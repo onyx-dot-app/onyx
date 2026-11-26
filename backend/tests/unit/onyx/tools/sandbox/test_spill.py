@@ -17,7 +17,8 @@ from onyx.llm.cancellation import (
     CancellationSignal,
     cancellation_scope,
 )
-from onyx.llm.models import ToolCall, ToolResult
+from onyx.llm.model_capabilities import ToolFamily
+from onyx.llm.models import ToolCall, ToolResult, ToolResultMessage
 from onyx.microvm.models import FileEntry, FileListing, FileType
 from onyx.server.features.build.sandbox.harness_base import (
     TOOL_RESULTS_ROOT,
@@ -27,7 +28,11 @@ from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     HarnessSandboxRef,
 )
-from onyx.tools.constants import CODE_MODE_TOOL_NAME, OPEN_URL_TOOL_NAME
+from onyx.tools.constants import (
+    EXEC_COMMAND_TOOL_NAME,
+    EXECUTE_CODE_TOOL_NAME,
+    OPEN_URL_TOOL_NAME,
+)
 from onyx.tools.models import SearchResult, SearchResults
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.code_mode.prompt import (
@@ -36,13 +41,20 @@ from onyx.tools.tool_implementations.code_mode.prompt import (
 )
 from onyx.tools.tool_implementations.sandbox import spill
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACT_RESULT_MAX_CHARS,
     SandboxExecResult,
     SpilledOutput,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
-    ExecCommandTool,
+    ArtifactTool,
+    LibraryFindTool,
+    LibraryListTool,
+    LibraryManageLibraryTool,
+    LibraryReadTool,
+    LibrarySearchTool,
     _exec_result,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.spill import (
     SPILL_FAILED_NOTE,
     spill_large_result,
@@ -59,13 +71,13 @@ class _FakeVMTurn(SandboxTurn):
     is the sandbox instead."""
 
     def __init__(self) -> None:
-        self.chat_session_id = uuid4()
         super().__init__(
             tenant_id="t",
             user_id=uuid4(),
-            chat_session_id=self.chat_session_id,
+            chat_session_id=uuid4(),
             vm_chat_files=[],
             copy_vm_chat_files=False,
+            shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         self.files: dict[str, bytes] = {}
         self.times: dict[str, datetime | None] = {}
@@ -198,7 +210,8 @@ def _spill(
     *,
     call_id: str = "call",
     name: str = "fetch",
-    code_mode: bool = False,
+    shell_name: str = "exec_command",
+    code_mode_run_name: str | None = None,
 ) -> ToolResult:
     return spill_large_result(
         turn,
@@ -208,7 +221,8 @@ def _spill(
             result=ToolResult(content=result) if isinstance(result, str) else result,
             step_results=(),
         ),
-        code_mode=code_mode,
+        shell_name=shell_name,
+        code_mode_run_name=code_mode_run_name,
     )
 
 
@@ -251,6 +265,51 @@ def test_many_short_lines_under_the_character_limit_stay_whole(
     assert text.count("\n") > 2_000 and len(text) < spill.RESULT_MAX_CHARS
 
     assert _spill(turn, text).content == text
+    assert turn.files == {}
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        LibraryReadTool.NAME,
+        LibraryFindTool.NAME,
+        LibrarySearchTool.NAME,
+        ArtifactTool.NAME,
+        # The tools that keep to their own limits, in each tool family.
+        "exec_command",
+        "bash",
+        "write_stdin",
+        "skills_read",
+        "skill",
+        "open_url",
+        "web_fetch",
+    ],
+)
+def test_a_bounded_library_result_past_the_steps_budget_stays_whole(
+    turn: _FakeVMTurn, name: str
+) -> None:
+    """A library tool pages through its results within
+    ARTIFACT_RESULT_MAX_CHARS, so a spill would only be read back."""
+    text = "r" * 39_000
+    earlier = ToolResultMessage(
+        tool_call_id="earlier",
+        tool_name="fetch",
+        content="e" * (spill.STEP_MAX_CHARS - 10_000),
+    )
+
+    result = spill_large_result(
+        turn,
+        ToolResultContext(
+            message_id="run:0",
+            calls=(ToolCall(id="call", name=name, arguments={}),),
+            result=ToolResult(content=text),
+            step_results=(earlier,),
+        ),
+        shell_name="exec_command",
+        code_mode_run_name=None,
+    )
+
+    assert result.content == text
     assert turn.files == {}
 
 
@@ -302,16 +361,28 @@ def test_a_preview_cannot_close_the_tag_in_any_case(turn: _FakeVMTurn) -> None:
 
 
 @pytest.mark.parametrize(
-    ("code_mode", "read_with"),
+    ("shell_name", "run_name", "read_with"),
     [
-        (False, "Read the file with exec_command (grep"),
-        (True, f"Read the file with exec_command in an {CODE_MODE_TOOL_NAME} program"),
+        ("exec_command", None, "Read the file with exec_command (grep"),
+        ("bash", None, "Read the file with bash (grep"),
+        (
+            "tools.exec_command",
+            "execute_code",
+            "Read the file with tools.exec_command in execute_code programs",
+        ),
+        (
+            "tools.bash",
+            "execute_code",
+            "Read the file with tools.bash in execute_code programs",
+        ),
     ],
 )
 def test_the_note_says_why_the_file_can_be_missing_and_to_rerun_only_reads(
-    turn: _FakeVMTurn, code_mode: bool, read_with: str
+    turn: _FakeVMTurn, shell_name: str, run_name: str | None, read_with: str
 ) -> None:
-    content = _spill(turn, "x" * 60_000, code_mode=code_mode).content
+    content = _spill(
+        turn, "x" * 60_000, shell_name=shell_name, code_mode_run_name=run_name
+    ).content
 
     assert read_with in content
     assert (
@@ -485,7 +556,7 @@ def test_a_spilled_cell_card_shows_its_error_once(turn: _FakeVMTurn) -> None:
     result = _spill(
         turn,
         ToolResult(content="cut", details=details, full_value=full),
-        name=CODE_MODE_TOOL_NAME,
+        name=EXECUTE_CODE_TOOL_NAME,
     )
 
     saved = result.details
@@ -507,6 +578,7 @@ def test_a_cell_spills_even_when_its_cut_leaves_out_one_character(
         heading=heading,
         status="completed",
         cell_id=1,
+        wait_name="wait",
         cell_calls=[],
         max_chars=len(f"{heading}\n\n{output}") - 1,
         end=None,
@@ -518,7 +590,7 @@ def test_a_cell_spills_even_when_its_cut_leaves_out_one_character(
     _spill(
         turn,
         ToolResult(content=cell.text, details=details, full_value=cell.full_value),
-        name=CODE_MODE_TOOL_NAME,
+        name=EXECUTE_CODE_TOOL_NAME,
     )
 
     [data] = turn.files.values()
@@ -543,7 +615,7 @@ def test_an_exec_call_spills_all_the_output_that_it_kept(turn: _FakeVMTurn) -> N
     assert isinstance(result.details, SandboxExecResult)
     cut = result.details.output
 
-    result = _spill(turn, result, name=ExecCommandTool.NAME)
+    result = _spill(turn, result, name=EXEC_COMMAND_TOOL_NAME)
 
     # The file marks the middle that the call did not keep.
     full = head + truncation_marker(7) + tail
@@ -579,3 +651,58 @@ def test_spilled_pages_list_each_page_with_a_bounded_title_inside_the_tag(
     assert listed.startswith('1. [4] "<\\/persisted-output>ttt')
     assert listed.endswith('" "https://docs.example.com/a": 30,000 characters')
     assert len(listed) < 400
+
+
+def test_a_manage_result_past_the_steps_budget_stays_whole(
+    turn: _FakeVMTurn,
+) -> None:
+    """A manage result holds at most MANAGE_LIBRARY_MAX_OPERATIONS short
+    results, so a spill would only be read back."""
+    text = "m" * 39_000
+    earlier = ToolResultMessage(
+        tool_call_id="earlier",
+        tool_name="fetch",
+        content="e" * (spill.STEP_MAX_CHARS - 10_000),
+    )
+
+    result = spill_large_result(
+        turn,
+        ToolResultContext(
+            message_id="run:0",
+            calls=(
+                ToolCall(id="call", name=LibraryManageLibraryTool.NAME, arguments={}),
+            ),
+            result=ToolResult(content=text),
+            step_results=(earlier,),
+        ),
+        shell_name="exec_command",
+        code_mode_run_name=None,
+    )
+
+    assert result.content == text
+    assert turn.writes == 0
+
+
+@pytest.mark.parametrize("name", [LibraryListTool.NAME, ArtifactTool.NAME])
+def test_a_library_list_page_stays_whole_in_a_full_step(
+    turn: _FakeVMTurn, name: str
+) -> None:
+    page = "e" * ARTIFACT_RESULT_MAX_CHARS
+    earlier = ToolResultMessage(
+        tool_call_id="earlier", tool_name="fetch", content="s" * spill.STEP_MAX_CHARS
+    )
+
+    result = spill_large_result(
+        turn,
+        ToolResultContext(
+            message_id="run:0",
+            calls=(ToolCall(id="call", name=name, arguments={}),),
+            result=ToolResult(content=page),
+            step_results=(earlier,),
+        ),
+        shell_name="exec_command",
+        code_mode_run_name=None,
+    )
+
+    assert result.content == page
+    assert turn.writes == 0

@@ -1,7 +1,9 @@
 # Web Search
 
 > Search of the public internet and fetch of web pages: the `web_search` and
-> `open_url` tools, the admin page that picks the active providers, and the
+> `open_url` tools (`open_url` is `web_fetch` for Claude models,
+> `tools/tool_implementations/open_url/open_url_tool.py:OPEN_URL_SHAPES`; its tool row keeps
+> `open_url`), the admin page that picks the active providers, and the
 > `/web-search` API for callers outside the chat loop.
 
 **Verified against:** `6bac4e012f` (2026-10-29)

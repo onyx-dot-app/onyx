@@ -19,6 +19,7 @@ from onyx.server.features.mcp.models import (
 )
 from onyx.server.features.mcp.oauth_discovery import discover_oauth_capabilities
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.utils.fleet_telemetry import MCPFailure, count_failure
 from onyx.utils.url import SSRFException
 
 
@@ -105,6 +106,12 @@ async def probe_mcp_server(
                     break
     except Exception:
         result = MCPUnreachableProbeResult()
+    if isinstance(result, MCPUnreachableProbeResult):
+        count_failure(
+            MCPFailure.PROBE_BLOCKED
+            if result.reason == "blocked"
+            else MCPFailure.PROBE_UNREACHABLE
+        )
     if progress:
         await progress(
             {

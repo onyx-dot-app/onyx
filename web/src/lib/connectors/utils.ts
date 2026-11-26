@@ -550,6 +550,8 @@ export function listSourceMetadata(): SourceMetadata[] {
         source !== "federated_slack" &&
         // user_file is for internal use (projects), not the Add Connector page
         source !== "user_file" &&
+        // chat_artifact holds files published in chat, which have no connector
+        source !== "chat_artifact" &&
         // craft_file backs the Craft user library, which has its own upload UI
         source !== "craft_file"
     )

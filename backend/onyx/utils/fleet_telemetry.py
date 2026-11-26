@@ -5,20 +5,24 @@ import hashlib
 import json
 import math
 import os
+import random
 import re
 import threading
 import time
 import uuid
 from collections import deque
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, NamedTuple
+from functools import wraps
+from typing import Any, NamedTuple, ParamSpec, TypeVar
 
 import requests
 
 from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB, WEB_DOMAIN
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.connectors.models import DocumentTypeLabel
+from onyx.llm.constants import LlmProviderNames
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -111,6 +115,45 @@ CONNECTOR_ROW_SETTINGS: tuple[str, ...] = (
     "auto_sync_enabled",
     "permission_sync_enabled",
 )
+
+
+class ToolKind(str, Enum):
+    """Fixed tool classes for query tool counts. Never a tool's own name."""
+
+    SEARCH = "search"
+    WEB_SEARCH = "web_search"
+    OPEN_URL = "open_url"
+    MCP = "mcp"
+    CUSTOM = "custom"
+    IMAGE = "image"
+    PYTHON = "python"
+    CODE_MODE = "code_mode"
+    SANDBOX = "sandbox"
+    OTHER = "other"
+
+
+class LoginFailure(str, Enum):
+    """The login method of a failed sign-in."""
+
+    PASSWORD = "password"
+    # The Google OAuth router configured by environment variables.
+    OAUTH = "oauth"
+    # The multi-provider OIDC router, which also serves Google provider rows.
+    OIDC = "oidc"
+    SAML = "saml"
+
+
+class MCPFailure(str, Enum):
+    """MCP server failures outside a tool call."""
+
+    DISCOVERY_AUTH = "discovery_auth"
+    DISCOVERY_TIMEOUT = "discovery_timeout"
+    DISCOVERY_ERROR = "discovery_error"
+    PROBE_UNREACHABLE = "probe_unreachable"
+    PROBE_BLOCKED = "probe_blocked"
+
+
+_TOOL_KINDS: frozenset[str] = frozenset(kind.value for kind in ToolKind)
 # The document types a corpus count can break down by.
 _DOCUMENT_TYPES: frozenset[str] = frozenset(label.value for label in DocumentTypeLabel)
 # Nested maps: their values must be numbers or booleans.
@@ -133,6 +176,15 @@ _NESTED_FIELDS: dict[str, frozenset[str]] = {
     ),
     "expected_by_type": _DOCUMENT_TYPES,
     "expected_bytes_by_type": _DOCUMENT_TYPES,
+    "tool_calls": _TOOL_KINDS,
+    "tool_failures": _TOOL_KINDS,
+    "login_failures": frozenset(failure.value for failure in LoginFailure),
+    "mcp_failures": frozenset(failure.value for failure in MCPFailure),
+    # Standard accounts by their question count in 7 days.
+    "users_by_queries_7d": frozenset({"q1", "q2_5", "q6_20", "q21_50", "q51_plus"}),
+    "agent_messages_7d": frozenset({"builtin", "custom"}),
+    # Provider types; any other provider counts as custom, never by its name.
+    "llm_providers": frozenset({*(name.value for name in LlmProviderNames), "custom"}),
 }
 # The keys each event type may carry. The fleet service checks the values.
 _FIELDS: dict[str, frozenset[str]] = {
@@ -169,6 +221,9 @@ _FIELDS: dict[str, frozenset[str]] = {
             "error_code",
             "error_source",
             "llm_provider",
+            "tool_calls",
+            "tool_failures",
+            "mcp_auth_failures",
         }
     ),
     "connector": frozenset(
@@ -276,6 +331,37 @@ _FIELDS: dict[str, frozenset[str]] = {
     ),
     "runtime": frozenset({"service_instance_id", "reason"}),
     "version": frozenset({"version"}),
+    "failure_counts": frozenset({"login_failures", "mcp_failures"}),
+    "usage": frozenset(
+        {
+            "active_users_1d",
+            "active_users_7d",
+            "active_users_30d",
+            "queries_7d",
+            "queries_30d",
+            "users_by_queries_7d",
+            "agent_messages_7d",
+            "agents_used_7d",
+            "uploads_7d",
+            "failed_uploads_7d",
+            "craft_sessions_7d",
+            "craft_sessions_total",
+        }
+    ),
+    "setup": frozenset(
+        {
+            "agents",
+            "llm_providers",
+            "mcp_servers",
+            "custom_actions",
+            "document_sets",
+            "slack_bots",
+            "sso_providers",
+            "sso_configured",
+        }
+    ),
+    # One completed ISO week; the service replaces the week on each send.
+    "usage_week": frozenset({"week_start", "queries", "sessions", "active_users"}),
     "heartbeat": frozenset(
         {
             "deployment_type",
@@ -288,6 +374,7 @@ _FIELDS: dict[str, frozenset[str]] = {
             "source_errors",
             "source_consecutive_errors",
             "last_source_success_at",
+            "usage_errors",
         }
     ),
 }
@@ -305,11 +392,15 @@ _FINAL_FLUSH_SECONDS: float = 5.0
 # The service asks to send an event again when it could not store it yet. The
 # sender sends such an event at most this many more times.
 _MAX_RETRIES: int = 3
+# The retry code for events whose customer is over the service's ingress budget.
+_BUDGET_EXCEEDED: str = "customer_ingress_budget_exceeded"
 # Short-lived processes wait at most this long at exit for their final delivery.
 EXIT_FLUSH_SECONDS: float = 2.0
 # Indexing counter deltas are summed per attempt and stage for this long.
 _STAGE_WINDOW_SECONDS: float = 30.0
 _MAX_STAGE_KEYS: int = 256
+# Each failure count stops here within one window, so an attack cannot grow it without bound.
+MAX_FAILURE_COUNT: int = 100_000
 
 
 def fingerprint(value: str) -> str:
@@ -393,6 +484,96 @@ def deployment_key() -> str:
     return get_or_create_deployment_key()
 
 
+def legacy_customer_uuid() -> str | None:
+    """The install ID that Onyx before v5 sent, so the service can link this deployment
+    to its pre-v5 records. None when there is none or it cannot be read."""
+    if MULTI_TENANT:
+        return None
+    try:
+        from onyx.db.fleet_enrollment import get_legacy_customer_uuid
+
+        return get_legacy_customer_uuid()
+    except Exception:
+        return None
+
+
+class FailureCounts:
+    """Failures outside queries, counted in memory under fixed keys.
+
+    The sender sends the counts with each heartbeat in one `failure_counts`
+    event, so a burst of failures never adds events."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        # A forked child gets a fresh lock and none of its parent's counts.
+        self._lock = threading.Lock()
+        self._counts: dict[LoginFailure | MCPFailure, int] = {}
+
+    def add(self, failure: LoginFailure | MCPFailure) -> None:
+        with self._lock:
+            self._counts[failure] = min(
+                self._counts.get(failure, 0) + 1, MAX_FAILURE_COUNT
+            )
+
+    def take(self) -> dict[str, Any] | None:
+        """The counts since the previous call; None when there were none."""
+        with self._lock:
+            counts, self._counts = self._counts, {}
+        login: dict[str, int] = {
+            key.value: value
+            for key, value in counts.items()
+            if isinstance(key, LoginFailure)
+        }
+        mcp: dict[str, int] = {
+            key.value: value
+            for key, value in counts.items()
+            if isinstance(key, MCPFailure)
+        }
+        data: dict[str, Any] = {
+            **({"login_failures": login} if login else {}),
+            **({"mcp_failures": mcp} if mcp else {}),
+        }
+        return data or None
+
+
+_failure_counts: FailureCounts = FailureCounts()
+os.register_at_fork(after_in_child=_failure_counts.reset)
+
+
+def count_failure(failure: LoginFailure | MCPFailure) -> None:
+    """Count one failure. No I/O; never raises."""
+    try:
+        if _client is not None:
+            _failure_counts.add(failure)
+    except Exception:
+        pass
+
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def count_login_failures(
+    method: LoginFailure,
+) -> Callable[[Callable[_P, Awaitable[_R]]], Callable[_P, Awaitable[_R]]]:
+    """Count each exception that a login handler raises, then raise it again."""
+
+    def decorate(handler: Callable[_P, Awaitable[_R]]) -> Callable[_P, Awaitable[_R]]:
+        @wraps(handler)
+        async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            try:
+                return await handler(*args, **kwargs)
+            except Exception:
+                count_failure(method)
+                raise
+
+        return wrapper
+
+    return decorate
+
+
 class _QueuedEvent(NamedTuple):
     """An event that waits for the sender thread. A tuple, so emitters stay cheap."""
 
@@ -439,6 +620,8 @@ class BoundedTelemetry:
         self._session: requests.Session | None = None
         # The sender thread reads the key and enrolls before its first delivery.
         self._key: str | None = None
+        # The pre-v5 install ID. "" after the service rejects it, so enrollment goes on without it.
+        self._legacy: str | None = None
         self._customer: str | None = None
         self._deployment: str | None = None
         self._stage_sums: dict[tuple[str, ...], dict[str, Any]] = {}
@@ -572,6 +755,7 @@ class BoundedTelemetry:
             return False
         if not (self._pending or self._queue or self._stage_sums):
             return True
+        retry_after: float = 0.0
         try:
             if transport is None:
                 if self._session is None:
@@ -613,68 +797,100 @@ class BoundedTelemetry:
                     self.rejected += len(self._pending)
                     self.dropped += len(self._pending)
                     self._pending = []
+                # Sent with 429, and with a reply that marks events over budget.
+                retry_after = _retry_after_seconds(response.headers.get("Retry-After"))
                 if not response.ok:
                     raise RuntimeError("telemetry delivery failed")
                 result: Any = read_json_body(response, 65536)
         except Exception:
             # An outage keeps the batch and backs off.
-            self._back_off()
+            self._back_off(retry_after)
             return False
         counts: dict[str, Any] = result if isinstance(result, dict) else {}
-        retry: list[dict[str, Any]] = self._retry_events(counts.get("results"))
+        retry, throttled = self._retry_indexes(counts.get("results"))
         sent: Any = counts.get("accepted")
         rejected: Any = counts.get("rejected")
         sent = sent if type(sent) is int else len(self._pending) - len(retry)
         rejected = rejected if type(rejected) is int else 0
         self.sent += sent
         self.rejected += rejected
-        if retry and self._retries < _MAX_RETRIES:
+        # Events over the service's ingress budget wait like a 429 outage: they stay
+        # pending without using a retry. The pending batch bounds them.
+        keep: set[int] = set(throttled)
+        if retry - throttled and self._retries < _MAX_RETRIES:
             self._retries += 1
-            self.dropped += max(0, len(self._pending) - sent - len(retry))
-            self._pending = retry
-            self._back_off()
+            keep |= retry
+        if keep:
+            self.dropped += max(0, len(self._pending) - sent - len(keep))
+            self._pending = [
+                event for index, event in enumerate(self._pending) if index in keep
+            ]
+            self._back_off(retry_after)
             return False
         self.failures = 0
         self.dropped += max(0, len(self._pending) - sent)
         self._pending = []
         return True
 
-    def _back_off(self) -> None:
+    def _back_off(self, retry_after: float = 0.0) -> None:
         self.failures = min(self.failures + 1, 8)
-        self._blocked_until = time.monotonic() + min(300, 2**self.failures)
+        window: float = min(300, 2**self.failures)
+        # Jitter spreads the retries of processes that failed at the same time.
+        delay: float = window / 2 + random.uniform(0, window / 2)
+        self._blocked_until = time.monotonic() + max(delay, min(300.0, retry_after))
 
-    def _retry_events(self, results: Any) -> list[dict[str, Any]]:
-        """The events of the batch that the service asks to send again."""
+    def _retry_indexes(self, results: Any) -> tuple[set[int], set[int]]:
+        """The batch positions the service asks to send again, and the subset it could
+        not take because their customer was over its ingress budget."""
+        retry: set[int] = set()
+        throttled: set[int] = set()
         if not isinstance(results, list):
-            return []
-        indexes: set[int] = {
-            row["index"]
-            for row in results
-            if isinstance(row, dict)
-            and row.get("status") == "retry"
-            and type(row.get("index")) is int
-        }
-        return [event for index, event in enumerate(self._pending) if index in indexes]
+            return retry, throttled
+        for row in results:
+            if (
+                isinstance(row, dict)
+                and row.get("status") == "retry"
+                and type(row.get("index")) is int
+                and 0 <= row["index"] < len(self._pending)
+            ):
+                retry.add(row["index"])
+                if row.get("code") == _BUDGET_EXCEEDED:
+                    throttled.add(row["index"])
+        return retry, throttled
 
     def _enroll(self, transport: Any) -> None:
         """Register the deployment key. The service answers with this deployment's IDs."""
         if self._key is None:
             self._key = deployment_key()
-        response: requests.Response = transport(
-            _ENDPOINT + "/v1/enroll",
-            headers={
-                "Authorization": "Bearer " + self._key,
-                "Accept-Encoding": "identity",
-            },
-            json={"is_cloud": MULTI_TENANT},
-            timeout=(1, 2),
-            allow_redirects=False,
-            stream=True,
-        )
-        with response:
-            if response.status_code != 200:
-                raise ValueError("Fleet enrollment unavailable")
-            result: Any = read_json_body(response, 4096)
+        if self._legacy is None:
+            self._legacy = legacy_customer_uuid() or ""
+        result: Any = None
+        # At most two requests: a service that predates `legacy_customer_uuid` answers 422,
+        # and this call enrolls again at once without it, so a short-lived process still
+        # delivers its queued events. Any other failure goes to the caller's backoff.
+        for _ in range(2):
+            body: dict[str, Any] = {"is_cloud": MULTI_TENANT}
+            if self._legacy:
+                body["legacy_customer_uuid"] = self._legacy
+            response: requests.Response = transport(
+                _ENDPOINT + "/v1/enroll",
+                headers={
+                    "Authorization": "Bearer " + self._key,
+                    "Accept-Encoding": "identity",
+                },
+                json=body,
+                timeout=(1, 2),
+                allow_redirects=False,
+                stream=True,
+            )
+            with response:
+                if response.status_code == 422 and self._legacy:
+                    self._legacy = ""
+                    continue
+                if response.status_code != 200:
+                    raise ValueError("Fleet enrollment unavailable")
+                result = read_json_body(response, 4096)
+            break
         deployment: Any = result["deployment_id"]
         if not isinstance(deployment, str) or not _OPAQUE.fullmatch(deployment):
             raise ValueError("Invalid fleet deployment ID")
@@ -768,6 +984,8 @@ class BoundedTelemetry:
                                 ),
                             },
                         )
+                        if failures := _failure_counts.take():
+                            self.emit("failure_counts", failures)
                         last_resource = now
                     # A backlog drains in consecutive batches; an idle queue sends nothing.
                     for _ in range(_MAX_BATCHES_PER_WAKEUP):
@@ -798,6 +1016,16 @@ class BoundedTelemetry:
         ) and time.monotonic() < deadline:
             if not self.flush_once():
                 return
+
+
+def _retry_after_seconds(value: str | None) -> float:
+    """The delay of a `Retry-After` header in seconds. HTTP dates, and values that are
+    not a finite positive number, count as none."""
+    try:
+        seconds: float = float(value or 0)
+    except ValueError:
+        return 0.0
+    return seconds if math.isfinite(seconds) and seconds > 0 else 0.0
 
 
 def poll_due(previous: float | None, now: float, interval: float) -> bool:

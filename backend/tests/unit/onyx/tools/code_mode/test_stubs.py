@@ -1,13 +1,24 @@
 import ast
+import inspect
 import json
 from collections.abc import Iterator
+from typing import cast
 from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel, Field, JsonValue, create_model
 from pydantic_monty import Monty, MontyTypingError
 
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolResult
+from onyx.prompts.tool_prompts import WEB_SEARCH_DESCRIPTION
+from onyx.tools.constants import (
+    SEND_MESSAGE_TOOL_NAME,
+    SKILLS_LIST_TOOL_NAME,
+    WEB_SEARCH_TOOL_NAME,
+    WRITE_STDIN_TOOL_NAME,
+)
+from onyx.tools.interface import tool_definition_from_arguments
 from onyx.tools.models import (
     CodeModeExposure,
     CodeModeResultKind,
@@ -15,6 +26,13 @@ from onyx.tools.models import (
     LlmPythonExecutionResult,
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import PRELUDE_STUBS
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    CLAUDE_CODE_MODE,
+    CODE_MODE_SHAPES,
+    OPENAI_CODE_MODE,
+    RUN_TOOL_NAMES,
+    WAIT_TOOL_NAMES,
+)
 from onyx.tools.tool_implementations.code_mode.stubs import (
     MAX_STUB_CHARS,
     ToolStubs,
@@ -30,11 +48,35 @@ from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
+    OPEN_URL_TOOL_NAMES,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_SHAPES,
+    QUESTION_TOOL_NAMES,
+)
+from onyx.tools.tool_implementations.sandbox.models import LibraryListArguments
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import ArtifactTool
+from onyx.tools.tool_implementations.sandbox.shapes import (
+    SHELL_SHAPES,
+    SHELL_TOOL_NAMES,
+)
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
+    SKILLS_READ_TOOL_NAMES,
+)
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_SHAPES,
+    SPAWN_TOOL_NAMES,
+)
+from onyx.tools.tool_implementations.subagents.subagent_tools import (
+    InterruptAgentTool,
+    ListAgentsTool,
+)
 from tests.unit.onyx.tools.code_mode.fakes import (
+    FakeImageGenerationTool,
     FakeMCPTool,
     FakeTool,
     FakeWebSearchTool,
@@ -57,6 +99,7 @@ def _with_deferred(count: int) -> ToolStubs:
         "properties": {"value": {"type": "string"}},
     }
     return build_tool_stubs(
+        OPENAI_CODE_MODE,
         [
             FakeTool("listed", _unused),
             *(
@@ -71,7 +114,7 @@ def _with_deferred(count: int) -> ToolStubs:
                 )
                 for index in range(count)
             ),
-        ]
+        ],
     )
 
 
@@ -120,20 +163,20 @@ def test_function_names_avoid_the_declared_result_types() -> None:
         FakeTool("SearchResults", _unused),
         FakeTool("SearchResult", _unused),
     ]
-    functions = build_tool_stubs(tools).functions
+    functions = build_tool_stubs(OPENAI_CODE_MODE, tools).functions
     assert functions["SearchResults_tool"].tool.name == "SearchResults"
     assert functions["SearchResult_tool"].tool.name == "SearchResult"
 
 
 def test_function_names_are_unique_and_sorted() -> None:
     tools = [FakeTool(name, _unused) for name in ["b-tool", "b_tool", "a"]]
-    functions = build_tool_stubs(tools).functions
+    functions = build_tool_stubs(OPENAI_CODE_MODE, tools).functions
     assert list(functions) == ["a", "b_tool", "b_tool_2"]
     assert functions["b_tool"].tool.name == "b-tool"
 
 
 def test_built_in_like_search_tool_gets_typed_result() -> None:
-    stubs = build_tool_stubs([FakeWebSearchTool(_unused)])
+    stubs = build_tool_stubs(OPENAI_CODE_MODE, [FakeWebSearchTool(_unused)])
     # The stub declares the JSON of the results model: keys it leaves out when
     # empty are NotRequired, and field descriptions become docstrings.
     assert "class SearchResult(TypedDict):" in _full_text(stubs)
@@ -161,11 +204,11 @@ class _BatchedSearchTool(FakeWebSearchTool):
 
 
 def test_usage_note_reaches_the_docstring() -> None:
-    stubs = build_tool_stubs([_BatchedSearchTool(_unused)])
+    stubs = build_tool_stubs(OPENAI_CODE_MODE, [_BatchedSearchTool(_unused)])
     assert (
-        "snippets.\n\n        Pass all queries in one call.\n\n        Args:"
-        in _full_text(stubs)
-    )
+        f"{WEB_SEARCH_DESCRIPTION.splitlines()[-1]}\n\n"
+        "        Pass all queries in one call.\n\n        Args:"
+    ) in _full_text(stubs)
 
 
 def test_mcp_like_schema_with_odd_names_and_refs() -> None:
@@ -190,7 +233,7 @@ def test_mcp_like_schema_with_odd_names_and_refs() -> None:
         "required": ["repo-name", "state"],
     }
     tool = FakeTool("mcp_github-list.issues", _unused, parameters=parameters)
-    stubs = build_tool_stubs([tool])
+    stubs = build_tool_stubs(OPENAI_CODE_MODE, [tool])
     function = stubs.functions["mcp_github_list_issues"]
 
     assert (
@@ -213,7 +256,9 @@ def test_mcp_like_schema_with_odd_names_and_refs() -> None:
 
 
 def test_tool_arguments_stop_at_their_byte_limit() -> None:
-    function = build_tool_stubs([FakeTool("echo", _unused)]).functions["echo"]
+    function = build_tool_stubs(
+        OPENAI_CODE_MODE, [FakeTool("echo", _unused)]
+    ).functions["echo"]
     shared: list[object] = ["x" * 1024]
     for _ in range(40):
         shared = [shared, shared]
@@ -233,7 +278,7 @@ def test_openapi_like_schema_without_required_makes_every_argument_optional() ->
         },
     }
     stubs = build_tool_stubs(
-        [FakeTool("create_ticket", _unused, parameters=parameters)]
+        OPENAI_CODE_MODE, [FakeTool("create_ticket", _unused, parameters=parameters)]
     )
     stub = stubs.functions["create_ticket"].stub
     assert (
@@ -241,6 +286,95 @@ def test_openapi_like_schema_without_required_makes_every_argument_optional() ->
         "requestBody: dict[str, Any] | None = None) -> Any:"
     ) in stub
     assert "requestBody: Keys: title?." in stub
+
+
+def test_an_object_with_properties_and_a_combinator_lists_its_keys() -> None:
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {
+            "body": {
+                "type": "object",
+                "properties": {"title": {"type": "string"}},
+                "required": ["title"],
+                "oneOf": [
+                    {"required": ["title"]},
+                    {"properties": {"draft": {"type": "boolean"}}},
+                ],
+            }
+        },
+    }
+    stub = (
+        build_tool_stubs(
+            OPENAI_CODE_MODE,
+            [FakeTool("create_ticket", _unused, parameters=parameters)],
+        )
+        .functions["create_ticket"]
+        .stub
+    )
+    assert "body: Keys: title." in stub
+
+
+def test_an_object_with_properties_and_a_ref_lists_its_own_keys() -> None:
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {
+            "body": {
+                "$ref": "#/$defs/Base",
+                "properties": {"title": {"type": "string"}},
+                "required": ["title"],
+            }
+        },
+        "$defs": {
+            "Base": {"type": "object", "properties": {"draft": {"type": "boolean"}}}
+        },
+    }
+    stub = (
+        build_tool_stubs(
+            OPENAI_CODE_MODE,
+            [FakeTool("create_ticket", _unused, parameters=parameters)],
+        )
+        .functions["create_ticket"]
+        .stub
+    )
+    assert "body: Keys: title." in stub
+
+
+def test_a_required_object_that_admits_null_through_its_combinator_is_sent_as_null() -> (
+    None
+):
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {
+            "x": {
+                "properties": {"title": {"type": "string"}},
+                "anyOf": [{"type": "object"}, {"type": "null"}],
+            }
+        },
+        "required": ["x"],
+    }
+    function = build_tool_stubs(
+        OPENAI_CODE_MODE, [FakeTool("create_ticket", _unused, parameters=parameters)]
+    ).functions["create_ticket"]
+    assert tool_arguments(function, {"x": None}).value == {"x": None}
+
+
+def test_a_nested_model_argument_lists_the_keys_of_its_model() -> None:
+    definition = tool_definition_from_arguments(
+        "library_list", "List files.", LibraryListArguments
+    )
+    stub = (
+        build_tool_stubs(
+            OPENAI_CODE_MODE,
+            [FakeTool(definition.name, _unused, parameters=definition.parameters)],
+        )
+        .functions["library_list"]
+        .stub
+    )
+    assert (
+        "filters: Keys: category?, created_after?, created_before?, "
+        "exclude_file_types?, include_file_types?, modified_after?, "
+        "modified_before?." in stub
+    )
 
 
 def test_strict_nullable_required_arguments_are_optional_and_sent_as_null() -> None:
@@ -254,7 +388,9 @@ def test_strict_nullable_required_arguments_are_optional_and_sent_as_null() -> N
         "required": ["file_id", "start_char", "mode"],
         "additionalProperties": False,
     }
-    stubs = build_tool_stubs([FakeTool("read", _unused, parameters=parameters)])
+    stubs = build_tool_stubs(
+        OPENAI_CODE_MODE, [FakeTool("read", _unused, parameters=parameters)]
+    )
     function = stubs.functions["read"]
     assert (
         "async def read(*, file_id: str, mode: Literal['a', 'b'] | None = None, "
@@ -280,7 +416,7 @@ def test_null_admitted_through_enum_const_or_ref_is_sent() -> None:
         "required": ["mode", "unset", "count"],
     }
     function = build_tool_stubs(
-        [FakeTool("update", _unused, parameters=parameters)]
+        OPENAI_CODE_MODE, [FakeTool("update", _unused, parameters=parameters)]
     ).functions["update"]
     assert function.nullable_arguments == {"mode", "unset", "count"}
     assert tool_arguments(function, {"mode": None, "label": None}).value == {
@@ -306,7 +442,7 @@ def test_a_long_ref_chain_builds_and_types_nullability_with_its_annotation() -> 
         "required": ["deep", "near"],
     }
     function = build_tool_stubs(
-        [FakeTool("chain", _unused, parameters=parameters)]
+        OPENAI_CODE_MODE, [FakeTool("chain", _unused, parameters=parameters)]
     ).functions["chain"]
     # Past the depth bound the type is Any and null is not known to be
     # accepted; a short chain types both.
@@ -331,7 +467,7 @@ def test_additional_properties_admit_other_keyword_arguments() -> None:
             "additionalProperties": True,
         },
     )
-    functions = build_tool_stubs([open_map, mixed]).functions
+    functions = build_tool_stubs(OPENAI_CODE_MODE, [open_map, mixed]).functions
     assert "async def tag(**kwargs: str) -> Any:" in functions["tag"].stub
     assert "async def label(*, kwargs: int, **kwargs_: Any) -> Any:" in (
         functions["label"].stub
@@ -345,7 +481,7 @@ def test_argument_names_are_python_identifiers_in_normal_form() -> None:
         "properties": {"version²": {"type": "string"}, "ﬁle": {"type": "string"}},
     }
     function = build_tool_stubs(
-        [FakeTool("fetch", _unused, parameters=parameters)]
+        OPENAI_CODE_MODE, [FakeTool("fetch", _unused, parameters=parameters)]
     ).functions["fetch"]
     assert function.argument_names == {"file": "ﬁle", "version2": "version²"}
     ast.parse(f"class tools:\n{function.stub}")
@@ -366,7 +502,9 @@ def test_required_entries_that_are_not_names_are_ignored() -> None:
             "required": [[]],
         },
     )
-    function = build_tool_stubs([tool]).functions["mcp__1__acme__list_tickets"]
+    function = build_tool_stubs(OPENAI_CODE_MODE, [tool]).functions[
+        "mcp__1__acme__list_tickets"
+    ]
     assert function.required_arguments == {"filter"}
     assert "tickets: NotRequired[list[Any]]" in "\n".join(function.declarations)
 
@@ -387,7 +525,7 @@ def test_oversized_stub_falls_back_to_any() -> None:
     tool = FakeTool(
         "big", _unused, parameters={"type": "object", "properties": properties}
     )
-    stub = build_tool_stubs([tool]).functions["big"].stub
+    stub = build_tool_stubs(OPENAI_CODE_MODE, [tool]).functions["big"].stub
     assert len(stub) <= MAX_STUB_CHARS
     assert "field_0: Any = None" in stub
 
@@ -405,7 +543,9 @@ def test_result_declarations_count_toward_the_stub_limit() -> None:
             },
         },
     )
-    function = build_tool_stubs([tool]).functions["mcp__1__acme__report"]
+    function = build_tool_stubs(OPENAI_CODE_MODE, [tool]).functions[
+        "mcp__1__acme__report"
+    ]
     assert function.declarations == ()
     assert (
         "async def mcp__1__acme__report(*, id: str | None = None) -> Any:"
@@ -432,7 +572,7 @@ def test_docstring_text_cannot_end_the_docstring() -> None:
             )
 
     stubs = build_tool_stubs(
-        [_QuotedTool('a"""b\\', _unused, description='Ends with """')]
+        OPENAI_CODE_MODE, [_QuotedTool('a"""b\\', _unused, description='Ends with """')]
     )
     ast.parse(_full_text(stubs))
     assert 'Tool name: a\\"""b\\\\' in _full_text(stubs)
@@ -460,7 +600,9 @@ def type_checker() -> Iterator[Monty]:
 def test_control_characters_in_a_tool_name_keep_the_stubs_valid(
     name: str, type_checker: Monty
 ) -> None:
-    stubs = build_tool_stubs([FakeTool(name, _unused), FakeTool("plain", _unused)])
+    stubs = build_tool_stubs(
+        OPENAI_CODE_MODE, [FakeTool(name, _unused), FakeTool("plain", _unused)]
+    )
 
     module = ast.parse(_full_text(stubs))
 
@@ -497,7 +639,9 @@ def test_control_characters_in_a_tool_name_keep_the_stubs_valid(
 def test_a_function_named_like_a_global_keeps_the_global(
     type_checker: Monty,
 ) -> None:
-    stubs = build_tool_stubs([FakeTool("json", _unused), FakeTool("store", _unused)])
+    stubs = build_tool_stubs(
+        OPENAI_CODE_MODE, [FakeTool("json", _unused), FakeTool("store", _unused)]
+    )
     code = (
         "await tools.json(value='a')\nawait tools.store(value='b')\n"
         "store('k', json.dumps(1))\n"
@@ -534,7 +678,9 @@ def test_an_invalid_schema_type_renders_as_any_without_failing_other_tools() -> 
         _unused,
         parameters={"type": "object", "properties": {"value": {"type": {}}}},
     )
-    functions = build_tool_stubs([odd, FakeTool("plain", _unused)]).functions
+    functions = build_tool_stubs(
+        OPENAI_CODE_MODE, [odd, FakeTool("plain", _unused)]
+    ).functions
     assert "async def odd(*, value: Any = None) -> Any:" in functions["odd"].stub
     assert "plain" in functions
 
@@ -545,21 +691,19 @@ def test_stub_text_is_deterministic() -> None:
         FakeWebSearchTool(_unused),
         FakeTool("a", _unused),
     ]
-    first = _full_text(build_tool_stubs(tools))
-    second = _full_text(build_tool_stubs(list(reversed(tools))))
+    first = _full_text(build_tool_stubs(OPENAI_CODE_MODE, tools))
+    second = _full_text(build_tool_stubs(OPENAI_CODE_MODE, list(reversed(tools))))
     assert first == second
-    assert first.index("async def a(") < first.index("async def web_search(")
-
-
-class FakeImageGenerationTool(ImageGenerationTool):
-    """An image generation tool without a provider; only its stub is used."""
-
-    def __init__(self) -> None:
-        self._id = 5
+    # By rank, then by name: the built-in tool before the other tools.
+    assert (
+        first.index("async def web_search(")
+        < first.index("async def a(")
+        < first.index("async def zeta(")
+    )
 
 
 def test_image_generation_returns_typed_images() -> None:
-    stubs = build_tool_stubs([FakeImageGenerationTool()])
+    stubs = build_tool_stubs(OPENAI_CODE_MODE, [FakeImageGenerationTool()])
     function = stubs.functions["generate_image"]
     assert (
         "class ImageResult(TypedDict):\n    file_id: str\n    revised_prompt: str"
@@ -578,7 +722,9 @@ def test_image_generation_returns_typed_images() -> None:
 
 
 def test_python_results_declare_the_fields_of_their_model() -> None:
-    stubs = build_tool_stubs([PythonTool(tool_id=4, chat_session_id=uuid4())])
+    stubs = build_tool_stubs(
+        OPENAI_CODE_MODE, [PythonTool(tool_id=4, chat_session_id=uuid4())]
+    )
     for name, field in LlmPythonExecutionResult.model_fields.items():
         if name != "generated_files":
             assert f"    {name}: " in _full_text(stubs), field
@@ -598,33 +744,157 @@ def test_tool_search_ranks_name_matches_first_and_bounds_the_count() -> None:
             ("send_email", "Send an email."),
         ]
     ]
-    index = build_tool_stubs(tools).tool_index
+    index = build_tool_stubs(OPENAI_CODE_MODE, tools).tool_index
     assert index is not None
 
     assert [match.name for match in index.search("tickets", 8)] == [
         "list_tickets",
         "get_uptime",
     ]
-    [match] = index.tool_search("tickets", limit=1)
+    stubs = build_tool_stubs(OPENAI_CODE_MODE, tools)
+    search = stubs.async_functions["tool_search"]
+    [match] = cast(list[dict[str, str]], search("tickets", limit=1))
     assert match == {
         "name": "list_tickets",
         "description": "List support tickets.",
         "stub": index.search("tickets", 1)[0].stub,
     }
-    assert index.tool_search("weather") == []
+    assert search("weather") == []
     with pytest.raises(TypeError):
-        index.tool_search(1)
+        search(1)
     with pytest.raises(ValueError):
-        index.tool_search("tickets", limit=0)
+        search("tickets", limit=0)
 
-    many = build_tool_stubs(
-        [
-            FakeTool(f"ticket_{n}", _unused, exposure=CodeModeExposure.DEFERRED)
-            for n in range(MAX_TOOL_SEARCH_LIMIT + 5)
-        ]
-    ).tool_index
-    assert many is not None
-    assert len(many.tool_search("ticket", limit=100)) == MAX_TOOL_SEARCH_LIMIT
+    many = [
+        FakeTool(f"ticket_{n}", _unused, exposure=CodeModeExposure.DEFERRED)
+        for n in range(MAX_TOOL_SEARCH_LIMIT + 5)
+    ]
+    # Each shape's search caps its own limit argument, which its stub and its
+    # host function both name.
+    for shape in CODE_MODE_SHAPES.values():
+        limit = shape.search_limit_argument
+        assert f"{limit}: int" in shape.search.stub
+        search = build_tool_stubs(shape, many).async_functions[shape.search_name]
+        assert list(inspect.signature(search).parameters) == ["query", limit]
+        found = search("ticket", **{limit: 100})
+        assert isinstance(found, list) and len(found) == MAX_TOOL_SEARCH_LIMIT
+    with pytest.raises(ValueError, match="max must be at least 1"):
+        build_tool_stubs(CLAUDE_CODE_MODE, many).async_functions["search_tools"](
+            "ticket", max=0
+        )
+
+
+def test_each_shape_names_arguments_that_its_models_have() -> None:
+    for shape in CODE_MODE_SHAPES.values():
+        assert shape.run_yield_argument in shape.run_arguments.model_fields
+
+
+def test_describe_tool_returns_the_match_of_one_listed_or_deferred_function() -> None:
+    listed = FakeTool("echo", _unused, description="Echo a value.")
+    deferred = FakeTool(
+        "list_tickets",
+        _unused,
+        description="List support tickets.",
+        exposure=CodeModeExposure.DEFERRED,
+        namespace="billing",
+    )
+    stubs = build_tool_stubs(CLAUDE_CODE_MODE, [listed, deferred])
+    describe = stubs.async_functions["describe_tool"]
+    [found] = cast(
+        list[dict[str, str]], stubs.async_functions["search_tools"]("tickets")
+    )
+    # A deferred function by its function name, after `tools.`, or by its
+    # tool's name; the match is the search's.
+    for name in (found["name"], f"tools.{found['name']}", deferred.name):
+        assert describe(name) == found
+    assert describe("echo") == {
+        "name": "echo",
+        "description": "Echo a value.",
+        "stub": stubs.functions["echo"].full_stub,
+    }
+    with pytest.raises(ValueError, match="No tool function is named 'nope'"):
+        describe("nope")
+    with pytest.raises(TypeError):
+        describe(1)
+    # The OpenAI shape has no describe function.
+    assert (
+        "describe_tool"
+        not in build_tool_stubs(OPENAI_CODE_MODE, [listed, deferred]).async_functions
+    )
+
+
+def test_the_names_of_different_operations_never_overlap() -> None:
+    """A name keys one operation in every family, so the name-keyed checks
+    never confuse two operations."""
+    operations = [
+        RUN_TOOL_NAMES,
+        WAIT_TOOL_NAMES,
+        QUESTION_TOOL_NAMES,
+        frozenset(shape.search.name for shape in CODE_MODE_SHAPES.values()),
+        frozenset(
+            shape.describe.name
+            for shape in CODE_MODE_SHAPES.values()
+            if shape.describe is not None
+        ),
+        SHELL_TOOL_NAMES,
+        frozenset({WRITE_STDIN_TOOL_NAME}),
+        SPAWN_TOOL_NAMES,
+        frozenset({SEND_MESSAGE_TOOL_NAME}),
+        frozenset(
+            shape.wait_name
+            for shape in AGENT_SHAPES.values()
+            if shape.wait_name is not None
+        ),
+        frozenset({ListAgentsTool.name}),
+        frozenset({InterruptAgentTool.name}),
+        SKILLS_READ_TOOL_NAMES,
+        frozenset({SKILLS_LIST_TOOL_NAME}),
+        OPEN_URL_TOOL_NAMES,
+        frozenset({WEB_SEARCH_TOOL_NAME}),
+        frozenset({ArtifactTool.NAME}),
+    ]
+    names = [name for operation in operations for name in operation]
+    assert len(names) == len(set(names))
+    # Each family names each operation; outside code mode's shared run tool,
+    # the families' names differ.
+    for family in ToolFamily:
+        shape = CODE_MODE_SHAPES[family]
+        assert shape.run_name in RUN_TOOL_NAMES
+        assert shape.wait_name in WAIT_TOOL_NAMES
+        assert QUESTION_SHAPES[family].name in QUESTION_TOOL_NAMES
+        assert SHELL_SHAPES[family].name in SHELL_TOOL_NAMES
+        assert AGENT_SHAPES[family].spawn_name in SPAWN_TOOL_NAMES
+        assert SKILL_READ_SHAPES[family].name in SKILLS_READ_TOOL_NAMES
+        assert OPEN_URL_SHAPES[family].name in OPEN_URL_TOOL_NAMES
+    for names_by_family in (
+        [shape.name for shape in SHELL_SHAPES.values()],
+        [shape.spawn_name for shape in AGENT_SHAPES.values()],
+        [shape.name for shape in SKILL_READ_SHAPES.values()],
+        [shape.name for shape in OPEN_URL_SHAPES.values()],
+    ):
+        assert len(set(names_by_family)) == len(ToolFamily)
+
+
+def test_every_family_runs_programs_with_execute_code() -> None:
+    """Every family names the run tool `execute_code`; the wait tool and the
+    program functions keep each family's names."""
+    assert {
+        family: (
+            shape.run_name,
+            shape.wait_name,
+            shape.search_name,
+            shape.describe.name if shape.describe else None,
+        )
+        for family, shape in CODE_MODE_SHAPES.items()
+    } == {
+        ToolFamily.OPENAI: ("execute_code", "wait", "tool_search", None),
+        ToolFamily.CLAUDE: (
+            "execute_code",
+            "poll",
+            "search_tools",
+            "describe_tool",
+        ),
+    }
 
 
 def test_tool_search_matches_words_in_any_script() -> None:
@@ -637,7 +907,7 @@ def test_tool_search_matches_words_in_any_script() -> None:
             ("ticket_lookup", "Найти заявки в службе поддержки."),
         ]
     ]
-    index = build_tool_stubs(tools).tool_index
+    index = build_tool_stubs(OPENAI_CODE_MODE, tools).tool_index
     assert index is not None
     assert [match.name for match in index.search("заявки", 8)] == ["ticket_lookup"]
     assert [match.name for match in index.search("prüfen", 8)] == ["billing_lookup"]
@@ -682,7 +952,7 @@ def test_tool_search_matches_argument_names_and_nested_descriptions() -> None:
         ),
         FakeTool("send_email", _unused, exposure=CodeModeExposure.DEFERRED),
     ]
-    index = build_tool_stubs(tools).tool_index
+    index = build_tool_stubs(OPENAI_CODE_MODE, tools).tool_index
     assert index is not None
 
     assert [match.name for match in index.search("swatch", 8)] == ["assign_ticket"]
@@ -722,7 +992,7 @@ def test_tool_search_ranks_a_name_match_with_a_large_schema_first() -> None:
             },
         ),
     ]
-    index = build_tool_stubs(tools).tool_index
+    index = build_tool_stubs(OPENAI_CODE_MODE, tools).tool_index
     assert index is not None
 
     assert [match.name for match in index.search("issue", 8)] == [
@@ -753,7 +1023,7 @@ def test_tool_search_ranks_a_full_parameter_match_above_a_filler_word_match() ->
             },
         ),
     ]
-    index = build_tool_stubs(tools).tool_index
+    index = build_tool_stubs(OPENAI_CODE_MODE, tools).tool_index
     assert index is not None
 
     assert [match.name for match in index.search("the urgency severity", 8)][0] == (
@@ -782,7 +1052,7 @@ def test_tool_search_skips_schema_data() -> None:
         ),
         FakeTool("archive", _unused, exposure=CodeModeExposure.DEFERRED),
     ]
-    index = build_tool_stubs(tools).tool_index
+    index = build_tool_stubs(OPENAI_CODE_MODE, tools).tool_index
     assert index is not None
 
     assert index.search("zebra giraffe okapi", 8) == []
@@ -800,7 +1070,7 @@ def test_tool_search_matches_the_namespace_of_any_deferred_tool() -> None:
         ),
         FakeTool("archive", _unused, exposure=CodeModeExposure.DEFERRED),
     ]
-    index = build_tool_stubs(tools).tool_index
+    index = build_tool_stubs(OPENAI_CODE_MODE, tools).tool_index
     assert index is not None
 
     assert [match.name for match in index.search("billing", 8)] == ["billing__refund"]
@@ -831,7 +1101,7 @@ def test_tool_search_matches_openapi_query_parameter_descriptions() -> None:
         }
     )
     tool = CustomTool(integration_id=1, method_spec=method, base_url="http://x")
-    stubs = build_tool_stubs([tool])
+    stubs = build_tool_stubs(OPENAI_CODE_MODE, [tool])
 
     assert "sev: Severity bucket of the outage." in stubs.functions[tool.name].stub
 
@@ -854,7 +1124,9 @@ def test_mcp_output_schema_types_the_result() -> None:
             "required": ["tickets"],
         },
     )
-    function = build_tool_stubs([tool]).functions["mcp__1__acme__list_tickets"]
+    function = build_tool_stubs(OPENAI_CODE_MODE, [tool]).functions[
+        "mcp__1__acme__list_tickets"
+    ]
     declarations = "\n".join(function.declarations)
     assert "class Mcp1AcmeListTicketsResult(TypedDict):" in declarations
     assert "next_page: NotRequired[str]" in declarations
@@ -875,7 +1147,7 @@ def test_mcp_result_types_are_python_names_that_match_their_keys() -> None:
         "type": "object",
         "properties": {"items": {"type": "array"}},
     }
-    stubs = build_tool_stubs([tool(items)])
+    stubs = build_tool_stubs(OPENAI_CODE_MODE, [tool(items)])
     [function] = stubs.functions.values()
     assert "class Mcp13dListItemsResult(TypedDict):" in function.declarations[0]
     ast.parse(_full_text(stubs))
@@ -885,7 +1157,9 @@ def test_mcp_result_types_are_python_names_that_match_their_keys() -> None:
         "type": "object",
         "properties": {"ﬁle": {"type": "string"}},
     }
-    [function] = build_tool_stubs([tool(compatibility)]).functions.values()
+    [function] = build_tool_stubs(
+        OPENAI_CODE_MODE, [tool(compatibility)]
+    ).functions.values()
     assert function.declarations == ()
     assert ") -> dict[str, Any]:" in function.stub
 
@@ -921,7 +1195,7 @@ def test_result_models_with_one_name_are_rejected() -> None:
         "class Result(TypedDict):",
     ]
     with pytest.raises(ValueError, match="Two result models are named Item"):
-        build_tool_stubs([_ModelTool("fetch", _unused)])
+        build_tool_stubs(OPENAI_CODE_MODE, [_ModelTool("fetch", _unused)])
 
 
 def test_soft_keywords_keep_their_names_as_arguments_and_fields() -> None:
@@ -931,7 +1205,9 @@ def test_soft_keywords_keep_their_names_as_arguments_and_fields() -> None:
         "required": ["type"],
     }
     tool = FakeMCPTool("list_items", _unused, schema, output_schema=schema)
-    function = build_tool_stubs([tool]).functions["mcp__1__acme__list_items"]
+    function = build_tool_stubs(OPENAI_CODE_MODE, [tool]).functions[
+        "mcp__1__acme__list_items"
+    ]
     assert (
         "async def mcp__1__acme__list_items(*, type: str) -> Mcp1AcmeListItemsResult:"
         in (function.stub)
@@ -961,7 +1237,9 @@ class _StatusTool(FakeTool):
 def test_details_results_give_the_program_the_declared_details() -> None:
     """The program gets the details as the declared model has them, also from
     a subclass with an aliased field; the model reads the content."""
-    function = build_tool_stubs([_StatusTool("status", _unused)]).functions["status"]
+    function = build_tool_stubs(
+        OPENAI_CODE_MODE, [_StatusTool("status", _unused)]
+    ).functions["status"]
     assert ") -> _Status:" in function.stub
 
     details = _LiveStatus(status="ok", exit_code=0, stream="out")
@@ -987,11 +1265,12 @@ class _ResultsTool(FakeTool):
 
 def test_a_program_gets_the_full_value_that_the_content_cuts() -> None:
     stubs = build_tool_stubs(
+        OPENAI_CODE_MODE,
         [
             _StatusTool("status", _unused),
             _TextTool("text", _unused),
             _ResultsTool("results", _unused),
-        ]
+        ],
     ).functions
 
     details = ToolResult(
@@ -1009,3 +1288,20 @@ def test_a_program_gets_the_full_value_that_the_content_cuts() -> None:
         "state": "whole",
         "exit_code": None,
     }
+
+
+def test_every_line_of_a_multi_line_description_is_indented() -> None:
+    tool = FakeMCPTool("lookup", _unused, {"type": "object", "properties": {}})
+    tool._description = 'First line.\n- a "quoted" item\n\nLast line ends with "'
+    [function_stub] = build_tool_stubs(OPENAI_CODE_MODE, [tool]).functions.values()
+    stub = function_stub.stub
+    assert '\n        - a "quoted" item\n\n        Last line ends with \\"' in stub
+    [tools_class] = ast.parse(f"class tools:\n{stub}").body
+    assert isinstance(tools_class, ast.ClassDef)
+    [function] = tools_class.body
+    assert isinstance(function, ast.AsyncFunctionDef)
+    docstring = ast.get_docstring(function)
+    assert docstring is not None
+    assert docstring.startswith(
+        'First line.\n- a "quoted" item\n\nLast line ends with "\n'
+    )

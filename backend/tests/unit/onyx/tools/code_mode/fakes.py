@@ -18,8 +18,12 @@ from onyx.tools.models import (
     IntegrationActionRef,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.code_mode.models import (
     SandboxLimits,
+)
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -28,6 +32,8 @@ RunFunction = Callable[[ToolInvocation, ToolContext], ToolOutcome]
 
 
 class FakeTool(Tool):
+    rank = ToolRank.INTEGRATION
+
     def __init__(
         self,
         name: str,
@@ -156,14 +162,26 @@ def search_result(document_ids: list[str], citation_start: int) -> ToolResult:
 class FakeWebSearchTool(WebSearchTool):
     """A web search tool with a scripted run; stubs treat it as a search tool."""
 
-    def __init__(self, run: RunFunction) -> None:
+    def __init__(self, run: RunFunction, *, supports_site_filter: bool = True) -> None:
         self._id = 3
         self._run_function = run
+        self._supports_site_filter = supports_site_filter
+
+    @property
+    def supports_site_filter(self) -> bool:
+        return self._supports_site_filter
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         outcome = self._run_function(invocation, context)
         assert isinstance(outcome, ToolResult)
         return outcome
+
+
+class FakeImageGenerationTool(ImageGenerationTool):
+    """An image generation tool without a provider; only its stub is used."""
+
+    def __init__(self) -> None:
+        self._id = 5
 
 
 class FakeMCPTool(MCPTool):

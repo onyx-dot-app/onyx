@@ -12,7 +12,10 @@ from onyx.server.features.build.sandbox.file_copy_state import (
     copy_generation_key,
 )
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
-from onyx.server.features.build.sandbox.models import HarnessSandboxRef
+from onyx.server.features.build.sandbox.models import (
+    HarnessSandboxRef,
+    session_workspace,
+)
 from onyx.tools.tool_implementations.sandbox.file_copies import (
     COPY_CACHE_SECONDS,
     CopyTarget,
@@ -20,6 +23,7 @@ from onyx.tools.tool_implementations.sandbox.file_copies import (
     TurnSearchFiles,
 )
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
+from onyx.tools.tool_implementations.sandbox.shapes import ShellShape
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -55,12 +59,16 @@ class SandboxTurn:
         chat_session_id: UUID,
         vm_chat_files: Sequence[VmChatFile],
         copy_vm_chat_files: bool,
+        shell: ShellShape,
     ) -> None:
         self._tenant_id = tenant_id
         self._user_id = user_id
         self._chat_session_id = chat_session_id
         self.vm_chat_files = vm_chat_files
         self._copy_vm_chat_files = copy_vm_chat_files
+        # The shell shape of the model's tool family, which the turn's tools
+        # call and name.
+        self.shell = shell
         self._lock = threading.Lock()
         # A call ran.
         self._called = False
@@ -79,6 +87,12 @@ class SandboxTurn:
             )
         self.file_copies: TurnFileCopies | None = None
         self.search_files = TurnSearchFiles(self.copy_target, user_id)
+
+    @property
+    def workdir(self) -> str:
+        """The chat's working directory in the VM, the default cwd of its
+        commands."""
+        return session_workspace(self._chat_session_id)
 
     @property
     def sandbox(self) -> HarnessSandbox:
@@ -170,3 +184,9 @@ class SandboxTurn:
     def user_id(self) -> UUID:
         """The user whose sandbox it is; reading it never starts a call."""
         return self._user_id
+
+    @property
+    def chat_session_id(self) -> UUID:
+        """The chat whose session directory the calls use; reading it never
+        starts a call."""
+        return self._chat_session_id

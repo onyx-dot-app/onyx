@@ -44,6 +44,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.prompts.deep_research.dr_tool_prompts import (
+    INTERNAL_SEARCH_TOOL_DESCRIPTION,
     OPEN_URLS_TOOL_DESCRIPTION,
     WEB_SEARCH_TOOL_DESCRIPTION,
 )
@@ -54,17 +55,21 @@ from onyx.prompts.deep_research.research_agent import (
     USER_REPORT_QUERY,
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
-from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
-from onyx.tools.constants import SKILL_TOOL_NAMES
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_TOOL_NAMES,
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
-from onyx.tools.tool_implementations.skills.skill_tools import skills_catalog_message
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_TOOL_NAMES,
+    skills_catalog_message,
+)
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.utils import generate_tools_description
@@ -96,7 +101,7 @@ class ResearchAgent(Agent, RestorableFeature):
         allowed_tools = {
             SearchTool.NAME,
             WebSearchTool.NAME,
-            OpenURLTool.NAME,
+            *OPEN_URL_TOOL_NAMES,
             *SKILL_TOOL_NAMES,
         }
         self.application_tools = [tool for tool in tools if tool.name in allowed_tools]
@@ -126,7 +131,10 @@ class ResearchAgent(Agent, RestorableFeature):
         )
         super().__init__(
             llm,
-            tools=[tool.bind(self._tool_context) for tool in self.application_tools]
+            tools=[
+                tool.bind(self._tool_context, summary_only=True)
+                for tool in self.application_tools
+            ]
             + [report_tool],
             agent_id=agent_id,
             previous_run_id=previous_run_id,
@@ -224,26 +232,31 @@ class ResearchAgent(Agent, RestorableFeature):
             reminder = USER_REPORT_QUERY.format(research_topic=research_topic)
         else:
             tool_names = {tool.name for tool in self.application_tools}
-            has_open_url = OpenURLTool.NAME in tool_names
+            open_url_tool = next(
+                (
+                    tool
+                    for tool in self.application_tools
+                    if isinstance(tool, OpenURLTool)
+                ),
+                None,
+            )
             system_prompt = RESEARCH_AGENT_PROMPT.format(
                 available_tools=generate_tools_description(self.application_tools),
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
-                optional_internal_search_tool_description=INTERNAL_SEARCH_GUIDANCE.format(
-                    name=SearchTool.NAME
-                )
+                optional_internal_search_tool_description=INTERNAL_SEARCH_TOOL_DESCRIPTION
                 if SearchTool.NAME in tool_names
                 else "",
                 optional_web_search_tool_description=WEB_SEARCH_TOOL_DESCRIPTION
                 if WebSearchTool.NAME in tool_names
                 else "",
-                optional_open_url_tool_description=OPEN_URLS_TOOL_DESCRIPTION
-                if has_open_url
-                else "",
+                optional_open_url_tool_description=""
+                if open_url_tool is None
+                else OPEN_URLS_TOOL_DESCRIPTION.format(name=open_url_tool.name),
             )
             reminder = (
-                OPEN_URL_REMINDER_RESEARCH_AGENT
-                if just_ran_web_search and has_open_url
+                OPEN_URL_REMINDER_RESEARCH_AGENT.format(name=open_url_tool.name)
+                if just_ran_web_search and open_url_tool is not None
                 else None
             )
         received = remap_received_citations(

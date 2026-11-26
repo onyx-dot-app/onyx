@@ -20,12 +20,15 @@ from onyx.llm.models import (
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
+from onyx.tools.ordering import ToolRank
 from tests.unit.onyx.agents.fakes import run_agent
 from tests.utils.secret_names import TestSecret
 
 
 class CatalogTool(Tool):
     """Return synthetic evidence without an external data dependency."""
+
+    rank = ToolRank.INTEGRATION
 
     def __init__(self, evidence: str) -> None:
         self.evidence = evidence

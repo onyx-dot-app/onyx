@@ -1,6 +1,7 @@
 """Rebuild feature configuration and resources without replacing saved conversation state."""
 
 from collections.abc import Callable
+from functools import partial
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -16,8 +17,17 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
     StepInput,
+    ToolCallContext,
 )
 from onyx.agents.runtime import Agent
+from onyx.agents.tool_execution import STOPPED_CALL_MESSAGE
+from onyx.agents.tools import (
+    HumanToolAnswer,
+    InputDecision,
+    InputMode,
+    PendingToolInput,
+    ToolInvocation,
+)
 from onyx.chat.agent import ChatAgent
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.restoration import restore_chat_agent
@@ -26,22 +36,34 @@ from onyx.db.models import User
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationRequest,
     ImageContentPart,
     ReasoningEffort,
     TextContent,
+    ToolCall,
     ToolChoiceOptions,
+    ToolResult,
+    ToolResultMessage,
     UserMessage,
 )
 from onyx.skills.models import ChatSkill
-from onyx.tools.constants import WAIT_CODE_TOOL_NAME
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, WAIT_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import CapabilityEntry
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.models import CapabilityEntry, ToolContext
+from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
+from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_SHAPES,
+    QuestionShape,
+)
 from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
     SkillsListTool,
     SkillsReadTool,
 )
@@ -51,6 +73,7 @@ from tests.unit.onyx.agents.fakes import (
     ScriptedLLM,
     run_agent,
 )
+from tests.unit.onyx.tools.code_mode.fakes import FakeTool
 
 PROJECT_IMAGE_BYTES = b"\x89PNG\r\n\x1a\n"
 
@@ -373,14 +396,26 @@ def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint
 
 
 _CODE_MODE_ECHO = "tools.echo (a function in `execute_code` programs)"
+_AGENT_TOOLS = [
+    "spawn_agent",
+    "list_agents",
+    "interrupt_agent",
+    "send_message",
+    "wait_agent",
+]
 
 
 @pytest.mark.parametrize(
     ("saved_code_mode", "offered", "preferred"),
     [
         # Code mode names the preferred tool as a function of its programs.
-        (True, [CodeModeTool.NAME, WAIT_CODE_TOOL_NAME], _CODE_MODE_ECHO),
-        (False, [EchoTool().name], EchoTool().name),
+        (
+            True,
+            [EXECUTE_CODE_TOOL_NAME, WAIT_TOOL_NAME, *_AGENT_TOOLS],
+            _CODE_MODE_ECHO,
+        ),
+        # The echo tool ranks as an integration, after the agent tools.
+        (False, [*_AGENT_TOOLS, EchoTool().name], EchoTool().name),
     ],
 )
 def test_restored_chat_keeps_the_saved_code_mode(
@@ -407,16 +442,121 @@ def test_restored_chat_keeps_the_saved_code_mode(
     rebuilt.restore_state(state)
     run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
     names, choice, request_text = _offered(llm)
-    assert names == [
-        *offered,
-        "spawn_agent",
-        "list_agents",
-        "interrupt_agent",
-        "send_message",
-        "wait_agents",
-    ]
+    assert names == offered
     assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text
+
+
+@pytest.mark.parametrize(
+    ("saved", "active"),
+    [
+        (ToolFamily.OPENAI, ToolFamily.CLAUDE),
+        (ToolFamily.CLAUDE, ToolFamily.OPENAI),
+    ],
+)
+def test_a_program_parked_under_one_family_ends_truthfully_under_the_other(
+    saved: ToolFamily, active: ToolFamily
+) -> None:
+    """A run continues on the active model's tool shapes. The parked program's
+    call, whose tool that shape does not have, says that its calls may have
+    had effects; the run then completes."""
+    sent: list[JsonValue] = []
+    saved_shape, active_shape = CODE_MODE_SHAPES[saved], CODE_MODE_SHAPES[active]
+    program = ToolCall(
+        id="program",
+        name=saved_shape.run_name,
+        arguments={"code": 'print("before")\nprint(await tools.send(value="x"))'},
+    )
+
+    def send(invocation: ToolInvocation, _context: ToolContext) -> ToolResult:
+        sent.append(invocation.arguments["value"])
+        return ToolResult(content="sent")
+
+    def first(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        return AssistantMessage(content=[program])
+
+    results: list[str] = []
+
+    def second(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        results.extend(
+            message.text
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        )
+        return AssistantMessage(content=[TextContent(text="done")])
+
+    def question(response_id: int, shape: QuestionShape) -> QuestionTool:
+        return QuestionTool(
+            shape, tenant_id="tenant", chat_session_id=uuid4(), response_id=response_id
+        )
+
+    def ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
+        if context.call.name != "send":
+            return None
+        return PendingToolInput(
+            request_id="send-approval", prompt="Send?", mode=InputMode.EXECUTE
+        )
+
+    original = ChatAgent(
+        messages=[],
+        tools=[FakeTool("send", send)],
+        code_mode=True,
+        custom_agent_prompt=None,
+        base_system_prompt="Base instructions",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(first, saved),
+        agent_id="parked-agent",
+        question_tool=partial(question, 1),
+    )
+    original.before_tool_call = ask_for_send
+    run = original.start(max_steps=3, messages=[UserMessage(content="Send")])
+    state = run.wait_until_settled(timeout=20)
+    assert state.status == RunStatus.SUSPENDED, state.failure
+    assert run.wait_for_idle(10)
+    captured = run.capture().model_dump(mode="json")
+    # A chat run's id is its response's message id.
+    checkpoint = ExecutionCheckpoint.model_validate(
+        {**captured, "run_state": {**captured["run_state"], "run_id": "7"}}
+    )
+
+    rebuilt = restore_chat_agent(
+        checkpoint,
+        0,
+        llm=FakeModelClient(second, active),
+        tools=[FakeTool("send", send)],
+        user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+        question_tool=question,
+    )
+    assert isinstance(rebuilt, ChatAgent)
+    assert {tool.name for tool in rebuilt.application_tools} == {
+        active_shape.run_name,
+        active_shape.wait_name,
+        QUESTION_SHAPES[active].name,
+    }
+    resumed = rebuilt.resume(
+        checkpoint.run_state,
+        answers=[
+            HumanToolAnswer(request_id="send-approval", decision=InputDecision.APPROVE)
+        ],
+    )
+    assert resumed.result(timeout=20).output.text == "done"
+    assert resumed.wait_for_idle(10)
+    assert sent == []
+    assert results == [STOPPED_CALL_MESSAGE]
 
 
 @pytest.fixture
@@ -443,8 +583,12 @@ def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
         llm,
         tools=[
             EchoTool(),
-            SkillsListTool(_user_skills, with_sandbox=False),
-            SkillsReadTool(_user_skills, with_sandbox=False),
+            SkillsListTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
+            SkillsReadTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
         ],
     )
     state = original.capture_state().model_dump(mode="json")
@@ -462,7 +606,7 @@ def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
     run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
 
     names, _, _ = _offered(llm)
-    assert names == [EchoTool().name, "skills_list", "skills_read"]
+    assert names == ["skills_list", "skills_read", EchoTool().name]
 
 
 def test_code_mode_offers_the_skill_tools_as_program_functions(
@@ -473,14 +617,18 @@ def test_code_mode_offers_the_skill_tools_as_program_functions(
         llm,
         code_mode=True,
         tools=[
-            SkillsListTool(_user_skills, with_sandbox=False),
-            SkillsReadTool(_user_skills, with_sandbox=False),
+            SkillsListTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
+            SkillsReadTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
         ],
     )
     run_agent(agent, max_steps=3, messages=[UserMessage(content="Go")])
 
     names, _, request = _offered(llm)
-    assert names == ["execute_code", "wait_code"]
+    assert names == ["execute_code", "wait"]
     # The catalog names the functions that programs call
     assert "- triage: Sort." in request
     assert "`tools.skills_read`" in request
@@ -494,8 +642,12 @@ def test_restored_deep_research_offers_the_skill_tools_like_the_original(
     original = DeepResearchAgent(
         messages=[],
         allowed_tools=[
-            SkillsListTool(_user_skills, with_sandbox=False),
-            SkillsReadTool(_user_skills, with_sandbox=False),
+            SkillsListTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
+            SkillsReadTool(
+                _user_skills, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            ),
         ],
         llm=llm,
         token_counter=len,

@@ -68,7 +68,7 @@ func TestQuestionCardAnswersWithAnOption(t *testing.T) {
 		t.Fatal("card does not show the answer in flight")
 	}
 	m = decide(t, m, cmd)
-	want := []models.QuestionAnswers{{Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Scope B"}}}}
+	want := []models.QuestionAnswers{{Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabels: []string{"Scope B"}}}}}
 	if !reflect.DeepEqual(client.answers, want) {
 		t.Fatalf("answers = %+v, want %+v", client.answers, want)
 	}
@@ -111,7 +111,7 @@ func TestQuestionCardStepsThroughItsQuestionsAndTakesAnOwnAnswer(t *testing.T) {
 	m, cmd = press(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = decide(t, m, cmd)
 	want := []models.QuestionAnswers{{Answers: []models.ToolQuestionAnswer{
-		{QuestionID: "scope", OptionLabel: "Scope A"},
+		{QuestionID: "scope", OptionLabels: []string{"Scope A"}},
 		{QuestionID: "region", UserNote: "EU only"},
 	}}}
 	if !reflect.DeepEqual(client.answers, want) || m.input.textInput.Value() != "" {
@@ -255,7 +255,7 @@ func TestQuestionThatParksTheResponseFollowsTheContinuationAfterTheAnswer(t *tes
 	if len(client.requests) != 1 || *client.requests[0].streamID != 3 || client.requests[0].cursor != 0 || m.streamCh != client.running {
 		t.Fatalf("requests = %+v, want stream 3 from cursor 0", client.requests)
 	}
-	answered := models.ToolQuestionResolvedEvent{QuestionRequestID: "q1", Outcome: "answered", AnsweredVia: "card", Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Scope A"}}}
+	answered := models.ToolQuestionResolvedEvent{QuestionRequestID: "q1", Outcome: "answered", AnsweredVia: "card", Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabels: []string{"Scope A"}}}}
 	for _, event := range []models.StreamEvent{
 		models.StreamCursorEvent{StreamID: 3},
 		models.MessageIDEvent{ReservedAgentMessageID: 2},
@@ -403,7 +403,7 @@ func TestTypedOptionNumberChoosesTheOption(t *testing.T) {
 	if !reflect.DeepEqual(client.answers, want) {
 		t.Fatalf("answers = %+v, want %+v", client.answers, want)
 	}
-	if got := m.questions[0].answers; !reflect.DeepEqual(got, []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Scope B"}}) {
+	if got := m.questions[0].answers; !reflect.DeepEqual(got, []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabels: []string{"Scope B"}}}) {
 		t.Fatalf("step answers = %+v", got)
 	}
 }

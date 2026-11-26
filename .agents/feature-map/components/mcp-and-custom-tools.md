@@ -444,18 +444,23 @@ gate below read the same policies.
 integrations/chat_tools.py:build_integration_chat_tools   once per model response
   (integrations/policy.py:resolve_action_policies for each integration and link)
   Blocked -> tool not offered    Ask -> tool.approval = ToolApprovalScope(integration_id, action_id)
+built-in tool: tool.approval = ToolApprovalScope(None, "onyx:<operation>"), set
+  where the tool is built; no policy covers it
   Tool.bind -> AgentTool.approval_required
 agents/tool_execution.py:ToolBatch.decide_call   (direct calls, and program calls
   through ToolInvocation.nested_calls, a NestedCallGate)
   -> coordinator ToolApprovals = chat/run_store.py:ChatRunStore.request_approval
+     -> tools/interface.py:Tool.approval_details(arguments), before any
+        database work: None -> run; else the card's headline and payload
+        (default: the tool's display name and the call's arguments)
      -> chat/tool_approvals.py:open_tool_approval
         session grant (action_now_blocked is false) -> run
         signed out -> error result
-        else ApprovalRequest row (display name, the call's arguments)
-          -> PendingToolInput(display_name)
+        else ApprovalRequest row (headline, payload)
+          -> PendingToolInput(display_name, display_arguments)
      the runtime marks the request PendingToolInput.approval
   a direct call waits in the run; a program call parks its cell's program
-  renderer sends tool_approval_request on the call's (or execute_code's) card
+  renderer sends tool_approval_request on the call's (or the run call's) card
 the run suspends when only such waits remain and its work is idle (see
   ToolInvocation.run_work)
 ChatRunStore.poll_control   one park pass over every owned run, once a second;
@@ -527,8 +532,12 @@ A decision row is the only channel between the API pod that takes the
 decision and the pod that owns the run. The `approval_request` row holds the
 session, the waiting response (`chat_message_id`), the `integration_id`, the
 action key, the decision, and for the saved record the step's call that shows the card
-(`tool_call_id`), the tool name, its display name and the call's arguments as
-the card shows them, so a live card and a replayed card are the same. Craft's proxy keeps its own `action_approval` table
+(`tool_call_id`), the tool name, and the card's headline (`display_name`) and
+payload (`arguments`) from `Tool.approval_details`. The payload is the tool's
+`ToolApprovalDetails.payload` (`PendingToolInput.display_arguments`), or the
+call's arguments when the tool gives none (`chat/renderer.py`). The live card reads the
+same two values from `PendingToolInput`, so a live card and a replayed card are
+the same, and a built-in tool's card needs no client change. Craft's proxy keeps its own `action_approval` table
 ([[craft-external-apps]]). The table, the decision route and the card are
 general, so future sandbox-proxy network approvals can reuse them. An
 "approve_session" decision is a session grant: it also approves the action's
@@ -537,7 +546,17 @@ other pending rows of that integration and action in the chat session, and
 unless the policy is now Blocked. A new row leaves the old `gated_app_id`
 column NULL. Deleting an
 integration sets `integration_id` to NULL; an approval of that row saves a
-rejection by the policy.
+rejection by the policy. A built-in action's row also has no integration, and
+an `onyx:` action key (`tools/models.py:is_builtin_action`): no policy blocks
+it, and its session grant matches rows with no integration and the same key
+(`db/integration_policy.py:list_session_granted_actions`,
+`db/approval_request.py:record_approval_decision__no_commit`). No
+integration action key starts with `onyx:`: `IntegrationActionSpec` refuses
+an MCP tool or OpenAPI operation with that name, so a deleted integration's
+row never matches a built-in grant. The code that builds a built-in tool must
+resolve the run's `ApprovalMode`, as
+`integrations/policy.py:decide_action_policy` does for integrations: under
+`RUN_WITHOUT_ASKING` it sets no scope.
 
 **Policy order** (`integrations/policy.py`):
 (1) the admin value: the admin row of the action, else the admin default row
@@ -868,7 +887,7 @@ default agent, is Blocked.
     stream showed.** `db/chat_response.py:read_response_replay_data` loads the
     `approval_request` rows of an ended or suspended response and the child
     runs it shows, and the rows of the background agents that its
-    `spawn_agent` and `send_message` calls started, directly or through
+    spawn tool (`spawn_agent` or `agent`) and `send_message` calls started, directly or through
     their agents, at any status; those show in that call's card, with the
     agent's name (`ToolApprovalRequest.agent_name`). Every request shows the
     arguments saved on its row, so a replayed card equals the live one. An
@@ -899,7 +918,7 @@ default agent, is Blocked.
     program.** MCP tools stay program functions in code mode. A gated call
     opens its request through `ToolInvocation.nested_calls`
     (`agents/tools.py:NestedCallGate`), and its card shows at once on the
-    observing `execute_code` or `wait_code` card, also for a cell that runs in
+    observing run or wait call's card, also for a cell that runs in
     the background. The program parks once it waits only for such calls
     ([[code-execution]]), the observation ends with `NestedInputWait`, and the
     run hands off as for a direct call: the parked cell is saved in

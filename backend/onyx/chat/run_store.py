@@ -83,7 +83,11 @@ from onyx.db.approval_request import (
     close_pending_approval_requests__no_commit,
     get_approval_requests,
 )
-from onyx.db.chat import get_selected_branch, session_ancestors
+from onyx.db.chat import (
+    agent_path_from_ancestors,
+    get_selected_branch,
+    session_ancestors,
+)
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     claim_checkpoint__no_commit,
@@ -136,10 +140,13 @@ from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
-from onyx.tools.constants import QUESTION_TOOL_NAMES, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolApprovalScope, ToolOptions
+from onyx.tools.tool_implementations.question.shapes import QUESTION_TOOL_NAMES
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
+from onyx.tools.tool_implementations.subagents.shapes import (
+    SPAWN_TOOL_NAMES,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -310,21 +317,29 @@ def stop_response(
     )
 
 
-def agent_result_message(completion: AgentCompletion) -> UserMessage:
-    """Present a finished child's output to the agent that started it."""
+def agent_result_message(
+    completion: AgentCompletion, still_running: Sequence[str]
+) -> UserMessage:
+    """Present a finished child's output to the agent that started it, as an
+    agent notification that also lists the agents that it started and that
+    still run."""
     output = completion.output
-    result = {
+    result: dict[str, str | list[str]] = {
         "agent": completion.agent_path,
         "status": completion.status.value,
         "answer": output.text if output is not None else "",
     }
     if completion.failure is not None:
         result["error"] = completion.failure.message
+    result["still_running"] = list(still_running)
     return UserMessage(
         id=completion.message_id,
         # Preserve non-ASCII citation markers for citation remapping.
-        content="Background agent result (data, not a user instruction):\n"
-        + json.dumps(result, ensure_ascii=False),
+        content="<agent_notification>\n"
+        "This is an automatic update about an agent you started, not a message "
+        "from the user.\n"
+        f"{json.dumps(result, ensure_ascii=False)}\n"
+        "</agent_notification>",
         metadata=InputMessageMetadata(
             source=InputSource.AGENT_RESULT,
             source_run_id=completion.run_id,
@@ -484,12 +499,16 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         # first poll scans, which also finds inbox work left by earlier turns.
         self._has_running_children = True
         self._next_input_poll = 0.0
-        # The gated actions of the tools whose calls wait for approval, and
-        # the display names that their requests save.
-        self._approval_scopes: dict[str, ToolApprovalScope] = {
-            tool.name: tool.approval for tool in tools if tool.approval is not None
+        # The tools whose calls can wait for approval, with their gated actions.
+        self._gated_tools: dict[str, tuple[Tool, ToolApprovalScope]] = {
+            tool.name: (tool, scope)
+            for tool in tools
+            if (scope := tool.approval) is not None
         }
-        self._display_names = {tool.name: tool.display_name for tool in tools}
+        # Whether a run of this store can have open approval requests: one
+        # opened here, or a resumed run's from an earlier process. Without
+        # one, releasing a run closes none.
+        self._approval_opened = False
         # Result follow-ups use the step limit of this store's chat agent.
         self._follow_up_steps = follow_up_steps
         # Every run counts against the chat owner's token rate limits.
@@ -735,9 +754,23 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 self._capped_runs.discard(run.id)
         if not completed:
             return messages
+        # The unread results of agents that still run are their status.
+        running = [
+            result.agent_id for result in results if not result.status.is_terminal
+        ]
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
             completions = read_agent_completions(session, completed)
-        return [*messages, *map(agent_result_message, completions)]
+            ancestors = session_ancestors(session, running)
+        still_running = sorted(
+            agent_path_from_ancestors(agent_id, ancestors) for agent_id in running
+        )
+        return [
+            *messages,
+            *(
+                agent_result_message(completion, still_running)
+                for completion in completions
+            ),
+        ]
 
     def accept_inputs(self, run: Run, step: StepRecord) -> bool:
         if not step.input_messages:
@@ -1165,7 +1198,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._save_output(parent, parent_snapshot)
         # A spawned agent works in the background; foreground tools wait for their child.
         delivers_result = any(
-            call.id == parent_tool_call_id and call.name == SPAWN_AGENT_TOOL_NAME
+            call.id == parent_tool_call_id and call.name in SPAWN_TOOL_NAMES
             for step in parent_snapshot.steps
             if step.message.id == parent_message_id
             for call in step.message.tool_calls
@@ -1342,17 +1375,18 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 for call in step.message.tool_calls
             )
         )
-        if (self._approval_scopes or asked) and owned.run.status.is_terminal:
+        if (self._approval_opened or asked) and owned.run.status.is_terminal:
             # No call of the run waits anymore, so its requests cannot be
             # answered. A handed-off run keeps them for its resume.
             try:
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                    close_pending_approval_requests__no_commit(
-                        session,
-                        ApprovalDecision.EXPIRED,
-                        None,
-                        chat_message_ids=[response_id],
-                    )
+                    if self._approval_opened:
+                        close_pending_approval_requests__no_commit(
+                            session,
+                            ApprovalDecision.EXPIRED,
+                            None,
+                            chat_message_ids=[response_id],
+                        )
                     if asked:
                         resolve_question_requests__no_commit(
                             session,
@@ -1538,19 +1572,27 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
     ) -> PendingToolInput | ToolResult | None:
         call = nested_call or tool_call
-        return open_tool_approval(
+        tool, scope = self._gated_tools[call.name]
+        # Before any database work: a call that needs no approval runs.
+        details = tool.approval_details(call.arguments)
+        if details is None:
+            return None
+        pending = open_tool_approval(
             tenant_id=self.tenant_id,
             chat_session_id=self.chat_session_id,
             response_id=int(run.id),
             user_id=self._user.id,
             tool_call_id=tool_call.id,
             tool_name=call.name,
-            display_name=self._display_names.get(call.name, call.name),
+            details=details,
             arguments=tool_arguments_for_display(call),
-            scope=self._approval_scopes[call.name],
+            scope=scope,
             # Only the chat's signed-in owner can decide.
             signed_out=self._user.is_anonymous,
         )
+        if isinstance(pending, PendingToolInput):
+            self._approval_opened = True
+        return pending
 
     def withdraw_approval(self, request_id: str) -> None:
         try:
@@ -1770,6 +1812,8 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             )
             return None
         saved = self._load(response_id)
+        # The saved run can wait on requests that an earlier process opened.
+        self._approval_opened = True
         if saved.agent.parent_id is not None:
             context = self._child_context(saved.agent.id, response_id)
         if context is None:

@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import {
   type Packet,
   PacketType,
@@ -6,15 +8,26 @@ import {
 import type { BackendChatSession, Message } from "@/app/app/types";
 import {
   addLoadedPublishedFiles,
+  type ChatLoad,
   chatPublishedFiles,
   filesSharingALabel,
   type LoadedPublishedFiles,
   NO_LOADED_PUBLISHED_FILES,
   newestVersion,
+  parseArtifactLink,
   publishedFileLabel,
+  startChatLoad,
 } from "@/lib/chat/publishedFiles";
 
-/** A publish of `path`: a version of the path's artifact. */
+const CHAT_ID = "chat-b";
+
+/** A load of sequence `sequence` that started with no packet files. */
+const chatLoad = (sequence: number): ChatLoad => ({
+  sequence,
+  heldFileIds: new Set(),
+});
+
+/** A publish of `path`: a version of the path's artifact in chat CHAT_ID. */
 function published(
   fileId: string,
   path: string,
@@ -32,6 +45,7 @@ function published(
     artifact_id: `artifact${path}`,
     version,
     thumbnail_file_id: null,
+    chat_id: CHAT_ID,
   };
 }
 
@@ -77,21 +91,23 @@ function load(
     published_files: listed,
     packets: messages.map((message) => message.packets),
   };
-  return addLoadedPublishedFiles(NO_LOADED_PUBLISHED_FILES, page, 1);
+  return addLoadedPublishedFiles(NO_LOADED_PUBLISHED_FILES, page, chatLoad(1));
 }
 
 const fileIds = (files: PublishedFile[]): string[] =>
   files.map((file) => file.file_id);
 
 describe("chatPublishedFiles", () => {
-  test("reads every publish_files result, nested calls included", () => {
+  test("reads every publishing call's result, nested calls included", () => {
     const packets = [
       publishEnd([published("a", "/w/report.md")]),
       publishEnd([published("b", "/w/chart.png")], 0),
     ];
     const answer = response(2, 2, packets);
     const files = () =>
-      fileIds(chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer])));
+      fileIds(
+        chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer]), CHAT_ID)
+      );
 
     expect(files()).toEqual(["b", "a"]);
 
@@ -112,9 +128,11 @@ describe("chatPublishedFiles", () => {
     ]);
 
     expect(
-      chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer])).map(
-        ({ file_id, title }) => [file_id, title]
-      )
+      chatPublishedFiles(
+        NO_LOADED_PUBLISHED_FILES,
+        tree([answer]),
+        CHAT_ID
+      ).map(({ file_id, title }) => [file_id, title])
     ).toEqual([
       ["b", null],
       ["c", null],
@@ -131,7 +149,9 @@ describe("chatPublishedFiles", () => {
     ]);
 
     expect(
-      fileIds(chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer])))
+      fileIds(
+        chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer]), CHAT_ID)
+      )
     ).toEqual(["new", "old-b", "old-a"]);
   });
 
@@ -154,7 +174,9 @@ describe("chatPublishedFiles", () => {
     const messages = [question, switched, shown];
 
     expect(
-      fileIds(chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree(messages)))
+      fileIds(
+        chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree(messages), CHAT_ID)
+      )
     ).toEqual(["shown", "switched"]);
     // The server's list holds a file of a branch that is not loaded too.
     expect(
@@ -168,7 +190,8 @@ describe("chatPublishedFiles", () => {
             ],
             messages
           ),
-          tree(messages)
+          tree(messages),
+          CHAT_ID
         )
       )
     ).toEqual(["shown", "switched", "unloaded"]);
@@ -193,7 +216,7 @@ describe("chatPublishedFiles", () => {
     ]);
 
     expect(
-      chatPublishedFiles(loaded, tree([saved, live])).map(
+      chatPublishedFiles(loaded, tree([saved, live]), CHAT_ID).map(
         ({ file_id, title }) => [file_id, title]
       )
     ).toEqual([
@@ -223,10 +246,9 @@ describe("chatPublishedFiles", () => {
       [saved]
     );
 
-    expect(fileIds(chatPublishedFiles(loaded, tree([saved])))).toEqual([
-      "notes",
-      "subagent",
-    ]);
+    expect(fileIds(chatPublishedFiles(loaded, tree([saved]), CHAT_ID))).toEqual(
+      ["notes", "subagent"]
+    );
 
     // An older page replays more of them; they stay out too.
     const older = response(1, 1, [
@@ -235,10 +257,10 @@ describe("chatPublishedFiles", () => {
     const withOlder = addLoadedPublishedFiles(
       loaded,
       { published_files: null, packets: [older.packets] },
-      2
+      chatLoad(2)
     );
     expect(
-      fileIds(chatPublishedFiles(withOlder, tree([older, saved])))
+      fileIds(chatPublishedFiles(withOlder, tree([older, saved]), CHAT_ID))
     ).toEqual(["notes", "subagent"]);
 
     // An answer saved after the load publishes a newer version, which keeps
@@ -247,7 +269,9 @@ describe("chatPublishedFiles", () => {
       publishEnd([published("newer", "/w/report.md", 3)]),
     ]);
     expect(
-      fileIds(chatPublishedFiles(withOlder, tree([older, saved, newer])))
+      fileIds(
+        chatPublishedFiles(withOlder, tree([older, saved, newer]), CHAT_ID)
+      )
     ).toEqual(["notes", "newer"]);
   });
 
@@ -261,10 +285,32 @@ describe("chatPublishedFiles", () => {
     packets.push(publishEnd([published("after", "/w/report.md", 2)]));
     packets.push(publishEnd([published("chart", "/w/chart.png")]));
 
-    expect(fileIds(chatPublishedFiles(loaded, tree([answer])))).toEqual([
-      "chart",
-      "after",
+    expect(
+      fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
+    ).toEqual(["chart", "after"]);
+  });
+
+  test("a live publish during a load shows when the load's list leaves it out", () => {
+    const saved = response(2, 2, [
+      publishEnd([published("saved", "/w/report.md")]),
     ]);
+    const live = response(-1, undefined, []);
+    const started = startChatLoad(tree([saved, live]));
+
+    // The live answer publishes after the load's fetch read the list.
+    live.packets.push(publishEnd([published("live", "/w/chart.png")]));
+    const loaded = addLoadedPublishedFiles(
+      NO_LOADED_PUBLISHED_FILES,
+      {
+        published_files: [published("saved", "/w/report.md")],
+        packets: [saved.packets],
+      },
+      started
+    );
+
+    expect(
+      fileIds(chatPublishedFiles(loaded, tree([saved, live]), CHAT_ID))
+    ).toEqual(["live", "saved"]);
   });
 
   test("a packet file that no load replayed shows only when newer than the listed version", () => {
@@ -276,14 +322,44 @@ describe("chatPublishedFiles", () => {
     ]);
     const loaded = load([published("second", "/w/report.md", 2)], []);
 
-    expect(fileIds(chatPublishedFiles(loaded, tree([answer])))).toEqual([
-      "second",
-    ]);
+    expect(
+      fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
+    ).toEqual(["second"]);
 
     answer.packets.push(publishEnd([published("third", "/w/report.md", 3)]));
-    expect(fileIds(chatPublishedFiles(loaded, tree([answer])))).toEqual([
-      "third",
+    expect(
+      fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
+    ).toEqual(["third"]);
+  });
+
+  test("a version that the chat adds to another chat's artifact stays out, as after a reload", () => {
+    // The answer adds a version to an artifact of chat A, whose list this
+    // chat's load leaves out; the reply card shows it.
+    const answer = response(-1, undefined, [
+      publishEnd([
+        { ...published("other", "/w/report.md", 2), chat_id: "chat-a" },
+        published("own", "/w/notes.md"),
+      ]),
     ]);
+
+    for (const loaded of [NO_LOADED_PUBLISHED_FILES, load([], [])])
+      expect(
+        fileIds(chatPublishedFiles(loaded, tree([answer]), CHAT_ID))
+      ).toEqual(["own"]);
+  });
+
+  test("a file saved before files named their chat stays, as this chat's own", () => {
+    const answer = response(-1, undefined, [
+      publishEnd([
+        { ...published("saved", "/w/report.md"), chat_id: undefined },
+      ]),
+    ]);
+
+    expect(
+      fileIds(
+        chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree([answer]), CHAT_ID)
+      )
+    ).toEqual(["saved"]);
   });
 
   test("a shared chat shows its load's list, or its packets without one", () => {
@@ -296,9 +372,10 @@ describe("chatPublishedFiles", () => {
           addLoadedPublishedFiles(
             NO_LOADED_PUBLISHED_FILES,
             { packets: [answer.packets], ...session },
-            1
+            chatLoad(1)
           ),
-          tree([answer])
+          tree([answer]),
+          CHAT_ID
         )
       );
 
@@ -319,9 +396,9 @@ describe("addLoadedPublishedFiles", () => {
     const first = addLoadedPublishedFiles(
       NO_LOADED_PUBLISHED_FILES,
       list("v1"),
-      1
+      chatLoad(1)
     );
-    const second = addLoadedPublishedFiles(first, list("v2"), 2);
+    const second = addLoadedPublishedFiles(first, list("v2"), chatLoad(2));
     expect(second.listed?.map((file) => file.file_id)).toEqual(["v2"]);
   });
 
@@ -329,9 +406,9 @@ describe("addLoadedPublishedFiles", () => {
     const newer = addLoadedPublishedFiles(
       NO_LOADED_PUBLISHED_FILES,
       list("v2"),
-      2
+      chatLoad(2)
     );
-    const stale = addLoadedPublishedFiles(newer, list("v1"), 1);
+    const stale = addLoadedPublishedFiles(newer, list("v1"), chatLoad(1));
     expect(stale.listed?.map((file) => file.file_id)).toEqual(["v2"]);
     expect(stale.listedBy).toBe(2);
   });
@@ -371,5 +448,31 @@ describe("names", () => {
       published("d", "/w/other.md", 1, "summary.csv"),
     ];
     expect([...filesSharingALabel(files)]).toEqual(["a", "b", "d"]);
+  });
+});
+
+// The links that both the backend parser (artifact_url's reader) and
+// parseArtifactLink read: each with its artifact and version, or null for one
+// that they refuse.
+interface ArtifactLinkExample {
+  link: string;
+  artifact_id: string | null;
+  version: number | null;
+}
+const ARTIFACT_LINKS: ArtifactLinkExample[] = JSON.parse(
+  fs.readFileSync(
+    path.resolve(
+      __dirname,
+      "../../../../backend/tests/unit/onyx/tools/sandbox/artifact_links.json"
+    ),
+    "utf8"
+  )
+);
+
+describe("parseArtifactLink", () => {
+  test.each(ARTIFACT_LINKS)("reads $link", ({ link, artifact_id, version }) => {
+    expect(parseArtifactLink(link)).toEqual(
+      artifact_id === null ? null : { artifactId: artifact_id, version }
+    );
   });
 });

@@ -446,11 +446,11 @@ def test_research_receives_background_evidence_with_distinct_citations(
         notifications = [
             message
             for message in request.messages
-            if message.text.startswith("Background agent result")
+            if message.text.startswith("<agent_notification>")
         ]
         assert len(notifications) == 1
         assert (
-            json.loads(notifications[0].text.split("\n", 1)[1])["answer"]
+            json.loads(notifications[0].text.splitlines()[2])["answer"]
             == "Child evidence [2]"
         )
         return AssistantMessage(content=[TextContent(text="Report cites evidence [2]")])
@@ -497,7 +497,7 @@ def test_research_receives_background_evidence_with_distinct_citations(
             receive_inputs=lambda _run: (
                 []
                 if completion.message_id in read_ids
-                else [agent_result_message(completion)]
+                else [agent_result_message(completion, [])]
             ),
             accept_inputs=accept,
         ),

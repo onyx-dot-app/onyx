@@ -15,6 +15,7 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.models import ToolCall, User
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.cancellation import check_cancelled, current_cancellation
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_request import ChatCompletionMessage, ToolMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -33,6 +34,7 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.shapes import CodeModeShape
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
 # A step is a fixed reply, or a reply built from the prompt.
@@ -52,8 +54,9 @@ class ChatLLM(ScriptedLLM):
         *,
         gates: dict[int, Callable[[], None]] | None = None,
         hold_open: bool = False,
+        family: ToolFamily = ToolFamily.OPENAI,
     ) -> None:
-        super().__init__([], max_input_tokens=128000)
+        super().__init__([], max_input_tokens=128000, family=family)
         self.script = list(steps)
         self.gates = gates or {}
         self.hold_open = hold_open
@@ -93,12 +96,18 @@ def tool_step(name: str, call_id: str, arguments: dict[str, object]) -> Delta:
     )
 
 
-def code_step(call_id: str, code: str, **arguments: object) -> Delta:
-    return tool_step("execute_code", call_id, {"code": code, **arguments})
+def code_step(
+    shape: CodeModeShape, call_id: str, code: str, **arguments: object
+) -> Delta:
+    """A call of the shape's run tool."""
+    return tool_step(shape.run_name, call_id, {"code": code, **arguments})
 
 
-def wait_step(call_id: str, cell_id: int, **arguments: object) -> Delta:
-    return tool_step("wait_code", call_id, {"cell_id": cell_id, **arguments})
+def wait_step(
+    shape: CodeModeShape, call_id: str, cell_id: int, **arguments: object
+) -> Delta:
+    """A call of the shape's wait tool."""
+    return tool_step(shape.wait_name, call_id, {"cell_id": cell_id, **arguments})
 
 
 def send(

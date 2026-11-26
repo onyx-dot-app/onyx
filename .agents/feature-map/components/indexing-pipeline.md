@@ -35,6 +35,10 @@ inline when they are on.
 - **A user uploads a file** in chat or a project. It goes through the same
   chunk, embed and write steps with no fetch phase and no cc-pair
   (`UserFileIndexingAdapter`, [[file-store-and-user-files]]).
+- **The model publishes a file** in a sandbox chat. Its newest version goes
+  through the same steps, one document per artifact, with no document row and
+  no content hash (`ChatArtifactIndexingAdapter`,
+  [[file-store-and-user-files]] "Published file text and search").
 - **An embedding rate limit** slows indexing down, not search.
 
 ## Scope
@@ -43,7 +47,7 @@ This component owns the path from a connector's `Document` stream to chunks in
 the index: the two phases, staging, checkpoints, the dedup gate, chunking
 (text, image and tabular), contextual RAG, embedding, the write, the
 `IndexAttempt` lifecycle and its errors, heartbeats, the tabular re-chunk
-migration, and the user-file adapter.
+migration, and the user-file and published-file adapters.
 
 Its neighbours own:
 - [[connectors]]: how a connector reads a source and yields documents,
@@ -151,7 +155,10 @@ dispatcher is gone, it sends the lost batches again and counts that as a
 heartbeat. When every stub batch is converted but fewer batches are complete,
 it sends the stored document batches that have no docprocessing task. The watchdog fails the attempt only after two runs in a row in
 which a restart sent nothing. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
-local disk inside one docprocessing task, so a large batch is never in memory.
+local disk inside one docprocessing task, so the vectors of a large batch are never
+all in memory. The documents and, until the write starts, the chunk texts stay in
+memory. A batch file holds a reference to each source document, not a copy, and only
+the store that wrote the file can read it.
 
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
 decides which documents to re-chunk. Gate 1 skips a document whose
@@ -496,3 +503,7 @@ the error type on purpose in auth code.
 - External dependency tests: `backend/tests/external_dependency_unit/indexing/`
   and `backend/tests/external_dependency_unit/db/`.
 - Integration tests: `backend/tests/integration/tests/indexing/`.
+- Throughput and memory: `backend/scripts/benchmark_docprocessing.py` runs
+  `_docprocessing_task` over a synthetic corpus with a mock model server and
+  checks the index against golden digests
+  (`backend/scripts/docprocessing_bench/README.md`).

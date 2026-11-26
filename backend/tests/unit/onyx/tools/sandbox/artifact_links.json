@@ -1,0 +1,18 @@
+[
+  {"link": "https://onyx.example.com/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000/v3", "artifact_id": "3f2a9c1e-0000-4000-8000-000000000000", "version": 3},
+  {"link": "https://onyx.example.com/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000/v3?x=1#top", "artifact_id": "3f2a9c1e-0000-4000-8000-000000000000", "version": 3},
+  {"link": "http://localhost:3000/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000/", "artifact_id": "3f2a9c1e-0000-4000-8000-000000000000", "version": null},
+  {"link": "/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000", "artifact_id": "3f2a9c1e-0000-4000-8000-000000000000", "version": null},
+  {"link": "/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000/v12/", "artifact_id": "3f2a9c1e-0000-4000-8000-000000000000", "version": 12},
+  {"link": "3f2a9c1e-0000-4000-8000-000000000000", "artifact_id": null, "version": null},
+  {"link": "", "artifact_id": null, "version": null},
+  {"link": "report.pdf", "artifact_id": null, "version": null},
+  {"link": "https://example.com/page", "artifact_id": null, "version": null},
+  {"link": "/api/chat/file/3f2a9c1e-0000-4000-8000-000000000000", "artifact_id": null, "version": null},
+  {"link": "/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000/v", "artifact_id": null, "version": null},
+  {"link": "/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000/vx", "artifact_id": null, "version": null},
+  {"link": "/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000/v2/extra", "artifact_id": null, "version": null},
+  {"link": "/app/artifacts/3f2a9c1e-0000-4000-8000-0000000000000", "artifact_id": null, "version": null},
+  {"link": "/app/artifacts/not-an-id", "artifact_id": null, "version": null},
+  {"link": "/x/app/artifacts/3f2a9c1e-0000-4000-8000-000000000000", "artifact_id": null, "version": null}
+]

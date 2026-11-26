@@ -169,12 +169,14 @@
   pptx, and browser with `ENABLE_BROWSER`). In this catalog, a skill's
   `metadata.short-description` replaces its description when it has one;
   `skills_list` shows the full description. The agent reads a skill's
-  SKILL.md with `skills_read` when the task matches. Deep Research and its
+  SKILL.md with its skill read tool (`skills_read`, or `skill` for Claude
+  models) when the task matches. Deep Research and its
   research agents get the same catalog and both tools.
   A skill the user mentions in a message adds its SKILL.md, frontmatter
   included, right after the message, as it was read when the message was
   accepted, at the version the user ran. A SKILL.md over 8,000 bytes is cut
-  there, with a note that tells the model to continue with `skills_read`. History keeps that text, so a later edit, a deletion or lost access
+  there, with a note that gives the character to continue reading from; it
+  names no tool, so a model of either tool family reads it. History keeps that text, so a later edit, a deletion or lost access
   does not change what earlier turns see. A skill that cannot be read when
   the message is accepted is not applied. In a turn with the sandbox tools,
   the SKILL.md (from `skills_read` or a pick) of a skill with other files
@@ -402,7 +404,7 @@ skill list: it resolves each skill in that list and reads the SKILL.md of all
 picks in one batched read with the user's current access
 (`skills/content.py:read_versions_skill_md`). The read gives the whole
 SKILL.md, frontmatter included, as Codex does. Each text over 8,000 bytes is
-cut there, with a note that tells the model to continue with `skills_read`.
+cut there, with a note that gives the character to continue reading from.
 A skill that is not in the list or whose SKILL.md cannot be read is not
 recorded. The result (`AcceptedPicks`) keeps two lists: the records
 (`RecordedSkillMention`: type, name and version id) and, for each record,
@@ -458,7 +460,8 @@ revoked skill keeps its text in old turns, as in Codex. The read
 (`db/plugin.py:get_visible_versions_skill_md`) returns text only for versions
 of skills the user can see at acceptance: the pinned version decides the
 content, and current access decides whether it is read.
-`chat/execution.py:create_chat_agent` adds `skills_list` and `skills_read`
+`chat/execution.py:create_chat_agent` adds `skills_list` and the skill read
+tool, `skills_read` or `skill` for Claude models
 (`tools/tool_implementations/skills/skill_tools.py`) when the user has a chat
 skill when the turn starts (`ChatTurnSetup.has_chat_skills`), whatever the
 agent's tool selection; restored and child agents get them with the other

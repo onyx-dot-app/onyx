@@ -308,7 +308,7 @@ def test_background_agent_result_wakes_the_idle_chat(
                 ToolCall(
                     id="spawn-research",
                     name="spawn_agent",
-                    arguments={"name": "research", "instruction": child_task},
+                    arguments={"task_name": "research", "message": child_task},
                 )
             ]
         ),
@@ -439,7 +439,7 @@ def test_the_agent_list_follows_a_background_agent(
                 ToolCall(
                     id="spawn-counter",
                     name="spawn_agent",
-                    arguments={"name": "counter", "instruction": child_task},
+                    arguments={"task_name": "counter", "message": child_task},
                 )
             ]
         ),
@@ -509,7 +509,7 @@ def test_a_background_agent_runs_programs_in_code_mode(
                 ToolCall(
                     id="spawn-compute",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "compute", "instruction": child_task},
+                    arguments={"task_name": "compute", "message": child_task},
                 )
             ],
             conditions=RequestConditions(

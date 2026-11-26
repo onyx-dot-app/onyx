@@ -22,6 +22,12 @@ gives the key to `/v1/enroll`, and the fleet service answers with the deployment
 A copy of the database reports as the same deployment. To make the copy a new deployment, delete
 that row in the copy before it starts.
 
+A deployment upgraded from before v5 also has the instance UUID that the old anonymous telemetry
+sent (encrypted key-value `customer_uuid`). The sender adds it to `/v1/enroll` as
+`legacy_customer_uuid`, so the fleet service can link the deployment to its pre-v5 records. Onyx
+never creates this UUID for enrollment. If the service answers 422, the sender enrolls again
+without the field.
+
 Onyx Cloud derives its key from `WEB_DOMAIN`. Each Cloud tenant reports as a separate customer
 inside the Cloud deployment.
 
@@ -34,7 +40,10 @@ inside the Cloud deployment.
 | `query` | Chat turns and search requests: channel, mode, outcome, timing, error category, chat tool usage, LLM cycles | At the end of server execution |
 | `attempt` counters | Indexing: documents fetched, chunks embedded and written, errors, durations | Summed for 30 seconds |
 | `connector`, `tenant_domain`, `license`, `users` | Collector: connector settings and counts, permission and group sync times and cadence of permission-synced connectors, signup email domains, license presence, the number of standard user accounts and how many of them are active | Each item when it changes, and 6 hours after its own last send |
+| `usage`, `setup` | Collector: active users, questions, agent use, uploads and Craft sessions; what is configured | About once an hour |
+| `usage_week` | Collector: one completed week of chat history | A few weeks per read, from the first question; all again about every 30 days |
 | `feedback` | A thumbs up or down on an answer: the vote, the channel, and a digest of the answer id | When a user votes |
+| `failure_counts` | Each API server, Celery worker, and Slack bot process: failed logins by method, and MCP server discovery and setup check failures | With the heartbeat, every 5 minutes, only when a count is not zero |
 | `attempt`, `stage`, `job` | Collector: index attempts, stage timings, sync and migration jobs that changed | Every 5 minutes |
 | `heartbeat` deployment fields | API: Standard or Lite; collector: whether a configured connector has an indexed document | Every 5 minutes |
 | `queue` | Celery queue depths, from the queue monitor | Every 10 minutes |
@@ -71,6 +80,53 @@ deployment that the provider does not know), `context_limit`, `content_policy`, 
 seat limits and inactive subscriptions do count, as `rate_limit` and `license`. Deploy the receiving
 server's `error_source` and `llm_provider` fields and these categories before this instrumentation.
 
+Queries also count their tool calls. `tool_calls` and `tool_failures` give the number of calls and failed
+calls for each tool kind: `search`, `web_search`, `open_url`, `mcp`, `custom` (custom and OpenAPI actions),
+`image`, `python`, `code_mode`, `sandbox`, and `other`. The kind comes from the tool's class, never from
+its name. A failed call is a call that raised an error or returned an error result to the model.
+`mcp_auth_failures` counts MCP calls that the server refused for authentication. A query without tool
+calls omits these fields. Deploy the receiving server's `tool_calls`, `tool_failures` and
+`mcp_auth_failures` fields before this instrumentation.
+
+Login and MCP failures outside a query go into one in-memory count for each process. The process sends
+the counts with its heartbeat in one `failure_counts` event, and then sets them to zero. A process with
+no failures in the window sends no event. `login_failures` counts failed sign-ins by method: `password`,
+`oauth` (the Google login configured by environment variables), `oidc` (OIDC and Google provider rows),
+and `saml`. `mcp_failures` counts `discovery_auth`, `discovery_timeout` and `discovery_error` when Onyx
+lists the tools of an MCP server, and `probe_unreachable` and `probe_blocked` when the setup check cannot
+reach a server. Each count stops at 100,000 for each window, so many failed logins never add events or
+bytes. Deploy the receiving server's `failure_counts` event type before this instrumentation.
+
+The collector also sends usage and setup counts for the deployment, never for a user. A question is a
+user chat message outside agent sub-sessions. An active user is a standard account that asked at least
+one question in the window.
+
+- `usage`: `active_users_1d`, `active_users_7d` and `active_users_30d`; `queries_7d` and `queries_30d`;
+  `users_by_queries_7d`, the number of active users by their question count in 7 days (`q1`, `q2_5`,
+  `q6_20`, `q21_50`, `q51_plus`); `agent_messages_7d`, questions to `builtin` and `custom` agents (a
+  chat without an agent counts as built-in); `agents_used_7d`, the distinct agents that got a question;
+  `uploads_7d` and `failed_uploads_7d`, user files and failed user files created in 7 days; and
+  `craft_sessions_7d` and `craft_sessions_total`.
+- `setup`: `agents` (custom, not deleted), `llm_providers` (providers per provider type; an unknown type
+  counts as `custom`), `mcp_servers`, `custom_actions` (OpenAPI tools), `document_sets`, `slack_bots`,
+  `sso_providers` (enabled SSO provider rows), and `sso_configured` (an enabled SSO provider, or Google
+  login by environment variables outside Onyx Cloud).
+- `usage_week`: `week_start` (a Monday, UTC), `queries`, `sessions` (chats with a question) and
+  `active_users` for one completed ISO week. The weeks start at the week of the first question, so the
+  usage curve starts at real first use, not at the telemetry upgrade.
+
+Each tenant reads usage and setup first after a random part of an hour, then about once an hour. The
+weekly history goes out 4 weeks per read, with 10 to 30 minutes between reads, until it reaches the last
+completed week. Then a new week goes out when it completes. About every 30 days the history starts again
+from the earliest week it has sent, so the fleet service corrects a week that it lost or that changed,
+and a week whose chats were deleted goes out again as zero. The service
+replaces a week each time it gets it, so a repeated week never adds up. These reads use aggregate SQL
+only. `chat_message` has no index on its send time, so each time window starts at a message ID that a
+binary search over the primary key finds. Each read runs in its own savepoint: a read that stops at the
+statement timeout adds one to `usage_errors` in the heartbeat and does not stop the other reads. Deploy
+the receiving server's `usage`, `setup` and `usage_week` event types and the `usage_errors` heartbeat
+field before this instrumentation.
+
 Connector document counts use the same query as the connector admin page. They count indexed
 document links for each connector and credential pair, excluding pending links. Counts follow
 indexing and deletion directly; they do not use the pair's legacy stored counter.
@@ -104,6 +160,7 @@ the next pass starts at the first row that this pass did not send.
 
 - Application threads only add an event to a bounded memory queue of 2048 events. They take no
   lock and do no network, disk, or database work. When the queue is full, Onyx drops the event.
+- A login or MCP failure only adds one to a count in memory, under a short lock.
 - One daemon thread in each process sends gzip batches of up to 100 events every 2 seconds.
 - During an outage, the sender keeps the current batch and waits up to about 4 minutes between
   attempts. The sender does not send rejected events again. When the fleet service cannot store
@@ -118,9 +175,10 @@ the next pass starts at the first row that this pass did not send.
 
 ```sh
 uv run pytest backend/tests/unit/onyx/utils/test_fleet_telemetry.py \
+  backend/tests/unit/onyx/utils/test_fleet_failure_counts.py \
   backend/tests/unit/onyx/utils/test_fleet_telemetry_collector.py \
   backend/tests/unit/onyx/utils/test_fleet_enrollment.py
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/telemetry/test_fleet_collector.py
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/telemetry/
 ```
 
 The second command needs a migrated PostgreSQL. It copies the source tables into a temporary

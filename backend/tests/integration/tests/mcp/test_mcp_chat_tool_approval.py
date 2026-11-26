@@ -1115,7 +1115,7 @@ def _cells(first: str, second: str) -> tuple[ToolCall, ToolCall, ToolCall]:
         ToolCall(id="cell2", name="execute_code", arguments={"code": second}),
         ToolCall(
             id="wait1",
-            name="wait_code",
+            name="wait",
             arguments={"cell_id": 1, "yield_time_ms": 20_000},
         ),
     )
@@ -1217,7 +1217,7 @@ def test_a_cell_that_runs_while_a_program_waits_keeps_its_result(
     assert cell1_result is not None and wait_result is not None
     if decide == "after_the_stop":
         # The answer stopped only after cell 1 ended: its closing record holds
-        # the end, and wait_code points to it.
+        # the end, and wait points to it.
         assert "Cell 1 completed after this output, before the run paused." in (
             cell1_result
         )
@@ -1242,7 +1242,7 @@ def test_a_background_cell_keeps_its_own_approval_request(
 ) -> None:
     """Cell 1 asks for approval in the background while cell 2 waits for its
     own. Both requests stay open while the answer is saved; after both
-    decisions, cell 1 continues and wait_code returns its result."""
+    decisions, cell 1 continues and wait returns its result."""
     monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", True)
     hello_function = function_name(connected_mcp_server.callable_name("hello"))
     cell1, cell2, wait1 = _cells(
@@ -1553,7 +1553,7 @@ def _spawn(call_id: str, name: str, instruction: str) -> ToolCall:
     return ToolCall(
         id=call_id,
         name=SPAWN_AGENT_TOOL_NAME,
-        arguments={"name": name, "instruction": instruction},
+        arguments={"task_name": name, "message": instruction},
     )
 
 

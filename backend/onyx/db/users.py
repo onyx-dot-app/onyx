@@ -23,8 +23,14 @@ from onyx.configs.constants import (
     NO_AUTH_PLACEHOLDER_USER_EMAIL,
     SLACK_SERVICE_ACCOUNT_EMAIL,
 )
-from onyx.db.enums import AccountType, MarketplaceKind, Permission
+from onyx.db.enums import (
+    AccountType,
+    ChatArtifactIndexStatus,
+    MarketplaceKind,
+    Permission,
+)
 from onyx.db.models import (
+    ChatArtifact,
     ChatMessage,
     ChatSession,
     DocumentSet,
@@ -50,6 +56,7 @@ from onyx.db.sandbox import (
 from onyx.db.utils import is_check_violation, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.constants import ARTIFACT_TEXT_FILE_PREFIX
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes_in_background,
@@ -680,6 +687,17 @@ def reconcile_user_email__no_commit(
         .where(MCPServer.owner == old_email)
         .values(owner=normalized_new_email)
     )
+    # The search documents of the user's published files carry the old email
+    # as their ACL; the indexing beat writes them again with the new one. The
+    # files of deleted chats (REMOVED) have no document.
+    db_session.execute(
+        update(ChatArtifact)
+        .where(
+            ChatArtifact.user_id == user_id,
+            ChatArtifact.index_status != ChatArtifactIndexStatus.REMOVED,
+        )
+        .values(index_status=ChatArtifactIndexStatus.PENDING, index_attempts=0)
+    )
     return old_email, prior_emails
 
 
@@ -982,12 +1000,18 @@ class UserDeleteCleanup(BaseModel):
 
     file_ids: list[str] = []
     affected_user_ids: set[UUID] = set()
+    # Their search documents match the user's email, which a new account can
+    # take.
+    chat_artifact_ids: list[UUID] = []
 
 
 def finish_user_delete(cleanup: UserDeleteCleanup, db_session: Session) -> None:
-    # onyx.skills.push imports this module.
+    # onyx.skills.push imports this module, and the index module imports it
+    # through onyx.db.connector_alerts.
+    from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
     from onyx.skills.push import push_skills_and_commit
 
+    delete_chat_artifacts_from_index(cleanup.chat_artifact_ids)
     delete_files_best_effort(cleanup.file_ids, "user delete cleanup")
     if cleanup.affected_user_ids:
         push_skills_and_commit(cleanup.affected_user_ids, db_session)
@@ -1000,7 +1024,9 @@ def delete_user_from_db__no_commit(
     """Removes the user's personal marketplaces too, and queues their profile
     photo for deletion. The caller runs `finish_user_delete` after the
     commit."""
-    # onyx.db.plugin imports this module through onyx.db.user_group.
+    # onyx.db.plugin imports this module through onyx.db.user_group, and
+    # onyx.db.chat through onyx.db.connector_alerts.
+    from onyx.db.chat import lock_chat_artifact_version_files
     from onyx.db.marketplace import delete_github_marketplace__no_commit
     from onyx.db.plugin import private_plugins_blocking_user_delete
 
@@ -1021,7 +1047,33 @@ def delete_user_from_db__no_commit(
                 ],
             },
         )
-    cleanup = UserDeleteCleanup()
+    # Lock order, as in every artifact delete: the artifact rows, then their
+    # version rows (db/chat.py:delete_chat_artifact). The cascade removes them
+    # in this transaction, which keeps them locked until then; the files go
+    # after the commit.
+    cleanup = UserDeleteCleanup(
+        chat_artifact_ids=list(
+            db_session.scalars(
+                select(ChatArtifact.id)
+                .where(ChatArtifact.user_id == user_to_delete.id)
+                .order_by(ChatArtifact.id)
+                .with_for_update()
+            )
+        )
+    )
+    for file_id, thumbnail_file_id, preview_file_id in lock_chat_artifact_version_files(
+        db_session, ChatArtifact.user_id == user_to_delete.id
+    ):
+        cleanup.file_ids.extend(
+            version_file_id
+            for version_file_id in (
+                thumbnail_file_id,
+                preview_file_id,
+                f"{ARTIFACT_TEXT_FILE_PREFIX}{file_id}",
+                file_id,
+            )
+            if version_file_id is not None
+        )
     if user_to_delete.profile_image_file_id:
         cleanup.file_ids.append(user_to_delete.profile_image_file_id)
     # A personal marketplace holds only copies of its repository.

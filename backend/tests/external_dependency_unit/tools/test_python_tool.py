@@ -30,6 +30,7 @@ from onyx.server.query_and_chat.streaming_models import (
     PythonToolDelta,
     PythonToolStart,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
@@ -210,7 +211,11 @@ def _configure_interpreter(
 
 def _python_step(code: str, code_mode: bool) -> Delta:
     if code_mode:
-        return code_step("python", f"print(await tools.run_python(code={code!r}))")
+        return code_step(
+            OPENAI_CODE_MODE,
+            "python",
+            f"print(await tools.run_python(code={code!r}))",
+        )
     return tool_step("run_python", "python", {"code": code})
 
 

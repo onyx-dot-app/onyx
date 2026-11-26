@@ -166,13 +166,18 @@ preamble and growing history.
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the
 `{{CURRENT_DATETIME}}`, `{{CITATION_GUIDANCE}}` and `{{REMINDER_TAG_DESCRIPTION}}`
 tags, adds the shared user-information framing and company context, then adds
-one guidance section per configured tool. `build_chat_prompt` calls it with
+a `# Tools` section with the guidance that spans tools: the search guidance,
+open a URL after a web search, the sandbox tools and code mode. With sandbox
+tools, a `# Environment` section with the VM's facts ends the prompt; it is the
+only text that names one chat. Each built-in tool's
+own guidance is in its description (`prompts/tool_prompts.py`, for example
+`MEMORY_DESCRIPTION`), so it reaches code mode stubs too. `build_chat_prompt` calls it with
 `include_user_info=False` and without `should_cite_documents`. The per-user
 block goes into a separate message from `build_user_information_prompt`, so the
 system message stays the same for every user. Two callers use
 `build_system_prompt`: `build_chat_prompt` for the live prompt, and
 `calculate_reserved_tokens` for the token estimate with
-`include_all_guidance=True`. A new parameter must reach both, or the
+`all_guidance_family`, the tool family whose names it uses. A new parameter must reach both, or the
 reservation undercounts. A change to the base prompt reaches normal chat turns
 and the Slack bot. It does not reach deep research or its research agents, which
 write their own system messages in `deep_research/agent.py` and
@@ -212,7 +217,8 @@ Failed image calls without images do not add the image reminder.
 `<system-reminder>` tags.
 
 **Budget.** In setup, `calculate_reserved_tokens` reserves a worst-case system
-prompt (`include_all_guidance=True`, so it overshoots on purpose), the
+prompt (`all_guidance_family`, so it overshoots on purpose), the longest
+description of each built-in tool with guidance, the
 replacement and agent prompts, and the files attached to the new message. Then
 `chat/files.py:extract_context_files` uses the window that remains, for the
 smallest model of the turn, to decide whether project files go inline
@@ -264,7 +270,7 @@ counts what is sent, not the stored token counts.
    prompt resolves to empty. The same tag in a persona task prompt resolves to
    the guidance once citing applies (saved history has citations, a citeable tool
    ran, or the turn has project files), because the task prompt is in the reminder.
-   `include_all_guidance` adds the guidance only for the token estimate.
+   `all_guidance_family` adds the guidance only for the token estimate.
 3. `agent-prompt-separate-message` **The custom agent prompt is a separate user
    message.** With a base prompt, it stays in the fixed preamble before history.
    With no base prompt or base-prompt replacement, it becomes the system message.
@@ -380,8 +386,9 @@ counts what is sent, not the stored token counts.
   message get one more message with a line for each image
   (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
   alone (`chat/files.py:place_chat_files`), so a message keeps its lines
-  and the prefix stays cacheable. The `exec_command` description gains the
-  layout of `attachments/` once, when the chat gets its first file.
+  and the prefix stays cacheable. The system prompt's `# Environment` section
+  gives the layout of `attachments/` in every sandbox turn, so no tool
+  definition changes when the chat gets its first file.
   Only user attachments enter the prompt as text, so turn preparation
   extracts text only for the files of user messages
   (`chat/process_message.py:prepare_chat_turn`, `text_file_ids`). Files of
@@ -419,12 +426,15 @@ counts what is sent, not the stored token counts.
 
 ## Recipes
 
-- `tool-guidance-section` **A new tool guidance section.** Copy the memory tool: `MEMORY_GUIDANCE` in
-  `prompts/tool_prompts.py` appears twice in `build_system_prompt`. Add the new
-  text to both places. The `include_all_guidance` branch returns early with its
-  own list of every section, and only that list reaches the reservation. The
-  `has_memory` branch keys the live prompt on the configured tools. List the
-  current sections with `git grep -n "_GUIDANCE" backend/onyx/chat/prompt_utils.py`.
+- `tool-guidance-section` **New tool guidance.** Guidance about one tool goes in
+  that tool's description. Copy the memory tool: `MemoryTool.DESCRIPTION` is
+  `prompts/tool_prompts.py:MEMORY_DESCRIPTION`, which says "this tool" and
+  names no other tool. Add the longest description of a built-in tool to the
+  descriptions that `calculate_reserved_tokens` counts. Guidance that spans
+  tools goes in the `# Tools` section: add it to both branches of
+  `build_system_prompt`, the live prompt by the offered tools' called names and
+  the token estimate (`all_guidance_family`) by that family's names. The
+  sections follow the tool rank (`tools/ordering.py`).
 - `workspace-setting-in-prompt` **A workspace setting in the system prompt.** Copy the company name and
   description: `prompts/prompt_utils.py:get_company_context` reads them from
   `Settings`, and `build_system_prompt` appends the result. Read the setting

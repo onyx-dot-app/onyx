@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from "next-intl";
 
 import { Button, Collapsible, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
-import { cn } from "@opal/utils";
+import { cn, stripBidiControls } from "@opal/utils";
 import {
   SvgCheckSquare,
   SvgChevronDown,
@@ -47,8 +47,8 @@ export interface ApprovalCardProps {
 
 /** A pending request shows its details and decisions; a decided one, one line. */
 export default function ApprovalCard({
-  actions,
-  appName,
+  actions: rawActions,
+  appName: rawAppName,
   payload,
   expiresAt,
   sessionScope = "session",
@@ -77,6 +77,18 @@ export default function ApprovalCard({
     }
   }
 
+  // Integrations and tools choose these strings, so they show without bidi
+  // controls; PayloadView strips the payload's.
+  const actions = rawActions.map((item) => ({
+    ...item,
+    name: stripBidiControls(item.name),
+    description:
+      item.description === undefined
+        ? undefined
+        : stripBidiControls(item.description),
+  }));
+  const appName =
+    rawAppName === undefined ? undefined : stripBidiControls(rawAppName);
   const action = actions[0];
   const headline =
     actions.length === 1 && action

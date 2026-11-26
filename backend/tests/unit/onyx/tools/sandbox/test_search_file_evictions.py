@@ -7,7 +7,7 @@ import pytest
 
 from onyx.microvm.models import FileEntry, FileType
 from onyx.tools.tool_implementations.sandbox import file_copies
-from onyx.tools.tool_implementations.sandbox.file_copies import _evictions, _File
+from onyx.tools.tool_implementations.sandbox.file_copies import FileWrite, _evictions
 
 _NOW = datetime(2026, 11, 23, tzinfo=timezone.utc)
 
@@ -26,8 +26,8 @@ def _entry(name: str, size: int, age_minutes: int | None) -> FileEntry:
     )
 
 
-def _write(name: str, size: int) -> _File:
-    return _File(f"attachments/search/{name}", f"id-{name}", size)
+def _write(name: str, size: int) -> FileWrite:
+    return FileWrite(f"attachments/search/{name}", f"id-{name}", size)
 
 
 @pytest.fixture(autouse=True)
@@ -82,7 +82,7 @@ def test_a_rewritten_path_counts_once() -> None:
 def _folder_bytes(
     held: dict[str, FileEntry],
     writing: dict[str, int],
-    plan: tuple[list[str], list[_File]],
+    plan: tuple[list[str], list[FileWrite]],
 ) -> int:
     """The most bytes that attachments/search/ can hold after the plan's
     deletes, whichever of the running and planned writes land. A write that

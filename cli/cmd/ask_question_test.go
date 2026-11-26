@@ -77,7 +77,7 @@ func newQuestionServer(t *testing.T, opts questionServerOptions) *questionRun {
 	run.answerElsewhere = func() {
 		mu.Lock()
 		defer mu.Unlock()
-		answers = []any{map[string]any{"question_id": "scope", "option_label": "Team"}, map[string]any{"question_id": "region", "option_label": "EU"}}
+		answers = []any{map[string]any{"question_id": "scope", "option_labels": []any{"Team"}}, map[string]any{"question_id": "region", "option_labels": []any{"EU"}}}
 		answered, continuing, elsewhere = true, true, true
 	}
 	resolved := func() string {
@@ -286,7 +286,7 @@ func TestAsk_PromptsForEachQuestion(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 	want := []map[string]any{
-		{"question_id": "scope", "option_label": "Team"},
+		{"question_id": "scope", "option_labels": []any{"Team"}},
 		{"question_id": "region", "user_note": "EU only"},
 	}
 	if got := sentAnswers(t, within(t, run.bodies)); !reflect.DeepEqual(got, want) {

@@ -110,6 +110,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Document360]: "sources.document360.description",
   [ValidSources.File]: "sources.file.description",
   [ValidSources.UserFile]: "sources.userFile.description",
+  [ValidSources.ChatArtifact]: "sources.chatArtifact.description",
   [ValidSources.GoogleSites]: "sources.googleSites.description",
   [ValidSources.Loopio]: "sources.loopio.description",
   [ValidSources.Box]: "sources.box.description",
@@ -560,6 +561,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
     docs: `${DOCS_BASE_URL}/overview/core_features/chat#projects`,
     isPopular: false, // Needs to be false to hide from the Add Connector page
+  },
+  chat_artifact: {
+    icon: SvgFileText,
+    displayName: "Published Files",
+    category: SourceCategory.Other,
+    isPopular: false,
   },
   braintrust: {
     icon: SvgBraintrust,

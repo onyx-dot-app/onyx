@@ -55,6 +55,8 @@ from onyx.server.query_and_chat.streaming_models import (
     ApplyPatchStart,
     ExecCommandStart,
     FileToolProgress,
+    OpenUrlStart,
+    OpenUrlUrls,
     Packet,
     PacketObj,
     PublishFilesStart,
@@ -62,7 +64,6 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolCallArgumentDelta,
     WriteStdinStart,
 )
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.sandbox.models import FileToolName
 
 
@@ -341,7 +342,9 @@ def code_deltas(packets: list[Packet], name: str) -> list[str]:
     ]
 
 
-@pytest.mark.parametrize("name", ["run_python", CodeModeTool.NAME])
+# Clients know code mode's run tool by its name (web and mobile
+# `CODE_MODE_TOOL_TYPE`).
+@pytest.mark.parametrize("name", ["run_python", "execute_code"])
 def test_code_reports_merge_the_text_between_them(
     monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
@@ -632,7 +635,7 @@ def test_a_file_path_shows_once_whole(
             {"session_id": ["x"]},
             WriteStdinStart(session_id="", chars=""),
         ),
-        ("publish_files", {"files": "a.md"}, PublishFilesStart()),
+        ("library_create_library_file", {"files": "a.md"}, PublishFilesStart()),
     ],
 )
 def test_a_call_with_unusable_arguments_keeps_its_own_card(
@@ -648,3 +651,54 @@ def test_a_call_with_unusable_arguments_keeps_its_own_card(
 
 def test_each_file_tool_names_its_arguments() -> None:
     assert set(FILE_TOOL_ARGUMENTS) == set(get_args(FileToolName))
+
+
+@pytest.mark.parametrize(
+    "name,arguments,start",
+    [
+        (
+            "exec_command",
+            {"cmd": "ls", "workdir": "src"},
+            [ExecCommandStart(cmd="ls", workdir="src")],
+        ),
+        # bash has no working directory; an extra one is not shown.
+        ("bash", {"command": "ls", "workdir": "src"}, [ExecCommandStart(cmd="ls")]),
+        (
+            "write_stdin",
+            {"session_id": 7, "chars": "y", "timeout": 500},
+            [WriteStdinStart(session_id="7", chars="y")],
+        ),
+        # An argument of another shape that the tool ignores does not hide
+        # the write.
+        (
+            "write_stdin",
+            {"session_id": "7", "chars": "y", "yield_time_ms": "500ms"},
+            [WriteStdinStart(session_id="7", chars="y")],
+        ),
+        # Null characters are a poll, as the tool reads them.
+        (
+            "write_stdin",
+            {"session_id": 7, "chars": None},
+            [WriteStdinStart(session_id="7", chars="")],
+        ),
+        (
+            "open_url",
+            {"urls": ["https://a.example"]},
+            [OpenUrlStart(), OpenUrlUrls(urls=["https://a.example"])],
+        ),
+        (
+            "web_fetch",
+            {"urls": ["https://a.example"]},
+            [OpenUrlStart(), OpenUrlUrls(urls=["https://a.example"])],
+        ),
+    ],
+)
+def test_each_family_s_shell_and_url_calls_start_their_own_cards(
+    name: str, arguments: dict[str, JsonValue], start: list[PacketObj]
+) -> None:
+    """Saved chats hold the calls of both tool families: each starts its
+    card from the arguments of its own shape."""
+    call = ToolCall(id="c", name=name, arguments=arguments)
+    assert [
+        packet.obj for packet in tool_renderer(call, Placement(turn_index=0)).start()
+    ] == start

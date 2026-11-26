@@ -1,15 +1,18 @@
 """Open and answer chat tool calls that wait for the user's approval.
 
 Tool construction materializes each tool's action policy: a tool whose policy
-asks carries a `ToolApprovalScope`, and the runtime gates its calls. The
-store of the run that calls, the root's or a subagent's, opens each request
-here (`ChatRunStore.request_approval`). The request row holds what the card
-shows: the tool's display name and the call's arguments. A run whose waits
-are all on people, on its requests or on runs that wait the same way, hands
-off: its checkpoint is saved and its pod is free. The user decides through
-the decision API, which saves the decision; once no request of the response
-waits, dispatch resumes the run on any pod (`ChatRunStore.resume`), which
-answers each waiting call from its saved decision. The user's Stop of a live
+asks carries a `ToolApprovalScope`, and the runtime gates its calls. A
+built-in tool carries a scope with no integration (`onyx:<operation>`), and no
+policy blocks it. The store of the run that calls, the root's or a
+subagent's, asks the tool what the call's card shows
+(`Tool.approval_details`; a call that needs no approval runs) and opens each
+request here (`ChatRunStore.request_approval`). The request row holds what the
+card shows. A run whose waits are all on people, on its requests or on runs
+that wait the same way, hands off: its checkpoint is saved and its pod is
+free. The user decides through the decision API, which saves the decision;
+once no request of the response waits, dispatch resumes the run on any pod
+(`ChatRunStore.resume`), which answers each waiting call from its saved
+decision. The user's Stop of a live
 turn saves a rejection of the requests that the turn's runs wait on and
 gives it to those runs (`ChatRunStore.reject_waiting_inputs`). The store
 closes the requests of a run that ends when it releases the run. A saved
@@ -41,7 +44,11 @@ from onyx.db.integration_policy import get_session_granted_actions
 from onyx.integrations.models import EffectivePolicy
 from onyx.integrations.policy import resolve_chat_action_policy
 from onyx.llm.models import ToolResult
-from onyx.tools.models import ToolApprovalScope
+from onyx.tools.models import (
+    ToolApprovalDetails,
+    ToolApprovalScope,
+    is_builtin_action,
+)
 
 
 def open_tool_approval(
@@ -52,13 +59,15 @@ def open_tool_approval(
     user_id: UUID,
     tool_call_id: str,
     tool_name: str,
-    display_name: str,
+    details: ToolApprovalDetails,
     arguments: dict[str, JsonValue],
     scope: ToolApprovalScope,
     signed_out: bool,
 ) -> PendingToolInput | ToolResult | None:
     """A request for the call to wait for, an error result for a call that
     cannot run or wait, or None when a session grant approves the action.
+    `arguments` are the call's, as its card shows them when the details give
+    no payload.
 
     `tool_call_id` is the call of the response's step that the request
     belongs to: the call that waits, or the call whose tool made it."""
@@ -92,15 +101,16 @@ def open_tool_approval(
             action_id=scope.action_id,
             tool_call_id=tool_call_id,
             tool_name=tool_name,
-            display_name=display_name,
-            arguments=arguments,
+            display_name=details.display_name,
+            arguments=arguments if details.payload is None else details.payload,
         )
         db_session.commit()
     return PendingToolInput(
         request_id=str(approval_id),
         prompt=f"Allow {tool_name} to run?",
         mode=InputMode.EXECUTE,
-        display_name=display_name,
+        display_name=details.display_name,
+        display_arguments=details.payload,
     )
 
 
@@ -113,7 +123,10 @@ def action_now_blocked(
     chat_session_id: UUID,
 ) -> bool:
     """True when the current policies block the action for the chat's agent,
-    or its integration is gone or turned off."""
+    or its integration is gone or turned off. No policy covers a built-in
+    action."""
+    if is_builtin_action(integration_id, action_id):
+        return False
     integration = (
         get_integration_by_id(integration_id, db_session)
         if integration_id is not None

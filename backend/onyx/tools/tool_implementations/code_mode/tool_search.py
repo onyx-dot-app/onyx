@@ -1,5 +1,5 @@
-"""tool_search(): how programs find the deferred functions, which the
-`execute_code` description does not list."""
+"""The search of the deferred functions, which the run tool's description
+does not list; each shape names it (code_mode/shapes.py)."""
 
 import math
 import re
@@ -7,29 +7,14 @@ from collections import Counter
 from collections.abc import Sequence
 
 from onyx.tools.tool_implementations.code_mode.models import SearchableFunction
-from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 
-TOOL_SEARCH_FUNCTION = "tool_search"
 TOOL_MATCH_TYPE = "ToolMatch"
-# Names the tool search adds to a program's globals.
-TOOL_SEARCH_NAMES: frozenset[str] = frozenset({TOOL_SEARCH_FUNCTION, TOOL_MATCH_TYPE})
-DEFAULT_TOOL_SEARCH_LIMIT = 8
-MAX_TOOL_SEARCH_LIMIT = 20
-
-TOOL_SEARCH_STUBS = f'''class {TOOL_MATCH_TYPE}(TypedDict):
+TOOL_MATCH_STUB = f"""class {TOOL_MATCH_TYPE}(TypedDict):
     name: str
     description: str
-    stub: str
-
-
-async def {TOOL_SEARCH_FUNCTION}(query: str, limit: int = {DEFAULT_TOOL_SEARCH_LIMIT}) -> list[{TOOL_MATCH_TYPE}]:
-    """Find tool functions that this description does not list, best match first.
-
-    Each match has the function name, its description, and its full stub with
-    the argument and result types. Call a match as `await {TOOLS_NAMESPACE}.<name>(...)`.
-    At most `limit` matches, up to {MAX_TOOL_SEARCH_LIMIT}.
-    """
-    ...'''
+    stub: str"""
+DEFAULT_TOOL_SEARCH_LIMIT = 8
+MAX_TOOL_SEARCH_LIMIT = 20
 
 # Runs of letters and digits in any script; `_` and other symbols split words.
 _TOKEN = re.compile(r"[^\W_]+")
@@ -107,17 +92,18 @@ class ToolIndex:
         scored.sort(key=lambda item: (-item[0], item[1].name))
         return [function for _, function in scored[:limit]]
 
-    def tool_search(
-        self, query: object, limit: object = DEFAULT_TOOL_SEARCH_LIMIT
+    def matches(
+        self, query: object, limit: object, limit_name: str
     ) -> list[dict[str, str]]:
-        """Answer a program's tool_search() call; raises TypeError or ValueError
-        for invalid arguments, as Python would."""
+        """Answer a program's search call; raises TypeError or ValueError for
+        invalid arguments, as Python would. `limit_name` is the argument's
+        name in the program."""
         if not isinstance(query, str):
             raise TypeError(f"query must be str, not {type(query).__name__}")
         if not isinstance(limit, int) or isinstance(limit, bool):
-            raise TypeError(f"limit must be int, not {type(limit).__name__}")
+            raise TypeError(f"{limit_name} must be int, not {type(limit).__name__}")
         if limit < 1:
-            raise ValueError("limit must be at least 1")
+            raise ValueError(f"{limit_name} must be at least 1")
         return [
             {
                 "name": function.name,

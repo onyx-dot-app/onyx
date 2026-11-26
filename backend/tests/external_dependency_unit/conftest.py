@@ -1,5 +1,8 @@
+import hashlib
 import logging
+import math
 import os
+import re
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from typing import Protocol
@@ -41,15 +44,18 @@ from onyx.db.models import (
     UserFile,
     UserProject,
 )
+from onyx.db.search_settings import get_current_search_settings
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.model_server_models import EmbedRequest, EmbedResponse
 from tests.common.models import CI_OPENAI_MODEL
 from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
 from tests.external_dependency_unit.session_state_guard import (
@@ -250,17 +256,13 @@ def delete_test_users_and_owned_rows(
 ) -> None:
     """Delete test-owned chat resources and their non-cascading links."""
     db_session.rollback()
-    # Published files and thumbnails are file records, which a chat's delete
-    # leaves; a user without any never reaches the file store.
-    artifact_files = (
-        db_session.execute(
-            select(ChatArtifactVersion.file_id, ChatArtifactVersion.thumbnail_file_id)
-            .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
-            .where(ChatArtifact.user_id.in_(user_ids))
-        )
-        .tuples()
-        .all()
-    )
+    # Published files, thumbnails and previews are file records, which a
+    # chat's delete leaves; a user without any never reaches the file store.
+    artifact_files = db_session.scalars(
+        select(ChatArtifactVersion.file_id)
+        .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+        .where(ChatArtifact.user_id.in_(user_ids))
+    ).all()
     if artifact_files:
         delete_chat_artifact_files(artifact_files)
     persona_ids = select(Persona.id).where(Persona.user_id.in_(user_ids))
@@ -402,3 +404,35 @@ def initialize_file_store() -> Generator[None, None, None]:
     """
     get_default_file_store().initialize()
     yield
+
+
+def _word_vector(text: str, dim: int) -> list[float]:
+    """A unit vector of the text's hashed words: texts that share words are
+    close, so semantic search ranks the texts that hold the query's words."""
+    vector = [0.0] * dim
+    vector[0] = 1e-3  # never the zero vector, which cosine similarity rejects
+    for word in re.findall(r"\w+", text.lower()):
+        bucket = int.from_bytes(hashlib.blake2b(word.encode()).digest()[:8], "big")
+        vector[bucket % dim] += 1.0
+    norm = math.sqrt(sum(value * value for value in vector))
+    return [value / norm for value in vector]
+
+
+@pytest.fixture
+def fake_embeddings(db_session: Session) -> Generator[None, None, None]:
+    """Embed indexing passages and search queries in-process, without the
+    model server, at the current search settings' dimension."""
+    dim = get_current_search_settings(db_session).final_embedding_dim
+
+    def _embed(
+        self: EmbeddingModel,  # noqa: ARG001
+        embed_request: EmbedRequest,
+        *args: object,  # noqa: ARG001
+        **kwargs: object,  # noqa: ARG001
+    ) -> EmbedResponse:
+        return EmbedResponse(
+            embeddings=[_word_vector(text, dim) for text in embed_request.texts]
+        )
+
+    with patch.object(EmbeddingModel, "_make_model_server_request", _embed):
+        yield

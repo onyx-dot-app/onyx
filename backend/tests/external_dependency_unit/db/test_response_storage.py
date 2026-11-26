@@ -203,7 +203,9 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.models import PublishedFile, PublishedFiles
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import PublishFilesTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    LibraryCreateLibraryFileTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.threadpool_concurrency import start_thread_future
@@ -1169,11 +1171,15 @@ def test_a_repeated_save_lists_each_published_file_once(
         record.run_id,
         [
             AssistantMessage(
-                content=[ToolCall(id="call", name=PublishFilesTool.NAME, arguments={})]
+                content=[
+                    ToolCall(
+                        id="call", name=LibraryCreateLibraryFileTool.NAME, arguments={}
+                    )
+                ]
             ),
             ToolResultMessage(
                 tool_call_id="call",
-                tool_name=PublishFilesTool.NAME,
+                tool_name=LibraryCreateLibraryFileTool.NAME,
                 content="Published.",
                 details=PublishedFiles(files=[published]),
             ),
@@ -1182,7 +1188,7 @@ def test_a_repeated_save_lists_each_published_file_once(
     )
     record.answer_step_index = 1
     projected = project_response(
-        response_snapshot(record), tool_ids={PublishFilesTool.NAME: None}
+        response_snapshot(record), tool_ids={LibraryCreateLibraryFileTool.NAME: None}
     )
     # The checkpoint contract lets an initial execution repeat its terminal save.
     for _ in range(2):

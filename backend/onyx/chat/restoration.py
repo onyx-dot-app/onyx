@@ -2,6 +2,7 @@
 
 import hashlib
 from collections.abc import Callable
+from functools import partial
 from io import BytesIO
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -34,10 +35,13 @@ from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import AssistantMessage, Message, ToolResultFields
-from onyx.tools.constants import QUESTION_TOOL_NAMES
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.question.shapes import (
+    QUESTION_TOOL_NAMES,
+    QuestionShape,
+)
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.tools.tool_implementations.subagents.subagent_tools import ListAgentsTool
 
@@ -105,7 +109,7 @@ def restore_chat_agent(
     user_identity: LLMUserIdentity | None,
     subagent_factory: Callable[[int], Callable[[], Agent]],
     on_root_drained: Callable[[], None] | None = None,
-    question_tool: Callable[[str, int], QuestionTool] | None = None,
+    question_tool: Callable[[int, QuestionShape], QuestionTool] | None = None,
 ) -> Agent:
     """Build feature code and resources; Agent.resume restores saved execution state.
 
@@ -114,8 +118,11 @@ def restore_chat_agent(
     declared them. Its children are one level deeper (`subagent_factory`); an
     agent at `MAX_CHILD_DEPTH` cannot start agents. A root chat agent gets
     `on_root_drained` as its on_drained hook, and the question tool
-    (`question_tool(name, response_id)`) when its saved step declared it,
-    under the declared name.
+    (`question_tool(response_id, shape)`) when its saved step declared one.
+
+    The agent gets the tool shapes of `llm`, the model that continues the
+    run, as its restored children and sandbox tools do. A saved call of
+    another shape's tool ends with the runtime's result for a removed tool.
     """
     snapshot = checkpoint.run_state
     if snapshot.progress is None:
@@ -125,14 +132,6 @@ def restore_chat_agent(
     state = _FEATURE_STATE.validate_python(snapshot.progress.feature_state)
     context = checkpoint.agent_state
     if isinstance(state, ChatFeatureState):
-        question_name = next(
-            (
-                tool.name
-                for tool in snapshot.progress.tools
-                if tool.name in QUESTION_TOOL_NAMES
-            ),
-            None,
-        )
         return ChatAgent(
             is_subagent=snapshot.parent_run_id is not None,
             on_drained=on_root_drained if snapshot.parent_run_id is None else None,
@@ -161,8 +160,11 @@ def restore_chat_agent(
             or any(tool.name == ListAgentsTool.name for tool in snapshot.progress.tools)
             else None,
             can_spawn=depth < MAX_CHILD_DEPTH,
-            question_tool=question_tool(question_name, int(snapshot.run_id))
-            if question_tool is not None and question_name is not None
+            question_tool=partial(question_tool, int(snapshot.run_id))
+            if question_tool is not None
+            and any(
+                tool.name in QUESTION_TOOL_NAMES for tool in snapshot.progress.tools
+            )
             else None,
         )
     if isinstance(state, ResearchFeatureState):

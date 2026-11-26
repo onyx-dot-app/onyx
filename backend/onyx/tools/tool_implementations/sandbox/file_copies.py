@@ -115,8 +115,13 @@ from onyx.microvm.agent_client import (
     InstanceMismatchError,
     VmNotRunningError,
 )
-from onyx.microvm.daemon_client import SandboxDaemonError
-from onyx.microvm.models import FileEntry, FileListing, FileType
+from onyx.microvm.daemon_client import SandboxDaemonError, SandboxDaemonErrorReason
+from onyx.microvm.models import (
+    FileEntry,
+    FileListing,
+    FileType,
+    HostAgentErrorReason,
+)
 from onyx.server.features.build.sandbox.file_copy_state import copy_generation_key
 from onyx.server.features.build.sandbox.harness_base import (
     AGENT_FILES_DIR,
@@ -154,7 +159,7 @@ COPY_CACHE_SECONDS = 5.0
 # The shortest busy mark of a copy's downloads and writes.
 BUSY_MARK_SECONDS = 120.0
 # The most entries listed in one directory.
-_MAX_LISTED = 100_000
+MAX_LISTED = 100_000
 # The directories of chat files, and those that the copy cleans up.
 _CHAT_FILE_DIRS = (CHAT_FILES_DIR, PROJECT_FILES_DIR, AGENT_FILES_DIR)
 _CLEANED_DIRS = (PROJECT_FILES_DIR, AGENT_FILES_DIR)
@@ -314,7 +319,7 @@ class CopyState(str, Enum):
     NOT_COPIED = "not_copied"
 
 
-class _Failure(NamedTuple):
+class CopyFailure(NamedTuple):
     # For the status line only.
     reason: str
     # The copy stops, and its waiting files fail too.
@@ -322,18 +327,22 @@ class _Failure(NamedTuple):
 
 
 # A newer copy of the chat, a purge, or pod shutdown.
-_SUPERSEDED = _Failure("the copy stopped", ends_copy=True)
-_NO_RESPONSE = _Failure("the sandbox did not respond", ends_copy=True)
-_NO_START = _Failure("the sandbox did not start")
-_ERROR = _Failure("the copy stopped on an error")
-_NO_DOWNLOAD = _Failure("the file store did not return the file")
-_NOT_TAKEN = _Failure("the sandbox did not take the file")
+_SUPERSEDED = CopyFailure("the copy stopped", ends_copy=True)
+NO_RESPONSE = CopyFailure("the sandbox did not respond", ends_copy=True)
+_NO_START = CopyFailure("the sandbox did not start")
+_ERROR = CopyFailure("the copy stopped on an error")
+_NO_DOWNLOAD = CopyFailure("the file store did not return the file")
+_NOT_TAKEN = CopyFailure("the sandbox did not take the file")
+# A write without overwrite found a file at its path.
+EXISTS = CopyFailure("a file is already at the path")
 
 
-class _File(NamedTuple):
+class FileWrite(NamedTuple):
     path: str
     file_id: str
     size: int
+    # False: a file at the path fails the write with EXISTS, and stays.
+    overwrite: bool = True
 
 
 class _Listing(NamedTuple):
@@ -367,9 +376,9 @@ def _list_chat_dirs(files: SessionFiles, sandbox_id: UUID) -> _Listing | None:
         if directory in not_dirs:
             continue
         try:
-            listing = files.list_files(directory, max_entries=_MAX_LISTED)
+            listing = files.list_files(directory, max_entries=MAX_LISTED)
         except Exception as error:
-            if _no_response(error):
+            if no_response(error):
                 return None
             logger.warning(
                 "sandbox_file_listing_failed sandbox=%s path=%s",
@@ -394,9 +403,38 @@ def _list_chat_dirs(files: SessionFiles, sandbox_id: UUID) -> _Listing | None:
     return _Listing(entries, not_dirs)
 
 
-def _no_response(error: Exception) -> bool:
-    """The call timed out, or the VM instance stopped or was replaced."""
+def in_place(
+    entry: FileEntry | None, size: int, *, updated_at: datetime | None = None
+) -> bool:
+    """Whether a listed entry is the file of `size` that a copy would write
+    (the In place rule): a regular file of that size. `updated_at` is the
+    file record's last write, for a file ID whose content can change (a
+    search file); the entry must then also be newer than it by
+    SEARCH_COPY_CLOCK_SKEW. A copy with no time may hold an earlier
+    content."""
+    return (
+        entry is not None
+        and entry.type is FileType.REGULAR
+        and entry.size == size
+        and (
+            updated_at is None
+            or (
+                entry.modified_at is not None
+                and entry.modified_at >= updated_at + SEARCH_COPY_CLOCK_SKEW
+            )
+        )
+    )
+
+
+def no_response(error: Exception) -> bool:
+    """The call timed out, or the VM instance stopped, was replaced or is
+    gone from its node."""
     if isinstance(error, (TimeoutError, VmNotRunningError, InstanceMismatchError)):
+        return True
+    if (
+        isinstance(error, HostAgentError)
+        and error.reason is HostAgentErrorReason.SANDBOX_NOT_FOUND
+    ):
         return True
     if isinstance(error, SandboxDaemonError) and error.vm_unusable:
         return True
@@ -524,7 +562,7 @@ def _superseded(cache: CacheBackend, session_id: UUID, generation: int) -> bool:
     return raw is None or int(raw) != generation
 
 
-class _Writes:
+class FileWrites:
     """The writes of one intake, in the VM's write slots: each file with its
     tries from one download, all under one busy mark of `files`. Creating it
     queues the writes. `on_end` gets every file once: None when it was
@@ -535,9 +573,9 @@ class _Writes:
         ref: HarnessSandboxRef,
         pool: FileCopyPool,
         files: SessionFiles,
-        writes: Sequence[_File],
+        writes: Sequence[FileWrite],
         superseded: Callable[[], bool],
-        on_end: Callable[[Sequence[_File], _Failure | None], None],
+        on_end: Callable[[Sequence[FileWrite], CopyFailure | None], None],
     ) -> None:
         self._pool = pool
         self._files = files
@@ -565,36 +603,31 @@ class _Writes:
 
         def write() -> None:
             """Write the file. A failure that ends the copy fails its
-            waiting files too."""
+            waiting files too. The busy mark is cleared before the last end
+            is reported: the caller may then set it again."""
             try:
                 failure = self._write(file)
-                if failure is None:
-                    self._on_end([file], None)
-                    return
-                with self._lock:
-                    failed = [file]
-                    if failure.ends_copy:
-                        failed.extend(self._pending)
-                        self._pending.clear()
-                self._on_end(failed, failure)
             except Exception:
                 logger.exception("sandbox_file_copy_failed path=%s", file.path)
-                self._on_end([file], _ERROR)
-            finally:
-                with self._lock:
-                    self._writing -= 1
-                    end = not self._writing and not self._pending
-                if end:
-                    with self._mark_lock:
-                        if self._busy_until:
-                            try:
-                                self._files.mark_busy(None)
-                            except Exception:
-                                # The mark expires on its own.
-                                logger.warning(
-                                    "sandbox_file_copy_mark_clear_failed",
-                                    exc_info=True,
-                                )
+                failure = _ERROR
+            ended = [file]
+            with self._lock:
+                if failure is not None and failure.ends_copy:
+                    ended.extend(self._pending)
+                    self._pending.clear()
+                self._writing -= 1
+                end = not self._writing and not self._pending
+            if end:
+                with self._mark_lock:
+                    if self._busy_until:
+                        try:
+                            self._files.mark_busy(None)
+                        except Exception:
+                            # The mark expires on its own.
+                            logger.warning(
+                                "sandbox_file_copy_mark_clear_failed", exc_info=True
+                            )
+            self._on_end(ended, failure)
 
         return write
 
@@ -614,7 +647,7 @@ class _Writes:
                 return
             self._busy_until = now + ttl
 
-    def _write(self, file: _File) -> _Failure | None:
+    def _write(self, file: FileWrite) -> CopyFailure | None:
         """Copy the file with its tries from one download; None, or why it
         failed."""
         timeout = COPY_BASE_SECONDS + file.size / COPY_MIN_BYTES_PER_SECOND
@@ -625,7 +658,7 @@ class _Writes:
                 if attempt:
                     time.sleep(RETRY_PAUSE_SECONDS)
                 if self._no_response:
-                    return _NO_RESPONSE
+                    return NO_RESPONSE
                 if content is None:
                     if self._pool.stopped.is_set() or self._superseded():
                         return _SUPERSEDED
@@ -650,22 +683,32 @@ class _Writes:
                 if self._superseded():
                     return _SUPERSEDED
                 if self._no_response:
-                    return _NO_RESPONSE
+                    return NO_RESPONSE
                 if self._pool.stopped.is_set():
                     return _SUPERSEDED
                 try:
                     # The write streams the file from its start each time.
-                    self._files.write(file.path, content, timeout_seconds=timeout)
+                    self._files.write(
+                        file.path,
+                        content,
+                        timeout_seconds=timeout,
+                        overwrite=file.overwrite,
+                    )
                 except Exception as error:
+                    if (
+                        isinstance(error, SandboxDaemonError)
+                        and error.reason is SandboxDaemonErrorReason.FILE_EXISTS
+                    ):
+                        return EXISTS
                     logger.warning(
                         "sandbox_file_write_failed path=%s try=%d",
                         file.path,
                         attempt + 1,
                         exc_info=True,
                     )
-                    if _no_response(error):
+                    if no_response(error):
                         self._no_response = True
-                        return _NO_RESPONSE
+                        return NO_RESPONSE
                     failure = _NOT_TAKEN
                     continue
                 return None
@@ -695,7 +738,7 @@ class TurnFileCopies:
         # By path: the file store file.
         self._vm_chat_files: dict[str, str] = {}
         for chat_file in vm_chat_files:
-            path = session_relative_path(ref, chat_file.path)
+            path = session_relative_path(ref.session_id, chat_file.path)
             if posixpath.dirname(path) not in _CHAT_FILE_DIRS:
                 raise SandboxPathError(
                     f"{chat_file.path!r} is not in a directory of chat files"
@@ -716,7 +759,7 @@ class TurnFileCopies:
         intake = [self._intake]
         self._pool.intake.want(ref.sandbox_id, lambda: intake.pop() if intake else None)
 
-    def _written(self, files: Sequence[_File], failure: _Failure | None) -> None:
+    def _written(self, files: Sequence[FileWrite], failure: CopyFailure | None) -> None:
         if failure is None:
             self.status.update(
                 ((file.path, CopyState.DONE, None) for file in files), written=True
@@ -754,7 +797,7 @@ class TurnFileCopies:
             return
         listing = _list_chat_dirs(files, ref.sandbox_id)
         if listing is None:
-            self.status.settle(_NO_RESPONSE.reason)
+            self.status.settle(NO_RESPONSE.reason)
             return
 
         with get_session_with_current_tenant() as db_session:
@@ -769,7 +812,7 @@ class TurnFileCopies:
         max_file_bytes = cast(int, load_settings().user_file_max_upload_size_mb) * _MIB
         budget = MAX_TURN_BYTES
         changes: list[tuple[str, CopyState, str | None]] = []
-        writes: list[_File] = []
+        writes: list[FileWrite] = []
         for path, file_id in self._vm_chat_files.items():
             size: int | None = None
             if file_id in sizes:
@@ -792,11 +835,7 @@ class TurnFileCopies:
                     CopyState.NOT_COPIED,
                     "the file is not in the file store",
                 )
-            elif (
-                entry is not None
-                and entry.type is FileType.REGULAR
-                and entry.size == size
-            ):
+            elif in_place(entry, size):
                 state = CopyState.DONE
             elif size > max_file_bytes:
                 state = CopyState.NOT_COPIED
@@ -815,7 +854,7 @@ class TurnFileCopies:
                 reason = "over the copy limit of one turn; copying next turn"
             else:
                 budget -= size
-                writes.append(_File(path, file_id, size))
+                writes.append(FileWrite(path, file_id, size))
             changes.append((path, state, reason))
         self.status.update(changes)
 
@@ -844,19 +883,19 @@ class TurnFileCopies:
                     path,
                     exc_info=True,
                 )
-                if _no_response(error):
-                    self.status.settle(_NO_RESPONSE.reason)
+                if no_response(error):
+                    self.status.settle(NO_RESPONSE.reason)
                     return
         if writes:
-            _Writes(ref, self._pool, files, writes, self._superseded, self._written)
+            FileWrites(ref, self._pool, files, writes, self._superseded, self._written)
 
 
 def _evictions(
     held: Mapping[str, FileEntry],
     writing: Mapping[str, int],
-    writes: Sequence[_File],
+    writes: Sequence[FileWrite],
     protected: set[str],
-) -> tuple[list[str], list[_File]]:
+) -> tuple[list[str], list[FileWrite]]:
     """The search files to delete, oldest first, and the writes that go
     ahead, so that attachments/search/ holds at most MAX_CHAT_SEARCH_BYTES.
     `held`: the listed entries of the folder; `writing`: by path, the sizes of
@@ -871,7 +910,7 @@ def _evictions(
     for path, size in writing.items():
         kept[path] = max(size, held[path].size if path in held else 0)
     room = MAX_CHAT_SEARCH_BYTES - sum(kept.values())
-    fitting: list[_File] = []
+    fitting: list[FileWrite] = []
     for write in writes:
         listed = held[write.path].size if write.path in held else 0
         charge = max(write.size, kept.get(write.path, listed))
@@ -1098,7 +1137,7 @@ class TurnSearchFiles:
             # None: unknown, so every file is written and none deleted.
             listing: FileListing | None = None
             try:
-                listing = files.list_files(SEARCH_FILES_DIR, max_entries=_MAX_LISTED)
+                listing = files.list_files(SEARCH_FILES_DIR, max_entries=MAX_LISTED)
             except Exception as error:
                 logger.warning(
                     "sandbox_file_listing_failed sandbox=%s path=%s",
@@ -1106,7 +1145,7 @@ class TurnSearchFiles:
                     SEARCH_FILES_DIR,
                     exc_info=True,
                 )
-                if _no_response(error):
+                if no_response(error):
                     return
             held = {
                 entry.path: entry
@@ -1114,17 +1153,11 @@ class TurnSearchFiles:
                 if entry.type is not FileType.DIRECTORY
             }
             writes = [
-                _File(file.path, file.file_id, size)
+                FileWrite(file.path, file.file_id, size)
                 for file, size in sized
-                if (entry := held.get(file.path)) is None
-                or entry.type is not FileType.REGULAR
-                or entry.size != size
-                # A copy with no time, or not clearly newer than the record's
-                # last write, may hold an earlier content of the file ID.
-                or entry.modified_at is None
-                or entry.modified_at < file.updated_at + SEARCH_COPY_CLOCK_SKEW
+                if not in_place(held.get(file.path), size, updated_at=file.updated_at)
             ]
-            in_place = len(sized) - len(writes)
+            placed = len(sized) - len(writes)
             evicted: list[str] = []
             # A truncated or failed listing deletes nothing.
             if listing is not None and not listing.truncated:
@@ -1151,7 +1184,7 @@ class TurnSearchFiles:
                 "sandbox_search_files_intake session=%s in_place=%d "
                 "copying=%d not_copied=%d no_access=%d evicted=%d",
                 target.ref.session_id,
-                in_place,
+                placed,
                 len(writes),
                 not_copied,
                 no_access,
@@ -1161,7 +1194,7 @@ class TurnSearchFiles:
                 with self._lock:
                     self._writing.update((write.path, write.size) for write in writes)
                 released -= {write.file_id for write in writes}
-                _Writes(target.ref, pool, files, writes, superseded, self._written)
+                FileWrites(target.ref, pool, files, writes, superseded, self._written)
         except Exception:
             logger.exception(
                 "sandbox_search_files_failed session=%s", target.ref.session_id
@@ -1175,7 +1208,7 @@ class TurnSearchFiles:
             if restart:
                 self._start_intake(target)
 
-    def _written(self, files: Sequence[_File], failure: _Failure | None) -> None:
+    def _written(self, files: Sequence[FileWrite], failure: CopyFailure | None) -> None:
         with self._lock:
             for file in files:
                 self._writing.pop(file.path, None)

@@ -40,6 +40,7 @@ from onyx.db.tools import get_builtin_tool
 from onyx.file_store.file_store import get_default_file_store
 from onyx.kg.models import KGStage
 from onyx.llm.cancellation import CancellationSignal, current_cancellation
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -66,20 +67,22 @@ from onyx.server.query_and_chat.chat_backend import delete_chat_session_by_id
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import PYTHON_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import CapabilityEntry, SearchResult, SearchResults, ToolOptions
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox import file_copies
 from onyx.tools.tool_implementations.sandbox.models import (
     SearchResultFile,
     VmChatFile,
 )
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search import search_tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.search.search_utils import (
     merge_overlapping_sections,
 )
-from tests.external_dependency_unit.chat.test_wait_agents import (
-    ScriptedLLM as WaitAgentsLLM,
+from tests.external_dependency_unit.chat.test_wait_agent import (
+    ScriptedLLM as WaitAgentLLM,
 )
 from tests.external_dependency_unit.code_mode_helpers import (
     ChatLLM,
@@ -516,6 +519,7 @@ def test_a_search_in_a_program_copies_its_file(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "program",
                 f"r = await tools.internal_search(queries=[{QUERY!r}])\n"
                 "print(r['results'][0]['file_name'])\n",
@@ -663,6 +667,7 @@ def test_the_chat_file_copy_never_deletes_search_or_artifact_files(
                     VmChatFile(file_id=file_id, path="attachments/project/p.txt")
                 ],
                 copy_vm_chat_files=True,
+                shell=SHELL_SHAPES[ToolFamily.OPENAI],
             )
 
         chat_session_id = uuid4()
@@ -720,6 +725,7 @@ def test_a_search_leaves_the_chat_file_copy_of_its_turn_running(
                 VmChatFile(file_id=uploads[1], path="attachments/b.txt"),
             ],
             copy_vm_chat_files=True,
+            shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
         ref = turn.start_call()
         _wait_until(lambda: "attachments/a.txt" in node.agent.write_waiting)
@@ -897,6 +903,7 @@ def test_an_earlier_turns_late_search_leaves_the_newer_turn_alone(
             chat_session_id=chat_session_id,
             vm_chat_files=chat_files,
             copy_vm_chat_files=bool(chat_files),
+            shell=SHELL_SHAPES[ToolFamily.OPENAI],
         )
 
     def offer(of: SandboxTurn, file: ConnectorFile) -> str:
@@ -991,8 +998,12 @@ def test_a_truncated_listing_evicts_nothing(
     monkeypatch.setattr(file_copies, "MAX_CHAT_SEARCH_BYTES", 8)
 
     class _Truncated(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
-            listing = super().list_files(directory, max_entries=max_entries)
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            listing = super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
             if directory != "attachments/search":
                 return listing
             return FileListing(entries=listing.entries, truncated=True)
@@ -1193,12 +1204,12 @@ def test_a_subagent_search_copies_its_file(
                 ToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "helper", "instruction": "Task helper"},
+                    arguments={"task_name": "helper", "message": "Task helper"},
                 )
             ]
         )
 
-    model = WaitAgentsLLM(generate)
+    model = WaitAgentLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
     )
@@ -1309,11 +1320,15 @@ def test_a_file_offered_while_the_intake_runs_is_copied(
     release = threading.Event()
 
     class _HeldListing(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
             if directory == "attachments/search" and not release.is_set():
                 listing.set()
                 release.wait(15)
-            return super().list_files(directory, max_entries=max_entries)
+            return super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
 
     _wrap(monkeypatch, sandbox, _HeldListing)
     chat_id = uuid4()
@@ -1324,6 +1339,7 @@ def test_a_file_offered_while_the_intake_runs_is_copied(
         chat_session_id=chat_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
 
     def offer(file: ConnectorFile) -> str:
@@ -1372,6 +1388,7 @@ def test_a_write_that_ends_during_the_listing_still_counts_toward_the_cap(
         chat_session_id=chat_id,
         vm_chat_files=[],
         copy_vm_chat_files=False,
+        shell=SHELL_SHAPES[ToolFamily.OPENAI],
     )
     ref = turn.copy_target().ref
     sandbox.ensure_running(ref)
@@ -1397,8 +1414,12 @@ def test_a_write_that_ends_during_the_listing_still_counts_toward_the_cap(
     running = turn.search_files._writing
 
     class _StaleListing(_Wrapped):
-        def list_files(self, directory: str, *, max_entries: int) -> FileListing:
-            listing = super().list_files(directory, max_entries=max_entries)
+        def list_files(
+            self, directory: str, *, max_entries: int, include_hidden: bool = False
+        ) -> FileListing:
+            listing = super().list_files(
+                directory, max_entries=max_entries, include_hidden=include_hidden
+            )
             if directory == "attachments/search" and armed.is_set():
                 gate.set()
                 _wait_until(lambda: not running)

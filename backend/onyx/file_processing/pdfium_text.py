@@ -16,8 +16,8 @@ TEXT_SECTION_SEPARATOR = "\n\n"
 PDFIUM_REOPEN_RSS_GROWTH_BYTES = 256 * 1024 * 1024
 
 
-def extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
-    """Extract all text from a PDF via pypdfium2 (PDFium/C).
+def extract_pdf_pages_pdfium(file_bytes: bytes, password: str | None) -> list[str]:
+    """Extract the text of each page of a PDF via pypdfium2 (PDFium/C).
 
     PDFium releases the GIL while parsing, so a large or complex PDF can't pin
     a worker thread or stall the indexing heartbeat during text extraction.
@@ -46,6 +46,6 @@ def extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
                     textpage.close()
             finally:
                 page.close()
-        return TEXT_SECTION_SEPARATOR.join(page_texts)
+        return page_texts
     finally:
         pdf.close()

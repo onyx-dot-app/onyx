@@ -29,6 +29,7 @@ from onyx.tools.models import (
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
+from onyx.utils.fleet_telemetry import ToolKind
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -231,7 +232,7 @@ def test_child_completion_does_not_repeat_tool_start_telemetry(
         assert bound.result_from_children(invocation, []) is result
     finally:
         CURRENT_QUERY_OBSERVATION.reset(token)
-    observation.tool_started.assert_called_once_with(is_search=False)
+    observation.tool_started.assert_called_once_with(ToolKind.OTHER)
 
 
 @pytest.mark.parametrize("display_error", [False, True])

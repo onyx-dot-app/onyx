@@ -114,7 +114,10 @@ from onyx.llm.models import ToolDefinition, ToolResult, ToolResultMessage
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.sandbox_tools import SEARCH_FILE_GUIDANCE
-from onyx.prompts.tool_prompts import CODE_MODE_SEARCH_USAGE
+from onyx.prompts.tool_prompts import (
+    CODE_MODE_SEARCH_USAGE,
+    INTERNAL_SEARCH_DESCRIPTION,
+)
 from onyx.secondary_llm_flows.decision_rerank_expansion import (
     MAX_DECISION_QUESTIONS,
     rank_sections_listwise,
@@ -154,6 +157,7 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.sandbox.models import (
     SEARCH_FILE_MAX_BYTES,
     SearchResultFile,
@@ -341,12 +345,14 @@ def _trim_sections_by_tokens(
 
 
 class SearchTool(Tool):
+    rank = ToolRank.INTERNAL_SEARCH
     merge_list_argument = "queries"
     merge_list_limit = MAX_QUERIES_PER_CALL
 
     NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
-    DESCRIPTION = "Search connected applications for information."
+    SUMMARY = "Search connected applications for information."
+    DESCRIPTION = INTERNAL_SEARCH_DESCRIPTION
 
     def __init__(
         self,
@@ -757,8 +763,10 @@ class SearchTool(Tool):
         - Regular connectors (team knowledge)
         - Federated connectors (e.g., Slack)
         - User files (User Knowledge mode)
+        - Indexed published files (chat artifacts)
         """
         from onyx.configs.app_configs import DISABLE_VECTOR_DB
+        from onyx.db.chat import check_indexed_chat_artifacts_exist
         from onyx.db.connector import check_user_files_exist
 
         if DISABLE_VECTOR_DB:
@@ -768,6 +776,7 @@ class SearchTool(Tool):
             check_connectors_exist(db_session)
             or check_federated_connectors_exist(db_session)
             or check_user_files_exist(db_session)
+            or check_indexed_chat_artifacts_exist(db_session)
         )
 
     @property
@@ -785,6 +794,10 @@ class SearchTool(Tool):
     @property
     def description(self) -> str:
         return self.DESCRIPTION
+
+    @property
+    def summary(self) -> str:
+        return self.SUMMARY
 
     @property
     def display_name(self) -> str:

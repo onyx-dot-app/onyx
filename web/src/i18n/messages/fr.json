@@ -510,6 +510,9 @@
         "userFile": {
           "description": "Fichiers importés dans le chat"
         },
+        "chatArtifact": {
+          "description": "Fichiers publiés dans le chat"
+        },
         "googleSites": {
           "description": "Pages hébergées par Google"
         },
@@ -12367,6 +12370,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"
+        },
+        "artifactError": {
+          "message": "Ce fichier n'est pas disponible."
         }
       },
       "messageEditing": {
@@ -12817,6 +12823,9 @@
           "placeholder": "Autre : saisissez votre propre réponse",
           "ariaLabel": "Autre réponse pour {header}"
         },
+        "multiSelect": {
+          "hint": "Choisissez toutes les réponses qui s'appliquent."
+        },
         "submit": "Envoyer",
         "page": {
           "progress": "Question {current} sur {total}",
@@ -13072,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# ligne} other {# lignes}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# mot} other {# mots}}"
-      },
       "copyButton": {
         "tooltip": "Copier le contenu"
       },
@@ -13098,6 +13104,13 @@
       "renderError": {
         "title": "Impossible de prévisualiser ce fichier",
         "description": "Le fichier ne peut pas être affiché ici. Téléchargez le fichier pour l’ouvrir."
+      },
+      "unavailable": {
+        "title": "Aucun aperçu pour ce fichier",
+        "description": "Impossible de créer un aperçu de ce fichier. Téléchargez le fichier pour l’ouvrir."
+      },
+      "preparing": {
+        "status": "Préparation de l’aperçu. Cela peut prendre un peu de temps."
       },
       "unsupported": {
         "title": "L’aperçu de ce type de fichier n’est pas disponible actuellement",
@@ -13146,30 +13159,6 @@
         },
         "error": {
           "description": "Le fichier PDF n'a pas pu être chargé."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Commandes de présentation"
-        },
-        "thumbnails": {
-          "toggle": "Afficher ou masquer les miniatures des diapositives",
-          "resize": "Redimensionner les miniatures des diapositives"
-        },
-        "slides": {
-          "label": "Diapositives"
-        },
-        "previous": {
-          "label": "Diapositive précédente"
-        },
-        "next": {
-          "label": "Diapositive suivante"
-        },
-        "slide": {
-          "counter": "Diapositive {current} sur {total}"
-        },
-        "empty": {
-          "label": "Aucune diapositive dans cette présentation"
         }
       }
     },

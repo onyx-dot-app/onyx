@@ -62,7 +62,7 @@ export interface CodeModeProgram {
   /** The program runs in this observation: it has started, and no final
    * delta has reported its status yet. A program that yields (status
    * "running") keeps running in its cell, but the model acts next; a later
-   * wait_code observation shows it running again. */
+   * wait observation shows it running again. */
   running: boolean;
 }
 

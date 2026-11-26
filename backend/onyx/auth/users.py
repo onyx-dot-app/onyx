@@ -193,6 +193,11 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
+from onyx.utils.fleet_telemetry import (
+    LoginFailure,
+    count_failure,
+    count_login_failures,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
     mt_cloud_identify_user,
@@ -1622,6 +1627,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         def _audit_login_failure(
             outcome: AuditOutcome = AuditOutcome.FAILURE,
         ) -> None:
+            count_failure(LoginFailure.PASSWORD)
             emit_audit_event(
                 AuditAction.LOGIN_FAILURE,
                 outcome,
@@ -3305,6 +3311,7 @@ def get_oauth_router(
             },
         },
     )
+    @count_login_failures(LoginFailure.OAUTH)
     async def callback(
         request: Request,
         access_token_state: Tuple[OAuth2Token, Optional[str]] | None = Depends(
@@ -3330,6 +3337,7 @@ def get_oauth_router(
                 )
 
         def build_error_response(exc: OnyxError) -> JSONResponse:
+            count_failure(LoginFailure.OAUTH)
             log_onyx_error(exc)
             error_response = onyx_error_to_json_response(exc)
             delete_pkce_cookie(error_response)
