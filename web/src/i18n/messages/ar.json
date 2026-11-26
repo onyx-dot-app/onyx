@@ -12197,6 +12197,13 @@
       },
       "fileDropOverlay": {
         "label": "أفلت الملفات لإرفاقها"
+      },
+      "editMessageBanner": {
+        "label": "جارٍ التعديل في محرر الرسائل",
+        "cancelButton": {
+          "label": "إلغاء",
+          "ariaLabel": "إلغاء تعديل الرسالة"
+        }
       }
     },
     "messages": {
@@ -12396,14 +12403,6 @@
         },
         "artifactError": {
           "message": "هذا الملف غير متاح."
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "إلغاء"
-        },
-        "submitButton": {
-          "label": "إرسال"
         }
       },
       "messageSwitcher": {

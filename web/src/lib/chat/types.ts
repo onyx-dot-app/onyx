@@ -1,4 +1,4 @@
-import type { ChatStream, Message } from "@/app/app/types";
+import type { ChatStream, FileDescriptor, Message } from "@/app/app/types";
 import type { LLMOverride } from "@/app/app/services/lib";
 import type { ToolQuestionAnswer } from "@/app/app/services/streamingModels";
 import type { ProjectFile } from "@/lib/projects/types";
@@ -48,6 +48,14 @@ export interface ComposedMessage {
 /** A question that did not reach the server, to put back in the composer. */
 export interface UnsentMessage extends ComposedMessage {
   files: ProjectFile[];
+  /** The sent question that an unsent edit replaces. */
+  messageIdToResend?: number;
+}
+
+/** A sent question that the user edits in the composer. */
+export interface MessageEdit extends ComposedMessage {
+  messageId: number;
+  files: FileDescriptor[];
 }
 
 /** Composer choices that a queued or interrupting message's turn starts with. */

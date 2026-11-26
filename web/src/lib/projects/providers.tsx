@@ -43,6 +43,7 @@ import {
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
 } from "@/lib/projects/svc";
+import { isFilePending } from "@/lib/projects/utils";
 import { trackUpload } from "@/lib/projects/uploadProgress";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppPosition } from "@/lib/navigation/hooks";
@@ -162,6 +163,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const currentMessageFilesRef = useRef<ProjectFile[]>([]);
   const pollIntervalRef = useRef<number | null>(null);
   const isPollingRef = useRef<boolean>(false);
+  // A poll asked for while one runs, such as for a file attached again.
+  const pollAgainRef = useRef<boolean>(false);
   // Cancelled uploads still being unlinked and deleted. The status poll does
   // not refresh while one runs: its list could still hold the file, and the
   // cleanup refreshes when it ends.
@@ -403,6 +406,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
       const upload = trackUpload(tempIds);
+      let settledFiles: ProjectFile[] = [];
       // The cleanup of cancelled files; the refresh waits for it, so it does
       // not list a file that is still linked.
       let cleanup: Promise<unknown> = Promise.resolve();
@@ -461,6 +465,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           const uploadedFiles = (uploaded.user_files || []).filter(
             (f) => !isCancelled(f)
           );
+          settledFiles = uploadedFiles;
           const tempIdToUploadedFileMap = new Map(
             uploadedFiles.map((f) => [f.temp_id, f])
           );
@@ -546,7 +551,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           onFailure?.(Array.from(optimisticTempIds));
         })
         .finally(() => {
-          upload.finish();
+          upload.finish(settledFiles);
           void cleanup.then(() => {
             if (projectId && currentProjectId === projectId) {
               refreshCurrentProjectDetails();
@@ -632,10 +637,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     autoTrackedIdsRef.current.forEach((id) => {
       if (!attachedIds.has(id)) autoTrackedIdsRef.current.delete(id);
     });
+    // A completed file has no status left to poll, and a sent message's file
+    // may have no user file id to poll with.
     const toTrack = currentMessageFiles
       .filter(
         (f) =>
           f.status !== UserFileStatus.UPLOADING &&
+          isFilePending(f.status) &&
           !autoTrackedIdsRef.current.has(f.id)
       )
       .map((f) => f.id);
@@ -684,13 +692,19 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
   // Targeted polling for tracked uploaded files only
   useEffect(() => {
-    const ids = Array.from(trackedUploadIds);
-    const shouldPoll = ids.length > 0;
+    const shouldPoll = trackedUploadIds.size > 0;
 
     const poll = async () => {
-      if (isPollingRef.current) return;
+      if (isPollingRef.current) {
+        pollAgainRef.current = true;
+        return;
+      }
       isPollingRef.current = true;
+      // The latest set, so a poll run again after the one in flight asks for
+      // files tracked meanwhile.
+      const ids = Array.from(trackedUploadIdsRef.current);
       try {
+        if (ids.length === 0) return;
         const statuses = await svcGetUserFileStatuses(ids);
         if (!statuses) return;
         const requestedIds = new Set(ids);
@@ -835,6 +849,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         }
       } finally {
         isPollingRef.current = false;
+        if (pollAgainRef.current) {
+          pollAgainRef.current = false;
+          void poll();
+        }
       }
     };
 

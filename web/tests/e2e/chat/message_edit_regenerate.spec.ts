@@ -139,16 +139,18 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
       await chat.expectAnswerParagraph("First answer.");
       await chat.inputBar.expectIdle();
 
-      await chat.editHumanMessage(`Review again ${nonce} with @${name}`);
+      // The composer keeps the skill tile; typed text adds to the message.
+      await chat.startHumanMessageEdit();
+      await chat.inputBar.typeText(" again");
       await chat.submitHumanMessageEdit();
       await chat.expectAnswerParagraph("Edited answer.");
-      await chat.expectHumanMessage(`Review again ${nonce} with @${name}`);
+      await chat.expectHumanMessage(`Review ${nonce} with @${name} again`);
       await expect(chat.skillMentionChips(0)).toHaveText([`@${name}`]);
       const [, edited] = await getMockLlmConversationRequests(nonce);
       const text = edited!.messages
         .map((message) => message.content)
         .join("\n");
-      expect(text).toContain("Review again");
+      expect(text).toContain(" again");
       expect(text).toContain(skillMessage(name, instructions));
     } finally {
       await deleteSkill(page.request, skill.id);

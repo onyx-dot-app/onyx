@@ -31,6 +31,7 @@ import { settleChatSession } from "@/lib/chat/settleChatSession";
 import type {
   ChatSessionQueue,
   ComposedMessage,
+  MessageEdit,
   PendingChatMessage,
   UnsentMessage,
 } from "@/lib/chat/types";
@@ -59,11 +60,24 @@ import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { useActiveProject, useProjects } from "@/lib/projects/hooks";
+import {
+  useActiveProject,
+  useHeldUploadsSettled,
+  useProjects,
+} from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
-import { cancelUpload } from "@/lib/projects/uploadProgress";
+import {
+  cancelUpload,
+  dropHeldUploads,
+  holdUploads,
+  releaseUploads,
+} from "@/lib/projects/uploadProgress";
+import { EditMessageBanner } from "@/sections/input/EditMessageBanner";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { isFilePending } from "@/lib/projects/utils";
+import {
+  fileDescriptorToProjectFile,
+  isFilePending,
+} from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
 import IntegrationConnectPrompt from "@/sections/plugins/IntegrationConnectPrompt";
@@ -99,6 +113,8 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import {
   useChatSessionStore,
+  useCurrentMessageHistory,
+  useCurrentMessageTree,
   useCurrentResponseStopped,
 } from "@/app/app/stores/useChatSessionStore";
 import { useAnswerWithMessage, useWaitingQuestionIds } from "@/lib/chat/hooks";
@@ -113,12 +129,19 @@ export interface AppInputBarHandle {
   focus: () => void;
   /** Focuses the input and pastes the clipboard data at its end. */
   paste: (data: DataTransfer) => void;
+  /** Loads a sent question into the composer and sets the draft aside. */
+  editMessage: (edit: MessageEdit) => void;
 }
+
+/** What the composer sends. An edit names the sent question it replaces. */
+export type ComposerSubmission = ComposedMessage & {
+  messageIdToResend?: number;
+};
 
 export interface AppInputBarProps {
   initialMessage?: string;
   stopGenerating: () => void;
-  onSubmit: (composed: ComposedMessage) => void;
+  onSubmit: (submission: ComposerSubmission) => void;
   llmManager: LlmManager;
   chatState: ChatState;
 
@@ -149,6 +172,13 @@ export interface AppInputBarProps {
 interface ChatDraft extends ComposedMessage {
   // Uploaded files only; a file still uploading has no stable id.
   files?: ProjectFile[];
+  /** The sent question this draft edits, and the draft set aside for it. */
+  edit?: DraftEdit;
+}
+
+interface DraftEdit {
+  messageId: number;
+  stash: ChatDraft;
 }
 
 // Older drafts are plain text, or have mentions without an `index`.
@@ -160,9 +190,10 @@ function toChatDraft(draft: StoredChatDraft): ChatDraft {
 
 function toStoredChatDraft(
   composed: ComposedMessage,
-  files: ProjectFile[]
+  files: ProjectFile[],
+  edit: DraftEdit | null = null
 ): ChatDraft {
-  return {
+  const draft: ChatDraft = {
     message: composed.message,
     mentions: composed.mentions,
     files: files.filter(
@@ -172,11 +203,17 @@ function toStoredChatDraft(
         (file.status !== UserFileStatus.UPLOADING && isFilePending(file.status))
     ),
   };
+  if (edit)
+    draft.edit = {
+      messageId: edit.messageId,
+      stash: toStoredChatDraft(edit.stash, edit.stash.files ?? []),
+    };
+  return draft;
 }
 
 function isChatDraftEmpty(draft: StoredChatDraft): boolean {
-  const { message, files } = toChatDraft(draft);
-  return !message.trim() && !files?.length;
+  const { message, files, edit } = toChatDraft(draft);
+  return !message.trim() && !files?.length && !edit;
 }
 
 /**
@@ -239,6 +276,12 @@ const AppInputBar = React.memo(
     const withdrawingForEdit =
       editWithdrawalSession !== null &&
       editWithdrawalSession === currentSessionId;
+    // A sent question edited in the composer. It is part of the chat's draft.
+    const [editing, setEditing] = useState<DraftEdit | null>(null);
+    const editingRef = useRef(editing);
+    useEffect(() => {
+      editingRef.current = editing;
+    }, [editing]);
     const { user, isAdmin } = useUser();
     const { isMac } = useBrowserInfo();
     const sendDelivery = user?.preferences.interrupt_on_send
@@ -434,6 +477,8 @@ const AppInputBar = React.memo(
       previousScopeRef.current = editorScope;
       attachmentsScope = editorScope;
       setHeldSendKey(null);
+      dropHeldUploads(editingRef.current?.stash.files ?? []);
+      setEditing(null);
       clearMessage();
       setCurrentMessageFiles([]);
     }, [editorScope, clearMessage, setCurrentMessageFiles]);
@@ -457,6 +502,7 @@ const AppInputBar = React.memo(
       );
       if (draft && !initialMessage && !hasMessage) {
         setMessage(draft.message, draft.mentions, { focus: false });
+        setEditing(draft.edit ?? null);
       }
     }, [
       chatDraftLoaded,
@@ -478,13 +524,14 @@ const AppInputBar = React.memo(
         skipNextDraftSaveRef.current = false;
         return;
       }
-      saveChatDraft(toStoredChatDraft(composed, currentMessageFiles));
+      saveChatDraft(toStoredChatDraft(composed, currentMessageFiles, editing));
     }, [
       composed,
       currentMessageFiles,
       chatDraftLoaded,
       draftGeneration,
       saveChatDraft,
+      editing,
     ]);
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
@@ -505,9 +552,71 @@ const AppInputBar = React.memo(
     const questionRefusesFiles =
       questionWaits && currentMessageFiles.length > 0;
 
+    function beginEdit(
+      messageId: number,
+      edited: ComposedMessage,
+      files: ProjectFile[]
+    ) {
+      if (!editing) holdUploads(currentMessageFiles);
+      setHeldSendKey(null);
+      setEditing({
+        messageId,
+        // Files still uploading or processing come back with the draft.
+        stash: editing?.stash ?? {
+          ...composedRef.current,
+          files: currentMessageFiles,
+        },
+      });
+      setMessage(edited.message, edited.mentions);
+      setCurrentMessageFiles(files);
+      setCursorToEnd();
+    }
+
+    // An upload of the set-aside draft that settles updates the draft, so the
+    // saved draft keeps the uploaded file.
+    const heldUploadsSettled = useHeldUploadsSettled();
+    useEffect(() => {
+      if (
+        !editing?.stash.files?.some(
+          (file) => file.status === UserFileStatus.UPLOADING
+        )
+      )
+        return;
+      const files = releaseUploads(editing.stash.files);
+      setEditing({ ...editing, stash: { ...editing.stash, files } });
+    }, [heldUploadsSettled]);
+
+    function endEdit(stash: ChatDraft) {
+      setHeldSendKey(null);
+      setEditing(null);
+      setMessage(stash.message, stash.mentions);
+      setCurrentMessageFiles(releaseUploads(stash.files ?? []));
+    }
+
+    // A switch to another version hides the edited message, and a resend of a
+    // hidden message fails, so the edit ends and the draft comes back. A
+    // message not loaded yet, such as one older than the first page, counts
+    // as shown.
+    const messageTree = useCurrentMessageTree();
+    const messageHistory = useCurrentMessageHistory();
+    const editedMessageId = editing?.messageId;
+    const editedMessageShown = useMemo(() => {
+      if (editedMessageId === undefined || !messageTree) return true;
+      const loaded = Array.from(messageTree.values()).some(
+        (message) => message.messageId === editedMessageId
+      );
+      return (
+        !loaded ||
+        messageHistory.some((message) => message.messageId === editedMessageId)
+      );
+    }, [editedMessageId, messageTree, messageHistory]);
+    useEffect(() => {
+      if (editing && !editedMessageShown) endEdit(editing.stash);
+    }, [editedMessageShown]);
+
     function submitMessage(submitted: ComposedMessage) {
       if (!submitted.message.trim()) return;
-      if (questionWaits) {
+      if (questionWaits && !editing) {
         if (!questionRefusesFiles) void answerQuestion(submitted);
         return;
       }
@@ -518,6 +627,11 @@ const AppInputBar = React.memo(
       }
       // Stop TTS first to prevent overlapping voices.
       stopTTS();
+      if (editing) {
+        onSubmit({ ...submitted, messageIdToResend: editing.messageId });
+        endEdit(editing.stash);
+        return;
+      }
       onSubmit(submitted);
       clearChatDraft();
     }
@@ -525,10 +639,17 @@ const AppInputBar = React.memo(
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
       reset: () => {
+        dropHeldUploads(editing?.stash.files ?? []);
+        setEditing(null);
         clearMessage();
         clearChatDraft();
       },
       restore: (unsent: UnsentMessage) => {
+        // A rejected edit stays an edit, and the draft goes aside again.
+        if (unsent.messageIdToResend !== undefined) {
+          beginEdit(unsent.messageIdToResend, unsent, unsent.files);
+          return;
+        }
         // Keep a draft the user started while the failed send was pending.
         if (message.trim() || currentMessageFiles.length > 0) return;
         setMessage(unsent.message, unsent.mentions);
@@ -544,6 +665,14 @@ const AppInputBar = React.memo(
         inputRef.current?.focus();
         setCursorToEnd();
         pasteClipboard(data);
+      },
+      editMessage: (edit: MessageEdit) => {
+        if (disabled || chatState !== "input" || withdrawingForEdit) return;
+        beginEdit(
+          edit.messageId,
+          edit,
+          edit.files.map(fileDescriptorToProjectFile)
+        );
       },
     }));
 
@@ -609,7 +738,7 @@ const AppInputBar = React.memo(
     // Text typed while Onyx responds becomes pending input, unless it
     // answers the agent's questions.
     const hasPendingInput =
-      responding && Boolean(message.trim()) && !questionWaits;
+      responding && Boolean(message.trim()) && !questionWaits && !editing;
     const canSubmitPending =
       queue.enabled &&
       !queue.busy &&
@@ -741,7 +870,7 @@ const AppInputBar = React.memo(
       if (
         !pending ||
         sessionId === null ||
-        (edit && composedRef.current.message.trim())
+        (edit && (composedRef.current.message.trim() || editing))
       )
         return;
       if (edit) setEditWithdrawalSession(sessionId);
@@ -847,6 +976,9 @@ const AppInputBar = React.memo(
     const controlsLoading =
       sourcesLoading || !activeAgent || llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
+    const promptMenuOpen = Boolean(
+      user?.preferences?.shortcut_enabled && showPrompts && !mentionPicker.open
+    );
 
     const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
@@ -1344,7 +1476,7 @@ const AppInputBar = React.memo(
                 return;
               }
               const canSubmitNormally = chatState === "input";
-              if (questionWaits && message.trim()) {
+              if (questionWaits && !editing && message.trim()) {
                 submitMessage(composed);
               } else if (!canSubmitNormally && message.trim()) {
                 void submitPendingMessage(sendDelivery);
@@ -1377,8 +1509,11 @@ const AppInputBar = React.memo(
           onEdit={(index) => void withdrawPendingMessage(index, true)}
           onSendNow={interruptWithQueuedMessage}
           disabled={queue.busy || disabled}
-          canEdit={!message.trim()}
+          canEdit={!message.trim() && !editing}
         />
+        {editing && (
+          <EditMessageBanner onCancel={() => endEdit(editing.stash)} />
+        )}
         {queue.error && (
           <Section padding={1} width="full" height="fit">
             <Text font="secondary-body" color="text-03">
@@ -1458,14 +1593,7 @@ const AppInputBar = React.memo(
             </div>
 
             <div className="flex flex-row items-center w-full">
-              <Popover
-                open={
-                  user?.preferences?.shortcut_enabled &&
-                  showPrompts &&
-                  !mentionPicker.open
-                }
-                onOpenChange={setShowPrompts}
-              >
+              <Popover open={promptMenuOpen} onOpenChange={setShowPrompts}>
                 <Popover.Anchor asChild>
                   <div
                     ref={inputWrapperRef}
@@ -1514,6 +1642,18 @@ const AppInputBar = React.memo(
                         )
                           return;
 
+                        if (
+                          event.key === "Escape" &&
+                          editing &&
+                          !promptMenuOpen &&
+                          !mentionPicker.open &&
+                          !event.nativeEvent.isComposing
+                        ) {
+                          event.preventDefault();
+                          endEdit(editing.stash);
+                          return;
+                        }
+
                         // Enter to submit or queue (Shift+Enter falls through
                         // to browser default: inserts <br>).
                         if (
@@ -1524,7 +1664,7 @@ const AppInputBar = React.memo(
                           !event.nativeEvent.isComposing
                         ) {
                           event.preventDefault();
-                          if (questionWaits) {
+                          if (questionWaits && !editing) {
                             submitMessage(composed);
                           } else if (chatState === "input") {
                             if (message && acceptsSend) {

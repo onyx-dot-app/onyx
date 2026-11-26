@@ -22,16 +22,20 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { Button } from "@opal/components";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import type { ChatState } from "@/app/app/types";
+import type { ChatState, Message } from "@/app/app/types";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { SYSTEM_NODE_ID } from "@/app/app/services/messageTree";
 import type { PickerSections } from "@/lib/skills/picker";
 import { useChatSkills } from "@/lib/skills/hooks";
 import type { ChatSkill } from "@/lib/skills/types";
 import { draftKey } from "@/hooks/useDraft";
-import { trackUpload } from "@/lib/projects/uploadProgress";
+import { releaseUploads, trackUpload } from "@/lib/projects/uploadProgress";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
 import {
   MAX_MENTIONS_PER_MESSAGE,
+  type ChatSessionQueue,
   type ComposedMessage,
+  type PendingChatMessage,
 } from "@/lib/chat/types";
 
 function memberTool(overrides: Partial<ToolSnapshot> = {}): ToolSnapshot {
@@ -209,6 +213,7 @@ function Composer({
   chatState = "input",
   disabled = false,
   onSubmit = jest.fn(),
+  queueOverride,
 }: {
   agentId?: number;
   tools?: MinimalAgent["tools"];
@@ -216,10 +221,12 @@ function Composer({
   chatState?: ChatState;
   disabled?: boolean;
   onSubmit?: AppInputBarProps["onSubmit"];
+  queueOverride?: ChatSessionQueue;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
-  const queue = useChatSessionQueue(false);
+  const sessionQueue = useChatSessionQueue(false);
+  const queue = queueOverride ?? sessionQueue;
   return (
     <>
       <Button
@@ -416,6 +423,408 @@ test("incognito keeps its draft out of storage and restores the regular draft on
   rerender(<Composer />);
   expect(message()).toHaveTextContent("regular draft");
   expect(message()).not.toHaveTextContent("private draft");
+});
+
+describe("edit a sent message in the composer", () => {
+  const sentFile = {
+    id: "store-sent",
+    type: ChatFileType.PLAIN_TEXT,
+    name: "sent.txt",
+    user_file_id: "user-sent",
+  };
+  const edit = {
+    messageId: 5,
+    message: "sent question",
+    mentions: [],
+    files: [sentFile],
+  };
+
+  function startEdit(
+    draftFiles: ProjectFile[] = [projectFile("draft-file")],
+    chatState: ChatState = "input"
+  ) {
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const onSubmit = jest.fn();
+    mockProjectsContext.currentMessageFiles = draftFiles;
+    render(
+      <Composer
+        inputBarRef={inputBarRef}
+        onSubmit={onSubmit}
+        chatState={chatState}
+      />
+    );
+    return { inputBarRef, onSubmit };
+  }
+
+  test("does not start while a queued message is withdrawn for an edit", async () => {
+    const store = useChatSessionStore.getState();
+    store.createSession("queue-session");
+    store.setCurrentSession("queue-session");
+    const withdrawal = deferred<PendingChatMessage | null>();
+    const queued: PendingChatMessage = {
+      id: "queued-1",
+      message: "queued text",
+      delivery: "queue",
+      target_response_id: null,
+      deep_research: false,
+      llm_override: null,
+      mentions: [],
+    };
+    const queue: ChatSessionQueue = {
+      enabled: true,
+      messages: [queued],
+      error: null,
+      busy: false,
+      hasActiveSubagents: false,
+      needsResponseSelection: false,
+      submit: jest.fn(),
+      withdraw: () => withdrawal.promise,
+      interrupt: jest.fn(),
+      stopSubagents: jest.fn(),
+    };
+    const inputBarRef = createRef<AppInputBarHandle>();
+    mockProjectsContext.currentMessageFiles = [];
+    render(<Composer inputBarRef={inputBarRef} queueOverride={queue} />);
+    await setupUser().click(
+      screen.getByRole("button", { name: "Edit queued message: queued text" })
+    );
+
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    await act(async () => withdrawal.resolve(null));
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
+  test("Escape ends the edit when the text starts with / and shortcuts are off", async () => {
+    const { inputBarRef } = startEdit([]);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const user = setupUser();
+    await user.clear(screen.getByRole("textbox"));
+    await user.type(screen.getByRole("textbox"), "/x");
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("does not start while a response streams", () => {
+    const { inputBarRef } = startEdit([], "streaming");
+    act(() => inputBarRef.current?.editMessage(edit));
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).not.toHaveTextContent("sent question");
+  });
+
+  test("a draft file still processing comes back live after the edit", async () => {
+    const processing = {
+      ...projectFile("processing-file"),
+      status: UserFileStatus.PROCESSING,
+    };
+    const { inputBarRef } = startEdit([processing]);
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await setupUser().keyboard("{Escape}");
+
+    expect(lastFiles()).toEqual([processing]);
+  });
+
+  test("a draft file that finished uploading during the edit comes back uploaded", async () => {
+    const uploading = {
+      ...projectFile("temp_draft"),
+      temp_id: "temp_draft",
+      status: UserFileStatus.UPLOADING,
+    };
+    const upload = trackUpload(["temp_draft"]);
+    const { inputBarRef } = startEdit([uploading]);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const uploaded = {
+      ...projectFile("user-draft"),
+      temp_id: "temp_draft",
+      status: UserFileStatus.PROCESSING,
+    };
+    act(() => upload.finish([uploaded]));
+
+    await setupUser().keyboard("{Escape}");
+
+    expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  describe("an abandoned edit forgets its held uploads", () => {
+    const uploading = {
+      ...projectFile("temp_abandoned"),
+      temp_id: "temp_abandoned",
+      status: UserFileStatus.UPLOADING,
+    };
+    const uploaded = {
+      ...projectFile("user-abandoned"),
+      temp_id: "temp_abandoned",
+      status: UserFileStatus.PROCESSING,
+    };
+
+    // A result still held comes back from `releaseUploads`; a dropped one does not.
+    function heldResult(): ProjectFile[] {
+      return releaseUploads([uploading]);
+    }
+
+    test("when the composer resets", () => {
+      const upload = trackUpload(["temp_abandoned"]);
+      const { inputBarRef } = startEdit([uploading]);
+      act(() => inputBarRef.current?.editMessage(edit));
+
+      act(() => inputBarRef.current?.reset());
+      act(() => upload.finish([uploaded]));
+
+      expect(heldResult()).toEqual([]);
+    });
+
+    test("when the chat changes", () => {
+      const upload = trackUpload(["temp_abandoned"]);
+      mockChatId = "chat-a";
+      const inputBarRef = createRef<AppInputBarHandle>();
+      mockProjectsContext.currentMessageFiles = [uploading];
+      const { rerender } = render(<Composer inputBarRef={inputBarRef} />);
+      act(() => inputBarRef.current?.editMessage(edit));
+
+      mockChatId = "chat-b";
+      rerender(<Composer inputBarRef={inputBarRef} />);
+      act(() => upload.finish([uploaded]));
+
+      expect(heldResult()).toEqual([]);
+    });
+  });
+
+  test("switching to another version of the edited message ends the edit", async () => {
+    const node = (nodeId: number, fields: Partial<Message> = {}): Message => ({
+      nodeId,
+      messageId: nodeId,
+      type: "user",
+      message: `version ${nodeId}`,
+      files: [],
+      toolCall: null,
+      packets: [],
+      parentNodeId: SYSTEM_NODE_ID,
+      childrenNodeIds: [],
+      latestChildNodeId: null,
+      ...fields,
+    });
+    const tree = (shown: number) =>
+      new Map([
+        [
+          SYSTEM_NODE_ID,
+          node(SYSTEM_NODE_ID, {
+            type: "system",
+            parentNodeId: null,
+            childrenNodeIds: [5, 6],
+            latestChildNodeId: shown,
+          }),
+        ],
+        [5, node(5)],
+        [6, node(6)],
+      ]);
+    const store = useChatSessionStore.getState();
+    store.createSession("edit-session", { messageTree: tree(5) });
+    store.setCurrentSession("edit-session");
+    const { inputBarRef } = startEdit();
+    await setupUser().type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+
+    act(() =>
+      useChatSessionStore
+        .getState()
+        .updateSessionMessageTree("edit-session", tree(6))
+    );
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
+  test("a reload keeps an edit of a message older than the loaded page", () => {
+    const newer: Message = {
+      nodeId: 30,
+      messageId: 30,
+      type: "user",
+      message: "newer question",
+      files: [],
+      toolCall: null,
+      packets: [],
+      parentNodeId: null,
+      childrenNodeIds: [],
+      latestChildNodeId: null,
+    };
+    const inputBarRef = createRef<AppInputBarHandle>();
+    mockProjectsContext.currentMessageFiles = [];
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    first.unmount();
+    // The first page after a reload holds only the newer messages.
+    const store = useChatSessionStore.getState();
+    store.createSession("paged-session", {
+      messageTree: new Map([[30, newer]]),
+    });
+    store.setCurrentSession("paged-session");
+
+    render(<Composer />);
+
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    act(() => useChatSessionStore.getState().setCurrentSession(null));
+  });
+
+  test("a draft file that finished uploading during the edit survives a remount", async () => {
+    const uploading = {
+      ...projectFile("temp_saved"),
+      temp_id: "temp_saved",
+      status: UserFileStatus.UPLOADING,
+    };
+    const upload = trackUpload(["temp_saved"]);
+    mockProjectsContext.currentMessageFiles = [uploading];
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    const uploaded = {
+      ...projectFile("user-saved"),
+      temp_id: "temp_saved",
+      status: UserFileStatus.PROCESSING,
+    };
+    act(() => upload.finish([uploaded]));
+    first.unmount();
+
+    render(<Composer />);
+    await setupUser().click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
+
+    expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  function lastFiles(): ProjectFile[] {
+    const next = mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+    return typeof next === "function" ? next([]) : next;
+  }
+
+  test("loads the text and files and shows the banner; Cancel restores the draft", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(lastFiles()).toEqual([
+      expect.objectContaining({
+        id: "user-sent",
+        file_id: "store-sent",
+        name: "sent.txt",
+      }),
+    ]);
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(lastFiles()).toEqual([projectFile("draft-file")]);
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("Escape cancels the edit", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("send resends the edited text as an edit, then restores the draft", async () => {
+    const { inputBarRef, onSubmit } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    await user.keyboard(" again{Enter}");
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "sent question again",
+      mentions: [],
+      messageIdToResend: 5,
+    });
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+    expect(lastFiles()).toEqual([projectFile("draft-file")]);
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+  });
+
+  test("a rejected edit comes back as the same edit", async () => {
+    const { inputBarRef } = startEdit();
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "my draft");
+    act(() => inputBarRef.current?.editMessage(edit));
+    await user.keyboard("{Enter}");
+
+    act(() =>
+      inputBarRef.current?.restore({
+        message: "sent question",
+        mentions: [],
+        files: [],
+        messageIdToResend: 5,
+      })
+    );
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Cancel editing message" })
+    );
+    expect(screen.getByRole("textbox")).toHaveTextContent("my draft");
+  });
+
+  test("a reset for a new chat ends the edit", async () => {
+    const { inputBarRef, onSubmit } = startEdit();
+    act(() => inputBarRef.current?.editMessage(edit));
+
+    act(() => inputBarRef.current?.reset());
+    await setupUser().type(screen.getByRole("textbox"), "new question{Enter}");
+
+    expect(
+      screen.queryByText("Editing in the composer")
+    ).not.toBeInTheDocument();
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "new question",
+      mentions: [],
+    });
+  });
+
+  test("the edit is saved with the draft and comes back after the composer remounts", () => {
+    const inputBarRef = createRef<AppInputBarHandle>();
+    const first = render(<Composer inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.editMessage(edit));
+    first.unmount();
+
+    render(<Composer />);
+
+    expect(screen.getByRole("textbox")).toHaveTextContent("sent question");
+    expect(screen.getByText("Editing in the composer")).toBeInTheDocument();
+  });
 });
 
 describe("restore after a failed send", () => {

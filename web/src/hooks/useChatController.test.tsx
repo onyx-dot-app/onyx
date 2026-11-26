@@ -32,7 +32,9 @@ import {
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import type { Message } from "@/app/app/types";
+import { ChatFileType, type Message } from "@/app/app/types";
+import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import { fileDescriptorToProjectFile } from "@/lib/projects/utils";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { StopReason } from "@/app/app/services/streamingModels";
 
@@ -1223,6 +1225,76 @@ function renderChatController(restoreInputBar = jest.fn()) {
     })
   );
 }
+
+test("an edit sends the composer's files and keeps a kept file's descriptor", async () => {
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session", { incognito: true });
+  jest
+    .mocked(sendMessage)
+    .mockImplementationOnce(async function* () {
+      yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+      yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+    })
+    .mockImplementationOnce(async function* () {
+      yield { user_message_id: 13, reserved_assistant_message_id: 14 };
+      yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+    });
+  const { result } = renderChatController();
+  const file = (id: string): ProjectFile => ({
+    id: `user-${id}`,
+    file_id: `store-${id}`,
+    name: `${id}.txt`,
+    project_id: null,
+    user_id: null,
+    created_at: "",
+    status: UserFileStatus.COMPLETED,
+    file_type: "text/plain",
+    last_accessed_at: "",
+    chat_file_type: ChatFileType.PLAIN_TEXT,
+    token_count: null,
+    chunk_count: null,
+  });
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Question",
+      mentions: [],
+      currentMessageFiles: [file("kept"), file("removed")],
+      deepResearch: false,
+    })
+  );
+  const [question] = getLatestMessageChain(
+    useChatSessionStore.getState().sessions.get("session")!.messageTree
+  );
+  const kept = question!.files[0]!;
+
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Edited question",
+      mentions: [],
+      currentMessageFiles: [fileDescriptorToProjectFile(kept), file("added")],
+      deepResearch: false,
+      messageIdToResend: 11,
+    })
+  );
+
+  expect(sendMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      message: "Edited question",
+      fileDescriptors: [
+        kept,
+        {
+          id: "store-added",
+          type: ChatFileType.PLAIN_TEXT,
+          name: "added.txt",
+          user_file_id: "user-added",
+        },
+      ],
+    })
+  );
+});
 
 test("a sent question shows its picks until the server records its skills", async () => {
   useChatSessionStore.setState({

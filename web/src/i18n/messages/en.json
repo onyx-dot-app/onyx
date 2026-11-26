@@ -12197,6 +12197,13 @@
       },
       "fileDropOverlay": {
         "label": "Drop files to attach"
+      },
+      "editMessageBanner": {
+        "label": "Editing in the composer",
+        "cancelButton": {
+          "label": "Cancel",
+          "ariaLabel": "Cancel editing message"
+        }
       }
     },
     "messages": {
@@ -12396,14 +12403,6 @@
         },
         "artifactError": {
           "message": "This file is not available."
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "Cancel"
-        },
-        "submitButton": {
-          "label": "Submit"
         }
       },
       "messageSwitcher": {

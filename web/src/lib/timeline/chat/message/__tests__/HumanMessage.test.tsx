@@ -1,35 +1,31 @@
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
+import { ChatFileType } from "@/app/app/types";
 
-test("an edit keeps the recorded mentions its text still has", async () => {
+test("edit hands the message, its mentions and its files to the composer", async () => {
   const onEdit = jest.fn();
+  const files = [
+    { id: "store-1", type: ChatFileType.PLAIN_TEXT, name: "notes.txt" },
+  ];
+  const mentions = [{ type: "skill" as const, name: "code-review" }];
   render(
     <HumanMessage
-      content="@code-review and @pdf this"
-      mentions={[
-        { type: "skill", name: "code-review" },
-        { type: "skill", name: "pdf" },
-      ]}
+      content="@code-review this"
+      mentions={mentions}
+      files={files}
       nodeId={1}
       messageId={7}
       onEdit={onEdit}
     />
   );
-  expect(screen.getAllByTestId("mention-chip")).toHaveLength(2);
 
-  const user = setupUser();
-  await user.click(screen.getByTestId("HumanMessage/edit-button"));
-  const editor = screen.getByRole("textbox");
-  await user.clear(editor);
-  // The edit has no `@` menu, so new mention text picks nothing.
-  await user.type(editor, "@code-review this with @triage");
-  await user.click(screen.getByRole("button", { name: "Submit" }));
+  await setupUser().click(screen.getByTestId("HumanMessage/edit-button"));
 
-  expect(onEdit).toHaveBeenCalledWith(
-    {
-      message: "@code-review this with @triage",
-      mentions: [{ type: "skill", name: "code-review", index: 0 }],
-    },
-    7
-  );
+  expect(onEdit).toHaveBeenCalledWith({
+    messageId: 7,
+    message: "@code-review this",
+    mentions,
+    files,
+  });
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 });

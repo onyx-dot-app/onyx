@@ -360,7 +360,95 @@ describe("ProjectsContext attached file status polling", () => {
     expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"]);
   });
 
-  it("keeps a file attached while an earlier status request is in flight", async () => {
+  it("does not poll a completed file, such as one from a sent message", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([
+        { ...makePendingFile("store-id"), status: UserFileStatus.COMPLETED },
+      ]);
+    });
+
+    expect(mockGetUserFileStatuses).not.toHaveBeenCalled();
+    expect(result.current.currentMessageFiles).toHaveLength(1);
+  });
+
+  it("updates a pending file attached again while its status request runs", async () => {
+    const pendingFile = makePendingFile("file-1");
+    let resolveFirstPoll: (value: ProjectFile[]) => void = () => {};
+    mockGetUserFileStatuses
+      .mockImplementationOnce(
+        () =>
+          new Promise<ProjectFile[]>((resolve) => {
+            resolveFirstPoll = resolve;
+          })
+      )
+      .mockImplementation(async (ids: string[]) => completedStatuses(ids));
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    // A draft set aside for an edit keeps the pending copy.
+    await act(async () => {
+      result.current.setCurrentMessageFiles([pendingFile]);
+    });
+    await waitFor(() =>
+      expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"])
+    );
+    await act(async () => {
+      result.current.setCurrentMessageFiles([]);
+    });
+    await act(async () => {
+      result.current.setCurrentMessageFiles([pendingFile]);
+    });
+    await act(async () => {
+      resolveFirstPoll(completedStatuses(["file-1"]));
+    });
+
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[0]?.status).toBe(
+        UserFileStatus.COMPLETED
+      )
+    );
+  });
+
+  it("polls a file attached while a finished poll refreshes recent files", async () => {
+    let releaseRecentFiles: () => void = () => {};
+    const recentFiles = new Promise<Response>((resolve) => {
+      releaseRecentFiles = () => resolve(new Response("[]", { status: 200 }));
+    });
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(() => recentFiles);
+    mockGetUserFileStatuses.mockImplementation(async (ids: string[]) =>
+      completedStatuses(ids)
+    );
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    // The first poll finishes its file, then waits on the recent files.
+    await act(async () => {
+      result.current.setCurrentMessageFiles([makePendingFile("file-1")]);
+    });
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[0]?.status).toBe(
+        UserFileStatus.COMPLETED
+      )
+    );
+    await act(async () => {
+      result.current.setCurrentMessageFiles([
+        ...result.current.currentMessageFiles,
+        makePendingFile("file-2"),
+      ]);
+    });
+    await act(async () => releaseRecentFiles());
+
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[1]?.status).toBe(
+        UserFileStatus.COMPLETED
+      )
+    );
+    fetchSpy.mockRestore();
+  });
+
+  it("polls a file attached during a status request right after it", async () => {
     const first = makePendingFile("file-1");
     const second = makePendingFile("file-2");
     let resolveFirstPoll: (value: ProjectFile[]) => void = () => {};
@@ -389,14 +477,13 @@ describe("ProjectsContext attached file status polling", () => {
       resolveFirstPoll(completedStatuses(["file-1"]));
     });
 
-    await waitFor(
-      () =>
-        expect(result.current.currentMessageFiles.map((f) => f.status)).toEqual(
-          [UserFileStatus.COMPLETED, UserFileStatus.COMPLETED]
-        ),
-      { timeout: 5000 }
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles.map((f) => f.status)).toEqual([
+        UserFileStatus.COMPLETED,
+        UserFileStatus.COMPLETED,
+      ])
     );
-  }, 10000);
+  });
 });
 
 describe("ProjectsContext beginUpload cancel", () => {

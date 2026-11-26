@@ -12197,6 +12197,13 @@
       },
       "fileDropOverlay": {
         "label": "Dateien zum Anhängen hier ablegen"
+      },
+      "editMessageBanner": {
+        "label": "Wird im Eingabefeld bearbeitet",
+        "cancelButton": {
+          "label": "Abbrechen",
+          "ariaLabel": "Bearbeiten der Nachricht abbrechen"
+        }
       }
     },
     "messages": {
@@ -12396,14 +12403,6 @@
         },
         "artifactError": {
           "message": "Diese Datei ist nicht verfügbar."
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "Abbrechen"
-        },
-        "submitButton": {
-          "label": "Absenden"
         }
       },
       "messageSwitcher": {
