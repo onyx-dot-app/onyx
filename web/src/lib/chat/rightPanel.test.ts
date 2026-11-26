@@ -296,14 +296,34 @@ describe("rightPanelReducer", () => {
     expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
   });
 
-  test("hiding Sources closes the panel only when Sources is active", () => {
+  test("hiding Sources closes its tab, and the panel only when Sources is active", () => {
     const files = apply(showFiles);
     expect(rightPanelReducer(files, { type: "hideSources" })).toBe(files);
 
-    const sources = apply({ type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB });
-    expect(rightPanelReducer(sources, { type: "hideSources" }).mode).toBe(
-      "closed"
+    const behindFiles = apply(
+      { type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB },
+      showFiles
     );
+    const hidden = rightPanelReducer(behindFiles, { type: "hideSources" });
+    expect(hidden.sourcesOpen).toBe(false);
+    expect(hidden.mode).not.toBe("closed");
+    expect(hidden.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+
+    const sources = apply({ type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB });
+    const closed = rightPanelReducer(sources, { type: "hideSources" });
+    expect(closed.mode).toBe("closed");
+    expect(closed.sourcesOpen).toBe(false);
+  });
+
+  test("closing the active tab shows an open Files list that was never shown", () => {
+    const state = apply(
+      openFile("a"),
+      { type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB },
+      closeTab(FILE_A),
+      closeTab(RIGHT_PANEL_SOURCES_TAB)
+    );
+    expect(state.mode).not.toBe("closed");
+    expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
   });
 
   test("full size ends when the panel closes", () => {

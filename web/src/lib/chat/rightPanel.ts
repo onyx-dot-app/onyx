@@ -114,7 +114,7 @@ export type ChatRightPanelAction =
   // Moves a file tab to another file tab's place, as a drop on that tab does
   | { type: "reorderTab"; tabId: string; overTabId: string }
   | { type: "closePanel" }
-  // Closes the panel when Sources is the active tab
+  // Closes the Sources tab, and the panel when Sources is the active tab
   | { type: "hideSources" }
   | { type: "setMode"; mode: Exclude<OutputPanelMode, "closed"> }
   | { type: "setProportion"; proportion: number }
@@ -170,16 +170,19 @@ function activate(
 
 /**
  * The panel after its active tab closes: on the last shown Files tab, else
- * Sources, else the browser, else closed.
+ * the first open one, else Sources, else the browser, else closed.
  */
 function leaveClosedTab(state: ChatRightPanelState): ChatRightPanelState {
+  const filesTab = filesPanelTabs(state)[0];
   const next =
     state.history[0] ??
-    (state.sourcesOpen
-      ? RIGHT_PANEL_SOURCES_TAB
-      : state.browserOpen
-        ? RIGHT_PANEL_BROWSER_TAB
-        : null);
+    (filesTab !== undefined
+      ? idOf(filesTab)
+      : state.sourcesOpen
+        ? RIGHT_PANEL_SOURCES_TAB
+        : state.browserOpen
+          ? RIGHT_PANEL_BROWSER_TAB
+          : null);
   return next === null
     ? { ...state, mode: "closed" }
     : { ...state, activeId: next };
@@ -291,9 +294,9 @@ export function rightPanelReducer(
     case "closePanel":
       return open ? { ...state, mode: "closed" } : state;
     case "hideSources":
-      return open && state.activeId === RIGHT_PANEL_SOURCES_TAB
-        ? { ...state, mode: "closed" }
-        : state;
+      if (open && state.activeId === RIGHT_PANEL_SOURCES_TAB)
+        return { ...state, mode: "closed", sourcesOpen: false };
+      return state.sourcesOpen ? { ...state, sourcesOpen: false } : state;
     case "setMode":
       return open ? { ...state, mode: action.mode } : state;
     case "setProportion":
