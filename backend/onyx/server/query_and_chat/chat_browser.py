@@ -14,7 +14,8 @@ it sends `{"type": "starting"}`.
 Close codes: 4403 forbidden or turned off, 4404 unknown chat, 4503 the
 sandbox or its browser did not open. The view checks the session cookie,
 the user, the setting and the chat again after each lease renewal, and
-closes with 4403 or 4404 on a change. A view that drops after it opened (the VM, the service or this
+closes with 4403 or 4404 on a change, or with 1012 when a check cannot
+complete. A view that drops after it opened (the VM, the service or this
 server went away) closes with 1012, which the viewer retries.
 """
 
@@ -69,7 +70,7 @@ from onyx.server.features.build.sandbox.harness_base import (
 from onyx.server.features.build.sandbox.harness_factory import get_harness_sandbox
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.server.query_and_chat.models import BrowserUploadResponse
-from onyx.server.settings.store import load_settings
+from onyx.server.settings.store import load_browser_enabled
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -118,9 +119,7 @@ def _check_browser_chat(
 ) -> None:
     """Raises OnyxError when the browser is off or the chat is not the
     user's. `require_setting=False` skips only the `browser_enabled` check."""
-    if not HARNESS_SANDBOX_ENABLED or (
-        require_setting and not load_settings().browser_enabled
-    ):
+    if not HARNESS_SANDBOX_ENABLED or (require_setting and not load_browser_enabled()):
         raise OnyxError(OnyxErrorCode.FEATURE_DISABLED, "The browser is turned off.")
     if user.is_anonymous:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to use the browser.")
@@ -195,7 +194,8 @@ async def _hold_browser_view(
     """Renew the viewer lease while the user may still view the chat (the
     session, the user, the setting, the owner and the chat are checked again
     after each renewal); returns the error that ends the view. A failed
-    renewal only lets the lease expire sooner."""
+    renewal only lets the lease expire sooner; a check that cannot complete
+    raises, which ends the view."""
     while True:
         try:
             await asyncio.to_thread(sandbox.renew_browser_view, ref)
@@ -213,10 +213,6 @@ async def _hold_browser_view(
             await asyncio.to_thread(_browser_ref, ref.session_id, user)
         except OnyxError as e:
             return e
-        except Exception:
-            logger.warning(
-                "chat_browser_view_check_failed chat=%s", ref.session_id, exc_info=True
-            )
 
 
 async def _viewer_to_service(
@@ -255,7 +251,8 @@ async def _pump(
 ) -> None:
     """Pump both directions until one ends or the lease ends. The viewer
     leaving ends the view quietly; an ended lease closes the websocket with
-    its error's code; anything else with CLOSE_RECONNECT."""
+    its error's code; anything else (also a failed access check) with
+    CLOSE_RECONNECT, and the reconnect checks access again."""
     from_viewer = asyncio.create_task(
         _viewer_to_service(websocket, stream, chat_session_id)
     )
@@ -271,8 +268,13 @@ async def _pump(
             task.cancel()
         await asyncio.gather(*pumps, return_exceptions=True)
     if lease in done:
-        await _close_refused(websocket, lease.result())
-        return
+        check_error = lease.exception()
+        if check_error is None:
+            await _close_refused(websocket, lease.result())
+            return
+        logger.warning(
+            "chat_browser_view_check_failed chat=%s: %r", chat_session_id, check_error
+        )
     viewer_error = from_viewer.exception() if from_viewer in done else None
     viewer_left = from_viewer in done and (
         viewer_error is None or isinstance(viewer_error, WebSocketDisconnect)

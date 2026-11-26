@@ -70,7 +70,9 @@ This component owns:
   one long stream per live view (`open_browser_stream`), which the chat's
   browser websocket route pumps to the owner's browser. The view re-reads the
   session cookie and the user at each lease renewal and closes on a logout,
-  a deactivation or a lost permission. The same routes write file chooser
+  a deactivation or a lost permission. A check that cannot complete closes
+  the view with 1012, and the reconnect checks again. The routes refuse the
+  browser when the settings cannot be read. The same routes write file chooser
   uploads, serve the files that the browser downloaded into the chat's
   `downloads/` (`GET /chat/sessions/{id}/browser/downloads/{name}`), and
   clear browser data.

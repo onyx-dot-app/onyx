@@ -141,10 +141,11 @@ class _BrowserTool[ArgumentsT: BrowserArguments](SandboxTool):
                 params,
                 timeout_seconds=wait_ms / 1000 + _CALL_MARGIN_SECONDS,
             )
+        content = self._content(result)
         return ToolResult(
-            content=truncate_output(
-                self._content(result), BROWSER_RESULT_MAX_CHARS, self.NAME
-            )
+            content=truncate_output(content, BROWSER_RESULT_MAX_CHARS, self.NAME),
+            # The sandbox spill keeps what the cut left out.
+            full_value=content if len(content) > BROWSER_RESULT_MAX_CHARS else None,
         )
 
 

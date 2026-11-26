@@ -339,7 +339,8 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         BROWSER_TOOLS (rank BROWSER, after the family's
                                         sandbox tools) with ChatTurnSetup.browser_tools (the
                                         browser_enabled setting, read once in
-                                        prepare_chat_turn); the token estimate counts
+                                        prepare_chat_turn, off when the settings
+                                        cannot be read); the token estimate counts
                                         their descriptions too
                                         (calculate_reserved_tokens browser_tools)
   browser_tools.py (SEQUENTIAL, one     each call is one HarnessSandbox.browser_call (one Dial

@@ -189,7 +189,6 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
-from onyx.server.settings.store import load_settings
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.tools.constants import (
     EXEC_COMMAND_TOOL_NAME,
@@ -1745,8 +1744,7 @@ def test_claude_models_get_edit_and_write_and_others_apply_patch(
 def test_the_browser_setting_turns_the_browser_tools_off(
     monkeypatch: pytest.MonkeyPatch, chat: SandboxChat
 ) -> None:
-    settings = load_settings().model_copy(update={"browser_enabled": False})
-    monkeypatch.setattr(process_message, "load_settings", lambda: settings)
+    monkeypatch.setattr(process_message, "load_browser_enabled", lambda: False)
     llm = NamedChatLLM([Delta(content="Ready.")], model_name="gpt-5.1")
     chat.send(llm)
 

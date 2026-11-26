@@ -152,7 +152,7 @@ from onyx.server.query_and_chat.token_limit import (
     check_model_spend_limits,
     check_token_rate_limits,
 )
-from onyx.server.settings.store import load_settings
+from onyx.server.settings.store import load_browser_enabled
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.skills.chat import accept_picked_skills, render_skills_catalog
 from onyx.tools.constants import (
@@ -557,7 +557,7 @@ def prepare_chat_turn(
                 and len(selected_models) == 1
                 and not new_msg_req.deep_research
             )
-            browser_tools = sandbox_tools and load_settings().browser_enabled
+            browser_tools = sandbox_tools and load_browser_enabled()
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn
             # that is not deep research. Its run parks while it waits. An

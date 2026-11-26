@@ -555,10 +555,18 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         """The running VM with the browser up. The browser profile is the
         session named by the sandbox ID: its last save comes back once per
         VM instance, like a chat session's, and the stop's saves keep it.
-        The chat's own session is set up too: its downloads go there."""
-        self._session_vm(ref)
+        The chat's own session is set up too, on the same VM instance: its
+        downloads go there."""
+        chat_placed, _ = self._session_vm(ref)
         profile = ref.model_copy(update={"session_id": ref.sandbox_id})
         placed, daemon = self._session_vm(profile)
+        if (placed.vm.attempt, placed.vm.generation) != (
+            chat_placed.vm.attempt,
+            chat_placed.vm.generation,
+        ):
+            raise HarnessSandboxError(
+                "The sandbox restarted while the browser started. Run the call again."
+            )
         # Under the profile's setup lock: a clear holds it, so Chrome never
         # starts on a profile that the clear is deleting.
         try:

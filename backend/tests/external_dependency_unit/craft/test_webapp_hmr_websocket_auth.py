@@ -27,7 +27,7 @@ import shared_configs.contextvars as shared_contextvars
 from onyx.auth.session_tokens import build_session_token_value
 from onyx.auth.users import current_user_from_websocket_cookie
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX, WEB_DOMAIN
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, AuthBackend
 from onyx.db.engine.async_sql_engine import abandon_async_engines
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.features.build.webapp_proxy import public_build_router
@@ -90,6 +90,8 @@ def _simulate_multi_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     no tenant set, and reading it unset raises."""
     monkeypatch.setattr(users_module, "MULTI_TENANT", True)
     monkeypatch.setattr(shared_contextvars, "MULTI_TENANT", True)
+    # The tests seed their session tokens in Redis.
+    monkeypatch.setattr(users_module, "AUTH_BACKEND", AuthBackend.REDIS)
 
 
 def _run_with_unset_tenant(run: Callable[[], Coroutine[Any, Any, None]]) -> None:

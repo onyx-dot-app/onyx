@@ -36,11 +36,13 @@ from onyx.microvm.browser_protocol import (
     parse_json_frame,
     view_hello,
 )
+from onyx.microvm.daemon_client import SandboxDaemonClient
 from onyx.microvm.lifecycle import (
     NoCheckpointSupport,
     VmStopOutcome,
     evict_idle_sandbox_vm,
 )
+from onyx.microvm.models import PlacedVm
 from onyx.server.features.build.sandbox.firecracker import harness_state
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
@@ -290,6 +292,34 @@ def test_a_call_restores_the_profile_starts_the_browser_and_returns_the_result(
     )
     # The profile session is set up on the instance, so a stop saves it.
     assert ref.sandbox_id in placement
+
+
+def test_a_call_fails_when_the_vm_instance_changes_during_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    service: FakeBrowserService,
+    ref: HarnessSandboxRef,
+) -> None:
+    """The chat session is set up on the instance that serves the call, or
+    the call fails: its downloads go to the chat session directory."""
+    session_vm = sandbox._session_vm
+
+    def next_instance_for_the_profile(
+        r: HarnessSandboxRef,
+    ) -> tuple[PlacedVm, SandboxDaemonClient]:
+        placed, daemon = session_vm(r)
+        if r.session_id != ref.sandbox_id:
+            return placed, daemon
+        vm = placed.vm.model_copy(update={"generation": placed.vm.generation + 1})
+        return placed.model_copy(update={"vm": vm}), daemon
+
+    monkeypatch.setattr(sandbox, "_session_vm", next_instance_for_the_profile)
+
+    with pytest.raises(HarnessSandboxError, match="restarted"):
+        sandbox.browser_call(ref, "status", {}, timeout_seconds=10)
+    assert node.agent.events == []
+    assert service.hellos == []
 
 
 def test_a_refused_call_raises_the_service_message(
@@ -557,13 +587,13 @@ def test_clear_browser_data_stops_chrome_and_deletes_the_profile_and_its_save(
         racers.append(racer)
         # A call that does not wait for the clear ends well within this.
         racer.join(2)
+        assert racer.is_alive()
         delete(deleted_id)
 
     store.delete = delete_during_a_call  # ty: ignore[invalid-assignment]
 
     sandbox.clear_browser_data(ref)
 
-    assert racers[0].is_alive()
     racers[0].join(10)
     assert not racers[0].is_alive()
     assert node.agent.events == ["browser_stop", f"browser_start:{sid}"]

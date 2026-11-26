@@ -18,6 +18,7 @@ from onyx.server.features.build.sandbox.models import (
 from onyx.tools.models import ToolCallException
 from onyx.tools.ordering import tool_order
 from onyx.tools.tool_implementations.sandbox.browser_tools import (
+    BROWSER_RESULT_MAX_CHARS,
     BROWSER_TOOLS,
     BrowserActTool,
     BrowserNavigateTool,
@@ -153,6 +154,20 @@ def test_open_and_snapshot_map_their_arguments() -> None:
     turn, sandbox = _turn({"tab": {"id": "t2"}, "text": "Title: Example\n- link"})
     result = BrowserSnapshotTool(turn)._run(_invocation({}), MagicMock())
     assert result.content == '{"tab":{"id":"t2"}}\nTitle: Example\n- link'
+
+
+def test_a_cut_result_keeps_its_full_text_for_the_sandbox_spill() -> None:
+    text = "x" * BROWSER_RESULT_MAX_CHARS
+    turn, _ = _turn({"tab": {"id": "t2"}, "text": text})
+    result = BrowserSnapshotTool(turn)._run(_invocation({}), MagicMock())
+    full = '{"tab":{"id":"t2"}}\n' + text
+    assert result.full_value == full
+    assert result.content.startswith(full[:BROWSER_RESULT_MAX_CHARS])
+    assert result.content != full
+
+    turn, _ = _turn({"tab": {"id": "t2"}, "text": "short"})
+    result = BrowserSnapshotTool(turn)._run(_invocation({}), MagicMock())
+    assert result.full_value is None
 
 
 def test_a_refused_call_and_bad_arguments_become_tool_errors() -> None:

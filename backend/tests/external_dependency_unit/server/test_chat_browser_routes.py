@@ -297,6 +297,37 @@ def test_a_view_closes_when_the_viewers_session_ends(
     assert sandbox.stream.closed.wait(10)
 
 
+def test_a_check_that_cannot_complete_asks_the_viewer_to_reconnect(
+    monkeypatch: pytest.MonkeyPatch,
+    client: TestClient,
+    sandbox: FakeSandbox,
+    ref: HarnessSandboxRef,
+) -> None:
+    """The reconnect checks access again before a new view opens."""
+    monkeypatch.setattr(chat_browser, "_VIEW_RENEW_SECONDS", 0.05)
+    broken = threading.Event()
+
+    def browser_ref(
+        chat_session_id: UUID,  # noqa: ARG001
+        user: User,  # noqa: ARG001
+        *,
+        require_setting: bool = True,  # noqa: ARG001
+    ) -> HarnessSandboxRef:
+        if broken.is_set():
+            raise RuntimeError("database down")
+        return ref
+
+    monkeypatch.setattr(chat_browser, "_browser_ref", browser_ref)
+    with client.websocket_connect(_url(ref.session_id)) as ws:
+        assert ws.receive_json() == {"type": "starting"}
+        assert sandbox.stream.next_sent()["op"] == "view"
+        broken.set()
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+    assert closed.value.code == chat_browser.CLOSE_RECONNECT
+    assert sandbox.stream.closed.wait(10)
+
+
 def test_a_cancelled_pump_cancels_and_awaits_its_pumps() -> None:
     """The route's task can be cancelled (the server shuts down) while the
     pump waits; no pump task outlives it."""
@@ -439,7 +470,9 @@ def test_the_owner_check_and_the_setting_gate_the_browser(
     )
     monkeypatch.setattr(chat_browser, "HARNESS_SANDBOX_ENABLED", True)
     settings = Settings()
-    monkeypatch.setattr(chat_browser, "load_settings", lambda: settings)
+    monkeypatch.setattr(
+        chat_browser, "load_browser_enabled", lambda: settings.browser_enabled
+    )
 
     # A read finds no sandbox before the first use creates it.
     with pytest.raises(OnyxError) as refused:
