@@ -23,18 +23,17 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 )
 
-// Defaults for the zero Config fields.
+// Defaults for the zero Config fields, except ServiceScript.
 const (
 	DefaultBinary       = "/opt/chrome/chrome"
+	DefaultNode         = "/usr/local/bin/node"
 	DefaultStartTimeout = 20 * time.Second
 	defaultSocketDir    = "/run/onyx-browser"
 )
 
-// The browser service and the Node that runs it, in the runtime image.
-const (
-	ServiceScript = "/opt/onyx/browser-service/main.ts"
-	Node          = "/usr/local/bin/node"
-)
+// DefaultServiceScript is the browser service in the runtime image. An empty
+// Config.ServiceScript stays empty: no service.
+const DefaultServiceScript = "/opt/onyx/browser-service/main.ts"
 
 // socketName is the service socket in Config.SocketDir.
 const socketName = "service.sock"
@@ -53,7 +52,7 @@ type Config struct {
 	// ServiceScript is the browser service that Node runs after Chrome
 	// answers. Empty: no service.
 	ServiceScript string
-	// Node runs ServiceScript.
+	// Node runs ServiceScript. Empty: DefaultNode.
 	Node string
 	// SocketDir holds the service socket. The daemon makes it (mode 0700,
 	// owned by Credential).
@@ -113,6 +112,9 @@ type running struct {
 func New(cfg Config) *Browser {
 	if cfg.Binary == "" {
 		cfg.Binary = DefaultBinary
+	}
+	if cfg.Node == "" {
+		cfg.Node = DefaultNode
 	}
 	if cfg.StartTimeout <= 0 {
 		cfg.StartTimeout = DefaultStartTimeout

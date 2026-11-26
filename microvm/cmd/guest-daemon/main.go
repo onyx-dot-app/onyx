@@ -165,7 +165,7 @@ func main() {
 	}
 	var bcfg *browser.Config
 	if *browserBin != "" {
-		bcfg = &browser.Config{Binary: *browserBin, ServiceScript: browser.ServiceScript, Node: browser.Node,
+		bcfg = &browser.Config{Binary: *browserBin, ServiceScript: browser.DefaultServiceScript,
 			SessionsRoot: fstore.Config().SessionsRoot, Log: log}
 		if ident != nil {
 			bcfg.Credential = ident.cred
