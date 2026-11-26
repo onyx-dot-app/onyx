@@ -1,23 +1,33 @@
 import { fireEvent, render, waitFor } from "@tests/setup/test-utils";
 import { Presence } from "@opal/components";
 
-// jsdom has no layout: the content is 100px wide, or 40px when its CSS caps
+// jsdom has no layout: the content is 99.25px wide, or 40px when its CSS caps
 // it at the box's previous width.
+// offsetWidth rounds to whole pixels, as in a browser.
 function mockWidths() {
+  const width = (el: HTMLElement) => {
+    if (!el.classList.contains("opal-presence-swap-content")) return 0;
+    return el.style.maxWidth === "none" ? 99.25 : 40;
+  };
+  jest
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      return { width: width(this), height: 0 } as DOMRect;
+    });
   Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
     configurable: true,
     get(this: HTMLElement) {
-      if (!this.classList.contains("opal-presence-swap-content")) return 0;
-      return this.style.maxWidth === "none" ? 100 : 40;
+      return Math.round(width(this));
     },
   });
 }
 
 afterEach(() => {
+  jest.restoreAllMocks();
   Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
 });
 
-test("a swap box measures its content uncapped, so a longer title is not cut", () => {
+test("a swap box measures its content uncapped and rounds up, so a title is not cut", () => {
   mockWidths();
   const { container } = render(
     <Presence.Swap swapKey="a" axis="inline">
@@ -35,16 +45,18 @@ test("a swap box measures its content uncapped, so a longer title is not cut", (
 // 10px per character, capped at the box's width unless measured uncapped.
 // The test observer never reports, as a capped content box would not.
 function mockTitleWidths() {
-  Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
-    configurable: true,
-    get(this: HTMLElement) {
-      if (!this.classList.contains("opal-presence-swap-content")) return 0;
-      const full = (this.textContent ?? "").length * 10;
-      if (this.style.maxWidth === "none") return full;
-      const box = parseFloat(this.parentElement?.style.width ?? "");
-      return Number.isNaN(box) ? full : Math.min(full, box);
-    },
-  });
+  jest
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      const width = (() => {
+        if (!this.classList.contains("opal-presence-swap-content")) return 0;
+        const full = (this.textContent ?? "").length * 10;
+        if (this.style.maxWidth === "none") return full;
+        const box = parseFloat(this.parentElement?.style.width ?? "");
+        return Number.isNaN(box) ? full : Math.min(full, box);
+      })();
+      return { width, height: 0 } as DOMRect;
+    });
 }
 
 function setReducedMotion(reduced: boolean) {
