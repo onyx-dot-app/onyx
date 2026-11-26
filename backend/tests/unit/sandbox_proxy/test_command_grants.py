@@ -3,9 +3,14 @@ VM command (`sandbox_proxy/approval_cache.py`)."""
 
 from uuid import UUID, uuid4
 
+import pytest
+from redis.exceptions import RedisError
+
 from onyx.db.enums import ActionPolicy
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.build.sandbox.firecracker import harness_sandbox
+from onyx.server.features.build.sandbox.firecracker.models import ExecSessionRecord
 from tests.unit.fakes import FakeCache
 
 
@@ -87,3 +92,34 @@ def test_the_foreground_mark_names_the_chat() -> None:
     assert not approval_cache.command_in_foreground(command, other_chat, cache)
     approval_cache.clear_command_foreground(command, cache)
     assert not approval_cache.command_in_foreground(command, chat, cache)
+
+
+def test_a_failed_grant_drop_still_ends_the_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The command's result and the cleanup of other commands do not wait on
+    the grant drop; the grants then end with their TTL."""
+    removed: list[str] = []
+
+    def drop(*_args: object) -> None:
+        raise RedisError("down")
+
+    monkeypatch.setattr(
+        harness_sandbox,
+        "remove_exec_session",
+        lambda _cache, _sandbox, exec_session_id: removed.append(exec_session_id),
+    )
+    monkeypatch.setattr(harness_sandbox.approval_cache, "drop_command_grants", drop)
+    record = ExecSessionRecord(
+        exec_session_id="exec-1",
+        chat_session_id=str(uuid4()),
+        execution_id="execution-1",
+        command_id=uuid4(),
+        attempt=0,
+        generation=0,
+        last_used=0.0,
+    )
+
+    harness_sandbox._end_exec_session(FakeCache(), uuid4(), record)
+
+    assert removed == ["exec-1"]
