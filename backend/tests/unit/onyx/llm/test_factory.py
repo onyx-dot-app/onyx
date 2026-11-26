@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -618,9 +618,16 @@ class TestCallerSession:
 
 
 def test_provider_view_without_access_reads_no_groups_or_personas() -> None:
+    # from_model catches an error from a relationship read, so count the reads.
+    reads: list[str] = []
+
     class _Unloaded:
-        def __iter__(self) -> None:
-            raise AssertionError("the relationship was read")
+        def __init__(self, name: str) -> None:
+            self._name = name
+
+        def __iter__(self) -> Iterator[int]:
+            reads.append(self._name)
+            return iter(())
 
     provider = MagicMock(spec=LLMProviderModel)
     provider.id = 1
@@ -634,8 +641,8 @@ def test_provider_view_without_access_reads_no_groups_or_personas() -> None:
     provider.is_public = True
     provider.is_auto_mode = False
     provider.deployment_name = None
-    provider.groups = _Unloaded()
-    provider.personas = _Unloaded()
+    provider.groups = _Unloaded("groups")
+    provider.personas = _Unloaded("personas")
 
     view = LLMProviderView.from_model(
         provider, model_configurations=[], include_access=False
@@ -643,6 +650,10 @@ def test_provider_view_without_access_reads_no_groups_or_personas() -> None:
 
     assert view.groups == []
     assert view.personas == []
+    assert reads == []
+
+    LLMProviderView.from_model(provider, model_configurations=[])
+    assert reads == ["groups", "personas"]
 
 
 class TestUnconfiguredOverrideModel:
