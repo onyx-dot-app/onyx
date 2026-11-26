@@ -12770,6 +12770,9 @@
               "patching": {
                 "status": "{count, plural, =0 {Patching files…} one {Patching # file…} other {Patching # files…}}"
               }
+            },
+            "deleted": {
+              "label": "File deleted"
             }
           },
           "stopped": {
