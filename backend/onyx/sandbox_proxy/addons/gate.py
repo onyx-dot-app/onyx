@@ -1027,7 +1027,7 @@ class GateAddon:
                 ctx.chat_command_id or ctx.session_id,
                 self._cache_factory(ctx.tenant_id),
             )
-        except CACHE_TRANSIENT_ERRORS as e:
+        except Exception as e:
             logger.warning(
                 "approval_announce_error approval=%s error=%r approval_id=%s",
                 short_log_id(approval_id),

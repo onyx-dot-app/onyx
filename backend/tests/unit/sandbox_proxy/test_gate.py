@@ -2657,6 +2657,30 @@ def test_a_command_row_names_the_request_and_is_announced_to_the_call(
     assert notified == []
 
 
+def test_a_failed_announce_still_returns_the_committed_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any announce error is best-effort: the caller gets the ID, so its
+    `finally` removes the parked entry and its wait ends the row."""
+    addon, _cache = _command_gate(monkeypatch)
+    _spy_approval_insert(monkeypatch)
+
+    def broken_announce(*_args: Any) -> None:
+        raise ValueError("bad cache payload")
+
+    monkeypatch.setattr(gate.approval_cache, "announce_approval", broken_announce)
+    ctx = _ctx(session_id=UUID(_TAG_UUID)).model_copy(
+        update={"chat_command_id": _COMMAND}
+    )
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    approval_id = addon._persist_approval_row(
+        ctx, _MATCH, gate._approval_payload(flow, ctx, _MATCH)
+    )
+
+    assert addon._parked.snapshot() == [(ctx.tenant_id, {approval_id})]
+
+
 def test_a_command_card_shows_the_size_of_a_large_body() -> None:
     ctx = _ctx().model_copy(update={"chat_command_id": _COMMAND})
     body = {"text": "x" * (128 * 1024)}
