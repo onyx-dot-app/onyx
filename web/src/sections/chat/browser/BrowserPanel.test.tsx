@@ -783,7 +783,7 @@ test("a key pressed before composition began goes up on the page", () => {
   expect(socket().sent).toHaveLength(sent);
 });
 
-test("a page switch forgets the old page's clicks, held buttons and touch", async () => {
+test("a page switch forgets the old page's clicks, held buttons, keys and touch", async () => {
   mockFrames();
   const { container } = renderPanel();
   const tabs = [TAB, { ...TAB, id: "t2" }];
@@ -798,7 +798,10 @@ test("a page switch forgets the old page's clicks, held buttons and touch", asyn
     { action: "down", clickCount: 1 },
     { action: "up" },
   ]);
-  // A held button and a finger on page A
+  // A held button, a held key and a finger on page A
+  const input = screen.getByRole("textbox", { name: "Browser page" });
+  act(() => input.focus());
+  fireEvent.keyDown(input, { key: "a", code: "KeyA" });
   fireEvent.pointerDown(canvas, { ...at, button: 0, buttons: 1 });
   fireEvent.pointerDown(canvas, { ...finger, button: 0, buttons: 1 });
   act(() => socket().receive({ type: "tabs", tabs, selected: "t2" }));
@@ -806,7 +809,8 @@ test("a page switch forgets the old page's clicks, held buttons and touch", asyn
   socket().sent = [];
   fireEvent.pointerUp(canvas, { ...at, button: 0, buttons: 0 });
   fireEvent.pointerUp(canvas, { ...finger, button: 0, buttons: 0 });
-  expect(mouseSent()).toEqual([]);
+  fireEvent.keyUp(input, { key: "a", code: "KeyA" });
+  expect(socket().sent).toEqual([]);
   fireEvent.pointerDown(canvas, { ...at, button: 0, buttons: 1 });
   expect(mouseSent().at(-1)).toMatchObject({ action: "down", clickCount: 1 });
 });

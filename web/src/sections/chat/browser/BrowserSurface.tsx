@@ -130,14 +130,15 @@ export function BrowserSurface({
       inputFrameRef.current = requestAnimationFrame(flushInput);
   };
 
-  // Also forgets the page's held buttons, touch and click history, so the
-  // next page gets no stray release or double click
+  // Also forgets the page's held buttons, keys, touch and click history, so
+  // the next page gets no stray release or double click
   const dropInput = useCallback(() => {
     if (inputFrameRef.current !== null)
       cancelAnimationFrame(inputFrameRef.current);
     inputFrameRef.current = null;
     pendingMoveRef.current = pendingWheelRef.current = null;
     mouseButtonsRef.current = 0;
+    heldKeysRef.current.clear();
     lastClickRef.current = null;
     touchRef.current = null;
   }, []);
@@ -569,7 +570,7 @@ export function BrowserSurface({
   return (
     <div
       ref={surfaceRef}
-      className="absolute inset-0 overflow-hidden"
+      className="absolute inset-0 overflow-hidden has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:-outline-offset-2 has-[textarea:focus-visible]:outline-border-04"
       data-chat-browser-surface
     >
       <canvas
