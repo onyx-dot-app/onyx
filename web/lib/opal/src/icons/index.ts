@@ -71,6 +71,7 @@ export { default as SvgDevKit } from "@opal/icons/dev-kit";
 export { default as SvgDiscord } from "@opal/icons/discord";
 export { default as SvgDownload } from "@opal/icons/download";
 export { default as SvgDownloadCloud } from "@opal/icons/download-cloud";
+export { default as SvgEarth } from "@opal/icons/earth";
 export { default as SvgEdit } from "@opal/icons/edit";
 export { default as SvgEditBig } from "@opal/icons/edit-big";
 export { default as SvgEmpty } from "@opal/icons/empty";

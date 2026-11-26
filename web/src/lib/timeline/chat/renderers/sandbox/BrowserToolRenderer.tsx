@@ -4,7 +4,7 @@ import { CodePanel } from "@opal/components";
 import type { JsonValue } from "@/lib/json";
 import {
   SvgBrowserFile,
-  SvgGlobe,
+  SvgEarth,
   SvgKeyboard,
   SvgMousePointer,
 } from "@opal/icons";
@@ -116,7 +116,7 @@ function actIcon(args: Record<string, unknown> | null): IconFunctionComponent {
     case "upload":
       return SvgBrowserFile;
     default:
-      return SvgGlobe;
+      return SvgEarth;
   }
 }
 
@@ -124,7 +124,7 @@ type BrowserToolRendererProps = ComponentProps<
   MessageRenderer<CustomToolPacket, {}>
 >;
 
-/** One browser tool call: what it did to the page, by a globe. */
+/** One browser tool call: what it did to the page, by the earth. */
 export function BrowserToolRenderer({
   packets,
   onComplete,
@@ -252,7 +252,7 @@ export function BrowserToolRenderer({
 
   return children([
     {
-      icon: toolName === "browser_act" ? actIcon(call.args) : SvgGlobe,
+      icon: toolName === "browser_act" ? actIcon(call.args) : SvgEarth,
       status,
       supportsCollapsible: true,
       content,

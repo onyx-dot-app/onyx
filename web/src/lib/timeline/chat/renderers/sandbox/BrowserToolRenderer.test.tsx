@@ -2,7 +2,7 @@ import { render, screen } from "@tests/setup/test-utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   SvgBrowserFile,
-  SvgGlobe,
+  SvgEarth,
   SvgKeyboard,
   SvgMousePointer,
 } from "@opal/icons";
@@ -158,5 +158,5 @@ test("each browser action gets its own icon", () => {
   expect(icons.scroll).toBe(SvgMousePointer);
   expect(icons.type).toBe(SvgKeyboard);
   expect(icons.upload).toBe(SvgBrowserFile);
-  expect(icons.open).toBe(SvgGlobe);
+  expect(icons.open).toBe(SvgEarth);
 });
