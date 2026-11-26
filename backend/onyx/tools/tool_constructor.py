@@ -41,6 +41,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.postgres.scope import build_document_scope
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.sandbox.browser_tool import BrowserTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
@@ -280,6 +281,10 @@ def _construct_tools_impl(
                     "Skipping tool %s because it is not available",
                     tool_cls.__name__,
                 )
+                continue
+
+            # The turn adds the sandbox's browser tools (process_message.py).
+            if tool_cls.__name__ == BrowserTool.__name__:
                 continue
 
             # Handle Internal Search Tool

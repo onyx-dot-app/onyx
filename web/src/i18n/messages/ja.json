@@ -263,6 +263,9 @@
       },
       "addMemory": {
         "label": "メモリに追加"
+      },
+      "browser": {
+        "label": "ブラウザ"
       }
     },
     "toolsPopover": {
@@ -335,6 +338,9 @@
         },
         "webSearch": {
           "description": "最新情報をウェブで検索します。"
+        },
+        "browser": {
+          "description": "ウェブサイトを閲覧し、ページを操作します。"
         }
       }
     },

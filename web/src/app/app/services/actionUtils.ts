@@ -1,11 +1,13 @@
 import { JSX } from "react";
 import type { IconProps } from "@opal/types";
 import { ToolSnapshot } from "@/lib/tools/types";
+import { BROWSER_TOOL_ID } from "@/lib/tools/constants";
 import {
   SvgCpu,
   SvgGlobe,
   SvgImage,
   SvgLink,
+  SvgMonitor,
   SvgSearch,
   SvgServer,
   SvgTerminal,
@@ -66,6 +68,7 @@ export function getIconForAction(
   if (isKnowledgeGraphTool(action)) return SvgServer;
   if (isOpenUrlTool(action)) return SvgLink;
   if (isCodeInterpreterTool(action)) return SvgTerminal;
+  if (action.in_code_tool_id === BROWSER_TOOL_ID) return SvgMonitor;
   return SvgCpu;
 }
 

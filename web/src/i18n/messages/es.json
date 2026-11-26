@@ -263,6 +263,9 @@
       },
       "addMemory": {
         "label": "Añadir a la memoria"
+      },
+      "browser": {
+        "label": "Navegador"
       }
     },
     "toolsPopover": {
@@ -335,6 +338,9 @@
         },
         "webSearch": {
           "description": "Busca en la web información actualizada."
+        },
+        "browser": {
+          "description": "Navega por sitios web y actúa en las páginas."
         }
       }
     },

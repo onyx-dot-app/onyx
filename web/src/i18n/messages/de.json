@@ -263,6 +263,9 @@
       },
       "addMemory": {
         "label": "Erinnerung hinzufügen"
+      },
+      "browser": {
+        "label": "Browser"
       }
     },
     "toolsPopover": {
@@ -335,6 +338,9 @@
         },
         "webSearch": {
           "description": "Durchsucht das Web nach aktuellen Informationen."
+        },
+        "browser": {
+          "description": "Websites durchsuchen und auf Seiten handeln."
         }
       }
     },
