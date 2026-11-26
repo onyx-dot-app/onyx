@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from onyx.agents.concurrency import EventDelivery
+from onyx.agents.concurrency import EventDelivery, EventDispatcher
 from onyx.agents.events import (
     AgentEvent,
     MessageEndEvent,
@@ -245,13 +245,20 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
 
 @pytest.mark.parametrize("inherited", [False, True])
 def test_events_hold_recorded_objects_that_never_change_after_publication(
-    inherited: bool,
+    monkeypatch: pytest.MonkeyPatch, inherited: bool
 ) -> None:
-    received: list[tuple[AgentEvent, str]] = []
+    published: list[tuple[AgentEvent, str]] = []
+    received: list[AgentEvent] = []
     shared: list[AgentEvent] = []
+    publish = EventDispatcher.publish
 
-    def record(event: AgentEvent) -> None:
-        received.append((event, event.model_dump_json()))
+    def record_publication(
+        self: EventDispatcher, delivery: EventDelivery, event: AgentEvent
+    ) -> None:
+        published.append((event, event.model_dump_json()))
+        publish(self, delivery, event)
+
+    monkeypatch.setattr(EventDispatcher, "publish", record_publication)
 
     def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
         return result.model_copy(update={"content": "accepted"})
@@ -266,25 +273,28 @@ def test_events_hold_recorded_objects_that_never_change_after_publication(
         ),
     )
     parent = EventDelivery()
-    if inherited:
-        parent.subscribe(record)
-    parent.subscribe(shared.append)
-    run = agent.start(
-        max_steps=2,
-        on_event=None if inherited else record,
-        _event_parent=parent,
-    )
-    assert run.result(timeout=5).output.text == "accepted"
-    assert run.wait_for_idle(5)
-    assert [event.model_dump_json() for event, _ in received] == [
-        dump for _, dump in received
-    ]
-    # Every listener gets the published object; events hold recorded objects.
-    events = [event for event, _ in received]
-    assert all(seen is event for seen, event in zip(shared, events, strict=True))
-    end = next(event for event in events if isinstance(event, MessageEndEvent))
-    assert end.message is run._state.steps[0].message
-    parent.close()
+    try:
+        if inherited:
+            parent.subscribe(received.append)
+        parent.subscribe(shared.append)
+        run = agent.start(
+            max_steps=2,
+            on_event=None if inherited else received.append,
+            _event_parent=parent,
+        )
+        assert run.result(timeout=5).output.text == "accepted"
+        assert run.wait_for_idle(5)
+        assert [event.model_dump_json() for event, _ in published] == [
+            dump for _, dump in published
+        ]
+        # Every listener gets the published object; events hold recorded objects.
+        events = [event for event, _ in published]
+        assert all(seen is event for seen, event in zip(received, events, strict=True))
+        assert all(seen is event for seen, event in zip(shared, events, strict=True))
+        end = next(event for event in events if isinstance(event, MessageEndEvent))
+        assert end.message is run._state.steps[0].message
+    finally:
+        parent.close()
 
 
 @pytest.mark.parametrize(
