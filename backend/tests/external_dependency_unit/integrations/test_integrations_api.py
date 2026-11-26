@@ -40,9 +40,11 @@ from onyx.db.integration_access import set_integration_preferences__no_commit
 from onyx.db.integration_connection import get_connection, get_oauth_client
 from onyx.db.integration_policy import list_persona_integration_links
 from onyx.db.models import (
+    ApiApp,
     ExternalApp,
     Integration,
     Integration__User,
+    IntegrationConnection,
     IntegrationOAuthClient,
     Marketplace,
     MCPServer,
@@ -75,6 +77,7 @@ from onyx.server.features.integrations.models import (
     ActionGrantsUpdate,
     ConnectionFieldsRequest,
     CredentialField,
+    GraphQLConfigInput,
     IntegrationActionsUpdate,
     IntegrationCreate,
     IntegrationShape,
@@ -491,38 +494,74 @@ def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -
     assert db_session.scalar(select(Tool.id).where(Tool.name == name)) is None
 
 
-@pytest.mark.parametrize("shape", ["mcp_server", "custom"])
+def _delete_shape_create(shape: str) -> IntegrationCreate:
+    if shape == "preset":
+        return _linear_create()
+    config: McpServerConfigInput | GraphQLConfigInput = (
+        McpServerConfigInput(server_url="https://mcp.example.com/mcp")
+        if shape == "mcp_server"
+        else GraphQLConfigInput(
+            endpoint_url="https://gql.example.com/graphql",
+            graphql_schema="type Query { ticket(id: ID!): String }",
+        )
+    )
+    return IntegrationCreate(
+        name=f"delete-{uuid4().hex[:8]}",
+        auth_mode=IntegrationAuthMode.SHARED,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"Authorization": "Bearer {token}"},
+        config=config,
+    )
+
+
+@pytest.mark.parametrize("shape", ["mcp_server", "custom", "graphql", "preset"])
 def test_delete_removes_the_kind_row(
     db_session: Session, admin: User, created: Created, shape: str
 ) -> None:
+    """The kind row, the OAuth client and the connections go with the
+    integration, so no row is left that names it."""
     integration_id = (
-        admin_api.create_integration(
-            IntegrationCreate(
-                name=f"delete-{uuid4().hex[:8]}",
-                auth_mode=IntegrationAuthMode.SHARED,
-                auth_method=IntegrationAuthMethod.API_KEY,
-                header_template={"Authorization": "Bearer {token}"},
-                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
-            ),
-            admin,
-            db_session,
+        _custom_app(db_session, admin)
+        if shape == "custom"
+        else admin_api.create_integration(
+            _delete_shape_create(shape), admin, db_session
         ).id
-        if shape == "mcp_server"
-        else _custom_app(db_session, admin)
     )
     created.add(integration_id)
     integration = db_session.get(Integration, integration_id)
     assert integration is not None
-    kind_row = (MCPServer, integration.mcp_server_id)
-    if integration.external_app_id is not None:
-        kind_row = (ExternalApp, integration.external_app_id)
-    assert kind_row[1] is not None
+    if shape == "preset":
+        assert db_session.get(IntegrationOAuthClient, integration_id) is not None
+    else:
+        connect_with_fields__no_commit(
+            integration,
+            None if integration.auth_mode is IntegrationAuthMode.SHARED else admin,
+            {"token": "a-token"},
+            db_session,
+        )
+        db_session.commit()
+    kind_rows: list[tuple[type[Any], int | None]] = [
+        (MCPServer, integration.mcp_server_id),
+        (ExternalApp, integration.external_app_id),
+        (ApiApp, integration.api_app_id),
+    ]
+    kind_rows = [(model, row_id) for model, row_id in kind_rows if row_id is not None]
+    assert len(kind_rows) == 1
 
     admin_api.delete_integration(integration_id, admin, db_session)
 
     db_session.expire_all()
     assert db_session.get(Integration, integration_id) is None
-    assert db_session.get(kind_row[0], kind_row[1]) is None
+    assert db_session.get(kind_rows[0][0], kind_rows[0][1]) is None
+    assert db_session.get(IntegrationOAuthClient, integration_id) is None
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(IntegrationConnection)
+            .where(IntegrationConnection.integration_id == integration_id)
+        )
+        == 0
+    )
 
 
 # Permissions
