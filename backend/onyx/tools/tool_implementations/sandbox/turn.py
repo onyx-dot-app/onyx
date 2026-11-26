@@ -12,7 +12,10 @@ from onyx.server.features.build.sandbox.file_copy_state import (
     copy_generation_key,
 )
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
-from onyx.server.features.build.sandbox.models import HarnessSandboxRef
+from onyx.server.features.build.sandbox.models import (
+    HarnessSandboxRef,
+    session_workspace,
+)
 from onyx.tools.tool_implementations.sandbox.file_copies import (
     COPY_CACHE_SECONDS,
     CopyTarget,
@@ -84,6 +87,12 @@ class SandboxTurn:
             )
         self.file_copies: TurnFileCopies | None = None
         self.search_files = TurnSearchFiles(self.copy_target, user_id)
+
+    @property
+    def workdir(self) -> str:
+        """The chat's working directory in the VM, the default cwd of its
+        commands."""
+        return session_workspace(self._chat_session_id)
 
     @property
     def sandbox(self) -> HarnessSandbox:
