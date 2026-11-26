@@ -12792,6 +12792,38 @@
             "failed": {
               "status": "Falha ao publicar"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {Abrindo {target}} failed {Não foi possível abrir {target}} canceled {Cancelado} other {{target} aberto}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Abrindo uma nova aba} failed {Não foi possível abrir uma nova aba} canceled {Cancelado} other {Nova aba aberta}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Indo para {target}} failed {Não foi possível ir para {target}} canceled {Cancelado} other {Foi para {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Lendo a página} failed {Não foi possível ler a página} canceled {Cancelado} other {Página lida}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Usando a página} failed {Não foi possível usar a página} canceled {Cancelado} other {Página usada}}"
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Aguardando a página} failed {A página não ficou pronta} canceled {Cancelado} other {Página aguardada}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Executando um script da página} failed {O script da página falhou} canceled {Cancelado} other {Script da página executado}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Respondendo a um diálogo da página} failed {Não foi possível responder ao diálogo da página} canceled {Cancelado} other {Diálogo da página respondido}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Verificando o navegador} failed {Não foi possível verificar o navegador} canceled {Cancelado} other {Navegador verificado}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Voltando} forward {Avançando} other {Recarregando a página}}} failed {Não foi possível mudar a página} canceled {Cancelado} other {{history, select, back {Voltou} forward {Avançou} other {Página recarregada}}}}"
+            }
           }
         },
         "skill": {

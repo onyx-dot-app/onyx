@@ -12792,6 +12792,38 @@
             "failed": {
               "status": "Veröffentlichung fehlgeschlagen"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {{target} wird geöffnet} failed {{target} konnte nicht geöffnet werden} canceled {Abgebrochen} other {{target} geöffnet}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Neuer Tab wird geöffnet} failed {Neuer Tab konnte nicht geöffnet werden} canceled {Abgebrochen} other {Neuer Tab geöffnet}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Wechsel zu {target}} failed {Wechsel zu {target} fehlgeschlagen} canceled {Abgebrochen} other {Zu {target} gewechselt}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Seite wird gelesen} failed {Seite konnte nicht gelesen werden} canceled {Abgebrochen} other {Seite gelesen}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Seite wird bedient} failed {Seite konnte nicht bedient werden} canceled {Abgebrochen} other {Seite bedient}}"
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Warten auf die Seite} failed {Die Seite wurde nicht bereit} canceled {Abgebrochen} other {Auf die Seite gewartet}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Seitenskript wird ausgeführt} failed {Das Seitenskript ist fehlgeschlagen} canceled {Abgebrochen} other {Seitenskript ausgeführt}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Seitendialog wird beantwortet} failed {Seitendialog konnte nicht beantwortet werden} canceled {Abgebrochen} other {Seitendialog beantwortet}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Browser wird geprüft} failed {Browser konnte nicht geprüft werden} canceled {Abgebrochen} other {Browser geprüft}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Zurück} forward {Vorwärts} other {Seite wird neu geladen}}} failed {Seite konnte nicht geändert werden} canceled {Abgebrochen} other {{history, select, back {Zurückgegangen} forward {Vorwärtsgegangen} other {Seite neu geladen}}}}"
+            }
           }
         },
         "skill": {

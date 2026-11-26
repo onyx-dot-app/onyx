@@ -12792,6 +12792,38 @@
             "failed": {
               "status": "Publish failed"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {Opening {target}} failed {Could not open {target}} canceled {Canceled} other {Opened {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Opening a new tab} failed {Could not open a new tab} canceled {Canceled} other {Opened a new tab}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Going to {target}} failed {Could not go to {target}} canceled {Canceled} other {Went to {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Reading the page} failed {Could not read the page} canceled {Canceled} other {Read the page}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Using the page} failed {Could not use the page} canceled {Canceled} other {Used the page}}"
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Waiting for the page} failed {The page did not get ready} canceled {Canceled} other {Waited for the page}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Running a page script} failed {The page script failed} canceled {Canceled} other {Ran a page script}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Answering a page dialog} failed {Could not answer the page dialog} canceled {Canceled} other {Answered a page dialog}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Checking the browser} failed {Could not check the browser} canceled {Canceled} other {Checked the browser}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Going back} forward {Going forward} other {Reloading the page}}} failed {Could not change the page} canceled {Canceled} other {{history, select, back {Went back} forward {Went forward} other {Reloaded the page}}}}"
+            }
           }
         },
         "skill": {

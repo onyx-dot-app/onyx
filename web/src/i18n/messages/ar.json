@@ -12792,6 +12792,38 @@
             "failed": {
               "status": "فشل النشر"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {جارٍ فتح {target}} failed {تعذّر فتح {target}} canceled {أُلغي} other {فُتح {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {جارٍ فتح علامة تبويب جديدة} failed {تعذّر فتح علامة تبويب جديدة} canceled {أُلغي} other {فُتحت علامة تبويب جديدة}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {جارٍ الانتقال إلى {target}} failed {تعذّر الانتقال إلى {target}} canceled {أُلغي} other {تم الانتقال إلى {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {جارٍ قراءة الصفحة} failed {تعذّرت قراءة الصفحة} canceled {أُلغي} other {قُرئت الصفحة}}"
+            },
+            "act": {
+              "status": "{phase, select, running {جارٍ استخدام الصفحة} failed {تعذّر استخدام الصفحة} canceled {أُلغي} other {استُخدمت الصفحة}}"
+            },
+            "waitFor": {
+              "status": "{phase, select, running {جارٍ انتظار الصفحة} failed {لم تصبح الصفحة جاهزة} canceled {أُلغي} other {تم انتظار الصفحة}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {جارٍ تشغيل نص برمجي للصفحة} failed {فشل النص البرمجي للصفحة} canceled {أُلغي} other {شُغّل نص برمجي للصفحة}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {جارٍ الرد على مربع حوار الصفحة} failed {تعذّر الرد على مربع حوار الصفحة} canceled {أُلغي} other {تم الرد على مربع حوار الصفحة}}"
+            },
+            "check": {
+              "status": "{phase, select, running {جارٍ فحص المتصفح} failed {تعذّر فحص المتصفح} canceled {أُلغي} other {فُحص المتصفح}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {جارٍ الرجوع} forward {جارٍ التقدم} other {جارٍ إعادة تحميل الصفحة}}} failed {تعذّر تغيير الصفحة} canceled {أُلغي} other {{history, select, back {تم الرجوع} forward {تم التقدم} other {أُعيد تحميل الصفحة}}}}"
+            }
           }
         },
         "skill": {

@@ -35,6 +35,10 @@ import {
 import { ExecToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/ExecToolRenderer";
 import { ApplyPatchToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/ApplyPatchToolRenderer";
 import { PublishFilesToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/PublishFilesToolRenderer";
+import {
+  BrowserToolRenderer,
+  isBrowserToolPacket,
+} from "@/lib/timeline/chat/renderers/sandbox/BrowserToolRenderer";
 import { FileReaderToolRenderer } from "@/lib/timeline/chat/renderers/filereader/FileReaderToolRenderer";
 import { FetchToolRenderer } from "@/lib/timeline/chat/renderers/fetch/FetchToolRenderer";
 import { MemoryToolRenderer } from "@/lib/timeline/chat/renderers/memory/MemoryToolRenderer";
@@ -201,6 +205,9 @@ export function findRenderer(
   }
   if (packets.some(isSkillToolPacket)) {
     return SkillToolRenderer;
+  }
+  if (packets.some(isBrowserToolPacket)) {
+    return BrowserToolRenderer;
   }
   if (packets.some(isCustomToolPacket)) {
     return CustomToolRenderer;
