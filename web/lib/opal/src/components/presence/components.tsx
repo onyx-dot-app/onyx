@@ -313,6 +313,11 @@ function PresenceSwap({
     observer.observe(content);
     return () => observer.disconnect();
   }, [axis, shownKey]);
+  // New content under the same key: capped the same way, so measure it too.
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (content && phase === "idle") setSize(contentSize(content, axis));
+  }, [children]);
 
   // Resizing: go straight on when the new content is the same size as the old,
   // and never stall if `transitionend` does not arrive. Runs once per phase
