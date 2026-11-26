@@ -77,6 +77,11 @@ const AGENT_CURSOR_CLICK_LEAD_MS = 40;
 const DOWNLOAD_MAX_BYTES = 256 * 1024 * 1024;
 const CHAT_DOWNLOAD_LIMIT = 20;
 const VIEWER_QUALITY = 70;
+const MAX_TAB_URL_CHARS = 2048;
+const MAX_DIALOG_MESSAGE_CHARS = 4000;
+// The web chat panel sends pasted text in chunks of this size.
+const MAX_INSERT_TEXT_CHARS = 10_000;
+const MAX_ECHO_CHARS = 40;
 
 export type Log = (event: string, fields?: Record<string, unknown>) => void;
 
@@ -418,12 +423,12 @@ export class BrowserService {
   private tabJson(tab: Tab): TabJson {
     return {
       id: tab.id,
-      url: BrowserPage.withoutDataPayload(tab.page.url()).slice(0, 2048),
+      url: BrowserPage.withoutDataPayload(tab.page.url()).slice(0, MAX_TAB_URL_CHARS),
       title: tab.title,
       loading: tab.loading,
       controller: tab.control.controller !== null ? "human" : tab.agentUsed ? "agent" : "none",
       dialog: tab.dialog
-        ? { type: tab.dialog.type(), message: tab.dialog.message().slice(0, 4000) }
+        ? { type: tab.dialog.type(), message: tab.dialog.message().slice(0, MAX_DIALOG_MESSAGE_CHARS) }
         : null,
     };
   }
@@ -661,7 +666,7 @@ export class BrowserService {
     const id = optString(params, "tab");
     if (id !== undefined) {
       const tab = chat.tabs.get(id);
-      if (!tab) throw new OperationError("tab_not_found", `Tab ${id.slice(0, 40)} is not open in this chat.`);
+      if (!tab) throw new OperationError("tab_not_found", `Tab ${id.slice(0, MAX_ECHO_CHARS)} is not open in this chat.`);
       this.setCurrent(chat, tab);
       return tab;
     }
@@ -764,7 +769,7 @@ export class BrowserService {
         return { tab: await this.freshTabJson(tab) };
       }
       default:
-        throw invalid(`Unknown method ${method.slice(0, 40)}.`);
+        throw invalid(`Unknown method ${method.slice(0, MAX_ECHO_CHARS)}.`);
     }
   }
 
@@ -1519,7 +1524,7 @@ export class BrowserService {
       case "reload":
         break;
       default:
-        throw invalid(`Unknown message type ${String(message.type).slice(0, 40)}.`);
+        throw invalid(`Unknown message type ${String(message.type).slice(0, MAX_ECHO_CHARS)}.`);
     }
     const dispatch = async (input: Record<string, unknown>) => {
       await this.dispatchViewerInput(tab, cast.session, viewer, input);
@@ -1617,7 +1622,7 @@ export class BrowserService {
       }
       case "text": {
         const text = optString(message, "text");
-        if (text) await session.send("Input.insertText", { text: text.slice(0, 10_000) });
+        if (text) await session.send("Input.insertText", { text: text.slice(0, MAX_INSERT_TEXT_CHARS) });
         return;
       }
       // A stalled navigation must not block a corrected URL or further viewer input.

@@ -14,6 +14,8 @@ const WAIT_POLL_MS = 100;
 const TARGET_COUNT_MS = 250;
 const MAX_TARGET_CHARS = 200;
 const SNAPSHOT_TIMEOUT_MS = 10_000;
+// Snapshot time kept for the steps after the aria tree, and for each unread iframe.
+const SNAPSHOT_MARGIN_MS = 2_000;
 const FRAME_ANSWER_MS = 1_000;
 
 export type Target = { readonly ref?: string | undefined; readonly selector?: string | undefined };
@@ -421,7 +423,7 @@ const capture = async (page: Page, cdp: CDPSession, deadline: number): Promise<S
   const tree = await page.ariaSnapshot({
     mode: "ai",
     boxes: true,
-    timeout: Math.max(1, deadline - Date.now() - 2_000),
+    timeout: Math.max(1, deadline - Date.now() - SNAPSHOT_MARGIN_MS),
   });
   const after = await read(before);
   // A value that changed meanwhile may be in the tree under neither reading.
@@ -432,7 +434,7 @@ const capture = async (page: Page, cdp: CDPSession, deadline: number): Promise<S
   const unread = readers.flatMap((reader, i) => (after[i] ? [] : reader.frames));
   const filled = /^\s*- iframe (?:\[active\] )?\[ref=(\S+?)\].*:$/gm;
   for (const match of unread.length ? tree.matchAll(filled) : []) {
-    const iframe = await page.locator(`aria-ref=${match[1]}`).elementHandle({ timeout: 2_000 });
+    const iframe = await page.locator(`aria-ref=${match[1]}`).elementHandle({ timeout: SNAPSHOT_MARGIN_MS });
     if (!iframe) throw pageChanged();
     const frame = await iframe.contentFrame();
     void iframe.dispose().catch(noop);
