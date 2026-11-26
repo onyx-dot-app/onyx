@@ -133,6 +133,7 @@ type Tab = {
   readonly viewers: Set<Viewer>;
   dialog: Dialog | null;
   dialogOrigin: string | null;
+  dialogOpened: PromiseWithResolvers<void>;
   fileChooser: OpenChooser | null;
   loading: boolean;
   title: string;
@@ -435,17 +436,7 @@ export class BrowserService {
   private chatFor(id: string): ChatState {
     let chat = this.chats.get(id);
     if (!chat) {
-      const saved = this.savedDownloads(id);
-      chat = {
-        id,
-        tabs: new Map(),
-        current: null,
-        viewers: new Set(),
-        tabsScheduled: false,
-        opening: 0,
-        downloads: saved.length,
-        downloadBytes: saved.reduce((total, size) => total + size, 0),
-      };
+      chat = { id, tabs: new Map(), current: null, viewers: new Set(), tabsScheduled: false, opening: 0, ...this.savedDownloads(id) };
       this.chats.set(id, chat);
     }
     return chat;
@@ -472,6 +463,7 @@ export class BrowserService {
 
   private async freshTabJson(tab: Tab) {
     await this.refreshTitle(tab);
+    if (tab.dialog) await Promise.race([tab.dialogOpened.promise, sleepUntil(Date.now() + STATUS_READ_MS)]);
     return this.tabJson(tab);
   }
 
@@ -575,6 +567,7 @@ export class BrowserService {
       viewers: new Set(),
       dialog: null,
       dialogOrigin: null,
+      dialogOpened: Promise.withResolvers(),
       fileChooser: null,
       loading: false,
       title: "",
@@ -640,11 +633,14 @@ export class BrowserService {
     // Playwright's dialog event has no frame, and it can arrive before or after this one.
     cdp.on("Page.javascriptDialogOpening", ({ url }) => {
       tab.dialogOrigin = originOf(url);
+      tab.dialogOpened.resolve();
       if (tab.dialog) this.scheduleTabs(chat);
     });
     // A navigation can close a dialog without us answering it.
     cdp.on("Page.javascriptDialogClosed", () => {
       tab.dialogOrigin = null;
+      tab.dialogOpened.resolve();
+      tab.dialogOpened = Promise.withResolvers();
       if (!tab.dialog) return;
       tab.dialog = null;
       this.broadcastControl(tab);
@@ -1077,15 +1073,14 @@ export class BrowserService {
   // ---- downloads and file chooser ----
 
   // A restarted service starts the budget from the downloads that the chat session restored.
-  private savedDownloads(chat: string): number[] {
+  private savedDownloads(chat: string) {
     const dir = NodePath.join(chatDir(this.sessionsRoot, chat), "downloads");
-    let names: string[];
+    let names: Array<string> = [];
     try {
       names = NodeFS.readdirSync(dir);
-    } catch {
-      return [];
-    }
-    return names.map((name) => NodeFS.lstatSync(NodePath.join(dir, name), { throwIfNoEntry: false })?.size ?? 0);
+    } catch {}
+    const sizes = names.map((name) => NodeFS.lstatSync(NodePath.join(dir, name), { throwIfNoEntry: false })?.size ?? 0);
+    return { downloads: sizes.length, downloadBytes: sizes.reduce((total, size) => total + size, 0) };
   }
 
   private cancelDownload(guid: string) {

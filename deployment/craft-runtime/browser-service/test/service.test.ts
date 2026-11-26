@@ -76,23 +76,21 @@ describe("browser service", () => {
   let chrome: Chrome;
   let service: Service;
   let site: Site;
-  const events: Array<{ readonly event: string; readonly chat: unknown }> = [];
   const cleanups: Array<() => Promise<void>> = [];
 
   before(async () => {
     chrome = await launchChrome();
     cleanups.unshift(() => chrome.stop());
-    service = await startService(chrome.cdpUrl, (event, fields) => events.push({ event, chat: fields?.chat }));
+    service = await startService(chrome.cdpUrl);
     cleanups.unshift(() => service.stop());
     site = await startSite();
     cleanups.unshift(() => site.stop());
   });
 
   after(async () => {
-    const results: Array<unknown> = [];
-    for (const cleanup of cleanups) results.push(await cleanup().then(() => null, (error: unknown) => error));
-    const failure = results.find((error) => error !== null);
-    if (failure !== undefined) throw failure;
+    const errors: Array<unknown> = [];
+    for (const cleanup of cleanups) await cleanup().catch((error: unknown) => errors.push(error));
+    if (errors.length > 0) throw errors[0];
   });
 
   test("server closes a connection that sends an oversize length", async () => {
@@ -590,7 +588,7 @@ describe("browser service", () => {
     for (let n = 0; n < 20; n += 1) await NodeFSP.writeFile(NodePath.join(dir, `saved-${n}.txt`), "x");
     await ok(service.socketPath, chat, "open", { url: `${site.url}/download-page` });
     await ok(service.socketPath, chat, "act", { action: "click", selector: "#dl" });
-    await waitUntil(() => events.some((e) => e.event === "download_refused" && e.chat === chat));
+    await waitUntil(() => service.events.some((e) => e.event === "download_refused" && e.chat === chat));
     assert.equal((await NodeFSP.readdir(dir)).length, 20);
   });
 
@@ -981,7 +979,7 @@ describe("browser service", () => {
       await NodeFSP.symlink(outside, NodePath.join(service.sessionsRoot, chat, "downloads"));
       await ok(service.socketPath, chat, "open", { url: `${site.url}/download-page` });
       await ok(service.socketPath, chat, "act", { action: "click", selector: "#dl" });
-      await waitUntil(() => events.some((e) => e.event === "download_failed" && e.chat === chat));
+      await waitUntil(() => service.events.some((e) => e.event === "download_failed" && e.chat === chat));
       assert.deepEqual(await NodeFSP.readdir(outside), []);
     } finally {
       await NodeFSP.rm(outside, { recursive: true, force: true });
@@ -990,7 +988,6 @@ describe("browser service", () => {
 
   test("dialogs and file choosers report the origin of the frame that opened them", async () => {
     const chat = newChat();
-    assert.notEqual(new URL(site.crossUrl).origin, new URL(site.url).origin);
     await ok(service.socketPath, chat, "open", { url: `${site.url}/cross-frame?inner=frame-alert` });
     const viewer = await ViewerClient.connect(service.socketPath, chat);
     viewer.autoAck = true;

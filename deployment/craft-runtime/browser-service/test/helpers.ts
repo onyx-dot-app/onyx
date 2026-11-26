@@ -8,7 +8,6 @@ import * as NodePath from "node:path";
 import { chromium } from "playwright-core";
 import { encodeJson, FrameDecoder, KIND_JPEG } from "../src/framing.ts";
 import { BrowserService } from "../src/service.ts";
-import type { Log } from "../src/service.ts";
 
 const findChrome = (): string => {
   const fromEnv = process.env.ONYX_TEST_CHROME;
@@ -85,13 +84,11 @@ export const launchChrome = async (): Promise<Chrome> => {
 export type Service = {
   readonly socketPath: string;
   readonly sessionsRoot: string;
+  readonly events: Array<{ readonly event: string; readonly chat: unknown }>;
   readonly stop: () => Promise<void>;
 };
 
-export const startService = async (
-  cdpUrl: string,
-  log: Log = () => {},
-): Promise<Service> => {
+export const startService = async (cdpUrl: string): Promise<Service> => {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-service-"));
   const socketPath = NodePath.join(dir, "service.sock");
   const sessionsRoot = NodePath.join(dir, "sessions");
@@ -99,13 +96,19 @@ export const startService = async (
   const browser = await chromium.connectOverCDP(cdpUrl);
   const context = browser.contexts()[0];
   if (!context) throw new Error("No default context.");
-  const service = new BrowserService({ context, sessionsRoot, log });
+  const events: Service["events"] = [];
+  const service = new BrowserService({
+    context,
+    sessionsRoot,
+    log: (event, fields) => events.push({ event, chat: fields?.chat }),
+  });
   await service.start();
   const server = NodeNet.createServer({ allowHalfOpen: true }, (socket) => service.handleConnection(socket));
   await new Promise<void>((resolve) => server.listen(socketPath, resolve));
   return {
     socketPath,
     sessionsRoot,
+    events,
     stop: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       for (const page of context.pages()) await page.close().catch(() => {});
