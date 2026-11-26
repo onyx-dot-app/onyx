@@ -1026,6 +1026,7 @@ def test_purges_reach_records_and_saves_that_the_indexes_miss(
                 exec_session_id=exec_id,
                 chat_session_id=str(session),
                 execution_id=f"x-{exec_id}",
+                command_id=uuid4(),
                 attempt=1,
                 generation=1,
                 last_used=time.time(),

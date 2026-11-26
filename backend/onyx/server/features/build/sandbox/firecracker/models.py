@@ -12,8 +12,7 @@ class ExecSessionRecord(BaseModel):
     chat_session_id: str
     execution_id: str
     # The ID that the command's app requests carry to the egress proxy.
-    # None for a record written before commands had one.
-    command_id: UUID | None = None
+    command_id: UUID
     # The VM instance that runs the command.
     attempt: int
     generation: int

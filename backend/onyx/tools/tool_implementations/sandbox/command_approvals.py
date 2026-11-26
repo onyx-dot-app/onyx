@@ -155,7 +155,7 @@ class CommandApprovals:
         """A request of the command waits for the user."""
         command_id = self._command_id
         if command_id is None:
-            return False
+            raise RuntimeError("holds() before begin()")
         try:
             with get_session_with_tenant(tenant_id=self._tenant_id) as db:
                 return bool(self._waiting(db, command_id))
