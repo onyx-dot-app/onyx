@@ -72,7 +72,7 @@ def introspection_to_sdl(result: object) -> str:
         raise ValueError("The endpoint did not return an introspection result.")
     try:
         return print_schema(build_client_schema(cast(IntrospectionQuery, data)))
-    except (GraphQLError, TypeError) as e:
+    except (GraphQLError, TypeError, KeyError) as e:
         raise ValueError(f"The introspection result is not valid: {e}") from e
 
 

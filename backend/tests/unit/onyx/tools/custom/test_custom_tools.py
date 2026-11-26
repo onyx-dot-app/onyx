@@ -1157,3 +1157,25 @@ def test_graphql_and_spec_fetches_refuse_blocked_hosts(
         with pytest.raises(OnyxError):
             service.import_openapi_document(OpenApiEndpointsRequest(spec_url=url))
     pinned.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "data",
+    [None, {"__schema": {"queryType": {"name": "Query"}}}],
+)
+def test_a_bad_introspection_result_is_an_invalid_input(data: object) -> None:
+    from onyx.error_handling.error_codes import OnyxErrorCode
+    from onyx.integrations import service
+    from onyx.server.features.integrations.models import GraphQLIntrospectRequest
+
+    response = http_request.ToolResponse(
+        status_code=200,
+        content_type="application/json",
+        body=json.dumps({"data": data}).encode(),
+    )
+    with patch.object(service, "send_tool_request", return_value=response):
+        with pytest.raises(OnyxError) as error:
+            service.introspect_graphql_endpoint(
+                GraphQLIntrospectRequest(endpoint_url="https://api.example.com/graphql")
+            )
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
