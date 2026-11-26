@@ -30,7 +30,7 @@ from onyx.agents.models import (
     ToolResultAmendment,
     ToolResultContext,
 )
-from onyx.agents.runtime import Agent, RestorableFeature, Run
+from onyx.agents.runtime import Agent, Run, RunHooks
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
 from onyx.agents.tools import (
     HumanToolAnswer,
@@ -124,11 +124,28 @@ class SavedCells(BaseModel):
     cells: list[SavedCodeCell]
 
 
-class CellsFeature(RestorableFeature):
-    """Saves and restores the cells of one agent, as chat's feature does."""
+class CellsFeature:
+    """Saves and restores the cells of one agent and ends them with its runs,
+    as chat's feature does."""
 
-    def __init__(self, cells: CodeCells) -> None:
+    def __init__(
+        self,
+        cells: CodeCells,
+        before_tool_call: Callable[[ToolCallContext], PendingToolInput | None],
+        prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = None,
+    ) -> None:
         self.cells = cells
+        self.before_tool_call = before_tool_call
+        self.prepare_tool_result = prepare_tool_result
+
+    def bind(self) -> RunHooks:
+        return RunHooks(
+            before_tool_call=self.before_tool_call,
+            prepare_tool_result=self.prepare_tool_result,
+            on_suspend=self.cells.suspend,
+            on_finish=self.cells.finish,
+            capture_state=self.capture_state,
+        )
 
     def capture_state(self) -> SavedCells:
         return SavedCells(cells=self.cells.saved())
@@ -238,11 +255,9 @@ class Agents:
                 execute.bind(ToolContext),
                 WaitCodeTool(cells, execute.program).bind(ToolContext),
             ],
-            before_tool_call=_ask_for_send,
-            on_suspend=cells.suspend,
-            on_finish=cells.finish,
-            restoration=CellsFeature(cells),
-            prepare_tool_result=self.prepare,
+            feature=CellsFeature(
+                cells, before_tool_call=_ask_for_send, prepare_tool_result=self.prepare
+            ),
         )
 
 
@@ -1263,16 +1278,16 @@ def test_a_restored_call_whose_function_now_names_another_tool_does_not_run() ->
                 execute.bind(ToolContext),
                 WaitCodeTool(cells, execute.program).bind(ToolContext),
             ],
-            before_tool_call=lambda context: (
-                PendingToolInput(
-                    request_id=REQUEST_ID, prompt="Send?", mode=InputMode.EXECUTE
-                )
-                if context.call.name == "send-mail"
-                else None
+            feature=CellsFeature(
+                cells,
+                before_tool_call=lambda context: (
+                    PendingToolInput(
+                        request_id=REQUEST_ID, prompt="Send?", mode=InputMode.EXECUTE
+                    )
+                    if context.call.name == "send-mail"
+                    else None
+                ),
             ),
-            on_suspend=cells.suspend,
-            on_finish=cells.finish,
-            restoration=CellsFeature(cells),
         )
 
     run = agent(["send-mail", "send_mail"]).start(
@@ -1461,10 +1476,7 @@ def test_a_restored_call_keeps_arguments_whose_names_collide() -> None:
                 execute.bind(ToolContext),
                 WaitCodeTool(cells, execute.program).bind(ToolContext),
             ],
-            before_tool_call=_ask_for_send,
-            on_suspend=cells.suspend,
-            on_finish=cells.finish,
-            restoration=CellsFeature(cells),
+            feature=CellsFeature(cells, before_tool_call=_ask_for_send),
         )
 
     run = agent().start(max_steps=3, messages=[UserMessage(content="Send")])

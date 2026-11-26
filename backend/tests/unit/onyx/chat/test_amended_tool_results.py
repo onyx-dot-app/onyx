@@ -2,7 +2,7 @@
 
 from onyx.agents.events import ToolResultAmendedEvent
 from onyx.agents.models import ToolResultAmendment
-from onyx.agents.runtime import Agent, Run
+from onyx.agents.runtime import Agent, Run, RunHooks
 from onyx.agents.tools import AgentTool
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
@@ -52,9 +52,13 @@ def _agent(tool_name: str) -> Agent:
                 execute=lambda _invocation: ToolResult(content="running"),
             )
         ],
-        on_finish=lambda _results: [
-            ToolResultAmendment(call_id=CALL_ID, result=ToolResult(content="closed"))
-        ],
+        feature=RunHooks(
+            on_finish=lambda _results: [
+                ToolResultAmendment(
+                    call_id=CALL_ID, result=ToolResult(content="closed")
+                )
+            ]
+        ),
     )
 
 

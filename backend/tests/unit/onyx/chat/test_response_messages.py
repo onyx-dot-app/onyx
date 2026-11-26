@@ -3,7 +3,7 @@
 import pytest
 
 from onyx.agents.models import RunStatus, StepResult
-from onyx.agents.runtime import Agent, Run
+from onyx.agents.runtime import Agent, Run, RunHooks
 from onyx.chat.response import response_record, response_snapshot
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -26,7 +26,7 @@ def test_harness_selects_answer_and_message_ids_survive_restore() -> None:
     agent = Agent(
         FakeModelClient(lambda _request, _signal: next(replies)),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        after_step=after_step,
+        feature=RunHooks(after_step=after_step),
     )
     runs: list[Run] = []
     run_agent(agent, max_steps=2, runs=runs)

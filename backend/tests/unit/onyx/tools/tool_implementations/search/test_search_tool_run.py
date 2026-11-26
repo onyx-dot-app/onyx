@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from opensearchpy import AuthorizationException, RequestError, TransportError
 
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunHooks
 from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.models import (
@@ -967,7 +967,7 @@ def test_sdk_searches_preserve_context_and_call_identity(merge_calls: bool) -> N
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool.bind(lambda: context)],
         # Per-call approval checks prevent merging, even when they permit execution.
-        before_tool_call=None if merge_calls else lambda _: None,
+        feature=RunHooks(before_tool_call=None if merge_calls else lambda _: None),
     )
 
     with (

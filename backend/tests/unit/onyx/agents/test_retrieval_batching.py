@@ -10,7 +10,7 @@ from pydantic import JsonValue
 
 from onyx.agents.events import AgentEvent, ToolEndEvent, ToolStartEvent, ToolUpdateEvent
 from onyx.agents.models import ToolCallContext
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunHooks
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolProgress
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.interfaces import GenerationContext
@@ -129,7 +129,6 @@ def test_before_tool_hook_keeps_individual_calls() -> None:
     run = Agent(
         FakeModelClient(lambda *_: next(replies)),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        before_tool_call=before,
         tools=[
             AgentTool(
                 definition=ToolDefinition(
@@ -139,6 +138,7 @@ def test_before_tool_hook_keeps_individual_calls() -> None:
                 merge_arguments=partial(merge_tool_arguments, field="queries"),
             )
         ],
+        feature=RunHooks(before_tool_call=before),
     ).start(max_steps=2)
     run.result(timeout=10)
     run.wait_for_idle(timeout=10)

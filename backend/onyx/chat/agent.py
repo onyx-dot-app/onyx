@@ -7,7 +7,6 @@ from pydantic import JsonValue
 from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import (
     AgentState,
-    CompactionCheckpoint,
     PreparedStep,
     ReleaseFailed,
     StepInput,
@@ -16,7 +15,7 @@ from onyx.agents.models import (
     ToolResultAmendment,
     ToolResultContext,
 )
-from onyx.agents.runtime import Agent, RestorableFeature
+from onyx.agents.runtime import Agent, RunHooks
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
@@ -141,8 +140,9 @@ def _offered_preference(
     return preference
 
 
-class ChatAgent(Agent, RestorableFeature):
-    """Chat step preparation and result handling for the shared runtime."""
+class ChatFeature:
+    """Chat step preparation and result handling for the shared runtime: an
+    AgentFeature. `agent` builds the agent that runs it."""
 
     def __init__(
         self,
@@ -155,29 +155,24 @@ class ChatAgent(Agent, RestorableFeature):
         user_memory_context: UserMemoryContext | None,
         llm: LLM,
         preferred_tool: ToolPreference | None = None,
-        user_identity: LLMUserIdentity | None = None,
         chat_files: list[ChatFile] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         include_citations: bool = True,
         all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
         inject_memories_in_prompt: bool = True,
         reminders_enabled: bool = True,
-        checkpoint: CompactionCheckpoint | None = None,
-        previous_run_id: str | None = None,
-        agent_id: str | None = None,
         additional_context: str | None = None,
         code_mode: bool = False,
         is_subagent: bool = False,
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
-        on_drained: Callable[[], None] | None = None,
         question_tool: Callable[[QuestionShape], QuestionTool] | None = None,
     ) -> None:
-        """`on_drained`: see Agent; a root agent's runs end per-run tool state
-        there (subagents share the root's tools and pass none). Only a root
+        """`messages` is the history that the agent starts with. Only a root
         agent gets a question tool: `question_tool` builds it in the given
         shape. The model's tool family (LLMConfig.tool_family) selects the
         shapes of the code mode tools, the agent tools and the question tool."""
+        self.llm = llm
         tool_family = llm.config.tool_family
         agent_shape = AGENT_SHAPES[tool_family]
         # The fixed system block for the agent's role: a subagent, or a root
@@ -293,10 +288,9 @@ class ChatAgent(Agent, RestorableFeature):
                     else [
                         WaitAgentTool(
                             agent_shape,
-                            open_cell_wait_name=lambda: (
-                                self.code_cells.shape.wait_name
-                                if self.code_cells is not None
-                                and self.code_cells.has_open
+                            open_cell_wait_name=lambda cells=self.code_cells: (
+                                cells.shape.wait_name
+                                if cells is not None and cells.has_open
                                 else None
                             ),
                         )
@@ -371,21 +365,39 @@ class ChatAgent(Agent, RestorableFeature):
             if self._sandbox_turn is not None and not is_subagent
             else frozenset()
         )
-        super().__init__(
-            llm,
-            tools=[tool.bind(self._tool_context) for tool in self.application_tools],
+
+    def agent(
+        self,
+        state: AgentState,
+        *,
+        agent_id: str | None = None,
+        previous_run_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
+        on_drained: Callable[[], None] | None = None,
+    ) -> Agent:
+        """The agent that runs this feature with the same model, from `state`,
+        whose messages are the history this feature started with.
+        `on_drained`: see RunConfig; a root agent's runs end per-run tool
+        state there (subagents share the root's tools and pass none)."""
+        return Agent(
+            self.llm,
+            feature=self,
+            state=state,
             agent_id=agent_id,
             previous_run_id=previous_run_id,
-            state=AgentState(
-                messages=messages,
-                checkpoint=checkpoint,
-            ),
-            restoration=self,
-            prepare_step=self._prepare_step,
-            after_step=self._after_step,
             generation_context=GenerationContext(
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
+            on_drained=on_drained,
+        )
+
+    def bind(self) -> RunHooks:
+        return RunHooks(
+            tools=tuple(
+                tool.bind(self._tool_context) for tool in self.application_tools
+            ),
+            prepare_step=self._prepare_step,
+            after_step=self._after_step,
             after_tool_call=self._finalize_tool,
             # In a chat with a sandbox, large results go to a file in the VM.
             prepare_tool_result=partial(
@@ -396,7 +408,7 @@ class ChatAgent(Agent, RestorableFeature):
             unknown_tool_hint=self._unknown_tool_hint,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
-            on_drained=on_drained,
+            capture_state=self.capture_state,
         )
 
     def _unknown_tool_hint(self, name: str) -> str | None:
@@ -725,14 +737,14 @@ def build_chat_agent(
     depth: int = 0,
     on_drained: Callable[[], None] | None = None,
     question_tool: Callable[[QuestionShape], QuestionTool] | None = None,
-) -> ChatAgent:
+) -> tuple[Agent, ChatFeature]:
     """Build a chat conversation independently of the current root's feature.
 
     `with_subagents` adds the agent tools. Only callers that deliver follow-up
     responses, such as the web chat, enable them. `depth` counts levels below
     the root; an agent at `MAX_CHILD_DEPTH` cannot start agents.
     """
-    return ChatAgent(
+    feature = ChatFeature(
         create_subagent=chat_subagent_factory(
             setup=setup,
             llm=llm,
@@ -743,11 +755,8 @@ def build_chat_agent(
         if with_subagents
         else None,
         can_spawn=depth < MAX_CHILD_DEPTH,
-        agent_id=agent_id,
         is_subagent=is_subagent,
         messages=state.messages,
-        checkpoint=state.checkpoint,
-        previous_run_id=previous_run_id,
         tools=tools,
         code_mode=CODE_MODE_ENABLED,
         custom_agent_prompt=setup.custom_agent_prompt,
@@ -758,15 +767,21 @@ def build_chat_agent(
         user_memory_context=setup.user_memory_context,
         llm=llm,
         preferred_tool=preferred_tool,
-        user_identity=setup.user_identity,
         chat_files=setup.chat_files_for_tools,
         reasoning_effort=setup.reasoning_effort,
         include_citations=setup.new_msg_req.include_citations,
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
-        on_drained=on_drained,
         question_tool=question_tool,
     )
+    agent = feature.agent(
+        state,
+        agent_id=agent_id,
+        previous_run_id=previous_run_id,
+        user_identity=setup.user_identity,
+        on_drained=on_drained,
+    )
+    return agent, feature
 
 
 def chat_subagent_factory(
@@ -776,10 +791,9 @@ def chat_subagent_factory(
     tools: list[Tool],
     inject_memories: bool,
     depth: int,
-) -> Callable[[], ChatAgent]:
+) -> Callable[[], Agent]:
     """Build children at `depth` as saved children are restored; children can start children."""
-    return partial(
-        build_chat_agent,
+    return lambda: build_chat_agent(
         AgentState(),
         None,
         None,
@@ -790,4 +804,4 @@ def chat_subagent_factory(
         with_subagents=True,
         is_subagent=True,
         depth=depth,
-    )
+    )[0]

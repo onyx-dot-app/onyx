@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from onyx.agents.models import PreparedStep
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunHooks
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
@@ -488,17 +488,19 @@ def test_recovered_forbidden_call_returns_error_without_execution(
             )
             for tool in [*TOOLS, _tool("other")]
         ],
-        prepare_step=lambda _: PreparedStep(
-            allowed_tool_names=frozenset({"internal_search", "other"})
-            if mode == "required_many"
-            else frozenset({"internal_search"}),
-            options=GenerationOptions(
-                tool_choice=ToolChoiceOptions.REQUIRED
-                if mode != "auto"
-                else ToolChoiceOptions.AUTO
+        feature=RunHooks(
+            prepare_step=lambda _: PreparedStep(
+                allowed_tool_names=frozenset({"internal_search", "other"})
+                if mode == "required_many"
+                else frozenset({"internal_search"}),
+                options=GenerationOptions(
+                    tool_choice=ToolChoiceOptions.REQUIRED
+                    if mode != "auto"
+                    else ToolChoiceOptions.AUTO
+                ),
             ),
+            before_tool_call=lambda context: approved.append(context.call.name),
         ),
-        before_tool_call=lambda context: approved.append(context.call.name),
     )
     run = agent.start(messages=[AppUserMessage(content="Search")], max_steps=2)
     try:

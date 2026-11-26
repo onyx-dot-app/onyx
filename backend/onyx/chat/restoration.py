@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
-from onyx.chat.agent import ChatAgent, build_chat_agent
+from onyx.chat.agent import ChatFeature, build_chat_agent
 from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
@@ -22,13 +22,13 @@ from onyx.chat.models import (
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.chat_response import CHECKPOINT_DUMP_CLEANUP
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
 from onyx.deep_research.models import (
     DeepResearchFeatureState,
     ResearchConfiguration,
     ResearchFeatureState,
 )
-from onyx.deep_research.research_agent import ResearchAgent
+from onyx.deep_research.research_agent import ResearchFeature
 from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
@@ -82,13 +82,9 @@ def restore_subagent(
             with_subagents=True,
             is_subagent=True,
             depth=depth,
-        )
+        )[0]
     if isinstance(configuration, ResearchConfiguration):
-        return ResearchAgent(
-            agent_id=history.agent_id,
-            messages=history.messages,
-            checkpoint=history.checkpoint,
-            previous_run_id=history.previous_run_id,
+        return ResearchFeature(
             sources=history.sources,
             tools=tools,
             llm=llm,
@@ -96,6 +92,10 @@ def restore_subagent(
             user_identity=setup.user_identity,
             language_section=configuration.language_section,
             reasoning_effort=configuration.reasoning_effort,
+        ).agent(
+            AgentState(messages=history.messages, checkpoint=history.checkpoint),
+            agent_id=history.agent_id,
+            previous_run_id=history.previous_run_id,
         )
     raise ValueError("This agent's external resources are no longer available")
 
@@ -132,9 +132,8 @@ def restore_chat_agent(
     state = _FEATURE_STATE.validate_python(snapshot.progress.feature_state)
     context = checkpoint.agent_state
     if isinstance(state, ChatFeatureState):
-        return ChatAgent(
+        return ChatFeature(
             is_subagent=snapshot.parent_run_id is not None,
-            on_drained=on_root_drained if snapshot.parent_run_id is None else None,
             messages=context.messages,
             tools=tools,
             code_mode=state.code_mode,
@@ -146,15 +145,11 @@ def restore_chat_agent(
             user_memory_context=state.memory,
             llm=llm,
             preferred_tool=state.preferred_tool,
-            user_identity=user_identity,
             reasoning_effort=state.reasoning_effort,
             include_citations=state.include_citations,
             all_injected_file_metadata=state.file_metadata,
             inject_memories_in_prompt=state.inject_memories,
             reminders_enabled=state.reminders_enabled,
-            checkpoint=context.checkpoint,
-            previous_run_id=snapshot.previous_run_id,
-            agent_id=snapshot.agent_id,
             create_subagent=subagent_factory(depth + 1)
             if depth > 0
             or any(tool.name == ListAgentsTool.name for tool in snapshot.progress.tools)
@@ -166,22 +161,27 @@ def restore_chat_agent(
                 tool.name in QUESTION_TOOL_NAMES for tool in snapshot.progress.tools
             )
             else None,
+        ).agent(
+            context,
+            agent_id=snapshot.agent_id,
+            previous_run_id=snapshot.previous_run_id,
+            user_identity=user_identity,
+            on_drained=on_root_drained if snapshot.parent_run_id is None else None,
         )
     if isinstance(state, ResearchFeatureState):
-        return ResearchAgent(
+        return ResearchFeature(
             tools=tools,
             llm=llm,
             token_counter=get_llm_token_counter(llm),
             user_identity=user_identity,
             language_section=state.configuration.language_section,
             reasoning_effort=state.configuration.reasoning_effort,
-            messages=context.messages,
-            checkpoint=context.checkpoint,
-            previous_run_id=snapshot.previous_run_id,
+        ).agent(
+            context,
             agent_id=snapshot.agent_id,
+            previous_run_id=snapshot.previous_run_id,
         )
-    return DeepResearchAgent(
-        messages=context.messages,
+    return DeepResearchFeature(
         allowed_tools=tools,
         additional_context=state.request_context,
         context_files=state.context_files.restore() if state.context_files else None,
@@ -192,9 +192,10 @@ def restore_chat_agent(
         reasoning_effort=state.reasoning_effort,
         all_injected_file_metadata=state.file_metadata,
         skip_clarification=state.skip_clarification,
-        checkpoint=context.checkpoint,
-        previous_run_id=snapshot.previous_run_id,
+    ).agent(
+        context,
         agent_id=snapshot.agent_id,
+        previous_run_id=snapshot.previous_run_id,
     )
 
 

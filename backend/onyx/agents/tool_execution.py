@@ -131,11 +131,11 @@ class ToolBatch:
         run's before_tool_call hook, then the user's approval when the call
         requires it."""
         call = nested_call or tool_call
-        if self.run.before_tool_call is not None:
-            decision = self.run.before_tool_call(self._context(call))
+        if self.run.config.hooks.before_tool_call is not None:
+            decision = self.run.config.hooks.before_tool_call(self._context(call))
             if decision is not None:
                 return decision
-        if call.name not in self.run.approval_required:
+        if call.name not in self.run.config.approval_required:
             return None
         approvals = self.run.approvals
         if approvals is None:
@@ -232,7 +232,7 @@ class ToolBatch:
                         self.run.finish_tool(
                             call,
                             self._context(call)
-                            if self.run.after_tool_call is not None
+                            if self.run.config.hooks.after_tool_call is not None
                             else None,
                         )
                     completed_call_ids = self._completed_call_ids()
@@ -406,8 +406,8 @@ class ToolBatch:
         if (
             tool is None
             or tool.merge_arguments is None
-            or self.run.before_tool_call is not None
-            or call.name in self.run.approval_required
+            or self.run.config.hooks.before_tool_call is not None
+            or call.name in self.run.config.approval_required
             or not call.arguments_complete
             or call.argument_error
             or self.message.stop_reason == "length"
@@ -481,9 +481,9 @@ class ToolBatch:
             if (
                 tool is None
                 and options.tool_choice != ToolChoiceOptions.NONE
-                and self.run.unknown_tool_hint is not None
+                and self.run.config.hooks.unknown_tool_hint is not None
             ):
-                content = self.run.unknown_tool_hint(call.name) or content
+                content = self.run.config.hooks.unknown_tool_hint(call.name) or content
             return ToolResult(content=content, is_error=True)
         if (
             call.argument_error
@@ -533,7 +533,8 @@ class ToolBatch:
             if self.run.coordination
             else None,
             nested_calls=_NestedCallGate(self, call, self.message_id, self.step.index)
-            if self.run.before_tool_call is not None or self.run.approval_required
+            if self.run.config.hooks.before_tool_call is not None
+            or self.run.config.approval_required
             else None,
             run_work=self.run.work,
         )

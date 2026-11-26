@@ -21,7 +21,7 @@ from onyx.agents.models import (
     ToolCallContext,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunHooks
 from onyx.agents.tools import (
     AgentTool,
     HumanToolAnswer,
@@ -336,8 +336,7 @@ def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent
                 execution_mode=ToolExecutionMode.SEQUENTIAL,
             ),
         ],
-        before_tool_call=gate,
-        after_tool_call=finalize,
+        feature=RunHooks(before_tool_call=gate, after_tool_call=finalize),
     )
 
 
@@ -372,7 +371,7 @@ def test_answer_resumes_in_the_execution_owners_context() -> None:
                 ),
             )
         ],
-        after_tool_call=finalize,
+        feature=RunHooks(after_tool_call=finalize),
     )
     run = agent.start(max_steps=2)
     try:

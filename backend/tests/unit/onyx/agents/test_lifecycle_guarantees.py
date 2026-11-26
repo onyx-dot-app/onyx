@@ -4,7 +4,9 @@ import gc
 import threading
 import time
 import weakref
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from functools import partial
+from uuid import uuid4
 
 import pytest
 from litellm.exceptions import (
@@ -20,21 +22,36 @@ from onyx.agents.models import (
     AgentState,
     PreparedStep,
     RunFailureKind,
+    RunStatus,
     StepInput,
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, RunFailed
-from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.runtime import Agent, RunFailed, RunHooks
+from onyx.agents.tools import AgentTool, InputMode, PendingToolInput, ToolInvocation
+from onyx.chat.agent import ChatFeature
+from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
+from onyx.chat.presentation import ResponsePresenter
+from onyx.deep_research.agent import DeepResearchFeature
+from onyx.deep_research.research_agent import ResearchFeature
+from onyx.deep_research.tool_definitions import GENERATE_REPORT_TOOL_NAME
+from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import ClassifiedLLMError, LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import GenerationContext
+from onyx.llm.model_capabilities import ToolFamily
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
     GenerationEvent,
     GenerationRequest,
+    ReasoningEffort,
     TextContent,
     TextDeltaEvent,
     ToolCall,
@@ -44,8 +61,13 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import ExecCommandTool
+from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tracing.flows import LLMFlow
-from tests.unit.onyx.agents.fakes import FakeModelClient
+from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, ScriptedLLM
 
 
 def answer(
@@ -81,8 +103,10 @@ def test_cancelled_callback_reserves_agent_until_it_returns(
     agent = Agent(
         FakeModelClient(answer),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=None if during_completion else prepare,
-        after_step=complete if during_completion else None,
+        feature=RunHooks(
+            prepare_step=None if during_completion else prepare,
+            after_step=complete if during_completion else None,
+        ),
     )
     run = agent.start(max_steps=1)
     try:
@@ -99,8 +123,7 @@ def test_cancelled_callback_reserves_agent_until_it_returns(
     with pytest.raises(AgentCancelled):
         run.result(2)
     assert run.wait_for_idle(2)
-    agent.prepare_step = None
-    agent.after_step = None
+    agent.feature = None
     following = agent.start(max_steps=1, messages=[UserMessage(content="Continue")])
     assert following.result(timeout=2).output.text == "answer"
     assert following.wait_for_idle(2)
@@ -129,7 +152,7 @@ def test_tool_execution_survives_enrichment_failure() -> None:
                 execute=lambda _: ToolResult(content="saved"),
             )
         ],
-        after_tool_call=enrich,
+        feature=RunHooks(after_tool_call=enrich),
     )
     run = agent.start(max_steps=1, on_event=events.append)
     with pytest.raises(RunFailed):
@@ -169,7 +192,7 @@ def test_cancellation_during_tool_finalization_rejects_the_enriched_result() -> 
                 execute=lambda _: ToolResult(content="saved"),
             )
         ],
-        after_tool_call=enrich,
+        feature=RunHooks(after_tool_call=enrich),
     )
     run = agent.start(max_steps=1, on_event=events.append)
     try:
@@ -226,39 +249,190 @@ def test_failed_handle_releases_agent_and_preserves_error_classification(
     assert run.snapshot().failure is not None
 
 
-def test_finished_run_is_freed_without_a_garbage_collection_pass() -> None:
-    def model(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        if len(request.messages) == 1:
-            return AssistantMessage(
-                content=[ToolCall(id="call", name="lookup", arguments={})]
-            )
-        return AssistantMessage(content=[TextContent(text="done")])
+ECHO_CALL = Delta(
+    tool_calls=[
+        ChatCompletionDeltaToolCall(
+            index=0,
+            id="call",
+            function=ResponseFunctionCall(name="echo", arguments='{"value":"x"}'),
+        )
+    ]
+)
+_EMPTY_FILES = ExtractedContextFiles(
+    file_texts=[],
+    image_files=[],
+    use_as_search_filter=False,
+    total_token_count=0,
+    file_metadata=[],
+    uncapped_token_count=None,
+)
 
-    agent = Agent(
-        FakeModelClient(model),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        state=AgentState(messages=[UserMessage(content="question")]),
-        tools=[
-            AgentTool(
-                definition=ToolDefinition(name="lookup", description="", parameters={}),
-                execute=lambda _invocation: ToolResult(content="found"),
-            )
-        ],
+
+def _plain() -> tuple[Agent, object | None]:
+    return (
+        Agent(
+            ScriptedLLM([ECHO_CALL, Delta(content="done")]),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[EchoTool().bind(ToolContext)],
+        ),
+        None,
     )
-    events: list[AgentEvent] = []
+
+
+def _chat(*, code_mode: bool = False, sandbox: bool = False) -> tuple[Agent, object]:
+    tools: list[Tool] = [EchoTool()]
+    if sandbox:
+        tools.append(
+            ExecCommandTool(
+                SandboxTurn(
+                    tenant_id="t",
+                    user_id=uuid4(),
+                    chat_session_id=uuid4(),
+                    vm_chat_files=[],
+                    copy_vm_chat_files=False,
+                    shell=SHELL_SHAPES[ToolFamily.OPENAI],
+                )
+            )
+        )
+
+    def build() -> ChatFeature:
+        return ChatFeature(
+            messages=[],
+            tools=tools,
+            code_mode=code_mode,
+            custom_agent_prompt=None,
+            base_system_prompt="",
+            context_files=_EMPTY_FILES,
+            persona=None,
+            user_memory_context=None,
+            llm=ScriptedLLM([ECHO_CALL, Delta(content="done")]),
+            create_subagent=lambda: build().agent(AgentState()),
+        )
+
+    feature = build()
+    return feature.agent(AgentState()), feature
+
+
+def _research() -> tuple[Agent, object]:
+    feature = ResearchFeature(
+        [EchoTool()],
+        # A step without calls continues; the step after it writes the report.
+        ScriptedLLM([ECHO_CALL, Delta(content="notes"), Delta(content="done")]),
+        len,
+        None,
+        "",
+        ReasoningEffort.LOW,
+    )
+    return feature.agent(), feature
+
+
+def _deep_research() -> tuple[Agent, object]:
+    feature = DeepResearchFeature(
+        [],
+        ScriptedLLM(
+            [
+                Delta(content="Plan"),
+                Delta(
+                    tool_calls=[
+                        ChatCompletionDeltaToolCall(
+                            index=0,
+                            id="report",
+                            function=ResponseFunctionCall(
+                                name=GENERATE_REPORT_TOOL_NAME, arguments="{}"
+                            ),
+                        )
+                    ]
+                ),
+                Delta(content="done"),
+            ],
+            128000,
+        ),
+        len,
+        None,
+        "",
+        ReasoningEffort.LOW,
+        None,
+        skip_clarification=True,
+    )
+    return feature.agent(AgentState()), feature
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        _plain,
+        _chat,
+        partial(_chat, code_mode=True),
+        partial(_chat, sandbox=True),
+        _research,
+        _deep_research,
+    ],
+    ids=[
+        "agent",
+        "chat",
+        "chat-code-mode",
+        "chat-sandbox",
+        "research",
+        "deep-research",
+    ],
+)
+def test_finished_agent_and_run_are_freed_without_a_garbage_collection_pass(
+    build: Callable[[], tuple[Agent, object | None]],
+) -> None:
+    agent, feature = build()
+    presenter = ResponsePresenter(Emitter(lambda _packet: None))
     gc.collect()
     gc.disable()
     try:
-        run = agent.start(max_steps=2, background=False, on_event=events.append)
+        run = agent.start(
+            max_steps=4,
+            background=False,
+            messages=[UserMessage(content="question")],
+            on_event=presenter.consume,
+        )
         assert run.result(timeout=5).output.text == "done"
         assert run.wait_for_idle(5)
-        freed = threading.Event()
-        weakref.finalize(run, freed.set)
-        del run, agent
+        freed = [threading.Event() for _ in range(3)]
+        weakref.finalize(run, freed[0].set)
+        weakref.finalize(agent, freed[1].set)
+        if feature is not None:
+            weakref.finalize(feature, freed[2].set)
+        else:
+            freed[2].set()
+        del run, agent, feature
         # Worker threads can still be leaving frames that hold the run.
-        assert freed.wait(5)
+        assert all(event.wait(5) for event in freed)
+    finally:
+        gc.enable()
+
+
+def test_released_suspended_run_is_freed_without_a_garbage_collection_pass() -> None:
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="send", name="echo", arguments={"value": "x"})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[EchoTool().bind(ToolContext)],
+        feature=RunHooks(
+            before_tool_call=lambda _context: PendingToolInput(
+                request_id="approve", prompt="Send?", mode=InputMode.EXECUTE
+            )
+        ),
+    )
+    gc.collect()
+    gc.disable()
+    try:
+        run = agent.start(max_steps=2, messages=[UserMessage(content="Send")])
+        assert run.wait_until_settled(5).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(5)
+        run.handoff()
+        freed = [threading.Event(), threading.Event()]
+        weakref.finalize(run, freed[0].set)
+        weakref.finalize(agent, freed[1].set)
+        del run, agent
+        assert all(event.wait(5) for event in freed)
     finally:
         gc.enable()
 
@@ -678,7 +852,7 @@ def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
                 execute=execute,
             )
         ],
-        before_tool_call=before,
+        feature=RunHooks(before_tool_call=before),
     )
     old = agent.start(max_steps=1)
     try:

@@ -281,7 +281,7 @@ class ToolCallContext(BaseModel):
 
 class ToolResultContext(BaseModel):
     """A result that the run has not recorded yet; see
-    `Agent.prepare_tool_result`. The fields reference the run's objects, not
+    `RunHooks.prepare_tool_result`. The fields reference the run's objects, not
     copies, because results can be large: read them, and return a new result
     to replace `result`."""
 

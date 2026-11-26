@@ -294,7 +294,7 @@ def test_terminal_snapshot_rejects_late_tool_result() -> None:
             ),
         ],
     )
-    agent.before_tool_call = before_call
+    agent.feature = runtime.RunHooks(before_tool_call=before_call)
     run = agent.start(max_steps=1)
     try:
         with pytest.raises(RunFailed):

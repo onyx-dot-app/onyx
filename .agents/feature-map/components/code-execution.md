@@ -123,7 +123,7 @@ run_python (stateless, one call = one execution)
 
 ```
 run / wait tools (code mode; a cell per program, a store per chat)
-  chat/execution.py:create_chat_agent   ChatAgent(code_mode=CODE_MODE_ENABLED); the agent
+  chat/execution.py:create_chat_agent   ChatFeature(code_mode=CODE_MODE_ENABLED); the agent
                                         takes its shapes from llm.config.tool_family. The
                                         flag is saved in ChatFeatureState.code_mode, and
                                         restoration uses the saved value, not the env flag
@@ -161,7 +161,7 @@ run / wait tools (code mode; a cell per program, a store per chat)
   CODE_MODE_TOOL_NAMES                  and other name-keyed checks read these sets.
                                         Calls under other names, such as exec or repl,
                                         replay as generic tool cards
-  code_mode_tool.py:with_code_mode      ChatAgent only: by Tool.code_mode_exposure, DIRECT
+  code_mode_tool.py:with_code_mode      ChatFeature only: by Tool.code_mode_exposure, DIRECT
                                         tools stay direct; IMMEDIATE and DEFERRED ->
                                         CodeModeTool(inner, cells=CodeCells(shape), ...)
                                         and WaitCodeTool(cells, programs), which read the
@@ -178,7 +178,7 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         STOPPED_CALL_MESSAGE (it may have had effects). A
                                         direct call of another shape's tool or program
                                         function, copied from history, gets a hint that
-                                        names this shape's (chat/agent.py: ChatAgent's
+                                        names this shape's (chat/agent.py: ChatFeature's
                                         unknown_tool_hint; the search only with deferred
                                         functions)
   CodeModeTool.operation_names          how the preference reminder names a preferred tool
@@ -260,20 +260,20 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         (stdout, calls, commit at the program's end,
                                         tool_call_count) with cell_id, observation and status
                                         (running while the cell runs)
-  chat/agent.py:_finished_cells (Agent.on_finish) -> CodeCells.finish
+  chat/agent.py:ChatFeature._finished_cells (RunHooks.on_finish) -> CodeCells.finish
                                         stop every open cell; a ToolResultAmendment with the
                                         result of each observation Stop interrupted, and one
                                         with a CellClosing for each cell whose last saved
                                         observation is running
-  chat/agent.py:_prepare_step (a run's first step) -> CodeCells.reopen
+  chat/agent.py:ChatFeature._prepare_step (a run's first step) -> CodeCells.reopen
                                         empty cells for the next run of the same agent (a
                                         message or results to an idle child) after finish
-  chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
+  chat/agent.py:ChatFeature._suspended_cells (RunHooks.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends (see
                                         ToolInvocation.run_work), with reason="suspended";
                                         later calls can start cells. A cell whose program
                                         waits for input stays parked
-  ChatAgent.capture_state / restore_state  CodeCells.saved / restore: a parked cell is a
+  ChatFeature.capture_state / restore_state  CodeCells.saved / restore: a parked cell is a
                                         SavedCodeCell in ChatFeatureState.code_cells; its
                                         dump goes to the file store at handoff, under a
                                         unique ID (chat/restoration.py:persist_checkpoint_files)
@@ -888,7 +888,7 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         same paths); the library tools' results
                                         (ListedArtifact, MaterializedItem,
                                         ArtifactPublished) carry it too
-  Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose
+  RunHooks.prepare_tool_result         sandbox/spill.py:spill_large_result, in a chat whose
                                         configured tools hold a SandboxTool. A result
                                         with ToolResult.full_value always spills: the tool
                                         sets it only when its cut leaves something out.
@@ -939,7 +939,7 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         AgentCancelled. Calls inside a program skip the
                                         hook; the program gets the full value
                                         (stubs.py:program_value)
-  ChatAgent._prepare_sandbox_result     Wraps the spill. After it, the root agent's
+  ChatFeature._prepare_sandbox_result     Wraps the spill. After it, the root agent's
                                         successful sandbox and code mode results end
                                         with the turn's TurnFileCopies.status.line() when
                                         it changed; failed results, amendments,
@@ -995,7 +995,7 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
   TurnSearchFiles (sandbox/file_copies) SandboxTurn.search_files: the turn's copies
                                         of search result files into the chat's
                                         attachments/search/, shared by the root and
-                                        its subagents. ChatAgent passes its offer
+                                        its subagents. ChatFeature passes its offer
                                         as ToolContext.sandbox_search_files, so
                                         direct, program and subagent searches use
                                         it. SearchTool._build_search_result offers
@@ -1032,7 +1032,7 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         search again in a later turn.
                                         No [files] line names them; a chat purge
                                         deletes them with the working directory
-  Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
+  Agent.on_drained (root chat agent)    SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research
                                         (which gets no sandbox tools). end_turn after each
@@ -1059,7 +1059,7 @@ as lazy chat files, but only the types in
 PowerPoint) and code files by extension
 (`server/query_and_chat/chat_utils.py:is_code_interpreter_staged_file`,
 `OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`). Other project and agent files reach the model only as prompt
-text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
+text or through search. `chat/agent.py:ChatFeature._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
 (`chat/files.py:build_python_chat_files_from_search_docs`), only when the chat
 offers the Python tool and has no sandbox
@@ -1069,8 +1069,8 @@ file record query; the result's text uses the same names), so staging reads
 no file records and names no file itself; `PythonTool` applies the staging
 caps. A sandbox chat copies the files into the VM instead
 (`TurnSearchFiles`). Files already in
-`ChatAgent.chat_files` from an earlier step are not loaded again. Search documents
-and citations are retained without Python. `chat/agent.py:ChatAgent._update_tool_context` merges them into
+`ChatFeature.chat_files` from an earlier step are not loaded again. Search documents
+and citations are retained without Python. `chat/agent.py:ChatFeature._update_tool_context` merges them into
 `chat_files` after the step and skips a filename already present, so the code in
 a later step can open a spreadsheet that search found. A code mode cell stages
 the files of its nested searches the same way, when its context's
@@ -1379,7 +1379,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     turn runs and cleared on save, and `displayed_document_ids` is set on save
     and used on restore to rebuild `details.displayed_docs`.
     `chat/tool_results.py:tool_result_parts` expands a result into its nested
-    calls, so `ChatAgent` folds their search context, stages their files
+    calls, so `ChatFeature` folds their search context, stages their files
     (`ChatCodeModeResult`, only when the Python tool is offered) and reads their
     artifacts as for direct calls.
 15. `code-mode-citation-blocks` **Only citing calls take citation numbers.**
@@ -1465,7 +1465,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     (an error without details). `WaitCodeTool` sets it to
     an error without details that names the shape's wait tool
     (`tools/tool_implementations/code_mode/code_mode_tool.py:RESTORED_WAIT_MESSAGE`): the cell's last saved observation stays
-    `running`. At the end of every run, `Agent.on_finish`
+    `running`. At the end of every run, `RunHooks.on_finish`
     (`chat/agent.py:_finished_cells`) calls `CodeCells.finish`. It stops each
     open cell (`terminated`, or `cancelled` when Stop stopped it first), waits
     up to `STOP_GRACE_SECONDS` from the first stop request, and returns a
@@ -1473,7 +1473,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     each cell whose last saved observation is `running`. The amendment adds a `CellClosing` (`reason="response_ended"`)
     with the calls, output, result and store commit after that observation;
     its text is formatted like an observation (`format_content`). When the
-    run suspends (see `ToolInvocation.run_work`), `Agent.on_suspend`
+    run suspends (see `ToolInvocation.run_work`), `RunHooks.on_suspend`
     (`chat/agent.py:_suspended_cells`) calls `CodeCells.suspend`, which does
     the same with `reason="suspended"` before the run captures its state. A
     cell that ended keeps its end in that closing record; a later wait tool

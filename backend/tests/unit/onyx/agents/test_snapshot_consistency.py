@@ -16,7 +16,7 @@ from onyx.agents.models import (
     StepRecord,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, Run
+from onyx.agents.runtime import Agent, Run, RunHooks
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -130,8 +130,7 @@ def test_message_and_operation_updates_are_visible_together(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
-        prepare_step=prepare,
-        after_tool_call=enrich,
+        feature=RunHooks(prepare_step=prepare, after_tool_call=enrich),
     ).start(max_steps=2)
     try:
         assert preparing.wait(3)
@@ -203,7 +202,7 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
                 ),
             )
         ],
-        after_tool_call=enrich,
+        feature=RunHooks(after_tool_call=enrich),
     )
     run = agent.start(max_steps=2)
     try:

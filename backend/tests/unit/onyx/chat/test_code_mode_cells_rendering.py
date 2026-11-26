@@ -11,7 +11,7 @@ from onyx.agents.models import (
     RunStatus,
     ToolResultAmendment,
 )
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunHooks
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import (
@@ -179,7 +179,7 @@ def test_cell_observations_and_closing_render_in_call_order(
         (StoppedAnswerClient if stopped else FakeModelClient)(_reply()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[_tool(EXECUTE_CODE_TOOL_NAME), _tool(WAIT_TOOL_NAME)],
-        on_finish=_close,
+        feature=RunHooks(on_finish=_close),
     )
     run = agent.start(
         max_steps=10,
@@ -391,7 +391,7 @@ def _replay(run_name: str, wait_name: str) -> list[packets.Packet]:
         FakeModelClient(_reply(run_name, wait_name)),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[_tool(run_name), _tool(wait_name)],
-        on_finish=_close,
+        feature=RunHooks(on_finish=_close),
     )
     run = agent.start(max_steps=10)
     run.wait_for_completion(timeout=10)

@@ -148,6 +148,19 @@ Initial execution and resumption use the same thread-launch path. `Run` owns sta
 terminal output, and cleanup. The coordinator resolves child results by run ID; a `Run` represents local execution.
 The coordinator calls its `RunStore` to save output after the result becomes available.
 
+## Features and hooks
+
+An agent's application state and step decisions live in its feature, an `AgentFeature` (`Agent(feature=...)`).
+`bind()` returns the `RunHooks` of each run when it starts: its tools and its hooks.
+`RunHooks` is the only place hooks are declared. A hook that is `None` is absent, which differs from one that changes nothing:
+without `prepare_step` the run uses its defaults, and without `before_tool_call` it can merge calls.
+A feature decides at `bind()` which hooks a run has, for example `prepare_tool_result` only with a sandbox turn.
+`RunHooks.bind()` returns itself, so an agent without feature state passes `feature=RunHooks(...)`.
+The run holds one `RunConfig` for its execution: the model, the default step, the tools and phases, the hooks and `on_drained`.
+It releases the configuration when its work drains or it hands off.
+A feature never holds its Agent or a Run, and an agent holds no callable bound to itself.
+A finished agent, its runs and its feature are therefore freed by reference counting, without a garbage collection pass.
+
 ## Preparing and completing steps
 
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
@@ -163,6 +176,7 @@ The input is detached from runtime state. `previous` references the matching mes
 Without this callback, the agent uses its configured instructions, tools, and model options.
 A custom callback supplies the step's instructions and generation options; the runtime does not merge those defaults into it.
 Pass executable tools to `Agent(tools=...)`. Construction snapshots their definitions and fixes their order.
+A feature's tools (`RunHooks.tools`) follow them; they are bound to the feature's live state for each run. `Agent.start` checks the names of the combined tools and the phases.
 `Agent.tools` returns detached inspection copies; changing those copies cannot change the configured tools.
 `PreparedStep.allowed_tool_names` restricts execution without changing the advertised definitions.
 `None` allows every tool in the active phase; an empty set disables tool execution.
@@ -222,7 +236,7 @@ A hook that fails otherwise or stops for cancellation is logged; the run keeps i
 An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
 `on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
 Chat code mode uses these hooks to close its cells and save what they did, also for a call that Stop interrupted.
-`on_drained()` runs after each finish or suspension, once the run's work has drained:
+`on_drained()`, an `Agent` argument rather than a feature hook, runs after each finish or suspension, once the run's work has drained:
 its tool threads, including calls that ignored a Stop, and the work of its foreground children.
 Background children do not hold it back.
 A suspension calls the hook only when no foreground child waits or works; otherwise the run's later end calls it.
@@ -590,9 +604,9 @@ Feature state is a JSON object. Chat's feature discriminator selects the schema 
 `run.result()` raises `RunReleased` after release; input must target a resumed execution.
 The storage adapter uses `save` and `expected_revision` to save matching state before ownership is released.
 If saving fails, the local execution remains owned and can accept input or retry the save.
-Features with private state supply `RestorableFeature` from `runtime.py`.
+A feature with private state saves it with `RunHooks.capture_state`, after the `on_suspend` amendments.
 `capture_state()` returns a Pydantic model. Its nested values may borrow feature state until the runtime immediately serializes it.
-`restore_state()` borrows that JSON data as a read-only mapping, including its nested values.
+`Agent.resume` calls the feature's `restore_state()` before the run starts. It borrows that JSON data as a read-only mapping, including its nested values.
 Validate it with the feature's model before retaining or changing the data.
 The fields survive a direct `ExecutionCheckpoint` JSON round trip without a feature-type registry in the SDK.
 
@@ -727,7 +741,7 @@ A chat request follows this path:
 1. The API checks the request and selects streaming or complete output.
 2. `prepare_chat_turn` loads authorized history, selects models, and creates response records.
 3. `ChatTurnExecution` starts a response worker for each selected model.
-4. Each worker creates a `ChatAgent` or `DeepResearchAgent` and calls `start(background=False)`.
+4. Each worker builds the agent of a `ChatFeature` or `DeepResearchFeature` and calls `start(background=False)`.
 5. `Run` advances model and tool steps. The model step calls `LLM.stream`.
 6. The LLM adapter calls the configured provider and returns typed generation updates.
 
@@ -737,10 +751,9 @@ A suspended run can release its response worker without finishing the response.
 `Agent` supplies configuration and history. `Run` owns each execution's state and controls.
 The response worker executes the run directly; these objects do not each create a thread.
 
-`ChatAgent`, `ResearchAgent`, and `DeepResearchAgent` extend `Agent`.
-Their constructors register feature callbacks; callers use `start()`, `resume()`, and `state` directly.
-Restorable features also register their state capture and restoration capability.
-`application_tools` contains application tool objects; inherited `tools` contains bound SDK tools.
+`ChatFeature`, `ResearchFeature`, and `DeepResearchFeature` are features. Each `agent()` method builds the `Agent` that runs the feature with its model;
+callers use the agent's `start()`, `resume()`, and `state`.
+`application_tools` contains a feature's application tool objects; the agent's `tools` contains the bound SDK tools of a run that starts now.
 `chat/prompt_utils.py` builds instructions and assembles history, reminders, and file context.
 Its `build_chat_prompt` function selects chat instructions and reminders before assembly.
 `chat/prompt_formatting.py` resolves attachments, reminder tags, and cache markers for model input.

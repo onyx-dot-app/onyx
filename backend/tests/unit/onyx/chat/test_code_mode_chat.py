@@ -10,13 +10,14 @@ import pytest
 from pydantic import BaseModel
 
 from onyx.agents.models import (
+    AgentState,
     ExecutionStatus,
     RunState,
     RunStatus,
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES, CheckpointSerializer
 from onyx.chat.presentation import project_response
 from onyx.chat.prompt_utils import build_system_prompt, calculate_reserved_tokens
@@ -924,7 +925,7 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
     preferred_tool_id: int, operation: str
 ) -> None:
     llm = ScriptedLLM([Delta(content="Done.")])
-    agent = ChatAgent(
+    agent = ChatFeature(
         messages=[],
         tools=[EchoTool(), _DirectOnlyTool(), _LookupTool()],
         code_mode=True,
@@ -935,7 +936,7 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
         user_memory_context=None,
         llm=llm,
         preferred_tool=CapabilityEntry(tool_id=preferred_tool_id),
-    )
+    ).agent(AgentState())
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=3)
 
     [request] = llm.requests
@@ -961,7 +962,7 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
         ]
     )
     llm = ScriptedLLM([program, Delta(content="Done.")])
-    agent = ChatAgent(
+    agent = ChatFeature(
         messages=[],
         tools=[EchoTool(), _DirectOnlyTool()],
         code_mode=True,
@@ -971,7 +972,7 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
         persona=None,
         user_memory_context=None,
         llm=llm,
-    )
+    ).agent(AgentState())
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=2)
 
     first, final = llm.requests
@@ -1010,7 +1011,7 @@ def test_the_next_run_of_the_same_agent_starts_new_cells() -> None:
             Delta(content="Two."),
         ]
     )
-    agent = ChatAgent(
+    agent = ChatFeature(
         messages=[],
         tools=[EchoTool()],
         code_mode=True,
@@ -1020,7 +1021,7 @@ def test_the_next_run_of_the_same_agent_starts_new_cells() -> None:
         persona=None,
         user_memory_context=None,
         llm=llm,
-    )
+    ).agent(AgentState())
     run_agent(agent, messages=[UserMessage(content="First")], max_steps=3)
     run_agent(agent, messages=[UserMessage(content="Again")], max_steps=3)
 
@@ -1046,7 +1047,7 @@ def test_the_next_run_of_the_same_agent_starts_new_cells() -> None:
 def test_the_code_mode_step_cap_applies_when_code_mode_does(
     code_mode: bool, tools: list[Tool], step_cap: int
 ) -> None:
-    agent = ChatAgent(
+    feature = ChatFeature(
         messages=[],
         tools=tools,
         code_mode=code_mode,
@@ -1057,7 +1058,7 @@ def test_the_code_mode_step_cap_applies_when_code_mode_does(
         user_memory_context=None,
         llm=ScriptedLLM([]),
     )
-    assert agent.max_steps == step_cap
+    assert feature.max_steps == step_cap
     assert CODE_MODE_MAX_LLM_CYCLES >= MAX_LLM_CYCLES
 
 
@@ -1069,7 +1070,7 @@ class _ReadFileTool(EchoTool):
 
 def test_the_file_notice_names_a_tool_that_runs_inside_programs() -> None:
     llm = ScriptedLLM([Delta(content="Done.")])
-    agent = ChatAgent(
+    agent = ChatFeature(
         messages=[],
         tools=[_ReadFileTool()],
         code_mode=True,
@@ -1084,7 +1085,7 @@ def test_the_file_notice_names_a_tool_that_runs_inside_programs() -> None:
                 file_id="file-1", filename="report.pdf", approx_char_count=90_000
             )
         },
-    )
+    ).agent(AgentState())
     run_agent(agent, messages=[UserMessage(content="Summarize")], max_steps=3)
 
     [request] = llm.requests
@@ -1376,7 +1377,7 @@ def test_a_call_by_another_shape_s_name_says_what_to_call(
         ],
         family=family,
     )
-    agent = ChatAgent(
+    agent = ChatFeature(
         messages=[],
         tools=tools,
         code_mode=code_mode,
@@ -1386,7 +1387,7 @@ def test_a_call_by_another_shape_s_name_says_what_to_call(
         persona=None,
         user_memory_context=None,
         llm=llm,
-    )
+    ).agent(AgentState())
     run_agent(agent, messages=[UserMessage(content="Go")], max_steps=3)
 
     [result] = [
@@ -1422,7 +1423,7 @@ def test_a_call_of_another_shape_s_spawn_tool_names_the_agent_s_own(
         ],
         family=family,
     )
-    agent = ChatAgent(
+    agent = ChatFeature(
         messages=[],
         tools=[EchoTool()],
         custom_agent_prompt=None,
@@ -1432,7 +1433,7 @@ def test_a_call_of_another_shape_s_spawn_tool_names_the_agent_s_own(
         user_memory_context=None,
         llm=llm,
         create_subagent=MagicMock(),
-    )
+    ).agent(AgentState())
     run_agent(agent, messages=[UserMessage(content="Go")], max_steps=3)
 
     [result] = [

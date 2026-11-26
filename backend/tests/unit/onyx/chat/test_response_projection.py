@@ -20,7 +20,7 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent, Run
+from onyx.agents.runtime import Agent, Run, RunHooks
 from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
@@ -100,8 +100,12 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     agent = Agent(
         StreamingClient(lambda *_: AssistantMessage()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=lambda _input: PreparedStep(
-            output_metadata=ResearchMessageMetadata(phase=ResearchPhase.CLARIFICATION)
+        feature=RunHooks(
+            prepare_step=lambda _input: PreparedStep(
+                output_metadata=ResearchMessageMetadata(
+                    phase=ResearchPhase.CLARIFICATION
+                )
+            )
         ),
     )
 
@@ -200,12 +204,14 @@ def test_full_response_content_survives_delivery_gaps(
             )
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=lambda _input: PreparedStep(
-            output_metadata=ChatMessageMetadata(
-                sources={1: documents[0], 2: documents[1]}
-                if sources_known_at_generation
-                else {},
-                documents=documents,
+        feature=RunHooks(
+            prepare_step=lambda _input: PreparedStep(
+                output_metadata=ChatMessageMetadata(
+                    sources={1: documents[0], 2: documents[1]}
+                    if sources_known_at_generation
+                    else {},
+                    documents=documents,
+                )
             )
         ),
     )

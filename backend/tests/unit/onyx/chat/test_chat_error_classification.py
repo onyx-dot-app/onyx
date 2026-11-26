@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from onyx.agents.models import RunState, StepResult
-from onyx.agents.runtime import Agent, RunFailed
+from onyx.agents.runtime import Agent, RunFailed, RunHooks
 from onyx.chat.errors import (
     _REFUSAL_FINISH_REASONS,
     EmptyLLMResponseError,
@@ -135,7 +135,7 @@ def test_empty_response_diagnostics_survive_saved_run_failure(
     run = Agent(
         llm,
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        after_step=reject_empty_response,
+        feature=RunHooks(after_step=reject_empty_response),
     ).start(max_steps=1)
     with pytest.raises(RunFailed):
         run.result(timeout=2)

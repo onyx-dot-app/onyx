@@ -18,7 +18,7 @@ from onyx.agents.models import (
     ToolCallContext,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent, Run, RunFailed
+from onyx.agents.runtime import Agent, Run, RunFailed, RunHooks
 from onyx.agents.tools import AgentTool
 from onyx.chat.models import ChatSearchResult
 from onyx.chat.response import response_record, response_snapshot
@@ -59,10 +59,14 @@ def test_response_capture_keeps_input_provenance_without_transient_payloads() ->
             lambda *_: AssistantMessage(content=[TextContent(text="Answer")])
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=lambda _input: PreparedStep(
-            input_messages=[
-                UserMessage(id="delivery", content="Accepted result", metadata=metadata)
-            ]
+        feature=RunHooks(
+            prepare_step=lambda _input: PreparedStep(
+                input_messages=[
+                    UserMessage(
+                        id="delivery", content="Accepted result", metadata=metadata
+                    )
+                ]
+            )
         ),
     )
     runs: list[Run] = []
@@ -100,7 +104,9 @@ def test_partial_run_keeps_input_and_replayable_output(cancelled: bool) -> None:
             lambda *_: AssistantMessage(content=[TextContent(text="unused")])
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=lambda _input: PreparedStep(output_metadata=ApplicationData()),
+        feature=RunHooks(
+            prepare_step=lambda _input: PreparedStep(output_metadata=ApplicationData())
+        ),
     )
     runs: list[Run] = []
     with pytest.raises(AgentCancelled if cancelled else RunFailed):
@@ -145,7 +151,7 @@ def test_running_snapshot_records_unfinished_calls_without_inventing_results() -
                 execute=lambda _: ToolResult(content="unused"),
             )
         ],
-        before_tool_call=before_tool,
+        feature=RunHooks(before_tool_call=before_tool),
     )
     run_agent(agent, max_steps=1, runs=runs)
     snapshot = snapshots[0]
@@ -255,7 +261,7 @@ def test_result_order_hook_updates_and_durable_details() -> None:
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
-        after_tool_call=finalize,
+        feature=RunHooks(after_tool_call=finalize),
     )
     runs: list[Run] = []
     run_agent(agent, max_steps=1, runs=runs)

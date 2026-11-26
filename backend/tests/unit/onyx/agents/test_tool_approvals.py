@@ -13,7 +13,7 @@ from pydantic import JsonValue
 from onyx.agents.agent_coordination import AgentCoordinator, ToolApprovals
 from onyx.agents.events import AgentEvent, InputEndedEvent, InputRequiredEvent
 from onyx.agents.models import AgentState, RunState, RunStatus, ToolCallContext
-from onyx.agents.runtime import Agent, Run
+from onyx.agents.runtime import Agent, Run, RunHooks
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
 from onyx.agents.tools import (
     AgentTool,
@@ -101,7 +101,7 @@ def _agent(
         agent_id="agent",
         state=state,
         tools=tools,
-        before_tool_call=before_tool_call,
+        feature=RunHooks(before_tool_call=before_tool_call),
     )
 
 

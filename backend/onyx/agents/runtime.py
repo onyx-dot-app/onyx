@@ -12,7 +12,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
 
-from pydantic import BaseModel, JsonValue, TypeAdapter
+from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 
 from onyx.agents.compaction import (
     CheckpointMismatchError,
@@ -234,20 +234,86 @@ def _capture_unsettled_child(state: RunState) -> RunState:
 ReleaseHook = Callable[[list[ToolResultMessage]], list[ToolResultAmendment]]
 
 
-class RestorableFeature(Protocol):
-    """Capture and restore feature-owned state at safe execution boundaries."""
+class RunHooks(BaseModel):
+    """What a feature gives one run: its tools and the hooks that decide its
+    steps. An absent hook (None) differs from one that changes nothing: the
+    run then uses its default behavior. `bind` returns the hooks themselves,
+    so an agent without feature state passes `feature=RunHooks(...)`."""
 
-    def capture_state(self) -> BaseModel:
-        """Return state for immediate serialization; nested values may be borrowed."""
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    # The feature's tools for this run, bound to its live state; the agent's
+    # own tools come first.
+    tools: tuple[AgentTool, ...] = ()
+    prepare_step: Callable[[StepInput], PreparedStep] | None = None
+    after_step: Callable[[StepResult], bool] | None = None
+    before_tool_call: (
+        Callable[[ToolCallContext], ToolResult | PendingToolInput | None] | None
+    ) = None
+    after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult] | None = None
+    # Replaces a completed result before the run records and streams it, so
+    # the live events, the saved history and the model see the same result.
+    # Results arrive one at a time, in the order calls complete.
+    prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = None
+    # The result of a call of a tool that the agent does not have, when it
+    # says what to call instead; None: the default result.
+    unknown_tool_hint: Callable[[str], str | None] | None = None
+    on_finish: ReleaseHook | None = None
+    # Called when the run suspends, before its state is captured.
+    on_suspend: ReleaseHook | None = None
+    # The feature state to save when the run suspends, for immediate
+    # serialization; nested values may be borrowed.
+    capture_state: Callable[[], BaseModel] | None = None
+
+    def bind(self) -> "RunHooks":
+        return self
+
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:  # noqa: ARG002
+        raise ValueError("These hooks save no feature state")
+
+
+class AgentFeature(Protocol):
+    """Application state and decisions of an agent, such as chat's citations
+    and code cells. A feature never holds its Agent or a Run, so a finished
+    agent and its runs are freed by reference counting."""
+
+    def bind(self) -> RunHooks:
+        """The tools and hooks of a run that starts now."""
         ...
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
-        """Read borrowed state without mutation; validate into an owned feature model."""
+        """Before the run starts again elsewhere, restore what `capture_state`
+        saved; read borrowed state without changing it."""
         ...
 
 
+class RunConfig(BaseModel):
+    """What one execution of a run uses: set when its agent starts it, and
+    released when its work drains or it hands off."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    llm: LLM
+    # The step without a prepare_step hook: the agent's instructions and options.
+    defaults: PreparedStep
+    tools: tuple[AgentTool, ...]
+    tool_phases: Mapping[str, frozenset[str]]
+    # Calls that wait for the user's approval before they run; see
+    # AgentTool.approval_required.
+    approval_required: frozenset[str]
+    # The agent's context, with the run's own cancellation signal.
+    generation_context: GenerationContext
+    hooks: RunHooks
+    # Called after each finish or suspension, once the run's work (its tool
+    # threads and the work of its foreground children) has drained, on the
+    # thread that ended that work, so it must be short. Errors, including
+    # AgentCancelled, are logged and do not stop the run's cleanup.
+    on_drained: Callable[[], None] | None
+
+
 class Agent:
-    """A conversation with resolved model, tools, and optional step decisions."""
+    """A conversation with resolved model, tools, and an optional feature that
+    decides its steps. One run executes at a time."""
 
     def __init__(
         self,
@@ -259,65 +325,29 @@ class Agent:
         tools: Sequence[AgentTool] = (),
         tool_phases: Mapping[str, Sequence[str]] | None = None,
         options: GenerationOptions | None = None,
-        prepare_step: Callable[[StepInput], PreparedStep] | None = None,
-        after_step: Callable[[StepResult], bool] | None = None,
-        before_tool_call: Callable[
-            [ToolCallContext], ToolResult | PendingToolInput | None
-        ]
-        | None = None,
-        after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult]
-        | None = None,
-        prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = None,
-        unknown_tool_hint: Callable[[str], str | None] | None = None,
-        on_finish: ReleaseHook | None = None,
-        on_suspend: ReleaseHook | None = None,
+        feature: AgentFeature | None = None,
         on_drained: Callable[[], None] | None = None,
         agent_id: str | None = None,
         previous_run_id: str | None = None,
-        restoration: "RestorableFeature | None" = None,
     ) -> None:
+        """`on_drained`: see RunConfig."""
         if generation_context.flow is None:
             raise ValueError("Agent generation context requires an LLMFlow")
-        if len({tool.name for tool in tools}) != len(tools):
-            raise ValueError("Tool names must be unique")
         self._id = agent_id or str(uuid4())
         self.llm = llm
         self._tools = tuple(tool.snapshot() for tool in tools)
-        configured_names = {tool.name for tool in self._tools}
         phases: dict[str, frozenset[str]] = {}
         for name, names in (tool_phases or {}).items():
             selected = frozenset(names)
-            if (
-                not name
-                or len(selected) != len(names)
-                or not selected <= configured_names
-            ):
+            if not name or len(selected) != len(names):
                 raise ValueError("Tool phases require unique configured tool names")
             phases[name] = selected
         self._tool_phases = MappingProxyType(phases)
         self.system_prompt = system_prompt
         self.options = options or GenerationOptions()
         self.generation_context = generation_context
-        self.prepare_step = prepare_step
-        self.after_step = after_step
-        self.before_tool_call = before_tool_call
-        self.after_tool_call = after_tool_call
-        # Replaces a completed result before the run records and streams it,
-        # so the live events, the saved history and the model see the same
-        # result. Results arrive one at a time, in the order calls complete.
-        self.prepare_tool_result = prepare_tool_result
-        # The result of a call of a tool that the agent does not have, when
-        # it says what to call instead; None: the default result.
-        self.unknown_tool_hint = unknown_tool_hint
-        self.on_finish = on_finish
-        # Called when the run suspends, before its state is captured.
-        self.on_suspend = on_suspend
-        # Called after each finish or suspension, once the run's work (its tool
-        # threads and the work of its foreground children) has drained, on the
-        # thread that ended that work, so it must be short. Errors, including
-        # AgentCancelled, are logged and do not stop the run's cleanup.
+        self.feature = feature
         self.on_drained = on_drained
-        self._restoration = restoration
         self._state = (state or AgentState()).snapshot()
         for message in self._state.messages:
             if message.id is None:
@@ -326,10 +356,22 @@ class Agent:
         self._lock = threading.RLock()
         self._latest_run: Run | None = None
 
+    def _bind(self) -> tuple[RunHooks, tuple[AgentTool, ...]]:
+        """The feature's hooks for a new run, and the run's tools: the agent's,
+        then the feature's."""
+        hooks = self.feature.bind() if self.feature is not None else RunHooks()
+        tools = (*self._tools, *hooks.tools)
+        names = {tool.name for tool in tools}
+        if len(names) != len(tools):
+            raise ValueError("Tool names must be unique")
+        if not all(phase <= names for phase in self._tool_phases.values()):
+            raise ValueError("Tool phases require unique configured tool names")
+        return hooks, tools
+
     @property
     def tools(self) -> tuple[AgentTool, ...]:
-        """Detached inspection copies; configured tools cannot change after construction."""
-        return tuple(tool.snapshot() for tool in self._tools)
+        """Detached inspection copies of the tools that a run starting now gets."""
+        return tuple(tool.snapshot() for tool in self._bind()[1])
 
     @property
     def id(self) -> str:
@@ -350,21 +392,7 @@ class Agent:
             latest_run = self._latest_run
             if latest_run is None:
                 return self._state.snapshot()
-            with latest_run.execution_lock:
-                record = latest_run._state
-                return AgentState(
-                    messages=[
-                        message.model_copy(deep=True)
-                        for message in [
-                            *latest_run._history.messages,
-                            *record.input_messages,
-                            *record.messages,
-                        ]
-                    ],
-                    checkpoint=record.checkpoint.model_copy(deep=True)
-                    if record.checkpoint
-                    else None,
-                )
+            return latest_run.conversation()
 
     def start(
         self,
@@ -390,6 +418,7 @@ class Agent:
         completing steps" in the agents README.
         """
         AgentStep(index=0, limit=max_steps)
+        hooks, tools = self._bind()
         with self._lock:
             previous = self._latest_run
             if previous is not None:
@@ -469,9 +498,32 @@ class Agent:
                         logger.exception("Agent start reservation rollback failed")
                 raise
             self._latest_run = run
+        config = RunConfig(
+            llm=self.llm,
+            defaults=PreparedStep(
+                system_prompt=self.system_prompt,
+                options=self.options.model_copy(deep=True),
+            ),
+            tools=tools,
+            tool_phases=self._tool_phases,
+            approval_required=frozenset(
+                name for tool in tools for name in tool.approval_required
+            ),
+            generation_context=self.generation_context.model_copy(
+                update={
+                    "cancellation": run.cancellation_signal,
+                    "user_identity": self.generation_context.user_identity.model_copy()
+                    if self.generation_context.user_identity
+                    else None,
+                }
+            ),
+            hooks=hooks,
+            on_drained=self.on_drained,
+        )
         try:
             run._start(
                 self,
+                config,
                 coordinator=coordinator,
                 background=background,
                 external_cancellation=external_cancellation,
@@ -495,7 +547,9 @@ class Agent:
         """Restore a suspended run after its previous owner has released execution.
 
         `answers` answer saved requests before execution starts, as `Run.submit`
-        does. `deadline_at` replaces the saved deadline.
+        does. `deadline_at` replaces the saved deadline. The feature's state is
+        restored before the run starts, so a start that fails leaves it
+        restored; resume a freshly built agent.
         """
         if snapshot.status != RunStatus.SUSPENDED or snapshot.progress is None:
             raise ValueError("Only a suspended execution snapshot can resume")
@@ -525,6 +579,10 @@ class Agent:
                     raise ValueError(
                         "Finalized tool must have a call and result in the current step"
                     )
+        if progress.feature_state is not None:
+            if self.feature is None:
+                raise ValueError("Feature restoration is required for this state")
+            self.feature.restore_state(progress.feature_state)
         return self.start(
             max_steps=progress.step_limit,
             coordinator=coordinator,
@@ -575,39 +633,43 @@ class Run:
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
         self._watched_children: dict[str, Future[RunState]] = {}
-        self._llm: LLM | None = None
-        self._defaults = PreparedStep()
-        self._configured_tools: tuple[AgentTool, ...] = ()
-        self._tool_phases: Mapping[str, frozenset[str]] = {}
-        self._generation_context = GenerationContext()
-        self._prepare_step: Callable[[StepInput], PreparedStep] | None = None
-        self._after_step: Callable[[StepResult], bool] | None = None
-        self.before_tool_call: (
-            Callable[[ToolCallContext], ToolResult | PendingToolInput | None] | None
-        ) = None
-        # Calls that wait for the user's approval before they run; see
-        # AgentTool.approval_required.
-        self.approval_required: frozenset[str] = frozenset()
-        self.after_tool_call: (
-            Callable[[ToolCallContext, ToolResult], ToolResult] | None
-        ) = None
-        self._prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = (
-            None
-        )
-        self.unknown_tool_hint: Callable[[str], str | None] | None = None
+        # Set while the run can execute; see RunConfig.
+        self._config: RunConfig | None = None
         # Serializes prepare_tool_result and recording, so each call of the
         # hook sees every result recorded before it.
         self._result_lock = threading.Lock()
-        self._on_finish: ReleaseHook | None = None
-        self._on_suspend: ReleaseHook | None = None
-        self._on_drained: Callable[[], None] | None = None
-        self._restoration: RestorableFeature | None = None
         self._step_tools: list[AgentTool] | None = None
         self.work = ExecutionWork(self._execution_condition)
         self.coordination: RunCoordination | None = None
         self._thread_context = copy_context()
         self._cancellation_link = ExitStack()
         self._released = False
+
+    @property
+    def config(self) -> RunConfig:
+        """The configuration of the run's current execution."""
+        config = self._config
+        if config is None:
+            raise RuntimeError("Run has no execution owner")
+        return config
+
+    def conversation(self) -> AgentState:
+        """An isolated copy of the conversation through this run: the history
+        before it, its input and its output."""
+        with self.execution_lock:
+            return AgentState(
+                messages=[
+                    message.model_copy(deep=True)
+                    for message in [
+                        *self._history.messages,
+                        *self._state.input_messages,
+                        *self._state.messages,
+                    ]
+                ],
+                checkpoint=self._state.checkpoint.model_copy(deep=True)
+                if self._state.checkpoint
+                else None,
+            )
 
     @classmethod
     def from_snapshot(cls, snapshot: RunState) -> "Run":
@@ -694,7 +756,7 @@ class Run:
                 raise RunReleased("Resume the saved run state in a new Agent")
             if self._completed.done():
                 raise ValueError("Cannot resume a terminal run")
-            if self._llm is None:
+            if self._config is None:
                 raise RuntimeError("Run has no execution owner")
             self._wake_execution(resume=True)
 
@@ -808,7 +870,8 @@ class Run:
     ) -> None:
         """Record the result of calls, after `prepare_tool_result` replaces
         it; `finish_tool` later ends them. Call without the execution lock."""
-        prepare = self._prepare_tool_result
+        config = self._config
+        prepare = config.hooks.prepare_tool_result if config is not None else None
         if prepare is None:
             with self.execution_lock:
                 record, message_id = self._accepting_tool_step()
@@ -1085,18 +1148,19 @@ class Run:
                 terminate=result_message.terminate,
             )
         finalized = False
+        after_tool_call = self.config.hooks.after_tool_call
         try:
-            if self.after_tool_call is not None:
+            if after_tool_call is not None:
                 if context is None:
                     raise RuntimeError("Tool finalization requires callback context")
                 self.cancellation_signal.check()
-                result = self.after_tool_call(context, result.model_copy(deep=True))
+                result = after_tool_call(context, result.model_copy(deep=True))
                 self.cancellation_signal.check()
             finalized = True
         finally:
             with self.execution_lock:
                 if self.is_accepting and not self.cancellation_signal.cancelled:
-                    if finalized and self.after_tool_call is not None:
+                    if finalized and after_tool_call is not None:
                         execution.result = _tool_result_message(
                             result, call, message_id
                         )
@@ -1145,6 +1209,7 @@ class Run:
     def _start(
         self,
         agent: "Agent",
+        config: RunConfig,
         *,
         coordinator: "AgentCoordinator | None",
         background: bool,
@@ -1163,42 +1228,7 @@ class Run:
                         )
                     )
                 )
-            if state.progress is not None:
-                feature_state = state.progress.feature_state
-                if feature_state is not None:
-                    if agent._restoration is None:
-                        raise ValueError(
-                            "Feature restoration is required for this state"
-                        )
-                    agent._restoration.restore_state(feature_state)
-            self._llm = agent.llm
-            self._defaults = PreparedStep(
-                system_prompt=agent.system_prompt,
-                options=agent.options.model_copy(deep=True),
-            )
-            self._configured_tools = agent._tools
-            self._tool_phases = agent._tool_phases
-            self._generation_context = agent.generation_context.model_copy(
-                update={
-                    "cancellation": self.cancellation_signal,
-                    "user_identity": agent.generation_context.user_identity.model_copy()
-                    if agent.generation_context.user_identity
-                    else None,
-                }
-            )
-            self._prepare_step = agent.prepare_step
-            self._after_step = agent.after_step
-            self.before_tool_call = agent.before_tool_call
-            self.approval_required = frozenset(
-                name for tool in agent._tools for name in tool.approval_required
-            )
-            self.after_tool_call = agent.after_tool_call
-            self._prepare_tool_result = agent.prepare_tool_result
-            self.unknown_tool_hint = agent.unknown_tool_hint
-            self._on_finish = agent.on_finish
-            self._on_suspend = agent.on_suspend
-            self._on_drained = agent.on_drained
-            self._restoration = agent._restoration
+            self._config = config
             self._thread_context = copy_context()
             if coordinator is not None:
                 self.coordination = coordinator.bind(self)
@@ -1272,7 +1302,7 @@ class Run:
 
     def _wake_execution(self, *, resume: bool = False) -> None:
         with self._execution_condition:
-            if not self.is_accepting or self._llm is None:
+            if not self.is_accepting or self._config is None:
                 return
             if resume or self._execution_request != ExecutionRequest.SUSPEND:
                 self._execution_request = ExecutionRequest.WAKE
@@ -1306,9 +1336,7 @@ class Run:
             raise TimeoutError("Agent tool exceeded its execution bound")
 
     def _execute(self) -> None:
-        llm = self._llm
-        if llm is None:
-            raise RuntimeError("Run has no execution owner")
+        llm = self.config.llm
         outcome = RunStatus.ERROR
         suspended = False
         try:
@@ -1373,7 +1401,7 @@ class Run:
             completion.add_done_callback(lambda _future: self._wake_execution())
 
     def _suspend(self) -> None:
-        amendments, failure = self._release_amendments(self._on_suspend)
+        amendments, failure = self._release_amendments(self.config.hooks.on_suspend)
         if amendments:
             with self.execution_lock:
                 self._apply_amendments(amendments)
@@ -1383,9 +1411,10 @@ class Run:
         if failure is not None:
             # The run fails instead of suspending.
             raise failure
-        if self._restoration is not None:
+        capture_state = self.config.hooks.capture_state
+        if capture_state is not None:
             feature_state = _FEATURE_STATE.validate_python(
-                self._restoration.capture_state().model_dump(mode="json")
+                capture_state().model_dump(mode="json")
             )
             self.cancellation_signal.check()
             with self.execution_lock:
@@ -1436,7 +1465,7 @@ class Run:
 
     def _finish(self, outcome: RunOutcome, llm: LLM) -> None:
         self._cancellation_link.close()
-        amendments, failure = self._release_amendments(self._on_finish)
+        amendments, failure = self._release_amendments(self.config.hooks.on_finish)
         if failure is not None:
             if outcome == RunStatus.CANCELLED:
                 # A Stop or deadline wins: the run stays cancelled.
@@ -1560,7 +1589,7 @@ class Run:
         except Exception:
             logger.exception("Run release hook failed: %s", self.id)
             return [], None
-        prepare = self._prepare_tool_result
+        prepare = self.config.hooks.prepare_tool_result
         if prepare is None or not amendments:
             return amendments, error
         # Amended results go through prepare_tool_result as recorded ones do,
@@ -1663,7 +1692,7 @@ class Run:
 
     def _work_drained(self) -> None:
         """Call the agent's on_drained hook; the run's work has drained."""
-        hook = self._on_drained
+        hook = self._config.on_drained if self._config is not None else None
         if hook is None:
             return
         # Cleanup goes on whatever the hook raises: the run must still become
@@ -1680,23 +1709,8 @@ class Run:
 
     def _clear_execution_config(self) -> None:
         self._token_counts.clear()
-        self._llm = None
         self._step_tools = None
-        self._defaults = PreparedStep()
-        self._configured_tools = ()
-        self._tool_phases = {}
-        self._generation_context = GenerationContext()
-        self._prepare_step = None
-        self._after_step = None
-        self.before_tool_call = None
-        self.approval_required = frozenset()
-        self.after_tool_call = None
-        self._prepare_tool_result = None
-        self.unknown_tool_hint = None
-        self._on_finish = None
-        self._on_suspend = None
-        self._on_drained = None
-        self._restoration = None
+        self._config = None
 
     def _drain_workers(self) -> None:
         delivery = self.event_delivery
@@ -1835,8 +1849,8 @@ def _advance_loop(
             if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
             step = AgentStep(index=progress.step_index, limit=progress.step_limit)
-            prepare = run._prepare_step
-            prepared = run._defaults
+            prepare = run.config.hooks.prepare_step
+            prepared = run.config.defaults
             ownership = (
                 run.coordination.coordinator.ownership if run.coordination else None
             )
@@ -1879,12 +1893,12 @@ def _resolve_step_tools(
     """Resolve fixed schemas and validate step permissions before model or tool effects."""
     phase_names = None
     if prepared.tool_phase is not None:
-        phase_names = run._tool_phases.get(prepared.tool_phase)
+        phase_names = run.config.tool_phases.get(prepared.tool_phase)
         if phase_names is None:
             raise ValueError(f"Unknown tool phase {prepared.tool_phase!r}")
     phase_tools = tuple(
         tool
-        for tool in run._configured_tools
+        for tool in run.config.tools
         if phase_names is None or tool.name in phase_names
     )
     advertised_names = frozenset(tool.name for tool in phase_tools)
@@ -1933,10 +1947,10 @@ def _advance_step(
         tool for tool in phase_tools if allowed is None or tool.name in allowed
     ]
     definitions = tuple(tool.definition for tool in phase_tools)
-    generation_context = run._generation_context.model_copy(
+    generation_context = run.config.generation_context.model_copy(
         update={
             "stall_timeout_s": prepared.stall_timeout_s
-            or run._generation_context.stall_timeout_s,
+            or run.config.generation_context.stall_timeout_s,
         }
     )
     # Compaction tells the task question from later input by this metadata.
@@ -2267,7 +2281,7 @@ def _limit_output(
 def _execute_tools(run: Run) -> bool:
     progress = run._progress
     if run._step_tools is None:
-        available = {tool.name: tool for tool in run._configured_tools}
+        available = {tool.name: tool for tool in run.config.tools}
         allowed = progress.allowed_tool_names
         if allowed is not None and not allowed <= {
             tool.name for tool in progress.tools
@@ -2312,7 +2326,7 @@ def _execute_tools(run: Run) -> bool:
 
 def _complete_step(run: Run) -> None:
     cancellation_signal = run.cancellation_signal
-    after_step = run._after_step
+    after_step = run.config.hooks.after_step
     cancellation_signal.check()
     progress = run._progress
     step = run._state.steps[progress.step_index]
