@@ -82,7 +82,8 @@
   `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
   the output panel.
   While the admin setting `browser_enabled` is on, and the agent has the
-  Browser built-in tool (`BrowserTool`, on the default agent) that the
+  Browser built-in tool (`BrowserTool`: the upgrade gives it to every
+  agent, and the agent editor turns it off or on) that the
   chat's tool options allow, the model also gets the
   browser tools (`browser_open`, `browser_navigate`, `browser_snapshot`,
   `browser_act`, `browser_wait_for`, `browser_evaluate`, `browser_status`,
