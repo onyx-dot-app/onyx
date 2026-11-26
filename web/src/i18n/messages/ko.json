@@ -13609,8 +13609,8 @@
         "inputDescription": "브라우저 페이지에서 나가려면 Shift+Esc를 누르세요."
       },
       "download": {
-        "saved": "{fileName}을(를) 이 채팅의 파일로 다운로드했습니다",
-        "showFiles": "파일 보기"
+        "action": "다운로드",
+        "saved": "브라우저가 {fileName}을(를) 다운로드했습니다"
       },
       "clearData": {
         "action": "브라우저 데이터 지우기",

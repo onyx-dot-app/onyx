@@ -107,6 +107,11 @@ function browserViewReducer(
             connection: "live",
             tabs: message.tabs,
             selectedTabId: message.selected,
+            // The service offers the newly selected tab's chooser again
+            fileChooser:
+              message.selected === state.selectedTabId
+                ? state.fileChooser
+                : null,
           };
         case "viewport":
           return {
@@ -204,6 +209,8 @@ export function useBrowserStream({
     const canvas = canvasRef.current;
     if (!active || sessionId === null || !canvas) return;
     const painter = createFramePainter(canvas, () => setHasFrame(true));
+    // Undefined until this connection's first tab list
+    let selected: string | null | undefined;
     const client = createBrowserStreamClient({
       url: browserStreamUrl(sessionId, window.location),
       events: {
@@ -215,6 +222,15 @@ export function useBrowserStream({
         onMessage: (message) => {
           if (message.type === "download") download(message);
           else if (message.type === "error") error(message.message);
+          else if (message.type === "tabs") {
+            // The old page's frame stays hidden, and takes no clicks, until
+            // the new page's first frame
+            if (selected !== undefined && message.selected !== selected) {
+              painter.clear();
+              setHasFrame(false);
+            }
+            selected = message.selected;
+          }
           dispatch({ type: "message", message });
         },
       },

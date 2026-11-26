@@ -11,6 +11,7 @@ import {
   pagePointFromClient,
   parseBrowserServerMessage,
   reconnectDelayMs,
+  splitBrowserText,
   wheelDeltaUnit,
   type BrowserSocketState,
 } from "@/lib/chat/browser/stream";
@@ -181,6 +182,25 @@ describe("agent cursor", () => {
     expect(
       agentCursorPosition({ x: 0, y: 0 }, box, frame, { width: 0, height: 0 })
     ).toBeNull();
+  });
+});
+
+describe("splitBrowserText", () => {
+  test("keeps short text whole and splits long text in order", () => {
+    expect(splitBrowserText("abc")).toEqual(["abc"]);
+    const long = "a".repeat(10_000) + "b".repeat(10_000) + "c";
+    expect(splitBrowserText(long)).toEqual([
+      "a".repeat(10_000),
+      "b".repeat(10_000),
+      "c",
+    ]);
+  });
+
+  test("does not split a surrogate pair", () => {
+    const text = "a".repeat(9_999) + "\u{1F600}" + "b";
+    const chunks = splitBrowserText(text);
+    expect(chunks).toEqual(["a".repeat(9_999), "\u{1F600}b"]);
+    expect(chunks.join("")).toBe(text);
   });
 });
 

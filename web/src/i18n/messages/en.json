@@ -13609,8 +13609,8 @@
         "inputDescription": "Press Shift+Escape to leave the browser page."
       },
       "download": {
-        "saved": "Downloaded {fileName} to this chat's files",
-        "showFiles": "Show files"
+        "action": "Download",
+        "saved": "The browser downloaded {fileName}"
       },
       "clearData": {
         "action": "Clear browser data",

@@ -4,6 +4,14 @@ function browserRoute(sessionId: string, action: string): string {
   return `/api/chat/sessions/${encodeURIComponent(sessionId)}/browser/${action}`;
 }
 
+/** The route that serves a file the chat's browser downloaded. */
+export function browserDownloadUrl(
+  sessionId: string,
+  fileName: string
+): string {
+  return browserRoute(sessionId, `downloads/${encodeURIComponent(fileName)}`);
+}
+
 /**
  * Uploads files for the page's file chooser into the chat's session dir.
  * Returns their paths relative to it, for the `fileChooser` answer.

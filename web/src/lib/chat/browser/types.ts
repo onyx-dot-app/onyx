@@ -42,7 +42,7 @@ export interface BrowserFileChooser {
   multiple: boolean;
 }
 
-/** A download the service saved to the chat's files. */
+/** A download the service saved to the sandbox's downloads/ dir. */
 export interface BrowserDownload {
   fileName: string;
 }

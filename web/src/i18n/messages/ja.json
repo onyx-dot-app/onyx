@@ -13609,8 +13609,8 @@
         "inputDescription": "ブラウザーのページから離れるには Shift+Esc を押します。"
       },
       "download": {
-        "saved": "{fileName} をこのチャットのファイルにダウンロードしました",
-        "showFiles": "ファイルを表示"
+        "action": "ダウンロード",
+        "saved": "ブラウザーが {fileName} をダウンロードしました"
       },
       "clearData": {
         "action": "ブラウザーのデータを消去",

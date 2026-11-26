@@ -13609,8 +13609,8 @@
         "inputDescription": "Appuyez sur Maj+Échap pour quitter la page du navigateur."
       },
       "download": {
-        "saved": "{fileName} a été téléchargé dans les fichiers de ce chat",
-        "showFiles": "Afficher les fichiers"
+        "action": "Télécharger",
+        "saved": "Le navigateur a téléchargé {fileName}"
       },
       "clearData": {
         "action": "Effacer les données du navigateur",

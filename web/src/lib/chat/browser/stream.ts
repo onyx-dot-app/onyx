@@ -83,6 +83,23 @@ export function browserStreamUrl(
   )}/browser/ws`;
 }
 
+// The service's limit on one `text` message, in UTF-16 units
+const BROWSER_TEXT_MAX = 10_000;
+
+/** Text in `text` messages the service accepts, without a split surrogate pair. */
+export function splitBrowserText(text: string): string[] {
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + BROWSER_TEXT_MAX, text.length);
+    const last = text.charCodeAt(end - 1);
+    if (end < text.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
+    chunks.push(text.slice(start, end));
+    start = end;
+  }
+  return chunks;
+}
+
 /** The modifier bitmask: alt 1, ctrl 2, meta 4, shift 8. */
 export function browserModifiers(event: {
   altKey: boolean;
@@ -478,6 +495,8 @@ export function createBrowserStreamClient({
 
 interface BrowserFramePainter {
   paint: (jpeg: ArrayBuffer) => void;
+  // Blanks the canvas and drops the frames still on their way to it
+  clear: () => void;
   stop: () => void;
 }
 
@@ -490,11 +509,13 @@ export function createFramePainter(
   let stopped = false;
   let decoding = false;
   let waiting: ArrayBuffer | null = null;
+  let generation = 0;
   const draw = (jpeg: ArrayBuffer) => {
     decoding = true;
+    const drawGeneration = generation;
     void createImageBitmap(new Blob([jpeg], { type: "image/jpeg" }))
       .then((bitmap) => {
-        if (stopped || !context) {
+        if (stopped || !context || drawGeneration !== generation) {
           bitmap.close();
           return;
         }
@@ -519,6 +540,11 @@ export function createFramePainter(
       if (stopped) return;
       if (decoding) waiting = jpeg;
       else draw(jpeg);
+    },
+    clear: () => {
+      generation += 1;
+      waiting = null;
+      context?.clearRect(0, 0, canvas.width, canvas.height);
     },
     stop: () => {
       stopped = true;

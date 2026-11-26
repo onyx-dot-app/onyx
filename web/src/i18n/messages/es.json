@@ -13609,8 +13609,8 @@
         "inputDescription": "Pulsa Mayús+Escape para salir de la página del navegador."
       },
       "download": {
-        "saved": "Se descargó {fileName} en los archivos de este chat",
-        "showFiles": "Mostrar archivos"
+        "action": "Descargar",
+        "saved": "El navegador descargó {fileName}"
       },
       "clearData": {
         "action": "Borrar datos del navegador",
