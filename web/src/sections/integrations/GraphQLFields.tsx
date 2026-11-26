@@ -22,9 +22,9 @@ interface GraphQLFieldsProps {
   /** Also true while introspection runs; the parent holds that state. */
   disabled: boolean;
   onLoadingChange: (loading: boolean) => void;
-  /** A schema over the size limit was refused; the parent blocks Save. */
-  tooLarge: boolean;
-  onTooLargeChange: (tooLarge: boolean) => void;
+  /** A refused schema; the parent blocks Save while it is set. */
+  importError: string | null;
+  onImportErrorChange: (importError: string | null) => void;
 }
 
 /** The GraphQL form: an endpoint URL and a schema in SDL. */
@@ -34,8 +34,8 @@ export default function GraphQLFields({
   showErrors,
   disabled,
   onLoadingChange,
-  tooLarge,
-  onTooLargeChange,
+  importError,
+  onImportErrorChange,
 }: GraphQLFieldsProps) {
   const t = useTranslations("admin.integrations.add.graphql");
   const tAdd = useTranslations("admin.integrations.add");
@@ -43,7 +43,7 @@ export default function GraphQLFields({
   /** Applies the schema when it fits; false when it is over the limit. */
   function setSchema(text: string): boolean {
     const over = specTextTooLarge(text);
-    onTooLargeChange(over);
+    onImportErrorChange(over ? tAdd("api.tooLarge") : null);
     if (!over) onChange({ ...draft, graphql_schema: text });
     return !over;
   }
@@ -96,11 +96,10 @@ export default function GraphQLFields({
         title={t("schema.title")}
         description={t("schema.description")}
         error={
-          tooLarge
-            ? tAdd("api.tooLarge")
-            : showErrors && !draft.graphql_schema.trim()
-              ? t("schema.required")
-              : undefined
+          importError ??
+          (showErrors && !draft.graphql_schema.trim()
+            ? t("schema.required")
+            : undefined)
         }
       >
         <Section gap={2} alignItems="stretch" height="auto">
@@ -109,11 +108,11 @@ export default function GraphQLFields({
             placeholder={t("schema.upload")}
             variant={disabled ? "disabled" : "primary"}
             maxSizeKb={SPEC_MAX_SIZE_KB}
-            onFileSizeExceeded={() => onTooLargeChange(true)}
+            onFileSizeExceeded={() => onImportErrorChange(tAdd("api.tooLarge"))}
             onReadingChange={onLoadingChange}
             setValue={(text) => {
               if (text.trim()) setSchema(text);
-              else onTooLargeChange(false);
+              else onImportErrorChange(null);
             }}
           />
           <InputTextArea

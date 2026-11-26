@@ -488,6 +488,48 @@ test("a refused REST upload blocks Save until a spec imports", async () => {
   expect(save).toBeEnabled();
 });
 
+test("a failed spec import blocks Save until the import is discarded", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": new Response(
+      JSON.stringify({ detail: "Could not fetch the spec" }),
+      { status: 400 }
+    ),
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const baseUrl = view.getByRole("textbox", {
+    name: copy.add.rest.baseUrl.title,
+  });
+  await u.clear(baseUrl);
+  await u.type(baseUrl, "https://new.example.com");
+  expect(save).toBeEnabled();
+
+  const specUrl = view.getByRole("textbox", { name: copy.add.rest.import.url });
+  await u.type(specUrl, "https://new.example.com/openapi.json");
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+
+  expect(await view.findByText("Could not fetch the spec")).toBeInTheDocument();
+  expect(save).toBeDisabled();
+
+  await u.clear(specUrl);
+  expect(view.queryByText("Could not fetch the spec")).not.toBeInTheDocument();
+  expect(save).toBeEnabled();
+});
+
 test("keeps the Base URL when a spec imported from a URL has no single server", async () => {
   mockFetch({
     [URL_DETAIL]: makeDetail({

@@ -47,9 +47,9 @@ interface RestEndpointFieldsProps {
   /** Also true while an import runs; the parent holds that state. */
   disabled: boolean;
   onImportingChange: (importing: boolean) => void;
-  /** A spec over the size limit was refused; the parent blocks Save. */
-  tooLarge: boolean;
-  onTooLargeChange: (tooLarge: boolean) => void;
+  /** A refused or failed import; the parent blocks Save while it is set. */
+  importError: string | null;
+  onImportErrorChange: (importError: string | null) => void;
 }
 
 export default function RestEndpointFields({
@@ -59,8 +59,8 @@ export default function RestEndpointFields({
   showErrors,
   disabled,
   onImportingChange,
-  tooLarge,
-  onTooLargeChange,
+  importError,
+  onImportErrorChange,
 }: RestEndpointFieldsProps) {
   const t = useTranslations("admin.integrations.add.rest");
   const tAdd = useTranslations("admin.integrations.add");
@@ -84,10 +84,12 @@ export default function RestEndpointFields({
           (draft.baseUrl.trim() || view.base_url),
       });
       setSkipped(view.skipped);
-      onTooLargeChange(false);
+      onImportErrorChange(null);
       toast.success(t("import.done", { count: view.endpoints.length }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("import.failed"));
+      onImportErrorChange(
+        error instanceof Error ? error.message : t("import.failed")
+      );
     } finally {
       onImportingChange(false);
     }
@@ -99,7 +101,7 @@ export default function RestEndpointFields({
         title={t("import.title")}
         description={t("import.description")}
         suffix="optional"
-        error={tooLarge ? tAdd("api.tooLarge") : undefined}
+        error={importError ?? undefined}
       >
         <Section gap={2} alignItems="stretch" height="auto">
           <InputSingleUpload
@@ -107,12 +109,12 @@ export default function RestEndpointFields({
             placeholder={t("import.upload")}
             variant={disabled ? "disabled" : "primary"}
             maxSizeKb={SPEC_MAX_SIZE_KB}
-            onFileSizeExceeded={() => onTooLargeChange(true)}
+            onFileSizeExceeded={() => onImportErrorChange(tAdd("api.tooLarge"))}
             // Called before setValue, which may start an import.
             onReadingChange={onImportingChange}
             setValue={(text) => {
               const over = specTextTooLarge(text);
-              onTooLargeChange(over);
+              onImportErrorChange(over ? tAdd("api.tooLarge") : null);
               if (!over && text.trim())
                 void runImport({ openapi_document: text });
             }}
@@ -123,7 +125,10 @@ export default function RestEndpointFields({
               placeholder={t("import.urlPlaceholder")}
               value={specUrl}
               variant={disabled ? "disabled" : "primary"}
-              onChange={(event) => setSpecUrl(event.target.value)}
+              onChange={(event) => {
+                setSpecUrl(event.target.value);
+                if (!event.target.value.trim()) onImportErrorChange(null);
+              }}
             />
             <Button
               type="button"
