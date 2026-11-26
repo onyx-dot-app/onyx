@@ -61,6 +61,14 @@ export default function ApprovalCard({
   const t = useTranslations("common.approvalCard");
   const format = useFormatter();
   const [isOpen, setIsOpen] = useState(true);
+  const deadline = expiresAt
+    ? t("deadline", {
+        time: format.dateTime(new Date(expiresAt), {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      })
+    : null;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
 
@@ -191,7 +199,9 @@ export default function ApprovalCard({
               {/* The spinner and the decisions show the wait; only screen
                   readers hear "Approval requested". */}
               <Collapsible.Trigger
-                aria-label={t("header.required", { headline })}
+                aria-label={[t("header.required", { headline }), deadline]
+                  .filter(Boolean)
+                  .join(". ")}
                 className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02"
               >
                 <SvgLoader className="size-4 shrink-0 stroke-status-info-05 motion-safe:animate-spin" />
@@ -204,18 +214,13 @@ export default function ApprovalCard({
                     {headline}
                   </Text>
                 </span>
-                {expiresAt && (
+                {deadline && (
                   <Text
                     font="secondary-body"
                     color="text-03"
                     wordWrap="whitespace-nowrap"
                   >
-                    {t("deadline", {
-                      time: format.dateTime(new Date(expiresAt), {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      }),
-                    })}
+                    {deadline}
                   </Text>
                 )}
                 <SvgChevronDown

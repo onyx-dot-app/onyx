@@ -34,6 +34,8 @@ describe("pending", () => {
 
     const trigger = screen.getByRole("button", { name: header });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
+    // Screen readers hear the deadline too.
+    expect(trigger).toHaveAccessibleName(/Approve by \d{1,2}:\d{2}\s?[AP]M$/);
     // The deadline sits in the header row, without seconds.
     expect(
       within(trigger).getByText(/^Approve by \d{1,2}:\d{2}\s?[AP]M$/)
