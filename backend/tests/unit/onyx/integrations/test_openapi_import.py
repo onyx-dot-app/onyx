@@ -3,6 +3,7 @@
 import copy
 import json
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -214,6 +215,27 @@ def test_a_pasted_spec_has_the_size_limit_of_a_spec_url() -> None:
 
     with pytest.raises(OnyxError, match="larger than 5 MB"):
         _import(json.dumps(spec))
+
+
+def test_a_fetched_spec_with_a_query_in_its_server_url_is_refused() -> None:
+    spec = _callable_spec()
+    spec["servers"] = [{"url": "https://pets.example.com/api?key=1"}]
+    response = MagicMock(status_code=200)
+    response.iter_content.return_value = [json.dumps(spec).encode()]
+    fetch = MagicMock()
+    fetch.return_value.__enter__.return_value = response
+
+    with (
+        patch("onyx.integrations.service.get_security_settings"),
+        patch("onyx.integrations.service.outbound_ssrf_params"),
+        patch("onyx.integrations.service.ssrf_safe_get", fetch),
+        pytest.raises(OnyxError, match="cannot have a query") as error,
+    ):
+        import_openapi_document(
+            OpenApiEndpointsRequest(spec_url="https://pets.example.com/openapi.json")
+        )
+
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
 
 
 def test_a_saved_spec_larger_than_the_import_limit_still_parses() -> None:

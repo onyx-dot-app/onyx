@@ -429,6 +429,22 @@ def _allowed_methods(
     return list(_TOKEN_METHODS)
 
 
+def _check_no_query_or_fragment(server_url: str) -> None:
+    try:
+        parsed = urlparse(server_url)
+    except ValueError as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Server URL '{server_url}' is not valid: {e}",
+        ) from e
+    if parsed.query or parsed.fragment:
+        # Tools append the endpoint path to the whole server URL.
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Server URL '{server_url}' cannot have a query or a fragment.",
+        )
+
+
 def validate_openapi_definition(definition: dict[str, Any]) -> None:
     try:
         validate_openapi_schema(definition)
@@ -436,13 +452,7 @@ def validate_openapi_definition(definition: dict[str, Any]) -> None:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
     server_url = openapi_to_url(definition)
     try:
-        parsed = urlparse(server_url)
-        if parsed.query or parsed.fragment:
-            # Tools append the endpoint path to the whole server URL.
-            raise OnyxError(
-                OnyxErrorCode.VALIDATION_ERROR,
-                f"Server URL '{server_url}' cannot have a query or a fragment.",
-            )
+        _check_no_query_or_fragment(server_url)
         # No DNS at save time; each call resolves and checks again.
         validate_custom_tool_url(server_url, resolve_dns=False)
     except (SSRFException, ValueError) as e:
@@ -566,7 +576,11 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, f"Onyx could not fetch the spec: {e}"
         ) from e
-    return _imported_view(body.decode("utf-8", errors="replace"))
+    view = _imported_view(body.decode("utf-8", errors="replace"))
+    # The client hides the base URL field for the single server URL of a
+    # fetched spec, so the admin cannot correct it after the import.
+    _check_no_query_or_fragment(view.base_url)
+    return view
 
 
 def _graphql_config(config: GraphQLConfigInput) -> GraphQLConfigInput:
