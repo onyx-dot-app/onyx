@@ -10643,7 +10643,7 @@
           "owner": "Propriétaire",
           "urlPatternApp": {
             "title": "Cette app utilise des modèles d'URL",
-            "description": "Onyx n'ajoute plus d'apps à modèles d'URL. Ajoutez de nouveau ce service comme app REST personnalisée, puis supprimez celle-ci."
+            "description": "Onyx n'ajoute plus d'apps à modèles d'URL. Ajoutez de nouveau ce service comme app REST personnalisée, ajoutez la nouvelle app aux mêmes agents et tâches planifiées, puis supprimez celle-ci."
           }
         },
         "configuration": {

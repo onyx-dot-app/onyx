@@ -10643,7 +10643,7 @@
           "owner": "所有者",
           "urlPatternApp": {
             "title": "此应用使用 URL 模式",
-            "description": "Onyx 不再添加 URL 模式应用。请将此服务重新添加为自定义 REST 应用，然后删除此应用。"
+            "description": "Onyx 不再添加 URL 模式应用。请将此服务重新添加为自定义 REST 应用，将新应用添加到相同的智能体和计划任务，然后删除此应用。"
           }
         },
         "configuration": {

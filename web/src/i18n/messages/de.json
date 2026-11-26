@@ -10643,7 +10643,7 @@
           "owner": "Eigentümer",
           "urlPatternApp": {
             "title": "Diese App verwendet URL-Muster",
-            "description": "Onyx fügt keine Apps mit URL-Mustern mehr hinzu. Fügen Sie diesen Dienst erneut als eigene REST-App hinzu und löschen Sie dann diese."
+            "description": "Onyx fügt keine Apps mit URL-Mustern mehr hinzu. Fügen Sie diesen Dienst erneut als eigene REST-App hinzu, fügen Sie die neue App denselben Agenten und geplanten Aufgaben hinzu und löschen Sie dann diese."
           }
         },
         "configuration": {

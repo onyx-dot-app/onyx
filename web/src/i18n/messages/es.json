@@ -10643,7 +10643,7 @@
           "owner": "Propietario",
           "urlPatternApp": {
             "title": "Esta app usa patrones de URL",
-            "description": "Onyx ya no añade apps con patrones de URL. Vuelve a añadir este servicio como app REST personalizada y luego elimina esta."
+            "description": "Onyx ya no añade apps con patrones de URL. Vuelve a añadir este servicio como app REST personalizada, añade la nueva app a los mismos agentes y tareas programadas y luego elimina esta."
           }
         },
         "configuration": {
