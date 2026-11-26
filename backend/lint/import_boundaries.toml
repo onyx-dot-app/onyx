@@ -203,6 +203,43 @@ importer = "onyx/connectors/wikipedia/connector.py"
 imports = "onyx.connectors.mediawiki.wiki"
 reason = "Wikipedia is a MediaWiki site: its connector subclasses MediaWikiConnector and adds only the hostname."
 
+# A service desk is a Jira project, so the JSM connector subclasses JiraConnector
+# instead of copying it. See `reason` for each file.
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/capability_checks.py"
+imports = "onyx.connectors.jira.connector"
+reason = "The checks must validate a project key against the same JQL builder the connector indexes with."
+
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/config.py"
+imports = "onyx.connectors.jira.config"
+reason = "The JSM config extends the Jira config, so it inherits the credential fields and defaults."
+
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/connector.py"
+imports = "onyx.connectors.jira.connector"
+reason = "The connector subclasses JiraConnector to inherit paging, checkpointing and permission sync."
+
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/source_operations.py"
+imports = "onyx.connectors.jira.config"
+reason = "The gateway is built from the JSM config, which extends the Jira config."
+
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/source_operations.py"
+imports = "onyx.connectors.jira.models"
+reason = "The gateway returns the Jira paging models the inherited connector code deserializes."
+
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/source_operations.py"
+imports = "onyx.connectors.jira.source_operations"
+reason = "The gateway reuses the Jira credential keys and error types so 401/403/429 classify the same way."
+
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/source_operations.py"
+imports = "onyx.connectors.jira.utils"
+reason = "servicedeskapi paths follow the same API version constants as the Jira gateway."
+
 [[contract]]
 name = "permission-sync-sources-are-independent"
 rule = "A permission-sync source must not import another source"
