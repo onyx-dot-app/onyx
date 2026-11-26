@@ -7,6 +7,7 @@ the rule-matching layer.
 """
 
 import json
+from collections.abc import Iterable
 
 from graphql import (
     FieldNode,
@@ -20,18 +21,14 @@ from graphql import parse as parse_graphql
 from graphql.language import SelectionSetNode
 
 
-def parse_invocations(body: bytes | None) -> list[tuple[str, str]]:
-    """``(operation_type, root_field)`` pairs invoked by a GraphQL request body.
-
-    Handles a single GraphQL POST body or a batched array of them. Returns an
-    empty list if the body isn't JSON / isn't a GraphQL request / can't be
-    parsed — such a request simply matches no GraphQL rule.
-    """
+def document_invocations(
+    queries: Iterable[str | None],
+) -> list[list[tuple[str, str]]]:
+    """The ``(operation_type, root_field)`` pairs of each GraphQL document. A
+    missing or unparsable ``query`` gives an empty list, so such a request
+    matches no GraphQL rule."""
     return [
-        invocation
-        for query in request_queries(body)
-        if query is not None
-        for invocation in operation_invocations(query)
+        operation_invocations(query) if query is not None else [] for query in queries
     ]
 
 

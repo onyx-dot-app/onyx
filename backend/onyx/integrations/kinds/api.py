@@ -30,7 +30,7 @@ from onyx.external_apps.matching.engine import (
     url_matches_patterns,
 )
 from onyx.external_apps.matching.graphql_parsing import (
-    operation_invocations,
+    document_invocations,
     request_queries,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
@@ -520,14 +520,12 @@ class ApiKindHandler(IntegrationKindHandler):
             action.key: action
             for action in api_integration_actions(integration_id, db_session)
         }
-        queries = [
-            *request_queries(request.body),
-            *parse_qs(urlsplit(url).query).get("query", []),
-        ]
-        documents = [
-            operation_invocations(query) if query is not None else []
-            for query in queries
-        ]
+        documents = document_invocations(
+            [
+                *request_queries(request.body),
+                *parse_qs(urlsplit(url).query).get("query", []),
+            ]
+        )
         invoked = {
             f"{operation}.{field}"
             for invocations in documents

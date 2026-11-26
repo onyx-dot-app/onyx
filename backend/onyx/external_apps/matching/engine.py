@@ -12,10 +12,6 @@ from onyx.db.enums import (
     ExternalAppType,
     IntegrationKind,
 )
-from onyx.external_apps.matching.graphql_parsing import (
-    operation_invocations,
-    request_queries,
-)
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.models import WHOLE_DOMAIN_ACTION_TYPE
@@ -148,10 +144,7 @@ def _has_unknown_graphql_field(
     }
     if not known:
         return False
-    if any(
-        query is None or not operation_invocations(query)
-        for query in request_queries(context.request.body)
-    ):
+    if not all(context.graphql_documents):
         return True
     return any(invocation not in known for invocation in context.graphql_invocations)
 
