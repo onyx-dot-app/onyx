@@ -245,7 +245,7 @@ test.each(["connected", "needs_reconnect"] as const)(
   }
 );
 
-test("the overview shows why the user must reconnect", async () => {
+test("the overview shows why the user must reconnect and offers Disconnect", async () => {
   open(
     makeMemberIntegration({
       status: { state: "needs_reconnect", reason: "The token expired." },
@@ -254,6 +254,9 @@ test("the overview shows why the user must reconnect", async () => {
   expect(await screen.findByText("The token expired.")).toBeVisible();
   expect(
     screen.getByRole("button", { name: "Reconnect Linear" })
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Disconnect Linear" })
   ).toBeVisible();
 });
 

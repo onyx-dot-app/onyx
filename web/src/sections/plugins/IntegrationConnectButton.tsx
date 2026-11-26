@@ -49,6 +49,13 @@ export default function IntegrationConnectButton({
   const connectRef = useRef<HTMLSpanElement>(null);
   const { state } = integration.status;
   const action = allowConnect ? connectAction(integration) : null;
+  const askAdmin = !action && allowConnect && needsAdmin(integration);
+  // A broken connection offers Disconnect beside Reconnect.
+  const canDisconnect =
+    !askAdmin &&
+    (state === "connected" || state === "needs_reconnect") &&
+    allowDisconnect &&
+    integration.auth_mode === "individual";
   const name = integration.name;
 
   async function refresh() {
@@ -123,13 +130,12 @@ export default function IntegrationConnectButton({
             {t(`${action}.label`)}
           </Button>
         </span>
-      ) : allowConnect && needsAdmin(integration) ? (
+      ) : askAdmin ? (
         <Text font="secondary-body" color="text-03">
           {t("askAdmin")}
         </Text>
-      ) : (state === "connected" || state === "needs_reconnect") &&
-        allowDisconnect &&
-        integration.auth_mode === "individual" ? (
+      ) : null}
+      {canDisconnect && (
         <Button
           key="disconnect"
           size="md"
@@ -143,7 +149,7 @@ export default function IntegrationConnectButton({
         >
           {t("disconnect.label")}
         </Button>
-      ) : null}
+      )}
       {credentialsOpen && (
         <IntegrationCredentialsModal
           integration={integration}
