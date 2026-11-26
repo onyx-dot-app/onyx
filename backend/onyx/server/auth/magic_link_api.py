@@ -199,21 +199,19 @@ async def redeem_magic_link(
     # A link signs in only where it was asked for, or for the person who knows
     # where it went. Otherwise a forwarded link would sign its reader in to the
     # sender's account.
-    if not opened_where_requested(
+    needs_address = not opened_where_requested(
         record, request.cookies.get(MAGIC_LINK_BROWSER_COOKIE)
-    ):
-        if payload.email is None:
-            return MagicLinkRedeemed(state="confirm_email")
-        if payload.email.strip().lower() != record.email:
-            # One try: a wrong address uses the link up, so it cannot be
-            # guessed.
-            await consume_magic_link(payload.token)
-            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, MAGIC_LINK_WRONG_EMAIL_CODE)
+    )
+    if needs_address and payload.email is None:
+        return MagicLinkRedeemed(state="confirm_email")
 
+    # Use the token up before comparing the address, so each link gets one
+    # guess, even with many requests at once.
     record = await consume_magic_link(payload.token)
     if record is None:
-        # Redeemed by another request since the read above.
         raise OnyxError(OnyxErrorCode.INVALID_TOKEN, MAGIC_LINK_INVALID_CODE)
+    if needs_address and (payload.email or "").strip().lower() != record.email:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, MAGIC_LINK_WRONG_EMAIL_CODE)
 
     try:
         user = await user_manager.magic_link_login(

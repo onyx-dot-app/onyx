@@ -580,6 +580,29 @@ class TestRedeemElsewhere:
         setup["consume"].assert_awaited_once_with("tok")
         user_manager.magic_link_login.assert_not_awaited()
 
+    @pytest.mark.parametrize(
+        "typed", ["someone@example.com", "victim@example.com"], ids=["right", "wrong"]
+    )
+    def test_a_link_used_up_meanwhile_gives_one_answer_for_any_address(
+        self,
+        client: TestClient,
+        user_manager: MagicMock,
+        setup: dict[str, AsyncMock],
+        typed: str,
+    ) -> None:
+        """Parallel guesses all read the record before one uses it up. The
+        others must answer the same, right address or wrong, or the
+        difference would reveal the address."""
+        setup["consume"].return_value = None
+
+        response = client.post(
+            "/auth/magic-link/redeem", json={"token": "tok", "email": typed}
+        )
+
+        assert response.status_code == OnyxErrorCode.INVALID_TOKEN.status_code
+        assert response.json()["detail"] == "MAGIC_LINK_INVALID"
+        user_manager.magic_link_login.assert_not_awaited()
+
     def test_a_record_without_a_browser_always_asks(
         self, client: TestClient, setup: dict[str, AsyncMock]
     ) -> None:
