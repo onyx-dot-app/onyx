@@ -1,7 +1,7 @@
 /**
- * The chat browser's viewer protocol (plans/chat-browser-contract.md,
- * "Viewer"). The api_server relays these messages between the chat's
- * websocket and the browser service in the chat's VM.
+ * The chat browser's viewer protocol. The browser service in the chat's VM
+ * (deployment/craft-runtime/browser-service/src/service.ts) defines it, and
+ * the api_server relays it between the chat's websocket and that service.
  */
 
 export interface BrowserDialog {
