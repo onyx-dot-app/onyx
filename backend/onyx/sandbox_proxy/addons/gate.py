@@ -7,6 +7,7 @@ Recognition failures block forwarding; unrelated traffic remains ungated.
 import asyncio
 import base64
 import binascii
+import contextlib
 import json
 from collections.abc import Callable
 from typing import Any
@@ -208,7 +209,7 @@ class GateAddon:
         self._proxy_instance_id = proxy_instance_id
         self._credential_dispatcher = credential_dispatcher
         self._stream_responses = stream_responses
-        # Invariant: `_persist_approval_row` is the only writer; the `finally`
+        # Invariant: `_save_parked_approval` is the only writer; the `finally`
         # after it in `request` is the only remover.
         self._parked = ParkedApprovals()
         # client connection id -> session tag, captured from the CONNECT's
@@ -445,7 +446,7 @@ class GateAddon:
                     self._apply_session_grant, ctx, matched_actions, payload
                 )
                 if approval_id is None:
-                    approval_id = self._persist_approval_row(
+                    approval_id = await self._save_parked_approval(
                         ctx, matched_actions, payload
                     )
                     try:
@@ -481,19 +482,7 @@ class GateAddon:
                     except asyncio.CancelledError:
                         # The sandbox closed the socket: end the row, then
                         # re-raise so mitmproxy releases the flow.
-                        try:
-                            await asyncio.to_thread(
-                                self._claim_expired_or_read_winner,
-                                approval_id,
-                                ctx.tenant_id,
-                            )
-                        except Exception:
-                            logger.exception(
-                                "approval_cancel_claim_error approval=%s "
-                                "approval_id=%s",
-                                short_log_id(approval_id),
-                                full_log_id(approval_id),
-                            )
+                        await self._end_cancelled_row(approval_id, ctx.tenant_id)
                         raise
                     finally:
                         self._parked.remove(ctx.tenant_id, approval_id)
@@ -995,13 +984,47 @@ class GateAddon:
             )
             return None
 
+    async def _save_parked_approval(
+        self,
+        ctx: SessionContext,
+        matched_actions: AllMatchedActions,
+        payload: dict[str, Any],
+    ) -> UUID:
+        """Saves the row off the event loop and parks it. A cancel still
+        waits for the save, so it can end the saved row."""
+        persisted = asyncio.ensure_future(
+            asyncio.to_thread(self._persist_approval_row, ctx, matched_actions, payload)
+        )
+        try:
+            approval_id = await asyncio.shield(persisted)
+        except asyncio.CancelledError:
+            # A failed save leaves no row to end.
+            with contextlib.suppress(Exception):
+                await self._end_cancelled_row(await persisted, ctx.tenant_id)
+            raise
+        self._parked.add(ctx.tenant_id, approval_id)
+        return approval_id
+
+    async def _end_cancelled_row(self, approval_id: UUID, tenant_id: str) -> None:
+        try:
+            await asyncio.to_thread(
+                self._claim_expired_or_read_winner, approval_id, tenant_id
+            )
+        except Exception:
+            logger.exception(
+                "approval_cancel_claim_error approval=%s approval_id=%s",
+                short_log_id(approval_id),
+                full_log_id(approval_id),
+            )
+
     def _persist_approval_row(
         self,
         ctx: SessionContext,
         matched_actions: AllMatchedActions,
         payload: dict[str, Any],
     ) -> UUID:
-        """Commits the row, register it for the drain, announce to the chat.
+        """Commits the row and announces it to the chat. Runs off the event
+        loop.
 
         Announce is best-effort: a miss degrades to the FE surfacing the card on
         the next `/live` refetch, so we don't fail the request. A chat
@@ -1023,7 +1046,6 @@ class GateAddon:
             approval_id = row.approval_id
             db.commit()
 
-        self._parked.add(ctx.tenant_id, approval_id)
         try:
             approval_cache.announce_approval(
                 approval_id,

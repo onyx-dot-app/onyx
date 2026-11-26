@@ -615,6 +615,79 @@ async def test_ask_denied_blocks(
     assert spy.dispatched == []
 
 
+class _BlockingPersist:
+    """A `_persist_approval_row` that holds until the test releases it."""
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.released = threading.Event()
+        self.approval_id = uuid4()
+        self.order: list[str] = []
+
+    def __call__(
+        self, _ctx: SessionContext, _match: AllMatchedActions, _payload: Any
+    ) -> UUID:
+        self.entered.set()
+        self.released.wait(timeout=1)
+        self.order.append("persisted")
+        return self.approval_id
+
+
+@pytest.mark.asyncio
+async def test_a_slow_approval_save_does_not_block_other_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver = StubResolver(
+        sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
+    )
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    persist = _BlockingPersist()
+    monkeypatch.setattr(addon, "_persist_approval_row", persist)
+
+    async def other_request() -> None:
+        await asyncio.to_thread(persist.entered.wait, 1)
+        persist.order.append("served")
+        persist.released.set()
+
+    await asyncio.gather(
+        addon.request(make_flow(proxy_auth=_basic_auth(_TAG_UUID))), other_request()
+    )
+
+    assert persist.order == ["served", "persisted"]
+
+
+@pytest.mark.asyncio
+async def test_a_cancel_during_the_approval_save_closes_the_saved_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver = StubResolver(
+        sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
+    )
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    persist = _BlockingPersist()
+    monkeypatch.setattr(addon, "_persist_approval_row", persist)
+    claimed: list[UUID] = []
+
+    def _claim(approval_id: UUID, _tenant_id: str) -> ApprovalDecision:
+        claimed.append(approval_id)
+        return ApprovalDecision.EXPIRED
+
+    monkeypatch.setattr(addon, "_claim_expired_or_read_winner", _claim)
+    task = asyncio.ensure_future(
+        addon.request(make_flow(proxy_auth=_basic_auth(_TAG_UUID)))
+    )
+    await asyncio.to_thread(persist.entered.wait, 1)
+    task.cancel()
+    persist.released.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert claimed == [persist.approval_id]
+    assert addon._parked.snapshot() == []
+
+
 # ---------------------------------------------------------------------------
 # request() — retained session approvals
 # ---------------------------------------------------------------------------
@@ -2622,10 +2695,10 @@ def test_a_command_row_names_the_request_and_is_announced_to_the_call(
 def test_a_failed_announce_still_returns_the_committed_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Any announce error is best-effort: the caller gets the ID, so its
-    `finally` removes the parked entry and its wait ends the row."""
+    """Any announce error is best-effort: the caller gets the ID, so it
+    parks the row and its wait ends the row."""
     addon, _cache = _command_gate(monkeypatch)
-    _spy_approval_insert(monkeypatch)
+    inserted = _spy_approval_insert(monkeypatch)
 
     def broken_announce(*_args: Any) -> None:
         raise ValueError("bad cache payload")
@@ -2640,7 +2713,8 @@ def test_a_failed_announce_still_returns_the_committed_row(
         ctx, _MATCH, gate._approval_payload(flow, ctx, _MATCH)
     )
 
-    assert addon._parked.snapshot() == [(ctx.tenant_id, {approval_id})]
+    assert isinstance(approval_id, UUID)
+    assert len(inserted) == 1
 
 
 def test_a_command_card_shows_the_size_of_a_body_that_is_not_json() -> None:

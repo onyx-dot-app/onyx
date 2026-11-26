@@ -181,7 +181,7 @@ sign-in, or says that the app has no tool for the request, as for a custom app (
 strictest first, and `governing_action` decides the verdict.
 
 **Approvals.** For an Ask verdict, `GateAddon._apply_session_grant` first looks
-for an "approve for session" grant. Otherwise `_persist_approval_row` commits a
+for an "approve for session" grant. Otherwise `_persist_approval_row` commits, off the event loop, a
 pending `ActionApproval`, announces it in Redis
 (`sandbox_proxy/approval_cache.py:announce_approval`), and `_await_decision`
 blocks on a wake key for `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`. The decision
