@@ -416,6 +416,12 @@ export function Table<TData>(props: DataTableProps<TData>) {
                             {isMultiSelect && (
                               <InputCheckbox
                                 aria-label={strings.selectAll}
+                                disabled={
+                                  selectedCount === 0 &&
+                                  !table
+                                    .getPreFilteredRowModel()
+                                    .flatRows.some((row) => row.getCanSelect())
+                                }
                                 checked={isAllRowsSelected}
                                 indeterminate={
                                   !isAllRowsSelected && selectedCount > 0

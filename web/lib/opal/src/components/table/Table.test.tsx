@@ -77,4 +77,18 @@ describe("Table selection", () => {
     fireEvent.click(screen.getByText("Row a"));
     expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["a"]));
   });
+
+  it("disables Select all when no row can be selected", () => {
+    render(
+      <Table
+        items={ROWS}
+        columns={[{ kind: "qualifier", canSelect: () => false }, ...COLUMNS]}
+        getRowId={(row) => row.id}
+        selectionBehavior="multi-select"
+      />
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select all" })
+    ).toHaveAttribute("aria-disabled", "true");
+  });
 });
