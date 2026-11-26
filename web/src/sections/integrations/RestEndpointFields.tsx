@@ -80,6 +80,7 @@ export default function RestEndpointFields({
           (draft.baseUrl.trim() || view.base_url),
       });
       setSkipped(view.skipped);
+      setTooLarge(false);
       toast.success(t("import.done", { count: view.endpoints.length }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("import.failed"));

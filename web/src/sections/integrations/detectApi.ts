@@ -125,9 +125,14 @@ export function specBaseUrl(
   specUrl: string | null
 ): string | null {
   if (normalizedUrl(baseUrl) !== null) return baseUrl.trim();
-  return specUrl
-    ? apiBaseUrl(new URL(baseUrl.trim() || "/", specUrl).href)
-    : null;
+  if (!specUrl) return null;
+  try {
+    return apiBaseUrl(new URL(baseUrl.trim() || "/", specUrl).href);
+  } catch {
+    // A variable with no default in the port, such as `:{port}`, is no URL;
+    // the admin sets it in the Base URL field.
+    return apiBaseUrl(baseUrl.trim());
+  }
 }
 
 /** The tool appends paths that start with "/", so drop a trailing one. */

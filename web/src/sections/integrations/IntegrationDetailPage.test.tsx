@@ -411,6 +411,78 @@ test("resolves a relative server of a spec imported from a URL", async () => {
   );
 });
 
+test("a server URL with a port variable and no default stays editable", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": {
+      ...OPENAPI_VIEW,
+      base_url: "https://api.example.com:{port}/v1",
+    },
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.type(
+    await view.findByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://pets.example.com/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+
+  await waitFor(() =>
+    expect(
+      view.getByRole("textbox", { name: copy.add.rest.baseUrl.title })
+    ).toHaveValue("https://api.example.com:{port}/v1")
+  );
+});
+
+test("a spec imported from a URL clears a refused upload", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": OPENAPI_VIEW,
+  });
+  const big = new File(["x"], "openapi.json");
+  Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 + 1 });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const input = await waitFor(() => {
+    const found =
+      activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+    if (!found) throw new Error("No file input");
+    return found;
+  });
+  await u.upload(input, big);
+  expect(await view.findByText(copy.add.api.tooLarge)).toBeInTheDocument();
+
+  await u.type(
+    view.getByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://pets.example.com/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+
+  await waitFor(() =>
+    expect(view.queryByText(copy.add.api.tooLarge)).not.toBeInTheDocument()
+  );
+});
+
 test("keeps the Base URL when a spec imported from a URL has no single server", async () => {
   mockFetch({
     [URL_DETAIL]: makeDetail({
