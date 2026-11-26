@@ -1999,9 +1999,9 @@ def _advance_step(
                         if not run.is_accepting:
                             raise AgentCancelled()
                         if event.request_params:
-                            run._state.request_params = event.request_params.model_copy(
-                                deep=True
-                            )
+                            # The event owns a copy and does not change after
+                            # publication.
+                            run._state.request_params = event.request_params
                         message = recorded_step.message
                         apply_generation_event(message, event)
                         if run.event_delivery and not isinstance(
