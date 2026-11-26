@@ -628,6 +628,40 @@ test.each<[IntegrationConfigView, string]>([
   }
 );
 
+test("blocks Save after a refused schema upload until the schema fits", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "graphql",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: GRAPHQL_CONFIG,
+    }),
+  });
+  const big = new File(["x"], "schema.graphql");
+  Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 + 1 });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const input =
+    activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("No file input");
+  await u.upload(input, big);
+
+  expect(await view.findByText(copy.add.api.tooLarge)).toBeInTheDocument();
+  expect(save).toBeDisabled();
+
+  await u.type(
+    view.getByRole("textbox", { name: copy.add.graphql.schema.title }),
+    " "
+  );
+  await waitFor(() => expect(save).toBeEnabled());
+});
+
 // Two UTF-8 bytes per character: over 5 MB in bytes, under it in characters.
 const OVERSIZED_TEXT = "é".repeat(2.5 * 1024 * 1024 + 1);
 

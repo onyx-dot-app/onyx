@@ -100,6 +100,8 @@ export default function IntegrationConfigurationTab({
   const [busy, setBusy] = useState(false);
   // A schema import or introspection in flight; Save waits for it.
   const [loadingSchema, setLoadingSchema] = useState(false);
+  // A refused schema; Save would keep the old one, so it waits.
+  const [schemaTooLarge, setSchemaTooLarge] = useState(false);
   const presets = useIntegrationPresets(integration.shape === "preset");
   const preset = presets.data?.find(
     (option) => option.id === integration.preset_id
@@ -322,6 +324,8 @@ export default function IntegrationConfigurationTab({
                   showErrors={showErrors}
                   disabled={disabled || loadingSchema}
                   onLoadingChange={setLoadingSchema}
+                  tooLarge={schemaTooLarge}
+                  onTooLargeChange={setSchemaTooLarge}
                 />
               ) : (
                 <RestEndpointFields
@@ -369,7 +373,7 @@ export default function IntegrationConfigurationTab({
           </InputHorizontal>
           <Section flexDirection="row" justifyContent="end" height="auto">
             <Button
-              disabled={disabled || loadingSchema}
+              disabled={disabled || loadingSchema || schemaTooLarge}
               onClick={() => void save()}
             >
               {busy ? t("saving") : t("save")}

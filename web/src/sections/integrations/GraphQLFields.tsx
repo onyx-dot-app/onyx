@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -23,6 +22,9 @@ interface GraphQLFieldsProps {
   /** Also true while introspection runs; the parent holds that state. */
   disabled: boolean;
   onLoadingChange: (loading: boolean) => void;
+  /** A schema over the size limit was refused; the parent blocks Save. */
+  tooLarge: boolean;
+  onTooLargeChange: (tooLarge: boolean) => void;
 }
 
 /** The GraphQL form: an endpoint URL and a schema in SDL. */
@@ -32,14 +34,15 @@ export default function GraphQLFields({
   showErrors,
   disabled,
   onLoadingChange,
+  tooLarge,
+  onTooLargeChange,
 }: GraphQLFieldsProps) {
   const t = useTranslations("admin.integrations.add.graphql");
   const tAdd = useTranslations("admin.integrations.add");
-  const [tooLarge, setTooLarge] = useState(false);
 
   function setSchema(text: string) {
     const over = specTextTooLarge(text);
-    setTooLarge(over);
+    onTooLargeChange(over);
     if (!over) onChange({ ...draft, graphql_schema: text });
   }
 
@@ -105,11 +108,11 @@ export default function GraphQLFields({
             placeholder={t("schema.upload")}
             variant={disabled ? "disabled" : "primary"}
             maxSizeKb={SPEC_MAX_SIZE_KB}
-            onFileSizeExceeded={() => setTooLarge(true)}
+            onFileSizeExceeded={() => onTooLargeChange(true)}
             onReadingChange={onLoadingChange}
             setValue={(text) => {
               if (text.trim()) setSchema(text);
-              else setTooLarge(false);
+              else onTooLargeChange(false);
             }}
           />
           <InputTextArea
