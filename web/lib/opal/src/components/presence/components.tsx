@@ -85,15 +85,15 @@ const TRANSITION_FALLBACK_MS = 400;
 /**
  * The content's size on `axis`. Its own CSS may cap its width at the box's,
  * which is the previous size, so the width is read uncapped: the box can
- * then grow to a longer title.
+ * then grow to a longer title. It is rounded up, so no fraction is cut.
  */
 function contentSize(content: HTMLElement, axis: PresenceSwapAxis): number {
   if (axis !== "inline") return content.offsetHeight;
   const { maxWidth } = content.style;
   content.style.maxWidth = "none";
-  const width = content.offsetWidth;
+  const width = content.getBoundingClientRect().width;
   content.style.maxWidth = maxWidth;
-  return width;
+  return Math.ceil(width);
 }
 
 // ---------------------------------------------------------------------------
