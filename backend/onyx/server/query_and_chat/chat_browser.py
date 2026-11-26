@@ -110,6 +110,11 @@ def _check_browser_chat(chat_session_id: UUID, user: User, db_session: Session) 
     chat_session = get_owned_chat_session(chat_session_id, user.id, db_session)
     if chat_session is None or chat_session.deleted:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found.")
+    # Incognito cleanup does not reach the sandbox, so these chats get none.
+    if chat_session.incognito_record_mode is not None:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_DISABLED, "Incognito chats have no browser."
+        )
 
 
 def _browser_ref(chat_session_id: UUID, user: User) -> HarnessSandboxRef:
