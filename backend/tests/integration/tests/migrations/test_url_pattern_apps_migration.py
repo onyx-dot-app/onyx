@@ -76,8 +76,9 @@ def engine(user_ids: list[UUID]) -> Generator[Engine, None, None]:
                     text("DELETE FROM external_app WHERE id = ANY(:ids)"),
                     {"ids": [row.external_app_id for row in kind_rows]},
                 )
-                # The tool rows go with their user.
+                # tool_user_fk has no ON DELETE CASCADE in the database.
                 for statement in (
+                    "DELETE FROM tool WHERE user_id = ANY(:ids)",
                     "DELETE FROM persona WHERE user_id = ANY(:ids)",
                     'DELETE FROM "user" WHERE id = ANY(:ids)',
                 ):
