@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import ExternalAppType, IntegrationAuthMethod
@@ -322,6 +323,29 @@ def test_a_redirect_is_refused() -> None:
         )
     assert result.is_error
     assert "redirect" in result.content
+
+
+@pytest.mark.parametrize(
+    ("error", "unreachable"),
+    [
+        (requests.exceptions.Timeout(), True),
+        (requests.exceptions.ConnectionError(), True),
+        (ValueError("blocked"), False),
+    ],
+)
+def test_a_timeout_or_lost_connection_is_unreachable(
+    error: Exception, unreachable: bool
+) -> None:
+    with patch(_SEND, side_effect=error):
+        result = _run(
+            _tool("github.issues.read"),
+            method="GET",
+            url="https://api.github.com/repos/o/r/issues",
+        )
+    assert result.is_error
+    assert isinstance(result.details, CustomToolCallSummary)
+    assert result.details.error is not None
+    assert result.details.error.is_unreachable is unreachable
 
 
 @pytest.mark.parametrize(

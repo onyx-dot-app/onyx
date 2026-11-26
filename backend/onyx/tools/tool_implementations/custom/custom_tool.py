@@ -220,8 +220,7 @@ class ApiTool(Tool):
             return self._failed_response(
                 status_code=e.status_code,
                 message=_FAILURE_MESSAGES[e.failure].format(name=self._name),
-                is_unreachable=e.failure
-                in (ToolRequestFailure.TIMEOUT, ToolRequestFailure.UNREACHABLE),
+                is_unreachable=e.is_unreachable,
             )
         if credentials is not None:
             note_rejected_credential(response, credentials)

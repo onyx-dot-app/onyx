@@ -213,13 +213,19 @@ class AppActionTool(Tool):
         )
 
     def _failed(
-        self, message: str, *, status_code: int | None = None, auth: bool = False
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        unreachable: bool = False,
+        auth: bool = False,
     ) -> ToolResult:
         return failed_tool_result(
             tool_name=self._name,
             integration_id=self._settings.integration_id,
             message=message,
             status_code=status_code,
+            is_unreachable=unreachable,
             is_auth_error=auth,
         )
 
@@ -292,7 +298,11 @@ class AppActionTool(Tool):
             )
         except ToolRequestError as e:
             logger.warning("%s request failed: %s", self._name, e.failure.value)
-            return self._failed(_FAILURE_MESSAGES[e.failure], status_code=e.status_code)
+            return self._failed(
+                _FAILURE_MESSAGES[e.failure],
+                status_code=e.status_code,
+                unreachable=e.is_unreachable,
+            )
 
         note_rejected_credential(response, credentials)
 

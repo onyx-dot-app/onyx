@@ -78,6 +78,13 @@ class ToolRequestError(Exception):
         self.failure = failure
         self.status_code = status_code
 
+    @property
+    def is_unreachable(self) -> bool:
+        return self.failure in (
+            ToolRequestFailure.TIMEOUT,
+            ToolRequestFailure.UNREACHABLE,
+        )
+
 
 class ToolResponse(BaseModel):
     """A response whose body was read up to the limit of the call."""
