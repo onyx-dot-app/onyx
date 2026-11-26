@@ -341,6 +341,14 @@ def test_a_replacing_operation_keeps_the_parameters_of_its_path() -> None:
     validate_openapi_schema(replaced)
 
 
+def test_a_line_for_a_path_that_is_not_an_object_is_refused() -> None:
+    spec = _callable_spec()
+    spec["paths"]["/broken"] = "not an object"
+
+    with pytest.raises(EndpointLinesError, match="/broken in the spec"):
+        _apply(spec, ["GET /broken Read it"])
+
+
 def test_imported_lines_with_any_query_name_save_again() -> None:
     """A spec's query names (`$filter`, `fields[user]`) appear in the lines,
     and those lines save again unchanged."""

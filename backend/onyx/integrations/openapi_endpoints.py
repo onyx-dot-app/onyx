@@ -258,6 +258,11 @@ def apply_endpoint_lines(
             key = (method, path)
             if key in wanted:
                 raise ValueError(f"Another line already has {method} {path}.")
+            spec_paths = spec.get("paths")
+            if isinstance(spec_paths, dict) and not isinstance(
+                spec_paths.get(path, {}), dict
+            ):
+                raise ValueError(f"{path} in the spec is not an object.")
             old = existing.get(key)
             wanted[key] = _operation(spec, method, path, query, name, old)
         except ValueError as e:
