@@ -645,6 +645,14 @@ def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
     blocked = _build(
         db_session, user, _configuration({personal.id: {"default": "blocked"}})
     )
+    # An agent that blocks by default but allows one action keeps the connect tool.
+    one_open = _build(
+        db_session,
+        user,
+        _configuration(
+            {rest.id: {"default": "blocked", "actions": {"listOrders": "allow"}}}
+        ),
+    )
 
     assert set(tools) == {
         f"app__{personal.id}__connect",
@@ -653,6 +661,7 @@ def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
         f"app__{rest.id}__connect",
     }
     assert blocked == {}
+    assert set(one_open) == {f"app__{rest.id}__connect"}
     for integration, user_can_connect in (
         (personal, True),
         (shared, False),
