@@ -13612,6 +13612,7 @@
         "action": "下载",
         "saved": "浏览器已下载 {fileName}"
       },
+      "error": "浏览器无法完成此操作。请重试。",
       "clearData": {
         "action": "清除浏览器数据",
         "title": "清除浏览器数据？",

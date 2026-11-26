@@ -13612,6 +13612,7 @@
         "action": "Download",
         "saved": "The browser downloaded {fileName}"
       },
+      "error": "The browser could not do that. Try again.",
       "clearData": {
         "action": "Clear browser data",
         "title": "Clear Browser Data?",

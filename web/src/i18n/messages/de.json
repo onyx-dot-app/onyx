@@ -13612,6 +13612,7 @@
         "action": "Herunterladen",
         "saved": "Der Browser hat {fileName} heruntergeladen"
       },
+      "error": "Der Browser konnte das nicht ausführen. Versuchen Sie es erneut.",
       "clearData": {
         "action": "Browserdaten löschen",
         "title": "Browserdaten löschen?",

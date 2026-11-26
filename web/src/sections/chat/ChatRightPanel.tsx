@@ -184,7 +184,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     sessionId: browserSessionId,
     active: open,
     onDownload,
-    onError: (message) => toast.error(message),
+    onError: (message) => toast.error(tb("error"), { description: message }),
   });
   const pages = browser.state.tabs;
   const browserLive = browser.state.connection === "live";
