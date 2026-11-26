@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 58b9d2306dff53b0e465cddc81e5491daf0dfdaf)
-# at commit fce4291c0f by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 1f734b2c927287620f006a68e99723a5557598ee)
+# at commit 3be401fe6a by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -784,8 +784,10 @@ class BrowserStartRequest(_message.Message):
     def __init__(self, profile_session_id: _Optional[str] = ...) -> None: ...
 
 class BrowserStartResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("service_protocol",)
+    SERVICE_PROTOCOL_FIELD_NUMBER: _ClassVar[int]
+    service_protocol: int
+    def __init__(self, service_protocol: _Optional[int] = ...) -> None: ...
 
 class BrowserStopRequest(_message.Message):
     __slots__ = ()

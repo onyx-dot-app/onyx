@@ -4529,9 +4529,13 @@ func (x *BrowserStartRequest) GetProfileSessionId() string {
 }
 
 type BrowserStartResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Version of the browser service protocol that vsock port 3011 relays
+	// (1). 0: no service or no relay, for example an older daemon. A client
+	// must not dial port 3011 when it is 0.
+	ServiceProtocol uint32 `protobuf:"varint,3,opt,name=service_protocol,json=serviceProtocol,proto3" json:"service_protocol,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *BrowserStartResponse) Reset() {
@@ -4562,6 +4566,13 @@ func (x *BrowserStartResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BrowserStartResponse.ProtoReflect.Descriptor instead.
 func (*BrowserStartResponse) Descriptor() ([]byte, []int) {
 	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *BrowserStartResponse) GetServiceProtocol() uint32 {
+	if x != nil {
+		return x.ServiceProtocol
+	}
+	return 0
 }
 
 type BrowserStopRequest struct {
@@ -5345,8 +5356,9 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\x05files\x18\x02 \x01(\x03R\x05files\x12%\n" +
 	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\"C\n" +
 	"\x13BrowserStartRequest\x12,\n" +
-	"\x12profile_session_id\x18\x01 \x01(\tR\x10profileSessionId\"5\n" +
-	"\x14BrowserStartResponseJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\bcdp_portR\astarted\"\x14\n" +
+	"\x12profile_session_id\x18\x01 \x01(\tR\x10profileSessionId\"`\n" +
+	"\x14BrowserStartResponse\x12)\n" +
+	"\x10service_protocol\x18\x03 \x01(\rR\x0fserviceProtocolJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\bcdp_portR\astarted\"\x14\n" +
 	"\x12BrowserStopRequest\"/\n" +
 	"\x13BrowserStopResponse\x12\x18\n" +
 	"\astopped\x18\x01 \x01(\bR\astopped\",\n" +

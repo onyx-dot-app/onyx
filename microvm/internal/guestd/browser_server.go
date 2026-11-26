@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
 
@@ -14,7 +15,8 @@ var errNoBrowser = status.Error(codes.Unimplemented, "this daemon has no browser
 
 // BrowserStart implements pb.SandboxdServer. Chrome and the service get the
 // env that a command with no env of its own gets. The profile is
-// <session dir>/chrome.
+// <session dir>/chrome. service_protocol is set only when the service runs
+// and the relay listens.
 func (s *Server) BrowserStart(ctx context.Context, req *pb.BrowserStartRequest) (*pb.BrowserStartResponse, error) {
 	b := s.cfg.Browser
 	if b == nil {
@@ -27,7 +29,11 @@ func (s *Server) BrowserStart(ctx context.Context, req *pb.BrowserStartRequest) 
 	if _, _, err := b.Start(ctx, filepath.Join(dir, "chrome"), s.commandEnv(nil)); err != nil {
 		return nil, apiError(pb.ErrorReason_BROWSER_START_FAILED, "%v", err)
 	}
-	return &pb.BrowserStartResponse{}, nil
+	resp := &pb.BrowserStartResponse{}
+	if s.cfg.BrowserRelay && b.HasService() {
+		resp.ServiceProtocol = browser.ServiceProtocol
+	}
+	return resp, nil
 }
 
 // BrowserStop implements pb.SandboxdServer.
