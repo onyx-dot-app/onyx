@@ -434,3 +434,8 @@ only the configuration of a chat that does not exist yet.
 - Playwright: `web/tests/e2e/mcp/`: the default agent, connecting from a
   plugin page and from the chat prompt (API key and OAuth), plugin access, and
   Always allow (`web/tests/e2e/mcp/mcp_tool_approval.spec.ts`).
+  `web/tests/e2e/integrations/` covers custom API apps against a local mock
+  upstream (`web/tests/e2e/utils/apiAppUpstream.ts`): the add flow from a spec
+  URL, a YAML upload and GraphQL introspection, a catalog app's member
+  sign-in, and Allow and Ask actions in chat with the member's key
+  (`web/tests/e2e/integrations/api_app_chat.spec.ts`).

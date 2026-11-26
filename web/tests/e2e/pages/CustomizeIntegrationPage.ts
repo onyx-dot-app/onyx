@@ -1,4 +1,5 @@
 import { type Locator, type Page, expect } from "@playwright/test";
+import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { IntegrationCredentialsDialog } from "@tests/e2e/pages/IntegrationCredentialsDialog";
 
 export type IntegrationPageTab = "Overview" | "Actions";
@@ -17,6 +18,12 @@ export class CustomizeIntegrationPage {
   constructor(page: Page) {
     this.page = page;
     this.credentials = new IntegrationCredentialsDialog(page);
+  }
+
+  /** Open the app once so a new user finishes onboarding. */
+  async openApp(): Promise<void> {
+    await this.page.goto("/app");
+    await ensureOnboardingComplete(this.page);
   }
 
   async goto(integrationId: number, tab?: IntegrationPageTab): Promise<void> {
@@ -80,6 +87,14 @@ export class CustomizeIntegrationPage {
   /** Clicks Connect in the page header. */
   async startConnect(integration: string): Promise<void> {
     await this.connectButton(integration).click();
+  }
+
+  /** Clicks Connect on an OAuth integration and returns the provider's
+   * sign-in tab that Onyx opens. */
+  async startOAuthConnect(integration: string): Promise<Page> {
+    const tab = this.page.context().waitForEvent("page");
+    await this.startConnect(integration);
+    return tab;
   }
 
   /** Waits for the connection state in the header, or a reason on Overview. */
