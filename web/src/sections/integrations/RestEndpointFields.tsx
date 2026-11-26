@@ -127,20 +127,7 @@ export default function RestEndpointFields({
               {t("import.submit")}
             </Button>
           </Section>
-          {skipped.length > 0 && (
-            <Collapsible
-              title={tAdd("detected.skippedTitle")}
-              defaultOpen={false}
-            >
-              <Section gap={1} alignItems="stretch" height="auto">
-                {skipped.map((line) => (
-                  <Text key={line} as="p" font="secondary-body" color="text-03">
-                    {line}
-                  </Text>
-                ))}
-              </Section>
-            </Collapsible>
-          )}
+          <SkippedOperations lines={skipped} />
         </Section>
       </InputVertical>
       <InputVertical
@@ -169,6 +156,23 @@ export default function RestEndpointFields({
         disabled={disabled}
       />
     </>
+  );
+}
+
+/** The spec operations that an import could not turn into endpoints. */
+export function SkippedOperations({ lines }: { lines: string[] }) {
+  const t = useTranslations("admin.integrations.add");
+  if (lines.length === 0) return null;
+  return (
+    <Collapsible title={t("detected.skippedTitle")} defaultOpen={false}>
+      <Section gap={1} alignItems="stretch" height="auto">
+        {lines.map((line) => (
+          <Text key={line} as="p" font="secondary-body" color="text-03">
+            {line}
+          </Text>
+        ))}
+      </Section>
+    </Collapsible>
   );
 }
 

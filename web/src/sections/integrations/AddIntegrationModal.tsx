@@ -73,7 +73,10 @@ import {
   SignInModeField,
 } from "@/sections/integrations/IntegrationSignInFields";
 import PresetSetupPanel from "@/sections/integrations/PresetSetupPanel";
-import { EndpointLinesField } from "@/sections/integrations/RestEndpointFields";
+import {
+  EndpointLinesField,
+  SkippedOperations,
+} from "@/sections/integrations/RestEndpointFields";
 import {
   DEFAULT_SIGN_IN,
   normalizedUrl,
@@ -625,16 +628,8 @@ export default function AddIntegrationModal({
             description={summary(found)}
           />
         </Card>
-        {found.shape === "openapi" && found.view.skipped.length > 0 && (
-          <Collapsible title={t("detected.skippedTitle")} defaultOpen={false}>
-            <Section gap={1} alignItems="stretch" height="auto">
-              {found.view.skipped.map((line) => (
-                <Text key={line} as="p" font="secondary-body" color="text-03">
-                  {line}
-                </Text>
-              ))}
-            </Section>
-          </Collapsible>
+        {found.shape === "openapi" && (
+          <SkippedOperations lines={found.view.skipped} />
         )}
         {found.shape === "openapi" && found.baseUrlGuessed && (
           <InputVertical
