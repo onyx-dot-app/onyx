@@ -231,7 +231,7 @@ class ApiTool(Tool):
                 message=f"{self._name} action failed because of authentication error",
             )
             logger.warning(
-                "Auth error from custom tool '%s': HTTP %s",
+                "Auth error from REST tool '%s': HTTP %s",
                 self._name,
                 response.status_code,
             )

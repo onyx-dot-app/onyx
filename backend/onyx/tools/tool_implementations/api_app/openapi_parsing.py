@@ -467,7 +467,7 @@ def validate_openapi_schema(
     schema: dict[str, Any], *, check_server_url: bool = True
 ) -> None:
     """Raise ``ValueError`` if ``schema`` is not an OpenAPI 3 schema that the
-    custom tools can call. Without ``check_server_url``, the schema needs no
+    REST tools can call. Without ``check_server_url``, the schema needs no
     server URL."""
     try:
         # JSON can escape an unpaired surrogate; PostgreSQL JSONB cannot store it.
