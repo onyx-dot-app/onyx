@@ -33,6 +33,8 @@ function FilledSquare(props: IconProps) {
   return <SvgSquare {...props} fill="currentColor" />;
 }
 
+const MAX_PARENT_TITLE = 32;
+
 interface ParentDividerProps {
   // The parent chat's title; none while it has none
   parentTitle: string | null;
@@ -55,7 +57,15 @@ function ParentDivider({ parentTitle }: ParentDividerProps) {
           aria-label={t("openParentChat")}
           onClick={openParent}
         >
-          {parentTitle ? t("parentOf", { title: parentTitle }) : t("parent")}
+          {parentTitle
+            ? t("parentOf", {
+                // The button does not truncate; this fits a phone's width
+                title:
+                  parentTitle.length > MAX_PARENT_TITLE
+                    ? `${parentTitle.slice(0, MAX_PARENT_TITLE - 1)}…`
+                    : parentTitle,
+              })
+            : t("parent")}
         </Button>
         <span aria-hidden className="h-px flex-1 bg-border-01" />
       </Section>
@@ -270,7 +280,6 @@ export function SubagentBar({ sessionId, agentId }: SubagentBarProps) {
           flexDirection="row"
           justifyContent="start"
           gap={3}
-          width="auto"
           height="fit"
           grow={1}
         >

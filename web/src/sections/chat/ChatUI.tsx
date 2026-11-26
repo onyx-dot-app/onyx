@@ -344,7 +344,8 @@ const ChatUI = React.memo(
           <WindowedRow
             id={messageReactComponentKey}
             key={messageReactComponentKey}
-            className={cn("w-full self-center", msgWidth)}
+            // A divider, not a message: half the gap between messages
+            className={cn("w-full self-center -my-6", msgWidth)}
             pinned={pinned}
             initiallyMounted={initiallyMounted}
             heightCache={rowHeightCache}

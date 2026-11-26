@@ -44,13 +44,13 @@ export function SubagentAvatar({ state }: SubagentAvatarProps) {
       height={1.5}
       shrink={false}
       gap={0}
-      className="relative rounded-full border border-border-01 bg-background-tint-02 ring-2 ring-background-neutral-00"
+      className="relative rounded-full border border-border-01 bg-background-tint-02"
     >
       <Icon className="size-3.5 text-text-03" />
       {state !== null && (
         <span
           className={cn(
-            "absolute -end-px -bottom-px size-2 rounded-full ring-2 ring-background-neutral-00",
+            "absolute -end-px -bottom-px size-2 rounded-full ring-2 ring-background",
             DOT_CLASSES[subagentBucket(state)]
           )}
         />
@@ -119,7 +119,6 @@ export function SubagentCard({ name, task, agent, state }: SubagentCardProps) {
         alignItems="stretch"
         justifyContent="start"
         gap={0}
-        width="auto"
         height="fit"
         grow={1}
       >

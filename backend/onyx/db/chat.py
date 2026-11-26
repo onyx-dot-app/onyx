@@ -2790,14 +2790,16 @@ def translate_db_message_to_chat_message_detail(
         if chat_message.request_params is not None
         else None
     )
-    deadline_cancelled = (
+    # A stop is not an error: the answer already ends with its reason
+    stopped = (
         chat_message.response_status == RunStatus.CANCELLED
         and chat_message.response_failure is not None
-        and chat_message.response_failure.kind == RunFailureKind.DEADLINE
+        and chat_message.response_failure.kind
+        in (RunFailureKind.DEADLINE, RunFailureKind.STOPPED_BY_USER)
     )
     error_info = (
         None
-        if deadline_cancelled
+        if stopped
         else chat_error(chat_message.response_failure)
         if chat_message.response_failure is not None
         else StreamingError(error=chat_message.error)
