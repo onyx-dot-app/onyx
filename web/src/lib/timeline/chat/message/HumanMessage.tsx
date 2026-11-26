@@ -264,7 +264,7 @@ const HumanMessage = React.memo(function HumanMessage({
     <Hoverable.Root group="humanMessage" width="full">
       <div
         id="onyx-human-message"
-        className="flex flex-col justify-end w-full relative"
+        className="group/human-message flex flex-col justify-end w-full relative"
       >
         <FileDisplay files={files || []} />
         <div className="flex justify-end">
@@ -286,11 +286,9 @@ const HumanMessage = React.memo(function HumanMessage({
           {isMobile && copyEditButton}
           {/* The send time sits under the bubble, at its end. */}
           {timeSent && (
-            <Hoverable.Item group="humanMessage" variant="appear-on-hover">
-              <div className="px-1">
-                <MessageTime timeSent={timeSent} />
-              </div>
-            </Hoverable.Item>
+            <div className="px-1 opacity-0 transition-opacity duration-0 group-hover/human-message:duration-150 group-hover/human-message:opacity-100 group-hover/human-message:delay-300 group-focus-within/human-message:opacity-100 no-hover:opacity-100">
+              <MessageTime timeSent={timeSent} />
+            </div>
           )}
           {currentMessageInd !== undefined &&
             onMessageSelection &&
