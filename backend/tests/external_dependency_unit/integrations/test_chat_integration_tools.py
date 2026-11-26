@@ -399,6 +399,56 @@ def test_an_integration_with_no_usable_credential_offers_no_action(
     assert orders.headers == {"X-Key": "org"}
 
 
+def test_each_user_calls_with_their_own_key_and_everyone_with_the_org_key(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+    integration_ids: list[int],
+) -> None:
+    """A personal key goes only with the calls of its user; a user with no
+    key gets the connect tool, never another user's key. The organization
+    key goes with every user's calls."""
+    personal = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
+    )
+    shared = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.SHARED,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
+    )
+    _access(db_session, [personal, shared])
+    alice, bob, carol = (make_test_user(name) for name in ("alice", "bob", "carol"))
+    for owner, key in ((alice, "alice-key"), (bob, "bob-key")):
+        add_connection(
+            db_session, personal, owner.id, ConnectionSecret(fields={"api_key": key})
+        )
+    add_connection(
+        db_session, shared, None, ConnectionSecret(fields={"api_key": "org-key"})
+    )
+    configuration = _configuration({personal.id: {}, shared.id: {}})
+
+    def keys(user: User) -> dict[str, str | None]:
+        tools = _build(db_session, user, configuration)
+        sent: dict[str, str | None] = {}
+        for integration in (personal, shared):
+            tool = tools.get(f"custom__{integration.id}__listOrders")
+            sent[integration.name] = (
+                tool.headers.get("X-Key") if isinstance(tool, CustomTool) else None
+            )
+        if sent[personal.name] is None:
+            assert f"app__{personal.id}__connect" in tools
+        return sent
+
+    assert keys(alice) == {personal.name: "alice-key", shared.name: "org-key"}
+    assert keys(bob) == {personal.name: "bob-key", shared.name: "org-key"}
+    assert keys(carol) == {personal.name: None, shared.name: "org-key"}
+
+
 def test_a_rest_tool_that_gets_401_marks_its_connection(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
