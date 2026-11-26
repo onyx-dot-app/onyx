@@ -447,6 +447,28 @@ def test_a_stop_closes_chrome_before_it_saves_the_profile_without_caches(
     assert store.downloads == 1
 
 
+def test_a_stop_that_a_call_cancels_starts_chrome_again(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    service: FakeBrowserService,  # noqa: ARG001
+    ref: HarnessSandboxRef,
+) -> None:
+    """The VM stays, so its browser runs again as before the stop."""
+    sandbox.browser_call(ref, "status", {}, timeout_seconds=10)
+    sandbox.write_file(ref, "notes.txt", b"a")
+    node.agent.capture_delay_seconds = 30.0
+    outcome: list[VmStopOutcome] = []
+    stop = threading.Thread(target=lambda: outcome.append(_sleep(sandbox, ref)))
+    stop.start()
+    assert node.agent.capture_started.wait(timeout=10)
+    assert sandbox.read_file(ref, "notes.txt", max_bytes=10) == b"a"
+    stop.join(timeout=10)
+
+    assert outcome == [VmStopOutcome.KEPT_NO_CHECKPOINT]
+    events = node.agent.events
+    assert f"browser_start:{ref.sandbox_id}" in events[events.index("browser_stop") :]
+
+
 def test_a_browser_call_sets_up_the_chat_session_so_its_downloads_are_saved(
     tenant_cache: CacheBackend,
     sandbox: FirecrackerHarnessSandbox,

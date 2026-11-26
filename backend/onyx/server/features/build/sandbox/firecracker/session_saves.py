@@ -470,6 +470,21 @@ def _stop_browser(daemon: SandboxDaemonClient, sandbox_id: UUID) -> None:
         )
 
 
+def _restart_browser(
+    tenant_cache: CacheBackend, daemon: SandboxDaemonClient, sandbox_id: UUID
+) -> None:
+    """Start Chrome again on a VM that the stop keeps. Under the profile's
+    save lock: a clear holds it while it deletes the profile."""
+    try:
+        with session_save_lock(tenant_cache, sandbox_id) as held:
+            if held:
+                daemon.browser_start(profile_session_id=str(sandbox_id))
+    except (HostAgentError, SandboxDaemonError):
+        logger.warning(
+            "sandbox_fc_browser_restart_failed sandbox=%s", sandbox_id, exc_info=True
+        )
+
+
 class SessionSaveCheckpointer(SandboxCheckpointer):
     """Saves every session set up on the VM, the browser profile session
     after Chrome closed. Keeps the VM (False) when the sandbox is busy
@@ -528,8 +543,40 @@ class SessionSaveCheckpointer(SandboxCheckpointer):
         sessions = sessions_on_instance(
             tenant_cache, sandbox_id, (vm.attempt, vm.generation)
         )
-        if sandbox_id in sessions and not cancelled():
+        browser_stopped = sandbox_id in sessions and not cancelled()
+        if browser_stopped:
             _stop_browser(daemon, sandbox_id)
+        saved = False
+        try:
+            saved = self._save_sessions(
+                tenant_cache,
+                agent,
+                daemon,
+                instance,
+                tenant_id=tenant_id,
+                sandbox_id=sandbox_id,
+                sessions=sessions,
+                cancelled=cancelled,
+                renew_lease=renew_lease,
+            )
+        finally:
+            if browser_stopped and not saved:
+                _restart_browser(tenant_cache, daemon, sandbox_id)
+        return saved
+
+    def _save_sessions(
+        self,
+        tenant_cache: CacheBackend,
+        agent: HostAgentClient,
+        daemon: SandboxDaemonClient,
+        instance: VmInstance,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        sessions: list[UUID],
+        cancelled: Callable[[], bool],
+        renew_lease: Callable[[], None],
+    ) -> bool:
         with tenant_scope(tenant_id):
             for session_id in sessions:
                 # Raises when the stop lost the lock: no later commit.
