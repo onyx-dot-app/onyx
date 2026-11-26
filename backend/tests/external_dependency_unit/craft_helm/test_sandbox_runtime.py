@@ -5,6 +5,7 @@ cluster without KVM nodes, and it must render the whole Firecracker stack,
 with or without ENABLE_CRAFT, once the chart has a pinned release tag and a
 node registration secret."""
 
+import base64
 import shutil
 import subprocess
 from pathlib import Path
@@ -90,10 +91,41 @@ def test_default_install_without_craft_renders_no_firecracker() -> None:
     assert not any(_firecracker_parts(docs).values())
 
 
-def test_auto_without_registration_renders_no_firecracker() -> None:
+def _registration_values(docs: list[dict[str, Any]]) -> dict[str, str]:
+    """The registration value of each Secret that carries it, by Secret name."""
+    values: dict[str, str] = {}
+    for doc in docs:
+        if doc["kind"] != "Secret":
+            continue
+        string_data = doc.get("stringData") or {}
+        data = {
+            k: base64.b64decode(v).decode() for k, v in (doc.get("data") or {}).items()
+        }
+        value = string_data.get("sandbox_node_registration_secret") or data.get(
+            "sandbox_node_registration_secret"
+        )
+        if value:
+            values[doc["metadata"]["name"]] = value
+    return values
+
+
+def test_auto_generates_the_registration_value() -> None:
+    """With no registration input, the chart makes one value and gives the
+    same value to the api_server Secret and the agent copy."""
     docs = _render([*_NO_CRAFT, *_PINNED])
-    assert not any(_firecracker_parts(docs).values())
-    assert "SANDBOX_FC_TEMPLATE" not in _configmap(docs)
+    assert all(_firecracker_parts(docs).values())
+    values = _registration_values(docs)
+    assert set(values) == {
+        "onyx-sandbox-node-registration",
+        "onyx-craft-fc-host-agent-registration",
+    }
+    assert len(set(values.values())) == 1
+    assert len(next(iter(values.values()))) == 64
+
+
+def test_an_inline_registration_value_wins() -> None:
+    values = _registration_values(_render([*_NO_CRAFT, *_PINNED, *_REGISTRATION]))
+    assert set(values.values()) == {_REG_VALUE}
 
 
 @pytest.mark.parametrize("craft", [[], _NO_CRAFT])

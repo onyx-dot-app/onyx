@@ -344,9 +344,30 @@ true
 {{- $rootfsTag = "" -}}
 {{- end -}}
 {{- /* The agent needs its own copy of the credential (craft-fc-host-agent.yaml). */}}
-{{- $regKey := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg -}}
-{{- $agentReg := or $agent.registrationExistingSecret (and (not $reg.existingSecret) (dig "values" $regKey "" $reg)) -}}
+{{- $agentReg := or $agent.registrationExistingSecret (and (not $reg.existingSecret) (include "onyx.sandboxNodeRegistrationValue" .)) -}}
 {{- if and (include "onyx.craftFcPinned" $agentTag) (include "onyx.craftFcPinned" $rootfsTag) (eq (toString $reg.enabled) "true") $agentReg -}}true{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+The node registration value when auth.sandboxNodeRegistration has no
+existingSecret: the inline value, else the value in the Secret of an earlier
+install (upgrades keep it), else a new random value. The first call stores it
+in .Values, so every template of one render uses the same value.
+*/}}
+{{- define "onyx.sandboxNodeRegistrationValue" -}}
+{{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict -}}
+{{- if not $reg.existingSecret -}}
+{{- $key := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg -}}
+{{- $value := dig "values" $key "" $reg -}}
+{{- if not $value -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace ($reg.secretName | default "onyx-sandbox-node-registration") -}}
+{{- $value = index (($existing | default dict).data | default dict) $key | default "" | b64dec -}}
+{{- if not $value -}}{{- $value = randAlphaNum 64 -}}{{- end -}}
+{{- if not $reg.values -}}{{- $_ := set $reg "values" dict -}}{{- end -}}
+{{- $_ := set $reg.values $key $value -}}
+{{- end -}}
+{{- $value -}}
 {{- end -}}
 {{- end }}
 
