@@ -130,9 +130,17 @@ export function ApplyPatchToolRenderer({
           title={stripBidiControls(file.path) || t("sandbox.patch.title")}
           copyText={index === 0 ? patch : undefined}
           lines={
-            // A delete has no lines; its panel says what happened.
-            file.change === "delete" && file.lines.length === 0
-              ? [{ type: "header", content: t("sandbox.patch.deleted.label") }]
+            // A delete or an empty new file has no lines; the panel names the
+            // operation, which holds before and after the call ends.
+            file.change !== "update" && file.lines.length === 0
+              ? [
+                  {
+                    type: "header",
+                    content: t("sandbox.patch.noLines.label", {
+                      change: file.change,
+                    }),
+                  },
+                ]
               : file.lines
           }
           counts={{ added: file.added, removed: file.removed }}

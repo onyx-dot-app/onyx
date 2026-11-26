@@ -12778,8 +12778,8 @@
                 "status": "{count, plural, =0 {ファイルにパッチを適用中…} one {# 個のファイルにパッチを適用中…} other {# 個のファイルにパッチを適用中…}}"
               }
             },
-            "deleted": {
-              "label": "ファイルを削除しました"
+            "noLines": {
+              "label": "{change, select, delete {ファイルを削除} other {空のファイル}}"
             }
           },
           "stopped": {

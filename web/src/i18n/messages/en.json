@@ -12778,8 +12778,8 @@
                 "status": "{count, plural, =0 {Patching files…} one {Patching # file…} other {Patching # files…}}"
               }
             },
-            "deleted": {
-              "label": "File deleted"
+            "noLines": {
+              "label": "{change, select, delete {Delete file} other {Empty file}}"
             }
           },
           "stopped": {
