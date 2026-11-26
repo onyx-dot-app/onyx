@@ -1521,6 +1521,10 @@
           "description": "Busca en la web información en tiempo real y resultados actualizados.",
           "title": "Búsqueda web"
         }
+      },
+      "browser": {
+        "title": "Navegador",
+        "description": "Permite que el agente use un navegador web en su sandbox. Los usuarios pueden verlo y tomar el control en el panel del chat."
       }
     },
     "codeInterpreter": {
@@ -13570,6 +13574,9 @@
       },
       "resizeHandle": {
         "label": "Cambiar tamaño del panel"
+      },
+      "browserTab": {
+        "label": "Navegador"
       }
     },
     "export": {
@@ -13659,6 +13666,97 @@
         "announcement": "Subagente {model}: {status}",
         "announcementUnnamed": "Subagente: {status}"
       }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "Página del navegador",
+        "inputDescription": "Pulsa Mayús+Escape para salir de la página del navegador."
+      },
+      "download": {
+        "action": "Descargar",
+        "saved": "El navegador descargó {fileName}"
+      },
+      "error": "El navegador no pudo hacerlo. Inténtalo de nuevo.",
+      "clearData": {
+        "action": "Borrar datos del navegador",
+        "title": "¿Borrar los datos del navegador?",
+        "description": "Esto cierra tu sesión en todos los sitios del navegador y elimina sus cookies, historial y datos guardados, en todos tus chats.",
+        "confirm": "Borrar datos",
+        "done": "Datos del navegador borrados",
+        "error": "No se pudieron borrar los datos del navegador. Inténtalo de nuevo."
+      },
+      "urlBar": {
+        "back": "Atrás",
+        "forward": "Adelante",
+        "reload": "Recargar",
+        "label": "Dirección",
+        "placeholder": "Introduce una URL"
+      },
+      "moreMenu": {
+        "label": "Más acciones del navegador"
+      },
+      "tabs": {
+        "new": "Nueva pestaña"
+      },
+      "control": {
+        "you": "Controlas esta pestaña",
+        "agent": "El agente controla esta pestaña",
+        "anotherViewer": "Otra ventana controla esta pestaña",
+        "none": "Nadie controla esta pestaña",
+        "take": "Tomar el control",
+        "release": "Liberar el control"
+      },
+      "status": {
+        "connecting": "Conectando con el navegador",
+        "starting": "Iniciando el navegador",
+        "blank": {
+          "title": "Aún no hay ninguna página",
+          "description": "Escribe una URL arriba para abrir una página."
+        },
+        "noTabs": {
+          "title": "No hay ninguna página abierta",
+          "description": "Aquí aparecen las páginas que abre el agente. También puedes abrir una nueva pestaña."
+        },
+        "disconnected": {
+          "title": "El navegador se desconectó",
+          "description": "Intentando conectar de nuevo."
+        },
+        "disabled": {
+          "title": "El navegador está desactivado",
+          "description": "Un administrador desactivó el navegador o no puedes ver el navegador de este chat."
+        },
+        "unreachable": {
+          "title": "No se pudo conectar con el navegador",
+          "description": "Comprueba que has iniciado sesión y tienes conexión y vuelve a intentarlo."
+        },
+        "error": {
+          "title": "El navegador no está disponible",
+          "description": "No se pudo iniciar el sandbox del chat. Inténtalo de nuevo más tarde."
+        },
+        "retry": "Reintentar"
+      },
+      "dialog": {
+        "label": "Diálogo de la página",
+        "from": "{origin} dice",
+        "response": "Respuesta del diálogo",
+        "responsePlaceholder": "Escribe una respuesta",
+        "dismiss": "Descartar",
+        "accept": "Aceptar",
+        "takeControl": "Toma el control para responder."
+      },
+      "fileChooser": {
+        "label": "Elegir archivos para la página",
+        "askOne": "La página pide un archivo.",
+        "askMany": "La página pide archivos.",
+        "askOneFrom": "{origin} pide un archivo.",
+        "askManyFrom": "{origin} pide archivos.",
+        "cancel": "Cancelar",
+        "chooseOne": "Elegir archivo",
+        "chooseMany": "Elegir archivos",
+        "inputLabel": "Archivos para la página",
+        "error": "No se pudieron subir los archivos. Inténtalo de nuevo."
+      },
+      "answerError": "No se pudo responder a la página. Inténtalo de nuevo."
     }
   },
   "common": {

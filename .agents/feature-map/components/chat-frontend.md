@@ -273,6 +273,33 @@
   and digits. The timeline step lists the
   files that the call asked for and how it ended. Shared chats show the same
   cards.
+- **Each page of the chat's sandbox browser is a tab of the right panel.**
+  The page tabs sit in the strip with Files, Sources and the file tabs
+  (display ID `browser:<page id>`; `RIGHT_PANEL_BROWSER_TAB` stands for the
+  browser until the stream lists its pages). The browser service owns the
+  page list and each viewer's selection: the `tabs` message's `selected`
+  marks the active page tab, and a tab click sends `selectTab`, close sends
+  `closeTab` (without a connection, close shuts the whole browser in the
+  panel). The browser opens by itself when a live stream starts the
+  agent's `browser_open` tool in the open chat, also on a followed
+  continuation (`followChatSession`), but not on reload or replay,
+  and from the strip's "+" menu (shown when
+  `settings.chat_browser_available`), which sends `newTab`. It closes when
+  the last page of a live browser closes. `ChatRightPanel` gets the stream
+  and the page tabs from `useChatBrowserTabs`, which owns the stream
+  (`useBrowserStream`) and the download and error toasts: its websocket
+  (`/api/chat/sessions/{id}/browser/ws`, cookie auth, owner only) is open
+  while the panel and the chat's browser are open. One view
+  (`sections/chat/browser/`, ported from T3 Code) serves all page tabs; only
+  the viewer that controls the tab can send input or navigate, and the
+  service adds a missing URL scheme. Page dialogs and file choosers name
+  the asking frame's origin when the service knows it. Close code 4403 shows the browser as
+  off, 4404 and 4503 as unavailable with a retry; other drops reconnect,
+  and six connects in a row that do not open stop with a retry. A
+  page's download goes to the sandbox's `downloads/`, not to Files: its toast
+  downloads it from `/api/chat/sessions/{id}/browser/downloads/{name}`. The
+  admin switch is "Browser" on the chat preferences page
+  (`browser_enabled`).
 - **A chat has a right panel, with a toggle at the far end of its header**
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the
@@ -704,7 +731,19 @@ are fixed tabs, so only the active tab and the history name them), width,
 search and seen files. The Files list and the file tabs follow the shared
 tab rules (`lib/outputPanel/tabs.ts:openPanelTab`, `closePanelTab`), with
 the Files list first, so closing the last file tab shows the Files list;
-Sources stands apart. A file that the panel shows counts as seen
+Sources and the browser stand apart: `browserOpen` says whether the
+browser's pages show as tabs (`openBrowser`; `closeTab` of
+`RIGHT_PANEL_BROWSER_TAB` closes it), and `RIGHT_PANEL_BROWSER_TAB` is the
+active tab while the browser shows. The page list and the selected page come
+from the stream, not from this state; `useChatBrowserTabs` gives each page a
+display tab ID `browser:<page id>`. `isFilesTab` excludes Sources and the
+browser. The browser protocol
+(`lib/chat/browser/types.ts`), the stream client and pure input mapping
+(`lib/chat/browser/stream.ts`), and the view's state
+(`lib/chat/browser/hooks.ts:useBrowserStream`, `useChatBrowserTabs`) match the
+api_server's browser route. In dev, `next.config.js` rewrites the
+websocket to the backend, as Craft's HMR route. A file that the panel shows
+counts as seen
 (`markSeen`); the first time the panel shows files, the panel marks the
 listed files seen once (`initializeSeen`). The store keeps one state per
 session and applies the reducer (`updateCurrentRightPanel`); the shared view

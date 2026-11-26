@@ -14,9 +14,11 @@ import { type ChatLoad, startChatLoad } from "@/lib/chat/publishedFiles";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 import {
+  openBrowserInChat,
   useChatSessionStore,
   type SessionError,
 } from "@/app/app/stores/useChatSessionStore";
+import { isBrowserOpenStart } from "@/lib/chat/browser/stream";
 import { asksUser, readWaitingToolRequests } from "@/lib/chat/toolApprovals";
 import {
   CHAT_STATUS_POLL_MS,
@@ -846,6 +848,10 @@ export async function followChatSession({
         continue;
       }
       contentSeen = true;
+      // A live browser_open start shows the Browser tab; a replayed one
+      // does not
+      if (!restoring && isBrowserOpenStart(packet.obj))
+        openBrowserInChat(sessionId);
       const modelIndex = packet.placement.model_index;
       if (!multiModel) accumulated[0]!.push(packet);
       // The overall stop has no model and ends every answer.

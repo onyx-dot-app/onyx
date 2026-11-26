@@ -1521,6 +1521,10 @@
           "description": "Search the web for real-time information and up-to-date results.",
           "title": "Web Search"
         }
+      },
+      "browser": {
+        "title": "Browser",
+        "description": "Let the agent use a web browser in its sandbox. Users can watch it and take control in the chat panel."
       }
     },
     "codeInterpreter": {
@@ -13570,6 +13574,9 @@
       },
       "resizeHandle": {
         "label": "Resize panel"
+      },
+      "browserTab": {
+        "label": "Browser"
       }
     },
     "export": {
@@ -13659,6 +13666,97 @@
         "announcement": "{model} subagent: {status}",
         "announcementUnnamed": "Subagent: {status}"
       }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "Browser page",
+        "inputDescription": "Press Shift+Escape to leave the browser page."
+      },
+      "download": {
+        "action": "Download",
+        "saved": "The browser downloaded {fileName}"
+      },
+      "error": "The browser could not do that. Try again.",
+      "clearData": {
+        "action": "Clear browser data",
+        "title": "Clear Browser Data?",
+        "description": "This signs you out of every site in the browser and deletes its cookies, history and saved data, for all your chats.",
+        "confirm": "Clear data",
+        "done": "Browser data cleared",
+        "error": "Could not clear the browser data. Try again."
+      },
+      "urlBar": {
+        "back": "Back",
+        "forward": "Forward",
+        "reload": "Reload",
+        "label": "Address",
+        "placeholder": "Enter a URL"
+      },
+      "moreMenu": {
+        "label": "More browser actions"
+      },
+      "tabs": {
+        "new": "New tab"
+      },
+      "control": {
+        "you": "You control this tab",
+        "agent": "The agent controls this tab",
+        "anotherViewer": "Another window controls this tab",
+        "none": "No one controls this tab",
+        "take": "Take control",
+        "release": "Release control"
+      },
+      "status": {
+        "connecting": "Connecting to the browser",
+        "starting": "Starting the browser",
+        "blank": {
+          "title": "No page yet",
+          "description": "Type a URL above to open a page."
+        },
+        "noTabs": {
+          "title": "No page is open",
+          "description": "Pages the agent opens show here. You can also open a new tab."
+        },
+        "disconnected": {
+          "title": "The browser disconnected",
+          "description": "Trying to connect again."
+        },
+        "disabled": {
+          "title": "The browser is off",
+          "description": "An admin turned off the browser, or you cannot view this chat's browser."
+        },
+        "unreachable": {
+          "title": "Could not reach the browser",
+          "description": "Check that you are signed in and online, then try again."
+        },
+        "error": {
+          "title": "The browser is unavailable",
+          "description": "The chat's sandbox could not start. Try again later."
+        },
+        "retry": "Retry"
+      },
+      "dialog": {
+        "label": "Page dialog",
+        "from": "{origin} says",
+        "response": "Dialog response",
+        "responsePlaceholder": "Type a response",
+        "dismiss": "Dismiss",
+        "accept": "Accept",
+        "takeControl": "Take control to respond."
+      },
+      "fileChooser": {
+        "label": "Choose files for the page",
+        "askOne": "The page asks for a file.",
+        "askMany": "The page asks for files.",
+        "askOneFrom": "{origin} asks for a file.",
+        "askManyFrom": "{origin} asks for files.",
+        "cancel": "Cancel",
+        "chooseOne": "Choose file",
+        "chooseMany": "Choose files",
+        "inputLabel": "Files for the page",
+        "error": "Could not upload the files. Try again."
+      },
+      "answerError": "Could not answer the page. Try again."
     }
   },
   "common": {

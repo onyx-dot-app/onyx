@@ -67,7 +67,7 @@ import {
   useIsFetchingChatMessages,
   useSourcesShown,
   useCurrentIsStreamDraining,
-  useFilesShown,
+  useRightPanelShown,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
@@ -362,7 +362,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (state) => state.updateCurrentRightPanel
   );
   const selectedNodeForDocDisplay = useSelectedNodeForDocDisplay();
-  const publishedFilesPanelOpen = useFilesShown();
+  const rightPanelShown = useRightPanelShown();
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
   // A chat opened for the first time has nothing to show until its fetch
@@ -784,7 +784,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // A stable element: the app chrome's slot renders again only when one of
   // these inputs changes, not on each streamed packet or panel change
   const rightPanelOpen =
-    (!!retrievalEnabled && sourcesPanelVisible) || publishedFilesPanelOpen;
+    rightPanelShown && (!!retrievalEnabled || !sourcesPanelVisible);
   const rightPanel = useMemo(
     () => (
       <CurrentChatRightPanel

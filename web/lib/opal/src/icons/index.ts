@@ -134,6 +134,7 @@ export { default as SvgMinusCircle } from "@opal/icons/minus-circle";
 export { default as SvgMonitor } from "@opal/icons/monitor";
 export { default as SvgMoon } from "@opal/icons/moon";
 export { default as SvgMoreHorizontal } from "@opal/icons/more-horizontal";
+export { default as SvgMousePointer } from "@opal/icons/mouse-pointer";
 export { default as SvgMusicSmall } from "@opal/icons/music-small";
 export { default as SvgNetworkGraph } from "@opal/icons/network-graph";
 export { default as SvgNoImage } from "@opal/icons/no-image";
