@@ -359,6 +359,23 @@ def test_server_variables_take_their_defaults() -> None:
     assert openapi_to_url(spec) == "https://pets.example.com/{version}"
 
 
+def test_a_trailing_slash_on_the_server_url_makes_no_double_slash() -> None:
+    spec: dict[str, Any] = {
+        "openapi": "3.0.3",
+        "info": {"title": "Users", "version": "1.0"},
+        "servers": [{"url": "https://api.example.com/v1/"}],
+        "paths": {
+            "/users": {"get": {"operationId": "listUsers", "summary": "List users"}}
+        },
+    }
+
+    (method_spec,) = openapi_to_method_specs(spec)
+    assert (
+        method_spec.build_url(openapi_to_url(spec), {}, {})
+        == "https://api.example.com/v1/users"
+    )
+
+
 def test_import_drops_an_operation_without_a_json_body() -> None:
     view = _import(json.dumps(SPEC))
 

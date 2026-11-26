@@ -399,7 +399,8 @@ def _with_variable_defaults(url: str, variables: object) -> str:
 
 def openapi_to_url(openapi_schema: dict[str, Any]) -> str:
     """The one server URL of an OpenAPI schema, with its variables set to
-    their defaults. Raises ``ValueError`` unless there is exactly one."""
+    their defaults and no trailing slash: each path starts with one. Raises
+    ``ValueError`` unless there is exactly one."""
     urls: list[str] = []
 
     servers = openapi_schema.get("servers", [])
@@ -415,7 +416,7 @@ def openapi_to_url(openapi_schema: dict[str, Any]) -> str:
             f"Expected exactly one URL in OpenAPI schema, but found {urls}"
         )
 
-    return urls[0]
+    return urls[0].rstrip("/")
 
 
 def validate_openapi_schema(
