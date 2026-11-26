@@ -19,6 +19,7 @@ from uuid import uuid4
 
 import pytest
 from litellm.exceptions import ContextWindowExceededError
+from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -34,6 +35,7 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, InputMode, PendingToolInput
 from onyx.chat.agent import ChatFeature
+from onyx.chat.checkpoint import CheckpointVersionError
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import EmptyLLMResponseError, chat_error
 from onyx.chat.execution import (
@@ -60,7 +62,11 @@ from onyx.chat.process_message import (
     _stream_chat_turn,
     gather_stream_full,
 )
-from onyx.chat.run_store import ChatRunStore
+from onyx.chat.run_store import (
+    RESUME_FAILED_MESSAGE,
+    RESUME_UPDATED_MESSAGE,
+    ChatRunStore,
+)
 from onyx.chat.stream_buffer import (
     ChatStream,
     StreamBufferWriter,
@@ -629,19 +635,36 @@ class TestRunModels:
         ]
 
     @pytest.mark.parametrize(
-        "error, lasting",
+        "error, message",
         [
-            (OperationalError("SELECT 1", {}, Exception("connection lost")), False),
-            (ValueError("The response is not suspended"), True),
+            (OperationalError("SELECT 1", {}, Exception("connection lost")), None),
+            (ValueError("The response is not suspended"), RESUME_FAILED_MESSAGE),
+            (
+                ValidationError.from_exception_data(
+                    "LLMOverride",
+                    [{"type": "missing", "loc": ("model_provider",), "input": {}}],
+                ),
+                RESUME_FAILED_MESSAGE,
+            ),
+            (
+                CheckpointVersionError("Checkpoint changed shape"),
+                RESUME_UPDATED_MESSAGE,
+            ),
+            (
+                CheckpointVersionError("Checkpoint history changed"),
+                RESUME_UPDATED_MESSAGE,
+            ),
         ],
-        ids=["transient", "lasting"],
+        ids=["transient", "lasting", "other_validation", "saved_shape", "saved_hash"],
     )
     def test_a_resume_that_cannot_start_fails_its_response_only_for_good(
-        self, error: Exception, lasting: bool
+        self, error: Exception, message: str | None
     ) -> None:
         """The stream still ends its (empty) replay. A transient error keeps
         the response suspended, and the turn's end asks dispatch to retry it
-        after a backoff; a lasting one fails the response."""
+        after a backoff; a lasting one fails the response, and the stream
+        shows its saved failure. Only saved data that this version cannot read
+        says that Onyx was updated."""
         setup = _make_setup(n_models=1)
         setup.resumed_response_id = setup.responses[0].message_id
         dispatch = MagicMock()
@@ -657,7 +680,7 @@ class TestRunModels:
                 "onyx.chat.execution.read_suspended_response_replay",
                 side_effect=error,
             ),
-            patch("onyx.chat.execution.fail_suspended_response") as fail,
+            patch("onyx.chat.run_store._end_ownerless_response") as end,
         ):
             reader = start_chat_turn(
                 setup, MagicMock(), dispatch_pending_messages=dispatch
@@ -672,9 +695,19 @@ class TestRunModels:
             for packet in packets
             if isinstance(packet, Packet) and isinstance(packet.obj, ReplayEnd)
         ] == [Packet(placement=Placement(turn_index=0, model_index=0), obj=ReplayEnd())]
-        assert fail.called is lasting
+        assert [call.kwargs["failure"].message for call in end.call_args_list] == (
+            [] if message is None else [message]
+        )
         [dispatched] = dispatch.call_args_list
-        assert dispatched.kwargs["retry_resume"] is not lasting
+        assert dispatched.kwargs["retry_resume"] is (message is None)
+        [published] = [p for p in packets if isinstance(p, StreamingError)]
+        if message is not None:
+            # The stream shows the failure that the response is saved with.
+            assert (
+                published.error,
+                published.error_code,
+                published.is_retryable,
+            ) == (message, "AGENT_EXECUTION_FAILED", False)
 
     def test_a_resumed_turn_builds_one_root_feature(
         self, monkeypatch: pytest.MonkeyPatch

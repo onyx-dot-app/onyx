@@ -181,11 +181,6 @@ class ResearchFeature(AgentFeature):
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
         saved = ResearchFeatureState.model_validate(state)
-        if (
-            saved.configuration.language_section != self.language_section
-            or saved.configuration.reasoning_effort != self.reasoning_effort
-        ):
-            raise ValueError("Research restoration configuration does not match")
         self.started = time.monotonic() - saved.elapsed_seconds
         self.search_context = saved.search_context
         self.citation_processor.citation_to_doc = saved.citation_sources

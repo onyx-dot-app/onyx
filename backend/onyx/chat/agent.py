@@ -505,23 +505,6 @@ class ChatFeature(AgentFeature):
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
         saved = ChatFeatureState.model_validate(state)
-        if (
-            saved.persona != self.persona
-            or saved.context_files != SavedContextFiles.capture(self.context_files)
-            or saved.file_metadata != self.file_metadata
-            or saved.memory != self.memory
-            or saved.reasoning_effort != self.reasoning_effort
-            or saved.include_citations != self.include_citations
-            or saved.inject_memories != self.inject_memories
-            or _offered_preference(saved.preferred_tool, self.configured_tools)
-            != self.preferred_tool
-            or saved.code_mode != self.code_mode
-            or saved.base_prompt != self.base_system_prompt
-            or saved.custom_prompt != self.custom_agent_prompt
-            or saved.request_context != self.additional_context
-            or saved.reminders_enabled != self.reminders_enabled
-        ):
-            raise ValueError("Chat restoration configuration does not match")
         self.search_context = saved.search_context
         self.started = time.monotonic() - saved.elapsed_seconds
         self.citation_processor.citation_to_doc = saved.citation_sources

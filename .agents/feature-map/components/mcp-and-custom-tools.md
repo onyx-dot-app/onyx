@@ -820,7 +820,15 @@ default agent, is Blocked.
     resume turn before its run exists, such as a gone model or saved state,
     ends the response through `chat/run_store.py:fail_suspended_response`:
     failed, its rows ended, its checkpoint and its parked programs' dumps
-    deleted, so no retry repeats it. A transient error
+    deleted, so no retry repeats it. `chat/run_store.py:resume_failure` picks
+    the failure that the response is saved with and that the stream shows:
+    saved data that the running code cannot read gets `RESUME_UPDATED_MESSAGE`,
+    which says that Onyx was updated; other failures get
+    `RESUME_FAILED_MESSAGE`. Saved data is read in three places, which turn a
+    pydantic validation error into `chat/checkpoint.py:CheckpointVersionError`:
+    `db/chat_checkpoint.py:claim_checkpoint__no_commit`,
+    `chat/checkpoint.py:deserialize_checkpoint` and
+    `chat/restoration.py:restore_chat_agent` (feature state). A transient error
     (`RETRYABLE_START_ERRORS`) keeps the response suspended; the turn does not
     hand off, and its release asks dispatch for `retry_resume`, which
     dispatches again after the next of

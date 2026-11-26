@@ -179,9 +179,6 @@ def test_research_json_restores_next_citation_number() -> None:
     restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
     assert restored.citation_processor.get_next_citation_number() == 9
     assert restored.citation_mapping == {8: "reference"}
-    changed = ResearchFeature([], model(), len, None, "French", ReasoningEffort.LOW)
-    with pytest.raises(ValueError, match="configuration"):
-        changed.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
 
 
 def test_deep_research_restores_citations_and_control_tools() -> None:

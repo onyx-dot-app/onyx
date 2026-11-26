@@ -68,6 +68,7 @@ from onyx.chat.run_store import (
     RETRYABLE_START_ERRORS,
     fail_suspended_response,
     interrupt_ownerless_responses,
+    resume_failure,
 )
 from onyx.chat.stream_buffer import ChatStream
 from onyx.configs.chat_configs import CHAT_RESPONSE_WAIT_TIMEOUT_S
@@ -1196,7 +1197,10 @@ def dispatch_pending_chat_messages(
                             in (OnyxErrorCode.CONFLICT, OnyxErrorCode.RATE_LIMITED)
                         ):
                             fail_suspended_response(
-                                cache, get_current_tenant_id(), resumable
+                                cache,
+                                get_current_tenant_id(),
+                                resumable,
+                                resume_failure(error),
                             )
                         raise
                     start_chat_turn(
@@ -1269,7 +1273,10 @@ def dispatch_pending_chat_messages(
                                 hosted_agents[0].tool_options,
                             ):
                                 fail_suspended_response(
-                                    cache, get_current_tenant_id(), run.response_id
+                                    cache,
+                                    get_current_tenant_id(),
+                                    run.response_id,
+                                    resume_failure(error),
                                 )
                         raise
                     host_agent_work(host_setup, user, dispatch)

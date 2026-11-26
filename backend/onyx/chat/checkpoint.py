@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 
-from pydantic import BaseModel, JsonValue, TypeAdapter
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from onyx.agents.compaction import is_input_context
 from onyx.agents.models import (
@@ -42,6 +42,10 @@ from onyx.utils.postgres_sanitization import sanitize_json_like
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _SAVED_IMAGES = TypeAdapter(list[SavedLoadedFile])
+
+
+class CheckpointVersionError(ValueError):
+    """Saved data does not match what the running code reads or hashes."""
 
 
 CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
@@ -106,7 +110,9 @@ class CheckpointSerializer:
         payload = CheckpointPayload.model_validate(value)
         schema = self._types.get(payload.tag)
         if schema is None:
-            raise ValueError(f"Unknown checkpoint payload tag: {payload.tag}")
+            raise CheckpointVersionError(
+                f"Unknown checkpoint payload tag: {payload.tag}"
+            )
         if schema is PromptMetadata:
             images = payload.value.pop("image_files", None)
             metadata = PromptMetadata.model_validate(payload.value)
@@ -165,8 +171,6 @@ class CheckpointSerializer:
     def decode_progress(self, value: JsonValue) -> RunProgress:
         raw = _object(value)
         answers = raw.pop("human_tool_answers", {})
-        # Saved checkpoints of deployed servers carry this unused key.
-        raw.pop("tool_configuration_digest", None)
         progress = RunProgress.model_validate(raw)
         progress.human_tool_answers = {
             key: self.decode_answer(answer) for key, answer in _object(answers).items()
@@ -310,12 +314,15 @@ def deserialize_checkpoint(
     """Validate saved resume data against the selected history and rebuild execution state."""
     serializer = CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES)
     if _digest(context, serializer) != data.history_digest:
-        raise ValueError("Checkpoint history changed")
+        raise CheckpointVersionError("Checkpoint history changed")
     if _response_digest(response) != data.response_digest:
-        raise ValueError("Checkpoint response changed")
+        raise CheckpointVersionError("Checkpoint response changed")
     if data.binding != binding or binding.response_id != response.run_id:
         raise ValueError("Checkpoint does not match the selected context")
-    return _restore_checkpoint_state(data, response, context, serializer)
+    try:
+        return _restore_checkpoint_state(data, response, context, serializer)
+    except ValidationError as error:
+        raise CheckpointVersionError("Checkpoint data changed shape") from error
 
 
 def _restore_checkpoint_state(
@@ -343,7 +350,7 @@ def _restore_checkpoint_state(
         messages: list[Message], payloads: list[MessagePayload]
     ) -> None:
         if len(messages) != len(payloads):
-            raise ValueError("Checkpoint message boundaries changed")
+            raise CheckpointVersionError("Checkpoint message boundaries changed")
         for message, payload in zip(messages, payloads, strict=True):
             message.metadata = serializer.decode_payload(payload.metadata)
             message.cacheable = payload.cacheable

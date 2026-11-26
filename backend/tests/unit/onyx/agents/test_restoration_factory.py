@@ -29,6 +29,7 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.chat.agent import ChatFeature
+from onyx.chat.checkpoint import CheckpointVersionError
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.restoration import restore_chat_agent
 from onyx.context.models import UserInfo, UserMemoryContext
@@ -309,6 +310,22 @@ def test_restore_drops_an_old_preferred_tool_id_that_no_tool_offers() -> None:
             step=AgentStep(index=0, limit=2),
         )
     )
+
+
+def test_factory_reports_feature_state_of_another_shape_as_a_version_error() -> None:
+    llm = ScriptedLLM([])
+    original = _chat_feature(llm)
+    state = original.capture_state().model_dump(mode="json")
+    del state["persona"]
+    with pytest.raises(CheckpointVersionError, match="changed shape"):
+        restore_chat_agent(
+            _suspended(original.agent(AgentState()), state),
+            0,
+            llm=llm,
+            tools=[EchoTool()],
+            user_identity=None,
+            subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+        )
 
 
 def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:

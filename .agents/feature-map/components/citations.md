@@ -252,8 +252,7 @@ of only markers stays empty.
     saves `citation_sources` and `citation_mapping` in
     `chat/models.py:ChatFeatureState`, and `restore_state` writes them back.
     The research agents do the same with their own feature state. Put new
-    citation state in that feature state, or a resumed turn reuses numbers. A
-    changed `include_citations` makes the restoration fail.
+    citation state in that feature state, or a resumed turn reuses numbers.
 14. `token-split-invariant` **The output must not depend on where tokens
     split.** `chat/citation_processor.py:DynamicCitationProcessor` holds a
     marker that later text can still change: a partial marker, `[n]` right
