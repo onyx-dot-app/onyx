@@ -206,6 +206,7 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                         context_files=None,
                         token_counter=token_counter,
                         llm_config=llm_config,
+                        search_passage_cache={},
                     )
 
                 return PreparedStep(
@@ -351,6 +352,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
             token_counter=len,
             all_injected_file_metadata={"attachment-id": file.tool_metadata},
             available_tool_names=set(),
+            search_passage_cache={},
         )
 
     agent = Agent(
@@ -891,6 +893,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
                 context_files=None,
                 token_counter=count_tokens,
                 llm_config=model.config,
+                search_passage_cache={},
             )
         )
 

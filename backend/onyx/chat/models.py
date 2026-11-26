@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
@@ -271,9 +271,53 @@ class MessageRendering(BaseModel):
     mode: PresentationMode = PresentationMode.ANSWER
     is_clarification: bool = False
     citation_mode: CitationMode | None = None
+    # The citation numbers and documents that this step adds to its run's;
+    # see RunDocuments. A step can also hold the run's whole set so far,
+    # which gives the same result.
     citation_documents: dict[int, str] = Field(default_factory=dict)
     document_ids: list[str] = Field(default_factory=list)
     pre_answer_seconds: float | None = None
+
+
+class RunDocuments(BaseModel):
+    """The documents and citations that a run's messages show after some of
+    its steps. Each step's MessageRendering adds to them: `add_steps` folds a
+    run's steps in order."""
+
+    model_config = ConfigDict(frozen=True)
+    # By document ID, in the order first shown, each in its latest copy.
+    shown: dict[str, SearchDoc] = Field(default_factory=dict)
+    # Citation numbers, each with the document of the step that added it.
+    cited: dict[int, SearchDoc] = Field(default_factory=dict)
+
+    def add_steps(
+        self, steps: Iterable[tuple[MessageRendering, Mapping[str, SearchDoc]]]
+    ) -> "RunDocuments":
+        """The documents after more steps, in order; each step's mapping
+        resolves its document IDs."""
+        shown = dict(self.shown)
+        cited = dict(self.cited)
+        for setting, documents in steps:
+            shown.update(
+                (key, documents[key])
+                for key in setting.document_ids
+                if key in documents
+            )
+            cited.update(
+                (number, documents[key])
+                for number, key in setting.citation_documents.items()
+                if key in documents
+            )
+        # The values are already validated documents.
+        return RunDocuments.model_construct(shown=shown, cited=cited)
+
+    @property
+    def citations(self) -> dict[int, SearchDoc]:
+        """Citation numbers and their documents, in the latest shown copy."""
+        return {
+            number: self.shown.get(document.document_id, document)
+            for number, document in self.cited.items()
+        }
 
 
 def read_message_rendering(value: dict[str, JsonValue]) -> MessageRendering:
@@ -571,6 +615,10 @@ class SavedAgentContext(BaseModel):
 class ChatMessageMetadata(BaseModel):
     """Source references and display settings attached to a generated chat message."""
 
+    # The citation numbers and gathered documents that are new since the
+    # run's earlier steps, or new copies; together the run's steps hold them
+    # all (see RunDocuments). Every chat step, the answer too, holds only
+    # these; a research report step holds its full map (new_sources).
     sources: dict[int, SearchDoc] = Field(default_factory=dict)
     documents: list[SearchDoc] = Field(default_factory=list)
     include_citations: bool = True

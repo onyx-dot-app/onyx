@@ -243,19 +243,36 @@ def read_agent_completions(
                 ChatMessage.response_status,
                 ChatMessage.response_failure,
             ),
-            load_only(ChatResponseItem.message, ChatResponseItem.rendering),
+            load_only(ChatResponseItem.message, ChatResponseItem.step_index),
         )
     ).all()
     ancestors = session_ancestors(
         db_session, [response.chat_session_id for response, _ in rows]
     )
     responses = {response.id: response for response, _ in rows}
+    # Each step's rendering holds only the citations new to its run, so the
+    # output's citations are those of every step up to the output's.
+    output_steps = {
+        response.id: item.step_index for response, item in rows if item is not None
+    }
+    renderings = db_session.execute(
+        select(
+            ChatResponseItem.chat_message_id,
+            ChatResponseItem.step_index,
+            ChatResponseItem.rendering,
+        )
+        .where(
+            ChatResponseItem.chat_message_id.in_(list(output_steps)),
+            ChatResponseItem.rendering.is_not(None),
+        )
+        .order_by(ChatResponseItem.chat_message_id, ChatResponseItem.step_index)
+    ).all()
     sources = _cited_sources(
         db_session,
         [
-            (response.id, read_message_rendering(item.rendering))
-            for response, item in rows
-            if item is not None and item.rendering is not None
+            (response_id, read_message_rendering(rendering))
+            for response_id, step_index, rendering in renderings
+            if step_index <= output_steps[response_id]
         ],
         lambda response_id: root_response_id(db_session, responses[response_id]),
     )

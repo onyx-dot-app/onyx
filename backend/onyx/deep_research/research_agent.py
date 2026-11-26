@@ -19,7 +19,11 @@ from onyx.chat.citation_utils import (
     remap_received_citations,
 )
 from onyx.chat.models import CitationMode, PromptMetadata
-from onyx.chat.prompt_utils import prepare_prompt, with_language_section
+from onyx.chat.prompt_utils import (
+    SearchPassageCache,
+    prepare_prompt,
+    with_language_section,
+)
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import (
@@ -27,6 +31,7 @@ from onyx.deep_research.models import (
     ResearchFeatureState,
     ResearchMessageMetadata,
     ResearchPhase,
+    new_sources,
 )
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_DESCRIPTION,
@@ -113,6 +118,8 @@ class ResearchFeature(AgentFeature):
         self.reasoning_effort = reasoning_effort
         # Preserve citation markers in intermediate reports so the parent can
         # renumber them when it combines reports from multiple research agents.
+        # Each step's deduplicated search results, for later requests.
+        self.search_passage_cache: SearchPassageCache = {}
         self.citation_processor = DynamicCitationProcessor(
             citation_mode=CitationMode.KEEP_MARKERS
         )
@@ -282,7 +289,10 @@ class ResearchFeature(AgentFeature):
         output_metadata = ResearchMessageMetadata(
             phase=ResearchPhase.REPORT if is_final_step else ResearchPhase.RESEARCH,
             is_intermediate=True,
-            sources=dict(self.citation_processor.citation_to_doc),
+            # The parent reads the report step's sources alone.
+            sources=dict(self.citation_processor.citation_to_doc)
+            if is_final_step
+            else new_sources(self.citation_processor.citation_to_doc, state.messages),
         )
         return PreparedStep(
             input_messages=received.messages,
@@ -292,6 +302,7 @@ class ResearchFeature(AgentFeature):
             output_metadata=output_metadata,
             assemble_messages=partial(
                 prepare_prompt,
+                search_passage_cache=self.search_passage_cache,
                 system_prompt=SystemMessage(content=system_prompt),
                 skills_catalog_message=self.skills_catalog_message,
                 custom_agent_prompt=None,

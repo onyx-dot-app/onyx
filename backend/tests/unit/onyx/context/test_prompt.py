@@ -71,6 +71,7 @@ def test_stable_preamble_precedes_history_and_dynamic_reminders() -> None:
         context_files=context,
         token_counter=len,
         available_tool_names={"read_file"},
+        search_passage_cache={},
     )
     assert [message.text for message in result[:2]] == [
         "System instructions",
@@ -123,6 +124,7 @@ def test_project_image_is_in_preamble_without_changing_user_history() -> None:
         ),
         token_counter=len,
         available_tool_names={"read_file"},
+        search_passage_cache={},
     )
     images = [
         image
@@ -163,6 +165,7 @@ def test_file_reader_metadata_covers_only_missing_file_contents(
         token_counter=len,
         available_tool_names={"read_file"},
         all_injected_file_metadata={"first": first, "second": second},
+        search_passage_cache={},
     )
     metadata = result[-1].text
     assert "read_file" in metadata
@@ -185,6 +188,7 @@ def test_prompt_can_be_rebuilt_without_a_user_message(history: list[Message]) ->
         context_files=None,
         token_counter=len,
         available_tool_names={"read_file"},
+        search_passage_cache={},
     )
     assert [message.text for message in result] == [
         "System",
@@ -242,6 +246,7 @@ def test_prompt_preserves_historical_and_current_evidence_after_checkpoint(
         )
         if with_model
         else None,
+        search_passage_cache={},
     )
     results = [message for message in request if isinstance(message, ToolResultMessage)]
     assert [message.text for message in results] == [
@@ -295,6 +300,7 @@ def test_prompt_output_shares_history_without_changing_it(
     originals = [message.model_copy(deep=True) for message in inputs]
     assemble = partial(
         prepare_prompt,
+        search_passage_cache={},
         system_prompt=system,
         user_info_prompt=user_info,
         custom_agent_prompt=custom,
@@ -370,6 +376,7 @@ def test_omitted_file_notice_uses_only_available_readers(
         token_counter=len,
         all_injected_file_metadata={metadata.file_id: metadata},
         available_tool_names=tools,
+        search_passage_cache={},
     )
     notice = next(message.text for message in messages if "report.pdf" in message.text)
     assert expected in notice
@@ -402,6 +409,7 @@ def test_omitted_file_notice_splits_python_staged_and_unstaged_files() -> None:
             unstaged.file_id: unstaged,
         },
         available_tool_names={"run_python"},
+        search_passage_cache={},
     )
     notice = next(m.text for m in messages if "template.docx" in m.text)
     python_part, unreadable_part = notice.split("no tool here can read them")
@@ -432,6 +440,7 @@ def test_omitted_file_notice_sends_unindexed_files_to_python_not_search() -> Non
             code.file_id: code,
         },
         available_tool_names={"internal_search", "run_python"},
+        search_passage_cache={},
     )
     notice = next(m.text for m in messages if "analyze.py" in m.text)
     search_part, python_part = notice.split("The python tool receives them")

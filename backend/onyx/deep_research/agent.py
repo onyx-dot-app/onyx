@@ -23,7 +23,11 @@ from onyx.chat.citation_utils import (
     remap_received_citations,
 )
 from onyx.chat.models import PromptMetadata
-from onyx.chat.prompt_utils import prepare_prompt, with_language_section
+from onyx.chat.prompt_utils import (
+    SearchPassageCache,
+    prepare_prompt,
+    with_language_section,
+)
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
 )
@@ -34,6 +38,7 @@ from onyx.deep_research.models import (
     ResearchMessageMetadata,
     ResearchPhase,
     ResearchTask,
+    new_sources,
 )
 from onyx.deep_research.research_agent import ResearchFeature
 from onyx.deep_research.tool_definitions import (
@@ -140,6 +145,8 @@ class DeepResearchFeature(AgentFeature):
         )
         self.citation_mapping: CitationMapping = {}
         self._citation_lock = Lock()
+        # Each step's deduplicated search results, for later requests.
+        self.search_passage_cache: SearchPassageCache = {}
 
     def agent(
         self,
@@ -304,7 +311,12 @@ class DeepResearchFeature(AgentFeature):
                 state.received_inputs, self.citation_mapping
             )
             self.citation_mapping.update(received.new_citations)
-            sources = dict(self.citation_mapping)
+            # The final report reads its step's sources alone.
+            sources = (
+                dict(self.citation_mapping)
+                if phase == ResearchPhase.REPORT
+                else new_sources(self.citation_mapping, state.messages)
+            )
         output_metadata = ResearchMessageMetadata(
             phase=phase,
             sources=sources,
@@ -320,6 +332,7 @@ class DeepResearchFeature(AgentFeature):
             output_metadata=output_metadata,
             assemble_messages=partial(
                 prepare_prompt,
+                search_passage_cache=self.search_passage_cache,
                 system_prompt=SystemMessage(content=system_prompt),
                 skills_catalog_message=self.skills_catalog_message,
                 custom_agent_prompt=None,

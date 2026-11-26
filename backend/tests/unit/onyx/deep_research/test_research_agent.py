@@ -8,6 +8,7 @@ import pytest
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.models import AgentState
 from onyx.agents.runtime import Run
+from onyx.agents.tools import ToolInvocation
 from onyx.chat.models import ChatMessageMetadata
 from onyx.chat.presentation import project_response
 from onyx.configs.constants import DocumentSource
@@ -44,6 +45,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
 )
 from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
 from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OPEN_URL_SHAPES,
     OpenURLTool,
@@ -509,3 +511,130 @@ def test_research_tools_show_their_summaries_and_the_prompt_their_guidance(
     assert INTERNAL_SEARCH_TOOL_DESCRIPTION in system
     assert OPEN_URLS_TOOL_DESCRIPTION.format(name=open_url.name) in system
     assert OPEN_URLS_GUIDANCE not in system
+
+
+def _source(document_id: str) -> SearchDoc:
+    return SearchDoc(
+        document_id=document_id,
+        chunk_ind=0,
+        semantic_identifier=document_id,
+        blurb=document_id,
+        source_type=DocumentSource.WEB,
+        boost=0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+
+
+@pytest.mark.parametrize("report", [False, True], ids=["research", "report"])
+def test_deep_research_steps_hold_new_sources_and_the_report_holds_all(
+    report: bool,
+) -> None:
+    from onyx.agents.models import AgentStep, StepInput, StepResult
+    from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
+    from onyx.llm.models import GenerationOptions
+
+    a, b = _source("a"), _source("b")
+    feature = DeepResearchFeature(
+        [],
+        FakeModelClient(lambda _request, _signal: AssistantMessage(content=[])),
+        len,
+        None,
+        "",
+        ReasoningEffort.LOW,
+        None,
+    )
+    feature.citation_mapping = {1: a, 2: b}
+    plan = AssistantMessage(
+        content=[TextContent(text="Compare launch evidence")],
+        metadata=ResearchMessageMetadata(phase=ResearchPhase.PLANNING),
+    )
+    tool_name = GENERATE_REPORT_TOOL_NAME if report else RESEARCH_AGENT_TOOL_NAME
+    research = AssistantMessage(
+        content=[ToolCall(id="call", name=tool_name, arguments={})],
+        metadata=ResearchMessageMetadata(phase=ResearchPhase.RESEARCH, sources={1: a}),
+    )
+    result = ToolResultMessage(tool_call_id="call", tool_name=tool_name, content="ok")
+    prepared = feature._prepare_step(
+        StepInput(
+            history=(),
+            input_messages=(UserMessage(content="Research the launch"),),
+            messages=(plan, research, result),
+            previous=StepResult(
+                step=AgentStep(index=1, limit=8),
+                message=research,
+                tool_results=(result,),
+                options=GenerationOptions(),
+            ),
+            step=AgentStep(index=2, limit=8),
+        )
+    )
+    metadata = prepared.output_metadata
+    assert isinstance(metadata, ResearchMessageMetadata)
+    if report:
+        assert metadata.phase == ResearchPhase.REPORT
+        assert metadata.sources == {1: a, 2: b}
+    else:
+        assert metadata.phase == ResearchPhase.RESEARCH
+        assert metadata.sources == {2: b}
+
+
+class _CitingWebSearch(EchoTool):
+    """Each call finds one new document under the next citation number."""
+
+    @property
+    def name(self) -> str:
+        return WebSearchTool.NAME
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        document = _source(str(invocation.arguments["value"]))
+        return ToolResult(
+            content=document.document_id,
+            details=SearchDocsResponse(
+                search_docs=[document],
+                citation_mapping={context.next_citation_num: document.document_id},
+            ),
+        )
+
+
+def test_research_steps_hold_new_sources_and_the_report_holds_all() -> None:
+    from onyx.deep_research.models import ResearchMessageMetadata
+
+    def search(value: str) -> Delta:
+        return Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    index=0,
+                    id=f"call-{value}",
+                    function=ResponseFunctionCall(
+                        name=WebSearchTool.NAME, arguments=f'{{"value":"{value}"}}'
+                    ),
+                )
+            ]
+        )
+
+    agent = ResearchFeature(
+        [_CitingWebSearch()],
+        ScriptedLLM(
+            [search("a"), search("b"), search("c"), Delta(content="Report [1]")],
+            128000,
+        ),
+        len,
+        None,
+        "",
+        ReasoningEffort.LOW,
+    ).agent()
+    runs: list[Run] = []
+    run_agent(
+        agent, runs=runs, max_steps=4, messages=[UserMessage(content="Find facts")]
+    )
+    sources = [
+        {
+            number: doc.document_id
+            for number, doc in step.message.metadata.sources.items()
+        }
+        for step in runs[-1].snapshot().steps
+        if isinstance(step.message.metadata, ResearchMessageMetadata)
+    ]
+    assert sources == [{}, {1: "a"}, {2: "b"}, {1: "a", 2: "b", 3: "c"}]

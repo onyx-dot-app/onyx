@@ -650,24 +650,22 @@ def build_system_prompt(
     return system_prompt
 
 
-def _deduplicate_search_passages(messages: list[Message]) -> None:
-    """Shorten exact repeats within a step in caller-owned prompt messages."""
+# The contents of one step's search results after deduplication, by the
+# tool call ID and content of each of those results.
+SearchPassageCache = dict[tuple[tuple[str, str], ...], tuple[str, ...]]
+
+
+def _deduplicated_contents(results: list[ToolResultMessage]) -> tuple[str, ...]:
+    """The contents of one step's search results, with exact repeats of a
+    passage replaced by a reference to its first occurrence."""
     seen: dict[tuple[str, str], str] = {}
-    for message in messages:
-        if isinstance(message, (AssistantMessage, UserMessage)):
-            seen.clear()
-            continue
-        if not isinstance(message, ToolResultMessage):
-            continue
-        if (
-            message.is_error
-            or not isinstance(message.content, str)
-            or not isinstance(message.details, SearchDocsResponse)
-            or not message.details.citation_mapping
-        ):
+    contents: list[str] = []
+    for message in results:
+        contents.append(message.content)
+        if not isinstance(message.details, SearchDocsResponse):
             continue
         try:
-            passages = SearchPassages.model_validate_json(message.text)
+            passages = SearchPassages.model_validate_json(message.content)
         except ValidationError:
             # Search metadata can accompany unstructured or historical tool output.
             logger.debug(
@@ -689,7 +687,36 @@ def _deduplicate_search_passages(messages: list[Message]) -> None:
                 f"{message.tool_call_id}; use that result's content."
             )
         if changed:
-            message.content = passages.model_dump_json()
+            contents[-1] = passages.model_dump_json()
+    return tuple(contents)
+
+
+def _deduplicate_search_passages(
+    messages: list[Message], cache: SearchPassageCache
+) -> None:
+    """Shorten exact repeats within a step in caller-owned prompt messages.
+    `cache` keeps each step's contents, so that a later request does not
+    parse the step's results again."""
+    steps: list[list[ToolResultMessage]] = [[]]
+    for message in messages:
+        if isinstance(message, (AssistantMessage, UserMessage)):
+            steps.append([])
+        elif (
+            isinstance(message, ToolResultMessage)
+            and not message.is_error
+            and isinstance(message.details, SearchDocsResponse)
+            and message.details.citation_mapping
+        ):
+            steps[-1].append(message)
+    for results in steps:
+        if not results:
+            continue
+        key = tuple((message.tool_call_id, message.content) for message in results)
+        contents = cache.get(key)
+        if contents is None:
+            contents = cache[key] = _deduplicated_contents(results)
+        for message, content in zip(results, contents, strict=True):
+            message.content = content
 
 
 def prepare_prompt(
@@ -700,6 +727,7 @@ def prepare_prompt(
     reminder_message: Message | None,
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int],
+    search_passage_cache: SearchPassageCache,
     user_info_prompt: Message | None = None,
     skills_catalog_message: Message | None = None,
     request_context_message: Message | None = None,
@@ -709,10 +737,12 @@ def prepare_prompt(
     available_tool_names: set[str] | None = None,
     context_file_citations: Mapping[str, int] | None = None,
 ) -> list[Message]:
-    """Assemble prompt messages without changing the input messages."""
+    """Assemble prompt messages without changing the input messages. Pass the
+    agent's `search_passage_cache` so that each step's search results are
+    deduplicated once."""
     # Each message is a shallow copy; nested payloads stay shared and read-only.
     history = [message.model_copy() for message in messages]
-    _deduplicate_search_passages(history)
+    _deduplicate_search_passages(history, search_passage_cache)
     for message in history:
         metadata = prompt_metadata(message).model_copy()
         message.metadata = metadata

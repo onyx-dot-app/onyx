@@ -35,6 +35,7 @@ from onyx.chat.models import (
     StagedChatFiles,
 )
 from onyx.chat.prompt_utils import (
+    SearchPassageCache,
     build_chat_prompt,
     callable_tools,
     prepare_prompt,
@@ -51,6 +52,7 @@ from onyx.configs.chat_configs import (
     MAX_LLM_CYCLES,
 )
 from onyx.context.models import UserMemoryContext
+from onyx.context.search.models import SearchDoc, new_or_changed
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_request import estimate_text_tokens
@@ -238,6 +240,8 @@ class ChatFeature(AgentFeature):
         self.stages_files = self._sandbox_turn is None and any(
             tool.name == PYTHON_TOOL_NAME for tool in self.configured_tools
         )
+        # Each step's deduplicated search results, for later requests.
+        self.search_passage_cache: SearchPassageCache = {}
         self.citation_processor = DynamicCitationProcessor(
             citation_mode=CitationMode.HYPERLINK
             if include_citations
@@ -255,7 +259,11 @@ class ChatFeature(AgentFeature):
         self.citation_processor.update_citation_mapping(
             self.initial_citations, update_duplicate_keys=True
         )
-        self.gathered_documents = list(self.initial_citations.values())
+        # By document ID, in the order first gathered; a later copy of a
+        # document replaces the earlier one.
+        self.gathered_documents = {
+            doc.document_id: doc for doc in self.initial_citations.values()
+        }
         self.citation_mapping = {
             number: doc.document_id
             for number, doc in self.citation_processor.citation_to_doc.items()
@@ -476,7 +484,7 @@ class ChatFeature(AgentFeature):
             elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
-            gathered_documents=self.gathered_documents,
+            gathered_documents=list(self.gathered_documents.values()),
             chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
             has_called_search_tool=self.has_called_search_tool,
             search_context=self.search_context,
@@ -506,7 +514,9 @@ class ChatFeature(AgentFeature):
         self.started = time.monotonic() - saved.elapsed_seconds
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
-        self.gathered_documents = saved.gathered_documents
+        self.gathered_documents = {
+            doc.document_id: doc for doc in saved.gathered_documents
+        }
         self.chat_files = [file.restore() for file in saved.chat_files]
         self.has_called_search_tool = saved.has_called_search_tool
         if self.code_cells is not None:
@@ -523,7 +533,8 @@ class ChatFeature(AgentFeature):
                 self.has_called_search_tool = True
             sources = tool_result_sources(data)
             if sources is not None:
-                self.gathered_documents.extend(sources.documents)
+                for document in sources.documents:
+                    self.gathered_documents[document.document_id] = document
             if isinstance(data, StagedChatFiles):
                 self.chat_files = merged_chat_files(self.chat_files, data.staged_files)
             if sources is None:
@@ -542,7 +553,7 @@ class ChatFeature(AgentFeature):
             next_citation_num=self.citation_processor.get_next_citation_number(),
             skip_search_query_expansion=self.has_called_search_tool,
             chat_files=list(self.chat_files),
-            url_snippet_map=extract_url_snippet_map(self.gathered_documents),
+            url_snippet_map=extract_url_snippet_map(self.gathered_documents.values()),
             called_name=self.called_name,
             inject_memories_in_prompt=self.inject_memories,
             python_stages_search_files=self.stages_files,
@@ -558,7 +569,9 @@ class ChatFeature(AgentFeature):
                 self.code_cells.reopen()
             self.search_context = SearchContext()
             self.started = time.monotonic()
-            self.gathered_documents = list(self.initial_citations.values())
+            self.gathered_documents = {
+                doc.document_id: doc for doc in self.initial_citations.values()
+            }
             assistant = None
             for message in state.history:
                 if isinstance(message, AssistantMessage):
@@ -571,20 +584,27 @@ class ChatFeature(AgentFeature):
             state.received_inputs, self.citation_processor.citation_to_doc
         )
         if received.new_citations:
-            known_documents = {
-                document.document_id for document in self.gathered_documents
-            }
             self.citation_processor.update_citation_mapping(received.new_citations)
             for number, document in received.new_citations.items():
                 self.citation_mapping[number] = document.document_id
-                if document.document_id not in known_documents:
-                    known_documents.add(document.document_id)
-                    self.gathered_documents.append(document)
+                self.gathered_documents.setdefault(document.document_id, document)
         results = [
             message
             for message in state.messages
             if isinstance(message, ToolResultMessage)
         ]
+        # Each step carries only the sources and documents that the run's
+        # earlier steps lack, or a new copy of one; readers fold the steps
+        # back with RunDocuments. Compare with what earlier steps recorded,
+        # each citation number in its own copy, not with a display fold.
+        attached_sources: dict[int, SearchDoc] = {}
+        attached_documents: dict[str, SearchDoc] = {}
+        for message in state.messages:
+            if isinstance(message.metadata, ChatMessageMetadata):
+                attached_sources.update(message.metadata.sources)
+                attached_documents.update(
+                    (doc.document_id, doc) for doc in message.metadata.documents
+                )
         allowed_tool_names: frozenset[str] | None = None
         tool_choice = ToolChoiceOptions.AUTO
         available_tool_names = {
@@ -618,13 +638,18 @@ class ChatFeature(AgentFeature):
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),
             output_metadata=ChatMessageMetadata(
-                sources=dict(self.citation_processor.citation_to_doc),
-                documents=list(self.gathered_documents),
+                sources=new_or_changed(
+                    self.citation_processor.citation_to_doc, attached_sources
+                ),
+                documents=list(
+                    new_or_changed(self.gathered_documents, attached_documents).values()
+                ),
                 include_citations=self.include_citations,
                 elapsed_seconds=time.monotonic() - self.started,
             ),
             assemble_messages=partial(
                 prepare_prompt,
+                search_passage_cache=self.search_passage_cache,
                 agent_instructions=self.agent_instructions,
                 system_prompt=prompt.system_prompt,
                 user_info_prompt=prompt.user_info_prompt,

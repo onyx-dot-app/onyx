@@ -435,6 +435,7 @@ def test_saved_tools_survive_replay_and_request_preparation(
             reminder_message=None,
             context_files=None,
             token_counter=len,
+            search_passage_cache={},
         )
         assert [m.text for m in request if isinstance(m, ToolResultMessage)] == [
             "Stored evidence",
