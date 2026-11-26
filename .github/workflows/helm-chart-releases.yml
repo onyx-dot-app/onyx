@@ -82,6 +82,8 @@ jobs:
       # index.yaml entry and the OCI artifact all ship the same bytes.
       - name: Package chart
         id: package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           helm dependency build "${CHART_DIR}"
@@ -101,6 +103,18 @@ jobs:
           [ -n "$package" ] || { echo "helm package produced no tarball" >&2; exit 1; }
           version="$(basename "$package" .tgz)"
           version="${version#onyx-}"
+
+          # A re-run after a newer Onyx tag would stamp another appVersion
+          # under the same chart version. Reuse the released tarball so the
+          # remaining publish steps (index, GHCR) ship the same bytes.
+          release="helm/onyx-${version}"
+          if gh release view "${release}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            rm -f "${package}"
+            gh release download "${release}" --repo "${GITHUB_REPOSITORY}" \
+              --pattern "onyx-${version}.tgz" --dir "${PACKAGE_DIR}"
+            [ -f "${package}" ] || { echo "${release} has no onyx-${version}.tgz asset" >&2; exit 1; }
+            echo "Reusing the ${release} tarball"
+          fi
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "package=${package}" >> "$GITHUB_OUTPUT"
