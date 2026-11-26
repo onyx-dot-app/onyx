@@ -13746,6 +13746,7 @@
         "chooseOne": "选择文件",
         "chooseMany": "选择多个文件",
         "inputLabel": "页面文件",
+        "sendError": "无法响应该页面。请重试。",
         "error": "无法上传文件。请重试。"
       }
     }

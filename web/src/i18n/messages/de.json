@@ -13746,6 +13746,7 @@
         "chooseOne": "Datei auswählen",
         "chooseMany": "Dateien auswählen",
         "inputLabel": "Dateien für die Seite",
+        "sendError": "Die Antwort an die Seite ist fehlgeschlagen. Versuchen Sie es erneut.",
         "error": "Die Dateien konnten nicht hochgeladen werden. Versuchen Sie es erneut."
       }
     }

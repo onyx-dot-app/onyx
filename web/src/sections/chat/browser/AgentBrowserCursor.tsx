@@ -53,7 +53,7 @@ export function AgentBrowserCursor({
       {phase === "click" && (
         <span
           key={sequence}
-          className="absolute -left-1 -top-1 size-4 rounded-full bg-theme-primary-05 opacity-25 animate-ping motion-reduce:animate-none"
+          className="absolute -left-1 -top-1 size-4 rounded-full bg-theme-primary-05 opacity-25 animate-agent-cursor-ripple"
         />
       )}
       <SvgMousePointer

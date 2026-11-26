@@ -522,7 +522,10 @@ export class ChatPage {
 
   /** The tiles of the right panel's Files list, from the top. */
   publishedFilesPanelCards(): Locator {
-    return this.publishedFilesPanel.getByRole("button", { name: /^Open / });
+    // The Files tab's own panel: the "+" button ("Open a tab") sits outside it
+    return this.publishedFilesPanel
+      .getByRole("tabpanel", { name: "Files" })
+      .getByRole("button", { name: /^Open / });
   }
 
   /** Checks a tile of the Files list: the name it shows. */

@@ -13,6 +13,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
   type RefObject,
+  useCallback,
   useEffect,
   useEffectEvent,
   useId,
@@ -74,6 +75,10 @@ interface BrowserSurfaceProps {
   hasFrame: boolean;
   agentPointer: BrowserPointer | null;
   send: (message: BrowserViewerMessage) => boolean;
+  // The field that takes the page's keys, for the panel to focus
+  inputRef: RefObject<HTMLTextAreaElement | null>;
+  // Set to the drop of the queued input, for a page switch to call
+  dropInputRef: RefObject<(() => void) | null>;
 }
 
 export function BrowserSurface({
@@ -83,12 +88,13 @@ export function BrowserSurface({
   hasFrame,
   agentPointer,
   send,
+  inputRef,
+  dropInputRef,
 }: BrowserSurfaceProps) {
   const t = useTranslations("chat.browser");
   const controlling = control === "you";
   const descriptionId = useId();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const keySentRef = useRef(false);
   // Keys down on the page, by code, to let go of when focus leaves it
   const heldKeysRef = useRef(new Map<string, KeyMessage>());
@@ -122,12 +128,25 @@ export function BrowserSurface({
       inputFrameRef.current = requestAnimationFrame(flushInput);
   };
 
+  const dropInput = useCallback(() => {
+    if (inputFrameRef.current !== null)
+      cancelAnimationFrame(inputFrameRef.current);
+    inputFrameRef.current = null;
+    pendingMoveRef.current = pendingWheelRef.current = null;
+  }, []);
+
   const queueWheel = (
     point: PagePoint,
     deltaX: number,
     deltaY: number,
     modifiers: number
   ) => {
+    // A wheel with other modifiers is another gesture: send the pending one
+    if (
+      pendingWheelRef.current &&
+      pendingWheelRef.current.modifiers !== modifiers
+    )
+      flushInput();
     const pending = pendingWheelRef.current;
     pendingWheelRef.current = {
       type: "wheel",
@@ -172,25 +191,22 @@ export function BrowserSurface({
   // Losing control drops the input in flight and the key field's focus
   useEffect(() => {
     if (controlling) return;
-    if (inputFrameRef.current !== null)
-      cancelAnimationFrame(inputFrameRef.current);
-    inputFrameRef.current = null;
-    pendingMoveRef.current = pendingWheelRef.current = null;
+    dropInput();
     mouseButtonsRef.current = 0;
     lastClickRef.current = null;
     touchRef.current = null;
     keySentRef.current = false;
     heldKeysRef.current.clear();
     inputRef.current?.blur();
-  }, [controlling]);
+  }, [controlling, dropInput, inputRef]);
 
-  useEffect(
-    () => () => {
-      if (inputFrameRef.current !== null)
-        cancelAnimationFrame(inputFrameRef.current);
-    },
-    []
-  );
+  useEffect(() => {
+    dropInputRef.current = dropInput;
+    return () => {
+      dropInputRef.current = null;
+      dropInput();
+    };
+  }, [dropInputRef, dropInput]);
 
   // Native, as React's wheel listener is passive and cannot stop the panel
   // from scrolling
@@ -458,17 +474,10 @@ export function BrowserSurface({
       (text !== undefined ||
         event.key === "Backspace" ||
         event.key === "Delete");
-    // The page copies or cuts; stop the browser's own copy or cut
-    if (
-      event.ctrlKey !== event.metaKey &&
-      !event.altKey &&
-      !event.shiftKey &&
-      ["c", "x"].includes(event.key.toLowerCase())
-    )
-      event.preventDefault();
-    if (shortcut) return;
+    // The page runs the key, so the app does not: Ctrl+R reloads the page,
+    // not Onyx, and Ctrl+C copies on the page
     event.preventDefault();
-    event.stopPropagation();
+    if (!shortcut) event.stopPropagation();
   };
 
   // Keys up after focus left go to the app, so the page would keep them

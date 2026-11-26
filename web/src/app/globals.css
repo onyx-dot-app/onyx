@@ -343,6 +343,24 @@
   animation: fadeIn 0.2s ease-out forwards;
 }
 
+/* The chat browser agent cursor's click ripple: one ping that ends hidden */
+@keyframes agent-cursor-ripple {
+  to {
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+
+.animate-agent-cursor-ripple {
+  animation: agent-cursor-ripple 1s cubic-bezier(0, 0, 0.2, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-agent-cursor-ripple {
+    animation: none;
+  }
+}
+
 /* Recording waveform animation */
 @keyframes waveform {
   0%,

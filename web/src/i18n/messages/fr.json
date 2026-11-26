@@ -13746,6 +13746,7 @@
         "chooseOne": "Choisir un fichier",
         "chooseMany": "Choisir des fichiers",
         "inputLabel": "Fichiers pour la page",
+        "sendError": "Impossible de répondre à la page. Réessayez.",
         "error": "Impossible de téléverser les fichiers. Réessayez."
       }
     }
