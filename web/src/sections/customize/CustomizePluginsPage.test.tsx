@@ -123,6 +123,22 @@ test("with no plugins and no marketplaces, one empty state offers upload and add
   expect(document.getElementById("marketplaces")).toBeNull();
 });
 
+test("the empty state offers add marketplace only once the marketplaces load", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [] },
+    "/api/marketplaces": () => new Promise<never>(() => undefined),
+  });
+  render(<CustomizePluginsPage />);
+
+  expect(
+    await screen.findByRole("button", { name: "Upload Plugin" })
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Add marketplace" })
+  ).not.toBeInTheDocument();
+});
+
 test("the Marketplaces section lists marketplaces and Add marketplace opens the add dialog", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({

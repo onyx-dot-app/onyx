@@ -365,7 +365,9 @@ export default function CustomizePluginsPage() {
                 >
                   {t("plugins.empty.upload")}
                 </Button>
-                {!showMarketplaces && (
+                {/* Only once the list loads empty: no flash for users
+                    who already have marketplaces. */}
+                {marketplaceList.marketplaces?.length === 0 && (
                   <Button
                     prominence="secondary"
                     icon={SvgGitHub}
