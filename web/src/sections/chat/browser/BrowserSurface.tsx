@@ -448,13 +448,28 @@ export function BrowserSurface({
   ) => {
     if (!controlling) return;
     keySentRef.current = false;
+    const held = event.code || event.key;
     if (
       event.nativeEvent.isComposing ||
       event.keyCode === 229 ||
       event.key === "Process" ||
       event.key === "Unidentified"
-    )
+    ) {
+      // A press that reached the page before composition began goes up there
+      const press = action === "up" ? heldKeysRef.current.get(held) : undefined;
+      if (press) {
+        heldKeysRef.current.delete(held);
+        send({
+          type: "key",
+          action: "up",
+          key: press.key,
+          code: press.code,
+          keyCode: press.keyCode,
+          modifiers: press.modifiers,
+        });
+      }
       return;
+    }
     // Shift+Escape leaves the page; Escape alone goes to it
     if (event.key === "Escape" && event.shiftKey) {
       event.preventDefault();
@@ -468,7 +483,6 @@ export function BrowserSurface({
     const modifiers = altGraph
       ? browserModifiers(event) & ~(ALT | CTRL)
       : browserModifiers(event);
-    const held = event.code || event.key;
     const key: KeyMessage = {
       type: "key",
       action,

@@ -753,6 +753,29 @@ test("a key released after a modifier went down still goes up on the page", () =
   expect(socket().sent).toHaveLength(sent);
 });
 
+test("a key pressed before composition began goes up on the page", () => {
+  renderPanel();
+  openControlled();
+  const input = screen.getByRole("textbox", { name: "Browser page" });
+  fireEvent.keyDown(input, { key: "a", code: "KeyA", keyCode: 65 });
+  fireEvent.keyUp(input, {
+    key: "Process",
+    code: "KeyA",
+    keyCode: 229,
+    isComposing: true,
+  });
+  expect(socket().sent.at(-1)).toMatchObject({
+    type: "key",
+    action: "up",
+    key: "a",
+    code: "KeyA",
+  });
+  // A composing key that never went down on the page stays off it
+  const sent = socket().sent.length;
+  fireEvent.keyUp(input, { key: "Process", code: "KeyB", keyCode: 229 });
+  expect(socket().sent).toHaveLength(sent);
+});
+
 test("a page switch forgets the old page's clicks, held buttons and touch", async () => {
   mockFrames();
   const { container } = renderPanel();
