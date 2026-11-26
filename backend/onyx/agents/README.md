@@ -157,7 +157,8 @@ without `prepare_step` the run uses its defaults, and without `before_tool_call`
 A feature decides at `bind()` which hooks a run has, for example `prepare_tool_result` only with a sandbox turn.
 `RunHooks.bind()` returns itself, so an agent without feature state passes `feature=RunHooks(...)`.
 The run holds one `RunConfig` for its execution: the model, the default step, the tools and phases, the hooks and `on_drained`.
-It releases the configuration when its work drains or it hands off.
+It releases the configuration when a finished run's work drains or when the run hands off.
+A suspended run keeps it, because `Run.resume()` continues with it.
 A feature never holds its Agent or a Run, and an agent holds no callable bound to itself.
 A finished agent, its runs and its feature are therefore freed by reference counting, without a garbage collection pass.
 
