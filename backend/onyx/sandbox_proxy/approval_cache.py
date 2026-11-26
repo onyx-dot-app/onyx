@@ -20,6 +20,8 @@ ID, and two more keys:
   command. Plain keys,
   not a set, so the TTL applies on every cache backend. The harness drops
   them when it sees the command end (`drop_command_grants`).
+* `approval:command:{command_id}:granted` — set before the first grant of the
+  command, so the drop scans for grant keys only when the command has one.
 * `approval:command:{command_id}:ended` — set by `drop_command_grants` before
   it drops the grants. A grant saved after the drop sees it and removes
   itself, so a late save cannot restore a grant of an ended command.
@@ -228,6 +230,10 @@ def _command_ended_key(command_id: UUID) -> str:
     return f"approval:command:{command_id}:ended"
 
 
+def _command_granted_key(command_id: UUID) -> str:
+    return f"approval:command:{command_id}:granted"
+
+
 def _command_grant_key(
     command_id: UUID, chat_session_id: UUID, integration_id: int, action_type: str
 ) -> str:
@@ -281,6 +287,7 @@ def grant_command_actions(
         _command_grant_key(command_id, chat_session_id, integration_id, action_type)
         for action_type in action_types
     }
+    cache.set(_command_granted_key(command_id), b"1", ex=COMMAND_GRANT_TTL_S)
     for key in keys:
         cache.set(key, b"1", ex=COMMAND_GRANT_TTL_S)
     # Write, then check: either the drop sees these grants or this sees its
@@ -308,9 +315,11 @@ def command_grants_cover(
 
 def drop_command_grants(command_id: UUID, cache: CacheBackend) -> None:
     """The command ended: a process that it left running gets no grant.
-    The mark comes first, so a grant saved during the drop removes itself."""
+    The mark comes first, so a grant saved during the drop removes itself.
+    A command without a grant skips the scan of its grant keys."""
     cache.set(_command_ended_key(command_id), b"1", ex=COMMAND_GRANT_TTL_S)
-    cache.delete_prefix(_command_grant_prefix(command_id))
+    if cache.exists(_command_granted_key(command_id)):
+        cache.delete_prefix(_command_grant_prefix(command_id))
 
 
 def pop_announcement(

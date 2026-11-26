@@ -64,6 +64,32 @@ def test_dropping_the_grants_of_a_command_keeps_other_commands() -> None:
     )
 
 
+def test_dropping_a_command_without_grants_scans_no_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    scanned: list[str] = []
+    delete_prefix = cache.delete_prefix
+
+    def scan(prefix: str) -> None:
+        scanned.append(prefix)
+        delete_prefix(prefix)
+
+    monkeypatch.setattr(cache, "delete_prefix", scan)
+    command, chat = uuid4(), uuid4()
+
+    approval_cache.drop_command_grants(command, cache)
+    assert scanned == []
+
+    granted = uuid4()
+    approval_cache.grant_command_actions(granted, chat, 7, ["issues.create"], cache)
+    approval_cache.drop_command_grants(granted, cache)
+    assert len(scanned) == 1
+    assert not approval_cache.command_grants_cover(
+        granted, chat, 7, ["issues.create"], cache
+    )
+
+
 def test_a_grant_covers_ask_actions_and_never_one_that_always_asks() -> None:
     assert approval_cache.command_grant_actions(
         [
