@@ -28,8 +28,9 @@ export function AgentToolRenderer({
   const call = agentToolCalls(packets)[0];
   const name = call?.name ?? "";
   const isComplete = call?.isComplete ?? false;
+  // A failed spawn, such as one whose name an agent already has, made none
   const [agent] = useSpawnedSubagents(
-    call?.action === "spawn" && name ? [name] : []
+    call?.action === "spawn" && !call.failed ? [call.agentName] : []
   );
 
   useEffect(() => {

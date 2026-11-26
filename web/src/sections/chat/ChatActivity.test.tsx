@@ -8,6 +8,7 @@ import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import type { ChatSessionStatus, ChatSubagent } from "@/lib/chat/types";
 import { RIGHT_PANEL_FILES_TAB } from "@/lib/chat/rightPanel";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
+import { SubagentTabsContext } from "@/lib/chat/subagents";
 
 const STATUS: ChatSessionStatus = {
   is_processing: false,
@@ -390,6 +391,35 @@ test("an agent row opens the agent's transcript in the right panel", async () =>
   const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
   expect(panel?.mode).not.toBe("closed");
   expect(panel?.activeId).toBe("agent:/root/poet");
+});
+
+test("a page without subagent tabs, as the extension's, opens no agent from its row", async () => {
+  serve([agent("/root/poet", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  render(
+    <SubagentTabsContext.Provider value={false}>
+      <AppWorkspaceElementsContext.Provider
+        value={{
+          workspace: { current: null },
+          page: { current: null },
+          panelToggleSlot: null,
+          activitySlot: document.body,
+        }}
+      >
+        <ChatActivity sessionId="s" />
+      </AppWorkspaceElementsContext.Provider>
+    </SubagentTabsContext.Provider>
+  );
+  const trigger = await screen.findByRole("button", { name: "Activity" });
+  act(() => trigger.click());
+  act(() => screen.getByText("poet").click());
+
+  const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
+  expect(panel?.mode).toBe("closed");
+  // Its Stop still works
+  expect(screen.getByRole("button", { name: "Stop poet" })).toBeInTheDocument();
 });
 
 test("a live agent shows its run time and no status word; a finished one its outcome only", async () => {

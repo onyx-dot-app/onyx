@@ -9,6 +9,9 @@ export interface AgentTool {
   action: "spawn" | "send" | "interrupt";
   /** The argument that names the agent. */
   nameArg: string;
+  /** Whether the server turns each `/` of the name into `-` for the
+   *  agent's path, as it does for a description. */
+  slashesToDashes?: boolean;
   /** The argument that holds the text sent to the agent. */
   messageArg: string | null;
 }
@@ -20,7 +23,15 @@ const AGENT_TOOLS: ReadonlyMap<string, AgentTool> = new Map([
     "spawn_agent",
     { action: "spawn", nameArg: "task_name", messageArg: "message" },
   ],
-  ["agent", { action: "spawn", nameArg: "description", messageArg: "prompt" }],
+  [
+    "agent",
+    {
+      action: "spawn",
+      nameArg: "description",
+      messageArg: "prompt",
+      slashesToDashes: true,
+    },
+  ],
   [
     "send_message",
     { action: "send", nameArg: "target", messageArg: "message" },
@@ -57,6 +68,8 @@ function stringArg(args: Record<string, unknown>, key: string): string {
 export interface AgentToolCall {
   action: AgentTool["action"];
   name: string;
+  /** The last part of the spawned agent's path. */
+  agentName: string;
   message: string;
   failed: boolean;
   isComplete: boolean;
@@ -76,6 +89,7 @@ export function agentToolCalls(packets: readonly Packet[]): AgentToolCall[] {
     const call: AgentToolCall = {
       action: tool.action,
       name: "",
+      agentName: "",
       message: "",
       failed: false,
       isComplete: false,
@@ -86,6 +100,9 @@ export function agentToolCalls(packets: readonly Packet[]): AgentToolCall[] {
           stringArg(obj.tool_args, tool.nameArg) ||
           // The Claude family names the target `to`.
           (tool.action === "send" ? stringArg(obj.tool_args, "to") : "");
+        call.agentName = tool.slashesToDashes
+          ? call.name.replaceAll("/", "-")
+          : call.name;
         if (tool.messageArg)
           call.message = stringArg(obj.tool_args, tool.messageArg);
       } else if (

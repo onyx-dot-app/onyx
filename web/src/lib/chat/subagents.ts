@@ -5,7 +5,6 @@ import useSWR from "swr";
 import type { BackendMessage, Message } from "@/app/app/types";
 import type { Packet, StreamCursor } from "@/app/app/services/streamingModels";
 import { processRawChatHistory } from "@/app/app/services/lib";
-import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import {
@@ -36,20 +35,25 @@ export function subagentName(path: string): string {
 export const SubagentPathContext = createContext("/root");
 
 /**
+ * Whether the page shows subagent tabs: the chat page's right panel does; the
+ * extension's has only Sources, so it opens no agent.
+ */
+export const SubagentTabsContext = createContext(true);
+
+/**
  * The open chat's agents that the rendering agent spawned with these names,
- * once the agents list holds them; undefined for a name it does not hold,
- * such as in a shared chat.
+ * once the agents list holds them; undefined for an empty name, a name it
+ * does not hold (such as in a shared chat), or a page without subagent tabs.
  */
 export function useSpawnedSubagents(
   names: readonly string[]
 ): (ChatSubagent | undefined)[] {
   const base = useContext(SubagentPathContext);
+  const opens = useContext(SubagentTabsContext);
   const sessionId = useChatSessionStore((state) => state.currentSessionId);
-  const { agents } = useChatSubagents(sessionId, false);
+  const { agents } = useChatSubagents(opens ? sessionId : null, false);
   return names.map((name) =>
-    sessionId === null
-      ? undefined
-      : agents.find((agent) => agent.path === `${base}/${name}`)
+    name ? agents.find((agent) => agent.path === `${base}/${name}`) : undefined
   );
 }
 
@@ -86,8 +90,10 @@ async function* followSubagentStream(
   yield* handleSSEStream<Packet | StreamCursor>(response, signal);
 }
 
+const RECONNECT_DELAY_MS = 1000;
+
 interface SubagentTranscript {
-  /** The conversation's latest chain, oldest first. */
+  /** The conversation's messages, oldest first. */
   messages: Message[];
   /** The response that streams live, if any. */
   liveResponseId: number | null;
@@ -99,7 +105,9 @@ interface SubagentTranscript {
  * A subagent's conversation: its saved history, and its running response's
  * packets from the live stream, which the saved packets lag. `streamId` is
  * the agents list's live stream for the agent: a new one reloads the history,
- * which names the stream to follow. The history reloads when the stream ends.
+ * which names the stream to follow; its end reloads the history too. The
+ * history reloads when the stream ends, and a dropped stream resumes from its
+ * last cursor.
  */
 export function useSubagentTranscript(
   sessionId: string,
@@ -115,9 +123,9 @@ export function useSubagentTranscript(
   const followed = stream?.stream_id ?? null;
   const liveResponseId = stream?.response_ids[0] ?? null;
 
-  // The agents list names a stream that this history predates
+  // The agents list names another stream, or none once the agent ended
   useEffect(() => {
-    if (streamId !== null && streamId !== followed) void mutate();
+    if (streamId !== followed) void mutate();
   }, [streamId, followed, mutate]);
 
   const [live, setLive] = useState<{ streamId: number; packets: Packet[] }>({
@@ -142,23 +150,37 @@ export function useSubagentTranscript(
     };
     setLive({ streamId: followed, packets: [] });
     void (async () => {
-      try {
-        for await (const item of followSubagentStream(
-          sessionId,
-          agentId,
-          followed,
-          0,
-          controller.signal
-        )) {
-          if (!isPacket(item)) continue;
-          const type = item.obj.type;
-          if (type === "chat_heartbeat" || type === "replay_end") continue;
-          pending.push(item);
-          if (frame === null) frame = requestAnimationFrame(flush);
+      let cursor = 0;
+      let stopped = false;
+      // Until the stream sends its stop, or no longer serves this stream
+      while (!stopped && !controller.signal.aborted) {
+        try {
+          for await (const item of followSubagentStream(
+            sessionId,
+            agentId,
+            followed,
+            cursor,
+            controller.signal
+          )) {
+            if (!isPacket(item)) {
+              cursor = item.next_cursor;
+              continue;
+            }
+            const type = item.obj.type;
+            if (type === "chat_heartbeat" || type === "replay_end") continue;
+            if (type === "stop") stopped = true;
+            pending.push(item);
+            if (frame === null) frame = requestAnimationFrame(flush);
+          }
+        } catch (failure) {
+          if (controller.signal.aborted) return;
+          if (failure instanceof FetchError && failure.status === 404) break;
+          console.warn("The subagent's live stream dropped", failure);
         }
-      } catch (failure) {
-        if (controller.signal.aborted) return;
-        console.warn("The subagent's live stream ended", failure);
+        if (!stopped)
+          await new Promise((resolve) =>
+            setTimeout(resolve, RECONNECT_DELAY_MS)
+          );
       }
       if (controller.signal.aborted) return;
       if (frame !== null) cancelAnimationFrame(frame);
@@ -174,9 +196,11 @@ export function useSubagentTranscript(
 
   const messages = useMemo(() => {
     if (!data) return [];
-    const chain = getLatestMessageChain(
-      processRawChatHistory(data.messages, data.packets)
-    );
+    // Each message the parent sends starts a reply that no earlier reply
+    // links to as its latest child, so the conversation reads in order
+    const chain = [
+      ...processRawChatHistory(data.messages, data.packets).values(),
+    ].sort((a, b) => (a.messageId ?? 0) - (b.messageId ?? 0));
     const streamed = live.streamId === followed ? live.packets : [];
     if (liveResponseId === null || streamed.length === 0) return chain;
     return chain.map((message) =>

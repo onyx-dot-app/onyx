@@ -44,6 +44,80 @@ function spawn(
   ];
 }
 
+/** A Claude-style spawn, whose description names the agent. */
+function claudeSpawn(tab: number, description: string): CustomToolPacket[] {
+  const placement = { turn_index: 1, tab_index: tab };
+  return [
+    {
+      placement,
+      obj: {
+        type: PacketType.CUSTOM_TOOL_START,
+        tool_name: "agent",
+        display_name: "Start agent",
+      },
+    },
+    {
+      placement,
+      obj: {
+        type: PacketType.CUSTOM_TOOL_ARGS,
+        tool_name: "agent",
+        tool_args: { description, prompt: "Review it" },
+      },
+    },
+    { placement, obj: { type: PacketType.SECTION_END } },
+  ];
+}
+
+/** A spawn that the server refused, such as for a name in use. */
+function refusedSpawn(tab: number, name: string): CustomToolPacket[] {
+  const [start, args, end] = spawn(tab, name, "Again");
+  if (!start || !args || !end) return [];
+  return [
+    start,
+    args,
+    {
+      placement: start.placement,
+      obj: {
+        type: PacketType.CUSTOM_TOOL_DELTA,
+        tool_name: "spawn_agent",
+        response_type: "text",
+        error: {
+          is_auth_error: false,
+          is_unreachable: false,
+          status_code: 400,
+          message: "An agent already has this name.",
+        },
+      },
+    },
+    end,
+  ];
+}
+
+function renderCard(packets: CustomToolPacket[]) {
+  render(
+    <AgentGroupRenderer
+      packets={packets}
+      nestedCalls={[]}
+      state={{}}
+      onComplete={jest.fn()}
+      renderType={RenderType.FULL}
+      animate={false}
+      stopPacketSeen={false}
+    >
+      {(results) => (
+        <div>
+          {results.map((result, index) => (
+            <div key={index}>
+              <div data-testid="accessory">{result.headerAccessory}</div>
+              <div data-testid="body">{result.content}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </AgentGroupRenderer>
+  );
+}
+
 function step(tab: number, packets: CustomToolPacket[]): TransformedStep {
   return {
     key: `1-${tab}`,
@@ -160,4 +234,33 @@ test("the card counts the subagents and who works, and a row opens its agent", a
   const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
   expect(panel?.activeId).toBe("agent:a-1");
   expect(panel?.agentTabs).toEqual([{ agentId: "a-1", name: "alpha" }]);
+});
+
+test("refused spawns count as failed and link to no earlier agent of their name", async () => {
+  // beta already exists; both spawns were refused before any agent started
+  renderCard([...refusedSpawn(0, "beta"), ...refusedSpawn(1, "delta")]);
+  expect(await screen.findByText("2 failed")).toBeVisible();
+  expect(screen.queryByText("Done")).toBeNull();
+  expect(screen.getByRole("button", { name: "Open beta" })).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
+});
+
+test("a Claude spawn whose description has a slash opens the agent the server named", async () => {
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    const body = String(input).endsWith("/agents")
+      ? [
+          agent("c-1", "/root/auth-session", "running", null),
+          agent("d-1", "/root/ui", "running", null),
+        ]
+      : STATUS;
+    return new Response(JSON.stringify(body), { status: 200 });
+  });
+  renderCard([...claudeSpawn(0, "auth/session"), ...claudeSpawn(1, "ui")]);
+  const row = await screen.findByRole("button", { name: "Open auth/session" });
+  act(() => row.click());
+  expect(
+    useChatSessionStore.getState().sessions.get("s")?.rightPanel.activeId
+  ).toBe("agent:c-1");
 });

@@ -108,7 +108,10 @@ export function AgentGroupRenderer({
 }: ComponentProps<MessageRenderer<CustomToolPacket, {}>>) {
   const t = useTranslations("chat.messages.timeline.agentGroup");
   const calls = agentToolCalls(packets);
-  const agents = useSpawnedSubagents(calls.map((call) => call.name));
+  // A failed spawn made no agent
+  const agents = useSpawnedSubagents(
+    calls.map((call) => (call.failed ? "" : call.agentName))
+  );
   const isComplete = calls.every((call) => call.isComplete);
   useEffect(() => {
     if (isComplete) onComplete();
@@ -117,9 +120,17 @@ export function AgentGroupRenderer({
   const working = agents.filter(
     (agent): agent is ChatSubagent => agent !== undefined && isLive(agent)
   );
-  const failed = agents.filter(
-    (agent) => agent?.status === "error" || agent?.status === "limit"
+  const failed = calls.filter(
+    (call, index) =>
+      call.failed ||
+      agents[index]?.status === "error" ||
+      agents[index]?.status === "limit"
   ).length;
+  // A spawn whose agent the list does not hold yet still starts
+  const starting = calls.filter(
+    (call, index) => !call.failed && agents[index] === undefined
+  ).length;
+  const busy = working.length + starting;
   const starts = working
     .map(startOf)
     .filter((start): start is number => start !== undefined);
@@ -136,7 +147,7 @@ export function AgentGroupRenderer({
           <Text
             font="secondary-body"
             color={
-              working.length > 0
+              busy > 0
                 ? "action-selection-05"
                 : failed > 0
                   ? "status-error-05"
@@ -144,8 +155,8 @@ export function AgentGroupRenderer({
             }
             wordWrap="whitespace-nowrap"
           >
-            {working.length > 0
-              ? t("working", { count: working.length })
+            {busy > 0
+              ? t("working", { count: busy })
               : failed > 0
                 ? t("failed", { count: failed })
                 : t("done")}

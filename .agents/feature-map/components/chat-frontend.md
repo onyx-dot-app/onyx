@@ -961,11 +961,18 @@ read-only, as the shared view does (`HumanMessage`, `AgentMessage`), from
 `GET .../agents/{agent_id}/history`. `useSubagentTranscript` follows the live
 stream that the history names (`.../agents/{agent_id}/stream`, one batch of
 packets per frame); its packets replace the running response's saved ones.
-The history reloads when the stream ends or the agents list names another
-`stream_id`. `SubagentBar` shows the agent's path, run time and Stop over the
-tab. `SubagentPathContext` gives the path of the agent whose conversation
-renders, so its spawns resolve to `{path}/{name}`. In the timeline, a spawn
-step whose agent the list holds has an open button
+A stream that drops before its stop packet resumes from its last cursor. The
+history reloads when the stream ends or the agents list names another
+`stream_id`, or none. The tab lists the agent's messages by ID, not by the
+latest-child chain: a reply never links to the next instruction its parent
+sends. The history reads approvals under the root chat and adds the stop packet
+that a child's saved reply lacks. `SubagentBar` shows the agent's path, run
+time and Stop over the tab. `SubagentPathContext` gives the path of the agent
+whose conversation renders, so its spawns resolve to `{path}/{name}`, with
+each `/` of a Claude-family description turned into `-` as the server names
+it; a refused spawn links to no agent. `SubagentTabsContext` is false on the
+extension page, which has no subagent tabs: its rows and spawns open nothing.
+In the timeline, a spawn step whose agent the list holds has an open button
 (`lib/timeline/chat/renderers/agent/AgentToolRenderer.tsx`), and consecutive spawns of one turn
 form one step (`lib/timeline/chat/transformers.ts:groupSpawnSteps`) that
 `lib/timeline/chat/renderers/agent/AgentGroupRenderer.tsx` draws as T3 Code's subagent card: the
