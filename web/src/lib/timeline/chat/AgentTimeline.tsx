@@ -26,6 +26,7 @@ import { useTimelineStepState } from "@/lib/timeline/chat/hooks/useTimelineStepS
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { RunCard } from "@/lib/timeline/components/RunCard";
 import {
+  findRunStepRow,
   RunStepOpenContext,
   useRunStepOpenState,
 } from "@/lib/timeline/components/RunStep";
@@ -226,9 +227,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     const stepId = focusedStepRef.current;
     if (stepId === undefined) return;
     focusedStepRef.current = undefined;
-    const row = Array.from(
-      card.querySelectorAll<HTMLElement>("[data-run-step-id]")
-    ).find((element) => element.dataset.runStepId === stepId);
+    const row = stepId === null ? null : findRunStepRow(card, stepId);
     (
       row?.querySelector<HTMLElement>("button") ??
       card.querySelector<HTMLElement>("button")
@@ -341,6 +340,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               icon={SvgListTree}
               appear={!cardHandedOver}
               startFolded={cardHandedOver && !handedOverOpen}
+              startOpen={handedOverOpen}
               stepOpenState={stepOpenState}
               isActive={isActive}
               autoCollapse={hasDisplayContent}

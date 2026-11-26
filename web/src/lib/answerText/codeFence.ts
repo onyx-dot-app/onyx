@@ -25,11 +25,6 @@ function titleFromMeta(meta: string | undefined): string | undefined {
     .find((candidate) => FENCE_FILENAME_TOKEN_REGEX.test(candidate));
 }
 
-function languageOfFileName(fileName: string): string | undefined {
-  const extension = fileName.split(".").pop()?.toLowerCase();
-  return getLanguageFromPath(fileName) ?? extension;
-}
-
 /**
  * Reads a fence info string: its first word (`lang`) and the rest (`meta`).
  * Supports `ts title="src/a.ts"`, `ts:src/a.ts` and a bare `src/a.ts`, whose
@@ -50,7 +45,7 @@ export function parseCodeFence(
     };
   }
   if (FENCE_FILENAME_TOKEN_REGEX.test(lang)) {
-    return { language: languageOfFileName(lang), fileName: metaTitle ?? lang };
+    return { language: getLanguageFromPath(lang), fileName: metaTitle ?? lang };
   }
   return { language: lang, fileName: metaTitle };
 }

@@ -301,23 +301,37 @@ function PresenceSwap({
     if (phase !== "exiting") shownChildrenRef.current = children;
   });
 
+  // The observers below only act while idle; the phase is read through a ref.
+  const phaseRef = useRef(phase);
+  useLayoutEffect(() => {
+    phaseRef.current = phase;
+  });
+
   // Track the content's size on `axis`, so the box animates to every new size.
   // Also measure on each new key: capped at the old box, the content's own
-  // box may not change, so the observer would not report a longer title.
+  // box may not change, so the resize observer would not report a longer
+  // title. New text under the same key is capped the same way, so a mutation
+  // observer measures it when the DOM changes.
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
     const measure = () => setSize(contentSize(content, axis));
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(content);
-    return () => observer.disconnect();
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(content);
+    const mutationObserver = new MutationObserver(() => {
+      if (phaseRef.current === "idle") measure();
+    });
+    mutationObserver.observe(content, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
   }, [axis, shownKey]);
-  // New content under the same key: capped the same way, so measure it too.
-  useLayoutEffect(() => {
-    const content = contentRef.current;
-    if (content && phase === "idle") setSize(contentSize(content, axis));
-  }, [children]);
 
   // Resizing: go straight on when the new content is the same size as the old,
   // and never stall if `transitionend` does not arrive. Runs once per phase
