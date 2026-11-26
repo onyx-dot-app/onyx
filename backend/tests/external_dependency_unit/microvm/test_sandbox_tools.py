@@ -189,6 +189,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
+from onyx.server.settings.store import load_settings
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.tools.constants import (
     EXEC_COMMAND_TOOL_NAME,
@@ -1733,6 +1734,27 @@ def test_claude_models_get_edit_and_write_and_others_apply_patch(
         "The user sees the change as a diff." in descriptions[name]
         for name in (file_tools if claude else {ApplyPatchTool.NAME})
     )
+    # The browser tools (on by default) come with their usage guidance in
+    # browser_open's description; the system prompt does not name them.
+    assert "browser_open" in offered
+    assert "take control" in descriptions["browser_open"]
+    assert "browser_open" not in str(request["prompt"])
+
+
+@pytest.mark.usefixtures("node")
+def test_the_browser_setting_turns_the_browser_tools_off(
+    monkeypatch: pytest.MonkeyPatch, chat: SandboxChat
+) -> None:
+    settings = load_settings().model_copy(update={"browser_enabled": False})
+    monkeypatch.setattr(process_message, "load_settings", lambda: settings)
+    llm = NamedChatLLM([Delta(content="Ready.")], model_name="gpt-5.1")
+    chat.send(llm)
+
+    [request] = llm.requests
+    offered = {tool["function"]["name"] for tool in request.get("tools") or []}
+    assert SHELL_SHAPES[ToolFamily.OPENAI].name in offered
+    assert not {name for name in offered if name.startswith("browser_")}
+    assert "browser_open" not in str(request["prompt"])
 
 
 @pytest.mark.usefixtures("node")

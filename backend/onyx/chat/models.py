@@ -997,6 +997,9 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     # The turn offers the sandbox tools (sandbox_tools.py:SANDBOX_TOOLS).
     sandbox_tools: bool
+    # With the sandbox tools, also the browser tools (the browser_enabled
+    # setting when the turn began).
+    browser_tools: bool = False
     # The chat's files in its sandbox (chat/files.py:place_chat_files); none
     # without the sandbox tools.
     vm_chat_files: list[VmChatFile]
