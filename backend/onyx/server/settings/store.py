@@ -142,7 +142,7 @@ def load_browser_enabled() -> bool:
     try:
         return load_settings(raise_on_error=True).browser_enabled
     except Exception:
-        logger.error("Could not load the browser setting; the browser is off")
+        logger.exception("Could not load the browser setting; the browser is off")
         return False
 
 
