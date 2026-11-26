@@ -63,7 +63,7 @@ from onyx.prompts.tool_prompts import (
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import (
-    EXEC_TOOL_NAME,
+    EXECUTE_CODE_TOOL_NAME,
     FILE_READER_TOOL_NAME,
     OPEN_URL_TOOL_NAME,
     WAIT_TOOL_NAME,
@@ -177,7 +177,7 @@ def _execution(stdout: str = "alpha\n") -> CodeModeExecutionResult:
 
 
 def _call() -> ToolCall:
-    return ToolCall(id="code-1", name=EXEC_TOOL_NAME, arguments={"code": CODE})
+    return ToolCall(id="code-1", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": CODE})
 
 
 def _result_message(
@@ -185,7 +185,7 @@ def _result_message(
 ) -> ToolResultMessage:
     return ToolResultMessage(
         tool_call_id="code-1",
-        tool_name=EXEC_TOOL_NAME,
+        tool_name=EXECUTE_CODE_TOOL_NAME,
         content="program output",
         details=_execution() if details is None and not is_error else details,
         is_error=is_error,
@@ -363,7 +363,7 @@ def test_nested_artifacts_belong_to_the_code_mode_call() -> None:
         }
     )
     history = project_response(
-        _state(_result_message(execution)), tool_ids={EXEC_TOOL_NAME: None}
+        _state(_result_message(execution)), tool_ids={EXECUTE_CODE_TOOL_NAME: None}
     )
     assert history.tool_calls[0].generated_files == [file]
 
@@ -394,15 +394,13 @@ def _code_mode_prompt(offered: list[Tool]) -> str:
 
 
 @pytest.mark.parametrize("family", list(ToolFamily))
-def test_code_mode_guidance_names_the_shape_s_run_tool(family: ToolFamily) -> None:
+def test_code_mode_guidance_names_execute_code(family: ToolFamily) -> None:
     offered = with_code_mode(
         [MemoryTool(tool_id=1, llm=MagicMock())], CODE_MODE_SHAPES[family]
     )[0]
     prompt = _code_mode_prompt(offered)
-    for other, shape in CODE_MODE_SHAPES.items():
-        assert (CODE_MODE_GUIDANCE.format(name=shape.run_name) in prompt) is (
-            other is family
-        )
+    assert CODE_MODE_GUIDANCE.format(name="execute_code") in prompt
+    assert prompt.count("## execute_code\n") == 1
 
 
 @pytest.mark.parametrize("family", list(ToolFamily))
@@ -730,7 +728,7 @@ def test_the_token_reservation_counts_code_mode_guidance(
         all_guidance_family=ToolFamily.OPENAI,
         all_guidance_sandbox=include_sandbox,
     )
-    assert CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME) in reserved
+    assert CODE_MODE_GUIDANCE.format(name=EXECUTE_CODE_TOOL_NAME) in reserved
     assert ("# Environment" in reserved) is include_sandbox
 
 
@@ -780,7 +778,7 @@ def test_tool_guidance_follows_the_tool_order_in_both_prompt_variants() -> None:
     ]
     # The search guidance opens the section, followed by URL reading after
     # a web search; the other sections follow the tool order.
-    expected = ["search", "open url", EXEC_TOOL_NAME]
+    expected = ["search", "open url", EXECUTE_CODE_TOOL_NAME]
 
     offered_prompt = _code_mode_prompt(offered)
     estimate_prompt = build_system_prompt(
@@ -880,7 +878,7 @@ def test_function_tools_move_into_the_run_tool() -> None:
     assert cells is not None
     assert [tool.name for tool in offered] == [
         "send_email",
-        EXEC_TOOL_NAME,
+        EXECUTE_CODE_TOOL_NAME,
         WAIT_TOOL_NAME,
     ]
     code_mode = offered[1]
@@ -918,7 +916,7 @@ def _offered(request: dict[str, Any]) -> list[str]:
     ("preferred_tool_id", "operation"),
     [
         # A function runs only inside programs, so the preference names it so.
-        (EchoTool().id, "tools.echo (a function in `exec` programs)"),
+        (EchoTool().id, "tools.echo (a function in `execute_code` programs)"),
         (_DirectOnlyTool().id, "send_email"),
     ],
 )
@@ -942,7 +940,7 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
 
     [request] = llm.requests
     assert _offered(request) == [
-        EXEC_TOOL_NAME,
+        EXECUTE_CODE_TOOL_NAME,
         WAIT_TOOL_NAME,
         "send_email",
     ]
@@ -957,7 +955,7 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
                 index=0,
                 id="call-0",
                 function=ResponseFunctionCall(
-                    name=EXEC_TOOL_NAME, arguments='{"code": "print(1)"}'
+                    name=EXECUTE_CODE_TOOL_NAME, arguments='{"code": "print(1)"}'
                 ),
             )
         ]
@@ -979,7 +977,7 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
     first, final = llm.requests
     assert first["tools"] == final["tools"]
     assert _offered(final) == [
-        EXEC_TOOL_NAME,
+        EXECUTE_CODE_TOOL_NAME,
         WAIT_TOOL_NAME,
         "send_email",
     ]
@@ -996,7 +994,8 @@ def test_the_next_run_of_the_same_agent_starts_new_cells() -> None:
                     index=0,
                     id=call_id,
                     function=ResponseFunctionCall(
-                        name=EXEC_TOOL_NAME, arguments=json.dumps({"code": code})
+                        name=EXECUTE_CODE_TOOL_NAME,
+                        arguments=json.dumps({"code": code}),
                     ),
                 )
             ]
@@ -1090,7 +1089,7 @@ def test_the_file_notice_names_a_tool_that_runs_inside_programs() -> None:
 
     [request] = llm.requests
     assert _offered(request) == [
-        EXEC_TOOL_NAME,
+        EXECUTE_CODE_TOOL_NAME,
         WAIT_TOOL_NAME,
     ]
     assert "Use the read_file tool" in str(request)
@@ -1142,13 +1141,23 @@ def test_live_stdout_cut_at_the_limit_is_replaced_by_the_saved_stdout() -> None:
     [
         (
             ToolFamily.CLAUDE,
-            ["use bash.", "Prefer edit for", "## repl\n", "use web_fetch after"],
-            ["use exec_command.", "## exec\n", "use open_url after"],
+            [
+                "use bash.",
+                "Prefer edit for",
+                "## execute_code\n",
+                "use web_fetch after",
+            ],
+            ["use exec_command.", "use open_url after"],
         ),
         (
             ToolFamily.OPENAI,
-            ["use exec_command.", "*** Begin Patch", "## exec\n", "use open_url after"],
-            ["use bash.", "Prefer edit for", "## repl\n", "use web_fetch after"],
+            [
+                "use exec_command.",
+                "*** Begin Patch",
+                "## execute_code\n",
+                "use open_url after",
+            ],
+            ["use bash.", "Prefer edit for", "use web_fetch after"],
         ),
     ],
 )
@@ -1216,27 +1225,13 @@ def _not_offered(name: str, use: str) -> str:
 @pytest.mark.parametrize(
     ("family", "code_mode", "tools", "called", "expected"),
     [
-        # Another shape's code mode tools and program functions.
-        (
-            ToolFamily.OPENAI,
-            True,
-            [EchoTool()],
-            "repl",
-            _not_offered("repl", "Run a program with `exec`."),
-        ),
+        # Another shape's wait tool and program functions.
         (
             ToolFamily.OPENAI,
             True,
             [EchoTool()],
             "poll",
             _not_offered("poll", "Wait on a running cell with `wait`."),
-        ),
-        (
-            ToolFamily.CLAUDE,
-            True,
-            [EchoTool()],
-            "exec",
-            _not_offered("exec", "Run a program with `repl`."),
         ),
         # The search exists only with deferred functions.
         (
@@ -1252,7 +1247,8 @@ def _not_offered(name: str, use: str) -> str:
             [EchoTool(), _DeferredTool()],
             "search_tools",
             _not_offered(
-                "search_tools", "Call `await tool_search(...)` in `exec` programs."
+                "search_tools",
+                "Call `await tool_search(...)` in `execute_code` programs.",
             ),
         ),
         (
@@ -1261,7 +1257,8 @@ def _not_offered(name: str, use: str) -> str:
             [EchoTool(), _DeferredTool()],
             "describe_tool",
             _not_offered(
-                "describe_tool", "Call `await tool_search(...)` in `exec` programs."
+                "describe_tool",
+                "Call `await tool_search(...)` in `execute_code` programs.",
             ),
         ),
         (
@@ -1270,7 +1267,8 @@ def _not_offered(name: str, use: str) -> str:
             [EchoTool(), _DeferredTool()],
             "tool_search",
             _not_offered(
-                "tool_search", "Call `await tool_search(...)` in `exec` programs."
+                "tool_search",
+                "Call `await tool_search(...)` in `execute_code` programs.",
             ),
         ),
         (
@@ -1279,7 +1277,8 @@ def _not_offered(name: str, use: str) -> str:
             [EchoTool(), _DeferredTool()],
             "tool_search",
             _not_offered(
-                "tool_search", "Call `await search_tools(...)` in `repl` programs."
+                "tool_search",
+                "Call `await search_tools(...)` in `execute_code` programs.",
             ),
         ),
         # The Claude shape describes listed functions too.
@@ -1289,7 +1288,8 @@ def _not_offered(name: str, use: str) -> str:
             [EchoTool()],
             "describe_tool",
             _not_offered(
-                "describe_tool", "Call `await describe_tool(...)` in `repl` programs."
+                "describe_tool",
+                "Call `await describe_tool(...)` in `execute_code` programs.",
             ),
         ),
         # Another shape's name of a tool that the agent has.
@@ -1307,7 +1307,7 @@ def _not_offered(name: str, use: str) -> str:
             "exec_command",
             _not_offered(
                 "exec_command",
-                "Call `await tools.bash(command=...)` in `repl` programs.",
+                "Call `await tools.bash(command=...)` in `execute_code` programs.",
             ),
         ),
         # A strict schema's optional arguments, which accept null, are not
@@ -1317,7 +1317,7 @@ def _not_offered(name: str, use: str) -> str:
             True,
             _sandbox_tools(ToolFamily.CLAUDE),
             "bash",
-            "`bash` is available only inside `repl` programs. Call it there: "
+            "`bash` is available only inside `execute_code` programs. Call it there: "
             "`await tools.bash(command=...)`.",
         ),
         (

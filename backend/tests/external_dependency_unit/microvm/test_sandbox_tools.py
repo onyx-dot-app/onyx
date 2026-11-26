@@ -192,7 +192,7 @@ from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.tools.constants import (
     EXEC_COMMAND_TOOL_NAME,
-    EXEC_TOOL_NAME,
+    EXECUTE_CODE_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
     LOAD_SKILL_TOOL_NAME,
     POSTGRES_TOOL_NAME,
@@ -2048,7 +2048,9 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
                 ),
                 ToolCall(
                     id="exec",
-                    name=EXEC_TOOL_NAME if code_mode else EXEC_COMMAND_TOOL_NAME,
+                    name=EXECUTE_CODE_TOOL_NAME
+                    if code_mode
+                    else EXEC_COMMAND_TOOL_NAME,
                     arguments={"code": "await tools.exec_command(cmd='echo hi')"}
                     if code_mode
                     else {"cmd": "echo hi"},
@@ -3613,7 +3615,9 @@ def _spills(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
 def _note(path: str, size: int, body: str, *, code_mode: bool = False) -> str:
     """The model's note of a spilled result."""
     # In code mode the shell is a function of programs.
-    read_with = "tools.exec_command in exec programs" if code_mode else "exec_command"
+    read_with = (
+        "tools.exec_command in execute_code programs" if code_mode else "exec_command"
+    )
     return (
         f'<persisted-output path="{path}" bytes={size}>\n{body}\n'
         f"Read the file with {read_with} (grep, sed, head, tail). It lasts while "
@@ -4168,7 +4172,7 @@ def test_parallel_cells_over_their_limit_spill_in_one_step_past_the_budget(
                 id=call_id,
                 index=index,
                 function=ResponseFunctionCall(
-                    name="exec",
+                    name="execute_code",
                     arguments=json.dumps(
                         {"code": _ROWS_PROGRAM, "max_output_tokens": 1_250}
                     ),

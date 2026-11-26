@@ -66,10 +66,10 @@ from onyx.tools.tool_implementations.code_mode.prompt import format_content
 from onyx.tools.tool_implementations.code_mode.shapes import (
     CLAUDE_CODE_MODE,
     OPENAI_CODE_MODE,
+    ClaudeRunArguments,
     CodeModeShape,
-    ExecArguments,
+    OpenAIRunArguments,
     PollArguments,
-    ReplArguments,
     RunRequest,
     WaitArguments,
     WaitRequest,
@@ -522,7 +522,7 @@ def test_cell_and_nested_tool_spans_carry_code_mode_attributes() -> None:
 
 def test_description_lists_stubs() -> None:
     first = _make_tool().tool_definition()
-    assert first.name == "exec"
+    assert first.name == "execute_code"
     assert first.parameters["required"] == ["code"]
     assert "asyncio.gather" in first.description
     assert "[n]" in first.description
@@ -531,16 +531,16 @@ def test_description_lists_stubs() -> None:
 def test_each_shape_s_arguments_become_the_same_requests() -> None:
     """Token budgets convert to the characters that the cells count, capped
     as character budgets are; the Claude shape has the default budget."""
-    assert ExecArguments(code="x", max_output_tokens=200).request() == RunRequest(
+    assert OpenAIRunArguments(code="x", max_output_tokens=200).request() == RunRequest(
         code="x", yield_seconds=30, max_chars=800
     )
-    assert ExecArguments(code="x", max_output_tokens=10**9).request().max_chars == (
-        MAX_OUTPUT_CHARS
-    )
+    assert OpenAIRunArguments(
+        code="x", max_output_tokens=10**9
+    ).request().max_chars == (MAX_OUTPUT_CHARS)
     assert WaitArguments(cell_id=2, max_tokens=50, terminate=True).request() == (
         WaitRequest(cell_id=2, yield_seconds=15, max_chars=200, terminate=True)
     )
-    assert ReplArguments(code="x", timeout=500_000).request() == RunRequest(
+    assert ClaudeRunArguments(code="x", timeout=500_000).request() == RunRequest(
         code="x", yield_seconds=120, max_chars=DEFAULT_MAX_OUTPUT_CHARS
     )
     assert PollArguments(cell_id=2, timeout=10).request() == WaitRequest(
@@ -670,7 +670,7 @@ def test_preferences_name_a_tool_as_its_program_function() -> None:
         limits=LIMITS,
     )
     assert tool.operation_names(CapabilityEntry(tool_id=7)) == [
-        "tools.list_issues (a function in `exec` programs; find its stub with "
+        "tools.list_issues (a function in `execute_code` programs; find its stub with "
         "`await tool_search(query)`)"
     ]
     assert tool.operation_names(CapabilityEntry(tool_id=8)) == []

@@ -30,7 +30,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.tools.constants import (
     EXEC_COMMAND_TOOL_NAME,
-    EXEC_TOOL_NAME,
+    EXECUTE_CODE_TOOL_NAME,
     OPEN_URL_TOOL_NAME,
 )
 from onyx.tools.models import SearchResult, SearchResults
@@ -367,10 +367,14 @@ def test_a_preview_cannot_close_the_tag_in_any_case(turn: _FakeVMTurn) -> None:
         ("bash", None, "Read the file with bash (grep"),
         (
             "tools.exec_command",
-            "exec",
-            "Read the file with tools.exec_command in exec programs",
+            "execute_code",
+            "Read the file with tools.exec_command in execute_code programs",
         ),
-        ("tools.bash", "repl", "Read the file with tools.bash in repl programs"),
+        (
+            "tools.bash",
+            "execute_code",
+            "Read the file with tools.bash in execute_code programs",
+        ),
     ],
 )
 def test_the_note_says_why_the_file_can_be_missing_and_to_rerun_only_reads(
@@ -552,7 +556,7 @@ def test_a_spilled_cell_card_shows_its_error_once(turn: _FakeVMTurn) -> None:
     result = _spill(
         turn,
         ToolResult(content="cut", details=details, full_value=full),
-        name=EXEC_TOOL_NAME,
+        name=EXECUTE_CODE_TOOL_NAME,
     )
 
     saved = result.details
@@ -586,7 +590,7 @@ def test_a_cell_spills_even_when_its_cut_leaves_out_one_character(
     _spill(
         turn,
         ToolResult(content=cell.text, details=details, full_value=cell.full_value),
-        name=EXEC_TOOL_NAME,
+        name=EXECUTE_CODE_TOOL_NAME,
     )
 
     [data] = turn.files.values()

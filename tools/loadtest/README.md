@@ -279,14 +279,14 @@ runs with representative model waits.
 
 ## Compare code mode
 
-In code mode, Onyx offers an `exec` tool instead of direct retrieval tools.
+In code mode, Onyx offers an `execute_code` tool instead of direct retrieval tools.
 The model writes a Python program, and each tool is an async function in that
 program. The program runs in a sandbox on the API server. The tool result is the
 printed output of the program. Set `CODE_MODE_ENABLED=true` on the API server to
 turn on code mode.
 
-The mock detects code mode from the offered tools. When a request offers a run
-tool (`exec`, or `repl` for a Claude-named model) with an `internal_search`
+The mock detects code mode from the offered tools. When a request offers the run
+tool `execute_code` with an `internal_search`
 function, and no direct `internal_search` tool, the search profile writes
 programs instead of direct search calls. The programs use the same seeded queries
 as direct mode. Each program prints one `[document] title` line for each result.
@@ -357,7 +357,7 @@ that it stops. Assess each arm's CSV with `capacity_report.py`, as
 
 Without `wait` calls, the per-round arm keeps the number and order of model
 calls of direct mode. Its difference from direct mode then shows the combined
-cost of the code mode path: the sandbox, the `exec` schema and
+cost of the code mode path: the sandbox, the `execute_code` schema and
 arguments, and the printed program output that replaces the JSON search results.
 The batched arm also makes fewer model calls and runs the searches in parallel.
 `search_calls` counts searches in both modes, so the arms report comparable
@@ -426,12 +426,12 @@ content for near-cap outputs.
 
 | Model | Tool shape | Plan |
 |---|---|---|
-| `mock-profile-code-v1` | `exec`, `wait` | Recorded `openai` turns |
-| `mock-profile-code-v1-claude` | `repl`, `poll` | Recorded `claude` turns |
+| `mock-profile-code-v1` | `execute_code`, `wait` | Recorded `openai` turns |
+| `mock-profile-code-v1-claude` | `execute_code`, `poll` | Recorded `claude` turns |
 | `mock-profile-code-v1-tail<pct>` | as above | `<pct>` percent of questions run a long-tail plan instead |
 
 Onyx gives a model the Claude tool shapes when any of its names contains
-`claude`, so the `-claude` name gets `repl` and `poll` from the server, and
+`claude`, so the `-claude` name gets `poll` and the Claude arguments from the server, and
 also Claude prompt caching marks. The mock writes the same programs in either
 shape; it reads the shape from the offered tools. `-tail100` makes every turn
 a long-tail turn; `-tail10` raises the tail share above the recorded 5.5%.

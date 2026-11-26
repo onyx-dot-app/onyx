@@ -1213,7 +1213,7 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
     for runner in (agent, child):
         run_agent(runner, messages=[UserMessage(content="Task")], max_steps=1)
     expected = {
-        *({"exec", "wait"} if code_mode else {"echo"}),
+        *({"execute_code", "wait"} if code_mode else {"echo"}),
         "spawn_agent",
         "list_agents",
         "interrupt_agent",
