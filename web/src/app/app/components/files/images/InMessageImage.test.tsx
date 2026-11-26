@@ -94,6 +94,19 @@ describe("full image gallery", () => {
     expect(screen.getByText("1 / 2")).toHaveClass("text-text-light-05");
   });
 
+  test("keeps the position label below the image, not on it", async () => {
+    const user = userEvent.setup();
+    renderAnswer(["a", "b"]);
+    await user.click(
+      screen.getAllByRole("button", { name: "View the full image" })[0]!
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveClass("pb-10");
+    expect(dialog.querySelector("img")).toHaveClass(
+      "max-h-[calc(100dvh-3.5rem)]"
+    );
+  });
+
   test("focuses the dialog, not a button, so Escape closes it at once", async () => {
     const user = userEvent.setup();
     renderAnswer(["a", "b"]);
