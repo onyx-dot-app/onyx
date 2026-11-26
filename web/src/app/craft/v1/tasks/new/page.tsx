@@ -10,10 +10,7 @@ import ScheduleTaskForm, {
 import type { EditorMode, EditorPayload } from "@/app/craft/v1/tasks/types";
 import { TASKS_PATH } from "@/app/craft/v1/tasks/constants";
 
-const VALID_MODES: ReadonlySet<EditorMode> = new Set<EditorMode>([
-  "interval",
-  "daily_weekly",
-]);
+const VALID_MODES: readonly EditorMode[] = ["interval", "daily_weekly"];
 
 export default function NewScheduledTaskPage() {
   const t = useTranslations("craft.tasks.newPage");
@@ -30,10 +27,8 @@ export default function NewScheduledTaskPage() {
     const modeParam = searchParams.get("mode") ?? null;
     const payloadParam = searchParams.get("payload") ?? null;
 
-    let mode: EditorMode = base.mode;
-    if (modeParam && VALID_MODES.has(modeParam as EditorMode)) {
-      mode = modeParam as EditorMode;
-    }
+    const mode =
+      VALID_MODES.find((validMode) => validMode === modeParam) ?? base.mode;
 
     let payload: EditorPayload = base.payload;
     if (payloadParam) {

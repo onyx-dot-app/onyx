@@ -1,50 +1,85 @@
-import type { MCPServer } from "@/lib/mcp/types";
-import type { ToolSnapshot } from "@/lib/tools/types";
-import type {
-  ActionPolicy,
-  ExternalAppType,
-  ExternalAppAdminResponse,
-} from "@/app/craft/v1/apps/registry";
+export type PluginUnusedPart =
+  | "commands"
+  | "agents"
+  | "hooks"
+  | "lsp_servers"
+  | "output_styles"
+  | "bin"
+  | "themes"
+  | "monitors";
 
-export type InstalledPlugin =
-  | { kind: "mcp"; server: MCPServer }
-  | { kind: "openapi"; tool: ToolSnapshot }
-  | { kind: "external-app"; app: ExternalAppAdminResponse };
-
-export type PluginReference =
-  | { kind: "mcp"; id: MCPServer["id"] }
-  | { kind: "openapi"; id: ToolSnapshot["id"] }
-  | { kind: "external-app"; id: ExternalAppAdminResponse["id"] };
-
-export type ChatPluginReference = Exclude<
-  PluginReference,
-  { kind: "external-app" }
->;
-
-export interface ActionPolicySettingView {
-  action_id: string;
-  normalised_name: string;
-  description: string;
-  effective_policy: ActionPolicy;
-  workspace_policy: ActionPolicy;
-  stored_policy: ActionPolicy | null;
-  editable: boolean;
-  lock_reason: "workspace_disabled" | "workspace_managed" | null;
+export interface PluginAuthor {
+  name: string | null;
+  email: string | null;
+  url: string | null;
 }
 
-export interface AppActionPoliciesView {
-  gated_app_id: number;
-  kind: "external_app" | "mcp_server";
-  target_id: number;
+export interface PluginManifest {
   name: string;
-  users_can_manage_policies: boolean;
-  enabled: boolean | null;
-  app_type?: ExternalAppType | null;
-  actions: ActionPolicySettingView[];
+  version: string | null;
+  description: string | null;
+  author: PluginAuthor | null;
+  homepage: string | null;
+  repository: string | null;
+  license: string | null;
+  keywords: string[];
+  unused_parts: PluginUnusedPart[];
 }
 
-export interface TaskAppActionPolicies {
-  gated_app_id: number;
-  enabled: boolean;
-  action_policies: Record<string, ActionPolicy>;
+export type PluginNeedState =
+  | "on"
+  | "turn_on"
+  | "sign_in"
+  | "no_access"
+  | "turned_off"
+  | "not_added"
+  | "more_than_one"
+  | "not_supported";
+
+export type PluginNeedUrlProblem = "variable" | "credential" | "invalid";
+
+export interface PluginNeed {
+  kind: "mcp";
+  name: string;
+  url: string | null;
+  transport: string | null;
+  url_problem: PluginNeedUrlProblem | null;
+  supported: boolean;
+  state: PluginNeedState;
+  integration_id: number | null;
+}
+
+export interface PluginSkillSummary {
+  path: string;
+  name: string;
+  description: string;
+}
+
+export interface PluginDetail {
+  manifest: PluginManifest | null;
+  skills: PluginSkillSummary[];
+  needs: PluginNeed[];
+}
+
+export interface PluginUploadSkill extends PluginSkillSummary {
+  warnings: string[];
+}
+
+interface PluginUploadTargetBase {
+  plugin_name: string;
+  version_number: number;
+}
+
+export type PluginUploadTarget =
+  | (PluginUploadTargetBase & { kind: "new_version"; plugin_id: string })
+  | (PluginUploadTargetBase & { kind: "new_plugin"; plugin_id: null });
+
+export interface PluginUploadPreview {
+  manifest: PluginManifest;
+  skills: PluginUploadSkill[];
+  needs: PluginNeed[];
+  warnings: string[];
+  target: PluginUploadTarget;
+  will_enable: boolean;
+  name_conflicts: string[];
 }

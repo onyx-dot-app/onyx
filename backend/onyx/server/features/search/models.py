@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, JsonValue, model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag
@@ -56,7 +56,25 @@ class SearchResult(BaseModel):
     link: str | None
     source_type: str
     updated_at: str | None
+    # Source fields such as a Jira reporter. Null when the document has none.
+    metadata: dict[str, str | list[str]] | None = None
 
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
+
+
+class PostgresQueryRequest(BaseModel):
+    """One postgres_query call: the arguments the chat tool takes."""
+
+    arguments: dict[str, JsonValue]
+    # Applies this agent's knowledge scope, as for search.
+    persona_id: int | None = None
+
+
+class PostgresQueryResponse(BaseModel):
+    # The text the chat tool returns to the model. Listed documents carry
+    # their links.
+    result: str
+    # The call was rejected or failed; `result` says why.
+    is_error: bool

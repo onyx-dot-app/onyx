@@ -111,6 +111,7 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
    */
   isError?: boolean;
   placeholder?: InputSingleSelectProps["placeholder"];
+  "aria-label"?: InputSingleSelectProps["aria-label"];
   /** Pages a truncated listing in: the end of the list loads more models,
    *  and a search no loaded model matches asks the server. */
   modelPaging?: ModelPaging;
@@ -150,6 +151,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   disabled,
   isError,
   placeholder,
+  "aria-label": ariaLabel,
   modelPaging,
   container,
   id,
@@ -336,6 +338,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         onChange(id as EmittedModelConfigurationId<Nullable>);
       }}
       placeholder={placeholder ?? t("placeholder")}
+      aria-label={ariaLabel}
       options={options}
       onSearchChange={modelPaging ? setQuery : undefined}
       onReachEnd={modelPaging ? loadNextWindow : undefined}

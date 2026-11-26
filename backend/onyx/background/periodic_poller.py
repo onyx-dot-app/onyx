@@ -15,7 +15,8 @@ that runs from the API server process.  Two responsibilities:
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.utils.logger import setup_logger
 
@@ -34,13 +35,14 @@ PERIODIC_TASK_KV_PREFIX = "periodic_poller:last_claimed:"
 _NEVER_RAN: float = -1e18
 
 
-@dataclass
-class _PeriodicTaskDef:
+class _PeriodicTaskDef(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     name: str
     interval_seconds: float
     lock_id: int
     run_fn: Callable[[], None]
-    last_run_at: float = field(default=_NEVER_RAN)
+    last_run_at: float = _NEVER_RAN
 
 
 def _run_auto_llm_update() -> None:
@@ -141,13 +143,13 @@ _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
 
 def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
-    from onyx.cache.interface import CacheBackendType
     from onyx.configs.app_configs import (
         AUTO_LLM_CONFIG_URL,
         CACHE_BACKEND,
         DISABLE_TELEMETRY,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
+    from onyx.configs.constants import CacheBackendType
     from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
     from onyx.utils.variable_functionality import global_version
     from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
@@ -228,11 +230,12 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
     from sqlalchemy import text
 
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
-    from onyx.db.models import KVStore
+    from onyx.db.kv_store import add_kv_store_row__no_commit, fetch_kv_store_row
 
     kv_key = PERIODIC_TASK_KV_PREFIX + task_def.name
 
     with get_session_with_current_tenant() as db_session:
+        # db-ops-outside-db: allow advisory lock, not a table query
         acquired = db_session.execute(
             text("SELECT pg_try_advisory_xact_lock(:id)"),
             {"id": task_def.lock_id},
@@ -240,7 +243,7 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
         if not acquired:
             return False
 
-        row = db_session.query(KVStore).filter_by(key=kv_key).first()
+        row = fetch_kv_store_row(db_session, kv_key)
         if row and row.value is not None:
             last_claimed = datetime.fromisoformat(str(row.value))
             elapsed = (datetime.now(timezone.utc) - last_claimed).total_seconds()
@@ -251,7 +254,7 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
         if row:
             row.value = now_ts
         else:
-            db_session.add(KVStore(key=kv_key, value=now_ts))
+            add_kv_store_row__no_commit(db_session, kv_key, now_ts)
         db_session.commit()
 
     return True

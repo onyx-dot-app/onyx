@@ -14,6 +14,7 @@ from onyx.document_index.interfaces import (
     DocumentInsertionRecord,
     DocumentSectionRequest,
     IndexingMetadata,
+    KeywordTermCounts,
     MetadataUpdateRequest,
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -71,6 +72,13 @@ class DisabledDocumentIndex(DocumentIndex):
     ) -> list[InferenceChunk]:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 
+    def leading_chunks_retrieval(
+        self,
+        filters: IndexFilters,  # noqa: ARG002
+        max_chunk_index: int,  # noqa: ARG002
+    ) -> list[InferenceChunk]:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
     def hybrid_retrieval(
         self,
         query: str,  # noqa: ARG002
@@ -89,6 +97,12 @@ class DisabledDocumentIndex(DocumentIndex):
         num_to_retrieve: int,  # noqa: ARG002
         include_hidden: bool = False,  # noqa: ARG002
     ) -> list[InferenceChunk]:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
+    def count_keyword_terms(
+        self,
+        query: str,  # noqa: ARG002
+    ) -> KeywordTermCounts:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 
     def semantic_retrieval(

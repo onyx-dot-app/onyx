@@ -4,17 +4,12 @@ description: "Let Craft read and act as each user in Slack, Gmail, Notion, and o
 icon: "hammer"
 ---
 
-<Note>
-  In Onyx 5.0, Craft Apps moved from **Admin Panel → Craft → Apps** to **Admin Panel → Plugins**.
-  See [Where things moved](/admins/plugins/overview#where-things-moved-in-onyx-5).
-</Note>
-
 A Craft App is a catalog of API endpoints for one application, such as Slack or Gmail.
 Each user connects their own account. Craft then calls the application's API as that user.
 
 Craft can only reach content that the connected account can access in the application.
 
-Admins add Craft Apps in **Admin Panel → Plugins**. Users connect their accounts in **Plugins** in Craft or Chat.
+Admins add Craft Apps in **Admin Panel → Integrations**. Users connect their accounts in **Customize** in Craft or Chat.
 
 <Note>
   Craft Apps work only in [Craft](/overview/core_features/craft). Main Chat does not support them.
@@ -58,8 +53,6 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
 
 ## Add a built-in App
 
-<img className="rounded-image" src="/assets/admins/plugins/craft_app_catalog.webp" alt="The Craft Apps catalog with Slack, Google Calendar, Google Drive, Gmail, Linear, GitHub, HubSpot, Notion, Zendesk, and Custom app"/>
-
 <Steps>
   <Step title="Create an OAuth application with the provider">
     On self-hosted Onyx, create an OAuth application in the provider. Use this redirect URI, with your Onyx domain:
@@ -72,41 +65,28 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
     See [Provider setup](#provider-setup) for each provider.
   </Step>
 
-  <Step title="Set the configuration">
-    Go to **Admin Panel → Plugins**, click **Add**, select **Craft Apps**, then select the provider.
-    On the **Configuration** tab, set:
-
-    | Setting | Effect |
-    | --- | --- |
-    | **Enable for Craft** | Makes the App available in Craft. |
-    | **Let users manage approval settings** | Lets users change approval policies for actions that you did not disable. |
-  </Step>
-
-  <Step title="Enter the provider credentials">
-    On the **Authentication** tab, follow the setup instructions, then enter the client ID and client secret.
-    Onyx does not ask for a user's access token. Each user signs in later.
-
-    <img className="rounded-image" src="/assets/admins/plugins/craft_app_slack_auth.webp" alt="The Slack Authentication tab with setup instructions, Client ID, and Client Secret"/>
+  <Step title="Add the App">
+    Go to **Admin Panel → Integrations**, click **Add**, then select **App**. Under **Start From**, select the App,
+    follow its **Setup instructions**, and enter the account settings, such as the client ID and client secret.
+    Onyx does not ask for a user's access token. Each user signs in later. Click **Add**.
   </Step>
 
   <Step title="Review action policies">
-    On the **Tools** tab, set a policy for each action. Review every write, send, delete, and publish action.
-
-    <img className="rounded-image" src="/assets/admins/plugins/craft_app_slack_tools.webp" alt="The Slack Tools tab with Auto-approve, Ask, and Disabled for each action"/>
-  </Step>
-
-  <Step title="Add the App">
-    Click **Add**. Onyx then asks you to add skills to the App. You can skip this step.
-    See [Skills for Apps](#skills-for-apps).
+    On the **Actions** tab of the App, set a policy for each action. Review every write, send, delete,
+    and publish action. See [Set action policies](#set-action-policies).
   </Step>
 
   <Step title="Test as a user">
-    Connect a test account from the [Plugins page](/overview/core_features/craft_apps#connect-an-app).
+    Connect a test account in [Customize → Integrations](/overview/core_features/craft_apps#connect-an-app).
     Test one read and one write.
   </Step>
 </Steps>
 
-On Onyx Cloud, Onyx manages the OAuth applications for built-in Apps. You do not enter client credentials.
+To replace the account settings or the OAuth client later,
+enter new values under **Account settings** on the **Configuration** tab, then click **Save**.
+
+On Onyx Cloud, Onyx manages the OAuth applications for built-in Apps. You do not enter client credentials,
+and you cannot add or delete these Apps or change their sign-in.
 
 You can add one instance of each built-in provider.
 
@@ -203,15 +183,15 @@ Each action in a built-in App has one workspace policy:
 
 | Policy | Effect | Typical use |
 | --- | --- | --- |
-| **Auto-approve** | Craft runs the action without a prompt. | Narrow, low-risk reads |
+| **Allow** | Craft runs the action without a prompt. | Narrow, low-risk reads |
 | **Ask** | Craft stops before the request and shows the user an approval card. | Sends, creates, edits, and broad reads |
-| **Disabled** | The proxy blocks the action. Users and scheduled tasks cannot override it. | Destructive or prohibited actions |
+| **Blocked** | The proxy blocks the action. Users cannot override it. | Destructive or prohibited actions |
 
-Built-in Apps start with defaults: most reads are **Auto-approve**, and most changes are **Ask**.
+Built-in Apps start with defaults: most reads are **Allow**, and most changes are **Ask**.
 
 <Info>
-  If one request matches more than one action, the strictest policy applies: **Disabled**, then **Ask**,
-  then **Auto-approve**. A request that does not match a cataloged action uses **Ask**.
+  If one request matches more than one action, the strictest policy applies: **Blocked**, then **Ask**, then **Allow**.
+  A request that does not match a cataloged action uses **Ask**.
 </Info>
 
 ### User approvals
@@ -219,48 +199,46 @@ Built-in Apps start with defaults: most reads are **Auto-approve**, and most cha
 When an action uses **Ask**, the user can approve once, approve for the session, or reject.
 **Approve for session** applies only to matching actions in that session. It does not change the workspace policy.
 
-If **Let users manage approval settings** is on, users can change the policy for their own account.
-They cannot turn on an action that you set to **Disabled**.
+If **Users Can Save Always Allow** is on, on the **Configuration** tab,
+users can pick **Always allow** for an action that uses **Ask**.
+They cannot turn on an action that you set to **Blocked**.
 
 ### Scheduled Tasks
 
-A [Scheduled Task](/overview/core_features/craft_scheduled_tasks) runs without a user present,
-so it cannot show an approval card.
-The task owner enables the Apps that the task can use in the task's **Approval settings**.
-Each App starts with the owner's current approval settings. Changes apply only to that task.
-
-- If **Let users manage approval settings** is off, the workspace policies apply to the task.
-- Task settings cannot override **Disabled**.
-- If a run reaches an action that needs approval, the run stops with the **Awaiting approval** status.
-  The owner must change the task's approval settings, then run the task again.
+Craft Apps are not available to [Scheduled Tasks](/overview/core_features/scheduled_tasks).
+A Scheduled Task runs in chat and can use only MCP and OpenAPI integrations.
 
 ## Skills for Apps
 
-[Skills](/admins/managing_features/craft_skills) teach Craft how to use an App well,
-for example which Slack channels to read first.
-Open the App and select the **Skills** tab to add existing skills or create a new skill for the App.
+Each built-in App comes with a built-in [Skill](/admins/managing_features/craft_skills)
+that teaches Craft how to use it. A user gets this Skill only while the user has the App on and the App is enabled.
+The user gets the Skill also before they connect an account.
+
+To teach Craft more about an App, for example which Slack channels to read first,
+create a custom Skill and share it with the users of the App. A custom Skill is not linked to an App. It loads,
+and counts toward the Skill limits, also for users who have not connected the App.
 
 ## Custom Apps
 
 Use a custom App for a public HTTP API that no built-in App covers.
 A custom App gives Craft credentials and network access for the API. It does not have an action catalog.
 
-<img className="rounded-image" src="/assets/admins/plugins/craft_custom_app.webp" alt="The Create custom app form with Name, Upstream URL patterns, Enable for Craft, and Let users manage approval settings"/>
-
 <Steps>
-  <Step title="Set the configuration">
-    Go to **Admin Panel → Plugins**, click **Add**, select **Craft Apps**, then select **Custom app**.
-    Enter a **Name** and one or more **Upstream URL patterns**. Type each pattern and press Enter.
+  <Step title="Set the URL patterns">
+    Go to **Admin Panel → Integrations**, click **Add**, then select **App**. Keep **Custom app** under **Start From**.
+    Enter a **Name** and the **URL Patterns**, one pattern on each line.
     The proxy injects credentials only into requests that match these patterns.
   </Step>
 
-  <Step title="Set the authentication">
-    On the **Authentication** tab, add the headers that the proxy injects, such as `Authorization: Bearer {api_key}`.
-    Optionally, add **Organization credentials** for values that every user shares.
+  <Step title="Set the sign-in">
+    A custom App signs in with an API key. Select a **Sign-in Mode**,
+    then enter the **Header Name** and the **Header Value**, such as `Bearer {api_key}`.
+    With **One account for the organization**, connect the account on the **Configuration** tab after you add the App.
+    With **Each user signs in**, each user enters a value.
 
-    <img className="rounded-image" src="/assets/admins/plugins/craft_custom_app_authentication.webp" alt="The custom app Authentication tab with header patterns and Organization credentials"/>
+    <img className="rounded-image" src="/assets/admins/plugins/integration_custom_configuration_tab.webp" alt="The Configuration tab of a custom App with URL patterns and API key sign-in"/>
 
-    Click **Create**. Then add skills that explain how to call the API.
+    Click **Add**. Then create a Skill that explains how to call the API. See [Skills for Apps](#skills-for-apps).
   </Step>
 </Steps>
 
@@ -271,7 +249,7 @@ For example:
 | Upstream URL pattern | `https://api.example.com/v1/*` |
 | Header | `Authorization` |
 | Header value | `Bearer {api_key}` |
-| Organization credential | `api_key` = a shared service token. Leave it empty to let each user enter a token. |
+| Sign-in Mode | **One account for the organization** for a shared service token, or **Each user signs in** to let each user enter a token. |
 
 ### Define URL patterns narrowly
 
@@ -310,9 +288,9 @@ Authorization: Bearer {api_key}
 X-Workspace-ID: {workspace_id}
 ```
 
-Add a value under **Organization credentials** when every user should use the same service identity.
-Leave a placeholder without an organization value when each user should enter their own value when they connect the app.
-You can also leave the header pattern empty for a public API that requires no credential.
+Select **One account for the organization** when every user should use the same service identity.
+Select **Each user signs in** when each user should enter their own value when they connect the app.
+Select **No sign-in** for a public API that requires no credential.
 
 Raw organization and user credentials are encrypted in Onyx-controlled storage.
 They are not copied into the custom bundle or sandbox workspace. After a request passes its gate,
@@ -320,18 +298,18 @@ the sandbox proxy injects the rendered headers on the way out.
 
 <Warning>
   A custom App has no action catalog. Every request that matches its URL patterns requires approval.
-  You cannot set a custom App request to **Auto-approve** or **Disabled**. To stop all use of a custom App,
-  turn off **Enable for Craft**.
+  On the **Actions** tab, you cannot set its requests to **Allow**, and users cannot save **Always allow** for them.
+  Set them to **Blocked**, or turn off **Enabled** on the **Overview** tab, to stop all use of a custom App.
 </Warning>
 
 ## Manage Apps
 
 | Action | Effect |
 | --- | --- |
-| **Turn off Enable for Craft** | Hides the App from users and stops credential injection. Onyx keeps the configuration and user connections. |
-| **Delete** | Click the trash icon. Onyx removes the App, its policies, user credentials, and its Scheduled Task settings. |
+| **Turn off Enabled** | On the **Overview** tab. Hides the App from users and stops credential injection. Onyx keeps the configuration and user connections. |
+| **Delete** | On the **Overview** tab, click **Delete**. Onyx removes the App, its policies, and user credentials. |
 
-Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enable for Craft** instead.
+Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
 
 ## Troubleshooting
 
@@ -343,19 +321,14 @@ Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enable for Craft**
   </Accordion>
 
   <Accordion title="An enabled app does not appear to users">
-    Confirm that **Enable for Craft** is on and that the user has Craft access.
+    Confirm that **Enabled** is on, that the user has access to the App (check its install setting and shares),
+    that the user turned the App on, and that the user has Craft access.
   </Accordion>
 
   <Accordion title="A user connected successfully but an action is blocked">
     Check the action's admin policy and the scopes or capabilities granted by the external account.
-    A **Disabled** policy cannot be overridden.
+    A **Blocked** policy cannot be overridden.
     An Ask request can also fail if the user rejects it or the approval expires.
-  </Accordion>
-
-  <Accordion title="A Scheduled Task is awaiting approval">
-    Confirm that the task owner is still connected to the app and that the app is on in the task's approval settings.
-    Then check for a **Disabled** policy, or a different app than the prompt was expected to use.
-    Correct the task and use **Run now**. The blocked run does not resume automatically.
   </Accordion>
 </AccordionGroup>
 

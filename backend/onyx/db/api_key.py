@@ -23,6 +23,7 @@ from onyx.db.enums import AccountType
 from onyx.db.models import ApiKey, User
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import (
+    UserDeleteCleanup,
     batch_get_user_groups,
     delete_user_from_db,
     delete_user_from_db__no_commit,
@@ -44,6 +45,9 @@ class ApiKeyAuthResult(NamedTuple):
     api_key_id: int
     api_key_name: str | None
     api_key_display: str
+    # The Discord bot's service key: only the bot creates an ownerless key
+    # with its name, and no key can be renamed to it.
+    is_discord_bot: bool
 
 
 def get_api_key_email_pattern() -> str:
@@ -138,6 +142,8 @@ async def fetch_api_key_auth_result(
         api_key_id=row.id,
         api_key_name=row.name,
         api_key_display=row.api_key_display,
+        is_discord_bot=row.owner_id is None
+        and row.name == DISCORD_SERVICE_API_KEY_NAME,
     )
 
 
@@ -204,6 +210,9 @@ def update_api_key(
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, f"API key with id {api_key_id} does not exist"
         )
+    # The name identifies the Discord bot's key; see ApiKeyAuthResult.
+    if api_key_args.name == DISCORD_SERVICE_API_KEY_NAME != existing_api_key.name:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "This API key name is reserved")
 
     existing_api_key.name = api_key_args.name
     api_key_user = db_session.scalar(
@@ -294,10 +303,11 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
     delete_user_from_db(user_associated_with_key, db_session)
 
 
-def remove_all_api_keys__no_commit(db_session: Session) -> None:
+def remove_all_api_keys__no_commit(db_session: Session) -> UserDeleteCleanup:
     """Removes every API key an admin manages, with the synthetic user behind
     it. The Discord bot's service key stays: the bot holds it in memory and
-    would keep sending a dead key."""
+    would keep sending a dead key. The caller runs `finish_user_delete` on the
+    result after the commit."""
     api_keys: Sequence[ApiKey] = (
         db_session.scalars(
             select(ApiKey)
@@ -317,5 +327,9 @@ def remove_all_api_keys__no_commit(db_session: Session) -> None:
     # Keys before users: a key made through another key is owned by that key's user.
     for api_key in api_keys:
         db_session.delete(api_key)
+    cleanup = UserDeleteCleanup()
     for key_user in key_users:
-        delete_user_from_db__no_commit(key_user, db_session)
+        user_cleanup = delete_user_from_db__no_commit(key_user, db_session)
+        cleanup.file_ids += user_cleanup.file_ids
+        cleanup.affected_user_ids |= user_cleanup.affected_user_ids
+    return cleanup

@@ -12,6 +12,8 @@ import { Button } from "@opal/components/buttons/button/components";
 import { SvgImport } from "@opal/icons";
 import { noProp } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
+import type { InputVariants } from "@opal/types";
+import { useInputDisabled } from "@opal/components/inputs/disabled";
 
 export type InputMultiUploadProps = Omit<UploadBaseProps, "placeholder"> & {
   /** Shown while no file is uploaded. Default: "Add files…". */
@@ -37,13 +39,18 @@ function fileKey(file: File): string {
  * tag and Backspace or Delete removes an armed one; the clear button removes
  * them all. The drop states and copy follow `InputSingleUpload`'s.
  *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` sets the
+ * `"disabled"` variant and its `disabledTooltip` applies too. `TagField`
+ * shows `tooltip`.
+ *
  * @example
  * ```tsx
  * <InputMultiUpload value={files} onFilesChange={setFiles} />
  * ```
  */
 export default function InputMultiUpload({
-  variant = "primary",
+  variant: variantProp = "primary",
+  tooltip,
   placeholder,
   id,
   name,
@@ -56,6 +63,9 @@ export default function InputMultiUpload({
   ...rest
 }: InputMultiUploadProps) {
   const strings = useOpalStrings();
+  const variant: InputVariants = useInputDisabled(false)
+    ? "disabled"
+    : variantProp;
   const triggerRef = useRef<HTMLDivElement>(null);
   const [ownFiles, setOwnFiles] = useState<File[]>([]);
   const files: File[] = value ?? ownFiles;
@@ -139,6 +149,7 @@ export default function InputMultiUpload({
         }
         variant={variant === "error" ? "error" : "primary"}
         disabled={isNonEditable}
+        tooltip={tooltip}
         icon={SvgImport}
         onClear={
           files.length > 0 && drag === null ? () => report([]) : undefined

@@ -12,7 +12,12 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.db.models import LLMProvider, ModelConfiguration, ModelCostOverride
+from onyx.db.models import (
+    LLMModelFlow,
+    LLMProvider,
+    ModelConfiguration,
+    ModelCostOverride,
+)
 from onyx.llm import cost as cost_mod
 from onyx.llm import cost_overrides
 from onyx.llm.cost import compute_cost_cents, get_model_price_per_million
@@ -32,7 +37,7 @@ def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) ->
 
 def _new_session() -> Session:
     engine: Engine = create_engine("sqlite://")
-    for model in (LLMProvider, ModelConfiguration, ModelCostOverride):
+    for model in (LLMProvider, ModelConfiguration, LLMModelFlow, ModelCostOverride):
         cast(Table, model.__table__).create(bind=engine)
     return sessionmaker(bind=engine)()
 

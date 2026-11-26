@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* Presence — content animates in when it appears and out when it goes */
 
 @keyframes opal-presence-in {
@@ -90,8 +92,11 @@
 .opal-presence[data-presence-grow][data-presence-phase="collapsing"] {
   grid-template-rows: 0fr;
 }
+/* A grid item's automatic minimum is its min-content size, so without
+   min-width: 0 wide content (a table, a long line) widens the whole box. */
 .opal-presence[data-presence-grow] > .opal-presence-motion {
   min-height: 0;
+  min-width: 0;
 }
 .opal-presence[data-presence-grow]
   > .opal-presence-motion[data-presence-phase="entering"] {
@@ -123,13 +128,16 @@
 }
 
 /* Same selectors as the rules above, so these overrides win on specificity. */
-@media (prefers-reduced-motion: reduce) {
-  .opal-presence-motion[data-presence-phase] {
+.opal-presence-motion[data-presence-phase] {
+  @variant motion-reduce {
     animation: none;
   }
-  .opal-presence[data-presence-grow],
-  .opal-presence-swap,
-  .opal-presence-swap[data-swap-axis="inline"] {
+}
+
+.opal-presence[data-presence-grow],
+.opal-presence-swap,
+.opal-presence-swap[data-swap-axis="inline"] {
+  @variant motion-reduce {
     transition: none;
   }
 }

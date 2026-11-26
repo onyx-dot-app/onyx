@@ -2,10 +2,8 @@ import datetime
 import time
 from uuid import UUID
 
-import sqlalchemy as sa
 from celery import Celery, Task, shared_task
 from redis.lock import Lock as RedisLock
-from sqlalchemy import select
 
 from onyx.access.access import build_access_for_user_files
 from onyx.access.models import DocumentAccess
@@ -41,17 +39,23 @@ from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document, HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import SearchSettings, UserFile
+from onyx.db.models import SearchSettings
 from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_user_file
 from onyx.db.search_settings import (
     active_secondary_port_target,
     get_active_search_settings,
     get_active_search_settings_list,
+    get_search_settings_by_id,
 )
 from onyx.db.user_file import (
+    add_user_file__no_commit,
     consume_user_file_processing_attempt,
+    delete_user_file__no_commit,
+    fetch_user_file_ids_by_status,
+    fetch_user_file_ids_needing_sync,
     fetch_user_files_with_access_relationships,
+    get_user_file_by_pk,
     mark_user_file_reconcile_pending,
 )
 from onyx.document_index.factory import get_default_document_index
@@ -77,6 +81,9 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.server.features.suggested_questions.scheduling import (
+    request_refresh_for_new_documents,
+)
 from onyx.utils.variable_functionality import global_version
 
 
@@ -224,14 +231,8 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
             return None
 
         with get_session_with_current_tenant() as db_session:
-            user_file_ids = (
-                db_session.execute(
-                    select(UserFile.id).where(
-                        UserFile.status == UserFileStatus.PROCESSING
-                    )
-                )
-                .scalars()
-                .all()
+            user_file_ids = fetch_user_file_ids_by_status(
+                db_session, UserFileStatus.PROCESSING
             )
 
             for user_file_id in user_file_ids:
@@ -322,7 +323,7 @@ def _process_user_file_without_vector_db(
 
     # Short session only for the status write
     with get_session_with_current_tenant() as db_session:
-        uf = db_session.get(UserFile, user_file_uuid)
+        uf = get_user_file_by_pk(db_session, user_file_uuid)
         if uf is None:
             return
         if uf.status != UserFileStatus.DELETING:
@@ -330,7 +331,7 @@ def _process_user_file_without_vector_db(
         uf.token_count = token_count
         uf.chunk_count = 0  # no chunks without vector DB
         uf.last_project_sync_at = datetime.datetime.now(datetime.timezone.utc)
-        db_session.add(uf)
+        add_user_file__no_commit(db_session, uf)
         db_session.commit()
 
     task_logger.info(
@@ -391,7 +392,7 @@ def _process_user_file_with_indexing(
     not hold an open session when calling this function.
     """
     with get_session_with_current_tenant() as db_session:
-        user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+        user_file = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
         if user_file is None or user_file.status == UserFileStatus.DELETING:
             task_logger.info(
                 f"_process_user_file_with_indexing - user file {user_file_id} is gone or "
@@ -423,7 +424,6 @@ def _process_user_file_with_indexing(
                 db_session=db_session,
                 tenant_id=tenant_id,
                 document_batch=documents,
-                request_id=None,
                 adapter=adapter,
                 written_search_settings_id=current_search_settings.id,
             )
@@ -449,13 +449,14 @@ def _process_user_file_with_indexing(
             f"_process_user_file_with_indexing - Indexing pipeline failed id={user_file_id}"
         )
         with get_session_with_current_tenant() as db_session:
-            uf = db_session.get(UserFile, _as_uuid(user_file_id))
+            uf = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
             if uf is not None and uf.status != UserFileStatus.DELETING:
                 uf.status = UserFileStatus.FAILED
-                db_session.add(uf)
+                add_user_file__no_commit(db_session, uf)
                 db_session.commit()
         raise RuntimeError(f"Indexing pipeline failed for user file {user_file_id}")
 
+    request_refresh_for_new_documents(tenant_id)
     _dual_write_new_file_to_secondary(user_file_id, documents, tenant_id)
 
 
@@ -473,7 +474,7 @@ def _index_user_file_to_secondary(
         # detached. Re-bind before from_db_search_settings reads its cloud_provider-backed
         # properties (api_key/api_url/api_version/deployment_name), which would otherwise
         # lazy-load and raise DetachedInstanceError.
-        bound_secondary = db_session.get(SearchSettings, secondary.id)
+        bound_secondary = get_search_settings_by_id(db_session, secondary.id)
         if bound_secondary is None:
             raise RuntimeError(
                 f"secondary search settings gone for user file {user_file_id}"
@@ -481,7 +482,7 @@ def _index_user_file_to_secondary(
         # Don't resurrect a file already being deleted into the target index — the delete
         # owns removing it, and the port orphan sweep can't remove these non-port chunks.
         # (the adapter's DELETING skip re-checks under the row lock to close the race.)
-        user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+        user_file = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
         if user_file is None or user_file.status == UserFileStatus.DELETING:
             task_logger.info(
                 f"_index_user_file_to_secondary - user file {user_file_id} is gone or "
@@ -506,7 +507,6 @@ def _index_user_file_to_secondary(
                 db_session=db_session,
                 tenant_id=tenant_id,
                 document_batch=documents,
-                request_id=None,
                 adapter=adapter,
                 written_search_settings_id=bound_secondary.id,
             )
@@ -556,7 +556,7 @@ def _supply_user_file_to_secondary(user_file_id: str, tenant_id: str) -> bool:
     failed (retried next scan)."""
     with get_session_with_current_tenant() as db_session:
         secondary = active_secondary_port_target(db_session)
-        user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+        user_file = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
         file_id = user_file.file_id if user_file is not None else None
         file_name = user_file.name if user_file is not None else None
         incognito = user_file is not None and user_file.incognito
@@ -638,7 +638,7 @@ def process_user_file_impl(
         # Short session: count the pickup and read what we need, then release
         # the connection before the slow file-I/O and indexing pipeline phases.
         with get_session_with_current_tenant() as db_session:
-            uf = db_session.get(UserFile, _as_uuid(user_file_id))
+            uf = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
             if not uf:
                 task_logger.warning(
                     f"process_user_file_impl - UserFile not found id={user_file_id}"
@@ -694,13 +694,15 @@ def process_user_file_impl(
                 f"process_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
             )
             with get_session_with_current_tenant() as db_session:
-                current_user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+                current_user_file = get_user_file_by_pk(
+                    db_session, _as_uuid(user_file_id)
+                )
                 if (
                     current_user_file
                     and current_user_file.status != UserFileStatus.DELETING
                 ):
                     current_user_file.status = UserFileStatus.FAILED
-                    db_session.add(current_user_file)
+                    add_user_file__no_commit(db_session, current_user_file)
                     db_session.commit()
             return
 
@@ -710,11 +712,11 @@ def process_user_file_impl(
         )
     except Exception as e:
         with get_session_with_current_tenant() as db_session:
-            uf = db_session.get(UserFile, _as_uuid(user_file_id))
+            uf = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
             if uf:
                 if uf.status != UserFileStatus.DELETING:
                     uf.status = UserFileStatus.FAILED
-                db_session.add(uf)
+                add_user_file__no_commit(db_session, uf)
                 db_session.commit()
 
         task_logger.exception(
@@ -803,14 +805,8 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
                     f"check_for_user_file_delete - Queued {len(stale_incognito)} "
                     f"stale incognito files for tenant={tenant_id}"
                 )
-            user_file_ids = (
-                db_session.execute(
-                    select(UserFile.id).where(
-                        UserFile.status == UserFileStatus.DELETING
-                    )
-                )
-                .scalars()
-                .all()
+            user_file_ids = fetch_user_file_ids_by_status(
+                db_session, UserFileStatus.DELETING
             )
             for user_file_id in user_file_ids:
                 # --- Protection 2: per-file queued guard ---
@@ -875,7 +871,7 @@ def delete_user_file_impl(
 
         # Phase 1: short read session — extract everything needed for slow I/O
         with get_session_with_current_tenant() as db_session:
-            user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+            user_file = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
             if not user_file:
                 task_logger.info(
                     f"delete_user_file_impl - User file not found id={user_file_id}"
@@ -942,9 +938,9 @@ def delete_user_file_impl(
             )
             return
         with get_session_with_current_tenant() as db_session:
-            user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+            user_file = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
             if user_file is not None:
-                db_session.delete(user_file)
+                delete_user_file__no_commit(db_session, user_file)
                 db_session.commit()
         task_logger.info(f"delete_user_file_impl - Completed id={user_file_id}")
     except Exception as e:
@@ -1004,23 +1000,7 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
             return None
 
         with get_session_with_current_tenant() as db_session:
-            user_file_ids = (
-                db_session.execute(
-                    select(UserFile.id).where(
-                        sa.and_(
-                            sa.or_(
-                                UserFile.needs_project_sync.is_(True),
-                                UserFile.needs_persona_sync.is_(True),
-                                # re-enqueue un-reconciled files so the reconciler retries
-                                UserFile.secondary_reconcile_pending.is_(True),
-                            ),
-                            UserFile.status == UserFileStatus.COMPLETED,
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            user_file_ids = fetch_user_file_ids_needing_sync(db_session)
 
             for user_file_id in user_file_ids:
                 if not enqueue_user_file_project_sync_task(
@@ -1135,7 +1115,7 @@ def project_sync_user_file_impl(
 
         # Phase 3: short write session — mark sync as done
         with get_session_with_current_tenant() as db_session:
-            user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+            user_file = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
             if user_file is not None:
                 user_file.needs_project_sync = False
                 user_file.needs_persona_sync = False
@@ -1148,7 +1128,7 @@ def project_sync_user_file_impl(
                     not secondary_consistent
                     and user_file.status == UserFileStatus.COMPLETED
                 )
-                db_session.add(user_file)
+                add_user_file__no_commit(db_session, user_file)
                 db_session.commit()
 
     except Exception as e:

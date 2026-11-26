@@ -23,14 +23,14 @@ gains a message or a full re-index rebuilds it.
 
 from collections import deque
 from collections.abc import Callable, Container, Generator, Iterable, Iterator
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from babel.core import get_global
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
+from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
@@ -54,6 +54,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
@@ -69,6 +70,7 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OutlookGraphError,
 )
 from onyx.connectors.microsoft_utils.graph_errors import raise_for_auth_error
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
@@ -584,10 +586,11 @@ def build_event_document(
     )
 
 
-@dataclass
-class AttachmentBudget:
+class AttachmentBudget(BaseModel):
     """What one conversation may still spend on attachments: characters kept
     and download-plus-extraction attempts, successful or not."""
+
+    model_config = ConfigDict(strict=True)
 
     text: int = MAX_ATTACHMENT_TEXT_PER_CONVERSATION
     reads: int = MAX_ATTACHMENT_READS_PER_CONVERSATION
@@ -701,6 +704,8 @@ class OutlookConnector(
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         batch_size: int = INDEX_BATCH_SIZE,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         # Addresses, then Entra groups by display name or object id whose
         # members are walked. Both empty means every mailbox the app may open.
@@ -756,6 +761,17 @@ class OutlookConnector(
                 CONFIG_GRAPH_API_HOST: self.graph_api_host,
             },
         )
+        self._ops.request_pacer = self._request_pacer()
+
+    def _request_pacer(self) -> MicrosoftRequestPacer | None:
+        limiter = self.source_api_limiter
+        return MicrosoftRequestPacer(limiter) if limiter is not None else None
+
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        super().set_source_api_limiter(limiter)
+        if self._ops is not None:
+            self._ops.request_pacer = self._request_pacer()
 
     def validate_connector_settings(self) -> None:
         try:

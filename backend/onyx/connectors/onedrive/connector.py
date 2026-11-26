@@ -1,7 +1,9 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
+
+from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -16,6 +18,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
@@ -42,10 +45,12 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -54,7 +59,6 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.onedrive.access import (
     get_onedrive_external_access,
-    prefix_onedrive_external_groups,
 )
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
@@ -140,7 +144,7 @@ def user_root_node(
         display_name=user.display_name or user.user_principal_name,
         link=drive.web_url,
         node_type=HierarchyNodeType.MY_DRIVE,
-        external_access=external_access or ExternalAccess.empty(),
+        external_access=external_access,
     )
 
 
@@ -177,7 +181,7 @@ def folder_node(
         display_name=item.name or "",
         link=item.web_url,
         node_type=HierarchyNodeType.FOLDER,
-        external_access=external_access or ExternalAccess.empty(),
+        external_access=external_access,
     )
 
 
@@ -271,6 +275,8 @@ class OneDriveConnector(
         treat_organization_link_as_public: bool = False,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         normalized_users = normalize_configured_users(users)
         self.settings = OneDriveSettings(
@@ -313,6 +319,17 @@ class OneDriveConnector(
                 CONFIG_USERS: self.settings.users,
             },
         )
+        self._ops.request_pacer = self._request_pacer()
+
+    def _request_pacer(self) -> MicrosoftRequestPacer | None:
+        limiter = self.source_api_limiter
+        return MicrosoftRequestPacer(limiter) if limiter is not None else None
+
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        super().set_source_api_limiter(limiter)
+        if self._ops is not None:
+            self._ops.request_pacer = self._request_pacer()
 
     def validate_connector_settings(self) -> None:
         resolve_microsoft_environment(
@@ -370,8 +387,6 @@ class OneDriveConnector(
         user: OneDriveUser,
         drive: OneDriveDrive,
         item_id: str,
-        *,
-        add_prefix: bool,
     ) -> ExternalAccess:
         permissions: list[OneDrivePermission] = self._list_all_permissions(
             drive.id, item_id
@@ -380,7 +395,6 @@ class OneDriveConnector(
             permissions,
             user.user_principal_name,
             self.settings.treat_organization_link_as_public,
-            add_prefix=add_prefix,
         )
 
     def _item_access(
@@ -388,8 +402,6 @@ class OneDriveConnector(
         user: OneDriveUser,
         drive: OneDriveDrive,
         item: DriveDeltaItem,
-        *,
-        add_prefix: bool,
     ) -> ExternalAccess:
         parent_id = item.parent_reference.id if item.parent_reference else None
         parent_access = self._folder_access.get(
@@ -397,7 +409,7 @@ class OneDriveConnector(
         )
         if not item.is_folder and item.shared is None and parent_access is not None:
             return parent_access
-        access = self._direct_access(user, drive, item.id, add_prefix=add_prefix)
+        access = self._direct_access(user, drive, item.id)
         if item.is_folder:
             cache_key = hierarchy_item_id(drive.id, item.id)
             self._folder_access[cache_key] = access
@@ -528,6 +540,8 @@ class OneDriveConnector(
             content = self.ops.download_item(
                 item=drive_item, raw_file_callback=self.raw_file_callback
             )
+        except ConnectorStopSignal:
+            raise
         except Exception as error:
             return _document_failure(drive_item, error)
         if content is None:
@@ -548,20 +562,41 @@ class OneDriveConnector(
         )
         return error.is_permanent_refusal or repeated_resync
 
+    def _read_item_access(
+        self,
+        user: OneDriveUser,
+        drive: OneDriveDrive,
+        item: DriveDeltaItem,
+        include_permissions: bool,
+        to_failure: Callable[[Exception], ConnectorFailure],
+    ) -> ExternalAccess | ConnectorFailure | None:
+        """The item's access, None without permission sync, or the failure
+        that ``to_failure`` makes when the read fails for this item only."""
+        if not include_permissions:
+            return None
+        try:
+            return self._item_access(user, drive, item)
+        except OneDriveGraphError as error:
+            if error.fails_the_attempt:
+                raise
+            return to_failure(error)
+        except ConnectorStopSignal:
+            raise
+        except Exception as error:
+            return to_failure(error)
+
     def _discover_delta_page(
         self,
         checkpoint: OneDriveCheckpoint,
+        user: OneDriveUser,
+        drive: OneDriveDrive,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         *,
         include_permissions: bool,
-        add_group_prefix: bool,
     ) -> Generator[
         OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure, None, None
     ]:
-        user = checkpoint.current_user
-        drive = checkpoint.current_drive
-        assert user is not None and drive is not None
         start_at = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
         end_at = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
         page_url = checkpoint.delta_cursor or build_delta_start_url(
@@ -615,56 +650,33 @@ class OneDriveConnector(
             if item.is_folder:
                 if not self._path_allowed(item):
                     continue
-                try:
-                    access = (
-                        self._item_access(
-                            user,
-                            drive,
-                            item,
-                            add_prefix=add_group_prefix,
-                        )
-                        if include_permissions
-                        else None
-                    )
-                except OneDriveGraphError as error:
-                    if error.fails_the_attempt:
-                        raise
-                    yield _entity_failure(item.id, str(error), error)
-                    continue
-                except Exception as error:
-                    yield _entity_failure(item.id, str(error), error)
-                    continue
-                node_access = (
-                    prefix_onedrive_external_groups(access)
-                    if access is not None and not add_group_prefix
-                    else access
+                folder_access = self._read_item_access(
+                    user,
+                    drive,
+                    item,
+                    include_permissions,
+                    lambda error, item_id=item.id: _entity_failure(
+                        item_id, str(error), error
+                    ),
                 )
-                yield folder_node(drive, item, node_access)
+                if isinstance(folder_access, ConnectorFailure):
+                    yield folder_access
+                    continue
+                yield folder_node(drive, item, folder_access)
                 continue
             if not item.is_file or not self._item_allowed(item, None, end_at):
                 continue
-            try:
-                access = (
-                    self._item_access(
-                        user,
-                        drive,
-                        item,
-                        add_prefix=add_group_prefix,
-                    )
-                    if include_permissions
-                    else None
-                )
-            except OneDriveGraphError as error:
-                if error.fails_the_attempt:
-                    raise
-                yield _document_failure(
-                    DriveItemData.from_graph_json(item.to_graph_json()), error
-                )
-                continue
-            except Exception as error:
-                yield _document_failure(
-                    DriveItemData.from_graph_json(item.to_graph_json()), error
-                )
+            access = self._read_item_access(
+                user,
+                drive,
+                item,
+                include_permissions,
+                lambda error, file=item: _document_failure(
+                    DriveItemData.from_graph_json(file.to_graph_json()), error
+                ),
+            )
+            if isinstance(access, ConnectorFailure):
+                yield access
                 continue
             yield OneDriveDiscoveredFile(
                 drive=drive,
@@ -681,7 +693,6 @@ class OneDriveConnector(
         checkpoint: OneDriveCheckpoint,
         *,
         include_permissions: bool,
-        add_group_prefix: bool,
     ) -> Generator[
         OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure,
         None,
@@ -694,14 +705,19 @@ class OneDriveConnector(
                 yield from self._select_explicit_user(checkpoint)
             if checkpoint.current_user is not None and checkpoint.current_drive is None:
                 yield from self._open_current_drive(checkpoint)
-        if checkpoint.current_drive is None:
+        drive = checkpoint.current_drive
+        if drive is None:
             return checkpoint
+        user = checkpoint.current_user
+        if user is None:
+            raise RuntimeError("OneDrive checkpoint has a current drive but no user.")
         yield from self._discover_delta_page(
             checkpoint,
+            user,
+            drive,
             start,
             end,
             include_permissions=include_permissions,
-            add_group_prefix=add_group_prefix,
         )
         return checkpoint
 
@@ -718,7 +734,6 @@ class OneDriveConnector(
             end,
             checkpoint,
             include_permissions=include_permissions,
-            add_group_prefix=True,
         ):
             if not isinstance(item, OneDriveDiscoveredFile):
                 yield item
@@ -774,7 +789,6 @@ class OneDriveConnector(
                 0,
                 checkpoint,
                 include_permissions=include_permissions,
-                add_group_prefix=False,
             ):
                 if isinstance(item, ConnectorFailure):
                     if item.exception is None:
@@ -949,9 +963,7 @@ class OneDriveConnector(
         # Top-down, so each folder's access is cached before its children use it.
         for folder in reversed(folders):
             access = (
-                self._item_access(user, drive, folder, add_prefix=True)
-                if include_permissions
-                else None
+                self._item_access(user, drive, folder) if include_permissions else None
             )
             node = folder_node(drive, folder, access)
             cache.emitted_node_ids.add(node.raw_node_id)
@@ -972,7 +984,7 @@ class OneDriveConnector(
             )
         yield from self._ancestor_nodes(owned, item, cache, include_permissions)
         access = (
-            self._item_access(owned.user, owned.drive, item, add_prefix=True)
+            self._item_access(owned.user, owned.drive, item)
             if include_permissions
             else None
         )
@@ -1012,6 +1024,8 @@ class OneDriveConnector(
                     if graph_error.fails_the_attempt:
                         raise
                     yield _reindex_failure(failed, str(graph_error), graph_error)
+                except ConnectorStopSignal:
+                    raise
                 except Exception as target_error:
                     yield _reindex_failure(failed, str(target_error), target_error)
         finally:

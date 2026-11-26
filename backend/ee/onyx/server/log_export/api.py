@@ -31,9 +31,9 @@ from ee.onyx.server.log_export.storage import (
 from onyx import __version__
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.cache.interface import CacheBackendType
-from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.app_configs import CACHE_BACKEND, ENABLE_CONVERSION_STAGE
 from onyx.configs.constants import (
+    CacheBackendType,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
@@ -43,6 +43,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.utils.logger import setup_logger
 from onyx.utils.platform_utils import is_running_in_kubernetes
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -50,7 +51,11 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.LOG_EXPORT))
+    ]
+)
 
 
 class _ExpiringLock:
@@ -110,6 +115,15 @@ WORKER_COLLECT_QUEUES: dict[str, str] = {
     "user_file_processing": OnyxCeleryQueues.USER_FILE_PROCESSING,
     "scheduled_tasks": OnyxCeleryQueues.SCHEDULED_TASKS,
     "monitoring": OnyxCeleryQueues.MONITORING,
+    # The docconversion worker runs only with the conversion stage. An export
+    # waits for each worker that it asks, so it asks this one only then. On
+    # Kubernetes, the API server does not get the setting; the Kubernetes
+    # collection reads that worker's logs.
+    **(
+        {"docconversion": OnyxCeleryQueues.DOCCONVERSION}
+        if ENABLE_CONVERSION_STAGE
+        else {}
+    ),
 }
 
 # Covers every replica, stdout, and crashed containers, which file collection

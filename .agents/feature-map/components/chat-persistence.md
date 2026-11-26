@@ -49,8 +49,11 @@
   its own.
 - **An API caller** reads a session with `GET /chat/get-chat-session/{id}`. The
   response holds the messages and, for each answer, the packets that rebuild
-  it. A send that names a parent off the active branch fails with "not on the
-  latest mainline".
+  it. A latest-page load and a shared chat's load also hold
+  `published_files`: the latest version of each artifact (every publish of
+  one path) that the model or its subagents published in the chat, on every
+  branch. A send that names a
+  parent off the active branch fails with "not on the latest mainline".
 
 ---
 
@@ -97,12 +100,32 @@ ChatResponsePersistence.save               chat/persistence.py; for USAGE_ONLY i
     save_chat_response_to_db               db/chat_response.py: checks the record
                                            mode, drops the checkpoint, then:
       save_chat_turn                       ONE commit: text, SearchDoc rows, links,
-                                           citations, final records
+                                           citations, final records, the
+                                           response's published files in
+                                           ChatMessage.files
 GET /chat/get-chat-session/{id}
   get_chat_message_page_ids                with `limit`: one page of the current
-                                           branch and the children of its messages
+                                           branch and the children of its messages;
+                                           the latest page reaches back to each
+                                           waiting card's reply
+                                           (db/chat_response.py:waiting_approval_reply_ids)
   get_chat_messages_by_session             that page, or all branches without
                                            `limit`; two ToolCall levels
+  get_chat_published_files                 latest-page and shared loads only; one
+                                           query of the chat's chat_artifact rows
+                                           (by chat_session_id: the root chat,
+                                           which subagents share) joined to
+                                           their versions and file records: the
+                                           latest version of each artifact
+                                           (a LATERAL newest-version subquery,
+                                           db/chat.py:_newest_available_version,
+                                           which artifacts_list shares), by first
+                                           publish (ChatArtifact.created_at,
+                                           then ID), with its artifact_id and
+                                           version. The path comes from the
+                                           artifact, the title from the
+                                           version. Versions whose object is
+                                           missing (file_size -1) are left out
   translate_assistant_message_to_packets   runtime rows: read_chat_execution,
                                            read_response_replay_data ->
                                            chat/presentation.py:replay_response;
@@ -136,7 +159,7 @@ those pointers from the root gives the active conversation
 (`db/chat.py:set_as_latest_chat_message`). A multi-model pick sets
 `preferred_response_id` and moves the same pointer (`db/chat.py:set_preferred_response`).
 
-**Child sessions.** When a research, coding or background sub-agent runs in a
+**Child sessions.** When a research or background subagent runs in a
 content-persisting chat, `reserve_child_response__no_commit` creates a
 `ChatSession` with `spawned_by_message_id` set to the parent response. It
 copies the root's user, agent, Slack flag and record mode. A child session has
@@ -293,11 +316,15 @@ legacy response replays through the builders in
 `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`:
 tool steps grouped by `turn_number`, the answer as one delta, citations in
 order of first use, and a stop packet. It picks a builder per tool by
-`in_code_tool_id`, with a custom-tool fallback. A runtime answer with tool
-calls adds a child-response query and a tool-replay query to session load.
+`in_code_tool_id`, with a custom-tool fallback.
 `get_chat_session` prefetches the tool calls' search docs and loads their tools
-in one query (`server/query_and_chat/session_loading.py:load_session_tools`);
-do not add per-message or per-call queries. A reload shows a `RUNNING` row as it is, with the steps saved so far.
+in one query (`server/query_and_chat/session_loading.py:load_session_tools`).
+It loads the child responses of the whole page together, with a fixed set of
+queries per hierarchy level: the child rows and their eager loads
+(`db/chat_response.py:load_child_responses`). Each response tree keeps its own
+`MAX_AGENT_HISTORY_RUNS` limit. `read_chat_execution` reads those rows and
+returns the tool calls that `read_response_replay_data` replays.
+Do not add per-message or per-call queries. A reload shows a `RUNNING` row as it is, with the steps saved so far.
 A failed answer's error comes from `ChatMessage.response_failure` through
 `chat/errors.py:chat_error` (code, retryable flag, model and provider), and
 falls back to `ChatMessage.error` on legacy rows
@@ -321,7 +348,7 @@ Content-persisting sessions retain PostgreSQL evidence for replay and citations.
 `USAGE_ONLY` sessions store no conversation content there. Their temporary history
 can lose evidence before model compaction under the retention limits below.
 
-**Incognito.** Chat does not start subagents, deep research, or coding agents in
+**Incognito.** Chat does not start subagents or deep research in
 incognito. Temporary history retains root messages and response receipts for
 idempotent saves. It does not index child conversations. A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings
@@ -374,15 +401,40 @@ deletes the context, then deletes the buffered stream keys. When the lock is
 busy, it queues a retry, and the periodic incognito cleanup task drains the
 pending set (`retry_incognito_teardowns`).
 
-**Deletion and retention.** Soft delete sets `deleted`. Hard delete
+**Deletion and retention.** Soft delete sets `deleted` and ends the chat's
+parked responses, which nothing can decide anymore
+(`server/query_and_chat/chat_backend.py:_end_parked_responses`): their
+requests, checkpoints and program dumps go. After the commit, both delete
+routes call `server/features/build/sandbox/firecracker/purge.py:purge_deleted_chat_sessions`:
+when the user has a sandbox row, it purges each chat's sandbox directory and
+saves. A single delete purges before it returns; delete-all purges in a
+background thread. The purge is best effort: a failure is logged and the
+delete stands. A chat deleted during its first sandbox call can leave its
+directory until the VM stops.
+Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
-its child sessions: message files, checkpoint blobs, then messages (tool calls,
+its child sessions: first the files and thumbnails of the root session's
+`chat_artifact` versions, through `delete_chat_artifact_files` (this covers a
+response that ended without its save, such as an interrupted parked one),
+then message files (`save_chat_turn` also adds each
+`publish_files` call's `PublishedFiles` to the response's `ChatMessage.files`
+in its one save), then the checkpoint blobs by file ID prefix under the root
+session ID, then messages (tool calls,
 response items and checkpoints cascade), then `SearchDoc` rows no message links
-to. The EE task
+to. `delete_chat_artifact_files` deletes each thumbnail before its file (a
+published file's delete cascades to its version, which links the thumbnail),
+and keeps the file when the thumbnail delete fails, so the next hard delete
+retries both. It raises after a failure, which stops the hard delete before
+the message files. The failed-publish clean-up
+(`delete_unpublished_chat_artifacts`) uses it too, and keeps the artifact of
+a kept file. The EE task
 `ee/onyx/background/celery/tasks/ttl_management/tasks.py:perform_ttl_management_task`
 hard-deletes in batches the sessions whose last activity, child sessions
 included, is older than the window (`db/chat.py:get_chat_sessions_older_than`).
+It purges no sandbox files itself. When the chain ends, it queues the sweep
+that purges the Craft Firecracker session saves the window no longer keeps,
+deleted chats' saves included ([[craft-sandboxes]]).
 A change to `maximum_chat_retention_days` needs the Enterprise tier, and the
 Community downgrade clears it ([[billing]]).
 
@@ -411,10 +463,12 @@ Community downgrade clears it ([[billing]]).
    not delivered again.
    `chat/run_store.py:ChatRunStore._load_status` marks a `RUNNING` response
    with no live owner as `ERROR` (`cancel_run`: `CANCELLED`) only when a later
-   run reads it as a sub-agent. A root response left `RUNNING` is repaired
-   only in a conversation with an inbox row: dispatch saves it as `ERROR`
+   run reads it as a sub-agent. The inbox lists a selected root response that
+   is `RUNNING`, or `SUSPENDED` without a checkpoint row, and dispatch saves it
+   as `ERROR` when it has no owner
    (`chat/run_store.py:interrupt_ownerless_responses`), which pauses the queue.
-   Otherwise a reload replays it as is.
+   Repair skips a parked response, `SUSPENDED` with a checkpoint row: it has
+   no owner by design ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
 3. `reserved-row-resolves` **A reserved assistant row must resolve.** Once
    `ChatTurnExecution.run` starts, `chat/persistence.py:ChatResponsePersistence`
    saves every outcome: an answer, a stop, a run failure, and a startup
@@ -451,7 +505,9 @@ Community downgrade clears it ([[billing]]).
    filters.** Owner history skips incognito; workspace surfaces skip only
    content-free sessions (`db/chat.py:content_persisting_sessions_filter`).
    Every read also skips child sessions (`spawned_by_message_id IS NULL`) and
-   summary rows (`db/chat.py:visible_chat_messages_filter`). A new list,
+   summary rows (`db/chat.py:visible_chat_messages_filter`). Owner history,
+   search and delete-all skip scheduled-run chats
+   (`db/chat.py:not_a_scheduled_run_chat`, [[craft-scheduled-tasks#run-link-hides-chat]]). A new list,
    search or export query that omits one of these leaks rows. Search applies
    the incognito filter to both halves of its union
    (`db/chat_search.py:search_chat_sessions`). Usage exports keep child
@@ -470,12 +526,19 @@ Community downgrade clears it ([[billing]]).
    `latest_child_message_id` chain. A parent of None or the root id starts a
    new top-level branch, and `AUTO_PLACE_AFTER_LATEST_MESSAGE` appends to the
    active tip. A client must persist a branch switch before it sends on that
-   branch. Reservation moves the active pointer to the new answer before the
+   branch. A turn that resumes a suspended response, or hosts a parked agent
+   run's branch, passes `any_branch`: its parent can be off the active branch,
+   such as another model's response, and brings its own ancestry. Reservation moves the active pointer to the new answer before the
    run starts.
 8. `replay-matches-live-stream` **Replay must match the live stream.** Runtime
    replay and the live stream share `chat/renderer.py:MessageRenderer` and
    `chat/renderer.py:ToolRenderer`, so change rendering there, not in one
-   caller. Runtime replay uses `chat/presentation.py:overall_stop`: a `CANCELLED`
+   caller. Tool approval records replay from `approval_request` rows through
+   the stream's outcome mapping, `chat/renderer.py:approval_outcome`, and
+   tool questions from `question_request` rows through
+   `chat/renderer.py:question_resolved`
+   ([[mcp-and-custom-tools#chat-approval-records-replay]]).
+   Runtime replay uses `chat/presentation.py:overall_stop`: a `CANCELLED`
    response with a `DEADLINE` failure gets `timed_out`; other cancellations get
    `user_cancelled`. Lost admission, lost ownership lease and control failures
    still cancel without a classified failure and replay like Stop. History keeps
@@ -493,9 +556,9 @@ Community downgrade clears it ([[billing]]).
    `run_python` builder parses the saved result JSON
    ([[code-execution#run-python-result-json]]).
 9. `tool-id-not-foreign-key` **`ToolCall.tool_id` is not a foreign key.**
-   After a tool is deleted, runtime replay still shows its calls from the
-   typed result, but legacy replay skips them, and the steps vanish from a
-   reloaded chat silently. Code mode has no tool row: `persistence.tool_ids`
+   Runtime replay skips a call and its child steps when the stored result type
+   is unknown. Legacy replay skips a call when its catalog row is missing.
+   Both keep the separately saved assistant answer. Code mode has no tool row: `persistence.tool_ids`
    maps `execute_code` and `wait_code` to None, and their calls save with a
    NULL `tool_id`.
 10. `shared-read-hides-deleted` **A shared read never returns a deleted
@@ -535,15 +598,28 @@ Community downgrade clears it ([[billing]]).
     display grouping. `db/chat_response.py:write_response_items` also refuses
     an update that drops a saved item or tool result, so a run must keep its
     step ids stable across saves.
-15. `checkpoints-not-written` **No chat path writes a checkpoint.**
-    `chat/run_store.py:ChatRunStore.handoff` writes `chat_response_checkpoint`
-    and `agent-checkpoint/<root session id>/` blobs
-    (`chat/restoration.py:persist_checkpoint_files`), but nothing calls it.
-    Nothing calls `ChatRunStore.resume` either, so no chat path claims a
-    checkpoint or runs `chat/restoration.py:restore_chat_agent`. A turn that a
-    restart interrupts is never resumed ([[#save-chat-turn-one-commit]]). A
-    feature that starts to suspend runs must keep blobs under the root session
-    id, because hard delete finds them only by that prefix.
+15. `checkpoints-for-approvals` **Only a run whose waits are all on people
+    writes a checkpoint.** One park pass in
+    `chat/run_store.py:ChatRunStore.poll_control` hands off each owned run,
+    the root or an agent run, that `ChatRunStore.may_park` accepts; the root
+    reports its park through the store's `on_root_parked` callback.
+    `ChatRunStore.handoff` saves `agent-checkpoint/<root session id>/` blobs
+    (`chat/restoration.py:persist_checkpoint_files`; parked programs' dumps
+    under unique IDs, other files under content IDs), then writes
+    `chat_response_checkpoint` with the foreground child runs it waits for
+    (`child_run_ids`) and the dumps it owns (`dump_file_ids`), and sets the
+    response `SUSPENDED` (`db/chat_checkpoint.py:publish_checkpoint__no_commit`).
+    A response is parked only while it is `SUSPENDED` with that row; ownerless
+    repair keeps it, and ends a `SUSPENDED` response without the row. The
+    continuation's `ChatRunStore.resume` claims it once and runs
+    `chat/restoration.py:restore_chat_agent`; completion deletes it
+    ([[mcp-and-custom-tools#chat-approval-durable-wait]]). The row owns its
+    dumps: deleting the row (`db/chat_response.py:finish_checkpoint__no_commit`)
+    or replacing it returns them, and the caller deletes them after commit; a
+    failed handoff deletes the dumps it saved. A turn that a restart
+    interrupts mid-step is never resumed ([[#save-chat-turn-one-commit]]). A
+    feature that suspends runs must keep blobs under the root session id,
+    because hard delete finds them only by that prefix.
 16. `code-mode-replay-content` **A code mode result is replayed as saved, so
     its content must carry what the next turn needs**
     (`tools/tool_implementations/code_mode/prompt.py:format_content`). An
@@ -650,8 +726,9 @@ Community downgrade clears it ([[billing]]).
 - `investigate-reload-differs` **Investigate "the reload looks different from
   the live answer".** Fetch
   `/api/chat/get-chat-session/{id}` through the frontend and compare its
-  `packets` for the answer with the live stream. On a legacy row, missing tool
-  steps point at a deleted tool ([[#tool-id-not-foreign-key]]). On any row they
+  `packets` for the answer with the live stream. If a legacy tool step is missing,
+  check whether its tool row still exists
+  ([[#tool-id-not-foreign-key]]). Missing steps on any row
   can point at a missing replay branch ([[#replay-matches-live-stream]]). A tab
   that shows its start but no result has no saved result: query
   `tool_call.operation_status` and `result` for the response (`turn_number` is

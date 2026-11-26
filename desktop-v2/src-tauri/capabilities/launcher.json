@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "launcher",
+  "description": "The launcher panel: ask, search and open results.",
+  "local": true,
+  "windows": ["launcher"],
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-ask",
+    "allow-search",
+    "allow-open-chat-in-main",
+    "allow-open-external",
+    "allow-hide-launcher",
+    "allow-discard-answer",
+    "allow-get-prefs",
+    "allow-list-agents",
+    "allow-set-launcher-agent",
+    "allow-upload-file",
+    "allow-get-upload-limit",
+    "allow-cancel-upload",
+    "allow-delete-user-file",
+    "allow-toggle-aonyx"
+  ]
+}

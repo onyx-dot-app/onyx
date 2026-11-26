@@ -8,6 +8,7 @@ import {
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { Settings } from "@/lib/settings/types";
+import type { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { Tier } from "@/lib/tiers/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
 
@@ -32,16 +33,14 @@ export type AdminNavItemId =
   | "skills"
   | "customAnalytics"
   | "agents"
-  | "plugins"
-  | "mcpActions"
-  | "openapiActions"
+  | "integrations"
   | "indexingStatus"
   | "connectors"
   | "documentSets"
   | "indexSettings"
   | "serviceAccounts"
-  | "slackIntegration"
-  | "discordIntegration"
+  | "slackBot"
+  | "discordBot"
   | "hookExtensions"
   | "users"
   | "groups"
@@ -56,6 +55,7 @@ export type AdminNavItemId =
   | "queryHistory"
   | "tracing"
   | "exportLogs"
+  | "serviceStatus"
   | "upgradePlan";
 
 /**
@@ -64,9 +64,9 @@ export type AdminNavItemId =
  */
 export type AdminNavSectionId =
   | "craft"
-  | "agentsAndActions"
+  | "agentsAndPlugins"
   | "documentsAndKnowledge"
-  | "integrations"
+  | "channels"
   | "permissions"
   | "organization"
   | "usage";
@@ -93,10 +93,7 @@ export const NAV_ITEM_IDS: Record<
   SKILLS: "skills",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
-  PLUGINS: "plugins",
-  PLUGINS_EXTERNAL_APP: null,
-  MCP_ACTIONS: null,
-  OPENAPI_ACTIONS: null,
+  INTEGRATIONS: "integrations",
   INDEXING_STATUS: "indexingStatus",
   CONNECTORS: "connectors",
   DOCUMENT_SETS: "documentSets",
@@ -105,8 +102,8 @@ export const NAV_ITEM_IDS: Record<
   INDEX_SETTINGS: "indexSettings",
   DOCUMENT_PROCESSING: null,
   API_KEYS: "serviceAccounts",
-  SLACK_BOTS: "slackIntegration",
-  DISCORD_BOTS: "discordIntegration",
+  SLACK_BOTS: "slackBot",
+  DISCORD_BOTS: "discordBot",
   HOOKS: "hookExtensions",
   USERS: "users",
   GROUPS: "groups",
@@ -122,6 +119,7 @@ export const NAV_ITEM_IDS: Record<
   QUERY_HISTORY: "queryHistory",
   TRACING: "tracing",
   EXPORT_LOGS: "exportLogs",
+  SERVICE_STATUS: "serviceStatus",
   STANDARD_ANSWERS: null,
   DOCUMENTS: null,
   PERFORMANCE: null,
@@ -175,9 +173,9 @@ const NAV_SECTION_IDS: readonly (readonly [
   id: AdminNavSectionId,
 ])[] = [
   ["Craft", "craft"],
-  ["Agents & Actions", "agentsAndActions"],
+  ["Agents & Plugins", "agentsAndPlugins"],
   ["Documents & Knowledge", "documentsAndKnowledge"],
-  ["Integrations", "integrations"],
+  ["Channels", "channels"],
   ["Permissions", "permissions"],
   ["Organization", "organization"],
   ["Usage", "usage"],
@@ -203,6 +201,8 @@ export interface SidebarItemEntry {
   disabled?: boolean;
   requiredTier?: Tier | null;
   beta?: boolean;
+  /** The page's feature key when the playground restricts it. The page stays reachable. */
+  restrictedFeatureKey?: PlaygroundRestrictedFeature;
 }
 
 export function buildItems(
@@ -211,6 +211,7 @@ export function buildItems(
   settings: Settings | null
 ): SidebarItemEntry[] {
   const userCanAccess = (perm: string) => hasPermission(permissions, perm);
+  const playgroundRestrictions = settings?.playground_restrictions ?? [];
   const items: SidebarItemEntry[] = [];
 
   // Safety: ADMIN_ROUTES satisfies Record<string, AdminRouteEntry>, so every
@@ -226,7 +227,15 @@ export function buildItems(
     if (!userCanAccess(route.requiredPermission)) continue;
     if (route.visibleWhen && !route.visibleWhen(flags)) continue;
 
+    const restrictedFeatureKey =
+      route.featureKey !== undefined &&
+      playgroundRestrictions.includes(route.featureKey)
+        ? route.featureKey
+        : undefined;
+    // A restricted page stays reachable: it renders read-only under the
+    // playground notice, so the tier upsell does not apply to it.
     const disabled =
+      restrictedFeatureKey === undefined &&
       route.requiredTier !== null &&
       !tierAtLeast(flags.tier, route.requiredTier);
 
@@ -238,6 +247,7 @@ export function buildItems(
       disabled,
       requiredTier: route.requiredTier,
       beta: route.beta,
+      restrictedFeatureKey,
     };
 
     // INDEX_SETTINGS surfaces a reindexing-needed error indicator
@@ -250,7 +260,8 @@ export function buildItems(
 
   if (
     userCanAccess(Permission.FULL_ADMIN_PANEL_ACCESS) &&
-    !flags.hasSubscription
+    !flags.hasSubscription &&
+    !flags.isPlayground
   ) {
     items.push({
       sectionId: null,

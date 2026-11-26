@@ -51,15 +51,14 @@ import (
 // LayoutVersion is the version of the template layout that the agent
 // builds: the file names, the drive slots and their order. Layout 3 adds
 // managed slot B (the spare for a managed drive swap) as the last drive, so
-// the guest devices of the older slots do not move. The agent still restores
-// layout 2 templates; their VMs cannot swap the managed drive. Layout 4
-// adds the balloon device with free page reporting; VMs of older
-// layouts never return free memory to the node. Layout 5 adds the
-// user-uploads and spaces managed mounts.
+// the guest devices of the older slots do not move. Layout 4 adds the
+// balloon device with free page reporting. Layout 5 adds the user-uploads
+// and spaces managed mounts.
 const LayoutVersion = 5
 
-// OldestLayout is the oldest layout that the agent restores.
-const OldestLayout = 2
+// OldestLayout is the oldest layout that the agent restores. Every VM has
+// the balloon, so freed guest memory always returns to the node.
+const OldestLayout = BalloonLayout
 
 // File names in a template directory and in each VM chroot.
 const (
@@ -107,21 +106,6 @@ type Drive struct {
 // layoutDrives are the drive slots of each layout in guest order (vda, vdb,
 // ...). The guest finds its drives by this order.
 var layoutDrives = map[int][]Drive{
-	2: {
-		{RootfsDriveID, RootfsFile, true},
-		{ScratchDriveID, ScratchFile, false},
-		{ManagedDriveID, ManagedFile, true},
-		{UploadADriveID, UploadAFile, true},
-		{UploadBDriveID, UploadBFile, true},
-	},
-	3: {
-		{RootfsDriveID, RootfsFile, true},
-		{ScratchDriveID, ScratchFile, false},
-		{ManagedDriveID, ManagedFile, true},
-		{UploadADriveID, UploadAFile, true},
-		{UploadBDriveID, UploadBFile, true},
-		{ManagedBDriveID, ManagedBFile, true},
-	},
 	4: {
 		{RootfsDriveID, RootfsFile, true},
 		{ScratchDriveID, ScratchFile, false},
@@ -212,7 +196,7 @@ var Balloon = BalloonConfig{AmountMiB: 0, DeflateOnOOM: true, StatsIntervalS: 5,
 
 // BalloonFor returns the balloon of a layout, or nil for a layout without one.
 func BalloonFor(layout int) *BalloonConfig {
-	if layout < BalloonLayout || !SupportedLayout(layout) {
+	if !SupportedLayout(layout) {
 		return nil
 	}
 	b := Balloon
@@ -238,7 +222,7 @@ func FilesFor(layout int) []string {
 }
 
 // SupportedLayout reports whether the agent restores templates of layout v.
-func SupportedLayout(v int) bool { return layoutDrives[v] != nil }
+func SupportedLayout(v int) bool { return v >= OldestLayout && layoutDrives[v] != nil }
 
 // Drives are the drive slots of the layout that the agent builds.
 var Drives = DrivesFor(LayoutVersion)
@@ -415,32 +399,22 @@ func (t *Template) Path(name string) string { return filepath.Join(t.Dir, name) 
 // FileList returns the data files of the template's layout.
 func (t *Template) FileList() []string { return FilesFor(t.LayoutVersion) }
 
-// ManagedSlots returns the number of managed drive slots: 2 from layout 3
-// on (a VM can swap its managed drive), else 1.
-func (t *Template) ManagedSlots() int {
-	for _, d := range DrivesFor(t.LayoutVersion) {
-		if d.ID == ManagedBDriveID {
-			return 2
-		}
-	}
-	return 1
-}
+// ManagedSlots is the number of managed drive slots of the VMs of every
+// layout that the agent restores: slot A and the spare slot B of a swap.
+const ManagedSlots = 2
 
 // ManagedMounts returns the managed mounts that the template's VMs can swap:
-// the layout must have their drives, and the guest daemon must serve them
-// (skills always).
+// the layout must have their drives, and the guest daemon must serve them.
+// A root drive that lists no managed mounts serves skills only.
 func (t *Template) ManagedMounts() []string {
 	var out []string
 	for _, m := range SwapMounts(t.LayoutVersion) {
-		if m == SkillsMount || slices.Contains(t.GuestMounts, m) {
+		if slices.Contains(t.GuestMounts, m) || (len(t.GuestMounts) == 0 && m == SkillsMount) {
 			out = append(out, m)
 		}
 	}
 	return out
 }
-
-// HasBalloon reports whether the template's VMs have the balloon device.
-func (t *Template) HasBalloon() bool { return BalloonFor(t.LayoutVersion) != nil }
 
 // CheckUnchanged fails if a file changed since Store.Verify hashed it. Call
 // it after the files are copied, so the copies are the verified content.

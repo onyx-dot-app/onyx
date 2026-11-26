@@ -271,6 +271,14 @@ export class InputBar {
   // Skill picker
   // ---------------------------------------------------------------------------
 
+  /** Types `@query`, then opens Customize from the menu's Manage skills row. */
+  async openManageSkills(query: string): Promise<void> {
+    await this.textbox.click();
+    await this.textbox.pressSequentially(`@${query}`);
+    await expect(this.skillPicker).toBeVisible();
+    await this.skillPicker.getByText("Manage skills", { exact: true }).click();
+  }
+
   skillPickerRow(name: string): Locator {
     return this.skillPicker.getByTestId(`skill-picker-row-${name}`);
   }
@@ -336,10 +344,15 @@ export class InputBar {
   }
 
   /** The composer accepts a normal send, and the empty composer cannot send. */
-  async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
+  /** No turn streams, so the composer sends a normal message. */
+  async expectAcceptsSend(timeout = POLL_TIMEOUT): Promise<void> {
     await expect(this.container).toHaveAttribute("data-accepts-send", "true", {
       timeout,
     });
+  }
+
+  async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
+    await this.expectAcceptsSend(timeout);
     await expect(this.textbox).toHaveAttribute("data-empty", "");
     await expect(this.sendButton).toBeDisabled();
   }

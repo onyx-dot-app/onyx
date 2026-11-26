@@ -27,6 +27,7 @@ from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
     ChatTurnSetup,
+    ContextUserFiles,
     IncognitoAgentResponse,
     IncognitoState,
     PendingChatMessage,
@@ -46,8 +47,8 @@ from onyx.db.models import (
     ChatMessage,
     ChatSession,
     Persona,
-    Tool,
     User,
+    UserPreferences,
     UserProject,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -68,8 +69,11 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.constants import CODING_AGENT_TOOL_ID
-from onyx.tools.models import ChatToolSelection, PersonaToolConfiguration
+from onyx.tools.models import (
+    CapabilityEntry,
+    PersonaToolConfiguration,
+    ToolOptions,
+)
 from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -133,7 +137,10 @@ def test_document_set_denial_precedes_session_and_model_creation() -> None:
     from onyx.server.query_and_chat.models import SendMessageRequest
 
     request = SendMessageRequest(
-        message="hello", internal_search_filters=BaseFilters(document_set=["private"])
+        message="hello",
+        tool_options=ToolOptions(
+            internal_search_filters=BaseFilters(document_set=["private"])
+        ),
     )
     user = MagicMock(is_anonymous=False)
     with (
@@ -248,7 +255,7 @@ def _mock_chat_preparation(
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.load_message_branch",
-        lambda *_args: ([parent], parent),
+        lambda *_args, **_kwargs: ([parent], parent),
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.execute_hook",
@@ -265,7 +272,14 @@ def _mock_chat_preparation(
     )
 
     monkeypatch.setattr(
-        "onyx.chat.process_message.resolve_context_user_files", lambda *_args: []
+        "onyx.chat.process_message.resolve_context_user_files",
+        lambda *_args: ContextUserFiles(project=[], agent=[]),
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.fetch_user_preferences",
+        lambda user, _db_session: UserPreferences(
+            user_id=user.id, use_memories=True, enable_memory_tool=True
+        ),
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.get_memories",
@@ -275,7 +289,9 @@ def _mock_chat_preparation(
         "onyx.chat.process_message.get_default_base_system_prompt",
         lambda *_args: "System",
     )
-    monkeypatch.setattr("onyx.chat.process_message.list_chat_skills", lambda *_args: [])
+    monkeypatch.setattr(
+        "onyx.chat.process_message.list_chat_skills", lambda *_args, **_kwargs: []
+    )
     monkeypatch.setattr(
         "onyx.chat.process_message.calculate_reserved_tokens", lambda **_kwargs: 100
     )
@@ -289,7 +305,7 @@ def _mock_chat_preparation(
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.capture_persona_tool_configuration",
-        lambda _persona: PersonaToolConfiguration(
+        lambda _persona, _db_session: PersonaToolConfiguration(
             persona_id=1,
             persona_name="Assistant",
             tools=[],
@@ -565,42 +581,17 @@ def test_invalid_deep_research_is_rejected_before_the_question_is_saved(
     accept_picks.assert_not_called()
 
 
-def test_incognito_rejects_a_preferred_coding_agent_before_the_question_is_saved(
-    chat_session: ChatSession,
-    _mock_chat_preparation: None,
-) -> None:
-    chat_session.incognito_record_mode = IncognitoRecordMode.FULL_HISTORY
-    chat_session.persona.tools = [
-        Tool(id=7, name="coding_agent", in_code_tool_id=CODING_AGENT_TOOL_ID)
-    ]
-    with (
-        patch("onyx.chat.process_message.create_new_chat_message") as create_message,
-        pytest.raises(OnyxError) as raised,
-    ):
-        prepare_chat_turn(
-            SendMessageRequest(
-                message="Question",
-                chat_session_id=chat_session.id,
-                preferred_tool_id=7,
-            ),
-            User(id=uuid4(), email="reader@example.com"),
-            llm_overrides=None,
-        )
-    assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
-    assert raised.value.detail == (
-        "The Coding Agent is not available in incognito. Start a normal chat to use it."
-    )
-    create_message.assert_not_called()
-
-
 def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
     chat_session: ChatSession,
     _mock_chat_preparation: None,
 ) -> None:
     filters = BaseFilters(document_set=["Handbook"])
-    chat_session.tool_selection = ChatToolSelection(
-        allowed_tool_ids=[3], preferred_tool_id=3, internal_search_filters=filters
+    saved = ToolOptions(
+        allowed=[CapabilityEntry(tool_id=3)],
+        preferred=CapabilityEntry(tool_id=3),
+        internal_search_filters=filters,
     )
+    chat_session.tool_options = saved
     question = ChatMessage(id=5, message_type=MessageType.USER)
     with (
         patch("onyx.chat.process_message.accept_queued_turn__no_commit"),
@@ -628,20 +619,18 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
                 ),
             ),
         )
-    assert setup.new_msg_req.allowed_tool_ids == [3]
-    assert setup.new_msg_req.preferred_tool_id == 3
-    assert setup.new_msg_req.internal_search_filters == filters
+    assert setup.new_msg_req.tool_options == saved
+    assert setup.preferred_tool == CapabilityEntry(tool_id=3)
     check_access.assert_called_once_with(ANY, ["Handbook"], ANY)
     setup.admission.release()
 
 
-def test_an_agent_host_uses_the_saved_tool_selection(
+def test_an_agent_host_uses_the_saved_tool_options(
     chat_session: ChatSession,
     _mock_chat_preparation: None,
 ) -> None:
-    chat_session.tool_selection = ChatToolSelection(
-        allowed_tool_ids=[3], preferred_tool_id=None
-    )
+    saved = ToolOptions(allowed=[CapabilityEntry(tool_id=3)])
+    chat_session.tool_options = saved
     with patch("onyx.chat.process_message.check_token_rate_limits"):
         setup = prepare_chat_turn(
             SendMessageRequest(message="", chat_session_id=chat_session.id),
@@ -649,7 +638,7 @@ def test_an_agent_host_uses_the_saved_tool_selection(
             llm_overrides=None,
             agent_host=True,
         )
-    assert setup.new_msg_req.allowed_tool_ids == [3]
+    assert setup.new_msg_req.tool_options == saved
     setup.admission.release()
 
 
@@ -715,7 +704,8 @@ def test_a_question_saves_its_picks_and_reserves_room_for_their_skills(
     chat_session.incognito_record_mode = record_mode
     picks = _review_pick(token_count=40)
     monkeypatch.setattr(
-        "onyx.chat.process_message.accept_picked_skills", lambda *_args: [picks]
+        "onyx.chat.process_message.accept_picked_skills",
+        lambda *_args, **_kwargs: [picks],
     )
     created: list[ChatMessage] = []
 
@@ -751,7 +741,7 @@ def test_a_question_saves_its_picks_and_reserves_room_for_their_skills(
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.load_message_branch",
-        lambda *_args: ([parent], parent),
+        lambda *_args, **_kwargs: ([parent], parent),
     )
     store = MagicMock()
     store.prepare_messages.side_effect = lambda history, _text: (history, None, None)

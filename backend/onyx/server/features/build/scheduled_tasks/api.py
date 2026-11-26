@@ -1,4 +1,4 @@
-"""FastAPI router for Craft Scheduled Tasks.
+"""FastAPI router for scheduled tasks.
 
 Thin HTTP layer over ``onyx.db.scheduled_task``. Every handler:
 
@@ -6,9 +6,9 @@ Thin HTTP layer over ``onyx.db.scheduled_task``. Every handler:
 2. Calls a DB op (which enforces ownership + raises ``OnyxError``).
 3. Optionally enqueues the executor task on the ``scheduled_tasks`` queue.
 
-The router is mounted under the existing ``/build`` prefix (see
-``backend/onyx/server/features/build/api.py``), which provides the
-``require_onyx_craft_enabled`` gate.
+The router is mounted twice: at ``/scheduled-tasks`` for the chat app, and
+under ``/build`` (``backend/onyx/server/features/build/api.py``) behind the
+Craft gate for the Craft pages.
 """
 
 from __future__ import annotations
@@ -24,10 +24,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as celery_app
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
-from onyx.db.action_policy import (
-    get_task_action_policies,
-    list_action_policies,
-)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     Permission,
@@ -35,9 +31,11 @@ from onyx.db.enums import (
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
+from onyx.db.integration_policy import list_task_integration_links
 from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
 from onyx.db.scheduled_task import (
     create_scheduled_task,
+    get_run_of_chat_session,
     get_scheduled_task,
     insert_run,
     list_runs_for_task,
@@ -49,7 +47,9 @@ from onyx.db.scheduled_task import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.models import AppActionPoliciesView, TaskAppActionPolicies
+from onyx.integrations.craft import list_task_integration_views
+from onyx.integrations.policy import parse_action_settings
+from onyx.server.features.build.models import TaskIntegrationView
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EDITOR_PAYLOAD_MODELS,
     EditorMode,
@@ -58,7 +58,8 @@ from onyx.server.features.build.scheduled_tasks.schedule import (
     human_readable,
     next_n_fires,
 )
-from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
+from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
+from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -130,7 +131,7 @@ class ScheduledTaskCreate(_Forbid):
     editor_payload: EditorPayload
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
-    action_policies: list[TaskAppActionPolicies] | None = None
+    integrations: list[IntegrationLinkConfiguration] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -147,7 +148,7 @@ class ScheduledTaskPatch(_Forbid):
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
-    action_policies: list[TaskAppActionPolicies] | None = None
+    integrations: list[IntegrationLinkConfiguration] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -168,7 +169,7 @@ class RunSummary(BaseModel):
     trigger_source: ScheduledTaskTriggerSource
     started_at: datetime
     finished_at: datetime | None
-    session_id: str | None
+    chat_session_id: str | None
     summary: str | None
     skip_reason: str | None
     error_class: str | None
@@ -183,10 +184,38 @@ class RunSummary(BaseModel):
             trigger_source=run.trigger_source,
             started_at=run.started_at,
             finished_at=run.finished_at,
-            session_id=str(run.session_id) if run.session_id is not None else None,
+            chat_session_id=(
+                str(run.chat_session_id) if run.chat_session_id is not None else None
+            ),
             summary=run.summary,
             skip_reason=run.skip_reason,
             error_class=run.error_class,
+            revision=run.version,
+            viewed_revision=run.viewed_revision,
+        )
+
+
+class ScheduledRunContextResponse(BaseModel):
+    """The run of a scheduled-run session, for the banner above its chat."""
+
+    run_id: str
+    task_id: str
+    task_name: str
+    status: ScheduledTaskRunStatus
+    started_at: datetime
+    finished_at: datetime | None
+    revision: int
+    viewed_revision: int | None
+
+    @classmethod
+    def from_run(cls, run: ScheduledTaskRun) -> "ScheduledRunContextResponse":
+        return cls(
+            run_id=str(run.id),
+            task_id=str(run.task_id),
+            task_name=run.task.name,
+            status=run.status,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
             revision=run.version,
             viewed_revision=run.viewed_revision,
         )
@@ -223,7 +252,7 @@ class ScheduledTaskDetail(BaseModel):
     next_run_at: datetime | None
     next_runs: list[datetime]
     last_run: RunSummary | None
-    action_policies: list[TaskAppActionPolicies]
+    integrations: list[IntegrationLinkConfiguration]
     created_at: datetime
     updated_at: datetime
 
@@ -325,7 +354,13 @@ def _detail(
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        action_policies=get_task_action_policies(db_session, task.id),
+        integrations=[
+            IntegrationLinkConfiguration(
+                integration_id=link.integration_id,
+                action_settings=parse_action_settings(link.action_settings),
+            )
+            for link in list_task_integration_links(db_session, task.id)
+        ],
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -348,7 +383,7 @@ def _enqueue_executor(run_id: UUID) -> None:
         kwargs={"run_id": str(run_id), "tenant_id": tenant_id},
         queue=OnyxCeleryQueues.SCHEDULED_TASKS,
         priority=OnyxCeleryPriority.MEDIUM,
-        expires=QUEUE_RESIDENCY_SECONDS,
+        expires=SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS,
     )
 
 
@@ -399,6 +434,28 @@ def get_unviewed_task_count(
     return UnviewedTaskCountResponse(count=len(unviewed))
 
 
+# Declared before ``/{task_id}`` so the literal path wins.
+@router.get("/action-policies")
+def list_new_task_action_policies(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[TaskIntegrationView]:
+    """The catalog a new task starts from."""
+    return list_task_integration_views(db_session, user, None)
+
+
+@router.get("/chat-sessions/{chat_session_id}/run")
+def get_chat_session_run(
+    chat_session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ScheduledRunContextResponse | None:
+    """The run of a chat, for its banner. None: the chat is not a run. The
+    chat view asks on every open, so a normal chat is not an error."""
+    run = get_run_of_chat_session(db_session, chat_session_id, user.id)
+    return ScheduledRunContextResponse.from_run(run) if run is not None else None
+
+
 @router.post("")
 def create_task(
     request: ScheduledTaskCreate,
@@ -424,7 +481,7 @@ def create_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        action_policies=request.action_policies,
+        integrations=request.integrations,
     )
 
     if request.run_immediately:
@@ -485,7 +542,7 @@ def patch_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        action_policies=request.action_policies,
+        integrations=request.integrations,
     )
     db_session.commit()
     db_session.refresh(task)
@@ -620,6 +677,8 @@ def list_task_action_policies(
     task_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> list[AppActionPoliciesView]:
+) -> list[TaskIntegrationView]:
+    """The integrations the task can use, each marked when the task uses it, with
+    the setting and the effective policy of each action."""
     get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
-    return list_action_policies(db_session, user, task_id=task_id)
+    return list_task_integration_views(db_session, user, task_id)

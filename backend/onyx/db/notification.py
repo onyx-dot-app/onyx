@@ -238,6 +238,42 @@ def dismiss_notifications_with_other_value(
     )
 
 
+def get_undismissed_additional_data(
+    notif_type: NotificationType,
+    db_session: Session,
+) -> list[dict]:
+    """The distinct additional_data of this type's undismissed notifications,
+    over all users."""
+    rows = db_session.execute(
+        select(_notification_additional_data_key())
+        .where(
+            Notification.notif_type == notif_type,
+            Notification.dismissed.is_(False),
+        )
+        .distinct()
+    ).scalars()
+    return [dict(row) for row in rows]
+
+
+def dismiss_notifications_by_additional_data(
+    notif_type: NotificationType,
+    additional_data: dict,
+    db_session: Session,
+) -> None:
+    """Dismiss, for every user, notifications of this type with exactly this
+    additional_data. Does not commit."""
+    db_session.execute(
+        update(Notification)
+        .where(
+            Notification.notif_type == notif_type,
+            Notification.dismissed.is_(False),
+            _notification_additional_data_key() == additional_data,
+        )
+        .values(dismissed=True)
+        .execution_options(synchronize_session=False)
+    )
+
+
 def dismiss_user_notifications(
     user: User,
     db_session: Session,

@@ -14,7 +14,7 @@ import {
   Tooltip,
   useCreateModal,
 } from "@opal/components";
-import { Hoverable, Disabled } from "@opal/core";
+import { Hoverable } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { Formik, Form, FieldArray } from "formik";
@@ -45,7 +45,6 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
-  CODING_AGENT_TOOL_ID,
 } from "@/lib/tools/constants";
 import { Collapsible, Text } from "@opal/components";
 import { InputSwitchField } from "@opal/form";
@@ -55,7 +54,6 @@ import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/types";
 import {
-  SvgActions,
   SvgEye,
   SvgEyeOff,
   SvgImage,
@@ -74,13 +72,9 @@ import SquareButton from "@/refresh-components/buttons/SquareButton";
 import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
 import { AgentUpsertParameters } from "@/lib/agents/types";
-import { useMcpServersForAgent } from "@/lib/mcp/hooks";
-import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/lib/tools/hooks";
-import { getActionIcon } from "@/lib/tools/utils";
-import { ToolSnapshot } from "@/lib/tools/types";
-import { MCPTool } from "@/lib/mcp/types";
-import { MCPServerCard } from "@/lib/mcp/components";
+import AgentIntegrationsSection from "@/sections/agents/AgentIntegrationsSection";
+import { draftFromLink, toIntegrationInput } from "@/lib/agents/integrations";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
@@ -308,27 +302,6 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
   );
 }
 
-interface OpenApiToolCardProps {
-  tool: ToolSnapshot;
-}
-
-function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
-  const toolFieldName = `openapi_tool_${tool.id}`;
-
-  return (
-    <Card border="solid" rounding={4}>
-      <InputHorizontal
-        icon={SvgActions}
-        title={tool.display_name || tool.name}
-        description={tool.description}
-        withLabel={toolFieldName}
-      >
-        <InputSwitchField name={toolFieldName} />
-      </InputHorizontal>
-    </Card>
-  );
-}
-
 function AgentStarterMessages() {
   const t = useTranslations("agents");
   const starterExamples = [
@@ -414,15 +387,17 @@ export function AgentDraftManager({
     if (!loaded || restoredRef.current) return;
     restoredRef.current = true;
     if (hasDraft && draft && !dirty) {
-      // Revive the date field that JSON serialized to an ISO string.
+      // Revive the date field that JSON serialized to an ISO string. A draft
+      // from an older version can lack a field, so the form values fill it.
       const cutoff = draft.knowledge_cutoff_date;
       setValues({
+        ...values,
         ...draft,
         knowledge_cutoff_date:
           typeof cutoff === "string" ? new Date(cutoff) : (cutoff ?? null),
       });
     }
-  }, [loaded, hasDraft, draft, dirty, setValues]);
+  }, [loaded, hasDraft, draft, dirty, setValues, values]);
 
   return null;
 }
@@ -527,14 +502,6 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForAgent(
-    existingAgent?.id
-  );
-  const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
-    useOpenApiTools();
-
-  const openApiTools = openApiToolsRaw ?? [];
-
   // Check if the *BUILT-IN* tools are available.
   // The built-in tools are:
   // - image-gen
@@ -557,38 +524,10 @@ export default function AgentEditorPage({
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
   );
-  const codingAgentTool = availableTools?.find(
-    (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
-  );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
     ? undefined
     : t("editor.actions.imageGeneration.unavailable.tooltip");
-
-  // Include inaccessible attached tools so edits preserve them.
-  const mcpServersWithTools = mcpServers.map((server) => {
-    const candidateTools = server.can_attach
-      ? availableTools
-      : (existingAgent?.tools ?? []);
-    const serverTools: MCPTool[] = candidateTools
-      .filter((tool) => tool.mcp_server_id === server.id)
-      .map((tool) => ({
-        id: tool.id.toString(),
-        icon: getActionIcon(server.server_url, server.name),
-        name: tool.display_name || tool.name,
-        description: tool.description,
-        isAvailable: server.can_attach,
-        isEnabled: tool.enabled,
-      }));
-
-    return { server, tools: serverTools, isLoading: false };
-  });
-
-  // Render-only filter. Form state registers every server through
-  // mcpServersWithTools.
-  const mcpServersWithVisibleTools = mcpServersWithTools.filter(
-    ({ tools }) => tools.length > 0
-  );
 
   const initialValues = {
     // General
@@ -662,47 +601,7 @@ export default function AgentEditorPage({
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
       ) ??
         false),
-    coding_agent:
-      !!codingAgentTool &&
-      (existingAgent?.tools?.some(
-        (tool) => tool.in_code_tool_id === CODING_AGENT_TOOL_ID
-      ) ??
-        false),
-    // MCP servers - dynamically add fields for each server with nested tool fields
-    ...Object.fromEntries(
-      mcpServersWithTools.map(({ server, tools }) => {
-        // Find all tools from existingAgent that belong to this MCP server
-        const serverToolsFromAgent =
-          existingAgent?.tools?.filter(
-            (tool) => tool.mcp_server_id === server.id
-          ) ?? [];
-
-        // Build the tool field object with tool_{id} for ALL available tools
-        const toolFields: Record<string, boolean> = {};
-        tools.forEach((tool) => {
-          // Set to true if this tool was enabled in existingAgent, false otherwise
-          toolFields[`tool_${tool.id}`] = serverToolsFromAgent.some(
-            (t) => t.id === Number(tool.id)
-          );
-        });
-
-        return [
-          `mcp_server_${server.id}`,
-          {
-            enabled: serverToolsFromAgent.length > 0, // Server is enabled if it has any tools
-            ...toolFields, // Add individual tool states for ALL tools
-          },
-        ];
-      })
-    ),
-
-    // OpenAPI tools - add a boolean field for each tool
-    ...Object.fromEntries(
-      openApiTools.map((openApiTool) => [
-        `openapi_tool_${openApiTool.id}`,
-        existingAgent?.tools?.some((t) => t.id === openApiTool.id) ?? false,
-      ])
-    ),
+    integrations: (existingAgent?.integrations ?? []).map(draftFromLink),
 
     // Sharing
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
@@ -761,22 +660,6 @@ export default function AgentEditorPage({
       ),
     replace_base_system_prompt: Yup.boolean(),
     reminders: Yup.string().optional(),
-
-    // MCP servers - dynamically add validation for each server with nested tool validation
-    ...Object.fromEntries(
-      mcpServers.map((server) => [
-        `mcp_server_${server.id}`,
-        Yup.object(), // Allow any nested tool fields as booleans
-      ])
-    ),
-
-    // OpenAPI tools - add boolean validation for each tool
-    ...Object.fromEntries(
-      openApiTools.map((openApiTool) => [
-        `openapi_tool_${openApiTool.id}`,
-        Yup.boolean(),
-      ])
-    ),
   });
 
   async function handleSubmit(values: typeof initialValues) {
@@ -813,40 +696,6 @@ export default function AgentEditorPage({
       if (values.code_interpreter && codeInterpreterTool) {
         toolIds.push(codeInterpreterTool.id);
       }
-      if (values.coding_agent && codingAgentTool) {
-        toolIds.push(codingAgentTool.id);
-      }
-
-      // Collect enabled MCP tool IDs
-      mcpServers.forEach((server) => {
-        const serverFieldName = `mcp_server_${server.id}`;
-        const serverData = (values as any)[serverFieldName];
-
-        if (
-          serverData &&
-          typeof serverData === "object" &&
-          serverData.enabled
-        ) {
-          // Server is enabled, collect all enabled tools
-          Object.keys(serverData).forEach((key) => {
-            if (key.startsWith("tool_") && serverData[key] === true) {
-              // Extract tool ID from key (e.g., "tool_123" -> 123)
-              const toolId = parseInt(key.replace("tool_", ""), 10);
-              if (!isNaN(toolId)) {
-                toolIds.push(toolId);
-              }
-            }
-          });
-        }
-      });
-
-      // Collect enabled OpenAPI tool IDs
-      openApiTools.forEach((openApiTool) => {
-        const toolFieldName = `openapi_tool_${openApiTool.id}`;
-        if ((values as any)[toolFieldName] === true) {
-          toolIds.push(openApiTool.id);
-        }
-      });
 
       // Build submission data
       const submissionData: AgentUpsertParameters = {
@@ -865,6 +714,7 @@ export default function AgentEditorPage({
           values.default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
         tool_ids: toolIds,
+        integrations: values.integrations.map(toIntegrationInput),
         // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
         uploaded_image_id: values.uploaded_image_id,
@@ -1065,11 +915,9 @@ export default function AgentEditorPage({
     }
   }
 
-  // Wait for async tool data before rendering the form. Formik captures
-  // initialValues on mount — if tools haven't loaded yet, the initial values
-  // won't include MCP tool fields. Later, toggling those fields would make
-  // the form permanently dirty since they have no baseline to compare against.
-  if (isToolsLoading || isMcpLoading || isOpenApiLoading) {
+  // Wait for the built-in tools before rendering the form. Formik captures
+  // initialValues on mount, and the tool switches start from them.
+  if (isToolsLoading) {
     return null;
   }
 
@@ -1520,139 +1368,70 @@ export default function AgentEditorPage({
                         description={t("editor.actions.description")}
                       >
                         <Section gap={2} alignItems="stretch">
-                          <Disabled
-                            disabled={!isImageGenerationAvailable}
-                            tooltip={imageGenerationDisabledTooltip}
-                          >
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="image_generation"
-                                title={t(
-                                  "editor.actions.imageGeneration.title"
-                                )}
-                                description={t(
-                                  "editor.actions.imageGeneration.description"
-                                )}
-                                disabled={!isImageGenerationAvailable}
-                              >
-                                <InputSwitchField
-                                  name="image_generation"
-                                  disabled={!isImageGenerationAvailable}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
+                          <Card border="solid" rounding={4}>
+                            <InputHorizontal
+                              withLabel="image_generation"
+                              title={t("editor.actions.imageGeneration.title")}
+                              description={t(
+                                "editor.actions.imageGeneration.description"
+                              )}
+                              disabled={!isImageGenerationAvailable}
+                              disabledTooltip={imageGenerationDisabledTooltip}
+                            >
+                              <InputSwitchField name="image_generation" />
+                            </InputHorizontal>
+                          </Card>
 
-                          <Disabled disabled={!webSearchTool}>
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="web_search"
-                                title={t("editor.actions.webSearch.title")}
-                                description={t(
-                                  "editor.actions.webSearch.description"
-                                )}
-                                disabled={!webSearchTool}
-                              >
-                                <InputSwitchField
-                                  name="web_search"
-                                  disabled={!webSearchTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
+                          <Card border="solid" rounding={4}>
+                            <InputHorizontal
+                              withLabel="web_search"
+                              title={t("editor.actions.webSearch.title")}
+                              description={t(
+                                "editor.actions.webSearch.description"
+                              )}
+                              disabled={!webSearchTool}
+                            >
+                              <InputSwitchField name="web_search" />
+                            </InputHorizontal>
+                          </Card>
 
-                          <Disabled disabled={!openURLTool}>
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="open_url"
-                                title={t("editor.actions.openUrl.title")}
-                                description={t(
-                                  "editor.actions.openUrl.description"
-                                )}
-                                disabled={!openURLTool}
-                              >
-                                <InputSwitchField
-                                  name="open_url"
-                                  disabled={!openURLTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
+                          <Card border="solid" rounding={4}>
+                            <InputHorizontal
+                              withLabel="open_url"
+                              title={t("editor.actions.openUrl.title")}
+                              description={t(
+                                "editor.actions.openUrl.description"
+                              )}
+                              disabled={!openURLTool}
+                            >
+                              <InputSwitchField name="open_url" />
+                            </InputHorizontal>
+                          </Card>
 
-                          <Disabled disabled={!codeInterpreterTool}>
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="code_interpreter"
-                                title={t(
-                                  "editor.actions.codeInterpreter.title"
-                                )}
-                                description={t(
-                                  "editor.actions.codeInterpreter.description"
-                                )}
-                                disabled={!codeInterpreterTool}
-                              >
-                                <InputSwitchField
-                                  name="code_interpreter"
-                                  disabled={!codeInterpreterTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
+                          <Card border="solid" rounding={4}>
+                            <InputHorizontal
+                              withLabel="code_interpreter"
+                              title={t("editor.actions.codeInterpreter.title")}
+                              description={t(
+                                "editor.actions.codeInterpreter.description"
+                              )}
+                              disabled={!codeInterpreterTool}
+                            >
+                              <InputSwitchField name="code_interpreter" />
+                            </InputHorizontal>
+                          </Card>
 
-                          <Disabled disabled={!codingAgentTool}>
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="coding_agent"
-                                title={t("editor.actions.codingAgent.title")}
-                                description={t(
-                                  "editor.actions.codingAgent.description"
-                                )}
-                                disabled={!codingAgentTool}
-                              >
-                                <InputSwitchField
-                                  name="coding_agent"
-                                  disabled={!codingAgentTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
-
-                          {/* Tools */}
-                          <>
-                            {/* render the divider if there is at least one mcp-server with tools or open-api-tool */}
-                            {(mcpServersWithVisibleTools.length > 0 ||
-                              openApiTools.length > 0) && (
-                              <Divider
-                                paddingPerpendicular={1}
-                                paddingParallel={0}
-                              />
-                            )}
-
-                            {/* MCP tools */}
-                            {mcpServersWithVisibleTools.length > 0 && (
-                              <Section gap={2} alignItems="stretch">
-                                {mcpServersWithVisibleTools.map(
-                                  ({ server, tools, isLoading }) => (
-                                    <MCPServerCard
-                                      key={server.id}
-                                      server={server}
-                                      tools={tools}
-                                      isLoading={isLoading}
-                                    />
-                                  )
-                                )}
-                              </Section>
-                            )}
-
-                            {/* OpenAPI tools */}
-                            {openApiTools.length > 0 && (
-                              <Section gap={2}>
-                                {openApiTools.map((tool) => (
-                                  <OpenApiToolCard key={tool.id} tool={tool} />
-                                ))}
-                              </Section>
-                            )}
-                          </>
+                          <Divider
+                            paddingPerpendicular={1}
+                            paddingParallel={0}
+                          />
+                          <AgentIntegrationsSection
+                            value={values.integrations}
+                            onChange={(integrations) =>
+                              setFieldValue("integrations", integrations)
+                            }
+                            sharingStatus={sharingStatus}
+                          />
                         </Section>
                       </Collapsible>
 

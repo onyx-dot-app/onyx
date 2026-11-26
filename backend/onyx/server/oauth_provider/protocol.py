@@ -17,6 +17,8 @@ from mcp.server.auth.middleware.client_auth import ClientAuthenticator
 from mcp.server.auth.provider import RegistrationError, construct_redirect_uri
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata
 from pydantic import ValidationError
+
+# no-direct-redis: allow names the Redis error in the unavailable tuple
 from redis.exceptions import RedisError
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
@@ -24,7 +26,7 @@ from starlette.types import Message
 
 from onyx.auth.constants import (
     NO_STORE_HEADERS,
-    OAUTH_PROVIDER_SCOPE,
+    OAUTH_PROVIDER_SCOPES,
 )
 from onyx.auth.oauth_provider import (
     OAuthProviderTokenKind,
@@ -158,7 +160,7 @@ async def metadata(request: Request) -> Response:
             "token_endpoint": f"{issuer}/token",
             "registration_endpoint": f"{issuer}/register",
             "revocation_endpoint": f"{issuer}/revoke",
-            "scopes_supported": [OAUTH_PROVIDER_SCOPE],
+            "scopes_supported": list(OAUTH_PROVIDER_SCOPES),
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "token_endpoint_auth_methods_supported": ["none"],
@@ -190,7 +192,7 @@ async def register(request: Request) -> Response:
         if "token_endpoint_auth_method" not in payload:
             payload["token_endpoint_auth_method"] = "none"
         if "scope" not in payload:
-            payload["scope"] = OAUTH_PROVIDER_SCOPE
+            payload["scope"] = " ".join(OAUTH_PROVIDER_SCOPES)
         client_metadata = OAuthClientMetadata.model_validate(payload)
         client = OAuthClientInformationFull(
             **client_metadata.model_dump(),

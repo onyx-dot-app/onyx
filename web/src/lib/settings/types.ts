@@ -1,5 +1,6 @@
+import type { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import { Tier } from "@/lib/tiers/types";
-import type { Notification } from "@/lib/notifications/interfaces";
+import type { Notification } from "@/lib/notifications/types";
 import type { Locale } from "@/i18n/config";
 
 export enum ApplicationStatus {
@@ -99,6 +100,8 @@ export interface Settings {
   craft_instructions?: string | null;
 
   plugin_publishing?: PluginPublishingPolicy;
+  // Whether members can share skills with people and groups. Admins always can.
+  plugin_sharing?: boolean;
 
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
   // button that streams the user's sandbox pod logs in real time. Backed
@@ -128,6 +131,8 @@ export interface Settings {
 
   // True on the playground deployment (IS_PLAYGROUND env var on the server).
   is_playground?: boolean;
+  // The features the playground restricts. Empty off the playground.
+  playground_restrictions?: PlaygroundRestrictedFeature[];
 
   // Application version from the ONYX_VERSION env var on the server.
   version?: string | null;

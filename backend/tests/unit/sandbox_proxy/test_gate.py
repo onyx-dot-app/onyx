@@ -32,10 +32,8 @@ from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    GatedAppKind,
+    IntegrationKind,
 )
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
@@ -94,6 +92,10 @@ class _StubMatcher(RequestEvaluator):
         return self._result
 
 
+def _defaults(recognized: AllMatchedActions) -> dict[str, ActionPolicy]:
+    return {action.action_type: action.policy for action in recognized.actions}
+
+
 def _noop_cache_factory(tenant_id: str) -> Any:  # noqa: ARG001
     raise AssertionError("cache factory unexpectedly used")
 
@@ -131,12 +133,9 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(gate, "pin_destination", lambda _host, _port, _address: None)
     monkeypatch.setattr(
-        gate, "get_active_scheduled_task_context", lambda _db, _session: None
-    )
-    monkeypatch.setattr(
         gate,
-        "resolve_action_policies",
-        lambda _db, *, catalog_policies, **_kwargs: catalog_policies,
+        "resolve_gate_policies",
+        lambda _db, *, recognized_actions, **_kwargs: _defaults(recognized_actions),
     )
     monkeypatch.setattr(
         gate.action_approval,
@@ -147,12 +146,10 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
             decided_via=ApprovalDecidedVia.USER,
         ),
     )
-    # The stub sessions can't answer the target → gated_app_id lookup.
-    monkeypatch.setattr(gate, "get_gated_app_id", lambda _db, _kind, _target_id: 1)
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, gated_app_id: [],  # noqa: ARG005
+        lambda _db, *, session_id, integration_id: [],  # noqa: ARG005
     )
 
 
@@ -192,8 +189,8 @@ _MATCH = make_matched_actions(payload={"text": "hi"})
 _MATCH_MCP = AllMatchedActions(
     actions=_MATCH.actions,
     target=GatedTarget(
-        kind=GatedAppKind.MCP_SERVER,
-        id=73,
+        integration_id=73,
+        kind=IntegrationKind.MCP,
         app_name="Linear MCP",
     ),
     payload=_MATCH.payload,
@@ -213,7 +210,7 @@ _MATCH_MULTI_ASK = AllMatchedActions(
             policy=ActionPolicy.ASK,
         ),
     ),
-    target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=42, app_name="Slack"),
+    target=GatedTarget(integration_id=42, kind=IntegrationKind.API, app_name="Slack"),
     payload={"text": "hi"},
 )
 _MATCH_ALWAYS = make_matched_actions(
@@ -494,6 +491,7 @@ def _spy_pipeline(
         *,
         sandbox: ResolvedSandbox,
         matched_actions: AllMatchedActions | None,
+        protocol_target: GatedTarget | None = None,  # noqa: ARG001
     ) -> InjectionOutcome:
         spy.dispatched.append((matched_actions, sandbox.user_id, sandbox.tenant_id))
         return InjectionOutcome.INJECTED
@@ -594,7 +592,6 @@ async def test_ask_denied_blocks(
 # ---------------------------------------------------------------------------
 
 
-_RUN_ID = UUID("55555555-5555-5555-5555-555555555555")
 # make_matched_actions defaults external_app_id=42.
 _GRANTED_APP_ID = 42
 _GRANTED_MCP_SERVER_ID = 73
@@ -715,7 +712,7 @@ async def test_session_grant_db_fallback_hydrates_cache(
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, gated_app_id: [grant_source],  # noqa: ARG005
+        lambda _db, *, session_id, integration_id: [grant_source],  # noqa: ARG005
     )
     flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
 
@@ -1051,6 +1048,63 @@ async def test_configured_global_internal_cidr_denied_before_identity(
     _assert_403(flow, SandboxProxyError.DESTINATION_BLOCKED)
     assert resolver.resolve_sandbox_calls == 0
     assert matcher.calls == 0
+
+
+_API_URL = "http://10.0.0.5:8080"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["GET", "PUT", "POST", "DELETE"])
+@pytest.mark.parametrize(
+    "path_components",
+    [
+        ("microvm", "node", "signing-key"),
+        ("api", "microvm", "node", "state"),
+        ("MicroVM", "node", "deregister"),
+        ("api/microvm/node/signing-key",),
+    ],
+)
+async def test_api_host_node_routes_denied(
+    method: str, path_components: tuple[str, ...]
+) -> None:
+    resolver = StubResolver(sandbox=make_resolved_sandbox())
+    matcher = _StubMatcher(result=None)
+    addon = _build(
+        resolver=resolver, matcher=matcher, policy=parse_destination_policy(_API_URL)
+    )
+    flow = make_flow(
+        host="10.0.0.5", port=8080, method=method, path_components=path_components
+    )
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.DESTINATION_BLOCKED)
+    assert matcher.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("host", "port", "path_components"),
+    [
+        ("10.0.0.5", 8080, ("api", "build", "sessions")),
+        ("10.0.0.5", 8080, ("microvms",)),
+        ("93.184.216.34", 443, ("microvm", "node", "signing-key")),
+    ],
+)
+async def test_other_api_paths_and_hosts_not_denied_as_node_routes(
+    host: str, port: int, path_components: tuple[str, ...]
+) -> None:
+    resolver = StubResolver(sandbox=make_resolved_sandbox())
+    addon = _build(
+        resolver=resolver,
+        matcher=_StubMatcher(result=None),
+        policy=parse_destination_policy(_API_URL),
+    )
+    flow = make_flow(host=host, port=port, path_components=path_components)
+
+    await addon.request(flow)
+
+    assert flow.response is None
 
 
 # ---------------------------------------------------------------------------
@@ -1647,9 +1701,9 @@ async def test_personal_setting_restricts_catalog_auto_approval(
 ) -> None:
     monkeypatch.setattr(
         gate,
-        "resolve_action_policies",
-        lambda _db, *, catalog_policies, **_kwargs: dict.fromkeys(
-            catalog_policies, policy
+        "resolve_gate_policies",
+        lambda _db, *, recognized_actions, **_kwargs: dict.fromkeys(
+            _defaults(recognized_actions), policy
         ),
     )
     addon = _build(
@@ -1672,29 +1726,23 @@ async def test_personal_setting_restricts_catalog_auto_approval(
 
 
 @pytest.mark.asyncio
-async def test_task_settings_are_read_live_without_grant_cache(
+async def test_settings_are_read_live_without_grant_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    task_id = uuid4()
-    monkeypatch.setattr(
-        gate,
-        "get_active_scheduled_task_context",
-        lambda _db, _session: (_RUN_ID, task_id),
-    )
     current_policy = ActionPolicy.ALWAYS
-    owners: list[UUID | None] = []
+    reads = 0
 
     def resolve(
         _db: Session,
         *,
-        catalog_policies: dict[str, ActionPolicy],
-        scheduled_task_id: UUID | None,
+        recognized_actions: AllMatchedActions,
         **_kwargs: object,
     ) -> dict[str, ActionPolicy]:
-        owners.append(scheduled_task_id)
-        return dict.fromkeys(catalog_policies, current_policy)
+        nonlocal reads
+        reads += 1
+        return dict.fromkeys(_defaults(recognized_actions), current_policy)
 
-    monkeypatch.setattr(gate, "resolve_action_policies", resolve)
+    monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
@@ -1713,25 +1761,20 @@ async def test_task_settings_are_read_live_without_grant_cache(
     await addon.request(second)
     _assert_403(second, SandboxProxyError.POLICY_DENIED)
     assert len(spy.dispatched) == 1
-    assert owners == [task_id, task_id]
+    assert reads == 2
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["disable", "run_finished", "recognition_failed"])
+@pytest.mark.parametrize("change", ["disable", "recognition_failed"])
 async def test_approval_cannot_bypass_changes_during_wait(
     monkeypatch: pytest.MonkeyPatch, change: str
 ) -> None:
-    task_id = uuid4()
-    active: tuple[UUID, UUID] | None = (_RUN_ID, task_id)
     current_policy = ActionPolicy.ASK
     monkeypatch.setattr(
-        gate, "get_active_scheduled_task_context", lambda _db, _session: active
-    )
-    monkeypatch.setattr(
         gate,
-        "resolve_action_policies",
-        lambda _db, *, catalog_policies, **_kwargs: dict.fromkeys(
-            catalog_policies, current_policy
+        "resolve_gate_policies",
+        lambda _db, *, recognized_actions, **_kwargs: dict.fromkeys(
+            _defaults(recognized_actions), current_policy
         ),
     )
     matcher = _StubMatcher(result=_MATCH)
@@ -1744,12 +1787,9 @@ async def test_approval_cannot_bypass_changes_during_wait(
     spy = _spy_pipeline(addon, monkeypatch)
 
     async def decide(*_args: object) -> ApprovalDecision:
-        nonlocal active, current_policy
+        nonlocal current_policy
         if change == "disable":
             current_policy = ActionPolicy.DENY
-        elif change == "run_finished":
-            active = None
-            current_policy = ActionPolicy.ALWAYS
         else:
             matcher._exc = RuntimeError("registry unavailable")
         return ApprovalDecision.APPROVED
@@ -1763,7 +1803,6 @@ async def test_approval_cannot_bypass_changes_during_wait(
     assert spy.dispatched == []
     expected = {
         "disable": SandboxProxyError.POLICY_DENIED,
-        "run_finished": SandboxProxyError.NO_ACTIVE_SESSION,
         "recognition_failed": SandboxProxyError.INTERNAL_ERROR,
     }
     _assert_403(flow, expected[change])
@@ -1776,7 +1815,7 @@ async def test_policy_read_failure_does_not_fall_back_to_catalog(
     def fail(*_args: object, **_kwargs: object) -> dict[str, ActionPolicy]:
         raise RuntimeError("database unavailable")
 
-    monkeypatch.setattr(gate, "resolve_action_policies", fail)
+    monkeypatch.setattr(gate, "resolve_gate_policies", fail)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
@@ -1798,9 +1837,9 @@ async def test_disabled_action_cannot_use_session_grant(
     cache = _SessionGrantCache(granted=True)
     monkeypatch.setattr(
         gate,
-        "resolve_action_policies",
-        lambda _db, *, catalog_policies, **_kwargs: dict.fromkeys(
-            catalog_policies, ActionPolicy.DENY
+        "resolve_gate_policies",
+        lambda _db, *, recognized_actions, **_kwargs: dict.fromkeys(
+            _defaults(recognized_actions), ActionPolicy.DENY
         ),
     )
     addon = _build(
@@ -1827,9 +1866,10 @@ async def test_policy_recheck_uses_catalog_defaults_not_previous_effective_choic
     def resolve(
         _db: Session,
         *,
-        catalog_policies: dict[str, ActionPolicy],
+        recognized_actions: AllMatchedActions,
         **_kwargs: object,
     ) -> dict[str, ActionPolicy]:
+        catalog_policies = _defaults(recognized_actions)
         defaults_seen.append(dict(catalog_policies))
         # An explicit personal Ask is reset while the request waits for approval.
         return {
@@ -1837,7 +1877,7 @@ async def test_policy_recheck_uses_catalog_defaults_not_previous_effective_choic
             for action, default in catalog_policies.items()
         }
 
-    monkeypatch.setattr(gate, "resolve_action_policies", resolve)
+    monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
@@ -1862,9 +1902,10 @@ async def test_newly_ask_action_is_not_covered_by_old_session_grant(
     def resolve(
         _db: Session,
         *,
-        catalog_policies: dict[str, ActionPolicy],
+        recognized_actions: AllMatchedActions,
         **_kwargs: object,
     ) -> dict[str, ActionPolicy]:
+        catalog_policies = _defaults(recognized_actions)
         nonlocal resolutions
         resolutions += 1
         return {
@@ -1874,7 +1915,7 @@ async def test_newly_ask_action_is_not_covered_by_old_session_grant(
             for action in catalog_policies
         }
 
-    monkeypatch.setattr(gate, "resolve_action_policies", resolve)
+    monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
     cache = _SessionGrantCache(granted_action_types={first_action.action_type})
     addon = _build(
         resolver=StubResolver(
@@ -1918,14 +1959,9 @@ async def test_unknown_external_action_ignores_historical_session_grant(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("enabled", [True, False])
-async def test_mcp_protocol_checks_task_app_without_requesting_approval(
-    monkeypatch: pytest.MonkeyPatch, enabled: bool
+async def test_mcp_protocol_dispatches_without_requesting_approval(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        gate, "get_active_scheduled_task_context", lambda *_args: (_RUN_ID, uuid4())
-    )
-    monkeypatch.setattr(gate, "task_app_enabled", lambda *_args: enabled)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
@@ -1936,11 +1972,8 @@ async def test_mcp_protocol_checks_task_app_without_requesting_approval(
     flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
     await addon.request(flow)
     assert not spy.approval_ran
-    assert bool(spy.dispatched) is enabled
-    if enabled:
-        assert flow.response is None
-    else:
-        _assert_403(flow, SandboxProxyError.POLICY_DENIED)
+    assert len(spy.dispatched) == 1
+    assert flow.response is None
 
 
 @pytest.mark.asyncio
@@ -1952,32 +1985,3 @@ async def test_mcp_protocol_without_session_is_blocked() -> None:
     flow = make_flow()
     await addon.request(flow)
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("protocol", [False, True])
-async def test_inactive_scheduled_session_returns_authorization_error(
-    monkeypatch: pytest.MonkeyPatch, protocol: bool
-) -> None:
-    def inactive_session(_db: Session, _session_id: UUID) -> None:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "Scheduled execution has ended"
-        )
-
-    monkeypatch.setattr(gate, "get_active_scheduled_task_context", inactive_session)
-    addon = _build(
-        resolver=StubResolver(
-            sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
-        ),
-        matcher=_StubMatcher(
-            result=McpProtocolRequest(target=_MATCH_MCP.target) if protocol else _MATCH
-        ),
-    )
-    spy = _spy_pipeline(addon, monkeypatch)
-    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
-
-    await addon.request(flow)
-
-    _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
-    assert not spy.approval_ran
-    assert spy.dispatched == []

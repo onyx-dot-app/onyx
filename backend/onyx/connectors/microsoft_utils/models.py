@@ -1,7 +1,8 @@
 """Plain data the Microsoft connectors share: what an app-only sign-in tells,
 the account's field labels for error text, and what
 SharePoint permission sync works on (principals and role assignments from
-SharePoint REST, the members of an Entra group from Graph). The office365
+SharePoint REST, which items inherit them, the members of an Entra group from
+Graph). The office365
 objects never leave ``sharepoint_rest``."""
 
 from datetime import datetime
@@ -48,6 +49,38 @@ class SharepointSecurable(BaseModel):
     # A site page's absolute web URL.
     page_url: str | None = None
     folder_unique_id: str | None = None
+
+
+class SharepointListItemInheritance(BaseModel):
+    """One file or folder of a document library, with SharePoint's flag for
+    role assignments of its own (``HasUniqueRoleAssignments``)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    item_id: int
+    is_folder: bool
+    # The decoded server-relative paths of the item and of its folder.
+    file_ref: str
+    file_dir_ref: str
+    has_unique_role_assignments: bool
+
+
+# A library with more items is not read: its files read their own
+# permissions. Conversion uses a read only while it is younger than
+# CONTAINER_ACCESS_TTL_SECONDS, and a larger read does not end in that time.
+LIBRARY_INHERITANCE_MAX_ITEMS = 50_000
+
+
+class SharepointLibraryInheritance(BaseModel):
+    """Which items of a document library have role assignments of their own.
+    An item without them has the role assignments of its nearest folder that
+    has them, else of the library, else of the site."""
+
+    model_config = ConfigDict(frozen=True)
+
+    root_folder_server_relative_url: str
+    has_unique_role_assignments: bool
+    items: list[SharepointListItemInheritance]
 
 
 class EntraMemberKind(str, Enum):

@@ -19,6 +19,7 @@ from onyx.natural_language_processing.embedding_rate_limit import (
     EmbeddingWaitTimeoutError,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_rate_window import RateWindow, RedisRateWindows
 
 _MODULE = "onyx.natural_language_processing.embedding_rate_limit"
 
@@ -33,22 +34,27 @@ def _short_retry_interval() -> Iterator[None]:
         yield
 
 
+def _delete_window(tenant: str) -> None:
+    window = RateWindow(key=_WINDOW_KEY, limit=1, period_seconds=1)
+    RedisRateWindows(get_redis_client(tenant_id=tenant)).delete(window)
+
+
 @pytest.fixture
 def tenant_id() -> Iterator[str]:
     tenant = f"tenant_test_{uuid4().hex[:12]}"
     yield tenant
-    get_redis_client(tenant_id=tenant).delete(_WINDOW_KEY)
+    _delete_window(tenant)
 
 
 def test_window_is_shared_between_workers(tenant_id: str) -> None:
     pod_a = EmbeddingRateLimiter(tenant_id, max_requests=3, period_seconds=10)
     pod_b = EmbeddingRateLimiter(tenant_id, max_requests=3, period_seconds=10)
 
-    assert pod_a._try_acquire() == 0
-    assert pod_b._try_acquire() == 0
-    assert pod_a._try_acquire() == 0
+    assert pod_a.try_acquire() == 0
+    assert pod_b.try_acquire() == 0
+    assert pod_a.try_acquire() == 0
 
-    wait = pod_b._try_acquire()
+    wait = pod_b.try_acquire()
     assert 0 < wait <= 10
 
 
@@ -57,11 +63,11 @@ def test_tenants_have_separate_windows(tenant_id: str) -> None:
     try:
         full = EmbeddingRateLimiter(tenant_id, max_requests=1, period_seconds=10)
         other = EmbeddingRateLimiter(other_tenant, max_requests=1, period_seconds=10)
-        assert full._try_acquire() == 0
-        assert full._try_acquire() > 0
-        assert other._try_acquire() == 0
+        assert full.try_acquire() == 0
+        assert full.try_acquire() > 0
+        assert other.try_acquire() == 0
     finally:
-        get_redis_client(tenant_id=other_tenant).delete(_WINDOW_KEY)
+        _delete_window(other_tenant)
 
 
 def test_acquire_blocks_until_a_slot_frees(tenant_id: str) -> None:
@@ -107,7 +113,7 @@ def test_stop_signal_ends_the_wait(tenant_id: str) -> None:
 def test_concurrent_workers_never_exceed_the_limit(tenant_id: str) -> None:
     def take_slot(_: int) -> float:
         limiter = EmbeddingRateLimiter(tenant_id, max_requests=5, period_seconds=30)
-        return limiter._try_acquire()
+        return limiter.try_acquire()
 
     with ThreadPoolExecutor(max_workers=20) as pool:
         waits = list(pool.map(take_slot, range(40)))

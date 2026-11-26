@@ -12,12 +12,16 @@ running, the daemon is unreachable) is a `HostAgentError`.
 """
 
 import hashlib
+import os
 import secrets
 import threading
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Protocol, TypeVar
+from functools import partial
+from io import BytesIO
+from typing import IO, Protocol, TypeVar
 
 import grpc
 from pydantic import SecretStr
@@ -48,6 +52,8 @@ from onyx.microvm.models import (
     FileListing,
     FileType,
     OutputStream,
+    PathStat,
+    StatError,
     WrittenFile,
     ZipSummary,
 )
@@ -70,6 +76,9 @@ _WINDOW_MARGIN_SECONDS = 5.0
 _TRANSFER_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 600.0)
 # WriteFile/UploadFile data messages (the daemon accepts up to 4 MiB).
 _WRITE_CHUNK_BYTES = 1 << 20
+# The guest daemon's caps on one StatFiles call.
+STAT_FILES_MAX_PATHS = 1000
+STAT_FILES_MAX_PATH_BYTES = 1 << 20
 
 
 class SandboxDaemonErrorReason(str, Enum):
@@ -257,6 +266,14 @@ def _execution(msg: sandboxd_pb2.Execution) -> ExecutionRecord:
     )
 
 
+_STAT_ERRORS: dict[int, StatError] = {
+    sandboxd_pb2.STAT_ERROR_MISSING: StatError.MISSING,
+    sandboxd_pb2.STAT_ERROR_ESCAPES: StatError.ESCAPES,
+    sandboxd_pb2.STAT_ERROR_LOOP: StatError.LOOP,
+    sandboxd_pb2.STAT_ERROR_OTHER: StatError.OTHER,
+}
+
+
 def _file_entry(msg: sandboxd_pb2.FileInfo) -> FileEntry:
     return FileEntry(
         path=msg.path,
@@ -269,9 +286,23 @@ def _file_entry(msg: sandboxd_pb2.FileInfo) -> FileEntry:
     )
 
 
-def _chunks(data: bytes) -> Iterator[bytes]:
-    for start in range(0, len(data), _WRITE_CHUNK_BYTES):
-        yield data[start : start + _WRITE_CHUNK_BYTES]
+def _write_content(
+    data: bytes | IO[bytes] | list[bytes],
+) -> tuple[int, Iterator[bytes]]:
+    """The size and data chunks of a write: the whole file from its start,
+    read one chunk at a time. The daemon checks the size."""
+    if isinstance(data, list):
+        return sum(map(len, data)), (
+            part[start : start + _WRITE_CHUNK_BYTES]
+            for part in data
+            for start in range(0, len(part), _WRITE_CHUNK_BYTES)
+        )
+    source = BytesIO(data) if isinstance(data, bytes) else data
+    if not source.seekable():
+        raise ValueError("a sandbox write needs bytes or a seekable file")
+    size = source.seek(0, os.SEEK_END)
+    source.seek(0)
+    return size, iter(partial(source.read, _WRITE_CHUNK_BYTES), b"")
 
 
 _Msg_co = TypeVar("_Msg_co", covariant=True)
@@ -418,12 +449,16 @@ class SandboxDaemonClient:
         stdout_offset: int = 0,
         stderr_offset: int = 0,
         window_seconds: float | None = None,
+        on_cancel: Callable[[Callable[[], None]], AbstractContextManager[None]]
+        | None = None,
     ) -> Generator[ExecEvent, None, None]:
         """Stream an execution's output from the offsets, then its result.
         Works while it runs and after it ended. A gap event marks bytes the
         daemon no longer keeps. The call starts when the iterator is first
         read. With `window_seconds`, the stream ends without a result when
-        the window passes; the command keeps running."""
+        the window passes; the command keeps running. `on_cancel` (for
+        example `CancellationSignal.on_cancel`) registers a callback that
+        ends the window early."""
         if window_seconds is None:
             timeout = _DEFAULT_EXEC_DEADLINE_SECONDS + _STREAM_MARGIN_SECONDS
         else:
@@ -450,7 +485,8 @@ class SandboxDaemonClient:
         timer.daemon = True
         timer.start()
         try:
-            yield from self._exec_events(call)
+            with on_cancel(end_window) if on_cancel is not None else nullcontext():
+                yield from self._exec_events(call)
         except HostAgentError as e:
             ended = (
                 window_ended.is_set() and e.code is grpc.StatusCode.CANCELLED
@@ -482,7 +518,9 @@ class SandboxDaemonClient:
     ) -> CancelResult:
         """SIGKILL: kill the execution's cgroup; the result is CANCELED.
         SIGINT/SIGTERM (Ctrl-C): signal the main process's group and return
-        without a result. An ended execution returns its own result."""
+        without a result. An ended execution returns its own result. An
+        execution that the daemon no longer has is gone: already ended, with
+        no result."""
         try:
             r: sandboxd_pb2.CancelResponse = self._stub.Cancel(
                 sandboxd_pb2.CancelRequest(
@@ -492,7 +530,13 @@ class SandboxDaemonClient:
                 timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
-            raise sandbox_daemon_error(e) from e
+            error = sandbox_daemon_error(e)
+            if (
+                isinstance(error, SandboxDaemonError)
+                and error.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND
+            ):
+                return CancelResult(result=None, already_ended=True)
+            raise error from e
         return CancelResult(
             result=_result(r.result) if r.HasField("result") else None,
             already_ended=r.already_ended,
@@ -569,18 +613,23 @@ class SandboxDaemonClient:
         *,
         session_id: str,
         path: str,
-        data: bytes,
+        data: bytes | IO[bytes] | list[bytes],
         mode: int = 0,
         overwrite: bool = True,
         make_parents: bool = True,
+        timeout_seconds: float | None = None,
     ) -> WrittenFile:
-        """Atomic write: the daemon renames the file into place only when the
-        size and SHA-256 match. Without overwrite, FILE_EXISTS raises."""
+        """Atomic write: the daemon renames the file into place only when all
+        bytes arrived. `data` is bytes, a seekable binary file that is
+        streamed whole, from its start, in chunks, so it is never whole in
+        memory, or the file's bytes in parts, sent without joining them.
+        Without overwrite, FILE_EXISTS raises. `timeout_seconds` replaces the
+        transfer timeout."""
+        size, chunks = _write_content(data)
         header = sandboxd_pb2.WriteFileHeader(
             session_id=session_id,
             path=path,
-            size=len(data),
-            sha256=hashlib.sha256(data).hexdigest(),
+            size=size,
             mode=mode,
             overwrite=overwrite,
             make_parents=make_parents,
@@ -588,33 +637,71 @@ class SandboxDaemonClient:
 
         def requests() -> Iterator[sandboxd_pb2.WriteFileRequest]:
             yield sandboxd_pb2.WriteFileRequest(header=header)
-            for chunk in _chunks(data):
+            for chunk in chunks:
                 yield sandboxd_pb2.WriteFileRequest(data=chunk)
 
         try:
             r: sandboxd_pb2.WriteFileResponse = self._stub.WriteFile(
-                requests(), metadata=self._authed(), timeout=_TRANSFER_TIMEOUT_SECONDS
+                requests(),
+                metadata=self._authed(),
+                timeout=_TRANSFER_TIMEOUT_SECONDS
+                if timeout_seconds is None
+                else timeout_seconds,
             )
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e
         return WrittenFile(info=_file_entry(r.info), sha256=r.sha256)
 
+    def install_skill(self, *, name: str, version: str, tar: bytes) -> bool:
+        """Put one skill in the VM skills folder from a plain tar whose
+        members are all under `<name>/`. False when the folder already had
+        `version`."""
+        header = sandboxd_pb2.InstallSkillHeader(
+            name=name,
+            version=version,
+            size_bytes=len(tar),
+            sha256=hashlib.sha256(tar).hexdigest(),
+        )
+
+        def requests() -> Iterator[sandboxd_pb2.InstallSkillRequest]:
+            yield sandboxd_pb2.InstallSkillRequest(header=header)
+            for start in range(0, len(tar), _WRITE_CHUNK_BYTES):
+                yield sandboxd_pb2.InstallSkillRequest(
+                    data=tar[start : start + _WRITE_CHUNK_BYTES]
+                )
+
+        try:
+            r: sandboxd_pb2.InstallSkillResponse = self._stub.InstallSkill(
+                requests(),
+                metadata=self._authed(),
+                timeout=_TRANSFER_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return r.installed
+
     def upload_file(
-        self, *, session_id: str, file_name: str, data: bytes, directory: str = ""
+        self,
+        *,
+        session_id: str,
+        file_name: str,
+        data: bytes | IO[bytes],
+        directory: str = "",
     ) -> WrittenFile:
         """Store an upload under a free name in `directory` (default
-        attachments). `info.path` is the stored path."""
+        attachments). `info.path` is the stored path. `data` as for
+        write_file."""
+        size, chunks = _write_content(data)
         header = sandboxd_pb2.UploadFileHeader(
             session_id=session_id,
             file_name=file_name,
-            size=len(data),
-            sha256=hashlib.sha256(data).hexdigest(),
+            size=size,
             directory=directory,
         )
 
         def requests() -> Iterator[sandboxd_pb2.UploadFileRequest]:
             yield sandboxd_pb2.UploadFileRequest(header=header)
-            for chunk in _chunks(data):
+            for chunk in chunks:
                 yield sandboxd_pb2.UploadFileRequest(data=chunk)
 
         try:
@@ -674,6 +761,34 @@ class SandboxDaemonClient:
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e
         return r.deleted
+
+    def stat_files(self, *, session_id: str, paths: list[str]) -> list[PathStat]:
+        """The kernel's facts of at most STAT_FILES_MAX_PATHS session paths
+        (STAT_FILES_MAX_PATH_BYTES in all), in request order. Reads no
+        content."""
+        try:
+            r: sandboxd_pb2.StatFilesResponse = self._stub.StatFiles(
+                sandboxd_pb2.StatFilesRequest(session_id=session_id, paths=paths),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return [
+            PathStat(
+                path=stat.path,
+                exists=stat.exists,
+                type=_FILE_TYPES.get(stat.type, FileType.UNSPECIFIED),
+                mode=stat.mode,
+                link_target=stat.link_target,
+                target_error=_STAT_ERRORS.get(stat.target_error),
+                target_type=_FILE_TYPES.get(stat.target_type, FileType.UNSPECIFIED),
+                target_mode=stat.target_mode,
+                device=stat.device,
+                inode=stat.inode,
+            )
+            for stat in r.stats
+        ]
 
     def zip_files(
         self,

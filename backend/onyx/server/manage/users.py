@@ -2,14 +2,14 @@ import csv
 import io
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
@@ -29,13 +29,16 @@ from onyx.auth.session_tokens import (
     SessionRejection,
     build_session_rejection_error,
     classify_session_token_value,
+    clear_unrecognized_session_cookie,
 )
 from onyx.auth.users import (
     anonymous_user_enabled,
     enforce_seat_limit_locked,
+    get_anonymous_user,
     optional_user,
     scope_exempt,
 )
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     AUTH_BACKEND,
     DEV_MODE,
@@ -50,58 +53,66 @@ from onyx.configs.app_configs import (
     AuthBackend,
 )
 from onyx.configs.constants import (
+    APPEARANCE_COOKIE_NAME,
     FASTAPI_USERS_AUTH_COOKIE_NAME,
     NEXT_LOCALE_COOKIE_NAME,
     PUBLIC_API_TAGS,
+    FileOrigin,
 )
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
-from onyx.db.enums import AccountType, Permission, UserFileStatus
-from onyx.db.models import User, UserFile
+from onyx.db.enums import AccountType, Permission
+from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.models import User
+from onyx.db.models import UserPreferences as UserPreferencesModel
 from onyx.db.pinned_personas import set_pinned_personas
+from onyx.db.skill import transfer_private_plugins__no_commit
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
+from onyx.db.user_file import fetch_recent_user_files
 from onyx.db.user_preferences import (
     activate_user,
     deactivate_user,
+    fetch_user_preferences,
     get_all_user_assistant_specific_configs,
     get_latest_access_token_for_user,
     get_memories_for_user,
+    replace_user_memories__no_commit,
     update_assistant_preferences,
-    update_user_assistant_visibility,
-    update_user_auto_scroll,
-    update_user_chat_background,
-    update_user_default_app_mode,
-    update_user_default_model,
-    update_user_interrupt_on_send,
-    update_user_language,
-    update_user_paste_as_tile,
-    update_user_personalization,
-    update_user_reasoning_effort_default,
-    update_user_shortcut_enabled,
-    update_user_temperature_default,
-    update_user_temperature_override_enabled,
-    update_user_theme_preference,
     update_users_craft_enabled,
+    upsert_user_preferences__no_commit,
 )
 from onyx.db.users import (
     batch_get_last_active,
     batch_get_user_groups,
     delete_user_from_db,
+    fetch_scim_synced_user_ids,
+    fetch_user_by_id,
     get_all_accepted_users,
     get_all_users,
     get_page_of_filtered_users,
     get_total_filtered_users_count,
     get_user_by_email,
     get_user_counts_by_account_type_and_status,
+    replace_user_profile_image_file_id,
     set_user_admin_access,
+    update_user_profile__no_commit,
     user_is_admin,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.serving import (
+    INLINE_SAFE_IMAGE_MIME_TYPES,
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.key_value_store.factory import get_kv_store
 from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
-from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
+
+# no-direct-redis: allow session store for AUTH_BACKEND=redis
+from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.invite_rate_limit import (
@@ -110,6 +121,7 @@ from onyx.server.manage.invite_rate_limit import (
 )
 from onyx.server.manage.models import (
     AllUsersResponse,
+    AppearanceRequest,
     AutoScrollRequest,
     BulkInviteResponse,
     ChatBackgroundRequest,
@@ -121,14 +133,21 @@ from onyx.server.manage.models import (
     TenantInfo,
     TenantSnapshot,
     ThemePreferenceRequest,
+    TransferPrivatePluginsRequest,
+    TransferPrivatePluginsResponse,
     UserAdminAccessUpdateRequest,
     UserByEmail,
     UserCraftAccessUpdateRequest,
     UserInfo,
     UserPermissionsResponse,
-    UserPreferences,
+    UserProfileImageResponse,
     UserSpecificAssistantPreference,
     UserSpecificAssistantPreferences,
+)
+from onyx.server.manage.profile_image import (
+    MAX_PROFILE_IMAGE_UPLOAD_BYTES,
+    PROFILE_IMAGE_MIME_TYPE,
+    normalize_profile_image,
 )
 from onyx.server.models import (
     FullUserSnapshot,
@@ -140,6 +159,7 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import resolve_user_language
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.skills.push import push_skills_and_commit
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -147,6 +167,7 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.csv_utils import sanitize_csv_cell
+from onyx.utils.file import read_upload_within_limit
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
@@ -318,12 +339,7 @@ def list_accepted_users(
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
     try:
-        from onyx.db.models import ScimUserMapping
-
-        scim_mappings = db_session.scalars(
-            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
-        ).all()
-        scim_synced_ids = set(scim_mappings)
+        scim_synced_ids = fetch_scim_synced_user_ids(db_session, user_ids)
     except Exception:
         logger.warning(
             "Failed to fetch SCIM mappings; marking all users as non-synced",
@@ -367,12 +383,7 @@ def list_all_accepted_users(
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
     try:
-        from onyx.db.models import ScimUserMapping
-
-        scim_mappings = db_session.scalars(
-            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
-        ).all()
-        scim_synced_ids = set(scim_mappings)
+        scim_synced_ids = fetch_scim_synced_user_ids(db_session, user_ids)
     except Exception:
         logger.warning(
             "Failed to fetch SCIM mappings; marking all users as non-synced",
@@ -606,9 +617,9 @@ def bulk_invite_users(
             new_invited_emails.append(email_info.normalized)
 
     except (EmailUndeliverableError, EmailNotValidError) as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid email address: {email} - {str(e)}",  # ty: ignore[possibly-unresolved-reference]
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Invalid email address: {email} - {str(e)}",  # ty: ignore[possibly-unresolved-reference]
         )
 
     # Count only new users (not already invited or existing) that need seats
@@ -649,7 +660,7 @@ def bulk_invite_users(
                 shared_session.commit()
                 trial_invite_reservation = num_new_invites
         enforce_invite_rate_limit(
-            redis_client=get_redis_client(tenant_id=tenant_id),
+            cache=get_cache_backend(tenant_id=tenant_id),
             admin_user_id=current_user.id,
             num_invites=len(emails_needing_seats),
             tenant_id=tenant_id,
@@ -775,7 +786,7 @@ def remove_invited_user(
     tenant_id = get_current_tenant_id()
     if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
         enforce_remove_invited_rate_limit(
-            redis_client=get_redis_client(tenant_id=tenant_id),
+            cache=get_cache_backend(tenant_id=tenant_id),
             admin_user_id=current_user.id,
         )
     if MULTI_TENANT:
@@ -808,14 +819,14 @@ def deactivate_user_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     if current_user.email == user_email.user_email:
-        raise HTTPException(status_code=400, detail="You cannot deactivate yourself")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "You cannot deactivate yourself")
 
     user_to_deactivate = get_user_by_email(
         email=user_email.user_email, db_session=db_session
     )
 
     if not user_to_deactivate:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_deactivate.is_active is False:
         logger.warning("%s is already deactivated", user_to_deactivate.email)
@@ -851,12 +862,12 @@ async def delete_user(
         email=user_email.user_email, db_session=db_session
     )
     if not user_to_delete:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_delete.is_active is True:
         logger.warning("%s must be deactivated before deleting", user_to_delete.email)
-        raise HTTPException(
-            status_code=400, detail="User must be deactivated before deleting"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "User must be deactivated before deleting"
         )
 
     # Capture identifiers before the row is detached/deleted below.
@@ -890,10 +901,34 @@ async def delete_user(
                 "onyx.db.license", "invalidate_license_cache", None
             )()
 
+    except OnyxError:
+        db_session.rollback()
+        raise
     except Exception as e:
         db_session.rollback()
         logger.error("Error deleting user %s: %s", user_to_delete.email, str(e))
-        raise HTTPException(status_code=500, detail="Error deleting user")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Error deleting user")
+
+
+@router.post("/manage/admin/transfer-private-plugins", tags=PUBLIC_API_TAGS)
+def transfer_private_plugins(
+    transfer_req: TransferPrivatePluginsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> TransferPrivatePluginsResponse:
+    user = get_user_by_email(email=transfer_req.user_email, db_session=db_session)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+    result = transfer_private_plugins__no_commit(
+        user_id=user.id,
+        new_owner_user_id=transfer_req.new_owner_user_id,
+        db_session=db_session,
+    )
+    db_session.commit()
+    push_skills_and_commit(result.affected_user_ids, db_session)
+    return TransferPrivatePluginsResponse(
+        plugin_ids=result.plugin_ids, renames=result.renames
+    )
 
 
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
@@ -908,7 +943,7 @@ def activate_user_api(
         email=user_email.user_email, db_session=db_session
     )
     if not user_to_activate:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_activate.is_active is True:
         logger.warning("%s is already activated", user_to_activate.email)
@@ -988,6 +1023,7 @@ def get_current_auth_token_expiry_redis(
             logger.debug("No auth token cookie found")
             return None
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = get_raw_redis_client()
         redis_key = REDIS_AUTH_KEY_PREFIX + token
         raw_value = redis.get(redis_key)
@@ -1097,8 +1133,18 @@ def verify_user_logged_in(
             store = get_kv_store()
             # A browser that still carries a signed-out user's cookie follows
             # the workspace default like any other anonymous visitor.
-            reconcile_locale_cookie(request, response, stored_language=None)
-            return fetch_anonymous_user_info(store)
+            set_preference_cookie(
+                request,
+                response,
+                NEXT_LOCALE_COOKIE_NAME,
+                resolve_user_language(None),
+            )
+            anonymous_preferences = fetch_user_preferences(
+                get_anonymous_user(), db_session
+            )
+            set_appearance_cookie(request, response, anonymous_preferences)
+            clear_unrecognized_session_cookie(response)
+            return fetch_anonymous_user_info(store, anonymous_preferences)
         session_rejection_error = build_session_rejection_error()
         if session_rejection_error is not None:
             raise session_rejection_error
@@ -1161,11 +1207,14 @@ def verify_user_logged_in(
         for memory in get_memories_for_user(user.id, db_session)
     ]
 
+    preferences = fetch_user_preferences(user, db_session)
     user_info = UserInfo.from_model(
         user,
+        preferences,
         token_expires_at=token_expires_at,
         is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
+        tenant_id=tenant_id if MULTI_TENANT else None,
         tenant_info=TenantInfo(
             new_tenant=new_tenant,
             invitation=tenant_invitation,
@@ -1174,7 +1223,13 @@ def verify_user_logged_in(
         effective_permissions=sorted(p.value for p in get_effective_permissions(user)),
     )
 
-    reconcile_locale_cookie(request, response, stored_language=user.language)
+    set_preference_cookie(
+        request,
+        response,
+        NEXT_LOCALE_COOKIE_NAME,
+        resolve_user_language(preferences.language),
+    )
+    set_appearance_cookie(request, response, preferences)
 
     return user_info
 
@@ -1204,7 +1259,10 @@ def update_user_temperature_default_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_temperature_default(user.id, request.temperature_default, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, temperature_default=request.temperature_default
+    )
+    db_session.commit()
 
 
 class ReasoningEffortDefaultRequest(BaseModel):
@@ -1232,9 +1290,10 @@ def update_user_reasoning_effort_default_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_reasoning_effort_default(
-        user.id, request.reasoning_effort_default, db_session
+    upsert_user_preferences__no_commit(
+        db_session, user.id, reasoning_effort_default=request.reasoning_effort_default
     )
+    db_session.commit()
 
 
 @router.patch("/temperature-override-enabled")
@@ -1243,9 +1302,10 @@ def update_user_temperature_override_enabled_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_temperature_override_enabled(
-        user.id, temperature_override_enabled, db_session
+    upsert_user_preferences__no_commit(
+        db_session, user.id, temperature_override_enabled=temperature_override_enabled
     )
+    db_session.commit()
 
 
 class ChosenDefaultModelRequest(BaseModel):
@@ -1258,7 +1318,10 @@ def update_user_shortcut_enabled_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, shortcut_enabled=shortcut_enabled
+    )
+    db_session.commit()
 
 
 @router.patch("/paste-as-tile")
@@ -1267,7 +1330,8 @@ def update_user_paste_as_tile_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_paste_as_tile(user.id, paste_as_tile, db_session)
+    upsert_user_preferences__no_commit(db_session, user.id, paste_as_tile=paste_as_tile)
+    db_session.commit()
 
 
 @router.patch("/interrupt-on-send")
@@ -1276,7 +1340,10 @@ def update_user_interrupt_on_send_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_interrupt_on_send(user.id, interrupt_on_send, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, interrupt_on_send=interrupt_on_send
+    )
+    db_session.commit()
 
 
 @router.patch("/auto-scroll")
@@ -1285,7 +1352,10 @@ def update_user_auto_scroll_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_auto_scroll(user.id, request.auto_scroll, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, auto_scroll=request.auto_scroll
+    )
+    db_session.commit()
 
 
 @router.patch("/user/theme-preference")
@@ -1294,20 +1364,27 @@ def update_user_theme_preference_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_theme_preference(user.id, request.theme_preference, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, theme_preference=request.theme_preference
+    )
+    db_session.commit()
 
 
-LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
+PREFERENCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
 
 
-def set_locale_cookie(response: Response, language: str) -> None:
-    """The backend owns the locale cookie: PATCH /user/language and GET /me
-    set it to the effective language, so the client never writes it. The
-    Next.js server layout is the only reader."""
+def set_preference_cookie(
+    request: Request, response: Response, key: str, value: str
+) -> None:
+    """Set a cookie that the Next.js server layout reads to render a saved
+    preference on first paint. The backend owns these cookies and the client
+    never writes them. A cookie the browser already holds is not re-sent."""
+    if request.cookies.get(key) == value:
+        return
     response.set_cookie(
-        key=NEXT_LOCALE_COOKIE_NAME,
-        value=language,
-        max_age=LOCALE_COOKIE_MAX_AGE_SECONDS,
+        key=key,
+        value=value,
+        max_age=PREFERENCE_COOKIE_MAX_AGE_SECONDS,
         path="/",
         secure=WEB_DOMAIN.startswith("https"),
         httponly=True,
@@ -1315,27 +1392,52 @@ def set_locale_cookie(response: Response, language: str) -> None:
     )
 
 
-def reconcile_locale_cookie(
-    request: Request, response: Response, stored_language: str | None
-) -> None:
-    """Re-issue the locale cookie when it disagrees with the effective
-    language, so a fresh browser, an identity switch or a changed workspace
-    default renders the right language."""
-    language: str = resolve_user_language(stored_language)
-    if request.cookies.get(NEXT_LOCALE_COOKIE_NAME) != language:
-        set_locale_cookie(response, language)
-
-
 @router.patch("/user/language")
 def update_user_language_api(
-    request: LanguageRequest,
+    body: LanguageRequest,
+    request: Request,
     response: Response,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    language: str | None = request.language.value if request.language else None
-    update_user_language(user.id, language, db_session)
-    set_locale_cookie(response, resolve_user_language(language))
+    language: str | None = body.language.value if body.language else None
+    upsert_user_preferences__no_commit(db_session, user.id, language=language)
+    db_session.commit()
+    set_preference_cookie(
+        request, response, NEXT_LOCALE_COOKIE_NAME, resolve_user_language(language)
+    )
+
+
+def set_appearance_cookie(
+    request: Request, response: Response, preferences: UserPreferencesModel
+) -> None:
+    """The value is a form-encoded query string, percent-encoded once more so
+    it stays a plain cookie value (web/src/lib/appearance/preferences.ts reads it)."""
+    value = quote(
+        urlencode(
+            {
+                "interface_font": preferences.interface_font.value,
+                "response_font": preferences.response_font.value,
+                "motion": preferences.motion.value,
+            }
+        )
+    )
+    set_preference_cookie(request, response, APPEARANCE_COOKIE_NAME, value)
+
+
+@router.patch("/user/appearance")
+def update_user_appearance_api(
+    body: AppearanceRequest,
+    request: Request,
+    response: Response,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    upsert_user_preferences__no_commit(
+        db_session, user.id, **body.model_dump(exclude_none=True)
+    )
+    db_session.commit()
+    set_appearance_cookie(request, response, fetch_user_preferences(user, db_session))
 
 
 @router.patch("/user/chat-background")
@@ -1344,7 +1446,10 @@ def update_user_chat_background_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_chat_background(user.id, request.chat_background, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, chat_background=request.chat_background
+    )
+    db_session.commit()
 
 
 @router.patch("/user/default-app-mode")
@@ -1353,7 +1458,10 @@ def update_user_default_app_mode_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_default_app_mode(user.id, request.default_app_mode, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, default_app_mode=request.default_app_mode
+    )
+    db_session.commit()
 
 
 @router.patch("/user/default-model")
@@ -1362,7 +1470,10 @@ def update_user_default_model_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_default_model(user.id, request.default_model, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, default_model=request.default_model
+    )
+    db_session.commit()
 
 
 @router.patch("/user/personalization")
@@ -1371,41 +1482,104 @@ def update_user_personalization_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    new_name = request.name if request.name is not None else user.personal_name
-    new_role = request.role if request.role is not None else user.personal_role
-    current_use_memories = user.use_memories
-    new_use_memories = (
-        request.use_memories
-        if request.use_memories is not None
-        else current_use_memories
+    profile = request.model_dump(
+        include={"name", "preferred_name", "role"}, by_alias=True, exclude_none=True
     )
-    new_enable_memory_tool = (
-        request.enable_memory_tool
-        if request.enable_memory_tool is not None
-        else user.enable_memory_tool
-    )
-    existing_memories = [
-        MemoryItem(id=memory.id, content=memory.memory_text)
-        for memory in get_memories_for_user(user.id, db_session)
-    ]
-    new_memories = (
-        request.memories if request.memories is not None else existing_memories
-    )
-    new_user_preferences = (
-        request.user_preferences
-        if request.user_preferences is not None
-        else user.user_preferences
-    )
-
-    update_user_personalization(
+    if "preferred_name" in profile:
+        profile["preferred_name"] = profile["preferred_name"].strip() or None
+    # Runs first: it rejects the shared anonymous account before any write.
+    upsert_user_preferences__no_commit(
+        db_session,
         user.id,
-        personal_name=new_name,
-        personal_role=new_role,
-        use_memories=new_use_memories,
-        enable_memory_tool=new_enable_memory_tool,
-        memories=new_memories,
-        user_preferences=new_user_preferences,
-        db_session=db_session,
+        **request.model_dump(
+            include={"use_memories", "enable_memory_tool", "user_preferences"},
+            by_alias=True,
+            exclude_none=True,
+        ),
+    )
+    update_user_profile__no_commit(db_session, user.id, **profile)
+    if request.memories is not None:
+        replace_user_memories__no_commit(db_session, user.id, request.memories)
+    db_session.commit()
+
+
+@router.post("/user/profile-image")
+def upload_user_profile_image(
+    file: UploadFile,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> UserProfileImageResponse:
+    upload = read_upload_within_limit(
+        file, MAX_PROFILE_IMAGE_UPLOAD_BYTES, "Profile photo"
+    )
+    file_id = get_default_file_store().save_file(
+        content=io.BytesIO(normalize_profile_image(upload)),
+        display_name=f"profile-image-{user.id}",
+        file_origin=FileOrigin.USER_PROFILE_IMAGE,
+        file_type=PROFILE_IMAGE_MIME_TYPE,
+    )
+    try:
+        previous_file_id = replace_user_profile_image_file_id(
+            user.id, file_id, db_session
+        )
+    except Exception:
+        delete_files_best_effort([file_id], "profile photo upload")
+        raise
+    if previous_file_id:
+        delete_files_best_effort([previous_file_id], "profile photo upload")
+    return UserProfileImageResponse(profile_image_file_id=file_id)
+
+
+@router.delete("/user/profile-image")
+def delete_user_profile_image(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    previous_file_id = replace_user_profile_image_file_id(user.id, None, db_session)
+    if previous_file_id:
+        delete_files_best_effort([previous_file_id], "profile photo delete")
+
+
+@router.get("/user/{user_id}/profile-image")
+def get_user_profile_image(
+    user_id: UUID,
+    request: Request,
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    # Every failure is a 404, so callers cannot probe which users exist.
+    profile_user = fetch_user_by_id(db_session, user_id)
+    file_id = profile_user.profile_image_file_id if profile_user else None
+    if not file_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Profile photo not found")
+
+    # Serve only files that the upload route stored.
+    file_record = get_filerecord_by_file_id_optional(file_id, db_session)
+    if file_record is None or file_record.file_origin != FileOrigin.USER_PROFILE_IMAGE:
+        logger.warning(
+            "User %s references profile photo %s with no matching profile file record",
+            user_id,
+            file_id,
+        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Profile photo not found")
+
+    # The client URL carries the file id, so a new photo is a new URL.
+    etag = f'"{file_id}-{RESPONSE_POLICY_VERSION}"'
+    cache_headers = {
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "ETag": etag,
+        "Vary": "Cookie",
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
+
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type, inline_types=INLINE_SAFE_IMAGE_MIME_TYPES
+    )
+    return StreamingResponse(
+        get_default_file_store().read_file(file_id, mode="b"),
+        media_type=media_type,
+        headers={**cache_headers, **security_headers},
     )
 
 
@@ -1429,28 +1603,6 @@ class ChosenAssistantsRequest(BaseModel):
     chosen_assistants: list[int]
 
 
-def update_assistant_visibility(
-    preferences: UserPreferences, assistant_id: int, show: bool
-) -> UserPreferences:
-    visible_assistants = preferences.visible_assistants or []
-    hidden_assistants = preferences.hidden_assistants or []
-
-    if show:
-        if assistant_id not in visible_assistants:
-            visible_assistants.append(assistant_id)
-        if assistant_id in hidden_assistants:
-            hidden_assistants.remove(assistant_id)
-    else:
-        if assistant_id in visible_assistants:
-            visible_assistants.remove(assistant_id)
-        if assistant_id not in hidden_assistants:
-            hidden_assistants.append(assistant_id)
-
-    preferences.visible_assistants = visible_assistants
-    preferences.hidden_assistants = hidden_assistants
-    return preferences
-
-
 @router.patch("/user/assistant-list/update/{assistant_id}")
 def update_user_assistant_visibility_api(
     assistant_id: int,
@@ -1458,19 +1610,32 @@ def update_user_assistant_visibility_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_preferences = UserInfo.from_model(user).preferences
-    updated_preferences = update_assistant_visibility(
-        user_preferences, assistant_id, show
+    preferences = fetch_user_preferences(user, db_session)
+    # Copies, so the loaded row is never changed in place.
+    visible_assistants = list(preferences.visible_assistants)
+    hidden_assistants = list(preferences.hidden_assistants)
+    added_to, removed_from = (
+        (visible_assistants, hidden_assistants)
+        if show
+        else (hidden_assistants, visible_assistants)
     )
-    if updated_preferences.chosen_assistants is not None:
-        updated_preferences.chosen_assistants.append(assistant_id)
-    update_user_assistant_visibility(
-        user.id,
-        updated_preferences.hidden_assistants,
-        updated_preferences.visible_assistants,
-        updated_preferences.chosen_assistants,
+    if assistant_id not in added_to:
+        added_to.append(assistant_id)
+    if assistant_id in removed_from:
+        removed_from.remove(assistant_id)
+    chosen_assistants = (
+        None
+        if preferences.chosen_assistants is None
+        else [*preferences.chosen_assistants, assistant_id]
+    )
+    upsert_user_preferences__no_commit(
         db_session,
+        user.id,
+        hidden_assistants=hidden_assistants,
+        visible_assistants=visible_assistants,
+        chosen_assistants=chosen_assistants,
     )
+    db_session.commit()
 
 
 @router.get("/user/assistant/preferences")
@@ -1484,7 +1649,8 @@ def get_user_assistant_preferences(
     )
     return {
         config.assistant_id: UserSpecificAssistantPreference(
-            disabled_tool_ids=config.disabled_tool_ids
+            disabled_tool_ids=config.disabled_tool_ids,
+            disabled_integration_ids=config.disabled_integration_ids,
         )
         for config in assistant_specific_configs
     }
@@ -1509,15 +1675,6 @@ def get_recent_files(
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     user_id = user.id
-    user_files = (
-        db_session.query(UserFile)
-        .filter(UserFile.user_id == user_id)
-        .filter(UserFile.status != UserFileStatus.FAILED)
-        .filter(UserFile.status != UserFileStatus.DELETING)
-        # Incognito uploads live only inside their session, never in recents.
-        .filter(UserFile.incognito.is_(False))
-        .order_by(UserFile.last_accessed_at.desc())
-        .all()
-    )
+    user_files = fetch_recent_user_files(db_session, user_id)
 
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]

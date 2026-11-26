@@ -36,12 +36,15 @@ If **Auto-Playback** is off, click **Read aloud** under a response to hear it.
 
 ## User Settings
 
-Set your voice preferences under **Settings → Voice**:
+Set your voice preferences in the **Voice** section of **Settings → Chat Preferences**:
 
 <img className="rounded-image" src="/assets/overview/core_features/voice_user_settings.webp" alt="Voice Mode Settings"/>
 
 - **Auto-Send on Pause**: When on, Onyx sends your message when you pause speaking.
   When off, Onyx keeps listening until you click the microphone button to stop.
+  If Onyx hears no new words for about 10 seconds after a pause, it stops listening.
+  The OpenAI speech-to-text provider does not detect pauses. With OpenAI, this setting has no effect:
+  click the microphone button to stop.
 - **Auto-Playback**: When on, Onyx reads each response aloud as soon as it finishes,
   then starts listening again for a hands-free conversation. When off,
   Onyx shows the response as text and you play it manually.

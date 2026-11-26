@@ -6,11 +6,11 @@ import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
+import { useAppearancePreferences } from "@/lib/appearance/hooks";
 import { useTheme } from "next-themes";
 import {
   CHAT_BACKGROUND_OPTIONS,
   CHAT_BACKGROUND_NONE,
-  ChatBackgroundOption,
 } from "@/lib/constants/chatBackgrounds";
 import { ThemePreference } from "@/lib/types";
 import { useTranslations } from "next-intl";
@@ -114,38 +114,12 @@ export const SettingsPanel = ({
   const t = useTranslations("chat");
   const { appName } = useSettings();
   const { useOnyxAsNewTab } = useNRFPreferences();
-  const { theme, setTheme } = useTheme();
-  const { user, updateUserChatBackground, updateUserThemePreference } =
-    useUser();
+  const { theme } = useTheme();
+  const { chooseTheme, chooseChatBackground } = useAppearancePreferences();
+  const { user } = useUser();
 
   const currentBackgroundId = user?.preferences?.chat_background ?? "none";
   const isDark = theme === "dark";
-
-  const toggleTheme = async () => {
-    const nextTheme = isDark ? ThemePreference.LIGHT : ThemePreference.DARK;
-    setTheme(nextTheme);
-    try {
-      await updateUserThemePreference(nextTheme);
-    } catch {
-      // errors are already logged and state is rolled back via refreshUser
-      // inside updateUserThemePreference
-    }
-  };
-
-  const handleBackgroundChange = async (bg: ChatBackgroundOption) => {
-    try {
-      await updateUserChatBackground(
-        bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
-      );
-      if (bg.theme) {
-        setTheme(bg.theme);
-        await updateUserThemePreference(bg.theme);
-      }
-    } catch {
-      // errors are already logged and state is rolled back via refreshUser
-      // inside the update functions
-    }
-  };
 
   return (
     <>
@@ -189,7 +163,11 @@ export const SettingsPanel = ({
               {/* Theme Toggle */}
               <Button
                 icon={isDark ? SvgMoon : SvgSun}
-                onClick={toggleTheme}
+                onClick={() =>
+                  void chooseTheme(
+                    isDark ? ThemePreference.LIGHT : ThemePreference.DARK
+                  )
+                }
                 prominence="tertiary"
                 tooltip={t("nrf.settingsPanel.themeToggle.tooltip", {
                   mode: isDark ? "light" : "dark",
@@ -240,7 +218,7 @@ export const SettingsPanel = ({
                   label={bgLabels[bg.id] ?? bg.label}
                   isNone={bg.src === CHAT_BACKGROUND_NONE}
                   isSelected={currentBackgroundId === bg.id}
-                  onClick={() => handleBackgroundChange(bg)}
+                  onClick={() => void chooseChatBackground(bg)}
                 />
               ))}
             </div>

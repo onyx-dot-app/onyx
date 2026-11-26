@@ -119,9 +119,9 @@ func TestInitKVM(t *testing.T) {
 	}
 
 	t.Run("no_managed_drive_is_read_only_tmpfs", func(t *testing.T) {
-		out := rootSh(ctx, t, c, key, `grep ' /mnt/skills ' /proc/mounts | cut -d' ' -f1,3,4 | cut -d, -f1; touch /mnt/skills/x 2>/dev/null && echo WRITABLE || echo READONLY`)
+		out := rootSh(ctx, t, c, key, `grep ' /mnt/user-uploads ' /proc/mounts | cut -d' ' -f1,3,4 | cut -d, -f1; touch /mnt/user-uploads/x 2>/dev/null && echo WRITABLE || echo READONLY`)
 		t.Logf("managed mount: %q", out)
-		if !strings.Contains(out, "craft-skills-empty tmpfs ro") || !strings.Contains(out, "READONLY") {
+		if !strings.Contains(out, "craft-user-uploads-empty tmpfs ro") || !strings.Contains(out, "READONLY") {
 			t.Errorf("managed fallback: %q", out)
 		}
 	})
@@ -137,6 +137,19 @@ func TestInitKVM(t *testing.T) {
 		}
 		if g := strings.TrimSpace(strings.SplitN(strings.SplitN(out, "Groups:", 2)[1], "\n", 2)[0]); g != "" {
 			t.Errorf("relay has supplementary groups %q", g)
+		}
+	})
+
+	t.Run("kernel_hardening_sysctls", func(t *testing.T) {
+		out := rootSh(ctx, t, c, key, `cd /proc/sys/kernel && for k in io_uring_disabled kptr_restrict dmesg_restrict sysrq kexec_load_disabled modules_disabled; do echo "$k=$(cat $k)"; done
+for k in modules_disabled kexec_load_disabled; do echo 0 >$k 2>/dev/null && echo "$k=reset"; done; true`)
+		for _, want := range []string{"io_uring_disabled=2", "kptr_restrict=2", "dmesg_restrict=1", "sysrq=0", "kexec_load_disabled=1", "modules_disabled=1"} {
+			if !strings.Contains(out, want+"\n") {
+				t.Errorf("sysctls:\n%s\nhave no %q", out, want)
+			}
+		}
+		if strings.Contains(out, "reset") {
+			t.Errorf("a one-way sysctl was set back:\n%s", out)
 		}
 	})
 
@@ -190,7 +203,7 @@ done; echo planted`
 		t.Logf("relay log: %s", got)
 	})
 
-	t.Run("managed_unmount_keeps_drive", func(t *testing.T) {
+	t.Run("skills_folder_not_the_managed_drive", func(t *testing.T) {
 		m := bootDrives(t, e, "init-managed", true, true)
 		if _, err := waitHealth(ctx, m); err != nil {
 			t.Fatalf("%v\nconsole: %s", err, m.console())
@@ -200,16 +213,10 @@ done; echo planted`
 		if _, err := keyInit(ctx, mc, mkey, initRequest("init-managed")); err != nil {
 			t.Fatal(err)
 		}
-		out := rootSh(ctx, t, mc, mkey, `grep ' /mnt/skills ' /proc/mounts | cut -d' ' -f1,4 | cut -d, -f1
-touch /mnt/skills/x 2>/dev/null && echo WRITABLE || echo READONLY
-mount -o remount,rw /mnt/skills 2>/dev/null && echo REMOUNT_RW || echo REMOUNT_REFUSED
-umount /mnt/skills && echo hello >/mnt/skills/f && echo WROTE_BELOW
-mkdir -p /tmp/m && mount -o ro,noload /dev/vdc /tmp/m && { [ -e /tmp/m/f ] && echo ON_DRIVE || echo NOT_ON_DRIVE; }`)
-		t.Logf("managed drive:\n%s", out)
-		for _, want := range []string{"/dev/vdc ro", "READONLY", "REMOUNT_REFUSED", "NOT_ON_DRIVE"} {
-			if !strings.Contains(out, want) {
-				t.Errorf("managed drive: no %q", want)
-			}
+		out := rootSh(ctx, t, mc, mkey, `grep -c '^/dev/vdc ' /proc/mounts || true
+stat -c %U:%a /home/onyx /var/lib/onyx /var/lib/onyx/skills`)
+		if out != "0\nsandbox:755\nroot:755\nroot:755\n" {
+			t.Errorf("skills folder and managed drive:\n%s", out)
 		}
 	})
 }

@@ -13,7 +13,7 @@ from onyx.db.models import Sandbox, User
 from onyx.server.features.skill.api import bulk_update_skills
 from onyx.server.features.skill.models import (
     SkillBulkShareRequest,
-    SkillShareRequest,
+    SkillBulkSharing,
     SkillUserShareRequest,
 )
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -46,16 +46,14 @@ def test_bulk_share_of_many_skills_pushes_once(
 
     try:
         push = MagicMock()
-        monkeypatch.setattr(
-            "onyx.server.features.skill.api.push_skills_for_users", push
-        )
+        monkeypatch.setattr("onyx.skills.push.push_skills_for_users", push)
         affected_reads = MagicMock(wraps=plugin_db.affected_user_ids_for_plugins)
         with patch.object(plugin_db, "affected_user_ids_for_plugins", affected_reads):
             response = bulk_update_skills(
                 SkillBulkShareRequest(
                     skill_ids=[skill.id for skill in skills],
                     action="share",
-                    sharing=SkillShareRequest(
+                    sharing=SkillBulkSharing(
                         user_shares=[
                             SkillUserShareRequest(
                                 user_id=new_viewer.id,

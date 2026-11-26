@@ -26,23 +26,24 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import MessageType
+from onyx.db.build_session import (
+    create_message,
+    get_build_session,
+    get_build_session_by_id,
+    update_session_activity,
+    upsert_agent_plan,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
+from onyx.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
-)
-from onyx.server.features.build.db.build_session import (
-    create_message,
-    get_build_session,
-    update_session_activity,
-    upsert_agent_plan,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_sandbox_by_user_id,
-    update_sandbox_heartbeat,
 )
 from onyx.server.features.build.packets import (
     ApprovalRequestedPacket,
@@ -488,9 +489,7 @@ def load_turn_session(
     holds; headless callers (scheduled-tasks executor) use this so they
     can pass fully-resolved values into :func:`yield_sandbox_events`.
     """
-    build_session = (
-        db_session.query(BuildSession).filter(BuildSession.id == session_id).first()
-    )
+    build_session = get_build_session_by_id(db_session, session_id)
     if build_session is None:
         logger.warning(
             "[SESSION-LIFECYCLE] preflight: BuildSession %s not found", session_id
@@ -619,9 +618,7 @@ def _persist_opencode_session_id(
     BuildSession row. Called from the transport's
     ``on_opencode_session_resolved`` callback when the persisted id
     was stale (404) or absent."""
-    build_session = (
-        db_session.query(BuildSession).filter(BuildSession.id == session_id).first()
-    )
+    build_session = get_build_session_by_id(db_session, session_id)
     if build_session is None:
         logger.warning(
             "[SESSION-LIFECYCLE] callback: BuildSession %s vanished before "

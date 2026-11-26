@@ -9,6 +9,7 @@
   (dict "key" "celery_worker_monitoring" "name" "celery-worker-monitoring" "needsVectorDB" true)
   (dict "key" "celery_worker_docfetching" "name" "celery-worker-docfetching" "needsVectorDB" true)
   (dict "key" "celery_worker_docprocessing" "name" "celery-worker-docprocessing" "needsVectorDB" true)
+  (dict "key" "celery_worker_docconversion" "name" "celery-worker-docconversion" "needsVectorDB" true "needsEnabled" true)
   (dict "key" "celery_worker_user_file_processing" "name" "celery-worker-user-file-processing" "needsVectorDB" true)
   (dict "key" "celery_worker_scheduled_tasks" "name" "celery-worker-scheduled-tasks" "needsVectorDB" true)
 }}
@@ -20,7 +21,7 @@
 {{- $replicas = int ($v.autoscaling.minReplicas | default 1) }}
 {{- end }}
 {{- /* A PDB on a single replica either blocks node drains or permits nothing, so skip it. */}}
-{{- if and $pdb.enabled (gt $replicas 1) (or (not $c.needsVectorDB) $.Values.vectorDB.enabled) }}
+{{- if and $pdb.enabled (gt $replicas 1) (or (not $c.needsVectorDB) $.Values.vectorDB.enabled) (or (not $c.needsEnabled) $v.enabled) }}
 {{- $blocksEvictions := false }}
 {{- if hasKey $pdb "minAvailable" }}
 {{- $min := toString $pdb.minAvailable }}

@@ -38,7 +38,7 @@ EXECUTE_CODE_TOOL = {
             "properties": {
                 "code": {"type": "string"},
                 "yield_time_ms": {"type": "integer"},
-                "max_output_tokens": {"type": "integer"},
+                "max_output_chars": {"type": "integer"},
             },
             "required": ["code"],
         },
@@ -55,7 +55,7 @@ WAIT_CODE_TOOL = {
             "properties": {
                 "cell_id": {"type": "integer"},
                 "yield_time_ms": {"type": "integer"},
-                "max_output_tokens": {"type": "integer"},
+                "max_output_chars": {"type": "integer"},
                 "terminate": {"type": "boolean"},
             },
             "required": ["cell_id"],

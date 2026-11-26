@@ -8,11 +8,12 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import create_engine, delete, or_, select, update
+from sqlalchemy import create_engine, delete, event, or_, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from onyx.db.chat import delete_chat_artifact_files
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import AccountType, LLMModelFlowType, UserFileStatus
 from onyx.db.llm import (
@@ -23,6 +24,8 @@ from onyx.db.llm import (
     upsert_llm_provider,
 )
 from onyx.db.models import (
+    ChatArtifact,
+    ChatArtifactVersion,
     ChatSession,
     MCPServer,
     MCPServer__UserGroup,
@@ -99,6 +102,23 @@ def db_session() -> Generator[Session, None, None]:
     )
     with get_session_with_current_tenant() as session:
         yield session
+
+
+@pytest.fixture
+def executed_sql(db_session: Session) -> Generator[list[str], None, None]:
+    """Every SQL statement run on the test engine while the fixture is active."""
+    statements: list[str] = []
+
+    def capture_statement(statement: str, **_event: object) -> None:
+        # SQLAlchemy supplies the unused connection, cursor, and execution parameters.
+        statements.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", capture_statement, named=True)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_statement)
 
 
 @pytest.fixture(params=[False, True], ids=["direct", "code_mode"])
@@ -230,6 +250,19 @@ def delete_test_users_and_owned_rows(
 ) -> None:
     """Delete test-owned chat resources and their non-cascading links."""
     db_session.rollback()
+    # Published files and thumbnails are file records, which a chat's delete
+    # leaves; a user without any never reaches the file store.
+    artifact_files = (
+        db_session.execute(
+            select(ChatArtifactVersion.file_id, ChatArtifactVersion.thumbnail_file_id)
+            .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+            .where(ChatArtifact.user_id.in_(user_ids))
+        )
+        .tuples()
+        .all()
+    )
+    if artifact_files:
+        delete_chat_artifact_files(artifact_files)
     persona_ids = select(Persona.id).where(Persona.user_id.in_(user_ids))
     persona_id_list = list(db_session.scalars(persona_ids))
     db_session.execute(delete(ChatSession).where(ChatSession.user_id.in_(user_ids)))

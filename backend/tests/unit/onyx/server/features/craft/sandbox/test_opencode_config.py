@@ -56,7 +56,7 @@ def _mcp(
     disabled_tools: tuple[str, ...] = (),
 ) -> CraftMCPServerConfig:
     return CraftMCPServerConfig(
-        key=key, url=url, disabled_tools=disabled_tools, server_id=1
+        key=key, url=url, disabled_tools=disabled_tools, integration_id=1
     )
 
 
@@ -312,7 +312,7 @@ def _srv(
         key=f"s-{server_id}",
         url=url,
         disabled_tools=disabled_tools,
-        server_id=server_id,
+        integration_id=server_id,
     )
 
 

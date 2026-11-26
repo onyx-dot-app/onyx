@@ -16,10 +16,16 @@ import json
 from functools import partial
 from typing import cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission, require_permission
+from onyx.agents.tools import CancellationSignal, ToolInvocation
+from onyx.auth.permissions import (
+    has_global_permission,
+    require_permission,
+    token_allows,
+)
+from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_TOOL
 from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
 from onyx.db.engine.sql_engine import get_session
@@ -29,10 +35,14 @@ from onyx.db.llm import (
     fetch_existing_llm_provider,
     fetch_user_group_ids,
 )
+from onyx.db.model_configuration import (
+    fetch_model_configuration_by_provider_id_and_name,
+)
 from onyx.db.models import Persona, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_tools
+from onyx.db.user_preferences import fetch_user_preferences
 from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -42,9 +52,12 @@ from onyx.llm.factory import (
     get_search_selection_llm,
     llm_from_provider,
 )
+from onyx.llm.models import ToolResult
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     BaseSearchRequest,
+    PostgresQueryRequest,
+    PostgresQueryResponse,
     RawSearchRequest,
     SearchRequest,
     SearchResponse,
@@ -60,6 +73,9 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatMinimalTextMessage, ToolContext
+from onyx.tools.tool_implementations.postgres.models import CHAT_HISTORY_TABLES
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
+from onyx.tools.tool_implementations.postgres.scope import build_document_scope
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.framework.create import (
     SearchTraceMetadata,
@@ -101,7 +117,9 @@ def search(
     persona, persona_search_info = _load_persona(request.persona_id, user, db_session)
 
     if request.provider:
-        provider_model = fetch_existing_llm_provider(request.provider, db_session)
+        provider_model = fetch_existing_llm_provider(
+            request.provider, db_session, include_model_configurations=False
+        )
         if not provider_model:
             raise OnyxError(
                 OnyxErrorCode.NOT_FOUND,
@@ -116,13 +134,21 @@ def search(
         ):
             raise OnyxError(OnyxErrorCode.UNAUTHORIZED)
 
-        llm_provider_view = LLMProviderView.from_model(provider_model)
+        model_name = cast(str, request.model)
+        model_config = fetch_model_configuration_by_provider_id_and_name(
+            db_session, provider_model.id, model_name
+        )
         llm = llm_from_provider(
-            model_name=cast(str, request.model),
-            llm_provider=llm_provider_view,
+            model_name=model_name,
+            llm_provider=LLMProviderView.from_model(
+                provider_model,
+                model_configurations=[model_config] if model_config else [],
+            ),
         )
     elif persona is not None:
-        llm = get_llm_for_persona(persona, user)
+        llm = get_llm_for_persona(
+            persona, user, fetch_user_preferences(user, db_session).chat_defaults
+        )
     else:
         llm = get_default_llm()
 
@@ -222,6 +248,72 @@ def raw_search(
         message_history=None,
         context=ToolContext(),
     )
+
+
+@router.post(
+    "/postgres-query",
+    # Runs no LLM, so no token budget applies.
+    dependencies=[Depends(check_api_key_usage)],
+    tags=PUBLIC_API_TAGS,
+)
+def postgres_query(
+    request: PostgresQueryRequest,
+    http_request: Request,
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
+    db_session: Session = Depends(get_session),
+) -> PostgresQueryResponse:
+    """
+    Run one `postgres_query` call: exact counts and listings over the metadata
+    of the documents the caller can access, and over the caller's own chat
+    history. `arguments` are the chat tool's arguments, such as
+    `{"table": "document", "source_type": ["jira"], "count": true}`. With
+    `persona_id`, document queries stay inside that agent's knowledge, as for
+    search. The chat-history tables also need `read:chat`.
+    """
+    if DISABLE_POSTGRES_QUERY_TOOL:
+        raise OnyxError(OnyxErrorCode.FEATURE_DISABLED, "postgres_query is turned off.")
+    # Chat history is not search: a token scoped to read:search must not read it.
+    # The tool rejects a table that is not a string.
+    table = request.arguments.get("table")
+    if (
+        isinstance(table, str)
+        and table in {chat_table.value for chat_table in CHAT_HISTORY_TABLES}
+        and not (
+            has_global_permission(user, Permission.READ_CHAT)
+            and token_allows(http_request, Permission.READ_CHAT)
+        )
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Querying chat history needs the read:chat permission. Only the "
+            "'document' and 'hierarchy_node' tables are available. To query chat "
+            "history, reconnect the app to Onyx, or use a personal access token "
+            "with read:search and read:chat.",
+        )
+    _, persona_search_info = _load_persona(request.persona_id, user, db_session)
+    tool = PostgresTool(
+        user=user,
+        current_chat_session_id=None,
+        scope=build_document_scope(
+            persona_search_info,
+            user_selected_filters=None,
+            project_id_filter=None,
+            persona_id_filter=None,
+        ),
+    )
+    outcome = tool.run(
+        ToolInvocation(
+            call_id="postgres-query-api",
+            arguments=request.arguments,
+            cancellation=CancellationSignal(),
+            update=lambda _: None,
+        ),
+        ToolContext(),
+    )
+    # The tool never pauses for input or child runs.
+    if not isinstance(outcome, ToolResult):
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "postgres_query did not finish.")
+    return PostgresQueryResponse(result=outcome.content, is_error=outcome.is_error)
 
 
 def _load_persona(
@@ -333,6 +425,9 @@ def _run_search(
                 link=entry.get("url"),
                 source_type=entry["source_type"],
                 updated_at=entry.get("updated_at"),
+                metadata=json.loads(entry["metadata"])
+                if entry.get("metadata")
+                else None,
             )
             for entry in entries
         ],

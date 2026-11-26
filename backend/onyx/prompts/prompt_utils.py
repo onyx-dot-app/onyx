@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import cast
 
 from langchain_core.messages import BaseMessage
@@ -30,7 +30,7 @@ def get_current_llm_day_time(
     full_sentence: bool = True,
     include_hour_min: bool = False,
 ) -> str:
-    current_datetime = datetime.now()
+    current_datetime = datetime.now(UTC).astimezone()
     # Format looks like: "October 16, 2023 14:30" if include_hour_min, otherwise "October 16, 2023"
     formatted_datetime = (
         current_datetime.strftime("%B %d, %Y %H:%M")

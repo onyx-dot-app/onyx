@@ -5,19 +5,32 @@ import urllib.parse
 from datetime import datetime, timezone
 from typing import cast
 
-from onyx.auth.schemas import AuthBackend
-from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import FileStoreType, QueryHistoryType
-from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
-from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import (
-    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
-    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+from onyx.configs.constants import (
+    AuthBackend,
+    CacheBackendType,
+    FileStoreType,
+    HtmlBasedConnectorTransformLinksStrategy,
+    OpenSearchAuthMethod,
+    QueryHistoryType,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+
+def _int_env(name: str, default: int) -> int | None:
+    """Parse an int env var: ``default`` when unset, None when the value is
+    not an integer. A bad value is logged and turns off what depends on it,
+    so it does not stop the import of this module."""
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.error("%s=%r is not an integer", name, raw)
+        return None
 
 
 def _non_negative_int_env(name: str, default: int) -> int:
@@ -105,11 +118,9 @@ CACHE_BACKEND = CacheBackendType(
 QUERY_EMBEDDING_CACHE_ENABLED = (
     os.environ.get("QUERY_EMBEDDING_CACHE_ENABLED", "true").lower() == "true"
 )
-assert (
-    QUERY_EMBEDDING_CACHE_TTL_S := int(
-        os.environ.get("QUERY_EMBEDDING_CACHE_TTL_S", "900")
-    )
-) > 0, "QUERY_EMBEDDING_CACHE_TTL_S must be positive."
+QUERY_EMBEDDING_CACHE_TTL_S = int(os.environ.get("QUERY_EMBEDDING_CACHE_TTL_S", "900"))
+if QUERY_EMBEDDING_CACHE_TTL_S <= 0:
+    raise ValueError("QUERY_EMBEDDING_CACHE_TTL_S must be positive.")
 
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
@@ -165,6 +176,14 @@ PASSWORD_REQUIRE_SPECIAL_CHAR = (
 # information. This provides an extra layer of security on top of Postgres access controls
 # and is available in Onyx EE
 ENCRYPTION_KEY_SECRET = os.environ.get("ENCRYPTION_KEY_SECRET") or ""
+# Keys for the envelope ciphertext format: a JSON object of key id -> base64 of
+# 32 random bytes, e.g. {"2026-11": "<base64>"}. Every key here can decrypt.
+# ENCRYPTION_KEY_SECRET stays the key for legacy ciphertext and is also readable
+# as an envelope key under the reserved id "legacy".
+ENCRYPTION_KEYS_JSON = os.environ.get("ENCRYPTION_KEYS", "").strip()
+# Key id that new writes use. Unset keeps the legacy write format: AES-CBC under
+# ENCRYPTION_KEY_SECRET, or plain text when that is unset too.
+ENCRYPTION_WRITE_KEY_ID = (os.environ.get("ENCRYPTION_WRITE_KEY_ID") or "").strip()
 
 # Turn off mask if admin users should see full credentials for data connectors.
 MASK_CREDENTIAL_PREFIX = (
@@ -206,6 +225,15 @@ VALID_EMAIL_DOMAINS = (
 DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
     "DISPOSABLE_EMAIL_DOMAINS_URL",
     "https://disposable.github.io/disposable-email-domains/domains.json",
+)
+
+# Free-mail domains (gmail, proton and the like) the playground refuses at
+# sign-up, on top of the curated list in onyx/auth/free_mail_email_validator.py.
+# Plain text, one domain per line. Set to empty string to use the curated list
+# alone. Only the playground downloads it.
+FREE_MAIL_DOMAINS_URL = os.environ.get(
+    "FREE_MAIL_DOMAINS_URL",
+    "https://f.hubspotusercontent40.net/hubfs/2832391/Marketing/Lead-Capture/free-domains-2.csv",
 )
 
 # Captcha cookie TTL — how long a verified captcha token remains valid in
@@ -1137,6 +1165,33 @@ except ValueError:
         _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
     )
 
+# Threads of one docconversion worker. Each thread converts one stub batch,
+# and a conversion parses on one core, so scale with pods, not with threads.
+# A value that is not an integer gives the default.
+_docconversion_concurrency = _int_env("CELERY_WORKER_DOCCONVERSION_CONCURRENCY", 2)
+CELERY_WORKER_DOCCONVERSION_CONCURRENCY = max(
+    1, 2 if _docconversion_concurrency is None else _docconversion_concurrency
+)
+# The most stub batches of one index attempt that are sent to conversion and
+# not converted yet. It bounds the conversion queue for each attempt.
+_docconversion_window_batches = _int_env("DOCCONVERSION_WINDOW_BATCHES", 32)
+DOCCONVERSION_WINDOW_BATCHES = max(
+    1, 32 if _docconversion_window_batches is None else _docconversion_window_batches
+)
+
+# The kill switch of the conversion stage. When true, docfetching lists a
+# source that supports it and stores stub batches, and the docconversion
+# worker fetches and parses the documents. Deploy that worker before you set it.
+ENABLE_CONVERSION_STAGE = (
+    os.environ.get("ENABLE_CONVERSION_STAGE", "").lower() == "true"
+)
+# The watchdog checks the conversion chain of an attempt when no task has
+# dispatched stub batches for this long.
+_docconversion_stall_seconds = _int_env("DOCCONVERSION_STALL_SECONDS", 300)
+DOCCONVERSION_STALL_SECONDS = max(
+    1, 300 if _docconversion_stall_seconds is None else _docconversion_stall_seconds
+)
+
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
 )
@@ -1158,12 +1213,17 @@ CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
 )
 
-# Concurrency for the dedicated Craft scheduled-tasks worker. Each thread can
-# run one headless agent fire at a time, so this caps simultaneous in-flight
-# scheduled runs per pod. Default is intentionally modest because each fire
-# can be long-running (LLM + tool calls in a sandbox).
+# Threads of the scheduled-tasks worker: the scheduled runs that one pod runs
+# at the same time. A run is a chat turn that mostly waits on LLM and tool I/O.
 CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
+    os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 32
+)
+
+# Each task fires a fixed number of seconds (from its id) inside this window
+# after its cron time, so tasks with the same schedule do not all start at
+# once. 0 turns the offset off.
+SCHEDULED_TASK_FIRE_WINDOW_SECONDS = max(
+    0, int(os.environ.get("SCHEDULED_TASK_FIRE_WINDOW_SECONDS") or 300)
 )
 
 # The maximum number of tasks that can be queued up to sync to the document index
@@ -1339,10 +1399,8 @@ CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = cast(
 
 
 def get_current_tz_offset() -> int:
-    # datetime now() gets local time, datetime.now(timezone.utc) gets UTC time.
-    # remove tzinfo to compare non-timezone-aware objects.
-    time_diff = datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)
-    return round(time_diff.total_seconds() / 3600)
+    offset = datetime.now(timezone.utc).astimezone().utcoffset()
+    return round(offset.total_seconds() / 3600) if offset is not None else 0
 
 
 # enter as a floating point offset from UTC in hours (-24 < val < 24)
@@ -1383,11 +1441,62 @@ except ValueError:
     )
     GOOGLE_DRIVE_CONVERSION_WORKERS = _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT
 
+# Files and site pages the SharePoint connector converts at once in one
+# docconversion task. Each conversion makes one download, and with permission
+# sync one or more permission reads, so this sets the requests in flight. The
+# shared Graph limiter paces them when ENABLE_SOURCE_API_LIMITER is on. The
+# SharePoint download host caps the rate, not the threads: on a test tenant,
+# 4 threads converted as many documents per minute as 16, with a quarter of
+# the limiter waiters and less memory.
+SHAREPOINT_CONVERSION_WORKERS = max(
+    1, _int_env("SHAREPOINT_CONVERSION_WORKERS", 4) or 4
+)
+
+# Folders of one drive that the SharePoint connector lists at once on a full
+# pass. Each one is a children page in flight.
+SHAREPOINT_LISTING_WORKERS = max(1, _int_env("SHAREPOINT_LISTING_WORKERS", 8) or 8)
+
 # Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
 # fetch. Native Docs report no `size`, so the fetch can't be checked from
 # metadata; larger Docs are indexed via the basic text export.
 GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
     os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
+)
+
+# Google's quota model for the Drive API of the customer's GCP project: "units"
+# (each call has a cost in quota units) or "requests" (each call counts as one).
+GOOGLE_DRIVE_QUOTA_MODEL = (
+    os.environ.get("GOOGLE_DRIVE_QUOTA_MODEL") or "units"
+).lower()
+# The budgets for one minute. Set them to the quotas of the GCP project.
+_drive_quota_per_project = _int_env(
+    "GOOGLE_DRIVE_QUOTA_PER_PROJECT",
+    12_000 if GOOGLE_DRIVE_QUOTA_MODEL == "requests" else 1_000_000,
+)
+_drive_quota_per_user = _int_env(
+    "GOOGLE_DRIVE_QUOTA_PER_USER",
+    12_000 if GOOGLE_DRIVE_QUOTA_MODEL == "requests" else 325_000,
+)
+_docs_reads_per_project = _int_env("GOOGLE_DOCS_READS_PER_PROJECT", 3_000)
+_docs_reads_per_user = _int_env("GOOGLE_DOCS_READS_PER_USER", 300)
+_limiter_budgets_valid = None not in (
+    _drive_quota_per_project,
+    _drive_quota_per_user,
+    _docs_reads_per_project,
+    _docs_reads_per_user,
+)
+GOOGLE_DRIVE_QUOTA_PER_PROJECT = _drive_quota_per_project or 0
+GOOGLE_DRIVE_QUOTA_PER_USER = _drive_quota_per_user or 0
+GOOGLE_DOCS_READS_PER_PROJECT = _docs_reads_per_project or 0
+GOOGLE_DOCS_READS_PER_USER = _docs_reads_per_user or 0
+
+# Off by default. When on, the workers that index Google Drive share one budget
+# of Google API calls for each credential, kept in Redis, so that many workers
+# do not each find Google's quota through 429 answers. A budget that is not an
+# integer turns it off.
+ENABLE_SOURCE_API_LIMITER = (
+    os.environ.get("ENABLE_SOURCE_API_LIMITER", "").lower() == "true"
+    and _limiter_budgets_valid
 )
 
 # Cap the total text retained per file across a connector's extracted sections,
@@ -2101,6 +2210,19 @@ TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS = int(
 
 
 # Image summarization configuration
+# Used for creating embeddings of images for vector search
+DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT = """
+You are an assistant for summarizing images for retrieval.
+Summarize the content of the following image and be as precise as possible.
+The summary will be embedded and used to retrieve the original image.
+Therefore, write a concise summary of the image that is optimized for retrieval.
+"""
+
+# Prompt for generating image descriptions with filename context
+DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT = """
+Describe precisely and concisely what the image shows.
+"""
+
 IMAGE_SUMMARIZATION_SYSTEM_PROMPT = os.environ.get(
     "IMAGE_SUMMARIZATION_SYSTEM_PROMPT",
     DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,

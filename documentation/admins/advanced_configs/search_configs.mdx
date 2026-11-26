@@ -169,6 +169,29 @@ Ensure the Vertex AI API is enabled and allow time for new IAM grants to propaga
 Do not set `GOOGLE_APPLICATION_CREDENTIALS` to a JSON key file when you intend to use the GKE pod identity:
 ADC checks that variable before the metadata server.
 
+##### Request Concurrency
+
+Onyx sends embedding requests to Vertex AI in parallel. Gemini Embedding 2 takes one text in each request.
+The other models take a batch of up to `VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE` texts (default 50).
+A batch has at most 250 texts, the Vertex AI limit, also when the setting is higher.
+For `text-embedding-005` and `text-multilingual-embedding-002`,
+Onyx estimates the tokens of each text and keeps a batch below 20,000 tokens, the Vertex AI limit.
+If Vertex AI refuses a batch for its token count, Onyx divides the batch into two and sends each half again.
+Two environment variables limit the requests in flight. Set them on the API server and on the indexing workers.
+Each process has its own limits.
+
+| Environment variable | Default | Limits |
+| --- | --- | --- |
+| `VERTEXAI_EMBEDDING_MAX_CONCURRENCY` | 128 | The Vertex AI embedding requests in flight in one process, for all projects and models. |
+| `VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY` | 16 | The first limit for each Vertex AI project, location, and model in one process. |
+
+The limit for each project, location, and model increases while requests succeed.
+When Vertex AI sends a rate-limit error, the limit decreases by 30%, not more than one time each 2 seconds.
+It does not go above `VERTEXAI_EMBEDDING_MAX_CONCURRENCY`.
+
+Decrease `VERTEXAI_EMBEDDING_MAX_CONCURRENCY` if your indexing pods do not have sufficient memory or CPU.
+To keep indexing below a request rate, set the [Embedding Rate Limit](#embedding-rate-limit).
+
 ### Self-hosted Models
 
 Self-hosted models run on Onyx's model servers, so your documents do not leave your deployment.
@@ -213,9 +236,13 @@ To set it, use the **Vector Quantization** field in the **Embedding Model** sect
 
 | Option | Vector memory | OpenSearch version |
 | --- | --- | --- |
-| **None** (default) | Full 32-bit precision | Any |
+| **None** | Full 32-bit precision | Any |
 | **7-bit** | 4x less | 2.16 or later |
 | **1-bit** | 32x less | 3.6 or later |
+
+A new self-hosted deployment starts with **7-bit** when its OpenSearch is version 2.16 or later.
+Onyx sets it at the first startup, before it creates the index. A deployment that already has an index, documents,
+connectors, or user files keeps its quantization. On Onyx Cloud, the quantization does not change.
 
 When the index is quantized, Onyx rescores the top search results with the full-precision vectors.
 OpenSearch keeps the full-precision vectors on disk for this, so the disk usage increases slightly.

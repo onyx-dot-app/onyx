@@ -23,13 +23,16 @@ from onyx.background.celery.celery_utils import (
     extract_ids_from_runnable_connector,
 )
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
-from onyx.background.celery.tasks.docprocessing.utils import IndexingCallbackBase
+from onyx.background.celery.tasks.shared.indexing_callback import IndexingCallbackBase
+from onyx.background.celery.tasks.shared.prune_records import (
+    reset_prune_and_cancel_sync_record,
+)
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_PRUNING_LOCK_TIMEOUT,
-    CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
+    PRUNING_GENERATOR_TASK_EXPIRES,
     DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -47,6 +50,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs,
     lock_connector_credential_pair_row,
 )
+from onyx.db.connector_edit_requests import clear_exhausted_prune_request__no_commit
 from onyx.db.document import (
     backfill_docs_created_at__no_commit,
     get_documents_for_connector_credential_pair,
@@ -70,7 +74,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.permission_sync_attempt import get_open_doc_permission_sync_attempt
 from onyx.db.sync_record import (
-    cleanup_sync_records,
+    delete_sync_record,
     fail_in_progress_sync_records,
     insert_sync_record,
     record_sync_record_error,
@@ -93,7 +97,10 @@ from onyx.redis.redis_hierarchy import (
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
+from onyx.server.metrics.pruning_metrics import (
+    inc_pruning_failure,
+    observe_pruning_diff_duration,
+)
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import (
@@ -242,20 +249,6 @@ CC_PAIR_STATUSES_BLOCKING_PRUNE = {
     ConnectorCredentialPairStatus.PAUSED,
     ConnectorCredentialPairStatus.DELETING,
 }
-
-
-def reset_prune_and_cancel_sync_record(
-    redis_connector: RedisConnector, db_session: Session
-) -> None:
-    """Abandons the pair's prune: its open PRUNING sync record ends CANCELED and
-    the fence is reset. The pair's prune request stays, so a later prune
-    serves it. The record closes first, so a failed write keeps the fence up."""
-    cleanup_sync_records(
-        db_session=db_session,
-        entity_id=redis_connector.cc_pair_id,
-        sync_type=SyncType.PRUNING,
-    )
-    redis_connector.prune.reset()
 
 
 def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
@@ -497,6 +490,13 @@ def try_creating_prune_generator_task(
             )
             return None
 
+        if clear_exhausted_prune_request__no_commit(db_session, cc_pair.id):
+            db_session.commit()
+            logger.warning(
+                "Prune request exhausted three attempts: cc_pair=%s", cc_pair.id
+            )
+            return None
+
         # add a long running generator task to the queue
         redis_connector.prune.generator_clear()
         redis_connector.prune.taskset_clear()
@@ -505,47 +505,48 @@ def try_creating_prune_generator_task(
 
         # create before setting fence to avoid race condition where the monitoring
         # task updates the sync record before it is created
+        sync_record_id = insert_sync_record(
+            db_session=db_session,
+            entity_id=cc_pair.id,
+            sync_type=SyncType.PRUNING,
+        ).id
+
         try:
-            insert_sync_record(
-                db_session=db_session,
-                entity_id=cc_pair.id,
-                sync_type=SyncType.PRUNING,
+            # signal active before the fence is set
+            redis_connector.prune.set_active()
+
+            # The task id is in the first fence write, so the validator can
+            # find a lost task even if no later write succeeds.
+            payload = RedisConnectorPrunePayload(
+                id=make_short_id(),
+                submitted=datetime.now(timezone.utc),
+                started=None,
+                celery_task_id=custom_task_id,
+                # read after the refresh above, so a prune serves only requests
+                # committed before it was dispatched
+                prune_requested_at=cc_pair.prune_requested_at,
+            )
+            redis_connector.prune.set_fence(payload)
+
+            celery_app.send_task(
+                OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
+                expires=PRUNING_GENERATOR_TASK_EXPIRES,
+                kwargs={
+                    "cc_pair_id": cc_pair.id,
+                    "connector_id": cc_pair.connector_id,
+                    "credential_id": cc_pair.credential_id,
+                    "tenant_id": tenant_id,
+                },
+                queue=OnyxCeleryQueues.CONNECTOR_PRUNING,
+                task_id=custom_task_id,
+                priority=OnyxCeleryPriority.LOW,
+                headers={"enqueued_at": time.time()},
             )
         except Exception:
-            task_logger.exception("insert_sync_record exceptioned.")
-
-        # signal active before the fence is set
-        redis_connector.prune.set_active()
-
-        # set a basic fence to start
-        payload = RedisConnectorPrunePayload(
-            id=make_short_id(),
-            submitted=datetime.now(timezone.utc),
-            started=None,
-            celery_task_id=None,
-            # read after the refresh above, so a prune serves only requests
-            # committed before it was dispatched
-            prune_requested_at=cc_pair.prune_requested_at,
-        )
-        redis_connector.prune.set_fence(payload)
-
-        result = celery_app.send_task(
-            OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
-            kwargs={
-                "cc_pair_id": cc_pair.id,
-                "connector_id": cc_pair.connector_id,
-                "credential_id": cc_pair.credential_id,
-                "tenant_id": tenant_id,
-            },
-            queue=OnyxCeleryQueues.CONNECTOR_PRUNING,
-            task_id=custom_task_id,
-            priority=OnyxCeleryPriority.LOW,
-            headers={"enqueued_at": time.time()},
-        )
-
-        # fill in the celery task id
-        payload.celery_task_id = result.id
-        redis_connector.prune.set_fence(payload)
+            # An unsent dispatch is not an attempt on the prune request.
+            delete_sync_record(db_session, sync_record_id)
+            redis_connector.prune.reset()
+            raise
 
         payload_id = payload.id
     except Exception as e:
@@ -598,52 +599,30 @@ def connector_pruning_generator_task(
 
     r = get_redis_client()
 
-    # this wait is needed to avoid a race condition where
-    # the primary worker sends the task and it is immediately executed
-    # before the primary worker can finalize the fence
-    start = time.monotonic()
-    while True:
-        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
-            raise ValueError(
-                f"connector_prune_generator_task - timed out waiting for fence to be ready: "
-                f"fence={redis_connector.prune.fence_key}"
-            )
-
-        if not redis_connector.prune.fenced:  # The fence must exist
-            raise ValueError(
-                f"connector_prune_generator_task - fence not found: fence={redis_connector.prune.fence_key}"
-            )
-
-        payload = redis_connector.prune.payload  # The payload must exist
-        if not payload:
-            raise ValueError(
-                "connector_prune_generator_task: payload invalid or not found"
-            )
-
-        if payload.celery_task_id is None:
-            logger.info(
-                "connector_prune_generator_task - Waiting for fence: fence=%s",
-                redis_connector.prune.fence_key,
-            )
-            time.sleep(1)
-            continue
-
-        # A stale dispatch must not run under a newer prune's fence.
-        if payload.celery_task_id != self.request.id:
-            task_logger.info(
-                f"Pruning canceled, the fence belongs to another task: "
-                f"cc_pair={cc_pair_id} fence_task_id={payload.celery_task_id}"
-            )
-            return None
-
-        payload_id = payload.id
-
-        logger.info(
-            "connector_prune_generator_task - Fence found, continuing...: fence=%s payload_id=%s",
-            redis_connector.prune.fence_key,
-            payload.id,
+    if not redis_connector.prune.fenced:  # The fence must exist
+        raise ValueError(
+            f"connector_prune_generator_task - fence not found: fence={redis_connector.prune.fence_key}"
         )
-        break
+
+    payload = redis_connector.prune.payload  # The payload must exist
+    if not payload:
+        raise ValueError("connector_prune_generator_task: payload invalid or not found")
+
+    # A stale dispatch must not run under a newer prune's fence.
+    if payload.celery_task_id != self.request.id:
+        task_logger.info(
+            f"Pruning canceled, the fence belongs to another task: "
+            f"cc_pair={cc_pair_id} fence_task_id={payload.celery_task_id}"
+        )
+        return None
+
+    payload_id = payload.id
+
+    logger.info(
+        "connector_prune_generator_task - Fence found, continuing...: fence=%s payload_id=%s",
+        redis_connector.prune.fence_key,
+        payload.id,
+    )
 
     # set thread_local=False since we don't control what thread the indexing/pruning
     # might run our callback with
@@ -660,12 +639,12 @@ def connector_pruning_generator_task(
         )
         return None
 
+    connector_type: str = ""
     try:
         # Session 1: pre-enumeration — load cc_pair and instantiate the connector.
         # The session is closed before enumeration so the DB connection is not held
         # open during the 10–30+ minute connector crawl.
         connector_source: DocumentSource | None = None
-        connector_type: str = ""
         is_connector_public: bool = False
         indexing_start: float | None = None
         runnable_connector: BaseConnector | None = None
@@ -719,12 +698,23 @@ def connector_pruning_generator_task(
                 f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={connector_source}"
             )
 
+            # Made before the connector, so that a wait for the source's API
+            # budget ends on a stop or the job timeout.
+            callback = PruneCallback(
+                0,
+                redis_connector,
+                lock,
+                r,
+                timeout_seconds=JOB_TIMEOUT,
+            )
             runnable_connector = instantiate_connector(
                 db_session,
                 connector_source,
                 InputType.SLIM_RETRIEVAL,
                 cc_pair.connector.connector_specific_config,
                 cc_pair.credential,
+                should_stop=callback.should_stop,
+                cc_pair_id=cc_pair.id,
             )
 
             # Read the indexed ids before the crawl, not after it. Indexing runs
@@ -741,14 +731,6 @@ def connector_pruning_generator_task(
                 )
             }
         # Session 1 closed here — connection released before enumeration.
-
-        callback = PruneCallback(
-            0,
-            redis_connector,
-            lock,
-            r,
-            timeout_seconds=JOB_TIMEOUT,
-        )
 
         # Extract docs and hierarchy nodes from the source (no DB session held).
         extraction_result = extract_ids_from_runnable_connector(
@@ -883,6 +865,8 @@ def connector_pruning_generator_task(
         task_logger.exception(
             f"Pruning exceptioned: cc_pair={cc_pair_id} connector={connector_id} payload_id={payload_id}"
         )
+
+        inc_pruning_failure(tenant_id, connector_type)
 
         # Back off so a failing prune isn't re-dispatched on the next beat.
         redis_connector.prune.set_failure_backoff()

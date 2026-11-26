@@ -700,7 +700,7 @@
       "type": "timeseries",
       "id": 12,
       "title": "Create results",
-      "description": "created: new VM. existing: repeat call for a VM that runs. refused: stopped before admission passed. failed: the start failed after admission.",
+      "description": "created: new VM. existing: repeat call for a VM that runs. refused: stopped before admission passed. failed: the start failed after admission. canceled: the caller canceled, or its deadline passed (not an agent failure).",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -730,7 +730,38 @@
           },
           "min": 0
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/ failed$/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/ canceled$/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -2155,7 +2186,7 @@
       "type": "timeseries",
       "id": 42,
       "title": "Time since last accepted report / key registration",
-      "description": "Seconds since the api_server last accepted a node state report or a signing key registration. The api_server treats a node with no report for SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180 s) as dead and places no VM on it. A node with no accepted report or registration since the agent started shows more than 50 years (the timestamp is 0).",
+      "description": "Seconds since the api_server last accepted a node state report or a signing key registration. The api_server treats a node with no report for SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180 s) as dead and places no VM on it. A node with no accepted report or registration since the agent started shows more than 50 years (the timestamp is 0). CraftFcNodeReportsStale fires when the report value stays above craft.hostAgent.alerts.nodeReportStaleSeconds (default 300 s) for 5 min.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"

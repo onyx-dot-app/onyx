@@ -50,6 +50,10 @@ class MockInternalSearchResult(BaseModel):
     source_type: DocumentSource
     semantic_identifier: str
     chunk_ind: int
+    content: str = ""
+    # The document's stored file; tests that set it patch
+    # populate_file_ids_on_sections, since the mocked pipeline has no rows.
+    file_id: str | None = None
 
     def to_inference_chunk(self) -> InferenceChunk:
         return InferenceChunk(
@@ -59,7 +63,7 @@ class MockInternalSearchResult(BaseModel):
             title=self.semantic_identifier,
             chunk_id=self.chunk_ind,
             blurb="",
-            content="",
+            content=self.content,
             source_links=None,
             image_file_id=None,
             section_continuation=False,
@@ -71,6 +75,7 @@ class MockInternalSearchResult(BaseModel):
             doc_summary="",
             chunk_context="",
             updated_at=None,
+            file_id=self.file_id,
         )
 
     def to_search_doc(self) -> SearchDoc:

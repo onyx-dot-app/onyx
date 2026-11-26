@@ -6,10 +6,6 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import type { BackendMessage, Message } from "@/app/app/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 
-jest.mock("@/components/chat/DynamicBottomSpacer", () => ({
-  __esModule: true,
-  default: () => null,
-}));
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({
     resetTTS: jest.fn(),
@@ -278,9 +274,10 @@ test("a failed response keeps partial text and ends search activity", async () =
     ]),
   });
   render(<ChatUI {...props} />);
+  // The run header and its open step both name the search.
   expect(
-    await screen.findByText("Searching internal documents")
-  ).toBeInTheDocument();
+    await screen.findAllByText("Searching internal documents...")
+  ).not.toHaveLength(0);
 
   const finishedPackets: Packet[] = [
     ...packets,
@@ -309,9 +306,10 @@ test("a failed response keeps partial text and ends search activity", async () =
     await screen.findByText("Provider declined the request")
   ).toBeInTheDocument();
   expect(await screen.findByText("Partial answer")).toBeInTheDocument();
+  // The run header settles, and the run folds under the text.
   await waitFor(() => {
     expect(
-      screen.queryByText("Searching internal documents")
+      screen.queryByText("Searching internal documents...")
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("onyx-ai-message")).toBeInTheDocument();
   });

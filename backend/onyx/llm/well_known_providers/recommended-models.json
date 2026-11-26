@@ -1,21 +1,21 @@
 {
-  "version": "1.26",
-  "updated_at": "2026-11-09T00:00:00Z",
+  "version": "1.32",
+  "updated_at": "2026-11-23T00:00:00Z",
   "providers": {
     "openai": {
-      "default_model": "gpt-6.1-sol",
+      "default_model": "gpt-6.2-sol",
       "additional_visible_models": [
         {
-          "name": "gpt-6.1-sol"
+          "name": "gpt-6.2-sol"
+        },
+        {
+          "name": "gpt-6.2-astra"
         },
         {
           "name": "gpt-6.1-terra"
         },
         {
           "name": "gpt-6-luna"
-        },
-        {
-          "name": "gpt-6-astra"
         }
       ]
     },
@@ -33,6 +33,10 @@
         {
           "name": "claude-haiku-5-5",
           "display_name": "Claude Haiku 5.5"
+        },
+        {
+          "name": "claude-fable-5-2",
+          "display_name": "Claude Fable 5.2"
         }
       ]
     },
@@ -44,12 +48,16 @@
           "display_name": "Gemini 4 Argon"
         },
         {
-          "name": "gemini-3.8-flash",
-          "display_name": "Gemini 3.8 Flash"
+          "name": "gemini-4-hydrogen",
+          "display_name": "Gemini 4 Hydrogen"
         },
         {
-          "name": "gemini-3.5-flash-lite",
-          "display_name": "Gemini 3.5 Flash-Lite"
+          "name": "gemini-4-carbon",
+          "display_name": "Gemini 4 Carbon"
+        },
+        {
+          "name": "gemini-4-neon",
+          "display_name": "Gemini 4 Neon"
         }
       ]
     },
@@ -69,8 +77,8 @@
           "display_name": "DeepSeek V4.1 Flash 1017"
         },
         {
-          "name": "qwen/qwen3.8-flash",
-          "display_name": "Qwen3.8 Flash"
+          "name": "qwen/qwen4-max",
+          "display_name": "Qwen4 Max"
         },
         {
           "name": "moonshotai/kimi-k3.1-pro",

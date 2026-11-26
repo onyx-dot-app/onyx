@@ -360,28 +360,6 @@ func TestSwapManagedRefusals(t *testing.T) {
 	}
 }
 
-func TestSwapManagedNeedsSlotB(t *testing.T) {
-	f := newFixture(t, 4)
-	dir := t.TempDir()
-	if _, err := template.WriteFakeLayout(dir, "old", template.Key{VCPUs: 2, MemMiB: 4096, ScratchGiB: 1, FirecrackerVersion: "v1.17.0"}, 2); err != nil {
-		t.Fatal(err)
-	}
-	f.m.templates = &template.Store{Dir: dir}
-	f.m.UseManagedGuest(newFakeGuest(), time.Second)
-	r := req(sb1, 1)
-	r.Template = "old"
-	vm, _, err := f.m.Create(context.Background(), r)
-	if err != nil {
-		t.Fatalf("a layout 2 template must still restore: %v", err)
-	}
-	if vm.Managed.Slots != 1 {
-		t.Fatalf("slots %d", vm.Managed.Slots)
-	}
-	res := f.m.SwapManaged(context.Background(), "", ManagedImage{ID: strings.Repeat("a", 64)},
-		[]SwapTarget{{SandboxID: sb1, Attempt: vm.Attempt, Generation: vm.Generation, Key: "k"}})
-	wantReason(t, res[0].Err, pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED)
-}
-
 // Stop waits for a running swap, so the swap's journal write never lands
 // after the tombstone.
 func TestStopWaitsForSwap(t *testing.T) {

@@ -36,6 +36,7 @@ function baseInput(
     parallelActiveStepHasCollapsedContent: false,
     finalAnswerComing: false,
     codeModeWorking: false,
+    awaitingUser: false,
     ...overrides,
   };
 }
@@ -95,6 +96,21 @@ describe("useTimelineUIState — the 7 states", () => {
         lastTurnGroup: sequentialTurn,
       }).uiState,
     ).toBe(TimelineUIState.COMPLETED_COLLAPSED);
+  });
+
+  it("keeps a wait for the user active after display content", () => {
+    expect(
+      run({
+        hasPackets: true,
+        hasDisplayContent: true,
+        lastTurnGroup: sequentialTurn,
+        awaitingUser: true,
+      }).uiState,
+    ).toBe(TimelineUIState.STREAMING_SEQUENTIAL);
+    // A question has no step: text, then only the question.
+    expect(run({ hasDisplayContent: true, awaitingUser: true }).uiState).toBe(
+      TimelineUIState.EMPTY,
+    );
   });
 });
 

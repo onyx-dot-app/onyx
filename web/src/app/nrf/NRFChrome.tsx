@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { ensureHrefProtocol } from "@/lib/utils";
 import { cn, richNodes } from "@opal/utils";
 import type { Components } from "react-markdown";
@@ -15,6 +15,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useSidebarState } from "@opal/layouts";
+import { usePublishedHeight } from "@opal/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useTranslations } from "next-intl";
 
@@ -69,28 +70,10 @@ export default function NRFChrome() {
   const { setFolded } = useSidebarState();
   const appPosition = useAppPosition();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
-  const footerRef = useRef<HTMLElement>(null);
+  const [footer, setFooter] = useState<HTMLElement | null>(null);
 
-  // Publishes the footer height so NRFPage can keep scrollable content clear of it
-  useEffect(() => {
-    const footer = footerRef.current;
-    const host = footer?.parentElement;
-    if (!footer || !host) return;
-
-    const update = () =>
-      host.style.setProperty(
-        NRF_FOOTER_HEIGHT_VAR,
-        `${footer.getBoundingClientRect().height}px`
-      );
-    update();
-
-    const observer = new ResizeObserver(update);
-    observer.observe(footer);
-    return () => {
-      observer.disconnect();
-      host.style.removeProperty(NRF_FOOTER_HEIGHT_VAR);
-    };
-  }, []);
+  // NRFPage keeps its scrollable content clear of the footer
+  usePublishedHeight(footer, NRF_FOOTER_HEIGHT_VAR);
 
   const effectiveMode: AppMode =
     appPosition.isNewSession() && state.phase === "idle"
@@ -166,7 +149,7 @@ export default function NRFChrome() {
 
       {/* Footer — bottom-center, transparent background */}
       <footer
-        ref={footerRef}
+        ref={setFooter}
         className="absolute bottom-0 start-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto"
       >
         <MinimalMarkdown

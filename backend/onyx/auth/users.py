@@ -17,7 +17,6 @@ from email_validator import EmailNotValidError, EmailUndeliverableError, validat
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -39,7 +38,6 @@ from fastapi_users import (
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
-    CookieTransport,
     JWTStrategy,
     RedisStrategy,  # ty: ignore[possibly-missing-import]
     Strategy,
@@ -58,6 +56,8 @@ from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
+
+# no-direct-redis: allow session store for AUTH_BACKEND=redis
 from redis.exceptions import WatchError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,7 +82,7 @@ from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import get_effective_permissions, has_global_permission
 from onyx.auth.pkce import generate_pkce_pair
-from onyx.auth.schemas import AuthBackend, UserCreate
+from onyx.auth.schemas import UserCreate
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
@@ -90,7 +90,9 @@ from onyx.auth.session_tokens import (
     build_session_token_value,
     build_session_tombstone_value,
     classify_session_token_value,
+    clear_unrecognized_session_cookie,
     compute_session_expires_at,
+    cookie_transport,
     may_be_session_token,
     physical_session_ttl_seconds,
     record_session_rejection,
@@ -118,6 +120,7 @@ from onyx.configs.constants import (
     FASTAPI_USERS_AUTH_COOKIE_NAME,
     PASSWORD_SPECIAL_CHARS,
     UNNAMED_KEY_PLACEHOLDER,
+    AuthBackend,
     MilestoneRecordType,
     OnyxRedisLocks,
 )
@@ -142,13 +145,20 @@ from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.db.pat import resolve_pat, revoke_all_pats_for_user__no_commit
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
+from onyx.db.sandbox import (
+    get_sandbox_purge_targets,
+    get_user_sandbox_blob_paths,
+)
 from onyx.db.sso_provider import lock_sso_provider_for_share
 from onyx.db.users import (
+    UserDeleteCleanup,
     assign_user_to_default_groups__no_commit,
     delete_user_from_db__no_commit,
     fetch_user_by_id,
+    finish_user_delete,
     get_user_by_email,
     get_user_by_oauth_account,
+    get_user_from_async_session,
     is_limited_user,
     promote_placeholder_to_web_login__no_commit,
     reconcile_user_email__no_commit,
@@ -164,19 +174,20 @@ from onyx.oauth_provider.auth import (
     extract_oauth_provider_bearer,
 )
 from onyx.redis.redis_pool import (
+    # no-direct-redis: allow session store for AUTH_BACKEND=redis
     get_async_redis_connection,
     retrieve_auth_token_data,
     retrieve_ws_token_data,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_sandbox_purge_targets,
-    get_user_sandbox_blob_paths,
 )
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes,
 )
 from onyx.server.features.build.sandbox.snapshot_manager import (
     delete_sandbox_blobs_best_effort,
+)
+from onyx.server.playground import (
+    PlaygroundRestrictedFeature,
+    is_restricted_in_playground,
 )
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
@@ -315,6 +326,10 @@ def user_needs_to_be_verified() -> bool:
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
     from onyx.cache.factory import get_cache_backend
+
+    # Restricted on the playground, whatever the cache says.
+    if is_restricted_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS):
+        return False
 
     cache = get_cache_backend(tenant_id=tenant_id)
     value = cache.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
@@ -611,6 +626,12 @@ async def resolve_tenant_for_user(email: str, request: Request | None = None) ->
     )(email=email, request=request)
 
 
+def finish_user_delete_in_own_session(cleanup: UserDeleteCleanup) -> None:
+    """File store and sandbox calls block, so they run off the event loop."""
+    with get_session_with_current_tenant() as db_session:
+        finish_user_delete(cleanup, db_session)
+
+
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
@@ -629,10 +650,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         purge_targets = await self.user_db.session.run_sync(
             partial(get_sandbox_purge_targets, user_id=user.id)
         )
-        await self.user_db.session.run_sync(
+        cleanup = await self.user_db.session.run_sync(
             partial(delete_user_from_db__no_commit, user)
         )
         await self.user_db.session.commit()
+        await asyncio.to_thread(finish_user_delete_in_own_session, cleanup)
         await asyncio.to_thread(delete_sandbox_blobs_best_effort, sandbox_blob_paths)
         await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         await self.on_after_delete(user, request)
@@ -878,7 +900,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise error
 
                     if MULTI_TENANT:
-                        user_by_session = await db_session.get(User, user.id)
+                        user_by_session = await get_user_from_async_session(
+                            db_session, user.id
+                        )
                         if user_by_session:
                             user = user_by_session
 
@@ -909,7 +933,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # the user we just got by email. Note that this only applies
                     # to multi-tenant, due to the overwriting of the user_db
                     if MULTI_TENANT:
-                        user_by_session = await db_session.get(User, user.id)
+                        user_by_session = await get_user_from_async_session(
+                            db_session, user.id
+                        )
                         if user_by_session:
                             user = user_by_session
 
@@ -961,11 +987,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         """
         seat_added = False
         with get_session_with_current_tenant() as sync_db:
-            sync_user = (
-                sync_db.query(User)
-                .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
-                .first()
-            )
+            sync_user = fetch_user_by_id(sync_db, user_id)
             if sync_user:
                 if _upgrade_will_add_seat(
                     sync_user, will_become_active=bool(sync_user.is_active)
@@ -1069,6 +1091,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         allowed_email_domains_override: Sequence[str] | None = None,
         enforce_verified_domain: bool = False,
         sso_provider_id: int | None = None,
+        start_new_team: bool = False,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None)  # ods: ignore[getattr]
@@ -1090,10 +1113,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
             oauth_name=oauth_name,
             account_id=account_id,
+            start_new_team=start_new_team,
         )
 
         if not tenant_id:
-            raise HTTPException(status_code=401, detail="User not found")
+            raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "User not found")
 
         async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
             verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
@@ -1243,7 +1267,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 user, existing_oauth_account, oauth_account_dict
                             )
 
-            assert user is not None
+            if user is None:
+                raise RuntimeError("OAuth callback has no user after account lookup.")
 
             if override is not None:
                 # A pinned login skipped the provisioning that records
@@ -1322,7 +1347,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 # the upgraded fields.
                 self.user_db.session.expire(user)
                 user = await self.user_db.get(refreshed_user_id)
-                assert user is not None
+                if user is None:
+                    raise RuntimeError("OAuth callback could not reload the user.")
 
             # this is needed if an organization toggles track_external_idp_expiry from
             # true to false; otherwise the oidc expiry will always be old and the user
@@ -1751,15 +1777,6 @@ async def get_user_manager(
     yield UserManager(user_db)
 
 
-# The cookie outlives the logical expiry by the grace window so a dead token is
-# still presented and can be classified (expired/terminated) instead of the
-# browser silently dropping it.
-cookie_transport = CookieTransport(
-    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS + SESSION_TOKEN_GRACE_PERIOD_SECONDS,
-    cookie_secure=WEB_DOMAIN.startswith("https"),
-    cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
-)
-
 # Native mobile clients can't use the HttpOnly auth cookie above, so they
 # authenticate with the SAME stateful session token returned/refreshed as a
 # Bearer value (Authorization header) via this transport. `tokenUrl` is only
@@ -1816,6 +1833,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         self.key_prefix = key_prefix
 
     async def write_token(self, user: User) -> str:
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
 
         # The token names the workspace every later request runs against, so it
@@ -1841,6 +1859,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         # Per-user set of session tokens, so revoke_user_sessions needs no scan.
         # It lives as long as the user's newest session; members whose token
         # key has expired are pruned here.
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
         members = list(
@@ -1868,6 +1887,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         Sessions written before the index existed are not covered until they
         are refreshed.
         """
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
         members = await cast(Awaitable[set[bytes | str]], redis.smembers(index_key))
@@ -1892,6 +1912,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         if token is None:
             return None
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         raw_value = await redis.get(f"{self.key_prefix}{token}")
         if raw_value is None and not may_be_session_token(token):
@@ -1916,6 +1937,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         Overwrites the token with a tombstone so other tabs' rejections classify
         as a sign-out rather than an anomalous drop.
         """
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
         previous_raw_value = await redis.get(token_key)
@@ -1937,6 +1959,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             # If no token provided, create a new one
             return await self.write_token(user)
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
 
@@ -2169,6 +2192,7 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
         )
 
         refresh_responses: OpenAPIResponseType = {
+            # http-exception: allow OpenAPI response key, not a raised error
             status.HTTP_401_UNAUTHORIZED: {
                 "description": "Missing token or inactive user."
             },
@@ -2229,9 +2253,8 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                 raise
             except Exception as e:
                 logger.error("Unexpected error in refresh endpoint: %s", str(e))
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Token refresh failed: {str(e)}",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST, f"Token refresh failed: {str(e)}"
                 )
 
         return router
@@ -2492,6 +2515,7 @@ async def _resolve_optional_user(
                     api_key.api_key_name,
                     api_key.api_key_display,
                 )
+                request.state.discord_bot_api_key = api_key.is_discord_bot
     except ValueError:
         logger.warning("Issue with validating authentication token")
         return None
@@ -2571,8 +2595,6 @@ def get_anonymous_user() -> User:
         is_superuser=False,
         account_type=AccountType.ANONYMOUS,
         effective_permissions=[Permission.BASIC_ACCESS.value],
-        use_memories=False,
-        enable_memory_tool=False,
     )
     return user
 
@@ -2626,9 +2648,16 @@ async def current_limited_user(
 
 
 async def current_chat_accessible_user(
+    response: Response,
     user: User | None = Depends(optional_user),
 ) -> AsyncGenerator[User, None]:
+    """
+    Endpoints that return their own ``Response`` (streaming) do not carry the
+    unrecognized-cookie clear; ``/me`` on the next page load clears it.
+    """
     tenant_id = get_current_tenant_id()
+    if user is None:
+        clear_unrecognized_session_cookie(response)
     user = await double_check_user(
         user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
     )
@@ -2670,7 +2699,7 @@ async def _get_user_from_token_data(token_data: dict) -> User | None:
         return None
 
     async with get_async_session_context_manager() as async_db_session:
-        user = await async_db_session.get(User, user_uuid)
+        user = await get_user_from_async_session(async_db_session, user_uuid)
         if user is None or not user.is_active:
             return None
         return user
@@ -3028,6 +3057,8 @@ async def complete_login_flow(
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
             enforce_verified_domain=enforce_verified_domain,  # ty: ignore[unknown-argument]
             sso_provider_id=sso_provider_id,  # ty: ignore[unknown-argument]
+            # Playground: the sign-up page put the choice into the signed state.
+            start_new_team=state_data.get("start_new_team") == "true",  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(
@@ -3141,7 +3172,7 @@ def get_oauth_router(
     @router.get(
         "/authorize",
         name=f"oauth:{oauth_client.name}.{backend.name}.authorize",
-        response_model=OAuth2AuthorizeResponse,
+        response_model=OAuth2AuthorizeResponse,  # no-response-model: allow the handler also returns a Response, so the annotation is a union
     )
     async def authorize(
         request: Request,
@@ -3172,6 +3203,9 @@ def get_oauth_router(
             "referral_source": referral_source or "default_referral",
             CSRF_TOKEN_KEY: csrf_token,
         }
+        # Playground: "start a new team" rides the signed state through the IdP.
+        if request.query_params.get("start_new_team") == "true":
+            state_data["start_new_team"] = "true"
         # No-op for web; for mobile, marks the signed state for complete_mobile_sso.
         apply_mobile_state(
             state_data, mobile_redirect_uri, app_state, app_code_challenge
@@ -3251,6 +3285,7 @@ def get_oauth_router(
         name=callback_route_name,
         description="The response varies based on the authentication backend used.",
         responses={
+            # http-exception: allow OpenAPI response key, not a raised error
             status.HTTP_400_BAD_REQUEST: {
                 "model": ErrorModel,
                 "content": {

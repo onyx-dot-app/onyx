@@ -1,18 +1,20 @@
 import json
 import time
 from typing import Any
+from uuid import UUID
 
-from mcp.client.auth import OAuthClientProvider
 from pydantic import JsonValue
 
 from onyx.agents.tools import ToolInvocation
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import (
-    MCPAuthenticationType,
-    MCPTransport,
+from onyx.db.enums import MCPTransport
+from onyx.integrations.call_credentials import (
+    credentials_near_expiry,
+    mark_api_key_rejected,
+    mcp_oauth_provider,
+    resolve_fresh_call_credentials,
 )
-from onyx.db.mcp import mark_connection_config_reauth_required
-from onyx.db.models import MCPConnectionConfig, MCPServer
+from onyx.integrations.connections import ConnectionProblem
+from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.server.features.mcp.client import (
@@ -20,20 +22,12 @@ from onyx.server.features.mcp.client import (
     has_unauthorized_response,
     process_mcp_result,
 )
-from onyx.server.features.mcp.credentials import (
-    ResolvedMCPCredentials,
-    uses_user_managed_headers,
-)
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPServerConnection,
     merge_mcp_headers,
 )
-from onyx.server.features.mcp.oauth import (
-    MCPReauthenticationRequired,
-    make_oauth_provider,
-    refresh_mcp_oauth_token_if_expired,
-)
+from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.tools.interface import Tool
@@ -43,6 +37,8 @@ from onyx.tools.models import (
     CodeModeResultKind,
     CodeModeResultSpec,
     CustomToolCallSummary,
+    IntegrationActionRef,
+    ToolApprovalScope,
     ToolContext,
 )
 from onyx.tools.tool_name import normalize_external_tool_name, sanitize_tool_name
@@ -99,38 +95,42 @@ def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any
 
 
 class MCPTool(Tool):
-    """Tool implementation for MCP (Model Context Protocol) servers"""
+    """One tool of an MCP server integration. A call sends the credential
+    that construction resolved, and resolves it again only when its token
+    is near expiry. ``oauth_server`` lets the MCP SDK refresh an OAuth2
+    token during the call."""
 
     def __init__(
         self,
-        tool_id: int,
-        mcp_server: MCPServer,
+        *,
+        integration_id: int,
+        integration_name: str,
+        integration_description: str | None,
+        server_url: str,
+        transport: MCPTransport | None,
         tool_name: str,
         tool_description: str,
         tool_definition: dict[str, Any],
-        connection_config: MCPConnectionConfig | None = None,
+        acting_user_id: UUID | None,
+        credentials: CallCredentials,
+        oauth_server: MCPServerConnection | None = None,
         output_schema: dict[str, JsonValue] | None = None,
-        user_email: str = "",
-        user_id: str = "",
-        user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
-        resolved_credentials: ResolvedMCPCredentials | None = None,
+        approval: ToolApprovalScope | None = None,
     ) -> None:
-
-        self._id = tool_id
-        self.mcp_server = MCPServerConnection.model_validate(mcp_server)
-        self._auth_performer = mcp_server.auth_performer
-        self._user_id = user_id
-        self._additional_headers = additional_headers or {}
-        self._resolved_credentials = (
-            resolved_credentials
-            or ResolvedMCPCredentials.from_connection_config(
-                connection_config=connection_config,
-                user_oauth_token=user_oauth_token,
-                auth_type=self.mcp_server.auth_type,
-                user_email=user_email,
-            )
+        self.approval = approval
+        self.integration_action = IntegrationActionRef(
+            integration_id=integration_id, action=tool_name
         )
+        self._integration_id = integration_id
+        self._integration_name = integration_name
+        self._integration_description = integration_description
+        self._server_url = server_url
+        self._transport = transport
+        self._acting_user_id = acting_user_id
+        self._credentials = credentials
+        self._oauth_server = oauth_server
+        self._additional_headers = additional_headers or {}
 
         self._mcp_tool_name = tool_name
         self._name = normalize_external_tool_name(
@@ -142,8 +142,8 @@ class MCPTool(Tool):
         self._display_name = tool_definition.get("displayName", tool_name)
 
     @property
-    def id(self) -> int:
-        return self._id
+    def id(self) -> int | None:
+        return None
 
     @property
     def code_mode_exposure(self) -> CodeModeExposure:
@@ -165,7 +165,8 @@ class MCPTool(Tool):
     def code_mode_function_name(self) -> CodeModeFunctionName:
         return CodeModeFunctionName(
             name=self._mcp_tool_name,
-            namespace=f"mcp__{self.mcp_server.id}__{sanitize_tool_name(self.mcp_server.name)}",
+            namespace=f"mcp__{self._integration_id}__{sanitize_tool_name(self._integration_name)}",
+            namespace_description=self._integration_description,
         )
 
     @property
@@ -201,8 +202,9 @@ class MCPTool(Tool):
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         """Check credentials, call the server, and report tool or authentication errors."""
         _start = time.monotonic()
-        _server = self.mcp_server.name
+        _server = self._integration_name
         outcome = MCPToolCallStatus.ERROR
+        credentials: CallCredentials | None = None
         try:
             request_headers = {
                 name: value
@@ -217,62 +219,36 @@ class MCPTool(Tool):
                     self._name,
                     denylisted,
                 )
-            credentials = self._resolved_credentials
-            headers = merge_mcp_headers(
-                request_headers,
-                credentials.build_headers(),
+            if credentials_near_expiry(self._credentials):
+                resolved = resolve_fresh_call_credentials(
+                    self._integration_id, self._acting_user_id
+                )
+                if isinstance(resolved, ConnectionProblem):
+                    logger.warning(
+                        "MCP tool '%s' cannot authenticate: %s",
+                        self._name,
+                        resolved.code.value,
+                    )
+                    outcome = MCPToolCallStatus.AUTH_ERROR
+                    return self._error_result(
+                        f"The {self._name} tool from {self._integration_name} "
+                        f"cannot run: {resolved.reason}"
+                    )
+                self._credentials = resolved
+            credentials = self._credentials
+            headers = merge_mcp_headers(request_headers, credentials.headers)
+            auth = (
+                mcp_oauth_provider(self._oauth_server, credentials)
+                if self._oauth_server is not None
+                else None
             )
 
-            if not credentials.can_authenticate_with_headers(request_headers):
-                auth_error_msg = (
-                    f"The {self._name} tool from {self.mcp_server.name} requires "
-                    "connection values. Tell the user to connect to the server "
-                    "from the MCP dropdown before using this tool."
-                )
-                logger.warning(
-                    "Authentication required for MCP tool '%s' but no credentials found",
-                    self._name,
-                )
-
-                outcome = MCPToolCallStatus.AUTH_ERROR
-                return self._error_result(auth_error_msg)
-
-            # For OAuth servers, construct OAuthClientProvider so the MCP SDK
-            # can refresh expired tokens automatically
-            auth: OAuthClientProvider | None = None
-            if (
-                self.mcp_server.auth_type == MCPAuthenticationType.OAUTH
-                and credentials.connection_config_id is not None
-                and self._user_id
-            ):
-                if self.mcp_server.transport == MCPTransport.SSE:
-                    # httpx.Auth refresh can't run over an open SSE stream;
-                    # refresh proactively here instead. Non-fatal on failure.
-                    try:
-                        refreshed_header = refresh_mcp_oauth_token_if_expired(
-                            self.mcp_server,
-                            credentials.connection_config_id,
-                        )
-                        if refreshed_header:
-                            headers["Authorization"] = refreshed_header
-                    except Exception:
-                        logger.exception(
-                            "MCP tool '%s': proactive SSE OAuth token refresh failed; using existing token",
-                            self._name,
-                        )
-                else:
-                    auth = make_oauth_provider(
-                        self.mcp_server,
-                        credentials.connection_config_id,
-                        None,
-                    )
-
             tool_result = call_mcp_tool(
-                self.mcp_server.server_url,
+                self._server_url,
                 self._mcp_tool_name,
                 invocation.arguments,
                 connection_headers=headers,
-                transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
+                transport=self._transport or MCPTransport.STREAMABLE_HTTP,
                 auth=auth,
                 cancellation=invocation.cancellation,
             )
@@ -285,7 +261,6 @@ class MCPTool(Tool):
 
             logger.info("MCP tool '%s' executed successfully", self._name)
 
-            # Format the tool result for response
             tool_result_dict = {
                 "tool_result": _tool_result_value(process_mcp_result(tool_result))
             }
@@ -305,24 +280,10 @@ class MCPTool(Tool):
             outcome = MCPToolCallStatus.CANCELLED
             raise
         except Exception as e:
-            credentials = self._resolved_credentials
             unauthorized_response = has_unauthorized_response(e)
-            if (
-                unauthorized_response
-                and credentials.connection_config_id is not None
-                and uses_user_managed_headers(
-                    self.mcp_server.auth_type,
-                    self._auth_performer,
-                    credentials.auth_template,
-                )
-            ):
+            if unauthorized_response and credentials is not None:
                 try:
-                    with get_session_with_current_tenant() as db_session:
-                        mark_connection_config_reauth_required(
-                            credentials.connection_config_id,
-                            credentials.connection_data,
-                            db_session,
-                        )
+                    mark_api_key_rejected(credentials)
                 except Exception:
                     logger.exception("Could not record rejected MCP credentials")
             error_str = str(e).lower()
@@ -336,12 +297,11 @@ class MCPTool(Tool):
 
             if is_auth_error:
                 outcome = MCPToolCallStatus.AUTH_ERROR
-                auth_error_msg = (
-                    f"Authentication failed for the {self._name} tool from {self.mcp_server.name}. "
-                    f"Please use the MCP dropdown in the chat bar to update your credentials "
-                    f"for the {self.mcp_server.name} server. Original error: {str(e)}"
+                return self._error_result(
+                    f"Authentication failed for the {self._name} tool from "
+                    f"{self._integration_name}. Reconnect {self._integration_name} "
+                    f"from the Plugins page. Original error: {str(e)}"
                 )
-                return self._error_result(auth_error_msg)
             return self._error_result(f"Tool execution failed: {str(e)}")
         finally:
             record_mcp_client_tool_outcome(

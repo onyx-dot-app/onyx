@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import { render, screen, waitFor } from "@tests/setup/test-utils";
+import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
 import Page from "@/app/auth/error/page";
 
 const mockReplace = jest.fn();
@@ -97,6 +97,70 @@ describe("auth error page", () => {
 
     expect(
       await screen.findByText(/already exists under a different sign-in method/)
+    ).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("tells a refused playground sign-up to contact sales", async () => {
+    mockError = "PLAYGROUND_LIMIT_REACHED";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText("Your company has used its playground access.")
+    ).toBeInTheDocument();
+    const sales = screen.getByRole("link", { name: "Contact sales" });
+    expect(sales).toHaveAttribute("href", "https://www.onyx.app/contact-sales");
+    expect(sales).toHaveAttribute("target", "_blank");
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("tells a free-mail sign-up to use a work email", async () => {
+    mockError = "PLAYGROUND_FREE_MAIL";
+
+    render(<Page />);
+
+    expect(await screen.findByText("Use your work email.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Contact sales" })).toHaveAttribute(
+      "href",
+      "https://www.onyx.app/contact-sales"
+    );
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("tells a playground sign-up the check did not run", async () => {
+    mockError = "PLAYGROUND_CHECK_FAILED";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(
+        "We could not check your sign-up. Try again later."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Contact sales" })).toHaveAttribute(
+      "href",
+      "https://www.onyx.app/contact-sales"
+    );
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test("lets a playground sign-up join its team or start a new one", async () => {
+    mockError = "PLAYGROUND_ACTIVE_TENANT";
+
+    render(<Page />);
+
+    expect(
+      await screen.findByText(/Join your team, or start a new team\?/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Start a new team" })
+    ).toHaveAttribute("href", "/auth/signup?start_new_team=true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Join your team" }));
+
+    expect(
+      await screen.findByText("Ask your admin to invite you.")
     ).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
   });

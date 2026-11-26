@@ -43,10 +43,11 @@ web bell and banner queue.
 Producers own the decision to notify. [[cc-pairs-and-creds]] and
 [[indexing-pipeline]] raise and clear connector alerts. [[agents-personas]]
 notifies on sharing. [[file-store-and-user-files]] notifies when files are
-ready. [[craft-scheduled-tasks]] notifies on task failure.
+ready. [[craft-scheduled-tasks]] notifies when a run fails or waits for approval.
 [[craft-external-apps]] notifies on a pending approval (`APPROVAL_REQUESTED`,
-from the egress proxy). [[billing]] owns the license state that the expiry
-warning reads. The admin banner editor sits on the theme page
+from the egress proxy). [[document-index]] notifies full admins of critical
+OpenSearch cluster issues (`OPENSEARCH_CLUSTER_ISSUE`). [[billing]] owns the
+license state that the expiry warning reads. The admin banner editor sits on the theme page
 ([[whitelabelling-and-theme]]).
 
 ---
@@ -142,7 +143,7 @@ banner queue adds it to its list.
    inserts can both succeed. A new producer must choose per-user or global
    before it ships.
 6. `web-enum-mirrored` **The web enum mirrors `NotificationType` by hand.** A
-   new type needs a value in `web/src/lib/notifications/interfaces.ts`, an
+   new type needs a value in `web/src/lib/notifications/types.ts`, an
    icon, and a `bannerTypeConfig` entry in
    `web/src/sections/banners/BannerQueue.tsx` if it needs its own link or
    aggregate text. Severity alone decides whether it shows as a banner.

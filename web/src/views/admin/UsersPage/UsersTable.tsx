@@ -26,7 +26,7 @@ import type {
   StatusCountMap,
 } from "./types";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
-import type { User } from "@/lib/types";
+import { buildUserProfileImageUrl } from "@/lib/users/svc";
 
 // ---------------------------------------------------------------------------
 // Column renderers
@@ -93,15 +93,14 @@ function buildColumns(
       kind: "qualifier",
       content: "icon",
       avatar: true,
-      icon: (row) => {
-        const user = {
-          email: row.email,
-          personalization: row.personal_name
-            ? { name: row.personal_name }
-            : undefined,
-        } as User;
-        return (props) => <UserAvatar user={user} size={props.size} />;
-      },
+      icon: (row) => (props) => (
+        <UserAvatar
+          name={row.personal_name}
+          email={row.email}
+          imageUrl={buildUserProfileImageUrl(row)}
+          size={props.size}
+        />
+      ),
     },
     {
       kind: "data",

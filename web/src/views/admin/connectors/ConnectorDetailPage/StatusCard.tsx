@@ -75,7 +75,7 @@ import {
   type DocumentTypeSlice,
   type TypeColorsByPair,
 } from "@/views/admin/connectors/ConnectorDetailPage/documentTypes";
-import { formatBytes } from "@/lib/utils";
+import { byteSizeFormat, useFormatBytes } from "@/hooks/useFormatBytes";
 
 // Statuses a pair keeps until its first index succeeds, a failed first run included.
 const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
@@ -202,28 +202,6 @@ function HintButton({ icon, label, onClick }: HintButtonProps) {
   );
 }
 
-interface SizeParts {
-  value: string;
-  unit: string;
-}
-
-/** A size as its number in the admin's locale and its unit: `formatBytes` picks the unit, the card sets the two in separate fonts. */
-function useSizeParts(): (bytes: number) => SizeParts {
-  const t = useTranslations("admin.connector.statusCard.types");
-  const format = useFormatter();
-  return (bytes) => {
-    const formatted = formatBytes(bytes, 1);
-    const space = formatted.lastIndexOf(" ");
-    const unit = formatted.slice(space + 1);
-    return {
-      value: format.number(parseFloat(formatted.slice(0, space)), {
-        maximumFractionDigits: 1,
-      }),
-      unit: unit === "Bytes" ? t("bytes") : unit,
-    };
-  };
-}
-
 interface SummaryLineProps {
   value: string | RichStr;
   unit: string | RichStr;
@@ -258,8 +236,20 @@ interface TypesSummaryProps {
 function TypesSummary({ typeCount, sizeBytes }: TypesSummaryProps) {
   const t = useTranslations("admin.connector.statusCard.types");
   const format = useFormatter();
-  const sizeParts = useSizeParts();
-  const size = sizeBytes === null ? null : sizeParts(sizeBytes);
+  const locale = useLocale();
+  // The card sets the size's number and unit in separate fonts.
+  let size: { value: string; unit: string } | null = null;
+  if (sizeBytes !== null) {
+    const { value, options } = byteSizeFormat(sizeBytes);
+    const parts = new Intl.NumberFormat(locale, options).formatToParts(value);
+    const join = (unit: boolean) =>
+      parts
+        .filter((part) => (part.type === "unit") === unit)
+        .map((part) => part.value)
+        .join("")
+        .trim();
+    size = { value: join(false), unit: join(true) };
+  }
   return (
     <Section alignItems="end" gap={0} width="fit" height="fit">
       <SummaryLine
@@ -377,11 +367,9 @@ interface TypesTableProps {
 function TypesTable({ slices, hover, onFold }: TypesTableProps) {
   const t = useTranslations("admin.connector.statusCard");
   const format = useFormatter();
-  const sizeParts = useSizeParts();
+  const formatBytes = useFormatBytes();
   function size(slice: DocumentTypeSlice): string {
-    if (slice.sizeBytes === null) return "";
-    const { value, unit } = sizeParts(slice.sizeBytes);
-    return t("types.sizeValue", { value, unit });
+    return slice.sizeBytes === null ? "" : formatBytes(slice.sizeBytes);
   }
   function column(
     header: string,

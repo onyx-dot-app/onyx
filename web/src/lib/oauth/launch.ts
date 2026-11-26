@@ -1,5 +1,4 @@
 import * as yup from "yup";
-import { loadPage } from "@opal/navigation";
 import { DESKTOP_STATE_SUFFIX } from "@/lib/oauth/desktopCallback";
 
 export type OAuthLaunchFailure =
@@ -34,6 +33,9 @@ export interface OAuthLaunchOptions {
 export { DESKTOP_STATE_SUFFIX };
 export const DESKTOP_OAUTH_RETURN_URL = "onyx://oauth-callback";
 const LAUNCH_TIMEOUT_MS = 10 * 60 * 1000;
+// Lets a completion posted just before the tab closed arrive first.
+const CLOSED_TAB_GRACE_MS = 1000;
+const CLOSED_TAB_POLL_MS = 1000;
 // A claimed callback that never reports must not leave a spinner running.
 const CLAIMED_CALLBACK_TIMEOUT_MS = 60 * 1000;
 // Marks a tab that `launchOAuth` opened, so only its callback closes itself.
@@ -252,12 +254,18 @@ export function launchOAuth(
     let callbackFrame: HTMLIFrameElement | null = null;
     let claimTimeout: number | undefined;
     let releaseDesktopCallback: (() => void) | null = null;
+    let closedTabTimeout: number | undefined;
+    let closedTabPoll: number | undefined;
     function finish(error?: Error, completion: OAuthCompletion = {}) {
       if (settled) return;
       settled = true;
       releaseDesktopCallback?.();
       callbackFrame?.remove();
       window.clearTimeout(claimTimeout);
+      window.clearTimeout(closedTabTimeout);
+      window.clearInterval(closedTabPoll);
+      window.removeEventListener("focus", checkClosedTab);
+      document.removeEventListener("visibilitychange", checkClosedTab);
       window.removeEventListener("message", receiveCompletion);
       signal?.removeEventListener("abort", cancel);
       channel?.removeEventListener("message", receiveBroadcastCompletion);
@@ -269,6 +277,23 @@ export function launchOAuth(
     }
     function cancel() {
       finish(new OAuthLaunchError("cancelled"));
+    }
+    // COOP can report a live provider tab as closed, so check only when the
+    // user is back on this page. A sign-in finished later still saves on the
+    // server, and the page reads it again on focus.
+    function checkClosedTab() {
+      if (
+        closedTabTimeout !== undefined ||
+        document.visibilityState !== "visible" ||
+        !document.hasFocus() ||
+        !popup?.closed
+      )
+        return;
+      closedTabTimeout = window.setTimeout(() => {
+        closedTabTimeout = undefined;
+        if (document.visibilityState === "visible" && document.hasFocus())
+          cancel();
+      }, CLOSED_TAB_GRACE_MS);
     }
     function receiveBroadcastCompletion(event: MessageEvent<unknown>) {
       try {
@@ -319,6 +344,12 @@ export function launchOAuth(
           // opener for postMessage.
           if (channel && tauriInternals() === null) popup.opener = null;
           popup.location.href = url.href;
+          window.addEventListener("focus", checkClosedTab);
+          document.addEventListener("visibilitychange", checkClosedTab);
+          closedTabPoll = window.setInterval(
+            checkClosedTab,
+            CLOSED_TAB_POLL_MS
+          );
           onOpened?.();
           return;
         }
@@ -375,30 +406,6 @@ export function reportOAuthCallback(
   const attemptState = stripDesktopOAuthState(state);
   notifyOAuthComplete(attemptState, ok, redirectPath, error);
   return closeOAuthCallbackWindow(attemptState, ok);
-}
-
-/**
- * Opens an authorization URL that is already known. Falls back to the
- * current-tab redirect when the browser blocks the new tab.
- */
-export function openOAuthAuthorization(
-  authorizationUrl: string,
-  options: OAuthLaunchOptions = {}
-): Promise<OAuthCompletion> {
-  return launchOAuth(async () => authorizationUrl, options).catch(
-    (error: unknown) => {
-      if (
-        error instanceof OAuthLaunchError &&
-        error.reason === "popup_blocked"
-      ) {
-        const url = parseAuthorizationUrl(authorizationUrl);
-        if (!url) throw new OAuthLaunchError("request_failed");
-        loadPage(url.href);
-        return new Promise<OAuthCompletion>(() => {});
-      }
-      throw error;
-    }
-  );
 }
 
 /** True for outcomes the user chose, which need no error message. */

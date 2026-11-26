@@ -421,6 +421,37 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class InterfaceFont(str, PyEnum):
+    """Font for interface text. Values match web/src/lib/appearance/preferences.ts."""
+
+    DEFAULT = "default"
+    SYSTEM = "system"
+    OPENDYSLEXIC = "opendyslexic"
+    ATKINSON = "atkinson"
+
+
+class ResponseFont(str, PyEnum):
+    """Font for chat response text: the interface font, or the default font."""
+
+    MATCH = "match"
+    DEFAULT = "default"
+
+
+class MotionPreference(str, PyEnum):
+    """Follow the OS reduced-motion setting, or always reduce motion. Values
+    match web/src/lib/appearance/preferences.ts."""
+
+    SYSTEM = "system"
+    REDUCED = "reduced"
+
+
+class PopupDismissal(str, PyEnum):
+    """Whether toasts close by themselves or stay until the user closes them."""
+
+    AUTO_DISMISS = "auto_dismiss"
+    STAY_ON_SCREEN = "stay_on_screen"
+
+
 class SupportedLanguage(str, PyEnum):
     EN = "en"
     ES = "es"
@@ -511,6 +542,22 @@ class ApprovalDecidedVia(str, PyEnum):
     USER = "USER"
     PRE_APPROVAL = "PRE_APPROVAL"
     SESSION_GRANT = "SESSION_GRANT"
+    # The action policy blocked the action when the user approved it.
+    POLICY = "POLICY"
+
+
+class QuestionOutcome(str, PyEnum):
+    """How a question that the agent asked the user ended; `outcome IS NULL`
+    means it waits."""
+
+    ANSWERED = "ANSWERED"
+    CANCELLED = "CANCELLED"
+
+
+class QuestionAnsweredVia(str, PyEnum):
+    # The question's card, or a message that the user typed in the chat.
+    CARD = "CARD"
+    MESSAGE = "MESSAGE"
 
 
 class ScheduledTaskStatus(str, PyEnum):
@@ -525,14 +572,20 @@ class ScheduledTaskRunStatus(str, PyEnum):
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"
     AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    CANCELLED = "CANCELLED"
 
     def is_terminal(self) -> bool:
-        """Terminal statuses produce no further state transitions in V1."""
+        """Terminal statuses produce no further state transitions."""
         return self in (
             ScheduledTaskRunStatus.SUCCEEDED,
             ScheduledTaskRunStatus.FAILED,
             ScheduledTaskRunStatus.SKIPPED,
+            ScheduledTaskRunStatus.CANCELLED,
         )
+
+    def has_results(self) -> bool:
+        """The owner has something new to open in the run's chat."""
+        return self.is_terminal() or self is ScheduledTaskRunStatus.AWAITING_APPROVAL
 
 
 class ScheduledTaskTriggerSource(str, PyEnum):
@@ -546,25 +599,24 @@ class ScheduledTaskErrorClass(str, PyEnum):
     Every code path that writes ``error_class`` must use a member of
     this enum — the column is intentionally a closed set so dashboards
     and triage queries can pivot on a known vocabulary. For unexpected
-    runtime failures inside the agent drive, use ``AGENT_EXCEPTION``
-    and put the actual exception class name + message in
-    ``error_detail``.
+    runtime failures of the chat turn, use ``AGENT_EXCEPTION`` and put
+    the message in ``error_detail``. Older rows can hold Craft-era values.
     """
 
-    TASK_MISSING = "task_missing"
-    SANDBOX_WAKE_FAILED = "sandbox_wake_failed"
-    EXECUTOR_ERROR = "executor_error"
-    TIMEOUT = "timeout"
     STUCK = "stuck"
+    # The turn reached the chat deadline (CHAT_EXECUTION_TIMEOUT_S).
+    TIMEOUT = "timeout"
     AGENT_EXCEPTION = "agent_exception"
-    AGENT_PERMISSION_REQUIRED = "agent_permission_required"
+    # CANCELLED runs: an approval that nobody answered, or a user Stop.
+    SUPERSEDED_BY_NEXT_FIRE = "superseded_by_next_fire"
+    APPROVAL_TIMEOUT = "approval_timeout"
+    USER_CANCELLED = "user_cancelled"
 
 
 class ScheduledTaskSkipReason(str, PyEnum):
     """Well-known values for ``ScheduledTaskRun.skip_reason``."""
 
     PRIOR_IN_FLIGHT = "prior_in_flight"
-    OWNER_CRAFT_DISABLED = "owner_craft_disabled"
 
 
 class SandboxStatus(str, PyEnum):
@@ -853,8 +905,7 @@ class PersonaSharePermission(str, PyEnum):
 
 
 class SkillSharePermission(str, PyEnum):
-    """Level granted by a skill share row (user or group), or to the whole org
-    via `Skill.public_permission`."""
+    """Level granted by a plugin share row (user or group)."""
 
     EDITOR = "EDITOR"
     VIEWER = "VIEWER"
@@ -1013,12 +1064,6 @@ class CapabilityReportRunStatus(str, PyEnum):
     FAILED_TO_RUN = "failed_to_run"
 
 
-class SkillInstallationPolicy(str, PyEnum):
-    AVAILABLE = "AVAILABLE"
-    DEFAULT = "DEFAULT"
-    REQUIRED = "REQUIRED"
-
-
 class MarketplaceKind(str, PyEnum):
     """Where a plugin comes from. A marketplace grants no access."""
 
@@ -1026,6 +1071,7 @@ class MarketplaceKind(str, PyEnum):
     USER_UPLOADS = "user_uploads"
     # One for each tenant. A plugin here is published to the organization.
     ORGANIZATION_LIBRARY = "organization_library"
+    GITHUB = "github"
 
 
 class PluginPublishingPolicy(str, PyEnum):
@@ -1039,12 +1085,90 @@ class PluginPublishingPolicy(str, PyEnum):
 
 class PluginInstallationPolicy(str, PyEnum):
     """Install setting of a plugin, a group override or a marketplace default.
-    Writes refuse NOT_AVAILABLE until group install settings ship."""
+    A marketplace default cannot be REQUIRED."""
 
     REQUIRED = "REQUIRED"
     DEFAULT = "DEFAULT"
     AVAILABLE = "AVAILABLE"
     NOT_AVAILABLE = "NOT_AVAILABLE"
+
+
+class IntegrationKind(str, PyEnum):
+    MCP = "mcp"
+    # An HTTP API: an OpenAPI custom tool or an external app.
+    API = "api"
+
+
+class ApiAppType(str, PyEnum):
+    REST = "rest"
+    GRAPHQL = "graphql"
+
+
+class IntegrationAuthMode(str, PyEnum):
+    NONE = "none"
+    # One connection for the organization.
+    SHARED = "shared"
+    # One connection for each user.
+    INDIVIDUAL = "individual"
+
+
+class IntegrationAuthMethod(str, PyEnum):
+    OAUTH2 = "oauth2"
+    API_KEY = "api_key"
+    # Onyx sends the user's own Onyx login token.
+    ONYX_LOGIN = "onyx_login"
+    MANAGED = "managed"
+
+
+class IntegrationActionSource(str, PyEnum):
+    """Where an integration_action row comes from. A sync from that source
+    rewrites it."""
+
+    # The tool list of an MCP server.
+    MCP = "mcp"
+    # An operation of an OpenAPI spec.
+    OPENAPI = "openapi"
+    # A query or mutation root field of a GraphQL schema.
+    GRAPHQL = "graphql"
+    # The action catalog of a built-in external app, in code.
+    EXTERNAL_APP = "external_app"
+
+
+class IntegrationOAuthProviderMode(str, PyEnum):
+    # Provider code owns the endpoints (a built-in external app).
+    PRESET = "preset"
+    # The admin entered the endpoints.
+    MANUAL = "manual"
+    # MCP auto-discovery, with dynamic client registration or CIMD.
+    DISCOVERY = "discovery"
+
+
+class IntegrationConnectionStatus(str, PyEnum):
+    CONNECTED = "connected"
+    NEEDS_RECONNECT = "needs_reconnect"
+
+
+class IntegrationLegacyFormat(str, PyEnum):
+    """The old secret format that the integration tables migration copied
+    as it was (``legacy_format``)."""
+
+    # mcp_connection_config.config
+    MCP_CONFIG = "mcp_config"
+    # external_app.organization_credentials
+    EXTERNAL_APP_ORG = "external_app_org"
+    # external_app_user_credential.user_credentials
+    EXTERNAL_APP_USER = "external_app_user"
+    # oauth_user_token.token_data
+    OAUTH_USER_TOKEN = "oauth_user_token"
+    # tool.custom_headers, plain JSON
+    TOOL_HEADERS = "tool_headers"
+
+
+class IntegrationActionPolicyValue(str, PyEnum):
+    ALLOW = "allow"
+    AUTO = "auto"
+    ASK = "ask"
+    BLOCKED = "blocked"
 
 
 class ConnectorEventType(str, PyEnum):

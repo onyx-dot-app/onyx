@@ -3,6 +3,13 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from tenacity import (
+    RetryError,
+    Retrying,
+    retry_if_result,
+    stop_before_delay,
+    wait_fixed,
+)
 
 from onyx.configs.chat_configs import CODE_MODE_ENABLED
 from onyx.llm.constants import LlmProviderNames
@@ -41,24 +48,34 @@ def requires_code_mode(enabled: bool) -> pytest.MarkDecorator:
 
 
 def tool_call_reply(
-    *calls: ToolCall, tool_choice: str | None = None, required: bool = True
+    *calls: ToolCall,
+    tool_choice: str | None = None,
+    required: bool = True,
+    conditions: RequestConditions | None = None,
 ) -> Reply:
     """A reply that calls tools the way the server offers them: native tool
     calls, or with code mode on, one `execute_code` program that awaits each
-    call in order. A program names a tool with its other characters as `_`; it
-    can call a deferred (MCP or custom) function without `tool_search`. The
+    call in order. A program calls a tool as `tools.<name>`, with the other
+    characters of its name as `_`; it can call a deferred (MCP or custom)
+    function without `tool_search`. The
     program call takes the first call's id, so a later reply can wait for
-    `has_results_for=[calls[0].id]` in both modes."""
+    `has_results_for=[calls[0].id]` in both modes. `conditions` holds more
+    checks; its offered tools add to the called ones, and `tool_choice`, when
+    set, replaces its tool choice."""
+    base = conditions or RequestConditions()
     if not CODE_MODE_ENABLED:
         return Reply(
             tool_calls=list(calls),
-            conditions=RequestConditions(
-                offers=[call.name for call in calls], tool_choice=tool_choice
+            conditions=base.model_copy(
+                update={
+                    "offers": [*base.offers, *(call.name for call in calls)],
+                    "tool_choice": tool_choice or base.tool_choice,
+                }
             ),
             required=required,
         )
     program = "\n".join(
-        f"await {re.sub(r'[^0-9A-Za-z_]', '_', call.name)}("
+        f"await tools.{re.sub(r'[^0-9A-Za-z_]', '_', call.name)}("
         + ", ".join(f"{name}={value!r}" for name, value in call.arguments.items())
         + ")"
         for call in calls
@@ -67,7 +84,12 @@ def tool_call_reply(
         tool_calls=[
             ToolCall(id=calls[0].id, name="execute_code", arguments={"code": program})
         ],
-        conditions=RequestConditions(offers=["execute_code"], tool_choice=tool_choice),
+        conditions=base.model_copy(
+            update={
+                "offers": [*base.offers, "execute_code"],
+                "tool_choice": tool_choice or base.tool_choice,
+            }
+        ),
         required=required,
     )
 
@@ -113,6 +135,19 @@ class MockLLMScript:
 
     def requests_in(self, name: str) -> list[RecordedRequest]:
         return [r for r in self.requests if r.conversation == name]
+
+    def wait_for_requests(
+        self, name: str, count: int, *, timeout: float, failure_message: str
+    ) -> None:
+        poll = Retrying(
+            retry=retry_if_result(lambda requests: len(requests) < count),
+            stop=stop_before_delay(timeout),
+            wait=wait_fixed(0.2),
+        )
+        try:
+            poll(self.requests_in, name)
+        except RetryError as exc:
+            raise AssertionError(failure_message) from exc
 
     def verify(self) -> None:
         """Fail on unmatched requests or unused required replies."""

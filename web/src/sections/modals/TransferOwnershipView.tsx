@@ -47,7 +47,7 @@ export function TransferOwnershipView({
     // Only sync the field when a real selection arrives. A null target comes
     // from the user typing to change the selection, where their input must stand.
     if (selectedTarget) {
-      setInputValue(selectedTarget.label);
+      setInputValue(selectedTarget.value);
     }
   }, [selectedTarget]);
 

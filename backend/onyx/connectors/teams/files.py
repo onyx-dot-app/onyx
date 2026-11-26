@@ -29,6 +29,14 @@ from onyx.connectors.microsoft_utils.drive_items import (
     iter_drive_items_paged,
 )
 from onyx.connectors.microsoft_utils.graph_auth import acquire_token_for_rest
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MicrosoftCall,
+    prepare_sdk_client,
+)
+from onyx.connectors.microsoft_utils.sharepoint_access import (
+    SharepointPermissionCache,
+    get_sharepoint_external_access,
+)
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.models import (
     BasicExpertInfo,
@@ -38,10 +46,6 @@ from onyx.connectors.models import (
     DocumentFailure,
     SlimDocument,
     TextSection,
-)
-from onyx.connectors.sharepoint.connector_utils import (
-    SharepointPermissionCache,
-    get_sharepoint_external_access,
 )
 from onyx.connectors.teams import listing
 from onyx.connectors.teams.models import ChannelLibrary, ChannelRef
@@ -58,7 +62,6 @@ from onyx.connectors.teams.utils import (
     ChannelFilesUnavailable,
     GraphRetriesExhausted,
     resolve_channel_library,
-    source_group_ids,
 )
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_store.staging import RawFileCallback
@@ -249,8 +252,12 @@ class FileSource:
         msal_app = self._msal_app()
         tenant_domain = _tenant_domain(site_url)
         suffix = self._session.sharepoint_domain_suffix
-        context = ClientContext(site_url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+        context = prepare_sdk_client(
+            ClientContext(site_url).with_access_token(
+                lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+            ),
+            lambda: self._session.request_pacer,
+            MicrosoftCall.REST,
         )
         by_site[site_url] = (context, time.monotonic())
         return context
@@ -266,24 +273,17 @@ class FileSource:
         )
 
     def _file_access(
-        self, library: ChannelLibrary, item: DriveItemData, for_indexing: bool
+        self, library: ChannelLibrary, item: DriveItemData
     ) -> ExternalAccess:
         """The file's own readers from SharePoint, expanded through site and
         Entra groups. Empty without the enterprise permission code, as for
         SharePoint documents, so the pair's access type decides on those builds."""
-        access = get_sharepoint_external_access(
+        return get_sharepoint_external_access(
             reader=self.permission_reader(),
             site_url=library.site_url,
             permission_cache=self._permission_cache,
             drive_item=item,
             list_id=library.list_id,
-        )
-        return ExternalAccess(
-            external_user_emails=access.external_user_emails,
-            external_user_group_ids=source_group_ids(
-                access.external_user_group_ids, for_indexing
-            ),
-            is_public=access.is_public,
         )
 
     def _channel_files(
@@ -325,8 +325,9 @@ class FileSource:
                 item,
                 size_threshold=TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
                 graph_api_base=self._session.graph_root,
-                access_token=self._session.access_token(),
+                get_access_token=self._session.access_token,
                 raw_file_callback=self._raw_file_callback(),
+                pacer=self._session.request_pacer,
             )
         except DriveItemContentError as e:
             return ConnectorFailure(
@@ -361,7 +362,7 @@ class FileSource:
             doc_updated_at=item.last_modified_datetime,
             primary_owners=owners,
             metadata={"channel": channel.display_name},
-            external_access=self._file_access(library, item, for_indexing=True),
+            external_access=self._file_access(library, item),
             file_id=content.staged_file_id if content is not None else None,
         )
 
@@ -377,9 +378,7 @@ class FileSource:
                 yield SlimDocument(
                     id=file_document_id(item.id),
                     external_access=(
-                        self._file_access(library, item, for_indexing=False)
-                        if walk.with_readers
-                        else None
+                        self._file_access(library, item) if walk.with_readers else None
                     ),
                     doc_created_at=item.created_datetime,
                 )

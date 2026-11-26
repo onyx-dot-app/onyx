@@ -2,12 +2,11 @@
 
 import ipaddress
 from enum import Enum
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from onyx.external_apps.matching.engine import AllMatchedActions, GatedTarget
-from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 
 IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
@@ -23,15 +22,23 @@ class DestinationPolicyConfig(BaseModel):
 class InjectionContext(BaseModel):
     """Per-request inputs every resolver receives.
 
-    `matched_actions` is the actions matched for this request (carrying
-    `external_app_id`), or `None` on off-catalog forwards. `sandbox.tenant_id` is
-    what resolvers key their per-tenant lookups by.
+    `matched_actions` is the actions matched for this request, `protocol_target`
+    the integration of an MCP protocol request, and both are `None` on
+    unmatched forwards. `sandbox.tenant_id` is what resolvers key their
+    per-tenant lookups by.
     """
 
     model_config = ConfigDict(frozen=True)
 
     sandbox: ResolvedSandbox
     matched_actions: AllMatchedActions | None
+    protocol_target: GatedTarget | None = None
+
+    @property
+    def target(self) -> GatedTarget | None:
+        if self.matched_actions is not None:
+            return self.matched_actions.target
+        return self.protocol_target
 
 
 class InjectionOutcome(Enum):
@@ -70,9 +77,3 @@ class McpProtocolRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
     target: GatedTarget
-
-
-class RequestContext(SessionContext):
-    """Pin the execution that authorized a request across an approval wait."""
-
-    scheduled_context: tuple[UUID, UUID] | None = None

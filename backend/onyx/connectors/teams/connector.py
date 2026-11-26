@@ -7,6 +7,7 @@ from typing import Any, cast
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
+from typing_extensions import override
 
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -22,11 +23,13 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.models import (
     ConnectorCheckpoint,
@@ -164,6 +167,8 @@ class TeamsConnector(
         # Off by default: a meeting's chat needs Chat.Read.All. Walked through
         # the same organizers as the transcripts.
         include_meeting_chats: bool = False,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         TeamsSession.__init__(self, graph_api_host, authority_host)
         if max_workers <= 0:
@@ -216,6 +221,11 @@ class TeamsConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.open(credentials)
         return None
+
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        super().set_source_api_limiter(limiter)
+        self.request_pacer = MicrosoftRequestPacer(limiter)
 
     def reindex(
         self,
@@ -751,7 +761,7 @@ def _rejects_saved_cursor(
 
 
 if __name__ == "__main__":
-    from tests.daily.connectors.utils import load_all_from_connector
+    from onyx.connectors.load_all import load_all_from_connector
 
     app_id = os.environ["TEAMS_APPLICATION_ID"]
     dir_id = os.environ["TEAMS_DIRECTORY_ID"]

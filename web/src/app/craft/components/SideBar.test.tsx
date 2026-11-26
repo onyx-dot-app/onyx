@@ -1,7 +1,7 @@
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import BuildSidebar from "@/app/craft/components/SideBar";
-import { memberPluginMessages } from "@/sections/plugins/__tests__/memberPluginFixtures";
+import englishMessages from "@/i18n/messages/en.json";
 
 const mockReplace = jest.fn();
 const mockAction = jest.fn();
@@ -10,7 +10,7 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
   useRouter: () => ({ replace: mockReplace }),
-  usePathname: () => "/craft/v1/plugins",
+  usePathname: () => "/craft/v1",
   useSearchParams: () => new URLSearchParams(),
 }));
 jest.mock("@/app/craft/contexts/BuildContext", () => ({
@@ -51,27 +51,15 @@ jest.mock("@/app/craft/components/OpencodeDebugLogs", () => ({
   default: () => null,
 }));
 
-test("Craft navigation opens Plugins at the unified route", async () => {
+test("Craft navigation opens Customize outside Craft", async () => {
   render(
-    <NextIntlClientProvider
-      locale="en"
-      messages={{
-        ...memberPluginMessages,
-        craft: {
-          ...memberPluginMessages.craft,
-          sideBar: {
-            ...memberPluginMessages.craft.sideBar,
-            plugins: { label: "Plugins" },
-          },
-        },
-      }}
-    >
+    <NextIntlClientProvider locale="en" messages={englishMessages}>
       <BuildSidebar />
     </NextIntlClientProvider>
   );
-  await setupUser().click(screen.getByRole("button", { name: /^Plugins$/ }));
-  expect(mockReplace).toHaveBeenCalledWith("/craft/v1/plugins");
+  await setupUser().click(screen.getByRole("button", { name: /^Customize$/ }));
+  expect(mockReplace).toHaveBeenCalledWith("/app/customize/skills");
   expect(
-    screen.queryByRole("button", { name: /^Apps$/ })
+    screen.queryByRole("button", { name: /^(Skills|Plugins|Apps)$/ })
   ).not.toBeInTheDocument();
 });

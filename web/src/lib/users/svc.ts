@@ -3,6 +3,7 @@ import { User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { CustomRefreshTokenResponse } from "@/lib/users/types";
 import { clearOutputThumbnailCache } from "@/app/craft/services/outputThumbnailCache";
+import { CHAT_PANEL_STORAGE_PREFIX } from "@/lib/chat/rightPanel";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -38,7 +39,8 @@ export async function logout(): Promise<Response> {
         const key = storage.key(index);
         if (
           key?.startsWith("onyx:craft:") ||
-          key?.startsWith("onyx:draft:craft:")
+          key?.startsWith("onyx:draft:craft:") ||
+          key?.startsWith(CHAT_PANEL_STORAGE_PREFIX)
         ) {
           storage.removeItem(key);
         }
@@ -130,8 +132,30 @@ export async function refreshToken(
   }
 }
 
+/** The name Onyx calls the user: the preferred name, else the full name. */
+export function getUserAddressedName(user: User | null): string | null {
+  return (
+    user?.personalization?.preferred_name || user?.personalization?.name || null
+  );
+}
+
+/**
+ * URL of a user's profile photo, or null when they have none. The file id
+ * makes a replaced photo a new URL, so the browser can cache each one forever.
+ */
+export function buildUserProfileImageUrl(
+  user:
+    | { id: string | null; profile_image_file_id?: string | null }
+    | null
+    | undefined
+): string | null {
+  if (!user?.id || !user.profile_image_file_id) return null;
+  return `/api/user/${encodeURIComponent(user.id)}/profile-image?v=${encodeURIComponent(user.profile_image_file_id)}`;
+}
+
 export function getUserDisplayName(user: User | null): string {
-  if (user?.personalization?.name) return user.personalization.name;
+  const addressedName = getUserAddressedName(user);
+  if (addressedName) return addressedName;
 
   if (user?.email) {
     const atIndex = user.email.indexOf("@");
@@ -197,16 +221,6 @@ export function getUserInitials(
     if (/^[A-Z]$/.test(result)) return result;
   }
   return null;
-}
-
-export async function setUserDefaultModel(
-  model: string | null
-): Promise<Response> {
-  return fetch(`/api/user/default-model`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ default_model: model }),
-  });
 }
 
 export async function updateUserPersonalization(

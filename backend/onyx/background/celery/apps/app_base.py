@@ -44,6 +44,7 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import (
     ColoredFormatter,
@@ -73,10 +74,12 @@ task_logger = get_task_logger(__name__)
 
 if SENTRY_DSN:
     from onyx.configs.sentry import init_sentry
+    from onyx.utils.telemetry import get_or_generate_uuid
 
     init_sentry(
         traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
         integrations=[CeleryIntegration()],
+        instance_id_resolver=get_or_generate_uuid,
     )
 else:
     logger.debug("Sentry DSN not provided, skipping Sentry initialization")
@@ -298,8 +301,20 @@ def on_celeryd_init(
         "Multiprocessing selected start method: %s", multiprocessing.get_start_method()
     )
 
+    validate_encryption_configuration_or_exit()
+
     # Initialize tracing in workers if credentials are available.
     setup_tracing()
+
+
+def validate_encryption_configuration_or_exit() -> None:
+    """Celery catches an exception raised in a signal handler and starts anyway,
+    so unusable encryption settings must stop the process here."""
+    try:
+        validate_encryption_configuration()
+    except RuntimeError as e:
+        logger.critical("Encryption settings are unusable, stopping: %s", e)
+        raise SystemExit(1) from e
 
 
 def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
@@ -357,6 +372,7 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
     while True:
         try:
             with Session(get_sqlalchemy_engine()) as db_session:
+                # db-ops-outside-db: allow database readiness probe
                 result = db_session.execute(text("SELECT NOW()")).scalar()
                 if result:
                     ready = True
@@ -709,9 +725,12 @@ def get_bootsteps() -> list[type]:
 # Task modules that require a vector DB (OpenSearch).
 # When DISABLE_VECTOR_DB is True these are excluded from autodiscover lists.
 _VECTOR_DB_TASK_MODULES: set[str] = {
+    # Its runs read chunks from and search the document index.
+    "onyx.background.celery.tasks.suggested_questions",
     "onyx.background.celery.tasks.connector_deletion",
     "onyx.background.celery.tasks.docprocessing",
     "onyx.background.celery.tasks.docfetching",
+    "onyx.background.celery.tasks.docconversion",
     "onyx.background.celery.tasks.pruning",
     "onyx.background.celery.tasks.vespa",
     "onyx.background.celery.tasks.cc_pair_ids_backfill",

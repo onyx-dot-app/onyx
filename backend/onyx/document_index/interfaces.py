@@ -63,6 +63,13 @@ class TenantState(BaseModel):
         return self
 
 
+class KeywordTermCounts(BaseModel):
+    """Terms the index analyzer produces for a query's keyword text."""
+
+    total: int
+    distinct: int
+
+
 class DocumentInsertionRecord(BaseModel):
     """
     Result of indexing a document.
@@ -361,6 +368,32 @@ class IdRetrievalCapable(abc.ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def leading_chunks_retrieval(
+        self,
+        filters: IndexFilters,
+        max_chunk_index: int,
+    ) -> list[InferenceChunk]:
+        """Fetches chunks 0 to max_chunk_index, inclusive, of every document
+        in filters.attached_document_ids, in one call.
+
+        Args:
+            filters: Filters for the retrieval. attached_document_ids must be
+                set, and it alone chooses the documents: the other knowledge
+                filters (hierarchy nodes, document sets, persona, project)
+                must be empty.
+            max_chunk_index: The last chunk index to retrieve per document.
+
+        Raises:
+            ValueError: attached_document_ids is empty, another knowledge
+                filter is set, or the request could return more chunks than
+                one query allows.
+
+        Returns:
+            The chunks found, in no particular order.
+        """
+        raise NotImplementedError
+
 
 class HybridCapable(abc.ABC):
     """
@@ -421,6 +454,18 @@ class HybridCapable(abc.ABC):
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def count_keyword_terms(self, query: str) -> KeywordTermCounts:
+        """Analyzes the keyword text hybrid retrieval would send for this query.
+
+        Args:
+            query: User query.
+
+        Returns:
+            The total and distinct terms the index analyzer produces.
         """
         raise NotImplementedError
 

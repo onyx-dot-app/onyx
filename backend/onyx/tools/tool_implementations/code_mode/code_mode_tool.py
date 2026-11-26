@@ -1,32 +1,50 @@
 """The execute_code and wait_code tools: model-written Python programs that call
 other tools, run as cells of the response (code_mode/cells.py)."""
 
+from collections.abc import Callable
+from functools import partial
+
 from pydantic import BaseModel, Field
 
-from onyx.agents.tools import ToolExecutionMode, ToolInvocation
+from onyx.agents.tools import (
+    NestedInputAnswer,
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolOutcome,
+)
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.constants import CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME
+from onyx.tools.constants import (
+    CODE_MODE_TOOL_NAME,
+    DEFAULT_MAX_OUTPUT_CHARS,
+    MAX_OUTPUT_CHARS_DESCRIPTION,
+    WAIT_CODE_TOOL_NAME,
+)
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
     tool_definition_from_arguments,
 )
-from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    ToolCallException,
+    ToolContext,
+    ToolPreference,
+)
 from onyx.tools.tool_implementations.code_mode.cells import (
-    DEFAULT_MAX_OUTPUT_TOKENS,
     CodeCells,
     Program,
     SequentialCalls,
 )
-from onyx.tools.tool_implementations.code_mode.models import (
-    SandboxLimits,
-)
+from onyx.tools.tool_implementations.code_mode.models import SandboxLimits
 from onyx.tools.tool_implementations.code_mode.prompt import (
+    INNER_CALL_MESSAGE,
     WAIT_CODE_DESCRIPTION,
     code_mode_description,
     program_function_operation,
 )
+from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
+from onyx.tools.tool_implementations.utils import output_chars
 
 # How long a call waits for the cell before it returns the output so far.
 DEFAULT_EXECUTE_YIELD_MS = 30_000
@@ -34,8 +52,6 @@ MAX_EXECUTE_YIELD_MS = 120_000
 DEFAULT_WAIT_YIELD_MS = 15_000
 MAX_WAIT_YIELD_MS = 300_000
 MIN_YIELD_MS = 1_000
-# Tokens of output that one observation can return to the model.
-MAX_OUTPUT_TOKENS = 40_000
 
 RESTORED_RUNNING_MESSAGE = (
     "Execution was interrupted before it finished and was not run again. Its tool "
@@ -49,13 +65,6 @@ RESTORED_WAIT_MESSAGE = (
 )
 
 
-_MAX_OUTPUT_TOKENS_DESCRIPTION = (
-    "Token budget for the output this call returns; longer output is cut in the "
-    f"middle. Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens, at most "
-    f"{MAX_OUTPUT_TOKENS}."
-)
-
-
 class CodeModeArguments(BaseModel):
     code: str = Field(description="The Python program to run.")
     yield_time_ms: int = Field(
@@ -64,8 +73,8 @@ class CodeModeArguments(BaseModel):
         f"so far while it keeps running. Defaults to {DEFAULT_EXECUTE_YIELD_MS} ms, "
         f"at most {MAX_EXECUTE_YIELD_MS} ms.",
     )
-    max_output_tokens: int = Field(
-        default=DEFAULT_MAX_OUTPUT_TOKENS, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    max_output_chars: int = Field(
+        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
     )
 
 
@@ -76,8 +85,8 @@ class WaitCodeArguments(BaseModel):
         description="How long to wait for more output before returning. Defaults "
         f"to {DEFAULT_WAIT_YIELD_MS} ms, at most {MAX_WAIT_YIELD_MS} ms.",
     )
-    max_output_tokens: int = Field(
-        default=DEFAULT_MAX_OUTPUT_TOKENS, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    max_output_chars: int = Field(
+        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
     )
     terminate: bool = Field(
         default=False,
@@ -87,10 +96,6 @@ class WaitCodeArguments(BaseModel):
 
 def yield_seconds(yield_time_ms: int, maximum_ms: int) -> float:
     return min(max(yield_time_ms, MIN_YIELD_MS), maximum_ms) / 1000
-
-
-def output_tokens(requested: int) -> int:
-    return min(max(requested, 1), MAX_OUTPUT_TOKENS)
 
 
 # The saved result of an `execute_code` call that stopped before it returned. A
@@ -120,22 +125,78 @@ class CodeModeTool(Tool):
         self._limits = limits
         self._stubs = build_tool_stubs(self._inner_tools)
         # Calls to a sequential tool run one at a time, as they do outside programs.
+        sequences: dict[str, SequentialCalls] = {}
         self._sequential_calls = {
-            tool.name: SequentialCalls()
+            tool.name: sequences.setdefault(
+                tool.sequence_group or tool.name, SequentialCalls()
+            )
             for tool in self._inner_tools
             if tool.execution_mode == ToolExecutionMode.SEQUENTIAL
         }
+        self.resume_with_input = self._resume_with_input
+        self.continue_open_input = partial(cells.continue_open, programs=self.program)
+
+    def program(self, code: str, limits: SandboxLimits) -> Program:
+        """A program that calls this tool's functions."""
+        return Program(
+            code=code,
+            stubs=self._stubs,
+            limits=limits,
+            sequential_calls=self._sequential_calls,
+        )
 
     @property
     def inner_tools(self) -> list[Tool]:
         return self._inner_tools
 
-    def operation_names(self, tool_id: int) -> list[str]:
+    def operation_names(self, preference: ToolPreference) -> list[str]:
         return [
-            program_function_operation(name, deferred=function.deferred)
-            for name, function in self._stubs.functions.items()
-            if function.tool.id == tool_id
+            program_function_operation(function.called_name, deferred=function.deferred)
+            for function in self._stubs.functions.values()
+            if function.tool.matches(preference)
         ]
+
+    def called_name(self, tool_name: str) -> str:
+        """The name that the model calls the tool named `tool_name` by:
+        `tools.<function>` for a function of this tool's programs, else the
+        tool's own name."""
+        function = next(
+            (
+                function
+                for function in self._stubs.functions.values()
+                if function.tool.name == tool_name
+            ),
+            None,
+        )
+        return tool_name if function is None else function.called_name
+
+    def inner_call_hint(self, name: str) -> str | None:
+        """`name` is a function name, as the description lists it, or the
+        name of its tool, also after `tools.` or `tools_`."""
+        candidates = [
+            name,
+            name.removeprefix(f"{TOOLS_NAMESPACE}."),
+            name.removeprefix(f"{TOOLS_NAMESPACE}_"),
+        ]
+        function = next(
+            (
+                function
+                for candidate in candidates
+                for function in self._stubs.functions.values()
+                if candidate in (function.function_name, function.tool.name)
+            ),
+            None,
+        )
+        if function is None:
+            return None
+        return INNER_CALL_MESSAGE.format(
+            name=name,
+            called_name=function.called_name,
+            arguments=", ".join(
+                f"{argument}=..." for argument in sorted(function.required_arguments)
+            )
+            or "...",
+        )
 
     @property
     def id(self) -> None:
@@ -168,7 +229,7 @@ class CodeModeTool(Tool):
             CodeModeArguments,
         )
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         arguments = parse_tool_arguments(CodeModeArguments, invocation.arguments)
         if not arguments.code.strip():
             raise ToolCallException(
@@ -176,16 +237,26 @@ class CodeModeTool(Tool):
                 llm_facing_message="The `code` argument is empty. Provide a Python program.",
             )
         return self._cells.start(
-            Program(
-                code=arguments.code,
-                stubs=self._stubs,
-                limits=self._limits,
-                sequential_calls=self._sequential_calls,
-            ),
+            self.program(arguments.code, self._limits),
             invocation,
             context,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
-            max_tokens=output_tokens(arguments.max_output_tokens),
+            max_chars=output_chars(arguments.max_output_chars),
+        )
+
+    def _resume_with_input(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        answers: list[NestedInputAnswer],
+    ) -> ToolOutcome:
+        arguments = parse_tool_arguments(CodeModeArguments, invocation.arguments)
+        return self._cells.resume(
+            invocation,
+            context,
+            answers,
+            programs=self.program,
+            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
         )
 
 
@@ -195,8 +266,14 @@ class WaitCodeTool(Tool):
     DESCRIPTION = "Wait for a running code cell."
     interrupted_result = INTERRUPTED_WAIT_RESULT
 
-    def __init__(self, cells: CodeCells) -> None:
+    def __init__(
+        self, cells: CodeCells, programs: Callable[[str, SandboxLimits], Program]
+    ) -> None:
         self._cells = cells
+        # Builds a saved cell's program with the current tools.
+        self._programs = programs
+        self.resume_with_input = self._resume_with_input
+        self.continue_open_input = partial(cells.continue_open, programs=programs)
 
     @property
     def id(self) -> None:
@@ -227,15 +304,31 @@ class WaitCodeTool(Tool):
             self.name, WAIT_CODE_DESCRIPTION, WaitCodeArguments
         )
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         arguments = parse_tool_arguments(WaitCodeArguments, invocation.arguments)
         return self._cells.wait(
             arguments.cell_id,
             invocation,
             context,
+            programs=self._programs,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
-            max_tokens=output_tokens(arguments.max_output_tokens),
+            max_chars=output_chars(arguments.max_output_chars),
             terminate=arguments.terminate,
+        )
+
+    def _resume_with_input(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        answers: list[NestedInputAnswer],
+    ) -> ToolOutcome:
+        arguments = parse_tool_arguments(WaitCodeArguments, invocation.arguments)
+        return self._cells.resume(
+            invocation,
+            context,
+            answers,
+            programs=self._programs,
+            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
         )
 
 
@@ -243,7 +336,7 @@ def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
     """Offer each tool as its `code_mode_exposure` declares: DIRECT tools stay
     direct, the others become Python functions inside `execute_code`.
 
-    `execute_code` and `wait_code` share the returned cells of one response; None
+    `execute_code` and `wait_code` share the returned cells of each run; None
     when no tool is a function. Raises ValueError for a tool that waits for child
     runs but is not DIRECT, since a program cannot wait for them.
     """
@@ -262,8 +355,9 @@ def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
     if not inner:
         return tools, None
     cells = CodeCells()
+    code_tool = CodeModeTool(inner, cells=cells, limits=SandboxLimits())
     return [
         *(tool for tool in tools if tool.code_mode_exposure is CodeModeExposure.DIRECT),
-        CodeModeTool(inner, cells=cells, limits=SandboxLimits()),
-        WaitCodeTool(cells),
+        code_tool,
+        WaitCodeTool(cells, code_tool.program),
     ], cells

@@ -22,6 +22,7 @@
         "Celery light",
         "Celery heavy",
         "Celery docfetching",
+        "Celery docconversion",
         "Celery docprocessing",
         "Celery user_file_processing",
         "Celery scheduled_tasks",
@@ -52,6 +53,7 @@
         "Celery light (k8s)",
         "Celery heavy (k8s)",
         "Celery docfetching (k8s)",
+        "Celery docconversion (k8s)",
         "Celery docprocessing (k8s)",
         "Celery user_file_processing (k8s)",
         "Celery scheduled_tasks (k8s)",
@@ -72,6 +74,7 @@
         "Celery user_file_processing",
         "Celery scheduled_tasks",
         "Celery docfetching",
+        "Celery docconversion",
         "Celery docprocessing",
         "Celery beat"
       ],
@@ -100,6 +103,7 @@
         "Celery user_file_processing (k8s)",
         "Celery scheduled_tasks (k8s)",
         "Celery docfetching (k8s)",
+        "Celery docconversion (k8s)",
         "Celery docprocessing (k8s)",
         "Celery beat (k8s)"
       ],
@@ -385,7 +389,7 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft,suggested_questions"
       ],
       "presentation": {
         "group": "2",
@@ -557,6 +561,38 @@
       "justMyCode": false
     },
     {
+      "name": "Celery docconversion",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.docconversion",
+        "worker",
+        "--pool=threads",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docconversion@%n",
+        "-Q",
+        "docconversion"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery docconversion Console",
+      "justMyCode": false
+    },
+    {
       "name": "Celery docprocessing",
       "type": "debugpy",
       "request": "launch",
@@ -671,7 +707,7 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft,suggested_questions"
       ],
       "presentation": {
         "group": "2",
@@ -840,6 +876,38 @@
         "hidden": true
       },
       "consoleTitle": "Celery docfetching (k8s) Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery docconversion (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/deployment/helm/dev/launch.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "k8s: telepresence connect",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "celery",
+        "-A",
+        "onyx.background.celery.versioned_apps.docconversion",
+        "worker",
+        "--pool=threads",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docconversion@%n",
+        "-Q",
+        "docconversion"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery docconversion (k8s) Console",
       "justMyCode": false
     },
     {

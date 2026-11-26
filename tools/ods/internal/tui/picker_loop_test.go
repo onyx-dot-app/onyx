@@ -42,6 +42,10 @@ func TestRunPicker_returnsTheSelectedItems(t *testing.T) {
 		{name: "g and Home jump to the header", script: script{}.text("g ").key(tcell.KeyEnd).key(tcell.KeyHome).text("j ").key(tcell.KeyEnter), want: []int{1}},
 		{name: "escape cancels a selection", script: script{}.text("a").key(tcell.KeyEscape), want: nil},
 		{name: "q cancels", script: script{}.text(" q"), want: nil},
+		{name: "ctrl-c cancels", script: script{}.text(" ").key(tcell.KeyCtrlC), want: nil},
+		{name: "unbound keys are ignored", script: script{}.text("z").key(tcell.KeyTab).text(" ").key(tcell.KeyEnter), want: []int{0}},
+		{name: "space on a partly selected header selects the whole group", script: script{}.text(" k ").key(tcell.KeyEnter), want: []int{0, 1}},
+		{name: "space on a fully selected header clears the group", script: script{}.text("k  G ").key(tcell.KeyEnter), want: []int{2}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -1,9 +1,9 @@
-import { CodeBlock } from "@/app/app/message/CodeBlock";
-import { extractCodeText } from "@/app/app/message/codeUtils";
+import { CodeBlock } from "@/lib/timeline/chat/message/CodeBlock";
+import { extractCodeText } from "@/lib/timeline/chat/message/codeUtils";
 import {
   MemoizedLink,
   MemoizedParagraph,
-} from "@/app/app/message/MemoizedTextComponents";
+} from "@/lib/timeline/chat/message/MemoizedTextComponents";
 import { useMemo, CSSProperties } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";

@@ -24,6 +24,7 @@ function buildAgentUpsertRequest(
     groups: params.groups,
     users: params.users,
     tool_ids: params.tool_ids,
+    integrations: params.integrations,
     remove_image: params.remove_image,
     search_start_date: params.search_start_date,
     datetime_aware: params.datetime_aware,

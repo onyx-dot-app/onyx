@@ -120,6 +120,16 @@ between the two steps. Without the lock, a prune that an API call starts during
 the reset is failed before its fence exists, or runs with no fence. Do not split
 the function or drop the lock.
 
+**Explicit prune requests.** The manual prune route and file removals commit
+`prune_requested_at` before dispatch. Connector edits use the same field. The
+beat sends the request again after a lost task or failure, even without
+`prune_freq`. Under the pair lock, the dispatcher counts the prune records since
+the request. After three, it clears the request and keeps the failed records in
+the run history. A dispatch whose fence write or task send fails deletes its
+record and resets the fence, so it is not an attempt. Request and record
+timestamps use `clock_timestamp()`, because an open beat transaction can predate
+a new request. Scheduled pruning without a request keeps its retry behavior.
+
 **Pruning without a slim listing.** A connector with no slim listing is
 pruned by a full load or poll
 (`background/celery/celery_utils.py:extract_ids_from_runnable_connector`). It
@@ -157,6 +167,23 @@ document in the batch and marks them modified, so the metadata sync corrects
 the index. The per-document `document_by_cc_pair_cleanup_task` only drains
 messages queued before an upgrade.
 
+**User exports.** Query-history and manual usage exports claim their pending task row with a
+conditional update. The hourly cleanup fails pending rows after one hour plus
+five minutes, and started rows after `JOB_TIMEOUT` plus five minutes. It keeps
+failures for 24 hours from the failure transition. Claiming resets the start
+time, so an old queued job that just started is safe. The worker uploads the
+file without a row lock, then locks the started row to publish. A late worker
+whose job cleanup failed deletes its file. Before cleanup purges an expired
+failure, it deletes that job's file, because without the row the file looks
+published. A failed delete keeps its row and does not stop the cleanup.
+Cleanup skips rows that a worker locks. The start route fails its new row when
+the broker send fails. Manual usage exports follow the same rules, and delete
+the job row in the same transaction that records the report. Scheduled usage
+exports do not create job rows. Usage generation runs on the primary worker,
+which registers that task; query-history generation and the shared hourly
+cleanup run on the heavy worker.
+Celery time limits do not stop these thread workers.
+
 **Other periodic flows.** Each owner documents its flow; this list says where
 it runs.
 - Craft scheduled tasks ([[craft-scheduled-tasks]]): the dispatcher and the
@@ -184,12 +211,15 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
 ## Contracts and traps
 
 1. `send-expires` **Give each new send `expires=`.** The backend AGENTS file
-   requires it, and every beat entry sets it. Many sends at the verified commit
-   omit it. Some do so on purpose: the docfetching and docprocessing sends wait
-   in queues for hours, and the heartbeat check and batch reissue recover a
-   lost one. Others, such as the pruning generator send and several
-   API-triggered sends, give no reason. Do not copy a send without checking why
-   it omits `expires`.
+   requires it, and `backend/lint/check_celery_task_expires.py` fails a
+   commit that omits it. Nine sends carry `# celery-expires: allow (<reason>)`
+   on purpose, because an expiry drops work that nothing sends again: the
+   docfetching and docprocessing sends, and the four jobs a user starts once
+   (targeted reindex, query history export, usage report, eval run). An expired per-document sync task of a
+   document set or user group leaves its taskset through `task_revoked`, so
+   the set would count as synced. A worker enforces `expires` when it takes
+   the task; nothing removes an expired task from a queue with no worker. Do
+   not copy a marked send to a new task.
 2. `default-acks-late` **The default ack mode is late.**
    `background/celery/configs/base.py` sets `task_acks_late`, and the broker
    redelivers an unacked task after `visibility_timeout`. A task that can run
@@ -285,7 +315,10 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
   system-wide cloud task takes none. Add its module to the `autodiscover_tasks`
   list of the worker app that reads its queue, such as
   `background/celery/apps/primary.py`; a module missing there is never
-  registered, and its messages wait until they expire. Add a template with a
+  registered, and its messages wait until they expire. Add a `task` line and a
+  `beat` line, each with a reason, to `backend/lint/celery_task_allowlist.txt`;
+  pre-commit fails a task or beat entry that is not there. A run-once backfill
+  is not a periodic task. Add a template with a
   queue, a priority, `expires` and a `timedelta` schedule
   ([[#beat-interval-stretched]], [[#cloud-timedelta-schedule]]). Decide
   `skip_gated` and `work_gated`. Add it to `_VECTOR_DB_BEAT_TASK_NAMES` if it
@@ -304,7 +337,20 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
   `backend/supervisord.conf`, and to the matching Helm worker template.
 - `add-worker` **A worker.** Copy the light worker: its app, versioned app and
   config modules, a supervisord program, and a Helm template. Update the worker
-  table in the backend AGENTS file.
+  table in the backend AGENTS file. Then add the worker to each list of
+  workers, or it is missing from dev, EE and monitoring:
+  `.vscode/launch.json` (the normal and k8s configs, and each compound that
+  lists the other workers), `.zed/debug.json`, `.zed/tasks.json` and
+  `.zed/process-compose.k8s.yaml`, `tools/ods/internal/devstack/launch.go`
+  (profiles and metrics port) with its tests, an EE versioned app in
+  `ee/onyx/background/celery/apps/` that loads the log export tasks,
+  `ee/onyx/server/log_export/api.py:WORKER_COLLECT_QUEUES`, the metrics port in
+  `server/metrics/metrics_server.py`, the worker list in
+  `backend/tests/integration/conftest.py`, `_UNACKED_QUEUES` in
+  `server/metrics/indexing_pipeline.py` and the queue log line in
+  `background/celery/tasks/monitoring/tasks.py`, and the Helm CI values
+  (`deployment/helm/charts/onyx/ci/ct-values.yaml`) so CI renders an optional
+  worker.
 - `investigate-task-not-running` **Investigate a task that does not run.** Look
   for the "Schedule updated" or "Schedule unchanged" beat log line; it gives the
   task count and the `beat_multiplier`. Read the queue depth with

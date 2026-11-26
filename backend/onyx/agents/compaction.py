@@ -63,22 +63,6 @@ def count_tokens(text: str, *, cached_counts: Mapping[str, int] | None = None) -
     return len(_encoder().encode(text, disallowed_special=()))
 
 
-def head_and_tail_tokens(text: str, max_tokens: int) -> tuple[str, str, int]:
-    """The head and tail of `text`, decoded, that together hold `max_tokens`
-    tokens, and the token count of `text`. A text that fits is the head."""
-    tokens = _encoder().encode(text, disallowed_special=())
-    if len(tokens) <= max_tokens:
-        return text, "", len(tokens)
-    # Token boundaries can split a UTF-8 character; the parts keep whole ones.
-    head_end = max_tokens // 2
-    while (head := _strict_decode(tokens[:head_end])) is None:
-        head_end -= 1
-    tail_start = len(tokens) - (max_tokens - max_tokens // 2)
-    while (tail := _strict_decode(tokens[tail_start:])) is None:
-        tail_start += 1
-    return head, tail, len(tokens)
-
-
 def _strict_decode(tokens: list[int]) -> str | None:
     """The text of `tokens`, or None when they start or end inside a character."""
     try:
@@ -106,7 +90,17 @@ def message_tokens(
 
 
 def request_tokens(
-    request: GenerationRequest, cached_counts: dict[str, int] | None = None
+    request: GenerationRequest, token_counter: Callable[[str], int] = count_tokens
+) -> int:
+    return (
+        token_counter(request.system_prompt)
+        + sum(token_counter(tool.model_dump_json()) for tool in request.tools)
+        + sum(message_tokens(message, token_counter) for message in request.messages)
+    )
+
+
+def cached_request_tokens(
+    request: GenerationRequest, cached_counts: dict[str, int]
 ) -> int:
     """Count the request and retain only its text counts for the next request."""
     current_counts: dict[str, int] = {}
@@ -117,14 +111,9 @@ def request_tokens(
             current_counts[text] = tokens
         return tokens
 
-    total = (
-        count(request.system_prompt)
-        + sum(count(tool.model_dump_json()) for tool in request.tools)
-        + sum(message_tokens(message, count) for message in request.messages)
-    )
-    if cached_counts is not None:
-        cached_counts.clear()
-        cached_counts.update(current_counts)
+    total = request_tokens(request, count)
+    cached_counts.clear()
+    cached_counts.update(current_counts)
     return total
 
 

@@ -4,14 +4,21 @@ built-in, external-app or invalid skills."""
 import io
 import zipfile
 from collections.abc import Iterator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
+from onyx.db.enums import (
+    PluginInstallationPolicy,
+    SkillSharePermission,
+)
 from onyx.db.models import Plugin, User
+from onyx.db.plugin import (
+    get_visible_versions_skill_md,
+    set_plugin_preferences__no_commit,
+)
 from onyx.db.skill import (
     SkillSharingChange,
     create_custom_skill__no_commit,
@@ -23,15 +30,22 @@ from onyx.db.skill import (
 )
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
-from onyx.skills.content import read_versions_skill_md
+from onyx.server.features.build.sandbox.models import CHAT_SKILLS_PATH
+from onyx.skills.built_in import CHAT_BUILT_IN_SKILL_IDS
+from onyx.skills.content import read_chat_skills_md, read_versions_skill_md
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
+from onyx.skills.models import ChatSkill, ChatSkillFiles
+from onyx.skills.push import build_chat_skill_files
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_chat_custom_skill,
     make_external_app,
+    make_group,
     make_skill,
     make_user,
-    make_user_credential,
     set_current_version_validity,
+    share_plugin_with_group,
 )
 
 
@@ -106,7 +120,7 @@ def test_chat_skills_use_the_version_each_user_runs(
             set_public_permission=True,
         ),
     )
-    set_skill_installation_policy(skill, SkillInstallationPolicy.DEFAULT, db_session)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.DEFAULT, db_session)
     plugin = db_session.get(Plugin, skill.id)
     assert plugin is not None
     first_version_id: UUID = plugin.current_version_id
@@ -129,9 +143,19 @@ def test_chat_skills_use_the_version_each_user_runs(
     db_session.commit()
 
     author_skills = {
-        skill.name: skill for skill in list_chat_skills(db_session, author)
+        skill.name: skill
+        for skill in list_chat_skills(db_session, author, with_sandbox=False)
     }
-    org_skills = {skill.name: skill for skill in list_chat_skills(db_session, org_only)}
+    org_skills = {
+        skill.name: skill
+        for skill in list_chat_skills(db_session, org_only, with_sandbox=False)
+    }
+
+    # Each user's version is its own copy key, so a new version replaces it.
+    author_files = build_chat_skill_files(author_skills[name], author, db_session)
+    org_files = build_chat_skill_files(org_skills[name], org_only, db_session)
+    assert author_files is not None and org_files is not None
+    assert author_files.version != org_files.version
 
     # Each skill has its version's description and short description.
     assert (
@@ -144,7 +168,7 @@ def test_chat_skills_use_the_version_each_user_runs(
     ) == ("Skill one", None)
     # The whole SKILL.md of each version, frontmatter included.
     skill_md = read_versions_skill_md(
-        [author_skills[name].version_id, org_skills[name].version_id],
+        [(author_skills[name].version_id, ""), (org_skills[name].version_id, "")],
         author.id,
         db_session,
     )
@@ -152,31 +176,28 @@ def test_chat_skills_use_the_version_each_user_runs(
         (author_skills[name].version_id, "two"),
         (org_skills[name].version_id, "one"),
     ):
-        assert skill_md[version_id].startswith(f"---\nname: {name}\n")
-        assert f"description: Skill {version}" in skill_md[version_id]
-        assert skill_md[version_id].rstrip().endswith(f"Instructions {version}")
+        text = skill_md[(version_id, "")]
+        assert text.startswith(f"---\nname: {name}\n")
+        assert f"description: Skill {version}" in text
+        assert text.rstrip().endswith(f"Instructions {version}")
     built_in_names = {
         runtime.name
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=author)
-        if runtime.skill.built_in_skill_id is not None
+        if runtime.built_in_skill_id is not None
     }
     assert built_in_names
     assert not built_in_names & set(author_skills)
 
 
-def test_chat_skills_leave_out_external_app_and_invalid_skills(
+def test_chat_skills_keep_app_skills_and_leave_out_invalid_skills(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     users: tuple[User, User],
 ) -> None:
     user, _ = users
+    # The app's plugin holds the skill; the user has not connected the app.
     app_skill = make_skill(db_session, is_public=True)
-    app = make_external_app(
-        db_session, skill=app_skill, auth_template={"token": "{token}"}
-    )
-    make_user_credential(
-        db_session, app=app, user=user, user_credentials={"token": "t"}
-    )
+    make_external_app(db_session, skill=app_skill, auth_template={"token": "{token}"})
     invalid_skill = make_skill(db_session, is_public=True)
     valid_skill = make_skill(db_session, is_public=True)
     for skill in (app_skill, invalid_skill, valid_skill):
@@ -189,9 +210,182 @@ def test_chat_skills_leave_out_external_app_and_invalid_skills(
         runtime.name
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=user)
     }
-    chat_names = {skill.name for skill in list_chat_skills(db_session, user)}
+    chat_names = {
+        skill.name for skill in list_chat_skills(db_session, user, with_sandbox=False)
+    }
 
     assert {app_skill.name, valid_skill.name} <= runtime_names
     assert invalid_skill.name not in runtime_names
-    assert valid_skill.name in chat_names
-    assert not {app_skill.name, invalid_skill.name} & chat_names
+    assert {app_skill.name, valid_skill.name} <= chat_names
+    assert invalid_skill.name not in chat_names
+
+
+def test_chat_skills_follow_install_settings_and_the_name_order(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User],
+) -> None:
+    """Chat gets the custom skills the sandbox loads: a group's Not available
+    hides a skill and its SKILL.md, Required turns a skill on, and one skill
+    keeps each name."""
+    user, other = users
+    group = make_group(db_session)
+    add_user_to_group(db_session, user, group)
+    hidden = make_skill(db_session, is_public=True)
+    required = make_skill(db_session, is_public=True)
+    name = f"chat-order-{uuid4().hex[:8]}"
+    published = make_skill(db_session, name=name, is_public=True)
+    own = make_skill(db_session, name=name, author_user_id=user.id)
+    for skill in (hidden, required, published, own):
+        set_current_version_validity(db_session, skill.id, True)
+    for skill, policy in (
+        (hidden, PluginInstallationPolicy.DEFAULT),
+        (published, PluginInstallationPolicy.DEFAULT),
+        (required, None),
+    ):
+        set_skill_installation_policy(skill, policy, db_session)
+    share_plugin_with_group(
+        db_session, hidden.id, group.id, None, PluginInstallationPolicy.NOT_AVAILABLE
+    )
+    share_plugin_with_group(
+        db_session, required.id, group.id, None, PluginInstallationPolicy.REQUIRED
+    )
+    set_plugin_preferences__no_commit(user.id, [own.id], True, db_session)
+    db_session.commit()
+
+    chat = {
+        skill.name: skill
+        for skill in list_chat_skills(db_session, user, with_sandbox=False)
+    }
+    runtime = {
+        runtime.name: runtime.version.id
+        for runtime in list_runtime_skills_for_user(db_session=db_session, user=user)
+        if runtime.version is not None
+    }
+
+    assert hidden.name not in chat
+    assert required.name in chat
+    assert hidden.name in {
+        skill.name for skill in list_chat_skills(db_session, other, with_sandbox=False)
+    }
+    assert required.name not in {
+        skill.name for skill in list_chat_skills(db_session, other, with_sandbox=False)
+    }
+    # One skill keeps the name: the published one beats the user's own, as in
+    # the sandbox.
+    assert [
+        skill.name for skill in list_chat_skills(db_session, user, with_sandbox=False)
+    ].count(name) == 1
+    assert {skill.name: skill.version_id for skill in chat.values()} == runtime
+    published_plugin = db_session.get(Plugin, published.id)
+    hidden_plugin = db_session.get(Plugin, hidden.id)
+    assert published_plugin is not None and hidden_plugin is not None
+    assert chat[name].version_id == published_plugin.current_version_id
+    # A picked skill's SKILL.md is read only for a skill the user can see.
+    assert not get_visible_versions_skill_md(
+        [(hidden_plugin.current_version_id, "")], user.id, db_session
+    )
+    assert get_visible_versions_skill_md(
+        [(hidden_plugin.current_version_id, "")], other.id, db_session
+    )
+
+
+def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User],
+) -> None:
+    user, _ = users
+    assert not any(
+        skill.built_in_skill_id
+        for skill in list_chat_skills(db_session, user, with_sandbox=False)
+    )
+
+    built_ins = {
+        skill.name: skill
+        for skill in list_chat_skills(db_session, user, with_sandbox=True)
+        if skill.built_in_skill_id is not None
+    }
+    assert "pptx" in built_ins
+    assert {skill.built_in_skill_id for skill in built_ins.values()} <= (
+        CHAT_BUILT_IN_SKILL_IDS
+    )
+
+    pptx = built_ins["pptx"]
+    skill_md = read_chat_skills_md([pptx], user.id, db_session, with_sandbox=True)[
+        (pptx.version_id, pptx.path)
+    ]
+    assert skill_md.startswith(f"Skill files: {CHAT_SKILLS_PATH}/pptx/")
+    assert f"python {CHAT_SKILLS_PATH}/pptx/scripts/lint.py" in skill_md
+
+    # A skill with no other files has nothing to load.
+    only_md = [
+        skill
+        for skill in built_ins.values()
+        if list(_files(build_chat_skill_files(skill, user, db_session)))
+        == [f"{skill.name}/SKILL.md"]
+    ]
+    assert only_md
+    for skill in only_md:
+        text = read_chat_skills_md([skill], user.id, db_session, with_sandbox=True)[
+            (skill.version_id, skill.path)
+        ]
+        assert not text.startswith("Skill files:")
+
+
+def _files(skill_files: ChatSkillFiles | None) -> dict[str, bytes]:
+    assert skill_files is not None
+    return skill_files.files
+
+
+def _custom_chat_skill(
+    db_session: Session, bundle_ids: list[str], author: User, files: dict[str, str]
+) -> ChatSkill:
+    skill, _, bundle_id = make_chat_custom_skill(db_session, author, files)
+    bundle_ids.append(bundle_id)
+    return skill
+
+
+def test_a_custom_chat_skill_copies_its_folder_and_names_it(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    bundle_ids: list[str],
+    users: tuple[User, User],
+) -> None:
+    author, _ = users
+    name = f"copy-{author.id.hex[:8]}"
+    skill = _custom_chat_skill(
+        db_session,
+        bundle_ids,
+        author,
+        {
+            "SKILL.md": f"---\nname: {name}\ndescription: Copy\n---\n\n"
+            "Run python ${CLAUDE_SKILL_DIR}/scripts/run.py.\n",
+            "scripts/run.py": "print(1)\n",
+        },
+    )
+
+    files = _files(build_chat_skill_files(skill, author, db_session))
+    folder = f"{CHAT_SKILLS_PATH}/{name}"
+    assert sorted(files) == [f"{name}/SKILL.md", f"{name}/scripts/run.py"]
+    copied_md = files[f"{name}/SKILL.md"].decode()
+
+    key = (skill.version_id, skill.path)
+    with_sandbox = read_chat_skills_md(
+        [skill], author.id, db_session, with_sandbox=True
+    )
+    assert with_sandbox[key].startswith(f"Skill files: {folder}/ (read-only). ")
+    assert f"Run python {folder}/scripts/run.py." in with_sandbox[key]
+    assert f"Run python {folder}/scripts/run.py." in copied_md
+    without = read_chat_skills_md([skill], author.id, db_session, with_sandbox=False)
+    assert without[key].startswith(f"---\nname: {name}\n")
+
+    # A skill with only SKILL.md has nothing to load.
+    only_md = _custom_chat_skill(
+        db_session,
+        bundle_ids,
+        author,
+        {"SKILL.md": f"---\nname: only-{name}\ndescription: Only\n---\n\nHi.\n"},
+    )
+    text = read_chat_skills_md([only_md], author.id, db_session, with_sandbox=True)
+    assert text[(only_md.version_id, only_md.path)].startswith("---\nname: only-")

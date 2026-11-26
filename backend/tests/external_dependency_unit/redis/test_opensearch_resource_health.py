@@ -2,33 +2,26 @@ import importlib
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from onyx.auth.users import current_user
 from onyx.background.celery.tasks import beat_schedule
+from onyx.cache.redis_backend import RedisCacheBackend
 from onyx.configs import app_configs
 from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
-from onyx.db.enums import Permission
-from onyx.db.models import User
 from onyx.document_index.opensearch import resource_health as health
 from onyx.document_index.opensearch.models import (
     NodesResourceStats,
     ResourceIssue,
+    ResourceSnapshot,
     VectorResourceStats,
 )
-from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.manage.opensearch_health import api
 from shared_configs import configs
 
 NOW = datetime.now(timezone.utc)
-ADMIN_IDS = (UUID(int=1), UUID(int=2))
-URL = "/manage/admin/opensearch-health"
 
 
 def node_stats(
@@ -57,23 +50,24 @@ def vector_stats(usage: float = 20, tripped: bool = False) -> VectorResourceStat
         {
             "_nodes": {"failed": 0},
             "circuit_breaker_triggered": tripped,
-            "nodes": {"node-1": {"graph_memory_usage_percentage": usage}},
+            "nodes": {"node-1": {"usage_percent": usage}},
         }
     )
+
+
+def _cached_issues(redis: TenantRedisClient) -> list[ResourceIssue]:
+    raw = redis.get(health.RESOURCE_SNAPSHOT_KEY)
+    return ResourceSnapshot.model_validate_json(raw).issues if raw else []
 
 
 @pytest.fixture
 def redis(monkeypatch: pytest.MonkeyPatch) -> Generator[TenantRedisClient, None, None]:
     client = get_redis_client(tenant_id=f"test_resource_health_{uuid4().hex}")
-    monkeypatch.setattr(health, "get_shared_redis_client", lambda: client)
-    monkeypatch.setattr(api, "get_redis_client", lambda: client)
+    backend = RedisCacheBackend(client)
+    monkeypatch.setattr(health, "get_shared_cache_backend", lambda: backend)
     monkeypatch.setattr(health, "DISABLE_VECTOR_DB", False)
     yield client
-    client.delete(
-        health.RESOURCE_SNAPSHOT_KEY,
-        health.RESOURCE_CHECK_LEASE_KEY,
-        *(f"{api.POPUP_KEY_PREFIX}:{user_id}" for user_id in ADMIN_IDS),
-    )
+    client.delete(health.RESOURCE_SNAPSHOT_KEY, health.RESOURCE_CHECK_LEASE_KEY)
 
 
 @pytest.mark.parametrize(
@@ -146,62 +140,16 @@ def test_resource_probe_is_cached_and_keeps_warning_on_failure(
     client.get_vector_resource_stats.return_value = vector_stats()
     monkeypatch.setattr(health, "OpenSearchClient", client_factory)
     health.refresh_resource_health()
-    assert health.get_resource_health().issues == [ResourceIssue.DISK]
+    assert _cached_issues(redis) == [ResourceIssue.DISK]
     health.refresh_resource_health()
     client_factory.assert_called_once_with(timeout=3, max_retries=0)
     client.get_node_resource_stats.assert_called_once()
     redis.delete(health.RESOURCE_CHECK_LEASE_KEY)
     client.get_node_resource_stats.side_effect = TimeoutError()
     health.refresh_resource_health()
-    assert health.get_resource_health().issues == [ResourceIssue.DISK]
+    assert _cached_issues(redis) == [ResourceIssue.DISK]
     health.refresh_resource_health()
     assert client_factory.call_count == 2
-
-
-def test_resource_admin_popup_is_daily_per_user_and_never_clears_banner(
-    redis: TenantRedisClient,
-) -> None:
-    snapshot = health.evaluate_resource_health(
-        node_stats(free=10), vector_stats(), None, NOW
-    )
-    redis.set(health.RESOURCE_SNAPSHOT_KEY, snapshot.model_dump_json())
-    app = FastAPI()
-    register_onyx_exception_handlers(app)
-    app.include_router(api.router)
-    user = User(
-        id=ADMIN_IDS[0],
-        effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
-    )
-    app.dependency_overrides[current_user] = lambda: user
-    with TestClient(app) as browser, TestClient(app) as other_browser:
-        assert browser.post(f"{URL}/popup").json()["show_popup"]
-        assert not other_browser.post(f"{URL}/popup").json()["show_popup"]
-        assert browser.get(URL).json()["issues"] == ["disk"]
-        key = f"{api.POPUP_KEY_PREFIX}:{user.id}"
-        assert 86390 <= redis.ttl(key) <= api.POPUP_INTERVAL_SECONDS
-        user.id = ADMIN_IDS[1]
-        assert other_browser.post(f"{URL}/popup").json()["show_popup"]
-        user.id = ADMIN_IDS[0]
-        redis.delete(key)
-        assert browser.post(f"{URL}/popup").json()["show_popup"]
-        user.effective_permissions = []
-        assert browser.get(URL).status_code == 403
-        assert browser.post(f"{URL}/popup").status_code == 403
-
-
-def test_resource_stale_warning_is_retained_without_new_popup(
-    redis: TenantRedisClient,
-) -> None:
-    snapshot = health.evaluate_resource_health(
-        node_stats(free=10), vector_stats(), None, NOW - timedelta(hours=1)
-    )
-    redis.set(health.RESOURCE_SNAPSHOT_KEY, snapshot.model_dump_json())
-    user = User(id=ADMIN_IDS[0])
-    result = api.claim_resource_popup(user)
-    assert result.health.stale
-    assert result.health.issues == [ResourceIssue.DISK]
-    assert not result.show_popup
-    assert not redis.exists(f"{api.POPUP_KEY_PREFIX}:{user.id}")
 
 
 def test_resource_disabled_mode_never_probes(
@@ -212,7 +160,7 @@ def test_resource_disabled_mode_never_probes(
     monkeypatch.setattr(health, "OpenSearchClient", client_factory)
     health.refresh_resource_health()
     client_factory.assert_not_called()
-    assert not health.get_resource_health().issues
+    assert not _cached_issues(redis)
     assert not redis.exists(health.RESOURCE_CHECK_LEASE_KEY)
 
 

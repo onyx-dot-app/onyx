@@ -165,6 +165,7 @@ from onyx.server.manage.llm.utils import (
     lm_studio_capability_enabled,
     strip_openrouter_vendor_prefix,
 )
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.server.settings.models import Settings
 from onyx.server.settings.store import (
     load_settings,
@@ -184,7 +185,12 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
-admin_router = APIRouter(prefix="/admin/llm")
+admin_router = APIRouter(
+    prefix="/admin/llm",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.LLM_PROVIDERS))
+    ],
+)
 basic_router = APIRouter(prefix="/llm")
 
 
@@ -731,7 +737,6 @@ def list_llm_providers(
         flow_type_filter=[],
         exclude_image_generation_providers=not include_image_gen,
         include_model_configurations=not page_models,
-        include_model_flows=not page_models,
     )
     default_text_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
     default_vision_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
@@ -1902,9 +1907,7 @@ def get_provider_contextual_cost(
       - the chunk_context
     - The per-token cost of the LLM used to generate the doc_summary and chunk_context
     """
-    providers = fetch_existing_llm_providers(
-        db_session, [LLMModelFlowType.CHAT], include_model_flows=True
-    )
+    providers = fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT])
     costs = []
     for provider in providers:
         for model_configuration in provider.model_configurations:

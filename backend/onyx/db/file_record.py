@@ -4,8 +4,7 @@ from sqlalchemy import ColumnElement, String, and_, case, cast, func, select, up
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
-from onyx.configs.constants import FileOrigin, FileType
+from onyx.configs.constants import QUERY_REPORT_NAME_PREFIX, FileOrigin, FileType
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import FileRecord, IndexAttempt
 from onyx.file_store.constants import (
@@ -302,6 +301,10 @@ def upsert_filerecord(
             "bucket_name": stmt.excluded.bucket_name,
             "object_key": stmt.excluded.object_key,
             "file_size": stmt.excluded.file_size,
+            # ON CONFLICT DO UPDATE skips the column's onupdate. The
+            # statement's time, not the transaction's start, follows the
+            # content write.
+            "updated_at": func.clock_timestamp(),
         },
     )
     db_session.execute(stmt)

@@ -13,8 +13,6 @@ from office365.runtime.http.request_options import RequestOptions
 from office365.runtime.queries.client_query import ClientQuery
 
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.microsoft_utils.drive_delta import (
     SHAREPOINT_IDS_PROPERTY,
@@ -26,6 +24,7 @@ from onyx.connectors.microsoft_utils.graph_client import (
     backoff_seconds,
     sleep_and_retry,
 )
+from onyx.connectors.microsoft_utils.request_pacer import sdk_client_pacer
 from onyx.connectors.teams.models import (
     ChannelLibrary,
     ChannelMember,
@@ -146,6 +145,12 @@ def request_with_retry(
         # Transient Graph errors (rate limits + 5xx gateway/server hiccups) are
         # retried with backoff; any other status is surfaced immediately.
         if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
+            # Other callers on the app learn of the refusal through the pacer.
+            pacer = sdk_client_pacer(graph_client)
+            if pacer is not None:
+                pacer.report_response(
+                    response.status_code, response.headers.get("Retry-After")
+                )
             cooldown = backoff_seconds(
                 attempt=retry_number,
                 retry_after=response.headers.get("Retry-After"),
@@ -313,28 +318,14 @@ def channel_group_id(channel: ChannelRef) -> str:
     return f"channel-members:{channel.id}"
 
 
-def source_group_ids(group_ids: set[str], for_indexing: bool) -> set[str]:
-    """Group ids as a document carries them. Indexing stores what it is handed,
-    so it needs the source prefix the group sync saves groups under. The
-    permission sync adds that prefix itself, and a second one matches no group."""
-    if not for_indexing:
-        return group_ids
-    return {
-        build_ext_group_name_for_onyx(group_id, DocumentSource.TEAMS)
-        for group_id in group_ids
-    }
-
-
-def channel_access(channel: ChannelRef, for_indexing: bool) -> ExternalAccess:
+def channel_access(channel: ChannelRef) -> ExternalAccess:
     """A channel is readable by its members and no one else, so no channel is
     ever public. The document names the group and the group sync names the
     people: a team of thousands would otherwise put every email on every
     thread, and a join or a leave would rewrite them all."""
     return ExternalAccess(
         external_user_emails=set(),
-        external_user_group_ids=source_group_ids(
-            {channel_group_id(channel)}, for_indexing
-        ),
+        external_user_group_ids={channel_group_id(channel)},
         is_public=False,
     )
 

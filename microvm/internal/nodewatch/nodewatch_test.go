@@ -33,6 +33,11 @@ func TestDrainTaints(t *testing.T) {
 	if got := DrainTaints(Node{Taints: n.Taints[:1]}, DefaultTaintKeys); got != nil {
 		t.Errorf("no drain taint: %v", got)
 	}
+	// The cluster autoscaler taints a node it removes and does not cordon it.
+	ca := Node{Taints: []Taint{{Key: "ToBeDeletedByClusterAutoscaler", Value: "1731542400", Effect: "NoSchedule"}}}
+	if got := DrainTaints(ca, DefaultTaintKeys); !slices.Equal(got, []string{"ToBeDeletedByClusterAutoscaler=1731542400:NoSchedule"}) {
+		t.Errorf("autoscaler taint: %v", got)
+	}
 }
 
 type fakeSource struct {
@@ -100,7 +105,7 @@ func TestInClusterNode(t *testing.T) {
 			http.Error(w, `{"reason":"Forbidden"}`, http.StatusForbidden)
 			return
 		}
-		_, _ = w.Write([]byte(`{"kind":"Node","spec":{"unschedulable":true,"taints":[
+		_, _ = w.Write([]byte(`{"kind":"Node","metadata":{"annotations":{"onyx.app/craft-fc-scale-down-guard":"true"}},"spec":{"unschedulable":true,"taints":[
 			{"key":"node.kubernetes.io/unschedulable","effect":"NoSchedule","timeAdded":"2026-11-09T00:00:00Z"},
 			{"key":"workload","value":"sandbox","effect":"NoSchedule"}]}}`))
 	}))
@@ -117,6 +122,9 @@ func TestInClusterNode(t *testing.T) {
 	n, err := c.Node(context.Background())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if n.Annotations[GuardOwnerKey] != "true" {
+		t.Errorf("annotations %v", n.Annotations)
 	}
 	if gotAuth != "Bearer tok-1" || gotPath != "/api/v1/nodes/ip-10-0-0-1.us-west-1.compute.internal" {
 		t.Errorf("auth %q path %q", gotAuth, gotPath)

@@ -6,7 +6,7 @@
       "account": "ログイン中: {email}",
       "workspace": "ワークスペース: {workspaceName}",
       "appAddress": "アプリのアドレス: {origin}",
-      "access": "アクセス可能なドキュメントの検索結果を読み取ります。ウェブ検索を使用し、ウェブページを開きます。",
+      "access": "アクセス可能なドキュメントの検索結果を読み取ります。ウェブ検索を使用し、ウェブページを開きます。チャット履歴を読み取ります。",
       "allow": "アクセスを許可",
       "deny": "拒否",
       "pending": "選択を保存中...",
@@ -119,12 +119,6 @@
       "addConnectors": {
         "label": "コネクタを追加"
       },
-      "authenticate": {
-        "label": "認証"
-      },
-      "codingAgentIncognito": {
-        "tooltip": "シークレットモードではコーディングエージェントを使用できません"
-      },
       "configure": {
         "tooltip": "設定"
       },
@@ -147,61 +141,7 @@
         "tooltip": "{description}\nこのチャットではこのツールを優先します。エージェントは使用せずに回答する場合があります。"
       }
     },
-    "addMcpModal": {
-      "addHeader": {
-        "title": "MCP サーバーを追加"
-      },
-      "cancelButton": {
-        "label": "キャンセル"
-      },
-      "description": {
-        "placeholder": "このサーバーでチームは何ができますか？",
-        "suffix": "任意",
-        "title": "説明"
-      },
-      "name": {
-        "placeholder": "例：Linear",
-        "required": "サーバー名は必須です",
-        "title": "サーバー名"
-      },
-      "serverUrl": {
-        "invalid": "有効な URL を入力してください",
-        "title": "MCP サーバー URL"
-      },
-      "submitButton": {
-        "saveLabel": "変更を保存",
-        "savingLabel": "保存中..."
-      },
-      "toasts": {
-        "updateFailed": "MCP サーバーの更新に失敗しました"
-      },
-      "access": {
-        "title": "アクセス制御",
-        "description": "このMCPを使用できるユーザーを選択します。",
-        "public": {
-          "label": "組織",
-          "description": "組織内の誰でもこのMCPを使用できます"
-        },
-        "groups": {
-          "label": "ユーザーグループ",
-          "description": "選択したユーザーグループはこのMCPを使用できます。",
-          "placeholder": "ユーザーグループを追加",
-          "required": "ユーザーグループを1つ以上選択してください。"
-        },
-        "scoped": {
-          "description": "管理しているグループを1つ以上選択してください。"
-        },
-        "retainedUsers": "{count, plural, other {#人のユーザーとも直接共有されています。}}",
-        "planNote": "グループアクセスにはBusinessプランが必要です。"
-      },
-      "defaultChat": {
-        "title": "Onyx のデフォルトチャットで利用可能"
-      }
-    },
     "addOpenApiModal": {
-      "addHeader": {
-        "title": "OpenAPI プラグインを追加"
-      },
       "cancelButton": {
         "label": "キャンセル"
       },
@@ -215,12 +155,6 @@
         "subDescription": "このプラグインで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI プラグイン]({docsUrl}) を参照してください。",
         "title": "OpenAPI スキーマ定義"
       },
-      "editConfigsButton": {
-        "disabledTooltip": "認証を管理できるのは、プラグインの作成者または管理者のみです"
-      },
-      "editHeader": {
-        "title": "OpenAPI プラグインを編集"
-      },
       "empty": {
         "description": "OpenAPI スキーマを入力すると、ここにアクションのプレビューが表示されます。",
         "title": "アクションが見つかりません"
@@ -231,18 +165,9 @@
       "method": {
         "noSummary": "概要はありません"
       },
-      "submitButton": {
-        "addLabel": "プラグインを追加",
-        "addingLabel": "追加中...",
-        "saveLabel": "変更を保存",
-        "savingLabel": "保存中..."
-      },
       "toasts": {
         "actionCreated": "OpenAPI プラグインを作成しました",
-        "actionUpdated": "OpenAPI プラグインを更新しました",
-        "createFailed": "OpenAPI プラグインの作成に失敗しました",
-        "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
-        "updateFailed": "OpenAPI プラグインの更新に失敗しました"
+        "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です"
       },
       "humanDescription": {
         "title": "ユーザー向けの説明",
@@ -290,429 +215,15 @@
         "title": "*{name}* を切断"
       }
     },
-    "mcpAuthModal": {
-      "additionalAuthParams": {
-        "label": "追加の認証パラメーター (JSON)"
-      },
-      "apiKey": {
-        "required": "API token は必須です"
-      },
-      "apiKeyTabs": {
-        "admin": {
-          "label": "共有トークン"
-        },
-        "perUser": {
-          "label": "個人用トークン"
-        }
-      },
-      "authPerformer": {
-        "label": "認証情報",
-        "required": "個人用または共有の認証情報を選択してください。"
-      },
-      "authType": {
-        "apiToken": {
-          "label": "API キー",
-          "description": "ユーザーごとの個別 API キー、または組織全体の共有 API キーを使用します。"
-        },
-        "label": "認証方法",
-        "none": {
-          "label": "認証なし",
-          "description": "推奨しません"
-        },
-        "oauth": {
-          "label": "OAuth",
-          "description": "各ユーザーが自分の資格情報で OAuth 認証を行う必要があります。"
-        },
-        "placeholder": "方法を選択",
-        "ptOauth": {
-          "label": "OAuth パススルー",
-          "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。"
-        },
-        "required": "認証タイプは必須です"
-      },
-      "authorizationEndpoint": {
-        "label": "認可エンドポイント",
-        "required": "プロバイダーの認可エンドポイントを入力してください。"
-      },
-      "cancelButton": {
-        "label": "キャンセル"
-      },
-      "clientId": {
-        "label": "クライアント ID",
-        "required": "OAuthクライアントIDを入力してください。"
-      },
-      "clientSecret": {
-        "label": "クライアントシークレット"
-      },
-      "errors": {
-        "additionalParamsInvalid": "追加の認証パラメーターの JSON が無効です",
-        "additionalParamsInvalidWithReason": "追加の認証パラメーターの JSON が無効です: {reason}",
-        "additionalParamsNotObject": "追加の認証パラメーターは JSON オブジェクトである必要があります",
-        "saveAuthFailed": "認証設定の保存に失敗しました",
-        "saveConfigFailed": "サーバー設定の保存に失敗しました",
-        "saveStage": "接続設定を保存できませんでした",
-        "loadStage": "接続設定を読み込めませんでした",
-        "clientRegistrationFailed": "クライアントの自動登録に失敗しました。独自のOAuthクライアントを使用するか、プロバイダーの設定要件を確認してください。",
-        "clientMetadataRejected": "プロバイダーがクライアントメタデータドキュメントを使用できませんでした。このインスタンスがインターネットからアクセスできない場合は、「クライアントメタデータドキュメントを使用」をオフにして、もう一度接続してください。",
-        "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
-        "connectionFailed": "サーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
-        "oauthFailed": "OAuth サインインに失敗しました。もう一度お試しいただくか、サーバーの OAuth 設定を確認してください。",
-        "oauthInitFailed": "OAuth の開始に失敗しました: {detail}"
-      },
-      "header": {
-        "defaultTitle": "認証を設定",
-        "description": "MCPサーバーの認証を設定",
-        "title": "*{name}*を設定"
-      },
-      "noAuthNotice": {
-        "description": "ユーザーはサインインせずにこのサーバーを使用できます。設定済みのカスタムヘッダーは引き続き送信されます。",
-        "title": "認証不要"
-      },
-      "oauthInfo": {
-        "discovery": "各ユーザーは自分のアカウントでサインインします。",
-        "manualRegistration": "このリダイレクトURIをプロバイダーに登録してください。",
-        "title": "OAuth設定"
-      },
-      "passThroughNotice": {
-        "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
-        "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"
-      },
-      "providerMode": {
-        "autoDiscovery": {
-          "description": "サーバーが公開しているサインイン設定を読み取ります。",
-          "label": "サインインエンドポイントを自動検索"
-        },
-        "knownProvider": {
-          "description": "サインインURLとトークンURLを自分で入力します。",
-          "label": "エンドポイントを手動入力"
-        },
-        "label": "OAuthエンドポイント",
-        "placeholder": "モードを選択"
-      },
-      "redirectUri": {
-        "copyTooltip": "リダイレクト URI をコピー",
-        "label": "**リダイレクト URI** を使用:"
-      },
-      "scopesOverride": {
-        "label": "スコープの上書き (カンマ区切り)"
-      },
-      "sharedApiKey": {
-        "description": "このキーは設定のテストと、アクセス権を持つ全員の接続に使用します。個人用ではなく、ワークスペース用のキーを使用してください。",
-        "label": "API キー",
-        "placeholder": "組織の共有 API キー"
-      },
-      "submitButton": {
-        "label": "変更を保存",
-        "pendingLabel": "保存中…"
-      },
-      "tokenEndpoint": {
-        "label": "トークンエンドポイント",
-        "required": "プロバイダーのトークンエンドポイントを入力してください。"
-      },
-      "transport": {
-        "required": "トランスポートは必須です",
-        "label": "接続トランスポート",
-        "description": "サーバーが従来のSSEを必要としない限り、Streamable HTTPを使用してください。この設定はサーバーから自動検出されません。",
-        "httpLabel": "Streamable HTTP",
-        "sseLabel": "SSE（従来方式）"
-      },
-      "advancedSettings": {
-        "title": "詳細設定"
-      },
-      "apiTokenInfo": {
-        "title": "APIキー設定",
-        "description": "各ユーザーが個人用トークンで接続するか、全員が共有トークンを使用するかを選択します。"
-      },
-      "oauthSetup": {
-        "label": "OAuth設定",
-        "automatic": {
-          "label": "自動で設定",
-          "description": "サーバーが公開する設定を使って、{appName}にOAuthクライアントを登録させます。"
-        },
-        "ownClient": {
-          "label": "独自のOAuthクライアントを使用",
-          "description": "プロバイダーのクライアントIDを入力してください。シークレットは必要な場合にのみ追加してください。"
-        }
-      },
-      "cimd": {
-        "label": "クライアントメタデータドキュメントを使用",
-        "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。"
-      },
-      "discovery": {
-        "checking": "自動設定を確認しています…",
-        "supported": "自動設定を利用できます",
-        "requiresClient": "このサーバーはクライアントの自動登録への対応を明示していません。独自のOAuthクライアントを設定することをお勧めします。自動登録を試すこともできます。",
-        "missing": "サーバーURLを確認するか、プロバイダーのサインインおよびトークンのエンドポイントを入力してください。",
-        "unreachable": "サーバーが利用できないか、検出リクエストをブロックしている可能性があります。",
-        "retry": "再確認",
-        "manual": "OAuth設定を手動入力",
-        "useOwnClient": "独自のOAuthクライアントを使用",
-        "unreachableTitle": "自動設定を利用できるか確認できませんでした",
-        "missingTitle": "OAuthエンドポイントが見つかりませんでした",
-        "requiresClientTitle": "自動設定を利用できない可能性があります"
-      },
-      "advanced": {
-        "description": "自動検出の代わりに、認可エンドポイントとトークンエンドポイントを明示的に指定して、既知の OAuth プロバイダーを設定します。",
-        "title": "詳細設定"
-      },
-      "knownProvider": {
-        "hint": "既知のプロバイダーモードでは、エンドポイントの設定が必要です。Google の参考エンドポイント: 認可 {authorizationEndpoint}、トークン {tokenEndpoint}。"
-      }
-    },
-    "mcpCard": {
-      "deleteModal": {
-        "body": {
-          "confirmation": "この MCP サーバーを削除してもよろしいですか？",
-          "description": "組織内のすべてのユーザーに対して、<emphasis>{title}</emphasis> とそのすべてのツールが削除されます。削除は取り消せません。"
-        },
-        "submitButton": {
-          "label": "削除"
-        },
-        "title": "MCP サーバーを削除"
-      }
-    },
-    "mcpOauthCallback": {
-      "autoRedirect": {
-        "text": "自動的に元のページに戻ります…"
-      },
-      "backToChatButton": {
-        "label": "チャットに戻る"
-      },
-      "cancelled": {
-        "description": "認可がキャンセルまたは拒否されたため、接続は確立されませんでした。再試行するには、MCP サーバーの認証設定から接続をやり直してください。",
-        "title": "認可がキャンセルされました"
-      },
-      "continueButton": {
-        "label": "続行"
-      },
-      "genericError": {
-        "fallbackDetail": "認可を完了できませんでした",
-        "title": "問題が発生しました"
-      },
-      "invalidLink": {
-        "description": "このリンクには必要な認可パラメータがありません。MCP サーバーの認証設定から接続をやり直してください。",
-        "title": "無効な認可リンク"
-      },
-      "processing": {
-        "description": "MCP サーバーへの接続を完了しています。しばらくお待ちください…",
-        "title": "認可を完了しています"
-      },
-      "serverNotFound": {
-        "description": "この認可が属する MCP サーバーは存在しないか、構成されていません。サーバーを再作成または再構成してから、もう一度接続してください。",
-        "title": "MCP サーバーが見つかりません"
-      },
-      "sessionExpired": {
-        "description": "この認可リンクは無効か、有効期限が切れているか、すでに使用されています。MCP サーバーの認証設定から接続をやり直してください。",
-        "title": "認可セッションの有効期限が切れました"
-      },
-      "success": {
-        "description": "認可が正常に完了しました。このサーバーのツールをチャットで使用できるようになりました。",
-        "title": "{serverName} に接続しました"
-      },
-      "timedOut": {
-        "description": "MCP サーバーが時間内に認可を確認しませんでした。もう一度接続してみてください。それでも解決しない場合は、サーバーの OAuth 設定を確認してください。",
-        "title": "認可がタイムアウトしました"
-      },
-      "tokenExchangeFailed": {
-        "description": "プロバイダーは認可を承認しましたが、有効なアクセストークンを取得できませんでした。サーバーの OAuth クライアント認証情報とエンドポイントを確認してから、もう一度接続してください。",
-        "title": "トークン交換に失敗しました"
-      }
-    },
-    "mcpPage": {
-      "addButton": {
-        "label": "MCP サーバーを追加"
-      },
-      "empty": {
-        "description": "MCP サーバーに接続して、カスタムアクションを追加します。"
-      },
-      "errors": {
-        "unknown": "不明なエラー"
-      },
-      "toasts": {
-        "deleteFailed": "MCP サーバーの削除に失敗しました",
-        "disconnectFailed": "MCP サーバーの切断に失敗しました",
-        "fetchToolsFailed": "ツールの取得に失敗しました: {error}",
-        "reconnectFailed": "MCP サーバーの再接続に失敗しました",
-        "serverDeleted": "MCP サーバーを削除しました"
-      }
-    },
-    "openApiAuthModal": {
-      "authMethod": {
-        "customHeader": {
-          "description": "すべてのリクエストにカスタムヘッダーを送信します。",
-          "label": "カスタム Authorization ヘッダー"
-        },
-        "label": "認証方法",
-        "oauth": {
-          "description": "各ユーザーが自分の資格情報で OAuth 認証を行います。",
-          "label": "OAuth"
-        },
-        "placeholder": "方法を選択",
-        "ptOauth": {
-          "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。",
-          "label": "OAuth パススルー"
-        },
-        "required": "認証方法は必須です"
-      },
-      "authorizationUrl": {
-        "label": "認可 URL",
-        "required": "認可 URL は必須です"
-      },
-      "cancelButton": {
-        "label": "キャンセル"
-      },
-      "clientId": {
-        "description": "現在のクライアント ID を維持するには、空欄のままにしてください。",
-        "label": "OAuth クライアント ID",
-        "required": "クライアント ID は必須です"
-      },
-      "clientSecret": {
-        "description": "現在のクライアントシークレットを維持するには、空欄のままにしてください。",
-        "label": "OAuth クライアントシークレット",
-        "required": "クライアントシークレットは必須です"
-      },
-      "errors": {
-        "invalidUrl": "有効な URL を入力してください",
-        "loadConfigFailed": "既存の OAuth 設定の読み込みに失敗しました。更新するには、内容を再入力してください。"
-      },
-      "header": {
-        "description": "接続を認証すると、OpenAPI プラグインを使用できます。"
-      },
-      "headers": {
-        "addButton": {
-          "label": "ヘッダーを追加"
-        },
-        "description": "このプラグインの API エンドポイントに送信するすべてのリクエストに、カスタムヘッダーを指定します。",
-        "keyRequired": "ヘッダーのキーは必須です",
-        "keyTitle": "ヘッダー",
-        "minRequired": "認証ヘッダーを 1 つ以上追加してください",
-        "title": "認証ヘッダー",
-        "valueRequired": "ヘッダーの値は必須です",
-        "valueTitle": "値"
-      },
-      "loading": {
-        "label": "既存の設定を読み込み中..."
-      },
-      "passThroughNotice": {
-        "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
-        "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"
-      },
-      "redirectUri": {
-        "copyTooltip": "リダイレクト URI をコピー",
-        "label": "<emphasis>リダイレクト URI</emphasis> を使用:"
-      },
-      "scopes": {
-        "description": "リクエストする OAuth スコープのカンマ区切りリストです。",
-        "label": "スコープ <optional>(任意)</optional>",
-        "placeholder": "例: repo, user"
-      },
-      "submitButton": {
-        "label": "接続",
-        "pendingLabel": "接続中..."
-      },
-      "tokenUrl": {
-        "label": "トークン URL",
-        "required": "トークン URL は必須です"
-      },
-      "pkce": {
-        "label": "PKCE を使用",
-        "description": "OAuth プロバイダーが S256 チャレンジ方式の PKCE に対応している場合のみ有効にしてください。"
-      },
-      "connectionCheck": {
-        "discovery": {
-          "idle": "PKCE の対応状況を確認するには、有効な HTTPS エンドポイントを入力してください。",
-          "checking": "公表されている PKCE の対応状況を確認中…",
-          "supported": "プロバイダーは S256 PKCE への対応を公表しています。",
-          "unsupported": "プロバイダーは S256 PKCE への対応を公表していません。",
-          "unknown": "PKCE の対応状況を確認できませんでした。設定は手動で選択できます。"
-        },
-        "description": "設定やトークンを保存せず、未保存の設定をテストします。プロバイダーで同意すると、このアプリにアカウントへのアクセスが許可される場合があります。",
-        "testing": "接続をテスト中…",
-        "test": "接続をテスト",
-        "successPkce": "PKCE パラメーターを使った認可に成功しました。ただし、プロバイダーが PKCE を強制している証明にはなりません。",
-        "success": "PKCE を使わない認可に成功しました。",
-        "result": {
-          "blocked": "ポップアップを許可して再試行してください。",
-          "closed": "テストウィンドウが閉じられたか、接続が切れました。開いているテストを完了するか、もう一度お試しください。",
-          "stale": "設定が変更されました。現在の設定を再テストしてください。",
-          "failed": "認可テストに失敗しました。設定を確認して再試行してください。",
-          "denied": "プロバイダーでの認可が拒否またはキャンセルされました。",
-          "interrupted": "テストが期限切れまたは中断されました。新しいテストを開始してください。"
-        },
-        "returnToSettings": "設定ウィンドウに戻って結果を確認してください。",
-        "close": "ウィンドウを閉じる"
-      }
-    },
-    "openApiCard": {
-      "card": {
-        "ariaLabel": "{name} OpenAPI アクションカード"
-      },
-      "deleteModal": {
-        "body": {
-          "confirmation": "この OpenAPI アクションを削除してもよろしいですか？",
-          "description": "OpenAPI アクション <emphasis>{name}</emphasis> とその設定を完全に削除します。"
-        },
-        "submitButton": {
-          "label": "削除"
-        },
-        "title": "OpenAPI プラグインを削除"
-      },
-      "method": {
-        "noSummary": "概要はありません"
-      },
-      "toolsList": {
-        "emptyMessage": "この OpenAPI スキーマにはアクションが定義されていません",
-        "emptySearchMessage": "検索条件に一致するアクションはありません"
-      }
-    },
-    "openApiPage": {
-      "addButton": {
-        "label": "OpenAPI アクションを追加"
-      },
-      "empty": {
-        "description": "OpenAPI スキーマからカスタムアクションを追加します。"
-      },
-      "toasts": {
-        "authSaveFailed": "認証設定の保存に失敗しました。",
-        "authSaved": "{name} の認証を保存しました。",
-        "deleteFailed": "ツールの削除に失敗しました。",
-        "disconnectFailed": "OpenAPI アクションの切断に失敗しました。",
-        "toolDeleted": "{name} を削除しました。"
-      }
-    },
-    "perUserAuth": {
-      "credentialField": {
-        "placeholder": "{field} を入力"
-      },
-      "credentials": {
-        "perUserDescription": "自分の認証情報を使ってこのMCPをテストし、ツールを読み込みます。認証情報は自分のアカウントにのみ保存されます。",
-        "sharedDescription": "これらの値は組織内のすべてのユーザーに使用されます。",
-        "perUserTitle": "自分のアカウント専用",
-        "sharedTitle": "組織で共有する値"
-      },
-      "headers": {
-        "addButton": {
-          "label": "ヘッダーを追加"
-        },
-        "error": {
-          "message": "少なくとも 1 つのヘッダーの値に {apiKey} プレースホルダーを含めてください。"
-        },
-        "keyTitle": "ヘッダー名",
-        "label": "カスタムヘッダー",
-        "perUserDescription": "各ユーザーのAPIキーには<mono>{apiKey}</mono>を使用します。<mono>{userEmail}</mono>にはユーザーのメールアドレスが自動で入ります。他のプレースホルダーはユーザーに値の入力を求めます。",
-        "sharedDescription": "組織の共有資格情報とともに送信するヘッダーの形式を設定します。少なくとも 1 つのヘッダーの値に <mono>{apiKey}</mono> などのプレースホルダーを使用してください。組織の共有キーに置き換えられます。",
-        "valueTitle": "ヘッダーの値"
-      }
-    },
     "policyToggle": {
       "always": {
-        "label": "自動承認"
+        "label": "許可"
       },
       "ask": {
         "label": "確認"
       },
       "deny": {
-        "label": "無効"
+        "label": "ブロック"
       }
     },
     "switchList": {
@@ -726,27 +237,6 @@
     "toolItem": {
       "unavailable": {
         "label": "ツールを利用できません"
-      }
-    },
-    "toolsList": {
-      "disableAllButton": {
-        "ariaLabel": "すべてのツールを無効化",
-        "tooltip": "すべてのツールを無効化"
-      },
-      "empty": {
-        "message": "利用できるツールがありません",
-        "searchMessage": "ツールが見つかりません"
-      },
-      "enableAllButton": {
-        "label": "すべて有効化"
-      },
-      "showAllButton": {
-        "ariaLabel": "すべてのツールを表示",
-        "tooltip": "すべてのツールを表示"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "有効なツールのみ表示",
-        "tooltip": "有効なもののみ表示"
       }
     },
     "toolNames": {
@@ -773,9 +263,6 @@
       },
       "addMemory": {
         "label": "メモリに追加"
-      },
-      "codingAgent": {
-        "label": "コーディングエージェント"
       }
     },
     "toolsPopover": {
@@ -787,7 +274,7 @@
           "tooltip": "画像生成を設定"
         },
         "openapi": {
-          "tooltip": "OpenAPIプラグインを管理"
+          "tooltip": "連携を管理"
         },
         "webSearch": {
           "tooltip": "ウェブ検索を設定"
@@ -831,9 +318,6 @@
         "askAdminSuffix": {
           "text": "管理者に設定を依頼してください。"
         },
-        "codingAgent": {
-          "description": "GitHubリポジトリを調査し、そのコードに関する質問に答えます。"
-        },
         "configureSuffix": {
           "text": "有効にするには設定の歯車を押してください。"
         },
@@ -864,404 +348,26 @@
       }
     },
     "placeholders": {
-      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
-      "oauthTokenUrl": "https://example.com/oauth/access_token",
-      "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://mcp-sabaa.com/mcp"
-    },
-    "memberPlugins": {
-      "chat": {
-        "trigger": {
-          "label": "プラグイン"
-        },
-        "search": {
-          "placeholder": "プラグインを検索"
-        },
-        "empty": {
-          "text": "このチャットで利用できるプラグインはありません。",
-          "searchText": "検索条件に一致するプラグインはありません。"
-        },
-        "loading": {
-          "label": "プラグインを読み込み中"
-        },
-        "loadError": {
-          "text": "一部のプラグインを読み込めませんでした。もう一度お試しください。"
-        },
-        "retry": {
-          "label": "再試行"
-        },
-        "browse": {
-          "label": "プラグインを探す"
-        },
-        "toggle": {
-          "ariaLabel": "このチャットで{name}を使用"
-        },
-        "connect": {
-          "label": "接続"
-        },
-        "connection": {
-          "connected": "接続済み",
-          "workspace": "ワークスペースの接続",
-          "session": "セッションの接続",
-          "none": "接続不要",
-          "oauth": "アカウントを接続",
-          "credentials": "認証情報を追加",
-          "checking": "接続を確認中",
-          "unconfigured": "ワークスペースでの設定が必要",
-          "unavailable": "接続を利用できません"
-        },
-        "intent": {
-          "unavailable": "このプラグインは、このチャットのエージェントでは利用できません。",
-          "invalid": "このプラグインのリンクは無効です。"
-        }
-      },
-      "oauthComplete": {
-        "success": {
-          "title": "プラグインを接続しました",
-          "description": "前のタブに戻って続行してください。"
-        },
-        "error": {
-          "title": "接続を確認できませんでした",
-          "description": "前のタブに戻り、もう一度接続してください。"
-        },
-        "return": {
-          "label": "プラグインに戻る"
-        },
-        "close": {
-          "label": "タブを閉じる"
-        }
-      },
-      "title": "プラグイン",
-      "description": "アカウントを接続してワークスペースのプラグインを使用します。",
-      "manageWorkspace": "ワークスペースのプラグインを管理",
-      "search": "プラグインを検索",
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft用アプリ"
-      },
-      "row": {
-        "view": "{name}を表示",
-        "connect": "{name}に接続"
-      },
-      "status": {
-        "connected": "接続済み",
-        "workspace": "ワークスペースの接続",
-        "session": "接続済みのアカウントを使用",
-        "none": "使用可能",
-        "oauth": "アカウントを接続",
-        "credentials": "認証情報を追加",
-        "unconfigured": "ワークスペースでの設定が必要",
-        "checking": "接続を確認中",
-        "unavailable": "接続を利用できません"
-      },
-      "availability": {
-        "label": "{name} の接続状態",
-        "chat": "メインチャット",
-        "craft": "Craft",
-        "on": "オン",
-        "off": "オフ",
-        "unknown": "不明",
-        "disabledByAdmin": "管理者が無効にしました",
-        "disabledByYou": "あなたが無効にしました",
-        "agents": "カスタムエージェント",
-        "notAvailable": "利用不可"
-      },
-      "state": {
-        "loading": "プラグインを読み込み中",
-        "serversError": "MCPプラグインを読み込めませんでした。",
-        "toolsError": "プラグインのツールを読み込めませんでした。",
-        "oauthError": "アカウントの接続を読み込めませんでした。",
-        "retry": "再試行",
-        "noResultsTitle": "一致するプラグインはありません",
-        "noResultsDescription": "別の名前や説明で検索してください。",
-        "clearSearch": "すべてのプラグインを表示",
-        "appsError": "Craftアプリを読み込めませんでした。",
-        "appsLoading": "Craftアプリを読み込み中",
-        "emptyTitle": "プラグインが見つかりません",
-        "emptyDescription": "別の接続フィルターを試すか、ワークスペース管理者にプラグインの追加を依頼してください。"
-      },
-      "detail": {
-        "issuesTitle": "問題",
-        "noAuthentication": "認証は不要です",
-        "connection": "接続",
-        "tools": "ツール",
-        "toolCount": "{count, plural, other {#個のツール}}",
-        "noTools": "このプラグインには表示できるツールが保存されていません。",
-        "connect": "アカウントを接続",
-        "useInChat": "チャットで使用",
-        "disconnect": "接続を解除",
-        "disconnectTitle": "{name}の接続を解除しますか？",
-        "disconnectDescription": "アカウントの接続を削除します。ワークスペースでの利用可否は変わりません。",
-        "oauthDisconnectWarning": "同じOAuth設定を使用するすべてのプラグインとアプリが、このアカウントの接続を共有しています。接続を解除すると、それらすべてから接続が削除されます。",
-        "disconnecting": "接続を解除中...",
-        "disconnectFailed": "アカウントの接続を解除できませんでした。もう一度お試しください。",
-        "cancel": "キャンセル",
-        "close": "完了",
-        "openInCraft": "Craftで開く"
-      },
-      "connection": {
-        "title": "{name}に接続",
-        "description": "このプラグインはワークスペースで設定済みです。アカウントを接続して使用してください。",
-        "credentialsDescription": "このプラグインの認証情報を入力してください。アカウントの接続は他のメンバーとは個別に管理されます。",
-        "oauthDescription": "続行してアカウントでログインしてください。プロバイダーが要求されたアクセス権を表示します。",
-        "continue": "{name}に進む",
-        "connect": "接続",
-        "connecting": "接続中...",
-        "cancel": "キャンセル",
-        "done": "完了",
-        "workspaceDescription": "この接続はワークスペースが提供しています。アカウントを接続する必要はありません。",
-        "sessionDescription": "このプラグインは現在のログイン情報を使用します。",
-        "noneDescription": "このプラグインにアカウントの接続は必要ありません。",
-        "connectedDescription": "アカウントは接続済みです。",
-        "unconfiguredDescription": "接続するには、ワークスペース管理者がこのプラグインの設定を完了する必要があります。",
-        "checkingDescription": "接続状態を読み込み中です。読み込みが完了してから再試行してください。",
-        "unavailableDescription": "接続状態を読み込めませんでした。プラグインページから再試行してください。",
-        "errors": {
-          "popup_blocked": "ブラウザーがログインウィンドウをブロックしました。ポップアップを許可して、もう一度お試しください。",
-          "cancelled": "ログインがキャンセルされました。再試行できます。",
-          "timed_out": "ログインがタイムアウトしました。もう一度お試しください。",
-          "credentials_required": "必要な認証情報をすべて入力してください。",
-          "unconfigured": "ワークスペース管理者がこのプラグインの設定を完了する必要があります。",
-          "not_connected": "アカウントの接続を確認できませんでした。もう一度お試しください。",
-          "request_failed": "接続に失敗しました。もう一度お試しください。"
-        }
-      },
-      "filters": {
-        "label": "接続状態",
-        "all": "すべて",
-        "connected": "接続済み",
-        "needsSignIn": "ログインが必要",
-        "showAll": "すべてのプラグインを表示"
-      },
-      "defaults": {
-        "chat": "デフォルトのチャットで有効にする",
-        "craft": "Craft で有効にする",
-        "chatDescription": "カスタムエージェントを使用しないチャットで、このプラグインを利用できるようにします。",
-        "craftDescription": "Craft のセッションとスケジュールされたタスクで、このプラグインを利用できるようにします。組織のツール権限は引き続き適用されます。",
-        "unavailable": "管理者が {surface} でこのプラグインを無効にしました。",
-        "saveFailed": "プラグインのデフォルト設定を保存できませんでした。もう一度お試しください。",
-        "chatUnavailable": "管理者が {surface} でこのプラグインを無効にしました。このプラグインが設定されたカスタムエージェントでは、引き続き使用できる場合があります。"
-      },
-      "openapi": {
-        "chatOnly": "Chat のみ",
-        "chatOnlyDescription": "このプラグインは Chat で利用でき、Craft では利用できません。"
-      },
-      "appSkills": {
-        "preview": "プレビュー",
-        "search": "スキルを検索",
-        "count": "{count, plural, one {# 件のスキル} other {# 件のスキル}}",
-        "empty": "このアプリに関連付けられたスキルはありません。",
-        "noMatches": "検索に一致するスキルはありません。",
-        "error": "スキルを読み込めませんでした。",
-        "enabled": "有効",
-        "disabled": "無効",
-        "loading": "スキルを読み込み中…"
-      },
-      "externalApp": {
-        "description": "Craftでアカウントを使用します。",
-        "craftOnly": "Craftのみ",
-        "craftOnlyDescription": "このアプリはCraftで利用できます。メインチャットには対応していません。",
-        "craftDisabledDescription": "このアプリはCraftで無効になっています。メインチャットではサポートされていません。"
-      }
-    },
-    "plugins": {
-      "availability": {
-        "mainChat": "メイン Chat",
-        "craft": "Craft",
-        "on": "有効",
-        "off": "無効",
-        "unknown": "不明",
-        "enabled": "有効",
-        "disabled": "無効",
-        "chatEnabled": "Chat 有効",
-        "chatDisabled": "Chat 無効",
-        "chatUnknown": "Chat 状態不明",
-        "craftEnabled": "Craft 有効",
-        "craftDisabled": "Craft 無効"
-      },
-      "controls": {
-        "disconnect": "ワークスペースで有効化または無効化",
-        "enable": "ワークスペースで有効化",
-        "disable": "ワークスペースで無効化",
-        "manageAvailability": "ワークスペースでの利用可否を管理",
-        "more": "その他の操作",
-        "disableChat": "メインチャットで無効にする",
-        "enableChat": "デフォルトのチャットで有効にする",
-        "disableCraft": "Craftで無効にする",
-        "enableCraft": "Craftで有効にする",
-        "chatDescription": "カスタムエージェントを使わないチャットでこのプラグインを利用可能にします。アクセス制御は引き続き適用されます。",
-        "defaultChatAdminOnly": "デフォルトのチャットでの利用可否を変更できるのは、ワークスペースの管理者のみです。",
-        "mcpCraftDescription": "Craft でこのプラグインを利用可能にします。アクセス制御とツールの権限は引き続き適用されます。",
-        "craftAppDescription": "Craft でこのアプリを利用可能にします。接続と承認の要件は引き続き適用されます。",
-        "workspaceDescription": "このプラグインをChatとカスタムエージェントで利用可能にします。アクセス制御と認証要件は引き続き適用されます。"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "設定",
-          "permissions": "権限",
-          "skills": "スキル"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "ワークスペースで{name}を無効にしますか？",
-        "workspaceDescription": "カスタムエージェントを含め、ワークスペースの全員に対して{name}を無効にします。保存済みの設定と認証情報は保持されます。再び有効にできます。",
-        "scope": "組織内のすべてのユーザー",
-        "chatTitle": "メインチャットで {name} を無効にしますか？",
-        "chatDescription": "組織内のすべてのユーザーのデフォルトチャットから {name} が削除されます。カスタムエージェントには影響しません。再度有効にできます。",
-        "craftTitle": "Craft で {name} を無効にしますか？",
-        "craftDescription": "組織内のすべてのユーザーが Craft で {name} を利用できなくなります。メインチャットには影響しません。再度有効にできます。"
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {# 件のツールを検出} other {# 件のツールを検出}}",
-          "viewTools": "ツールを表示",
-          "saveToUpdate": "変更を保存してツールを更新してください。"
-        },
-        "createTitle": "OpenAPI プラグインを追加",
-        "detailDescription": "この API とエージェントが使用できるツールを管理します。",
-        "detailsTitle": "設定",
-        "schemaTitle": "OpenAPI スキーマ",
-        "notFound": "プラグインが見つかりません",
-        "loadFailed": "このプラグインを読み込めませんでした",
-        "unavailable": "このプラグインは削除されたか、アクセス権がない可能性があります。",
-        "readOnly": "このプラグインは表示できますが、設定を変更する権限はありません。",
-        "deleteDescription": "OpenAPI プラグインとその設定が完全に削除されます。"
-      },
-      "title": "プラグイン",
-      "description": "ツールやアプリをワークスペースに接続します。",
-      "search": {
-        "placeholder": "プラグインを検索"
-      },
-      "add": {
-        "label": "追加",
-        "mcp": "カスタム MCP サーバーを追加",
-        "openapi": "OpenAPI プラグインを追加"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "課題、プロジェクト、チームを管理します",
-          "description": "課題、プロジェクト、チームを管理します。"
-        },
-        "notion": {
-          "summary": "Notion ワークスペースを検索、更新します",
-          "description": "Notion ワークスペースを検索、更新します。"
-        },
-        "sentry": {
-          "summary": "エラーやパフォーマンスの問題を調査します",
-          "description": "エラーやパフォーマンスの問題を調査します。"
-        },
-        "atlassian": {
-          "summary": "Jira と Confluence を使用します",
-          "description": "Jira と Confluence を使用します。",
-          "approvalNote": "Atlassian の組織で管理者の承認が必要な場合があります。"
-        },
-        "setupGuide": "設定ガイド",
-        "add": {
-          "label": "{name} を追加"
-        }
-      },
-      "row": {
-        "externalAppKind": "Craft アプリ",
-        "manage": {
-          "label": "{name} を管理"
-        },
-        "view": {
-          "label": "{name} を表示"
-        }
-      },
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft アプリ"
-      },
-      "filters": {
-        "label": "プラグインの種類",
-        "all": "すべて",
-        "apps": "Craft アプリ"
-      },
-      "state": {
-        "mcpError": "MCP サーバーを読み込めませんでした。",
-        "listErrorDescription": "このプラグイン一覧を読み込めませんでした。しばらくしてから再試行してください。",
-        "openapiError": "OpenAPI プラグインを読み込めませんでした。",
-        "retry": {
-          "label": "再試行"
-        },
-        "loading": "プラグインを読み込み中",
-        "empty": {
-          "title": "プラグインがインストールされていません",
-          "description": "ワークスペースにプラグインを追加してください。",
-          "explore": {
-            "label": "プラグインを探す"
-          }
-        },
-        "noResults": {
-          "title": "プラグインが見つかりません",
-          "description": "別の名前、説明、サーバー URL で検索してください。",
-          "clear": {
-            "label": "すべてのプラグインを表示"
-          }
-        },
-        "externalAppsError": "アプリを読み込めませんでした"
-      }
+      "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
     "mcpSetup": {
-      "connectTo": "{name} に接続",
       "contactingServer": "サーバーに接続中",
       "detectingAuthentication": "認証方式を検出中",
-      "stagePending": "処理中",
-      "stageSuccess": "完了",
-      "stageError": "失敗",
       "stageWaiting": "待機中",
       "progress": "設定の進行状況",
       "serverStep": "サーバー",
       "connectionStep": "接続",
-      "permissionDenied": "MCPサーバーを追加する権限がありません。",
-      "reviewSettings": "接続する前にサーバー設定を確認してください。",
-      "urlDescription": "サーバーURLを入力して、接続と認証の設定を検出します。",
       "detectedTransport": "トランスポート: {transport}",
-      "retry": "再確認",
       "authenticationUndetected": "次のページで認証方法を選択してください。",
-      "configureManually": "手動で設定",
       "details": "詳細",
       "checking": "サーバーを確認中…",
-      "unreachable": "このMCPサーバーに接続できませんでした",
-      "retryCheck": "URLとサーバーの稼働状況を確認して、もう一度お試しください。",
-      "blocked": "このURLは送信セキュリティ設定によってブロックされています。",
-      "publicDetected": "認証は不要です",
-      "oauthDetected": "OAuthを検出しました",
-      "clientMetadata": "クライアントメタデータドキュメント",
-      "clientMetadataSupported": "対応",
-      "clientMetadataUnsupported": "非対応",
-      "clientMetadataUnknown": "未確認",
-      "manualRequired": "認証方法を手動で選択",
-      "chooseAuthentication": "このサーバーの認証方法を確認できませんでした。以下から方法を選択してください。",
-      "connect": "接続",
-      "publicDetails": "利用可能なツール数: {count}",
       "serverDetails": "サーバーの詳細",
       "authentication": "認証",
       "continue": "続ける",
       "back": "戻る"
     },
-    "mcpTools": {
-      "title": "ツール",
-      "enabledTab": "利用可能なツール",
-      "policiesTab": "承認設定",
-      "refresh": "ツールを更新",
-      "loadError": "ツールを読み込めませんでした",
-      "saveError": "ツールの設定を保存できませんでした",
-      "refreshError": "ツールを更新できませんでした",
-      "search": "ツールを検索",
-      "enabledCount": "有効なツール: {total} 個中 {enabled} 個"
-    },
-    "mcpDetail": {
-      "configuration": "設定",
-      "authentication": "認証",
-      "loadError": "MCPサーバーを読み込めませんでした",
-      "notFound": "MCPサーバーが見つかりません",
-      "unavailable": "このサーバーは削除されたか、アクセス権がない可能性があります。",
-      "retry": "再試行",
-      "availabilitySaved": "利用設定を更新しました"
+    "policyEditor": {
+      "toolCount": "{count, plural, other {#個のアクション}}"
     }
   },
   "admin": {
@@ -1767,7 +873,6 @@
           "title": "利用状況レポートの読み込みに失敗しました。"
         },
         "pendingRow": {
-          "description": "{range} · 通常は 1 分以内に完了します",
           "slowDescription": "処理中です。このページを離れても、レポートはここに表示されます。",
           "title": "レポートを準備中…"
         },
@@ -1805,8 +910,11 @@
         "toasts": {
           "ready": "利用状況レポートが完成しました。",
           "startFailed": "レポート作成の開始に失敗しました: {message}",
-          "timedOut": "レポートの作成に時間がかかっています。もう一度実行するか、後で確認してください。",
           "unknownError": "不明なエラー"
+        },
+        "failedRow": {
+          "title": "レポートの生成に失敗しました",
+          "description": "リクエスト日時: {time}。再試行するには、新しいレポートを生成してください。"
         }
       },
       "slackChannelChart": {
@@ -2261,10 +1369,6 @@
       "advanced": {
         "title": "詳細オプション"
       },
-      "anonymousUsers": {
-        "description": "**ログインせずに**誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
-        "title": "匿名ユーザーを許可"
-      },
       "autoDetectFilters": {
         "description": "検索クエリから推定したソースフィルターと期間フィルターを自動的に適用します。",
         "title": "検索フィルターの自動検出"
@@ -2336,48 +1440,6 @@
         "description": "チャットで複数のモデルが並行して応答を生成できるようにします。",
         "title": "マルチモデル生成"
       },
-      "queryHistory": {
-        "anonymized": {
-          "description": "クエリは管理者に表示されますが、ユーザーの識別情報は削除されます",
-          "label": "匿名化"
-        },
-        "description": "組織のチャット履歴全体を管理パネルにどのように表示するかを制御します。",
-        "disabled": {
-          "description": "クエリ履歴のレポートは無効です。",
-          "label": "非表示"
-        },
-        "normal": {
-          "description": "すべてのクエリが管理者に表示され、個々のユーザーに紐づけられます。",
-          "label": "ユーザー情報付きで表示"
-        },
-        "title": "クエリ履歴の表示設定"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "1 から {max} までの整数の日数を入力してください。",
-          "label": "カスタム保持期間",
-          "moreTooltip": "その他",
-          "placeholder": "日数",
-          "restoreTooltip": "既定値に戻す"
-        },
-        "description": "組織のチャットを {appName} が保持する期間を指定します。",
-        "forever": {
-          "label": "無期限"
-        },
-        "presets": {
-          "days30": "30 日",
-          "days60": "60 日",
-          "days7": "7 日",
-          "days90": "90 日",
-          "year1": "1 年"
-        },
-        "reduceModal": {
-          "confirmLabel": "保持期間を短縮",
-          "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
-          "title": "チャットの保持期間を短縮しますか？"
-        },
-        "title": "チャット履歴の保持"
-      },
       "searchMode": {
         "description": "組織全体のドキュメントをすばやく検索するための UI モードです。",
         "noConnectorsTooltip": "検索モードを使用するにはコネクターを設定してください",
@@ -2436,12 +1498,8 @@
           "description": "コードを生成して実行します。",
           "title": "コードインタープリター"
         },
-        "codingAgent": {
-          "description": "GitHub リポジトリを調査し、そのコードに関する質問に回答します。",
-          "title": "コーディングエージェント"
-        },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
-        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI プラグインは、[プラグイン]({url})で設定できます。",
+        "pluginsNote": "MCP サーバーと OpenAPI アプリは[連携]({url})で管理します。",
         "imageGeneration": {
           "description": "AI ツールを使用して画像を生成・加工します。",
           "disabledTooltip": "画像生成にはモデルの設定が必要です。「構成 > 画像生成」で設定するか、管理者に依頼してください。",
@@ -2604,6 +1662,7 @@
         "removingBadge": {
           "label": "削除中"
         },
+        "unknownSize": "不明",
         "saveButton": {
           "label": "変更を保存",
           "saving": "保存しています..."
@@ -2876,9 +1935,7 @@
           "size": "サイズ",
           "other": "その他",
           "countWithSize": "{count}（{size}）",
-          "bytes": "バイト",
-          "loadError": "ドキュメントの種類を読み込めませんでした。",
-          "sizeValue": "{value} {unit}"
+          "loadError": "ドキュメントの種類を読み込めませんでした。"
         }
       },
       "toasts": {
@@ -3107,7 +2164,15 @@
           "close": "閉じる",
           "count": "({count})"
         },
-        "showing": "<mono>{total}</mono> 件中 <mono>{from}</mono>~<mono>{to}</mono> 件を表示"
+        "showing": "<mono>{total}</mono> 件中 <mono>{from}</mono>~<mono>{to}</mono> 件を表示",
+        "progress": {
+          "listed": "一覧取得済み",
+          "converted": "変換済み",
+          "indexed": "インデックス済み",
+          "listedSoFar": "{count, plural, other {これまでに # 件のドキュメントを一覧取得}}",
+          "skipped": "{count, plural, other {変更のないドキュメント # 件をスキップ}}",
+          "eta": "残り約 {duration}"
+        }
       },
       "activity": {
         "search": {
@@ -4942,6 +4007,18 @@
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "1 分あたりの RU",
+              "description": "このコネクタが使用できる、Microsoft アプリ登録のレート制限の割り当てです。単位は 1 分あたりのリソース ユニット (RU) です。Microsoft はライセンス階層に応じて、アプリの制限を 1 分あたり 1,250〜6,250 RU に設定します。空欄にすると、Onyx が制限を学習します。[階層の確認方法](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "このアプリ登録を使用する他のコネクタ: {connectors}。合計: 1 分あたり {total} RU。",
+              "none": "このアプリ登録で 1 分あたりの RU を設定している他のコネクタはありません。",
+              "hidden": "{count, plural, other {表示できないコネクタ # 件}}",
+              "unavailable": "このアプリ登録を使用する他のコネクタの 1 分あたりの RU を読み込めませんでした。"
+            }
+          }
         }
       }
     },
@@ -5201,10 +4278,20 @@
           "description": "管理者だけがスキルを組織に公開できます。"
         },
         "saveSuccess": {
-          "message": "公開設定を保存しました。"
+          "message": "設定を保存しました。"
         },
         "saveError": {
-          "message": "公開設定を保存できませんでした。"
+          "message": "設定を保存できませんでした。"
+        },
+        "defaultAccess": {
+          "title": "デフォルトのアクセス",
+          "description": "独自の設定がない公開済みスキルすべてに適用されます。後から公開されるスキルも含みます。",
+          "loadFailed": "デフォルトのアクセスを読み込めませんでした。",
+          "retry": "再試行"
+        },
+        "sharing": {
+          "title": "共有",
+          "description": "メンバーはスキルをユーザーやグループと共有できます。スキル管理者は常に共有できます。"
         }
       }
     },
@@ -5984,15 +5071,13 @@
         },
         "deleteModal": {
           "description": "組織全体からこのアプリを削除します。設定、すべてのメンバーの接続、プロバイダー管理のスキルがすべて削除されます。",
-          "retainedSkills": "{count, plural, =0 {削除される関連カスタムスキルはありません。} one {関連するカスタムスキル # 件は保持されますが、このアプリとのリンクが解除され、全員に対して無効になります。} other {関連するカスタムスキル # 件は保持されますが、このアプリとのリンクが解除され、全員に対して無効になります。}}",
           "submit": {
             "label": "アプリを削除"
           },
           "title": "「{name}」を削除しますか？"
         },
         "toasts": {
-          "deleteFailed": "「{name}」を削除できませんでした",
-          "enableFailed": "「{name}」を有効にできませんでした"
+          "deleteFailed": "「{name}」を削除できませんでした"
         }
       },
       "loading": {
@@ -6009,9 +5094,6 @@
       },
       "page": {
         "description": "組織の Craft エージェントが使用できるアプリを設定します。各メンバーは Craft のアプリページで自分のアカウントを接続します。"
-      },
-      "warnings": {
-        "providerUnavailable": "プロバイダーを利用できません"
       }
     },
     "federated": {
@@ -8641,6 +7723,48 @@
         "section": {
           "title": "管理者コントロール"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "クエリは管理者に表示されますが、ユーザーの識別情報は削除されます",
+            "label": "匿名化"
+          },
+          "description": "組織のチャット履歴全体を管理パネルにどのように表示するかを制御します。",
+          "disabled": {
+            "description": "クエリ履歴のレポートは無効です。",
+            "label": "非表示"
+          },
+          "normal": {
+            "description": "すべてのクエリが管理者に表示され、個々のユーザーに紐づけられます。",
+            "label": "ユーザー情報付きで表示"
+          },
+          "title": "クエリ履歴の表示設定"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "1 から {max} までの整数の日数を入力してください。",
+            "label": "カスタム保持期間",
+            "moreTooltip": "その他",
+            "placeholder": "日数",
+            "restoreTooltip": "既定値に戻す"
+          },
+          "description": "組織のチャットを {appName} が保持する期間を指定します。",
+          "forever": {
+            "label": "無期限"
+          },
+          "presets": {
+            "days30": "30 日",
+            "days60": "60 日",
+            "days7": "7 日",
+            "days90": "90 日",
+            "year1": "1 年"
+          },
+          "reduceModal": {
+            "confirmLabel": "保持期間を短縮",
+            "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
+            "title": "チャットの保持期間を短縮しますか？"
+          },
+          "title": "チャット履歴の保持"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "管理者のみが全ユーザー一覧を表示できます。",
@@ -8659,6 +7783,10 @@
           "placeholder": "ドメインを追加（例：onyx.app）",
           "subDescription": "新規ユーザーは、このドメイン一覧に含まれるメールアドレスでのみアカウントを登録できます。",
           "title": "許可するメールドメイン"
+        },
+        "anonymousUsers": {
+          "description": "**ログインせずに**誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
+          "title": "匿名ユーザーを許可"
         },
         "emailDomains": {
           "description": "新規ユーザーの登録を特定のメールドメインに制限します。",
@@ -8983,6 +8111,13 @@
         },
         "setDefaultButton": {
           "label": "デフォルトに設定"
+        },
+        "deleteButton": {
+          "ariaLabel": "{title} を削除",
+          "tooltip": "削除"
+        },
+        "reconnectButton": {
+          "label": "再接続"
         }
       }
     },
@@ -9942,6 +9077,9 @@
       "provider": {
         "connected": {
           "label": "接続済み"
+        },
+        "disconnected": {
+          "suffix": "(接続解除済み)"
         }
       },
       "setupModal": {
@@ -9959,8 +9097,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} に接続しました",
-        "disconnected": "{label} を切断しました",
         "unexpectedError": "予期しないエラーが発生しました。"
       },
       "providers": {
@@ -10001,6 +9137,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "**{label}** の API キーと設定が削除されます。再度トレースを送信するには、最初から設定してください。",
+        "description": "このプロバイダーの API キーと設定を削除します。",
+        "submit": {
+          "label": "削除"
+        },
+        "title": "{label} を削除",
+        "envBody": "**{label}** の API キーと設定が削除されます。トレースはオフのままです。環境変数の設定で再度トレースを送信するには、再接続してください。"
       }
     },
     "usage": {
@@ -10153,7 +9298,18 @@
         },
         "title": "ユーザーを削除",
         "toasts": {
+          "blockedBySkills": "このユーザーを削除できません",
+          "openSkills": "スキルを開いて移管する",
+          "renamed": "新しい所有者は同じ名前のスキルをすでに持っていたため、移動したスキルの名前が変更されました",
           "success": "ユーザーを削除しました"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> は {count, plural, other {# 件の非公開スキル}} を所有しています。所有権を別のユーザーに移管すると、アカウントが削除されます。",
+          "submit": {
+            "label": "すべて移管して削除"
+          },
+          "ownersLoadFailed": "スキルを受け取れるユーザーを読み込めませんでした。",
+          "retry": "再試行"
         }
       },
       "editModal": {
@@ -10692,7 +9848,7 @@
       },
       "tierTooltip": "LLM ゲートウェイには Business プランまたは Enterprise プランが必要です。",
       "scopeNote": {
-        "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
+        "title": "各ユーザーは設定 → サードパーティアクセス → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
       },
       "toasts": {
         "settingsUpdateFailed": "設定の更新に失敗しました"
@@ -11093,7 +10249,6 @@
         "kind": {
           "placeholder": "上限の種類を選択"
         },
-        "field": {},
         "new": {
           "title": "新しいグループ上限",
           "pool": {
@@ -11231,6 +10386,436 @@
           "tooltip": "編集"
         }
       }
+    },
+    "integrations": {
+      "title": "連携",
+      "description": "MCP サーバーとアプリを接続します。各統合には所有者、インストール設定、独自の共有があります。",
+      "search": "連携を検索",
+      "open": "{name} を開く",
+      "loadFailed": "連携を読み込めませんでした。",
+      "add": {
+        "label": "追加",
+        "title": "連携を追加",
+        "description": "サービスを接続すると、チャットと Craft で使えるようになります。",
+        "created": "{name} を追加しました。",
+        "createFailed": "連携を追加できませんでした。",
+        "openapi": {
+          "title": "OpenAPI アプリを追加",
+          "schema": {
+            "title": "スキーマ",
+            "description": "アクションを定義するOpenAPIスキーマを追加します。",
+            "added": "{count, plural, other {スキーマには # 個のパスがあります。}}",
+            "required": "スキーマを追加してください。",
+            "add": "スキーマを追加",
+            "edit": "スキーマを編集"
+          }
+        },
+        "preset": {
+          "title": "開始点",
+          "loadFailed": "プリセットを読み込めませんでした。",
+          "instructions": "セットアップ手順",
+          "credentialRequired": "この値を入力してください。",
+          "description": "プリセットは、組み込みアプリの名前とサインインを入力します。任意のHTTPサービスを設定するには「カスタムアプリ」を選択します。",
+          "custom": "カスタムアプリ"
+        },
+        "name": {
+          "title": "名前",
+          "placeholder": "名前を入力",
+          "required": "名前を入力してください。"
+        },
+        "descriptionField": {
+          "title": "説明",
+          "placeholder": "説明を入力"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL パターン",
+            "description": "1 行に 1 つの URL パターンを入力します（例: https://api.example.com/*）。",
+            "placeholder": "https://api.example.com/*",
+            "required": "URL パターンを 1 つ以上入力してください。"
+          }
+        },
+        "mcp": {
+          "url": {
+            "title": "サーバー URL",
+            "placeholder": "https://example.com/mcp",
+            "error": "有効なサーバー URL を入力してください。"
+          },
+          "probe": {
+            "checking": "サーバーを確認しています…",
+            "public": "{count, plural, one {# 個のツール} other {# 個のツール}}が見つかりました。このサーバーはログイン不要です。",
+            "oauth": "このサーバーは OAuth ログインを使用します。",
+            "authUnknown": "このサーバーにはログインが必要です。API キーのヘッダーまたは OAuth を追加してください。",
+            "unreachable": "Onyx はこのサーバーに接続できません。URL を確認してください。",
+            "forbidden": "追加する前にこのサーバーを確認できるのは管理者だけです。このまま追加することもできます。"
+          },
+          "transport": {
+            "title": "トランスポート",
+            "streamableHttp": "Streamable HTTP",
+            "sse": "Server-Sent Events (SSE)"
+          },
+          "suggested": "おすすめのサーバー"
+        },
+        "owner": {
+          "title": "所有者",
+          "personal": "自分用",
+          "organization": "組織用",
+          "personalDescription": "この統合を使えるのはあなただけです。後で共有できます。",
+          "organizationDescription": "組織の各ユーザーがこの統合をオンにできます。"
+        },
+        "submit": "追加",
+        "adding": "追加しています…",
+        "cancel": "キャンセル",
+        "type": {
+          "title": "種類",
+          "description": "Onyxがサービスに接続する方法を選択します。",
+          "mcp_server": {
+            "title": "MCPサーバー",
+            "description": "URLでリモートのMCPサーバーに接続します。"
+          },
+          "openapi": {
+            "title": "OpenAPIアプリ",
+            "description": "OpenAPIスキーマからアクションを作成します。"
+          },
+          "app": {
+            "title": "アプリ",
+            "description": "GitHubなどのプリセット、またはカスタムアプリから始めます。"
+          }
+        },
+        "details": {
+          "title": "詳細"
+        },
+        "signIn": {
+          "title": "サインイン"
+        }
+      },
+      "filters": {
+        "label": "連携の種類",
+        "all": "すべての種類",
+        "mcp": "MCP サーバー",
+        "api": "アプリ"
+      },
+      "columns": {
+        "name": "名前",
+        "type": "種類",
+        "signIn": "ログイン",
+        "status": "ステータス",
+        "installation": "インストール設定"
+      },
+      "empty": {
+        "title": "連携はありません",
+        "description": "MCP サーバーまたはアプリを追加して、エージェントに新しいアクションを提供します。",
+        "noResults": "連携が見つかりません",
+        "noResultsDescription": "別の名前または種類で試してください。"
+      },
+      "shape": {
+        "mcp_server": "MCP サーバー",
+        "openapi": "OpenAPI アプリ",
+        "preset": "アプリ",
+        "custom": "カスタムアプリ"
+      },
+      "signInSummary": "{mode, select, none {ログインなし} shared {{method, select, oauth2 {組織アカウント (OAuth)} api_key {組織の API キー} onyx_login {Onyx ログイン} managed {Onyx が管理} other {組織アカウント}}} individual {{method, select, oauth2 {各ユーザー (OAuth)} api_key {各ユーザー (API キー)} onyx_login {Onyx ログイン} managed {Onyx が管理} other {各ユーザー}}} other {不明}}",
+      "status": {
+        "needsSetup": "要セットアップ",
+        "off": "オフ",
+        "needsReconnect": "要再接続",
+        "ready": "準備完了"
+      },
+      "signIn": {
+        "mode": {
+          "title": "ログインモード",
+          "description": "サービスにログインするユーザーを選択します。",
+          "none": "ログインなし",
+          "shared": "組織で 1 つのアカウント",
+          "individual": "各ユーザーがログイン"
+        },
+        "method": {
+          "title": "ログイン方法",
+          "oauth2": "OAuth",
+          "apiKey": "API キー",
+          "onyxLogin": "Onyx ログイン",
+          "managed": "Onyx が管理"
+        },
+        "header": {
+          "name": {
+            "title": "ヘッダー名",
+            "placeholder": "ヘッダー名を入力",
+            "error": "ヘッダー名を入力してください。",
+            "duplicate": "各ヘッダー名は 1 回だけ使用してください。"
+          },
+          "value": {
+            "title": "ヘッダー値",
+            "description": "各認証情報を波かっこで囲みます（例: {example}）。各プレースホルダーが認証情報の入力欄になります。",
+            "placeholder": "例: {example}",
+            "error": "プレースホルダーを 1 つ以上追加してください（例: {example}）。"
+          },
+          "add": "ヘッダーを追加",
+          "remove": "ヘッダー {name} を削除"
+        },
+        "oauth": {
+          "providerMode": {
+            "title": "OAuth クライアント",
+            "manual": "クライアント情報を入力",
+            "discovery": "クライアントを自動登録",
+            "preset": "プリセットのクライアントを使用"
+          },
+          "authorizationUrl": "認可 URL",
+          "tokenUrl": "トークン URL",
+          "urlPlaceholder": "https://",
+          "urlError": "有効な URL を入力してください。",
+          "clientId": "クライアント ID",
+          "clientIdPlaceholder": "クライアント ID を入力",
+          "clientIdError": "クライアント ID を入力してください。",
+          "clientSecret": "クライアントシークレット",
+          "clientSecretPlaceholder": "クライアントシークレットを入力",
+          "clientSecretSaved": "保存済みです。置き換えるには新しいシークレットを入力してください。",
+          "scopes": {
+            "title": "スコープ",
+            "description": "スコープはスペースで区切ります。",
+            "placeholder": "例: read write"
+          }
+        }
+      },
+      "detail": {
+        "title": "連携",
+        "back": "すべての連携",
+        "notFound": "この連携は存在しないか、表示する権限がありません。",
+        "loadFailed": "この連携を読み込めませんでした。",
+        "tabs": {
+          "overview": "概要",
+          "configuration": "設定",
+          "actions": "アクション"
+        },
+        "overview": {
+          "readOnly": "この連携は表示できますが、変更はできません。",
+          "noDescription": "説明なし",
+          "type": "種類",
+          "signIn": "ログイン",
+          "createdBy": "追加したユーザー",
+          "needsSetup": "要セットアップ",
+          "needsSetupDefault": "「設定」タブでログイン設定を完了してください。",
+          "enabled": {
+            "title": "有効",
+            "description": "オフにすると、エージェントもユーザーもこの連携を使用できません。"
+          },
+          "delete": {
+            "label": "削除",
+            "confirmTitle": "{name} を削除しますか？",
+            "confirmDescription": "Onyx は統合とその接続およびアクション設定を削除し、各エージェントとタスクから外します。元に戻すことはできません。",
+            "confirm": "削除"
+          },
+          "deleted": "{name} を削除しました。",
+          "deleteFailed": "連携を削除できませんでした。",
+          "saveFailed": "変更を保存できませんでした。",
+          "details": {
+            "name": "名前",
+            "nameRequired": "連携に名前を付けてください。",
+            "description": "説明",
+            "save": "保存",
+            "saved": "名前と説明を保存しました。",
+            "edit": "詳細を編集",
+            "title": "詳細を編集",
+            "cancel": "キャンセル",
+            "saveFailed": "名前と説明を保存できませんでした。"
+          },
+          "description": "説明",
+          "menu": "その他の操作",
+          "owner": "所有者"
+        },
+        "configuration": {
+          "readOnly": "この連携は表示できますが、変更はできません。",
+          "connection": {
+            "title": "接続",
+            "serverUrl": "サーバー URL",
+            "serverUrlError": "有効なサーバー URL を入力してください。",
+            "urlPatterns": "URL パターン",
+            "urlPatternsDescription": "1 行に 1 つの URL パターンを入力します。",
+            "schema": "OpenAPI スキーマ",
+            "schemaDescription": "変更したスキーマを保存すると、Onyx はアクションを再同期します。",
+            "schemaError": "スキーマを JSON オブジェクトとして入力してください。"
+          },
+          "signIn": {
+            "title": "ログイン",
+            "description": "ログイン方法、クライアント、URL、スコープを変更すると、各ユーザーは再接続する必要があります。"
+          },
+          "alwaysAllow": {
+            "title": "ユーザーによる「常に許可」の保存",
+            "description": "「確認」に設定されたアクションについて、各ユーザーが承認プロンプトを省略できるようにします。"
+          },
+          "save": "保存",
+          "saving": "保存しています…",
+          "saved": "設定を保存しました。",
+          "saveFailed": "設定を保存できませんでした。",
+          "organization": {
+            "title": "組織の接続",
+            "description": "各ユーザーはこのアカウントで操作します。",
+            "connect": "接続",
+            "disconnect": "接続を解除",
+            "connected": "組織アカウントを接続しました。",
+            "disconnected": "組織アカウントの接続を解除しました。",
+            "failed": "組織の接続を変更できませんでした。"
+          },
+          "preset": {
+            "title": "アカウント設定",
+            "description": "保存済みのアカウント設定と OAuth クライアントを置き換えるには、新しい値を入力します。保持するには空欄のままにします。",
+            "credentialRequired": "アカウント設定を置き換えるには、すべての項目を入力してください。"
+          }
+        },
+        "actions": {
+          "loadFailed": "アクションを読み込めませんでした。",
+          "retry": "再試行",
+          "search": "アクションを検索",
+          "refresh": "更新",
+          "refreshed": "アクションを更新しました。",
+          "refreshFailed": "アクションを更新できませんでした。",
+          "save": "保存",
+          "saving": "保存しています…",
+          "saved": "アクション設定を保存しました。",
+          "saveFailed": "アクション設定を保存できませんでした。",
+          "default": {
+            "title": "新しいアクションのデフォルト",
+            "description": "個別の設定がないアクションはこの値を使用します。連携が後で追加するアクションにも適用されます。",
+            "unset": "未設定です。各アクションは独自のデフォルトを使用します。",
+            "clear": "クリア"
+          },
+          "usesDefault": "デフォルトを使用",
+          "setByAdmin": "管理者が設定",
+          "alwaysAsks": "Craft は、他のアクションに一致しない各リクエストの前に確認します。許可は設定できません。",
+          "useDefaults": "デフォルトを使用",
+          "readOnly": "読み取りアクション ({count})",
+          "write": "書き込みアクション ({count})",
+          "other": "その他のアクション ({count})",
+          "empty": "この連携にはアクションがありません。",
+          "connectFirst": {
+            "title": "まずサーバーに接続してください",
+            "description": "Onyx は MCP サーバーの接続後にそのアクションを読み込みます。",
+            "open": "設定を開く",
+            "individualDescription": "各ユーザーがこのサーバーにサインインします。統合のページで自分のアカウントを接続してから、[更新]をクリックしてください。",
+            "openIntegration": "統合を開く"
+          }
+        }
+      },
+      "installation": {
+        "select": "{name} のインストール設定",
+        "saved": "{name} は {policy} になりました。",
+        "saveFailed": "インストール設定を保存できませんでした。",
+        "title": "インストール設定",
+        "description": "この連携を使える人。利用不可にすると非公開になり、所有者、共有相手、独自の設定を持つグループだけが使えます。所有者と共有相手だけに限定するには、それらのグループ設定を削除してください。",
+        "notAvailable": "非公開。所有者、共有相手、独自の設定を持つグループだけが使えます。",
+        "required": "自分のアカウントでサインインするメンバーは、チャットと Craft を使う前に接続する必要があります。"
+      },
+      "ownedBy": "所有者: {owner}",
+      "groupAccess": {
+        "saved": "{name} のグループ設定を保存しました。",
+        "saveFailed": "グループ設定を保存できませんでした。"
+      }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Onyx インスタンスの現在のリソース使用量と検索クラスターの状態",
+        "refresh": "更新",
+        "refreshFailed": "クラスターの状態を更新できませんでした。ページには前回の結果が表示されています。",
+        "loadFailed": "検索クラスターの状態を読み取れませんでした。OpenSearch に接続できるか確認してください。"
+      },
+      "cluster": {
+        "title": "検索クラスター - OpenSearch",
+        "status": "クラスターの状態",
+        "version": "OpenSearch {version}",
+        "noVersion": "OpenSearch",
+        "updated": "{time}に更新",
+        "dataNodes": "データノード",
+        "shards": "シャード",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "コピー",
+        "indexSize": "インデックスサイズ",
+        "chunks": "チャンク",
+        "healthGreen": "緑: すべてのシャードコピーが割り当てられています。",
+        "healthYellow": "黄: 一部のレプリカシャードが割り当てられていません。検索は機能しますが、データノードを失うとデータが失われる可能性があります。",
+        "healthYellowSingleNode": "黄: レプリカのコピーには 2 つ目のデータノードが必要です。データノードが 1 つのクラスターでは正常な状態で、検索は動作します。",
+        "healthRed": "赤: 一部のプライマリシャードが割り当てられていないため、インデックスの一部を検索できません。"
+      },
+      "searches": {
+        "loadTitle": "検索負荷",
+        "loadUnit": "回/秒",
+        "timeTitle": "検索レイテンシ",
+        "seconds": "{value} 秒",
+        "milliseconds": "{value} ミリ秒",
+        "loadFailed": "最近の検索を読み取れませんでした。",
+        "p90Note": "(90パーセンタイル)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}、p10 {p10}",
+        "rateTooltip": "{rate} 回/秒",
+        "millisecondsUnit": "ミリ秒",
+        "secondsUnit": "秒",
+        "failedInMinute": "{count, plural, other {# 件失敗}}"
+      },
+      "nodes": {
+        "title": "データノード",
+        "disk": "ディスク使用量",
+        "vector": "ベクトルメモリ",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, other {# シャード}}",
+        "unnamed": "ノード {number}",
+        "copyName": "OpenSearch のノード名をコピー ({name})"
+      },
+      "indexes": {
+        "title": "インデックス",
+        "chunks": "チャンク",
+        "shards": "シャード",
+        "reindex": "再インデックス",
+        "detail": "埋め込みモデル · {dim} 次元",
+        "deleted": "削除済みチャンク {percent}%",
+        "detailQuantized": "埋め込みモデル · {dim} 次元 · {quantization} ベクトル",
+        "reindexProgress": "現在の {percent}%"
+      },
+      "issues": {
+        "title": "問題と推奨事項",
+        "none": "問題は見つかりませんでした。",
+        "criticalCount": "重大 {count} 件",
+        "warningCount": "{count, plural, other {警告 # 件}}",
+        "nodeCount": "{count} 個のデータノード",
+        "indexSettings": "インデックス設定",
+        "sizingGuide": "サイジングガイド",
+        "clusterRed": {
+          "title": "クラスターの状態が赤です",
+          "description": "一部のプライマリシャードが割り当てられていないため、インデックスの一部を検索できません。OpenSearch のログを確認してください。"
+        },
+        "unassignedShards": {
+          "title": "{value, plural, other {# 個のシャードコピーが割り当てられていません}}",
+          "description": "OpenSearch にはそれらを配置するデータノードがありません。データノードを追加するか、レプリカ数を減らしてください。"
+        },
+        "diskCritical": {
+          "title": "{nodes} のディスクが {value}%",
+          "description": "OpenSearch は 85% でデータノードへのシャード配置を停止します。ストレージまたはデータノードを追加してください。"
+        },
+        "diskWarning": {
+          "title": "{nodes} のディスクが {value}%",
+          "description": "再インデックスには 2 つ目のインデックス用の空き容量が必要です。ストレージまたはデータノードを追加してください。"
+        },
+        "vectorCritical": {
+          "title": "{nodes} のベクトルメモリが {value}%",
+          "description": "ベクトルがメモリに収まらないため、検索はディスクから読み取ります。メモリまたはデータノードを追加するか、より小さいベクトル量子化を使用してください。"
+        },
+        "vectorWarning": {
+          "title": "{nodes} のベクトルメモリが {value}%",
+          "description": "ベクトルがメモリに収まらないと検索が遅くなります。メモリまたはデータノードを追加するか、より小さいベクトル量子化を使用してください。"
+        },
+        "heap": {
+          "title": "{nodes} の JVM ヒープが {value}%",
+          "description": "ヒープがいっぱいになると、OpenSearch はリクエストを拒否することがあります。メモリまたはデータノードを追加してください。"
+        },
+        "indexMissing": {
+          "title": "検索インデックスがありません",
+          "description": "現在の検索設定のインデックスが OpenSearch にないため、検索結果が返りません。OpenSearch のログを確認してから、インデックス設定で再インデックスを開始してください。"
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, other {# 個のデータノードが応答しませんでした}}",
+          "description": "状態には、これらのノードが報告しなかったディスクやメモリなどの情報が含まれていません。すべてのデータノードが動作していることを確認してから、更新してください。"
+        },
+        "dismiss": "閉じる"
+      }
     }
   },
   "agents": {
@@ -11265,10 +10850,6 @@
         "codeInterpreter": {
           "description": "コードを生成して実行します。",
           "title": "コードインタープリター"
-        },
-        "codingAgent": {
-          "description": "GitHubリポジトリを調査し、そのコードに関する質問に回答します。",
-          "title": "コーディングエージェント"
         },
         "description": "このエージェントが使用できるツールと機能です。",
         "imageGeneration": {
@@ -11349,14 +10930,6 @@
         "editTitle": "エージェントを編集",
         "save": {
           "label": "保存"
-        }
-      },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "このMCPサーバーへのアクセス権がなくなりました。既存のツールは保持されます。"
-        },
-        "searchTools": {
-          "placeholder": "ツールを検索..."
         }
       },
       "page": {
@@ -11453,6 +11026,51 @@
       },
       "warnings": {
         "openUrl": "URLを開く機能なしのウェブ検索では、ウェブベースの結果が大幅に悪化する可能性があります。"
+      },
+      "integrations": {
+        "askHint": "確認なしで実行するには、エージェントの設定を変更するか、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
+        "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
+        "askHintAgent": "確認なしで実行するには、エージェントの設定を変更するか、各ユーザーが常に許可を選びます。",
+        "askHintAgentOnly": "確認なしで実行するには、エージェントの設定を変更します。",
+        "choice": {
+          "inherit": "統合の設定を使う",
+          "agentDefault": "エージェントのデフォルトを使用"
+        },
+        "default": {
+          "description": "独自の設定がない各アクションに適用されます。統合が後で追加するアクションにも適用されます。",
+          "title": "その他のアクションのデフォルト"
+        },
+        "description": "エージェントに統合を追加します。別の設定を選ばない限り、各アクションは統合の設定を使います。",
+        "effective": "{policy, select, allow {許可} ask {確認} other {ブロック}}（{source, select, integration {統合の設定} agentDefault {エージェントのデフォルト} other {エージェントの設定}}）",
+        "empty": "利用できる統合はありません。",
+        "loadFailed": "統合を読み込めませんでした。",
+        "lock": {
+          "adminBlocked": "許可は選べません: 管理者がこのアクションをブロックしました。",
+          "alwaysAsks": "許可は使用できません: Craft はこれらのリクエストごとに承認を求めます。",
+          "adminFinal": "許可は選べません: この統合の管理者設定は確定しています。"
+        },
+        "noActions": "この統合にはまだアクションがありません。",
+        "notVisible": "この統合のアクションは表示できません。設定はそのまま残ります。",
+        "title": "統合",
+        "add": {
+          "placeholder": "統合を追加"
+        },
+        "remove": {
+          "ariaLabel": "{integration}を削除"
+        },
+        "retry": {
+          "label": "再試行"
+        },
+        "actionSetting": {
+          "label": "{action} の設定"
+        },
+        "defaultSetting": {
+          "label": "{integration}のデフォルト設定"
+        },
+        "openIntegration": {
+          "label": "{integration} のアクションを開く"
+        },
+        "sharedWider": "このエージェントを使える一部のユーザーは{integration}を使えません。そのユーザーのチャットはこの統合なしで動作します。アクセスを付与するには、{integration}を共有してください。"
       }
     },
     "filters": {
@@ -11593,7 +11211,8 @@
           "empty": {
             "title": "アクションなし"
           },
-          "title": "アクションとツール"
+          "title": "アクションとツール",
+          "noAccess": "この統合は使用できません。このエージェントとのチャットは統合なしで動作します。"
         },
         "conversationStarters": {
           "title": "会話のきっかけ"
@@ -11617,14 +11236,6 @@
         "knowledgeCutoff": {
           "description": "この日付より前に最終更新されたドキュメントは無視されます。",
           "title": "ナレッジのカットオフ日"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "展開"
-          },
-          "fold": {
-            "label": "折りたたむ"
-          }
         },
         "moreInfo": {
           "title": "詳細情報"
@@ -11790,9 +11401,18 @@
         "loginBadCredentials": "このアカウントはサインインできません。無効化されている可能性があります。ワークスペースの管理者にお問い合わせください。",
         "loginRequired": "先に ID プロバイダーでログインする必要があります。",
         "oauthUserAlreadyExists": "このメールアドレスのアカウントは、別のサインイン方法で既に存在します。最初に使用した方法でサインインするか、管理者にこのプロバイダーの連携を依頼してください。",
+        "playgroundActiveTenant": "あなたの会社のチームがすでに Onyx を試用しています。チームに参加しますか、それとも新しいチームを始めますか？",
+        "playgroundAskAdmin": "管理者に招待を依頼してください。",
+        "playgroundCheckFailed": "サインアップを確認できませんでした。しばらくしてからもう一度お試しください。",
+        "playgroundEmailUsed": "プレイグラウンドへのアクセスはすでに使用済みです。",
+        "playgroundFreeMail": "勤務先のメールアドレスを使用してください。",
+        "playgroundLimitReached": "貴社はプレイグラウンドへのアクセスをすでに使用済みです。",
         "serverError": "ID プロバイダーでエラーが発生しました。もう一度お試しください。",
         "staleSignIn": "このログインリンクは期限切れか、無効になっています。もう一度ログインしてください。",
         "temporarilyUnavailable": "ID プロバイダーは一時的に利用できません。しばらくしてからもう一度お試しください。"
+      },
+      "contactSalesButton": {
+        "label": "営業に問い合わせる"
       },
       "credentialsIssue": {
         "description": "ログイン認証情報の誤りまたは期限切れ"
@@ -11800,6 +11420,12 @@
       "heading": {
         "description": "ログインの試行中に問題が発生しました。",
         "title": "認証エラー"
+      },
+      "joinTeamButton": {
+        "label": "チームに参加"
+      },
+      "playgroundHeading": {
+        "title": "Onyx プレイグラウンド"
       },
       "possibleIssues": {
         "title": "考えられる原因："
@@ -11809,6 +11435,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "問題が解決しない場合は、システム管理者にお問い合わせください。"
+      },
+      "startNewTeamButton": {
+        "label": "新しいチームを始める"
       },
       "systemDisruptionIssue": {
         "description": "認証システムの一時的な障害"
@@ -12131,106 +11760,15 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "アプリ「{app}」は無効です",
-        "connectToEnable": "有効にするにはアプリ「{app}」を接続してください",
-        "connectToUse": "使用するにはアプリ「{app}」を接続してください",
-        "nameConflict": "同じ名前の別のスキルが有効です",
-        "usesApp": "アプリ「{app}」を使用します"
-      },
-      "edit": {
-        "tooltip": "スキルを編集"
-      },
-      "invalid": {
-        "description": "この無効なスキルを削除して、新しいスキルを作成してください。"
-      },
       "tags": {
-        "appSkill": {
-          "label": "アプリスキル"
-        },
-        "builtin": {
-          "label": "組み込み"
-        },
-        "invalid": {
-          "label": "無効"
-        },
-        "personal": {
-          "label": "個人用"
-        },
-        "required": {
-          "tooltip": "組織の管理者により、このスキルの利用が必須になっています。"
-        },
-        "unavailable": {
-          "label": "利用できません - クリックして詳細を表示"
-        },
-        "shared": {
-          "label": "共有"
-        },
-        "organization": {
-          "label": "組織"
-        },
         "unpublished": {
           "label": "未公開の変更",
           "tooltip": "組織はまだバージョン {number} を使用しています。"
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "{name} を無効にする"
-        },
-        "disableForApp": {
-          "ariaLabel": "{app} で {name} を無効にする"
-        },
-        "enable": {
-          "ariaLabel": "{name} を有効にする"
-        },
-        "enableForApp": {
-          "ariaLabel": "{app} で {name} を有効にする"
-        }
-      },
-      "tooltips": {
-        "appDisabled": "アプリ「{app}」は管理者によって無効化されています。",
-        "connectApp": "このスキルを使用するには、アプリページでアプリ「{app}」を接続してください。",
-        "invalid": "このスキルは無効です。削除して新しいスキルを作成してください。",
-        "unavailable": "このスキルは現在利用できません。クリックすると詳細を表示します。"
       }
     }
   },
   "chat": {
-    "mcpConnections": {
-      "trigger": {
-        "label": "ツールに認証情報が必要です（{count}）",
-        "tooltip": "一部のツールは、アカウントを接続するか認証情報を追加するまで使用できません。"
-      },
-      "modal": {
-        "title": "ツールを接続",
-        "description": "Onyxでこれらのツールを使用するには、認証情報を追加してください。",
-        "hint": "これらのツールを接続しなくてもチャットを続けられますが、エージェントの機能が制限される場合があります。"
-      },
-      "connect": {
-        "label": "接続",
-        "accessibleLabel": "{server}に接続"
-      },
-      "reconnect": {
-        "label": "再接続",
-        "accessibleLabel": "{server} に再接続"
-      },
-      "connecting": {
-        "label": "接続中…"
-      },
-      "connected": {
-        "label": "接続済み"
-      },
-      "required": {
-        "label": "認証情報が必要です"
-      },
-      "done": {
-        "label": "完了"
-      },
-      "error": {
-        "description": "接続できませんでした。もう一度お試しください。"
-      }
-    },
     "app": {
       "createSessionFailed": {
         "toast": "新しいチャットを開始できませんでした。もう一度お試しください。"
@@ -12266,39 +11804,9 @@
       "sessionNotFound": {
         "description": "このチャットセッションは存在しないか、削除されています。",
         "title": "チャットが見つかりません"
-      },
-      "sourcesModal": {
-        "title": "ソース"
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "削除"
-      },
-      "deleteModal": {
-        "description": "このチャットを削除してもよろしいですか？この操作は元に戻せません。",
-        "submitButton": {
-          "label": "削除"
-        },
-        "title": "チャットを削除"
-      },
-      "exportAs": {
-        "label": "形式を指定してエクスポート…"
-      },
-      "exportFailed": {
-        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "プレーンテキスト"
-      },
-      "fullWidth": {
-        "ariaLabel": "チャットの全幅表示を切り替え",
-        "fitTooltip": "幅を合わせる",
-        "fullTooltip": "全幅"
-      },
       "incognitoExit": {
         "ariaLabel": "シークレットチャットを終了",
         "tooltip": "シークレットチャットを終了"
@@ -12325,14 +11833,14 @@
       "modeButton": {
         "ariaLabel": "アプリモードを変更"
       },
-      "moveToProject": {
-        "label": "プロジェクトに移動"
-      },
       "openSidebar": {
         "ariaLabel": "サイドバーを開く"
       },
       "share": {
-        "label": "共有"
+        "label": "共有…"
+      },
+      "shareMenu": {
+        "label": "共有またはエクスポート"
       }
     },
     "banners": {
@@ -12377,6 +11885,14 @@
       "licenseExpiry": {
         "source": {
           "label": "ライセンス"
+        }
+      },
+      "searchCluster": {
+        "source": {
+          "label": "検索クラスター"
+        },
+        "cta": {
+          "label": "サービスステータスを開く"
         }
       },
       "nextButton": {
@@ -12509,7 +12025,8 @@
         },
         "stopSubagentsButton": {
           "label": "サブエージェントを停止"
-        }
+        },
+        "questionAttachmentsHint": "エージェントの質問への回答にはファイルを含められません。回答するにはファイルを削除してください。"
       },
       "baseInputBar": {
         "input": {
@@ -12563,6 +12080,9 @@
         },
         "skillsGroup": {
           "label": "スキル"
+        },
+        "manageSkills": {
+          "label": "スキルを管理"
         }
       },
       "inputChip": {
@@ -12654,91 +12174,15 @@
         "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
         "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
         "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
-      }
-    },
-    "mcpApiKey": {
-      "apiKeyField": {
-        "label": "API キー",
-        "placeholder": "API キーを入力"
       },
-      "apiKeyVisibilityButton": {
-        "hideAriaLabel": "API キーを非表示",
-        "showAriaLabel": "API キーを表示"
+      "pendingToolApproval": {
+        "toast": "先に保留中のツール呼び出しを承認または拒否してください。"
       },
-      "cancelButton": {
-        "label": "キャンセル"
+      "pendingToolQuestion": {
+        "toast": "先にエージェントの質問に回答してください。"
       },
-      "credentialField": {
-        "placeholder": "{field} を入力"
-      },
-      "credentialVisibilityButton": {
-        "hideAriaLabel": "認証情報を非表示",
-        "showAriaLabel": "認証情報を表示"
-      },
-      "header": {
-        "enterApiKey": {
-          "title": "API キーの入力"
-        },
-        "enterCredentials": {
-          "title": "認証情報の入力"
-        },
-        "manageApiKey": {
-          "title": "API キーの管理"
-        },
-        "manageCredentials": {
-          "title": "認証情報の管理"
-        }
-      },
-      "intro": {
-        "enterApiKey": {
-          "text": "認証を有効にするには、{server} の API キーを入力してください。"
-        },
-        "enterCredentials": {
-          "text": "認証を有効にするには、{server} の認証情報を入力してください。"
-        },
-        "updateApiKey": {
-          "text": "{server} の API キーを更新してください。"
-        },
-        "updateCredentials": {
-          "text": "{server} の認証情報を更新してください。"
-        }
-      },
-      "saveApiKeyError": {
-        "message": "API キーを保存できませんでした"
-      },
-      "saveCredentialsError": {
-        "message": "認証情報を保存できませんでした"
-      },
-      "submitButton": {
-        "saveApiKey": {
-          "label": "API キーを保存"
-        },
-        "saveCredentials": {
-          "label": "認証情報を保存"
-        },
-        "saving": {
-          "label": "保存中..."
-        },
-        "updateApiKey": {
-          "label": "API キーを更新"
-        },
-        "updateCredentials": {
-          "label": "認証情報を更新"
-        }
-      },
-      "validationNote": {
-        "apiKey": {
-          "text": "API キーはサーバーで検証され、安全に保管されます。"
-        },
-        "authenticated": {
-          "text": "変更は保存前にサーバーで検証されます。"
-        },
-        "credentials": {
-          "text": "認証情報はサーバーで検証され、安全に保管されます。"
-        }
-      },
-      "backButton": {
-        "label": "ツールに戻る"
+      "pendingUserInput": {
+        "toast": "先に保留中の承認リクエストまたは質問に対応してください。"
       }
     },
     "messages": {
@@ -12767,7 +12211,7 @@
           "text": "{toolName} はブロックされました"
         },
         "completedStatus": {
-          "text": "{toolName} が完了しました"
+          "text": "{toolName} を実行しました"
         },
         "downloadFileLink": {
           "label": "ダウンロード"
@@ -12801,9 +12245,6 @@
         },
         "unreachableStatus": {
           "text": "{toolName} はサーバーに接続できませんでした"
-        },
-        "waitingIndicator": {
-          "text": "レスポンスを待っています..."
         }
       },
       "customToolAuth": {
@@ -12889,9 +12330,6 @@
         "emptyState": {
           "text": "生成された画像はありません"
         },
-        "failedStatus": {
-          "text": "画像の生成に失敗しました"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
         },
@@ -12900,6 +12338,11 @@
         },
         "stoppedStatus": {
           "text": "画像の生成を停止しました"
+        }
+      },
+      "markdownTable": {
+        "copyButton": {
+          "label": "表をコピー"
         }
       },
       "memoizedLink": {
@@ -12979,45 +12422,10 @@
       },
       "text": {
         "thinkingPlaceholder": {
-          "text": "思考中"
+          "text": "思考中..."
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · 終了コード {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · 失敗"
-          },
-          "bashRequest": {
-            "label": "リクエスト"
-          },
-          "bashResponse": {
-            "label": "レスポンス"
-          },
-          "bashRunning": {
-            "header": "Bash · 実行中…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · タイムアウト"
-          },
-          "noOutput": {
-            "text": "出力なし"
-          },
-          "response": {
-            "header": "レスポンス"
-          },
-          "task": {
-            "header": "コーディングタスク"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nリポジトリ: {repo}"
-          },
-          "thinking": {
-            "header": "思考中"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "タイムラインを折りたたむ"
         },
@@ -13029,73 +12437,127 @@
             "status": "プランを生成しました"
           },
           "generating": {
-            "status": "プランを生成中"
+            "status": "プランを生成中..."
           }
-        },
-        "doneStep": {
-          "header": "完了"
         },
         "expandButton": {
           "ariaLabel": "タイムラインを展開"
         },
         "fetch": {
           "reading": {
-            "status": "読み取り中"
+            "status": "ウェブページを閲覧中..."
+          },
+          "read": {
+            "status": "{count, plural, =0 {ウェブページを閲覧しました} other {# 件のウェブページを閲覧しました}}"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "{total, number} 文字中 {start, number}–{end, number} 文字目"
-          },
           "read": {
             "status": "{fileName} を読み取りました ({total, number} 文字中 {start, number}–{end, number} 文字目)"
           },
           "reading": {
-            "status": "ファイルを読み取り中"
+            "status": "ファイルを読み取り中..."
           }
-        },
-        "generatedImages": {
-          "label": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
         },
         "header": {
           "executingCode": {
-            "label": "コードを実行中"
+            "label": "コードを実行中..."
           },
           "executingNamedTool": {
-            "label": "{toolName} を実行中"
+            "label": "{toolName} を実行中..."
           },
           "executingTool": {
-            "label": "ツールを実行中"
+            "label": "ツールを実行中..."
           },
           "generatingImages": {
-            "label": "画像を生成中"
+            "label": "画像を生成中..."
           },
           "generatingPlan": {
-            "label": "プランを生成中"
+            "label": "プランを生成中..."
+          },
+          "queryingKnowledgeBase": {
+            "label": "ナレッジベースを照会中..."
           },
           "reading": {
-            "label": "読み取り中"
+            "label": "読み取り中..."
           },
           "readingFile": {
-            "label": "ファイルを読み取り中"
+            "label": "ファイルを読み取り中..."
           },
           "researching": {
-            "label": "リサーチ中"
+            "label": "リサーチ中..."
           },
           "searchingWeb": {
-            "label": "ウェブを検索中"
+            "label": "ウェブを検索中..."
           },
           "thinking": {
-            "label": "思考中"
-          },
-          "thinkingEllipsis": {
             "label": "思考中..."
           },
           "updatingMemory": {
             "label": "メモリを更新中..."
           },
           "working": {
-            "label": "作業中"
+            "label": "作業中..."
+          },
+          "waitingForApproval": {
+            "label": "承認を待っています..."
+          },
+          "waitingForAnswer": {
+            "label": "回答を待っています..."
+          },
+          "runningCommand": {
+            "label": "コマンドを実行中..."
+          },
+          "editingFiles": {
+            "label": "ファイルを編集中..."
+          },
+          "publishingFiles": {
+            "label": "ファイルを公開しています..."
+          },
+          "browsing": {
+            "label": "ウェブページを閲覧中..."
+          },
+          "runPhrases": {
+            "doingWork": {
+              "working": "作業中...",
+              "done": "作業しました"
+            },
+            "crunchingDetails": {
+              "working": "詳細を分析中...",
+              "done": "詳細を分析しました"
+            },
+            "connectingDots": {
+              "working": "点と点をつないでいます...",
+              "done": "点と点をつなぎました"
+            },
+            "runningNumbers": {
+              "working": "数字を計算中...",
+              "done": "数字を計算しました"
+            },
+            "fillingGaps": {
+              "working": "足りない部分を補っています...",
+              "done": "足りない部分を補いました"
+            },
+            "sortingThingsOut": {
+              "working": "整理しています...",
+              "done": "整理しました"
+            },
+            "gatheringPieces": {
+              "working": "ピースを集めています...",
+              "done": "ピースを集めました"
+            },
+            "workingThroughIt": {
+              "working": "取り組んでいます...",
+              "done": "取り組みました"
+            },
+            "ironingOutDetails": {
+              "working": "細部を詰めています...",
+              "done": "細部を詰めました"
+            },
+            "roundingThingsOut": {
+              "working": "仕上げています...",
+              "done": "仕上げました"
+            }
           }
         },
         "internalSearch": {
@@ -13103,13 +12565,19 @@
             "text": "結果が見つかりません"
           },
           "reading": {
-            "status": "読み取り中"
+            "status": "読み取り中..."
+          },
+          "read": {
+            "label": "読んだドキュメント"
           },
           "header": {
             "default": "社内ドキュメントを検索中",
+            "doneDefault": "社内ドキュメントを検索しました",
             "sources": "{sources}を検索中",
+            "doneSources": "{sources}を検索しました",
             "sourcesOverflow": "{sources} 他{count}件",
-            "withTimeWindow": "{header}({timeWindow})"
+            "withTimeWindow": "{header}({timeWindow})",
+            "running": "{header}..."
           },
           "timeWindow": {
             "since": "{date}以降",
@@ -13128,7 +12596,10 @@
             "text": "メモリツールは無効です"
           },
           "updating": {
-            "status": "メモリを更新中"
+            "status": "メモリを更新中..."
+          },
+          "updated": {
+            "status": "メモリを更新しました"
           },
           "viewMemoriesButton": {
             "tooltip": "メモリを表示"
@@ -13142,21 +12613,57 @@
             "label": "メモリを更新しました"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "ナレッジベースを照会しました"
+          },
+          "querying": {
+            "status": "ナレッジベースを照会中..."
+          },
+          "query": {
+            "table": {
+              "document": "ドキュメント",
+              "hierarchy_node": "フォルダー",
+              "chat_session": "チャットセッション",
+              "chat_message": "チャットメッセージ",
+              "search_doc": "引用されたドキュメント"
+            },
+            "count": "件数",
+            "countBy": {
+              "source": "ソース別の件数",
+              "owner": "所有者別の件数",
+              "month": "月別の件数"
+            },
+            "titleContains": "タイトルに「{text}」を含む",
+            "nameContains": "名前に「{text}」を含む",
+            "textContains": "本文に「{text}」を含む",
+            "updated": {
+              "since": "{date} 以降に更新",
+              "before": "{date} より前に更新",
+              "between": "{start} – {end} に更新"
+            },
+            "created": {
+              "since": "{date} 以降に作成",
+              "before": "{date} より前に作成",
+              "between": "{start} – {end} に作成"
+            },
+            "sent": {
+              "since": "{date} 以降に送信",
+              "before": "{date} より前に送信",
+              "between": "{start} – {end} に送信"
+            },
+            "owner": "所有者: {owner}",
+            "folder": "フォルダー {name} 内",
+            "nodeType": "種類: {type}",
+            "author": "送信者: {author}",
+            "message": "メッセージ {id}",
+            "allRetrieved": "取得したすべて",
+            "nextPage": "次のページ"
+          }
+        },
         "python": {
-          "completed": {
-            "status": "Python の実行が完了しました"
-          },
-          "default": {
-            "status": "Python の実行"
-          },
           "error": {
             "label": "エラー:"
-          },
-          "executing": {
-            "status": "Python コードを実行中..."
-          },
-          "failed": {
-            "status": "Python の実行に失敗しました"
           },
           "generatedFiles": {
             "label": "{count, plural, one {# 件のファイルを生成しました} other {# 件のファイルを生成しました}}"
@@ -13167,19 +12674,19 @@
           "output": {
             "label": "出力:"
           },
-          "runningCode": {
-            "label": "コードを実行中..."
+          "running": {
+            "status": "Python を実行中..."
           },
-          "writingCode": {
-            "status": "コードを作成中..."
+          "ran": {
+            "status": "Python を実行しました"
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "全文"
-          },
           "thinking": {
-            "status": "思考中"
+            "status": "思考中..."
+          },
+          "thought": {
+            "status": "思考しました"
           }
         },
         "researchAgent": {
@@ -13201,9 +12708,6 @@
         "stepsButton": {
           "label": "{count, plural, one {# ステップ} other {# ステップ}}"
         },
-        "stoppedStep": {
-          "header": "停止しました"
-        },
         "thoughtDuration": {
           "label": "{duration} 思考しました"
         },
@@ -13213,24 +12717,98 @@
         "toggleRow": {
           "ariaLabel": "タイムラインを切り替え"
         },
-        "toolNames": {
-          "codeInterpreter": "コードインタープリター",
-          "codingAgent": "コーディングエージェント",
-          "customTool": "カスタムツール",
-          "generateImage": "画像生成",
-          "generatePlan": "プラン生成",
-          "internalSearch": "社内検索",
-          "memory": "メモリ",
-          "openUrls": "URL を開く",
-          "researchAgent": "リサーチエージェント",
-          "thinking": "思考",
-          "tool": "ツール",
-          "webSearch": "ウェブ検索"
-        },
         "webSearch": {
           "searching": {
-            "status": "ウェブを検索中"
+            "status": "ウェブを検索中..."
+          },
+          "searched": {
+            "status": "ウェブを検索しました"
           }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {コマンドを実行中...} started {コマンドを開始しました} failed {コマンドが失敗しました} canceled {キャンセルされました} done {コマンドを実行しました} other {コマンドを実行しました}}",
+            "workdir": {
+              "label": "場所: {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中...} failed {セッション {sessionId} に入力を送信できませんでした} canceled {キャンセルされました} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中...} failed {セッション {sessionId} を確認できませんでした} canceled {キャンセルされました} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {セッションに入力を送信中...} failed {セッションに入力を送信できませんでした} canceled {キャンセルされました} done {セッションに入力を送信しました} other {セッションに入力を送信しました}}} check {{phase, select, running {セッションを確認中...} failed {セッションを確認できませんでした} canceled {キャンセルされました} done {セッションを確認しました} other {セッションを確認しました}}} other {セッション}}"
+            }
+          },
+          "exitCode": {
+            "label": "終了コード {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {シグナルで停止しました} canceled {キャンセルされました} deadline_exceeded {制限時間で停止しました} other {終了しました}}"
+          },
+          "stillRunning": {
+            "label": "実行中 (セッション {sessionId})"
+          },
+          "truncated": {
+            "label": "出力は切り詰められました"
+          },
+          "noOutput": {
+            "text": "出力なし"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# 個のファイルを編集しました} other {# 個のファイルを編集しました}}"
+            },
+            "failed": {
+              "status": "編集に失敗しました"
+            },
+            "title": "パッチ",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {{path} を書き込み中…} other {{path} を編集中…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {ファイルを書き込み中…} other {ファイルを編集中…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {ファイルにパッチを適用中…} one {# 個のファイルにパッチを適用中…} other {# 個のファイルにパッチを適用中…}}"
+              }
+            }
+          },
+          "stopped": {
+            "status": "停止しました"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, other {# 件のファイルを公開しました}}"
+            },
+            "failed": {
+              "status": "公開に失敗しました"
+            }
+          }
+        }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} が {tool} を実行しようとしています"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {エージェントから質問があります} other {エージェントから # 件の質問があります}}",
+        "other": {
+          "placeholder": "その他: 独自の回答を入力",
+          "ariaLabel": "{header} へのその他の回答"
+        },
+        "submit": "送信",
+        "page": {
+          "progress": "質問 {current} / {total}",
+          "next": "次へ",
+          "unanswered": "{count, plural, one {送信するには質問 {numbers} に回答してください。} other {送信するには質問 {numbers} に回答してください。}}"
+        },
+        "submitError": "回答を送信できませんでした。もう一度お試しください。",
+        "record": {
+          "answered": "回答済み",
+          "answeredInChat": "チャットで回答済み",
+          "cancelled": "未回答",
+          "closed": "待機は終了しました",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option}（{note}）"
         }
       },
       "toolbar": {
@@ -13308,61 +12886,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "内容をコピー"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# 列} other {# 列}} • {rowCount, plural, one {# 行} other {# 行}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# 行} other {# 行}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# 行} other {# 行}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Word 文書 • # 語} other {Word 文書 • # 語}}",
-          "headerDescriptionFallback": "Word 文書",
-          "legacyDocMessage": "従来の .doc 形式はプレビューできません。ファイルをダウンロードして表示してください。",
-          "loadError": {
-            "message": "この文書をプレビューできませんでした。ファイルをダウンロードして表示してください。"
-          }
-        },
-        "downloadButton": {
-          "label": "ファイルをダウンロード",
-          "tooltip": "ダウンロード"
-        },
         "exceptionTrace": {
           "defaultTitle": "例外トレースの全文"
-        },
-        "header": {
-          "fallbackTitle": "ドキュメント"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# 行} other {# 行}}"
-        },
-        "loadError": {
-          "message": "ドキュメントを読み込めませんでした。"
-        },
-        "pdf": {
-          "iframeTitle": "PDF ビューアー"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "このファイル形式はプレビューに対応していません。"
-        },
-        "xlsx": {
-          "headerDescription": "スプレッドシート - {count, plural, one {#シート} other {#シート}}",
-          "parseError": {
-            "message": "このスプレッドシートはプレビューできません。"
-          },
-          "sheetCount": "{count, plural, one {#シート} other {#シート}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "拡大",
-          "zoomOutTooltip": "縮小"
         }
       },
       "share": {
@@ -13509,6 +13034,120 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# 件のファイルを選択中} other {# 件のファイルを選択中}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "ドキュメント"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# 行} other {# 行}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# 語} other {# 語}}"
+      },
+      "copyButton": {
+        "tooltip": "内容をコピー"
+      },
+      "sourceButton": {
+        "tooltip": "ソースを表示"
+      },
+      "previewButton": {
+        "tooltip": "プレビューを表示"
+      },
+      "downloadButton": {
+        "label": "ファイルをダウンロード",
+        "tooltip": "ダウンロード"
+      },
+      "retryButton": {
+        "label": "再試行"
+      },
+      "error": {
+        "title": "プレビューを読み込めませんでした",
+        "description": "もう一度お試しいただくか、ファイルをダウンロードして開いてください。"
+      },
+      "renderError": {
+        "title": "このファイルはプレビューできません",
+        "description": "ここではファイルを表示できません。ファイルをダウンロードして開いてください。"
+      },
+      "unsupported": {
+        "title": "このファイル形式のプレビューは現在サポートされていません",
+        "description": "ファイルをダウンロードして内容を確認してください。"
+      },
+      "tooLarge": {
+        "title": "ファイルが大きすぎるためプレビューできません",
+        "description": "ここでは{size, number} MBまでのファイルをプレビューできます。ファイルをダウンロードして開いてください。"
+      },
+      "spreadsheet": {
+        "headerDescription": "スプレッドシート - {count, plural, one {#シート} other {#シート}}",
+        "truncated": "プレビューは{rows, number}行、{columns, number}列、{cells, number}セルまでです。すべてのデータを見るには元のファイルをダウンロードしてください。",
+        "malformed": "このCSVには引用符で囲まれた無効なフィールドがあります。確認するには元のファイルをダウンロードしてください。",
+        "empty": "コンテンツがありません"
+      },
+      "image": {
+        "loading": {
+          "label": "画像を読み込んでいます..."
+        },
+        "actualSize": {
+          "label": "実際のサイズ"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "PDFの操作"
+        },
+        "thumbnails": {
+          "toggle": "ページのサムネイルを表示・非表示",
+          "label": "ページのサムネイル",
+          "resize": "ページのサムネイルの幅を変更"
+        },
+        "page": {
+          "previous": "前のページ",
+          "next": "次のページ",
+          "counter": "{current, number} / {total, number}",
+          "preview": "ページ{page, number}のプレビュー",
+          "select": "ページ{page, number}に移動"
+        },
+        "zoom": {
+          "out": "縮小",
+          "in": "拡大",
+          "label": "ズーム",
+          "fitWidth": "幅に合わせる",
+          "fitPage": "ページに合わせる"
+        },
+        "error": {
+          "description": "PDF ファイルを読み込めませんでした。"
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "プレゼンテーションの操作"
+        },
+        "thumbnails": {
+          "toggle": "スライドのサムネイルを表示・非表示",
+          "resize": "スライドのサムネイルの幅を変更"
+        },
+        "slides": {
+          "label": "スライド"
+        },
+        "previous": {
+          "label": "前のスライド"
+        },
+        "next": {
+          "label": "次のスライド"
+        },
+        "slide": {
+          "counter": "スライド {current} / {total}"
+        },
+        "empty": {
+          "label": "このプレゼンテーションにはスライドがありません"
         }
       }
     },
@@ -13846,6 +13485,105 @@
     "readiness": {
       "stopFailed": "応答を停止できませんでした。もう一度お試しください。",
       "checkFailed": "応答の完了を確認できませんでした。次のメッセージを送信する前に、もう一度確認してください。"
+    },
+    "publishedFiles": {
+      "card": {
+        "preview": {
+          "ariaLabel": "{name} をプレビュー"
+        }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "{name} のプレビュー"
+        }
+      },
+      "viewAllButton": {
+        "label": "{count}件のファイルをすべて表示"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "ファイル",
+        "description": "このチャットでモデルが公開したファイル",
+        "empty": "このチャットにはまだファイルがありません",
+        "tile": {
+          "ariaLabel": "{name} を開く"
+        },
+        "search": {
+          "placeholder": "ファイルを検索",
+          "empty": "検索に一致するファイルはありません"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate>（v{version}/{latest}）"
+      },
+      "sourcesTab": {
+        "label": "ソース"
+      },
+      "toggleButton": {
+        "label": "パネルの表示を切り替え"
+      },
+      "reloadButton": {
+        "label": "ファイルを更新",
+        "error": "ファイルを再読み込みできませんでした。もう一度お試しください。"
+      },
+      "expandButton": {
+        "label": "パネルを拡大"
+      },
+      "restoreButton": {
+        "label": "パネルを元に戻す"
+      },
+      "resizeHandle": {
+        "label": "パネルのサイズを変更"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
+      },
+      "plaintext": {
+        "label": "プレーンテキスト"
+      },
+      "asMarkdown": {
+        "label": "Markdown としてエクスポート"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "プレーンテキストとしてエクスポート"
+      },
+      "menu": {
+        "label": "形式を指定してエクスポート…"
+      }
+    },
+    "activity": {
+      "trigger": {
+        "label": "アクティビティ"
+      },
+      "needsYou": {
+        "title": "対応が必要",
+        "approval": "{tool}を承認",
+        "question": "質問に回答"
+      },
+      "agents": {
+        "title": "エージェント",
+        "status": {
+          "starting": "開始中",
+          "running": "実行中",
+          "suspended": "待機中",
+          "complete": "完了",
+          "limit": "ステップ上限に到達",
+          "cancelled": "キャンセル済み",
+          "stopped": "停止済み",
+          "error": "失敗"
+        },
+        "finished": "以前のエージェント"
+      },
+      "files": {
+        "title": "ファイル",
+        "viewAll": "{count, plural, other {#件のファイルをすべて表示}}"
+      }
     }
   },
   "common": {
@@ -13902,11 +13640,6 @@
       },
       "plant": {
         "label": "植物"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "あア"
       }
     },
     "commandMenu": {
@@ -14120,10 +13853,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {#行} other {#行}}"
-      },
-      "size": {
-        "bytes": "{count}バイト",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "全文を表示"
@@ -14386,6 +14115,21 @@
       },
       "availableFor": "{plan}で利用可能"
     },
+    "playground": {
+      "restricted": {
+        "enterprise": {
+          "description": "これはEnterprise機能です。プレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})"
+        },
+        "ownKeys": {
+          "description": "機能をお試しいただけるよう、当社のモデルキーを設定しています。ご自身のOnyxではご自身のキーで動作します。[営業に相談]({salesUrl})"
+        },
+        "switchedOff": {
+          "description": "この機能はプレイグラウンドでは無効になっています。ご自身のOnyxでは利用できます。[営業に相談]({salesUrl})"
+        },
+        "title": "プレイグラウンドの制限",
+        "tooltip": "プレイグラウンドでは利用できません。ご自身のOnyxでは利用できます。"
+      }
+    },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
       "url": "https://",
@@ -14450,6 +14194,54 @@
         "decision": "判断",
         "vision": "画像対応"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "ペイロードはありません。"
+      },
+      "showLess": {
+        "button": "表示を減らす"
+      },
+      "showMore": {
+        "button": "もっと見る"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "このチャットで承認",
+        "tooltip": "今すぐ承認し、このチャットの残りの間はこのツールを確認なしで実行します"
+      },
+      "approveOnce": {
+        "ariaLabel": "このアクションを1回だけ承認",
+        "button": "1回だけ承認"
+      },
+      "approveSession": {
+        "button": "セッション全体で承認",
+        "tooltip": "このセッションの一致するアクションを承認"
+      },
+      "deadline": "{time}までに承認",
+      "header": {
+        "required": "承認リクエスト: {headline}"
+      },
+      "headline": {
+        "multiAction": "{app} での {count, plural, one {# 件のアクション} other {# 件のアクション}}",
+        "singleAction": "{app} での {action}"
+      },
+      "reject": {
+        "ariaLabel": "このアクションを却下",
+        "button": "却下"
+      },
+      "record": {
+        "approved": "承認済み: {headline}",
+        "closed": "承認待ちではありません: {headline}",
+        "disabled": "無効: {headline}",
+        "expired": "タイムアウト: {headline}",
+        "rejected": "未承認: {headline}",
+        "approvedForChat": "このチャットで承認済み: {headline}",
+        "approvedForSession": "このセッションで承認済み: {headline}"
+      },
+      "submitError": "決定を送信できませんでした。もう一度お試しください。",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14464,268 +14256,7 @@
         "ariaLabel": "エージェントを切り替える"
       }
     },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "このアクションを1回だけ承認",
-        "button": "1回だけ承認"
-      },
-      "approveSession": {
-        "button": "セッション全体で承認",
-        "tooltip": "このセッションの一致するアクションを承認"
-      },
-      "details": {
-        "hideAriaLabel": "詳細を隠す",
-        "showAriaLabel": "詳細を表示"
-      },
-      "header": {
-        "required": "承認が必要です: {headline}"
-      },
-      "headline": {
-        "multiAction": "{app} での {count, plural, one {# 件のアクション} other {# 件のアクション}}",
-        "singleAction": "{app} での {action}"
-      },
-      "payload": {
-        "empty": {
-          "label": "ペイロードはありません。"
-        },
-        "showLess": {
-          "button": "表示を減らす"
-        },
-        "showMore": {
-          "button": "もっと見る"
-        }
-      },
-      "reject": {
-        "ariaLabel": "このアクションを却下",
-        "button": "却下"
-      },
-      "status": {
-        "approved": "承認済み",
-        "rejected": "却下済み",
-        "expired": "期限切れ"
-      },
-      "submit": {
-        "errorFallback": "決定を送信できませんでした"
-      }
-    },
-    "apps": {
-      "addCatalog": {
-        "addButton": "追加",
-        "createButton": "作成",
-        "customApp": {
-          "description": "独自のインテグレーション向けの認証情報とネットワークアクセス。",
-          "title": "カスタムアプリ"
-        },
-        "mcpHint": {
-          "label": "MCP サーバーが必要な場合は、まず「アクション」で接続してから、ここで Craft 向けに有効化してください。",
-          "openActionsButton": "アクションを開く"
-        },
-        "modal": {
-          "description": "組織全体で使えるインテグレーションを追加します。組み込みプロバイダーには Craft エージェントに使い方を教えるアクションが付属しています。設定済みのプロバイダーは表示されません。",
-          "title": "アプリを追加"
-        }
-      },
-      "associatedSkills": {
-        "associateButton": "既存のスキルを関連付け",
-        "create": {
-          "github": {
-            "description": "スキルが GitHub にある場合は、まずスキルページでインポートしてから、このアプリに関連付けてください。",
-            "label": "GitHub からインポート"
-          },
-          "scratch": {
-            "description": "手順を書き、補助ファイルを追加します。",
-            "label": "最初から作成"
-          },
-          "upload": {
-            "description": "SKILL.md ファイル、ZIP ファイル、またはスキルフォルダをインポートします。",
-            "label": "スキルをアップロード"
-          }
-        },
-        "createSkillButton": "スキルを作成",
-        "description": "スキルは、このアプリの使い方を Craft に指示します。スキルは組織全体で共有され、アプリが正しく動作するにはユーザーがすべて有効にする必要がある場合があります。",
-        "editButton": "編集",
-        "empty": {
-          "label": "編集可能なスキルが見つかりません。"
-        },
-        "invalidTag": "無効",
-        "loading": {
-          "label": "スキルを読み込み中…"
-        },
-        "noneAssociated": {
-          "label": "まだスキルが関連付けられていません。スキルがなくてもこのアプリは保存して使用できます。"
-        },
-        "promote": {
-          "cancelButton": "キャンセル",
-          "confirmButton": "組織全体で利用可能にする",
-          "description": "アプリに関連付けられたスキルは全員が利用できる必要があります。アプリを保存すると、スキルが組織に公開されます。公開は取り消せません。",
-          "title": "「{name}」を組織全体で利用可能にしますか？"
-        },
-        "search": {
-          "placeholder": "編集可能なスキルを検索..."
-        },
-        "title": "関連付けられたスキル",
-        "unavailable": {
-          "duplicateName": "「{name}」という名前のスキルはすでに関連付けられています。",
-          "invalid": "無効なスキル。関連付ける前に修正してください。",
-          "otherApp": "すでにアプリ「{name}」に関連付けられています。"
-        },
-        "unlink": {
-          "button": "切り離す",
-          "cancelButton": "キャンセル",
-          "confirm": "「{name}」をこのアプリから切り離しますか？"
-        },
-        "unlinkAriaLabel": "{name} を切り離す",
-        "viewButton": "表示"
-      },
-      "configureProvider": {
-        "addButton": "追加",
-        "addTitle": "{name} を追加",
-        "editTitle": "{name} を編集",
-        "emptyPolicies": "このプロバイダーには設定できるアクションがありません。",
-        "fields": {
-          "name": {
-            "description": "この接続のラベルです。同じプロバイダーを複数追加する場合は、区別できる名前を付けてください（例:「{name} — エンジニアリング」）。",
-            "label": "名前"
-          }
-        },
-        "managedDescription": "Onyx が提供。エージェントに許可する操作を設定してください。",
-        "managedNote": "認証情報は Onyx が管理します。「権限」でアクションのポリシーを設定します。メンバーは「プラグイン」から接続します。",
-        "saveButton": "保存"
-      },
-      "customApp": {
-        "cancelButton": "キャンセル",
-        "createButton": "作成",
-        "createDescription": "エグレスプロキシがこのアプリに到達し認証する方法を設定します。スキルは必須ではありません。",
-        "createTitle": "カスタムアプリを作成",
-        "creatingButton": "作成中…",
-        "disabled": {
-          "nameMissing": "このカスタムアプリを作成する前に名前を入力してください。",
-          "patternMissing": "アップストリーム URL パターンを 1 つ以上追加してください。パターンを入力して Enter を押します。",
-          "pristine": "保存する前に変更を加えてください。",
-          "saving": "保存処理がすでに進行中です。"
-        },
-        "editDescription": "ゲートウェイ設定を更新し、関連スキルを管理します。",
-        "editTitle": "{name} を編集",
-        "errors": {
-          "saveFailedTitle": "保存できませんでした"
-        },
-        "fields": {
-          "headers": {
-            "addButton": "ヘッダーを追加",
-            "description": "任意。送信リクエストに挿入されるヘッダーです。ユーザー（または下記の組織）が提供する値には '{placeholder}' を使います（例: \"Bearer '{api_key}'\"）。空のままにすると、認証情報を挿入せずにアップストリームパターンを許可します。",
-            "keyTitle": "ヘッダー",
-            "label": "ヘッダー認証情報パターン",
-            "valueTitle": "値"
-          },
-          "name": {
-            "label": "名前",
-            "placeholder": "マイカスタムアプリ"
-          },
-          "orgCredentials": {
-            "addButton": "認証情報を追加",
-            "description": "任意。組織が全ユーザー向けに事前入力する値です。各ユーザーが自分の認証情報を入力するアプリでは空のままにしてください。",
-            "keyTitle": "認証情報キー",
-            "label": "組織の認証情報",
-            "valueTitle": "値"
-          },
-          "upstreamPatterns": {
-            "description": "プロキシが認証情報を挿入できる送信先 URL です。* は任意の文字に一致します（例: https://api.example.com/* はそのホストのすべてのパスに一致）。ホストはリテラルで指定し、最初のスラッシュより前にワイルドカードは使えません。パターンを入力して Enter を押してください。",
-            "label": "アップストリーム URL パターン"
-          }
-        },
-        "saveButton": "保存",
-        "savingButton": "保存中…",
-        "placeholders": {
-          "allowedUrl": "https://api.example.com/*"
-        }
-      },
-      "errors": {
-        "duplicateSkillName": "アプリ「{appName}」には「{skillName}」という名前の関連スキルがすでにあります。別の名前のスキルをアップロードしてください。"
-      },
-      "mcpPolicy": {
-        "description": "この MCP サーバーのツールで Craft エージェントに許可する操作を設定します。",
-        "emptyPolicies": "このサーバーには有効なツールがありません。まず MCP アクションページでツールを有効にしてください。",
-        "saveButton": "保存",
-        "title": "{name} を編集"
-      },
-      "oauthCallback": {
-        "backButton": "マイアプリに戻る",
-        "description": "OAuth ハンドシェイクを完了しています…",
-        "errors": {
-          "cancelled": "OAuth がキャンセルまたは拒否されました: {reason}",
-          "failed": "接続に失敗しました。",
-          "missingParams": "コールバック URL に code または state がありません。"
-        },
-        "exchanging": {
-          "label": "認可コードを交換しています…"
-        },
-        "success": {
-          "label": "接続しました。アプリ一覧に戻ります…"
-        },
-        "title": "アプリを接続しています"
-      },
-      "page": {
-        "empty": {
-          "description": "組織向けに設定されたアプリや MCP サーバーはまだありません。",
-          "title": "まだ接続できるものがありません"
-        },
-        "header": {
-          "description": "Onyx Craft が作業中にコンテキストとして使えるツールを接続します。",
-          "title": "アプリ"
-        },
-        "loading": {
-          "label": "読み込み中…"
-        },
-        "reviewSkillsButton": "スキルを確認",
-        "status": {
-          "connected": "接続済み",
-          "connectedNeedsSkills": "接続済み · 一部の関連スキルが無効です",
-          "notAvailable": "お使いのアカウントでは利用できません。管理者にお問い合わせください",
-          "skillWarningAriaLabel": "スキルの設定が必要です",
-          "skillWarningTooltip": "一部の関連スキルが無効です。このアプリは正しく動作しない可能性があります。",
-          "skillWarningSummary": "一部の関連スキルが無効です。"
-        }
-      },
-      "policyEditor": {
-        "cancelButton": "キャンセル",
-        "loading": {
-          "label": "読み込み中…"
-        },
-        "permissions": {
-          "askOption": "確認する",
-          "autoApproveOption": "自動承認",
-          "customOption": "カスタム",
-          "defaultOption": "デフォルト",
-          "description": "エージェントに許可する操作を選択します。「確認する」は各アクションの前に承認を求め、「自動承認」は確認なしで実行します。",
-          "title": "権限"
-        },
-        "savingButton": "保存中…",
-        "advanced": {
-          "description": "アクションごとに個別のポリシーを設定します。",
-          "title": "詳細設定"
-        }
-      },
-      "skillsStep": {
-        "description": "任意。既存のスキルを関連付けるか、このアプリ用に新しく作成します。",
-        "errors": {
-          "saveFailedTitle": "保存できませんでした"
-        },
-        "saveButton": "スキルを保存",
-        "savingButton": "保存中…",
-        "skipButton": "今はスキップ",
-        "title": "{name} にスキルを追加"
-      },
-      "userCredentials": {
-        "cancelButton": "キャンセル",
-        "connectButton": "接続",
-        "connectingButton": "接続中…",
-        "description": "このアプリをアカウントで認可するには、認証情報を入力してください。",
-        "errors": {
-          "connectFailedTitle": "接続できませんでした"
-        },
-        "title": "{name} を接続"
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "ダウンロード"
@@ -14752,7 +14283,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "会話を続ける...",
-        "scheduledRunPlaceholder": "スケジュール実行中...",
         "subagentPlaceholder": "メッセージを送るにはメインエージェントに切り替えてください"
       },
       "openSidebar": {
@@ -14770,8 +14300,7 @@
       },
       "toast": {
         "operationWait": "現在の操作が完了するまでお待ちください。",
-        "sandboxWait": "サンドボックスの初期化をお待ちください",
-        "scheduledRunWait": "スケジュール実行が完了するまでお待ちください。"
+        "sandboxWait": "サンドボックスの初期化をお待ちください"
       },
       "loadError": {
         "title": "セッションを読み込めませんでした",
@@ -15007,6 +14536,11 @@
         "label": "おすすめのモデルのみ"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "ターンが失敗しました。"
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
@@ -15217,23 +14751,6 @@
         "button": "サンドボックスを起動"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "スケジュール済み"
-      },
-      "startedAt": {
-        "label": "{time} に開始"
-      },
-      "status": {
-        "awaitingApproval": "このスケジュール実行は承認待ちです。再開して完了すると追加メッセージを送信できるようになります。",
-        "running": "このスケジュール実行はまだ進行中です。完了すると追加メッセージを送信できるようになります。",
-        "startedBy": "このセッションはスケジュールされたタスク {task} により {time} に開始されました。"
-      },
-      "viewTask": {
-        "ariaLabel": "スケジュールされたタスク {task} を表示。{status}",
-        "label": "タスクを表示"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "外部アプリ {id}"
@@ -15247,7 +14764,6 @@
       "error": {
         "generic": "問題が発生しました。もう一度お試しください。",
         "notConfigurable": "このアプリはここからは設定できません。",
-        "popupBlocked": "設定ウィンドウを開けませんでした。ポップアップを許可してからもう一度お試しください。",
         "startFailed": "設定を開始できませんでした"
       },
       "loading": {
@@ -15320,15 +14836,12 @@
         "empty": "さあ、作り始めましょう！セッション履歴がここに表示されます。",
         "title": "セッション"
       },
-      "skills": {
-        "label": "スキル"
-      },
       "toast": {
         "deleteFailed": "セッションを削除できませんでした",
         "deleted": "「{title}」を削除しました。"
       },
-      "plugins": {
-        "label": "プラグイン"
+      "customize": {
+        "label": "カスタマイズ"
       }
     },
     "skillsStale": {
@@ -15510,7 +15023,8 @@
         },
         "tabs": {
           "dailyWeekly": "毎日 / 毎週",
-          "interval": "間隔"
+          "interval": "間隔",
+          "advanced": "詳細"
         },
         "weekdays": {
           "fri": "金",
@@ -15520,6 +15034,21 @@
           "thu": "木",
           "tue": "火",
           "wed": "水"
+        },
+        "advanced": {
+          "cronLabel": "cron 式",
+          "hint": "5 つのフィールド: 分、時、日、月、曜日。式は UTC で実行されます。",
+          "placeholder": "例: 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "間隔は 1 以上の整数である必要があります。",
+          "minutesIntervalTooLong": "59 分を超える間隔には時間単位を使用してください。",
+          "hoursIntervalTooLong": "23 時間を超える間隔には毎日のスケジュールを使用してください。",
+          "dayIntervalTimeRequired": "日単位の間隔には時刻を選択してください。",
+          "timeRequired": "時刻を選択してください。",
+          "weekdayOutOfRange": "曜日の値は 0〜6（日〜土）である必要があります。",
+          "cronRequired": "cron 式を入力してください。",
+          "cronFieldCount": "cron はちょうど 5 つのフィールド（分 時 日 月 曜日）が必要です。"
         }
       },
       "unviewedResults": "新しい結果"
@@ -15556,11 +15085,8 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
-        },
         "working": {
-          "label": "作業中"
+          "label": "作業中..."
         }
       },
       "read": {
@@ -15679,18 +15205,6 @@
       },
       "browser": {
         "label": "アプリ"
-      },
-      "list": {
-        "label": "出力タブ"
-      },
-      "close": {
-        "label": "{name}を閉じる"
-      },
-      "reordered": {
-        "label": "タブを{count}個中{position}番目に移動しました"
-      },
-      "open": {
-        "label": "タブを開く"
       },
       "outputs": {
         "label": "出力"
@@ -15817,8 +15331,7 @@
       "scope": {
         "turn": "ターン {turn, number} の出力",
         "all": "すべての出力"
-      },
-      "unseen": "新規または更新済み"
+      }
     },
     "turnOutputs": {
       "showAll": "{count}件の出力をすべて表示",
@@ -15840,48 +15353,75 @@
     "actionPolicies": {
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
-      "personalDescription": "これらの設定は、Craftの会話と新しいタスクでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
-      "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
-      "newTaskDescription": "プラグインを有効にすると、現在のアクション設定を初期設定として使用します。",
-      "workspace_disabled": "ワークスペースで無効",
-      "workspace_managed": "ワークスペースで管理",
+      "personalDescription": "これらの設定は、Craftの会話、新しいタスク、チャットでのMCPツール呼び出しでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
+      "taskDescription": "このタスクで使える統合を選び、自動で実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
       "userManagement": "ユーザーによる承認設定の管理を許可",
       "userManagementDescription": "ユーザーは利用可能なアクションの承認設定を変更できます。",
       "loading": "承認設定を読み込み中…",
       "loadError": "承認設定を読み込めませんでした。",
       "retry": "再試行",
-      "save": "保存",
       "saving": "保存中…",
       "cancel": "キャンセル",
-      "saveError": "承認設定を保存できませんでした。",
       "emptyActions": "既知のアクションがありません。不明なアクションには承認が必要です。",
-      "emptyApps": "利用可能なアプリがありません。",
-      "expired": "承認がタイムアウトしました。アクションは実行されませんでした。",
-      "rejected": "リクエストが拒否されました。このリクエストは実行されませんでした。",
-      "deadline": "{time}までに承認",
       "agentPermissionRequired": "アクションに承認が必要なため、この実行は停止しました。権限を確認してタスクを再実行してください。",
       "enableForTask": "このタスクで有効にする",
       "enableAppForTask": "このタスクで{app}を有効にする",
       "enabledForTask": "このタスクで有効",
       "disabledForTask": "このタスクで無効",
-      "externalApp": "アプリ",
-      "mcpServer": "MCPサーバー",
-      "taskAppsTitle": "プラグイン",
-      "taskAccessTitle": "プラグインへのアクセス",
-      "noEnabledApps": "このタスクで有効なプラグインはありません。",
+      "taskAppsTitle": "統合",
+      "taskAccessTitle": "統合へのアクセス",
+      "noEnabledApps": "このタスクでオンになっている統合はありません。",
       "actionPolicies": "承認設定",
-      "policyCounts": "自動承認 {auto} · 確認 {ask} · 無効 {disabled}",
       "manageActions": "アクションを管理",
       "taskModalDescription": "変更はタスクの保存時に適用されます。ワークスペースの制限は常に適用されます。",
       "searchActions": "アクションを検索",
       "setPermissions": "権限を設定",
       "applyMatching": "一致する編集可能なアクション {count} 件",
-      "noMatchingActions": "検索に一致するアクションはありません。",
       "close": "閉じる",
       "saveChanges": "変更を保存",
       "resetDefaults": "すべて既定値に戻す",
       "resetAll": "すべてワークスペースの既定値に戻す",
-      "workspaceDisabledTooltip": "管理者がワークスペースでこのアクションを無効にしました。"
+      "needsSignIn": "{name} にはサインインが必要です。",
+      "taskPolicyCounts": "許可 {allow} · 確認 {ask} · ブロック {blocked}",
+      "actionSetting": "{action} の設定",
+      "lockedAllow": "このアクションにはワークスペースの設定が適用されるため、許可は効果がありません。",
+      "value": {
+        "inherit": "連携の設定を使用 ({policy})",
+        "allow": "許可",
+        "ask": "確認",
+        "blocked": "ブロック"
+      },
+      "newTaskIntegrationsDescription": "このタスクで使える統合をオンにします。変更するまで、各アクションは統合の設定を使います。",
+      "emptyIntegrations": "利用できる統合はありません。",
+      "notRunnable": "Craft は現在 {name} を実行できないため、タスクはこれをスキップします。"
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {# 件のスキルを読み込めませんでした}}",
+      "description": "このセッションでは {names} を使用できません。スキルは {maxSize} かつ {maxFiles, number} ファイル以内に収める必要があります。不要なスキルをオフにして空きを作ってください。",
+      "manage": "スキルを管理",
+      "dismiss": "閉じる"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "出力タブ"
+      },
+      "close": {
+        "label": "{name}を閉じる"
+      },
+      "reordered": {
+        "label": "タブを{count}個中{position}番目に移動しました"
+      },
+      "open": {
+        "label": "タブを開く"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "ダウンロード"
+      },
+      "unseen": "新規または更新済み"
     }
   },
   "knowledge": {
@@ -16306,14 +15846,17 @@
       "sort": "並べ替え",
       "sortBy": "並べ替え基準",
       "sortingOrder": "並べ替え順",
-      "viewSelected": "選択項目を表示"
+      "viewSelected": "選択項目を表示",
+      "selectAll": "すべて選択",
+      "selectRow": "行を選択"
     },
     "tabs": {
       "scrollLeft": "タブを左にスクロール",
       "scrollRight": "タブを右にスクロール"
     },
     "toast": {
-      "moreCount": "他 {count} 件"
+      "moreCount": "他 {count} 件",
+      "closeAll": "すべて閉じる"
     },
     "sidebar": {
       "open": "サイドバーを開く",
@@ -16327,11 +15870,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "匿名",
-        "description": "アカウントのメールアドレスです。",
-        "title": "メールアドレス"
-      },
       "password": {
         "changeButton": "パスワードを変更",
         "description": "アカウントのパスワードを更新します。",
@@ -16364,8 +15902,7 @@
           "mismatch": "パスワードが一致しません",
           "newRequired": "新しいパスワードは必須です"
         }
-      },
-      "title": "アカウント"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -16450,13 +15987,62 @@
         "title": "チャットの背景"
       },
       "colorMode": {
-        "auto": "自動",
+        "auto": "システム",
         "dark": "ダーク",
-        "description": "UI で使用するカラーモードを選択してください。",
+        "description": "UI で使用するテーマを選択してください。",
         "light": "ライト",
-        "title": "カラーモード"
+        "title": "テーマ"
       },
-      "title": "外観"
+      "general": {
+        "title": "一般"
+      },
+      "fonts": {
+        "title": "フォント"
+      },
+      "transcriptWidth": {
+        "title": "会話の表示幅",
+        "description": "このデバイスでのチャットメッセージと入力バーの幅を設定します。",
+        "standard": "標準",
+        "wide": "ワイド",
+        "placeholder": "幅を選択"
+      },
+      "responseFont": {
+        "default": "デフォルト",
+        "match": "インターフェースに合わせる",
+        "title": "回答のフォント",
+        "description": "チャットの回答に使用するフォントを選択してください。",
+        "placeholder": "フォントを選択"
+      },
+      "interfaceFont": {
+        "title": "インターフェースのフォント",
+        "description": "アプリ全体のテキストに使用するフォントを選択してください。",
+        "default": "デフォルト",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "システム",
+        "placeholder": "フォントを選択"
+      },
+      "accessibility": {
+        "title": "アクセシビリティ"
+      },
+      "motion": {
+        "title": "モーション",
+        "description": "システムのモーション設定に従うか、アプリ全体でアニメーションを減らします。",
+        "placeholder": "モーション設定を選択",
+        "system": "システム",
+        "reduced": "減らす"
+      },
+      "popupDismissal": {
+        "title": "通知",
+        "description": "通知を自動で閉じるか、閉じるまで表示し続けるかを選択します。",
+        "placeholder": "通知を閉じるタイミングを選択",
+        "auto_dismiss": "自動で閉じる",
+        "stay_on_screen": "画面に表示し続ける"
+      },
+      "dynamicConversations": {
+        "title": "動的な会話",
+        "description": "長い会話をスクロールすると、メッセージを読み込んだり解放したりします。パフォーマンスは向上しますが、解放されたメッセージにはスクリーンリーダーからアクセスできません。すべてのメッセージを読み込んだままにするには、オフにしてください。"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -16490,7 +16076,6 @@
         "description": "ストリーミング応答を 1 文字ずつアニメーション表示します。無効にすると、受信したチャンクをそのまま表示します。",
         "title": "スムーズストリーミング"
       },
-      "title": "チャット",
       "toasts": {
         "saveFailed": "設定を保存できませんでした"
       },
@@ -16503,6 +16088,7 @@
     },
     "connectors": {
       "connectButton": "接続",
+      "disconnectAriaLabel": "{name} の接続を解除",
       "disconnectModal": {
         "continueNote": "{name} のコンテンツを参照している既存のセッションは、引き続き利用できます。",
         "description": "{appName} はあなたの {name} アカウントのコンテンツにアクセスまたは検索できなくなります。",
@@ -16510,11 +16096,9 @@
         "submit": "切断",
         "title": "*{name}* を切断"
       },
-      "emptyMessage": "組織に設定されたコネクターはありません。",
       "status": {
         "connected": "接続済み",
-        "notConnected": "未接続",
-        "paused": "一時停止中"
+        "notConnected": "未接続"
       },
       "title": "コネクター",
       "toasts": {
@@ -16578,7 +16162,6 @@
         "description": "UI で使用する言語を選択してください。",
         "title": "表示言語"
       },
-      "title": "言語",
       "toasts": {
         "updateFailed": "言語設定を更新できませんでした"
       }
@@ -16591,23 +16174,20 @@
         "placeholder": "セクションを選択"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "アカウントとアクセス"
+        "appearance": {
+          "label": "外観"
+        },
+        "usage": {
+          "label": "使用状況"
+        },
+        "account": {
+          "label": "アカウント"
         },
         "chatPreferences": {
           "label": "チャット設定"
         },
-        "connectors": {
-          "label": "コネクタ"
-        },
-        "general": {
-          "label": "一般"
-        },
-        "llmGateway": {
-          "label": "LLMゲートウェイ"
-        },
-        "usage": {
-          "label": "使用状況"
+        "thirdPartyAccess": {
+          "label": "サードパーティアクセス"
         }
       }
     },
@@ -16656,9 +16236,9 @@
       }
     },
     "personalPreferences": {
-      "description": "カスタム設定を自然な文章で入力してください。",
+      "description": "{appName} はすべてのチャットでこれらを考慮します。",
       "placeholder": "システムに期待する動作と、使ってほしい口調を記述してください。",
-      "title": "個人設定"
+      "title": "指示"
     },
     "profile": {
       "fullName": {
@@ -16672,8 +16252,68 @@
       },
       "workRole": {
         "description": "役割を入力すると、応答をより適切に調整できます。",
-        "placeholder": "あなたの役割",
-        "title": "職務"
+        "placeholder": "役割を選択",
+        "title": "あなたの仕事に最も近いものは？",
+        "other": {
+          "placeholder": "役割を入力",
+          "title": "あなたの仕事"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "10 MB 以下の画像を選択してください。",
+          "invalidType": "PNG、JPEG、WebP の画像を選択してください。"
+        },
+        "description": "PNG、JPEG、WebP（最大 10 MB）。",
+        "toasts": {
+          "updateFailed": "プロフィール写真を更新できませんでした。もう一度お試しください。"
+        },
+        "title": "プロフィール写真",
+        "editButton": {
+          "ariaLabel": "プロフィール写真を変更"
+        },
+        "uploadButton": {
+          "ariaLabel": "プロフィール写真をアップロード"
+        },
+        "menu": {
+          "label": "プロフィール写真のオプション",
+          "replace": {
+            "label": "写真を置き換える"
+          },
+          "remove": {
+            "label": "削除"
+          }
+        },
+        "cropModal": {
+          "title": "写真を切り抜く",
+          "description": "ドラッグするか矢印キーで位置を調整します。スライダーまたはスクロールでズームします。",
+          "area": {
+            "ariaLabel": "切り抜き範囲"
+          },
+          "zoom": {
+            "ariaLabel": "ズーム"
+          },
+          "zoomIn": {
+            "ariaLabel": "拡大"
+          },
+          "zoomOut": {
+            "ariaLabel": "縮小"
+          },
+          "reset": {
+            "label": "リセット"
+          },
+          "cancel": {
+            "label": "キャンセル"
+          },
+          "save": {
+            "label": "保存"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} はこの名前であなたに話しかけます。",
+        "placeholder": "名前を入力",
+        "title": "{appName} にどう呼ばれたいですか？"
       }
     },
     "promptShortcuts": {
@@ -16683,7 +16323,6 @@
         "publicTooltip": "組織全体のプロンプトショートカットは削除できません。",
         "removeAriaLabel": "ショートカットを削除"
       },
-      "title": "プロンプトショートカット",
       "toasts": {
         "bothRequired": "ショートカットと展開後のテキストの両方が必要です",
         "deleteFailed": "ショートカットを削除できませんでした",
@@ -16706,9 +16345,6 @@
       "empty": {
         "description": "チャットを始めると、モデルの使用状況とコストがここに表示されます。",
         "title": "まだ使用記録がありません"
-      },
-      "header": {
-        "title": "使用状況"
       },
       "loadError": {
         "description": "使用状況の取得中に問題が発生しました。しばらくしてからもう一度お試しください。",
@@ -16769,9 +16405,31 @@
       },
       "playbackSpeed": {
         "description": "音声再生の速度を調整します。",
-        "title": "再生速度"
+        "title": "再生速度",
+        "value": "{speed}x"
       },
       "title": "音声"
+    },
+    "modelPreferences": {
+      "title": "モデルの設定"
+    },
+    "interactions": {
+      "title": "操作"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "グループマネージャー",
+        "description": "このワークスペースでのアクセス レベルです。",
+        "admin": "管理者",
+        "basic": "一般ユーザー",
+        "title": "あなたのロール"
+      },
+      "tenantId": {
+        "description": "サポートに問い合わせる際はこの ID を伝えてください。",
+        "copyTooltip": "テナント ID をコピー",
+        "title": "テナント ID"
+      },
+      "title": "組織"
     }
   },
   "sidebar": {
@@ -16824,9 +16482,6 @@
         "customAnalytics": {
           "label": "カスタム分析"
         },
-        "discordIntegration": {
-          "label": "Discord 連携"
-        },
         "documentSets": {
           "label": "ドキュメントセット"
         },
@@ -16857,15 +16512,6 @@
         "llmGateway": {
           "label": "LLM ゲートウェイ"
         },
-        "plugins": {
-          "label": "プラグイン"
-        },
-        "mcpActions": {
-          "label": "MCP アクション"
-        },
-        "openapiActions": {
-          "label": "OpenAPI アクション"
-        },
         "plansAndBilling": {
           "label": "プランと請求"
         },
@@ -16880,9 +16526,6 @@
         },
         "serviceAccounts": {
           "label": "サービスアカウント"
-        },
-        "slackIntegration": {
-          "label": "Slack 連携"
         },
         "ssoProviders": {
           "label": "SSO プロバイダー"
@@ -16910,20 +16553,26 @@
         },
         "spendingLimits": {
           "label": "支出上限"
+        },
+        "integrations": {
+          "label": "連携"
+        },
+        "slackBot": {
+          "label": "Slack ボット"
+        },
+        "discordBot": {
+          "label": "Discord ボット"
+        },
+        "serviceStatus": {
+          "label": "サービスステータス"
         }
       },
       "sections": {
-        "agentsAndActions": {
-          "label": "エージェントとアクション"
-        },
         "craft": {
           "label": "Craft"
         },
         "documentsAndKnowledge": {
           "label": "ドキュメントとナレッジ"
-        },
-        "integrations": {
-          "label": "連携"
         },
         "organization": {
           "label": "組織"
@@ -16933,6 +16582,12 @@
         },
         "usage": {
           "label": "使用状況"
+        },
+        "agentsAndPlugins": {
+          "label": "エージェントとプラグイン"
+        },
+        "channels": {
+          "label": "チャンネル"
         }
       }
     },
@@ -16985,8 +16640,11 @@
       "searchChats": {
         "label": "チャットを検索"
       },
-      "plugins": {
-        "label": "プラグイン"
+      "customize": {
+        "label": "カスタマイズ"
+      },
+      "scheduledTasks": {
+        "label": "スケジュールされたタスク"
       }
     },
     "chatButton": {
@@ -17102,21 +16760,12 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "アプリ「{appName}」には既に「{skillName}」という名前の関連スキルがあります。",
-        "title": "別のスキル名を選択してください"
-      },
       "confirmUpload": {
         "importBody": "このアップロードにはSKILL.mdが含まれています。続行すると、現在の名前、説明、指示、ファイルがアップロードされたバンドルに置き換えられます。",
         "importSubmit": {
           "label": "スキルをインポート"
         },
-        "importTitle": "このスキルをインポートしますか？",
-        "replaceBody": "このアップロードは同じスキル名を使用する必要があります。続行すると、説明、指示、ファイルがアップロードされたバンドルに置き換えられます。",
-        "replaceSubmit": {
-          "label": "内容を置き換え"
-        },
-        "replaceTitle": "スキルの内容を置き換えますか？"
+        "importTitle": "このスキルをインポートしますか？"
       },
       "delete": {
         "button": {
@@ -17130,70 +16779,21 @@
         "label": "削除",
         "pendingLabel": "削除中..."
       },
-      "details": {
-        "description": "Craftがこのスキルをいつどのように使用するかを定義します。",
-        "descriptionField": {
-          "description": "このスキルをいつ使用すべきかを説明します。",
-          "placeholder": "このスキルは何に役立ちますか？",
-          "title": "説明"
-        },
-        "name": {
-          "createDescription": "小文字、数字、単一のハイフンを使用してください。",
-          "lockedDescription": "スキル名は作成後に変更できません。",
-          "placeholder": "スキルに名前を付ける",
-          "title": "名前"
-        },
-        "title": "詳細"
-      },
       "files": {
-        "busyLabel": "アップロード中...",
-        "description": "このスキルで使用する参照、スクリプト、アセット、その他のファイルを追加します。ZIPファイルは自動的に展開されます。",
-        "input": {
-          "ariaLabel": "サポートファイルを追加"
-        },
-        "pendingUpload": {
-          "emptyMessage": "このアップロードのファイルは、スキルの作成後に表示されます。"
-        },
-        "title": "サポートファイル"
-      },
-      "filesTooltip": {
-        "noPermission": "このスキルのファイルを更新する権限がありません。",
-        "saveFirst": "スキルファイルを更新する前に詳細の変更を保存してください。",
-        "updating": "スキルファイルを更新中..."
+        "addedOnCreate": "「作成」でこのファイルがスキルに追加されます。"
       },
       "header": {
-        "appFallbackName": "外部アプリ",
         "createDescription": "個人スキルを作成",
-        "createForAppDescription": "アプリ「{appName}」に組織スキルを追加",
         "createTitle": "スキルを作成",
-        "editDescription": "スキルの詳細とファイルを更新",
         "editTitle": "スキルを編集",
         "save": {
-          "label": "保存",
-          "pendingLabel": "保存中..."
-        }
-      },
-      "import": {
-        "busyLabel": "インポート中...",
-        "button": {
-          "label": "スキルをインポート"
+          "label": "作成",
+          "pendingLabel": "作成中..."
         },
-        "description": "SKILL.md、ZIP、またはスキルフォルダをインポートすると、フォームが事前入力され、ファイルが含まれます。",
-        "input": {
-          "ariaLabel": "既存のスキルをインポート"
-        },
-        "prompt": "SKILL.mdまたはZIPを選択するか、スキルフォルダをここにドロップしてください。",
-        "title": "既存のスキルがありますか？"
-      },
-      "instructions": {
-        "description": "このスキルがCraftに追加する動作とワークフローを記述します。",
-        "emptyFallback": "まだ指示がありません。",
-        "placeholder": "スキルの指示を書いてください。",
-        "title": "指示"
+        "cancel": "キャンセル"
       },
       "loadError": {
-        "description": "このスキルは存在しないか、組み込みであるか、またはお使いのアカウントでは編集できない可能性があります。",
-        "title": "スキルを利用できません"
+        "description": "このスキルは存在しないか、組み込みであるか、またはお使いのアカウントでは編集できない可能性があります。"
       },
       "management": {
         "sharing": {
@@ -17203,12 +16803,9 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "保存する前に説明を追加してください。",
         "missingInstructions": "保存する前に指示を追加してください。",
         "missingName": "保存する前に名前を追加してください。",
         "noChanges": "変更はありません。",
-        "noPermission": "このスキルの詳細を編集する権限がありません。",
-        "savingChanges": "変更を保存中...",
         "savingSkill": "スキルを保存中..."
       },
       "staleVersion": {
@@ -17222,14 +16819,10 @@
         "created": "「{name}」を作成しました",
         "deleteFailed": "スキルの削除に失敗しました",
         "deleted": "「{name}」を削除しました",
-        "fileRemoveFailed": "スキルファイルの削除に失敗しました",
-        "fileRemoved": "「{path}」を削除しました",
-        "filesUpdateFailed": "スキルファイルの更新に失敗しました",
-        "filesUpdated": "「{name}」のファイルを更新しました",
-        "importMissingSkillMd": "SKILL.md、ZIP、またはSKILL.mdを含むフォルダをインポートしてください。",
         "inspectFailed": "スキルバンドルの検査に失敗しました",
         "saveFailed": "スキルの保存に失敗しました",
-        "saved": "「{name}」を保存しました"
+        "saved": "「{name}」を保存しました",
+        "mergeLimit": "{limit, select, files {スキルに含められるファイルは最大 {max, number} 個です。ファイルをいくつか削除してから「作成」を選択してください。} other {スキルに含められるファイルは最大 {max, number} MB です。ファイルをいくつか削除してから「作成」を選択してください。}}"
       },
       "creationAccess": {
         "title": "アクセス権"
@@ -17281,84 +16874,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "キャンセル"
-        },
         "doneButton": {
           "label": "完了"
         },
-        "header": {
-          "chooseDescription": "{repository} からスキルを選択してください。",
-          "completeDescription": "スキルに追加された内容を確認してください。",
-          "completeTitle": "GitHub からのインポートが完了しました",
-          "description": "GitHub リポジトリから 1 つ以上のスキルをインポートします。",
-          "title": "GitHub からインポート"
-        },
-        "importError": {
-          "message": "スキルをインポートできませんでした。",
-          "title": "スキルをインポートできませんでした"
-        },
-        "loadError": {
-          "message": "リポジトリを読み込めませんでした。",
-          "title": "リポジトリを読み込めませんでした"
-        },
-        "privateRepos": {
-          "askAdmin": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートする前に、管理者に GitHub の設定を依頼してください。",
-          "connect": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートするには GitHub を接続してください。",
-          "connectButton": {
-            "label": "GitHub を接続"
-          },
-          "connected": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリでは、お使いの GitHub 接続を使用します。",
-          "needsConnection": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリには GitHub 接続が必要です。",
-          "setUp": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートする前に GitHub を設定してください。",
-          "setUpButton": {
-            "label": "GitHub を設定"
-          }
-        },
-        "repositoryInput": {
-          "label": "リポジトリ"
-        },
-        "result": {
-          "disabledCount": "同じ名前のスキルが有効になっているため、{count} 件は無効の状態でインポートしました。",
-          "enabledCount": "{count} 件を自動的に有効にしました。",
-          "failedCount": "{count} 件をインポートできませんでした。",
-          "importedSection": {
-            "title": "インポート済み"
-          },
-          "importedTitle": "{count, plural, one {# 件のスキルをインポートしました} other {# 件のスキルをインポートしました}}",
-          "noneTitle": "インポートされたスキルはありません",
-          "notImportedSection": {
-            "title": "インポートなし"
-          },
-          "notSelectedCount": "{count} 件は選択されていません。"
-        },
-        "selectAll": {
-          "ariaLabel": "インポート可能なすべてのスキルを選択"
-        },
-        "selection": {
-          "label": "インポート可能な{total, plural, one {# 件のスキル} other {# 件のスキル}}のうち {selected} 件を選択中"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "{name} を選択"
-        },
-        "skillTag": {
-          "disabled": "無効",
-          "enabled": "有効"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {スキルをインポート} other {# 件のスキルをインポート}}",
-          "importingLabel": "インポート中…",
-          "searchLabel": "リポジトリを検索",
-          "searchingLabel": "検索中…"
-        },
-        "unavailableFallback": "このスキルはインポートできません。",
-        "unavailableTag": {
-          "label": "インポート不可"
+          "importingLabel": "インポート中…"
         },
         "sharing": {
-          "title": "インポートするスキルのアクセス権",
-          "configureButton": "アクセス権を設定",
-          "description": "これらのアクセス設定は、選択した{count, plural, one {# 件のスキル} other {# 件のスキル}}すべてに適用されます。"
+          "configureButton": "アクセス権を設定"
         }
       },
       "nameConflict": {
@@ -17385,17 +16909,12 @@
         "metadata": {
           "createdBy": {
             "label": "作成者"
-          },
-          "externalApp": {
-            "label": "外部アプリ"
           }
         },
         "noInstructions": {
           "message": "指示が見つかりません。"
         },
         "unavailable": {
-          "appDisabled": "アプリ「{appName}」は管理者によって無効にされています。",
-          "appNotConnected": "このスキルを使用するには、「アプリ」ページからアプリ「{appName}」を接続してください。",
           "title": "スキルを利用できません"
         }
       },
@@ -17410,7 +16929,6 @@
         "doneButton": {
           "label": "完了"
         },
-        "externalAppNotice": "このスキルがアプリ「{appName}」に関連付けられている間は、組織全体への閲覧者アクセスが必要です。",
         "header": {
           "transferTitle": "*{name}* を譲渡"
         },
@@ -17445,12 +16963,6 @@
         },
         "installation": {
           "title": "インストール",
-          "available": "インストール可能",
-          "default": "デフォルトでインストール",
-          "required": "必須",
-          "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
-          "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
-          "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
           "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
         },
         "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
@@ -17474,10 +16986,35 @@
         "publishOff": {
           "title": "公開はオフになっています",
           "description": "管理者が組織への公開をオフにしました。このスキルの公開を管理者に依頼してください。"
+        },
+        "sharingOff": {
+          "title": "共有はオフです",
+          "description": "管理者がユーザーやグループとの共有をオフにしました。このスキルの共有はスキル管理者に依頼してください。"
+        },
+        "groupAccess": {
+          "title": "グループアクセス",
+          "description": "デフォルトでは、各グループは組織の設定を使用します。グループの設定は、より厳しい場合でも、そのグループのメンバーに対して組織の設定を置き換えます。",
+          "add": "グループを追加",
+          "select": "{name} の設定",
+          "remove": "{name} を削除",
+          "shared": "このグループと共有済み",
+          "settingOnly": "グループ設定のみ"
+        },
+        "plugin": {
+          "installation": {
+            "description": "アクセス権を持つすべての人に対するこのプラグインのインストール方法を選択します。"
+          },
+          "published": {
+            "description": "公開済み。組織の全員がこのプラグインを使用できます。"
+          },
+          "publishWarning": {
+            "description": "保存すると、組織の全員がこのプラグインを使用できるようになります。非公開に戻すことはできません。削除できるのは管理者だけです。",
+            "reviewDescription": "管理者がリクエストを承認するまで、プラグインは非公開のままです。承認後は非公開に戻せません。"
+          },
+          "publishOff": {
+            "description": "管理者が組織への公開をオフにしました。このプラグインの公開を管理者に依頼してください。"
+          }
         }
-      },
-      "placeholders": {
-        "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
       },
       "tabs": {
         "details": "詳細",
@@ -17489,7 +17026,8 @@
         "columns": {
           "version": "バージョン",
           "madeBy": "作成者",
-          "date": "日付"
+          "date": "日付",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "バージョン {number}",
         "currentBadge": "現在",
@@ -17502,11 +17040,7 @@
           "ariaLabel": "バージョン {number} を復元",
           "successToast": "バージョン {number} をバージョン {newNumber} として復元しました。",
           "unchangedToast": "バージョン {number} のファイルは現在のバージョンと同じです。",
-          "failedToast": "このバージョンを復元できませんでした。",
-          "unsavedChanges": {
-            "title": "先に変更を保存してください",
-            "description": "バージョンを復元する前に、エディターの変更を保存するか破棄してください。"
-          }
+          "failedToast": "このバージョンを復元できませんでした。"
         },
         "loadError": {
           "title": "バージョンを読み込めませんでした",
@@ -17516,7 +17050,9 @@
           "back": "すべてのバージョン",
           "loadError": {
             "title": "このバージョンを読み込めませんでした"
-          }
+          },
+          "skills": "スキル · {count}",
+          "integrations": "連携 · {count}"
         },
         "status": {
           "pending": "レビュー待ち",
@@ -17528,21 +17064,14 @@
           "failedToast": "この更新を公開できませんでした。",
           "sentForReviewToast": "バージョン {number} を管理者のレビューに送信しました。",
           "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
-        }
+        },
+        "noManifestVersion": "なし",
+        "manifestVersion": "plugin.json {version}",
+        "locked": "このプラグインは GitHub から同期されるため、変更は GitHub で行います。"
       }
     },
     "page": {
-      "browse": {
-        "title": "スキルを選択"
-      },
-      "countSeparator": {
-        "label": "{count, plural, one {スキル} other {スキル}}"
-      },
       "createMenu": {
-        "github": {
-          "description": "リポジトリから1つ以上のスキルをインポートします。",
-          "title": "GitHubからインポート"
-        },
         "scratch": {
           "description": "{appName}で指示を書き、サポートファイルを追加します。",
           "title": "最初から作成"
@@ -17553,27 +17082,24 @@
         "upload": {
           "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",
           "title": "スキルをアップロード"
+        },
+        "marketplace": {
+          "title": "マーケットプレイスを追加",
+          "description": "リポジトリから追加して、そのプラグインを同期します。"
         }
       },
       "empty": {
         "noMatches": {
           "description": "別の検索をお試しください。",
-          "title": "一致するスキルがありません"
+          "title": "一致するスキルがありません",
+          "groupDescription": "このグループに一致するスキルはありません。別のグループまたは検索を試してください。"
         },
         "noSkills": {
           "title": "カスタムスキルはまだありません",
           "description": "スキルを作成またはインポートしてライブラリに追加してください。"
         }
       },
-      "focusedApp": {
-        "description": "アプリ「{appName}」に関連付けられたすべてのスキルを有効にします。これらがないとアプリが正しく動作しない場合があります。同名の別のスキルが有効な場合、アプリ関連スキルを有効にするともう一方のスキルは無効になります。",
-        "showAll": {
-          "label": "すべてのスキルを表示"
-        },
-        "title": "アプリ「{appName}」のスキル"
-      },
       "header": {
-        "description": "Craftエージェントが利用できる機能バンドルです。このページには、組み込みスキル、共有されたスキル、あなたの個人スキルが表示されます。",
         "title": "スキル"
       },
       "loadError": {
@@ -17590,18 +17116,18 @@
         "body": "続行すると、現在有効なスキルが無効になり、このスキルが有効になります。",
         "description": "「{name}」という名前のスキルは一度に1つだけ有効にできます。",
         "submit": {
-          "label": "スキルを切り替え",
+          "label": "切り替え",
           "pendingLabel": "切り替え中..."
         },
-        "title": "スキル「{name}」を切り替えますか？"
+        "title": "「{name}」をオンにしますか？",
+        "descriptionNamed": "{names} は「{name}」と同じスキル名をすでに使用しています。一度にオンにできるのは1つだけです。",
+        "bodyNamed": "「{name}」をオンにすると、{names} がオフになります。"
       },
       "toasts": {
         "disableFailed": "{name}を無効にできませんでした",
         "enableFailed": "{name}を有効にできませんでした",
-        "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。"
-      },
-      "builtins": {
-        "title": "組み込みスキル（{count, number}）"
+        "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。",
+        "listRefreshFailed": "スキル一覧を更新できませんでした。ページを再読み込みして変更を確認してください。"
       }
     },
     "sections": {
@@ -17617,28 +17143,17 @@
         },
         "upload": {
           "label": "ドラッグ＆ドロップするか、クリックしてアップロード"
-        }
-      },
-      "fileTree": {
-        "empty": {
-          "description": "補助ファイルはまだありません。"
         },
-        "remove": {
-          "label": "{name} を削除"
+        "chooseFolder": {
+          "label": "フォルダーを選択"
         }
       },
       "filesPicker": {
-        "addFiles": {
-          "label": "ファイルを追加"
-        },
         "input": {
           "ariaLabel": "スキルファイルを追加"
         },
         "preparing": {
           "label": "準備中..."
-        },
-        "prompt": {
-          "description": "ファイルまたは ZIP を選択するか、フォルダーをここにドロップしてください。"
         }
       },
       "instructionsToggle": {
@@ -17654,7 +17169,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "アップロードされたファイルを読み込めませんでした。"
+          "readFailed": "アップロードされたファイルを読み込めませんでした。",
+          "folderRoot": "{upload, select, plugin {選択したフォルダーの最上位に SKILL.md または plugin.json マニフェストが必要です。} other {選択したフォルダーの最上位に SKILL.md が必要です。}}"
         }
       }
     },
@@ -17665,13 +17181,11 @@
     },
     "bulk": {
       "adminDescription": "組織全体のスキルとアクセス権を管理します。",
-      "selectAll": "表示中のカスタムスキルをすべて選択",
       "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
       "share": "共有",
       "enable": "自分用に有効化",
       "disable": "自分用に無効化",
       "delete": "削除",
-      "selectSkill": "{name} を選択",
       "updated": "{count, plural, one {# 件のスキルを更新しました} other {# 件のスキルを更新しました}}",
       "failed": "スキルを更新できませんでした。もう一度お試しください。",
       "partialFailure": "{count, plural, one {# 件のスキルを更新できませんでした} other {# 件のスキルを更新できませんでした}}",
@@ -17715,20 +17229,970 @@
       "version": {
         "firstPublish": "v{number} · 初回公開",
         "update": "v{number} · v{published} からの更新"
+      },
+      "banner": {
+        "title": "{count, plural, other {# 件のスキルが公開を待っています}}",
+        "review": "確認"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "必須",
+        "description": "インストール済みで常にオンです。メンバーはオフにできません。"
+      },
+      "DEFAULT": {
+        "label": "インストール済み",
+        "description": "すべてのメンバーにインストールされます。メンバーはオフにできます。"
+      },
+      "AVAILABLE": {
+        "label": "利用可能",
+        "description": "メンバーが見つけて、必要に応じてオンにします。"
+      },
+      "NOT_AVAILABLE": {
+        "label": "利用不可",
+        "description": "非表示です。メンバーは見つけることもオンにすることもできません。"
+      },
+      "inherit": {
+        "label": "{scope, select, group {組織の設定} other {デフォルトのアクセス}}",
+        "labelWithPolicy": "{scope, select, group {組織の設定（{policy}）} other {デフォルトのアクセス（{policy}）}}",
+        "description": "{scope, select, group {グループ設定はありません。グループは組織の設定を使用します。} other {独自の設定はありません。管理者が変更した後も、スキルはデフォルトアクセスを使用します。}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "グループで絞り込む",
+        "all": "すべてのグループ"
+      },
+      "card": "グループ: {groups}",
+      "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "refused": "この変更により {maxSize} または {maxFiles, number} ファイルのスキル上限を超えます。使っていないスキルをオフにしてから、もう一度お試しください。",
+      "banner": {
+        "title": "{count, plural, other {# 人のユーザーがスキルの上限を超えています}}",
+        "description": "グループ設定と共有により、ユーザーのスキルが {maxSize} または {maxFiles, number} ファイルを超えることがあります。その場合、一部のスキルが読み込まれないことがあります。グループ設定を変更するか、ユーザーにスキルをオフにするよう依頼してください。",
+        "user": "{email}: {size}、{files, plural, other {# ファイル}}、読み込まれなかったスキル {notLoaded, plural, other {# 件}}",
+        "more": "ほか {count, number} 人。"
+      }
+    },
+    "adminTable": {
+      "label": "カスタムスキル",
+      "columns": {
+        "name": "名前",
+        "source": "ソース",
+        "version": "バージョン",
+        "audience": "対象"
+      },
+      "organizationLibrary": "組織ライブラリ",
+      "noOwner": "所有者なし",
+      "version": "v{current}{published, select, none {} other { · v{published} 公開中}}",
+      "private": "所有者のみ",
+      "shared": "ユーザーまたはグループと共有",
+      "open": "{name} を開く",
+      "menu": "{name} のその他の操作",
+      "share": "共有",
+      "delete": "削除",
+      "select": "{name} を選択"
+    }
+  },
+  "plugins": {
+    "member": {
+      "sections": {
+        "organization": "組織ライブラリ",
+        "mine": "マイアップロード",
+        "shared": "あなたと共有",
+        "marketplace": "マーケットプレイスから",
+        "private": "別のユーザー専用"
+      },
+      "detail": {
+        "title": "プラグイン",
+        "notFound": "このプラグインは利用できません。",
+        "loadFailed": "プラグインを読み込めませんでした。",
+        "tabs": {
+          "overview": "概要",
+          "skills": "スキル",
+          "versions": "バージョン"
+        },
+        "overview": {
+          "noDescription": "説明はありません。",
+          "location": "場所",
+          "owner": "所有者",
+          "skills": "スキル",
+          "description": "説明",
+          "version": "plugin.json のバージョン",
+          "author": "作成者",
+          "homepage": "ホームページ",
+          "license": "ライセンス",
+          "notUsed": "Onyx では使用しない部分",
+          "marketplace": "{name} マーケットプレイス、{scope, select, personal {個人} other {会社}}（{repository}）"
+        },
+        "skills": {
+          "off": "オフ",
+          "invalid": "無効",
+          "read": "読む",
+          "readAriaLabel": "スキル {name} を読む",
+          "readFailed": "このスキルを読み込めませんでした。",
+          "noInstructions": "このスキルには手順がありません。"
+        },
+        "switch": {
+          "title": "このプラグインを使用",
+          "label": "{name} を使用",
+          "required": "管理者がこのプラグインを必須にしました。オフにできません。",
+          "unavailable": "このプラグインのオンとオフを切り替えることはできません。",
+          "failed": "プラグインを変更できませんでした。",
+          "on": "オン。デフォルトのエージェントはこのプラグインを使用できます。",
+          "off": "オフ。オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
+          "nameHeld": "{names} が同じスキル名を使用しているため、オフです。代わりにこのプラグインを使うにはオンにしてください。"
+        },
+        "actions": {
+          "share": "共有",
+          "menu": "その他の操作",
+          "uploadVersion": "新しいバージョンをアップロード",
+          "remove": "プラグインを削除"
+        },
+        "remove": {
+          "entityType": "プラグイン",
+          "description": "このプラグインを使用しているすべての人が利用できなくなります。元に戻すことはできません。",
+          "submit": "削除",
+          "pending": "削除中…",
+          "done": "{name} を削除しました。",
+          "failed": "プラグインを削除できませんでした。"
+        },
+        "syncedFrom": "{repository} から同期",
+        "managed": {
+          "title": "マーケットプレイス {name} が管理しています",
+          "description": "Onyx はこのプラグインを {repository} から同期します。GitHub で変更してから、マーケットプレイスを同期してください。",
+          "open": "マーケットプレイスを開く"
+        }
+      },
+      "connection": {
+        "askAdmin": "管理者に問い合わせてください",
+        "connected": "{name} を接続しました。",
+        "disconnected": "{name} の接続を解除しました。",
+        "failed": "接続できませんでした。もう一度お試しください。",
+        "disconnectFailed": "接続を解除できませんでした。もう一度お試しください。",
+        "connect": {
+          "label": "接続",
+          "ariaLabel": "{name} を接続"
+        },
+        "reconnect": {
+          "label": "再接続",
+          "ariaLabel": "{name} を再接続"
+        },
+        "disconnect": {
+          "label": "接続を解除",
+          "ariaLabel": "{name} の接続を解除"
+        }
+      },
+      "credentials": {
+        "title": "{name} を接続",
+        "description": "認証情報を入力してください。使うのはあなただけです。",
+        "required": "この値を入力してください。",
+        "failed": "認証情報を保存できませんでした。もう一度お試しください。",
+        "submit": {
+          "label": "接続",
+          "pendingLabel": "接続中…"
+        },
+        "cancel": {
+          "label": "キャンセル"
+        }
+      },
+      "alwaysAllow": {
+        "title": "常に許可",
+        "description": "承認を求めるアクションを確認なしで実行します。",
+        "loadFailed": "アクションを読み込めませんでした。",
+        "saveFailed": "保存できませんでした。もう一度お試しください。",
+        "alwaysAsks": "Craft はこれらのリクエストごとに承認を求めます。",
+        "switch": {
+          "label": "{name} を常に許可"
+        },
+        "retry": {
+          "label": "再試行"
+        },
+        "readOnlyTitle": "アクション",
+        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。"
+      },
+      "oauthCallback": {
+        "processing": "アカウントを接続中…",
+        "successTitle": "アカウントを接続しました",
+        "successDescription": "Onyx が元のページに戻ります。",
+        "errorTitle": "接続できませんでした",
+        "cancelled": "サインインはキャンセルされました。",
+        "invalidLink": "このサインインリンクは無効です。もう一度サインインを始めてください。",
+        "failed": "サインインが完了しませんでした。もう一度お試しください。",
+        "back": {
+          "label": "統合に戻る"
+        }
+      }
+    },
+    "chat": {
+      "popover": {
+        "empty": "このエージェントには統合がありません。",
+        "searchEmpty": "検索に一致する統合はありません。",
+        "loading": "統合を読み込み中",
+        "loadError": "一部の統合を読み込めませんでした。もう一度お試しください。",
+        "trigger": {
+          "label": "統合"
+        },
+        "retry": {
+          "label": "再試行"
+        },
+        "browse": {
+          "label": "統合を参照"
+        },
+        "toggle": {
+          "label": "このエージェントで {name} を使用"
+        },
+        "search": {
+          "placeholder": "統合を検索"
+        }
+      },
+      "connectPrompt": {
+        "tooltip": "アカウントを接続するまで、エージェントはこれらの連携を使えません。",
+        "title": "連携を接続",
+        "description": "このチャットでこれらの連携を使うにはサインインしてください。",
+        "hint": "チャットは続けられます。接続するまで、エージェントはその連携を使いません。",
+        "trigger": {
+          "label": "{count, plural, other {# 件の連携がサインインを必要としています}}"
+        },
+        "done": {
+          "label": "完了"
+        }
+      }
+    },
+    "needs": {
+      "intro": "プラグインが連携へのアクセス権を与えることはありません。各行には、その連携に対するあなた自身の状態が表示されます。オンでない連携がなくても、プラグインは動作します。",
+      "state": {
+        "on": "オン",
+        "turn_on": "オフ",
+        "sign_in": "未サインイン",
+        "no_access": "アクセス権なし",
+        "turned_off": "管理者がオフに設定",
+        "not_added": "未追加",
+        "more_than_one": "複数が一致",
+        "not_supported": "非対応"
+      },
+      "note": {
+        "askAdmin": "管理者に依頼してください",
+        "turnedOff": "管理者がオフにしています",
+        "moreThanOne": "複数の連携が一致します",
+        "notSupported": "Onyx では非対応"
+      },
+      "localServer": "ローカルサーバー",
+      "noUrl": "サーバー URL なし",
+      "turnOn": {
+        "label": "オンにする",
+        "ariaLabel": "{name} をオンにする",
+        "failed": "{name} をオンにできませんでした。"
+      },
+      "add": {
+        "label": "インテグレーションを追加",
+        "ariaLabel": "{name} インテグレーションを追加"
+      },
+      "urlProblem": {
+        "variable": "URL に変数が含まれています。Onyx は変数を埋めません。",
+        "credential": "URL に認証情報が含まれています。Onyx はそれを保存しません。",
+        "invalid": "URL は有効な http または https の URL ではありません。"
+      }
+    },
+    "upload": {
+      "title": "プラグインをアップロード",
+      "description": "Claude Code または Codex のプラグインをアップロードします。.zip ファイルを選択するか、プラグインのフォルダーをここにドラッグしてください。",
+      "reading": "読み込み中…",
+      "requirements": {
+        "title": "Onyx はプラグインの次の部分を使用します:",
+        "skills": "skills/'<name>'/SKILL.md 内のスキル",
+        "mcp": ".mcp.json または plugin.json 内の MCP サーバー",
+        "other": "Onyx はコマンド、エージェント、フック、その他の部分を使用しません。"
+      },
+      "skillOnly": {
+        "title": "このアップロードはスキルです",
+        "description": "plugin.json がありません。続行してスキルとして追加します。",
+        "continue": "続行"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "{name} を Onyx バージョン {version} に更新します",
+        "newPlugin": "新しいプラグイン: {name}"
+      },
+      "willBeOff": "プラグインはオフで保存されます。{names} に同じ名前のスキルがあります。",
+      "saveAsNew": {
+        "label": "新しいプラグインとして保存",
+        "description": "この名前のプラグインは変更しません。"
+      },
+      "sections": {
+        "skills": "スキル · {count}",
+        "integrations": "連携 · {count}",
+        "unused": "Onyx では使用しない部分",
+        "warnings": "警告"
+      },
+      "integrationsNote": "保存すると、すでに利用できる連携がオンになります。プラグインが連携へのアクセス権を与えることはありません。",
+      "integrationsNoteOff": "保存後もプラグインはオフのため、インテグレーションはオンになりません。",
+      "unusedParts": {
+        "commands": "コマンド",
+        "agents": "エージェント",
+        "hooks": "フック",
+        "lsp_servers": "LSP サーバー",
+        "output_styles": "出力スタイル",
+        "bin": "実行ファイル (bin)",
+        "themes": "テーマ",
+        "monitors": "モニター"
+      },
+      "cancel": "キャンセル",
+      "save": "保存",
+      "saving": "保存中…",
+      "readFailed": "プラグインを読み込めませんでした。",
+      "saveFailed": "プラグインを保存できませんでした。",
+      "saved": {
+        "newPlugin": "{name} を追加しました。",
+        "newVersion": "{name} を Onyx バージョン {version} に更新しました。",
+        "unchanged": "変更はありません。{name} はすでに Onyx バージョン {version} です。",
+        "off": "{name} を追加しました。{names} に同じ名前のスキルがあるため、オフになっています。"
+      }
+    },
+    "turnOn": {
+      "title": "{name} はオンです",
+      "description": "このプラグインが必要とする連携の一部は、あなたには利用できません。",
+      "note": "それらがなくてもプラグインは動作します。プラグインが連携へのアクセス権を与えることはありません。",
+      "done": "完了"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "準備完了",
+        "blocked": "インストール不可",
+        "not_supported": "未対応"
+      },
+      "scope": {
+        "personal": "個人",
+        "company": "会社"
+      },
+      "source": {
+        "repository": "リポジトリ",
+        "folder": "フォルダ",
+        "root": "リポジトリのルート",
+        "ref": "ブランチ、タグ、またはコミット",
+        "defaultBranch": "デフォルトブランチ",
+        "commit": "コミット"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {追加するプラグイン # 件} other {追加するプラグイン # 件}}",
+        "empty": "このマーケットプレイスにはエントリがありません。",
+        "failedTitle": "Onyx はこのマーケットプレイスを読み取れません",
+        "version": "v{version}",
+        "willInstall": "インストールされるもの",
+        "skills": "{count, plural, one {スキル} other {スキル}}: {names}",
+        "showUnusable": "{count, plural, one {Onyx が使えない # 件のエントリを表示} other {Onyx が使えない # 件のエントリを表示}}",
+        "hideUnusable": "Onyx が使えないエントリを非表示",
+        "summary": "準備完了 {ready} · インストール不可 {blocked} · 非対応 {unsupported}"
+      },
+      "add": {
+        "menuItem": "マーケットプレイスを追加",
+        "title": "マーケットプレイスを追加",
+        "description": "リポジトリから追加します。Onyx は .claude-plugin/marketplace.json ファイルを読み取り、各エントリがプラグインになります。",
+        "confirmTitle": "マーケットプレイスを確認",
+        "confirmDescription": "ソースとプラグインが意図したものか確認してから、マーケットプレイスを追加してください。",
+        "repository": {
+          "title": "リポジトリ",
+          "description": "owner/repo またはリポジトリの URL を入力してください。",
+          "placeholder": "例: anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "フォルダ",
+          "description": ".claude-plugin/marketplace.json があるフォルダ。リポジトリのルートを使う場合は空のままにします。",
+          "placeholder": "例: plugins"
+        },
+        "ref": {
+          "title": "ブランチ、タグ、またはコミット",
+          "description": "空のままにすると、デフォルトブランチを使用します。",
+          "placeholder": "例: main"
+        },
+        "scope": {
+          "title": "マーケットプレイスの種類",
+          "personalDescription": "このマーケットプレイスのプラグインはあなただけが利用できます。",
+          "companyDescription": "このマーケットプレイスのプラグインは、公開済みプラグインと同様に組織が利用できます。"
+        },
+        "defaultAccess": {
+          "title": "デフォルトのアクセス",
+          "description": "このマーケットプレイスの各プラグインのインストール設定。後で個別のプラグインについて変更できます。"
+        },
+        "privateNote": "Onyx は GitHub 接続を使ってプライベートリポジトリを読み取ります。プライベートリポジトリを追加する前に、連携で GitHub を接続してください。",
+        "continue": "続行",
+        "previewing": "読み取り中…",
+        "back": "戻る",
+        "submit": "マーケットプレイスを追加",
+        "adding": "追加中…",
+        "cancel": "キャンセル",
+        "previewFailed": "リポジトリを読み取れませんでした。",
+        "addFailed": "マーケットプレイスを追加できませんでした。",
+        "added": "{name} を追加しました。プラグインは最初の同期後に表示されます。",
+        "duplicate": {
+          "personal": "このマーケットプレイスはすでに追加されています。",
+          "company": "組織はすでにこのマーケットプレイスを利用しています。"
+        }
+      },
+      "sync": {
+        "now": "今すぐ同期",
+        "requested": "{name} の同期を開始しました。",
+        "failed": "同期を開始できませんでした。",
+        "lastSync": "最終同期 {date}",
+        "never": "未同期",
+        "state": {
+          "syncing": "同期中",
+          "failed": "同期に失敗",
+          "not_synced": "未同期",
+          "synced": "同期済み"
+        }
+      },
+      "columns": {
+        "marketplace": "マーケットプレイス",
+        "sync": "同期",
+        "items": "プラグイン"
+      },
+      "items": "{count, plural, one {# 件のプラグイン} other {# 件のプラグイン}}",
+      "tableLabel": "マーケットプレイス",
+      "open": "{name} を開く",
+      "menu": "{name} の操作",
+      "loadFailed": "マーケットプレイスを読み込めませんでした。",
+      "empty": {
+        "title": "マーケットプレイスはまだありません",
+        "description": "GitHub リポジトリを追加して、そのプラグインを取得します。"
+      },
+      "page": {
+        "title": "マーケットプレイス",
+        "description": "プラグインの取得元の GitHub リポジトリとそのソースです。マーケットプレイスを同期すると、GitHub の変更を取得します。"
+      },
+      "attention": {
+        "failedTitle": "{name} の前回の同期に失敗しました"
+      },
+      "defaultAccess": {
+        "title": "デフォルトのアクセス",
+        "description": "{name} のうち、独自の設定がない各プラグインのインストール設定。",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "saved": "デフォルトのアクセスを保存しました。",
+        "failed": "デフォルトのアクセスを保存できませんでした。"
+      },
+      "replaceLogin": {
+        "label": "ログインを置き換え",
+        "description": "あなたとしてリポジトリを同期します。GitHub 接続がある場合は、それを使います。",
+        "done": "Onyx は {name} をあなたとして同期します。",
+        "doneWithoutGithub": "Onyx は {name} をあなたとして同期するようになりましたが、GitHub が接続されていません。Onyx は公開リポジトリのみ読み取れます。連携で GitHub を接続してください。",
+        "failed": "ログインを置き換えられませんでした。"
+      },
+      "remove": {
+        "label": "削除",
+        "title": "{name} を削除しますか？",
+        "description": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。メンバーはこれらのプラグインを使えなくなります。",
+        "listLabel": "削除するプラグイン",
+        "noPlugins": "このマーケットプレイスにはプラグインがありません。",
+        "confirm": "削除",
+        "done": "{name} を削除しました。",
+        "failed": "マーケットプレイスを削除できませんでした。",
+        "loadFailed": "このマーケットプレイスのプラグインを読み込めませんでした。",
+        "retry": "再試行",
+        "personalDescription": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。あなたはこれらのプラグインを使えなくなります。"
+      },
+      "detail": {
+        "title": "マーケットプレイス",
+        "description": "このマーケットプレイスのソース、同期、エントリ。",
+        "loadFailed": "マーケットプレイスを読み込めませんでした。",
+        "scope": "種類",
+        "login": "同期ユーザー",
+        "noLogin": "なし。再度同期するにはログインを置き換えてください。",
+        "lastSync": "最終同期",
+        "entries": "エントリ（{count}）",
+        "noEntries": "前回の同期ではエントリが見つかりませんでした。",
+        "close": "閉じる"
+      },
+      "readOnly": "このマーケットプレイスは管理者が管理しています。",
+      "reason": {
+        "skills_and_mcp_only": "Onyx はスキルと MCP サーバーのみを実行します。",
+        "pastLimit": "Onyx はこのリポジトリを読み込みませんでした。",
+        "external_repository_limit": "Onyx が 1 つのマーケットプレイスで同期する外部リポジトリは最大 {limit} 件です。",
+        "external_repository_limit_without_login": "{limit} 件を超える外部リポジトリを同期するには GitHub を接続してください。",
+        "limitTitle": "一部のプラグインは Onyx が読み込まなかったリポジトリから提供されています"
+      },
+      "errors": {
+        "rateLimited": "GitHub の API レート制限に達しました。数分後にもう一度お試しください。制限を引き上げるには GitHub を接続してください。",
+        "rateLimitedUntil": "GitHub の API レート制限に達しました。{time} にリセットされます。制限を引き上げるには GitHub を接続してください。"
       }
     }
   },
-  "opensearchHealth": {
-    "title": "OpenSearchのリソースが不足しています",
-    "disk": "OpenSearchのデータノードでディスク使用率が85%以上です。ディスクがいっぱいになるとインデックス作成が停止する可能性があります。",
-    "jvmMemory": "OpenSearchのJVMメモリ使用率が複数回のチェックで85%を超えています。検索やインデックス作成が失敗する可能性があります。",
-    "vectorMemory": "OpenSearchのベクトルメモリがほぼ満杯、または上限に達しています。検索やインデックス作成が失敗する可能性があります。",
-    "contact": "システム管理者、またはOnyxチーム（[support@onyx.app](mailto:support@onyx.app)）にお問い合わせください。",
-    "stale": "最新のチェックを利用できません。この警告は最後に成功したチェックに基づいており、復旧は確認されていません。",
-    "dismiss": "閉じる",
-    "diskTitle": "ディスク容量",
-    "jvmMemoryTitle": "JVMメモリ",
-    "vectorMemoryTitle": "ベクトルメモリ",
-    "viewDetails": "詳細を表示"
+  "integrations": {
+    "connectionState": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}",
+    "share": {
+      "title": "{name} を共有",
+      "description": "特定のユーザーにこの統合の使用を許可します。共有で付与されるのは使用のみです。",
+      "sharedSignIn": "{name}は1つのアカウントを使います。アクセス権のあるユーザーは、あなたが接続したアカウントを使います。",
+      "loadFailed": "アクセス権を持つユーザーを読み込めませんでした。",
+      "empty": "アクセス権を持つのはあなただけです。",
+      "remove": {
+        "label": "{name} を削除"
+      },
+      "cancel": {
+        "label": "キャンセル"
+      },
+      "submit": {
+        "label": "保存",
+        "pendingLabel": "保存中..."
+      },
+      "saved": "{name} のアクセス権を保存しました。",
+      "failed": "アクセス権を保存できませんでした。"
+    },
+    "memberState": {
+      "on": {
+        "label": "オン"
+      },
+      "turn_on": {
+        "label": "オンにする"
+      },
+      "sign_in": {
+        "label": "サインイン"
+      },
+      "no_access": {
+        "label": "アクセス権なし",
+        "reason": "アクセス権なし: この統合はあなたと共有されていません。",
+        "reasonOwner": "アクセス権なし: {owner}はあなたと共有していません。"
+      },
+      "turned_off": {
+        "label": "オフ",
+        "reason": "管理者がオフにしました。"
+      },
+      "switch": {
+        "label": "{name}を使用",
+        "required": "管理者がこの統合を必須にしました。オフにすることはできません。",
+        "failed": "統合を変更できませんでした。"
+      }
+    },
+    "menu": {
+      "label": "{name}のその他の操作",
+      "share": "共有",
+      "publish": {
+        "label": "組織に公開",
+        "blocked": "統合を公開できるのは、組織全体のアクション管理権限を持つユーザーだけです。",
+        "confirmTitle": "{name}を組織に公開しますか？",
+        "confirmMessage": "組織の各ユーザーがオンにできるようになります。インストール設定は管理者が決めます。共有したユーザーはアクセス権を保持します。",
+        "done": "{name}は組織で利用できるようになりました。",
+        "failed": "統合を公開できませんでした。"
+      }
+    },
+    "requiredGate": {
+      "title": "業務ツールを接続",
+      "description": "管理者がこれらの連携を必須にしています。続行するには、それぞれを接続してください。",
+      "adminDescription": "メンバーは Onyx を使う前にこれらの連携を接続する必要があります。管理者なので、接続せずに続行できます。",
+      "connected": "接続済み",
+      "progress": "{total} 件中 {connected} 件接続済み",
+      "askAdmin": "{name} に接続できない場合は、管理者に相談してください。今はスキップできます。",
+      "skip": "今はスキップ",
+      "continue": "続行",
+      "signOut": "サインアウト",
+      "signOutFailed": "サインアウトできませんでした。もう一度お試しください。"
+    }
+  },
+  "customize": {
+    "title": "カスタマイズ",
+    "tabs": {
+      "label": "カスタマイズのセクション",
+      "skills": "スキル",
+      "integrations": "インテグレーション",
+      "plugins": "プラグイン"
+    },
+    "skills": {
+      "loadFailed": "スキルを読み込めませんでした。",
+      "filter": {
+        "label": "フィルター",
+        "all": "すべてのスキル",
+        "on": "オン",
+        "off": "オフ"
+      },
+      "sort": {
+        "label": "並べ替え",
+        "updated": "最近更新",
+        "name": "名前"
+      },
+      "add": {
+        "label": "追加",
+        "upload": "スキルをアップロード",
+        "create": "スキルを作成",
+        "uploadPlugin": "プラグインをアップロード",
+        "marketplace": "マーケットプレイスを追加",
+        "manageMarketplaces": "マーケットプレイスを管理"
+      },
+      "groups": {
+        "mine": "自分が作成",
+        "organization": "組織から",
+        "shared": "共有されたもの",
+        "builtin": "組み込み",
+        "marketplace": "マーケットプレイスから",
+        "private": "他のユーザー専用"
+      },
+      "source": {
+        "mine": "自分",
+        "organization": "組織から",
+        "sharedBy": "{email} が共有",
+        "shared": "共有されたもの",
+        "builtin": "組み込み",
+        "marketplace": "{name} から（{scope, select, personal {個人} other {会社}}）",
+        "privateTo": "{email} 専用"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "無効",
+        "required": "必須",
+        "pending": "レビュー待ち",
+        "invalid": "無効な形式"
+      },
+      "open": "{name} を開く",
+      "menu": {
+        "label": "{name} のその他の操作",
+        "turnOn": "オンにする",
+        "turnOff": "オフにする",
+        "share": "共有",
+        "remove": "削除"
+      },
+      "empty": {
+        "title": "スキルはまだありません",
+        "description": "スキルを作成またはアップロードして、アシスタントにタスクを教えます。"
+      },
+      "noMatches": {
+        "title": "一致するスキルはありません",
+        "description": "別の検索語またはフィルターを試してください。",
+        "clear": "すべてのスキルを表示"
+      }
+    },
+    "integrations": {
+      "title": "インテグレーション",
+      "loadFailed": "インテグレーションを読み込めませんでした。",
+      "columns": {
+        "name": "インテグレーション",
+        "type": "種類",
+        "authorization": "認可",
+        "status": "ステータス"
+      },
+      "status": {
+        "connected": "接続済み"
+      },
+      "add": {
+        "label": "追加",
+        "integration": "インテグレーションを追加",
+        "manage": "インテグレーションを管理"
+      },
+      "open": "{name} を開く",
+      "empty": {
+        "title": "インテグレーションはまだありません",
+        "description": "管理者にインテグレーションの追加を依頼してください。"
+      },
+      "noMatches": {
+        "title": "一致するインテグレーションはありません",
+        "description": "別の検索語を試してください。"
+      }
+    },
+    "plugins": {
+      "loadFailed": "プラグインを読み込めませんでした。",
+      "filter": {
+        "all": "すべてのプラグイン"
+      },
+      "empty": {
+        "title": "プラグインはまだありません",
+        "description": "プラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを作成します。各スキルは 1 つのプラグインです。",
+        "upload": "プラグインをアップロード"
+      },
+      "noMatches": {
+        "title": "一致するプラグインはありません",
+        "clear": "すべてのプラグインを表示"
+      },
+      "intro": "プラグインはスキルと、そのスキルに必要な連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。ルートに SKILL.md だけがあるプラグインは［スキル］タブに表示されます。",
+      "integrations": "{needed} 件中 {available} 件の連携が利用可能",
+      "nameHeld": "オフ: {names} が同じスキル名を使用しています"
+    },
+    "skillPage": {
+      "title": "スキル",
+      "back": "スキル",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} が組織で公開中}} · {updated} に更新",
+      "ownerYou": "自分",
+      "ownerEmail": "{email} が作成",
+      "ownerYouTitle": "自分",
+      "fromOrganization": "組織ライブラリから",
+      "copyLink": "リンクをコピー",
+      "share": "共有",
+      "menu": "その他",
+      "edit": "編集",
+      "remove": "削除",
+      "add": "追加",
+      "switch": "{name} を使用",
+      "loadFailed": "このスキルは利用できません。",
+      "tabs": {
+        "overview": "概要",
+        "contents": "コンテンツ",
+        "versions": "バージョン",
+        "contentsCount": "コンテンツ · {count}"
+      },
+      "overview": {
+        "description": "説明",
+        "noDescription": "説明はありません。",
+        "createdBy": "作成者",
+        "access": "アクセス",
+        "accessValue": "{access, select, personal {自分のみ} private {所有者のみ} shared {ユーザーまたはグループと共有} other {組織ライブラリ}}",
+        "tools": "インテグレーションとアクション",
+        "instructionsOnly": "エージェントへの指示のみを追加します"
+      },
+      "backAdmin": "スキル一覧",
+      "contents": {
+        "version": "{name} v{version} · 現在",
+        "edit": "編集",
+        "cancel": "キャンセル",
+        "saveVersion": "バージョンを保存",
+        "saving": "保存中…",
+        "addFile": "ファイルを追加",
+        "removeFile": "{name} を削除",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx は SKILL.md のテキストのみを表示します。このファイルはスキルの一部です。",
+        "addedFile": "「バージョンを保存」でこのファイルがスキルに追加されます。",
+        "errors": {
+          "frontmatter": "SKILL.md は名前と説明を含む --- ブロックで始める必要があります。",
+          "description": "SKILL.md の --- ブロックに説明を追加してください。",
+          "name": "名前は「{name}」のままにしてください。",
+          "skillMd": "SKILL.md はエディターで編集してください。ここでは補助ファイルのみを追加します。"
+        },
+        "loadFailed": "このスキルの内容を読み込めませんでした。",
+        "retry": "再試行",
+        "reloadFailed": "最新バージョンを読み込めませんでした。変更は保持されています。もう一度再読み込みしてください。"
+      },
+      "required": {
+        "label": "必須",
+        "tooltip": "管理者がこのスキルを必須にしているため、オフにできません。"
+      }
+    },
+    "integrationPage": {
+      "title": "インテグレーション",
+      "back": "インテグレーション",
+      "loadFailed": "このインテグレーションは利用できません。",
+      "tabs": {
+        "overview": "概要",
+        "configuration": "設定",
+        "actions": "アクション"
+      },
+      "overview": {
+        "description": "説明",
+        "noDescription": "説明はありません。",
+        "type": "種類",
+        "signIn": "サインイン",
+        "url": "サーバー URL",
+        "owner": "所有者",
+        "organization": "組織",
+        "status": "ステータス",
+        "switch": {
+          "title": "この統合を使用",
+          "description": "オンにすると、チャットと Craft で使えます。",
+          "required": "管理者がこの統合を必須にしました。オフにすることはできません。"
+        }
+      },
+      "configuration": {
+        "description": "{mode, select, individual {このインテグレーションへの接続です。使用するのはあなただけです。} shared {このインテグレーションのアカウントです。アクセス権を持つ全員が使用します。} other {このインテグレーションにサインインは不要です。}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "スキル · {count}",
+        "integrations": "連携 · {count}"
+      }
+    },
+    "search": "検索"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "新しい結果",
+    "runStatus": "{status, select, QUEUED {待機中} RUNNING {実行中} AWAITING_APPROVAL {承認待ち} SUCCEEDED {成功} FAILED {失敗} CANCELLED {キャンセル済み} SKIPPED {スキップ} other {不明}}",
+    "taskStatus": "{status, select, ACTIVE {有効} other {一時停止中}}",
+    "schedule": {
+      "cron": "cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, other {# 分ごと}}",
+      "everyHours": "{count, plural, other {# 時間ごと}}",
+      "everyDays": "{count, plural, other {# 日ごとの {time}}}",
+      "daily": "毎日 {time}",
+      "weekly": "{days} の {time}"
+    },
+    "list": {
+      "title": "スケジュールされたタスク",
+      "description": "スケジュールに従ってプロンプトを実行します。各実行は、読んで続けられるチャットとして開きます。",
+      "search": "タスクを検索",
+      "new": "新しいタスク",
+      "never": "なし",
+      "notScheduled": "未スケジュール",
+      "loadFailed": "スケジュールされたタスクを読み込めませんでした。",
+      "open": "{name} を開く",
+      "columns": {
+        "name": "名前",
+        "schedule": "スケジュール",
+        "lastRun": "前回の実行",
+        "nextRun": "次回の実行",
+        "status": "ステータス"
+      },
+      "empty": {
+        "title": "スケジュールされたタスクはまだありません",
+        "description": "タスクを作成して、スケジュールに従ってプロンプトを実行します。"
+      },
+      "noMatches": {
+        "title": "一致するタスクはありません",
+        "description": "別の検索語句またはフィルターをお試しください。"
+      },
+      "filter": {
+        "label": "タスクを絞り込む",
+        "all": "すべてのタスク",
+        "unviewed": "新しい結果"
+      }
+    },
+    "actions": {
+      "runNow": "1回実行",
+      "pause": "一時停止",
+      "resume": "再開",
+      "edit": "編集",
+      "delete": "削除",
+      "menu": "{name} の操作",
+      "toasts": {
+        "runQueued": "「{name}」の実行を開始しました。",
+        "runFailed": "実行を開始できませんでした。",
+        "resumed": "タスクを再開しました。",
+        "paused": "タスクを一時停止しました。",
+        "statusFailed": "タスクのステータスを変更できませんでした。",
+        "deleted": "「{name}」を削除しました。",
+        "deleteFailed": "タスクを削除できませんでした。"
+      },
+      "confirmDelete": {
+        "title": "「{name}」を削除しますか？",
+        "description": "タスクの実行が停止し、実行履歴も削除されます。",
+        "submit": "削除"
+      }
+    },
+    "runs": {
+      "label": "実行履歴",
+      "open": "{time} の実行を開く",
+      "loading": "実行を読み込み中…",
+      "loadFailed": "実行履歴を読み込めませんでした。",
+      "loadMore": "さらに読み込む",
+      "markAllViewed": "すべて既読にする",
+      "markAllViewedFailed": "実行を既読にできませんでした。もう一度お試しください。",
+      "trigger": "{source, select, MANUAL_RUN_NOW {1回実行} other {スケジュール}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} agent_exception {失敗: 実行中にエラーが発生しました。} stuck {失敗: 実行が時間内に開始されませんでした。} timeout {失敗: 実行が 1 時間の上限に達しました。} other {失敗: {errorClass}}}",
+      "columns": {
+        "started": "開始",
+        "status": "ステータス",
+        "duration": "所要時間",
+        "trigger": "トリガー",
+        "detail": "詳細"
+      },
+      "closed": {
+        "queued": "この実行はまだ開始されていないため、開くチャットはありません。",
+        "skipped": "この実行はスキップされたため、開くチャットはありません。",
+        "noChat": "この実行には開くチャットがありません。"
+      },
+      "empty": {
+        "title": "まだ実行はありません",
+        "description": "タスクは発火するたびに実行を追加します。今すぐ開始するには「1回実行」を使用してください。"
+      }
+    },
+    "detail": {
+      "title": "スケジュールされたタスク",
+      "back": "スケジュールされたタスク",
+      "loadFailed": "このスケジュールされたタスクを読み込めませんでした。",
+      "tabs": {
+        "runs": "実行",
+        "overview": "概要"
+      },
+      "overview": {
+        "prompt": "プロンプト",
+        "schedule": "スケジュール",
+        "nextRun": "次回の実行",
+        "notScheduled": "未スケジュール",
+        "lastRun": "前回の実行",
+        "never": "なし"
+      },
+      "switch": {
+        "title": "スケジュールどおりに実行",
+        "label": "{name} をスケジュールどおりに実行"
+      },
+      "menu": "その他の操作"
+    },
+    "editor": {
+      "newTitle": "新しいスケジュールされたタスク",
+      "editTitle": "スケジュールされたタスクを編集",
+      "description": "各実行は、デフォルトのエージェントを使用する新しいチャットにプロンプトを送信します。",
+      "back": "戻る",
+      "loadFailed": "このスケジュールされたタスクを読み込めませんでした。",
+      "save": "保存",
+      "saveAndRun": "保存して今すぐ実行",
+      "errors": {
+        "nameRequired": "名前を入力してください。",
+        "promptRequired": "プロンプトを入力してください。"
+      },
+      "toasts": {
+        "created": "スケジュールされたタスクを作成しました。",
+        "createdAndRun": "スケジュールされたタスクを作成しました。最初の実行を開始しました。",
+        "updated": "スケジュールされたタスクを更新しました。",
+        "saveFailed": "スケジュールされたタスクを保存できませんでした。"
+      },
+      "fields": {
+        "name": {
+          "label": "名前",
+          "placeholder": "例: 顧客エスカレーションの週次ダイジェスト"
+        },
+        "prompt": {
+          "label": "プロンプト",
+          "description": "各実行は、このメッセージを新しいチャットに送信します。",
+          "placeholder": "各実行で行うことを説明してください"
+        },
+        "schedule": {
+          "label": "スケジュール"
+        }
+      }
+    },
+    "banner": {
+      "title": "{task} のスケジュール実行",
+      "inFlight": "{status, select, AWAITING_APPROVAL {この実行は下であなたの承認を待っています。} other {この実行は進行中です。}}",
+      "startedAt": "{time} に開始",
+      "viewTask": "タスクを表示"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "マーケティング"
+      },
+      "finance": {
+        "label": "財務"
+      },
+      "other": {
+        "label": "その他"
+      },
+      "engineering": {
+        "label": "エンジニアリング"
+      },
+      "customerSupportSuccess": {
+        "label": "カスタマーサポート・サクセス"
+      },
+      "peopleHr": {
+        "label": "人事"
+      },
+      "dataAnalytics": {
+        "label": "データ・分析"
+      },
+      "legal": {
+        "label": "法務"
+      },
+      "design": {
+        "label": "デザイン"
+      },
+      "product": {
+        "label": "プロダクト"
+      },
+      "operations": {
+        "label": "オペレーション"
+      },
+      "sales": {
+        "label": "営業"
+      },
+      "leadership": {
+        "label": "経営"
+      }
+    }
   }
 }

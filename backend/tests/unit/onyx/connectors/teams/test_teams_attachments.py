@@ -76,24 +76,17 @@ LIBRARY_ROUTES: dict[str, dict[str, Any]] = {
     },
 }
 MEMBERS = {MEMBERS_URL: {"value": [member("Ada", "ada@example.com", "u1")]}}
-# A thread names the group of its channel's members, without the source prefix
-# on the permission sync walk, which adds it. The SDK channel double carries
-# no membership type, so the channel has a group of its own.
+# A thread names the group of its channel's members. The SDK channel double
+# carries no membership type, so the channel has a group of its own.
 CHANNEL_READERS = channel_access(
-    ChannelRef(team_id=TEAM_ID, id=CHANNEL_ID, display_name="General"),
-    for_indexing=False,
+    ChannelRef(team_id=TEAM_ID, id=CHANNEL_ID, display_name="General")
 )
-# What the SharePoint permission code answers for a file, and what the file's
-# document carries: the same groups under this connector's source prefix.
+# What the SharePoint permission code answers for a file. The file's document
+# carries it as given; storage adds the source prefix.
 SITE_GROUP = f"{SITE_URL.lower()}::members"
 SHAREPOINT_READERS = ExternalAccess(
     external_user_emails={"ada@example.com"},
     external_user_group_ids={SITE_GROUP},
-    is_public=False,
-)
-FILE_READERS = ExternalAccess(
-    external_user_emails={"ada@example.com"},
-    external_user_group_ids={f"teams_{SITE_GROUP}"},
     is_public=False,
 )
 
@@ -130,7 +123,7 @@ def library(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         yield from seen["files"]
 
     def extract(item: DriveItemData, **kwargs: Any) -> DriveItemContent | None:
-        seen["extracted"].append((item.id, kwargs["access_token"]))
+        seen["extracted"].append((item.id, kwargs["get_access_token"]()))
         if item.name.endswith(".skip"):
             return None
         if item.name.endswith(".bad"):
@@ -232,7 +225,7 @@ def test_channel_files_become_documents_with_sharepoints_readers(
     ]
     plan = [item for item in items if isinstance(item, Document)][1]
     assert plan.semantic_identifier == "Plan.pdf"
-    assert plan.external_access == FILE_READERS
+    assert plan.external_access == SHAREPOINT_READERS
     assert plan.doc_updated_at == datetime(2026, 9, 2, 10, tzinfo=timezone.utc)
     assert plan.metadata == {"channel": "General"}
     assert [owner.email for owner in plan.primary_owners or []] == ["ada@example.com"]
@@ -366,7 +359,7 @@ def test_an_unreadable_file_keeps_its_name_and_a_failed_one_is_a_document_failur
     documents = [item for item in items if isinstance(item, Document)]
     assert [document.id for document in documents] == ["m1", file_document_id("item-1")]
     assert [section.text for section in documents[1].sections] == ["empty.skip"]
-    assert documents[1].external_access == FILE_READERS
+    assert documents[1].external_access == SHAREPOINT_READERS
     failures = [item for item in items if isinstance(item, ConnectorFailure)]
     assert len(failures) == 1
     assert failures[0].failed_document is not None
@@ -621,7 +614,7 @@ def test_a_file_without_a_list_item_id_is_looked_up_on_the_threads_client(
 
     worker = threading.Thread(
         target=lambda: _files(teams_connector)._file_access(
-            channel_library, _item("f1", "a.pdf"), for_indexing=True
+            channel_library, _item("f1", "a.pdf")
         )
     )
     worker.start()

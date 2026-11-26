@@ -199,6 +199,7 @@ for (const completionTransport of ["stream", "recovery"] as const) {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       session_loaded_in_sandbox: true,
     };
     const messages: ApiMessageResponse[] = (["user", "assistant"] as const).map(
@@ -237,7 +238,9 @@ for (const completionTransport of ["stream", "recovery"] as const) {
     const sessionUrl = `**/api/build/sessions/${sessionId}`;
     await page.route(sessionUrl, (route) => route.fulfill({ json: session }));
     await page.route(`${sessionUrl}/sandbox-status`, (route) =>
-      route.fulfill({ json: { status: "running" } })
+      route.fulfill({
+        json: { status: "running", skills_stale: false, skill_omissions: null },
+      })
     );
     await page.route(`${sessionUrl}/artifacts`, (route) =>
       route.fulfill({ json: [] })

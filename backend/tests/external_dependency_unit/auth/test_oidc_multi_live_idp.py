@@ -28,7 +28,9 @@ from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import cookie_transport
+from onyx.auth.mobile_sso.code_store import consume_sso_code
+from onyx.auth.session_tokens import cookie_transport
+from onyx.auth.users import generate_pkce_pair
 from onyx.db.enums import AccountType, SSOProviderType
 from onyx.db.models import ScimUserMapping, SSOProvider, User, User__UserGroup
 from onyx.db.sso_provider import create_sso_provider
@@ -222,6 +224,57 @@ async def _drive_login(
     assert location.startswith(f"{prefix}/auth/oidc/{provider}/callback")
     # The web proxy strips /api before requests reach FastAPI.
     return await client.get(location.removeprefix(prefix))
+
+
+_APP_REDIRECT = "onyx://auth/callback"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("providers")
+async def test_native_app_sign_in_returns_a_one_time_code(app: FastAPI) -> None:
+    """A native app (desktop, mobile) opens the authorize URL in the system
+    browser with its PKCE challenge. The browser must be sent to the IdP, and
+    the callback must end at the app's deep link with a one-time code instead
+    of a web session."""
+    verifier, challenge = generate_pkce_pair()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url=_WEB_DOMAIN) as client:
+        resp = await client.get(
+            f"/auth/oidc/{_PROVIDER_A}/authorize",
+            params={
+                "redirect": "true",
+                "mobile_redirect_uri": _APP_REDIRECT,
+                "app_state": "app-state-1",
+                "app_code_challenge": challenge,
+            },
+        )
+        assert resp.status_code == 302, resp.text
+        location = _idp_login(resp.headers["location"], _USER_A)
+        prefix = f"{_WEB_DOMAIN}/api"
+        callback = await client.get(location.removeprefix(prefix))
+
+    assert callback.status_code == 302, callback.text
+    deep_link = callback.headers["location"]
+    assert deep_link.startswith(f"{_APP_REDIRECT}?")
+    assert _SESSION_COOKIE not in callback.cookies
+    query = parse_qs(urlsplit(deep_link).query)
+    assert query["state"] == ["app-state-1"]
+    assert await consume_sso_code(query["code"][0], verifier) is not None
+
+
+@pytest.mark.usefixtures("providers")
+def test_native_app_sign_in_rejects_a_disallowed_redirect(app: FastAPI) -> None:
+    _, challenge = generate_pkce_pair()
+    resp = TestClient(app).get(
+        f"/auth/oidc/{_PROVIDER_A}/authorize",
+        params={
+            "redirect": "true",
+            "mobile_redirect_uri": "https://attacker.example.com/cb",
+            "app_code_challenge": challenge,
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400, resp.text
 
 
 def _user_by_email(db_session: Session, email: str) -> User:

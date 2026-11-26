@@ -334,7 +334,7 @@ def test_malformed_address_is_rejected(client: TestClient) -> None:
 
 @patch("onyx.server.sso_discovery.MULTI_TENANT", True)
 @patch(
-    "onyx.server.sso_discovery.get_async_redis_connection",
+    "onyx.server.sso_discovery.get_shared_cache_backend",
     side_effect=ConnectionError("redis is down"),
 )
 def test_lookup_refuses_when_the_limiter_is_unavailable(
@@ -398,6 +398,8 @@ def test_resolved_workspace_authorize_urls_carry_a_workspace_pin(
     [provider] = response.json()["providers"]
     assert provider["authorize_url"].startswith("/api/auth/oidc/okta/authorize?")
     assert "workspace_token=" in provider["authorize_url"]
+    # An OIDC row's authorize URL takes the native-app SSO parameters.
+    assert provider["native_app_sso"] is True
 
 
 @patch("ee.onyx.db.tenant_sso_domain.MULTI_TENANT", True)

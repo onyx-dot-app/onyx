@@ -10,19 +10,23 @@ import pytest
 
 from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.chat.models import PendingChatMessage
-from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import MessageType
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
     ChatSessionDetailResponse,
     ChatSessionProcessingStatus,
+    ChatSubagent,
     PendingChatMessageRequest,
 )
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
+from onyx.tools.models import ToolOptions
+from onyx.tools.tool_name import normalize_external_tool_name
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.integration_rows import link_persona
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.integration import IntegrationManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.mock_llm import (
     MockLLMManager,
@@ -412,6 +416,84 @@ def test_background_agent_result_wakes_the_idle_chat(
     assert {request.body["model"] for request in root_requests} == {CHOSEN_MODEL}
 
 
+def _agents(session_id: UUID, user: DATestUser) -> list[ChatSubagent]:
+    response = client.get(
+        f"{API_SERVER_URL}/chat/chat-session/{session_id}/agents",
+        headers=user.headers,
+    )
+    response.raise_for_status()
+    return [ChatSubagent.model_validate(agent) for agent in response.json()]
+
+
+def test_the_agent_list_follows_a_background_agent(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    """The chat's agent list shows a spawned agent with its instruction, running
+    while it works and complete once it finishes."""
+    nonce = uuid4().hex
+    child_task = f"Count the stars. {uuid4().hex}"
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="spawn-counter",
+                    name="spawn_agent",
+                    arguments={"name": "counter", "instruction": child_task},
+                )
+            ]
+        ),
+        Reply(
+            text="Counting started.",
+            conditions=RequestConditions(has_results_for=["spawn-counter"]),
+        ),
+        Reply(text="Done counting."),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        child_task,
+        Reply(text="Seven stars.", pause_after_first_chunk=child_task),
+        conditions=RequestConditions(prompt_contains=[child_task]),
+    )
+    session = ChatSessionManager.create(user_performing_action=admin_user)
+    assert _agents(session.id, admin_user) == []
+    try:
+        started = ChatSessionManager.send_message(
+            session.id,
+            f"Count in the background. {nonce}",
+            admin_user,
+            accepts_follow_ups=True,
+        )
+        assert started.error is None
+        _wait_until(
+            lambda: bool(mock_llm.requests_in(child_task)), "the child is running"
+        )
+        [running] = _agents(session.id, admin_user)
+        assert running.path == "/root/counter"
+        assert running.status == RunStatus.RUNNING
+        assert not running.stopped_by_user
+    finally:
+        mock_llm.release_gate(child_task)
+
+    _wait_until(
+        lambda: (
+            [agent.status for agent in _agents(session.id, admin_user)]
+            == [RunStatus.COMPLETE]
+        ),
+        "the child completes",
+    )
+
+    # The child's result wakes the root, which uses its last scripted reply
+    def root_answered() -> bool:
+        detail = _detail(session.id, admin_user)
+        return (
+            "Done counting." in _texts(detail, MessageType.ASSISTANT)
+            and not detail.is_processing
+        )
+
+    _wait_until(root_answered, "the root answers the child's result")
+
+
 @requires_code_mode(True)
 def test_a_background_agent_runs_programs_in_code_mode(
     admin_user: DATestUser, mock_llm: MockLLMScript
@@ -485,43 +567,48 @@ def test_a_background_agent_runs_programs_in_code_mode(
     assert "42" in (child_answer_request.tool_result("child-program") or "")
 
 
-def test_turns_the_server_starts_use_the_current_tool_selection(
+def test_turns_the_server_starts_use_the_saved_tool_options(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
-    """The chat keeps the user's tool selection: a queued turn offers the
-    tools selected when it starts, not the tools of the last sent message."""
+    """The chat keeps the user's tool options: a queued turn offers the
+    actions saved when it starts, not the tools of the last sent message."""
     nonce = uuid4().hex
     enabled, blocked = "Queued with the tool", "Queued without the tool"
-    created = client.post(
-        f"{API_SERVER_URL}/admin/tool/custom",
-        json={
-            "name": f"selection-{nonce}",
+    created = IntegrationManager.create(
+        {
+            "for_organization": True,
+            "name": f"options-{nonce}",
             "description": "Ping a service",
-            "definition": {
-                "openapi": "3.0.0",
-                "info": {"title": "Ping", "description": "Ping", "version": "1.0.0"},
-                "servers": [{"url": "https://example.com"}],
-                "paths": {
-                    "/ping": {
-                        "get": {
-                            "summary": "Ping the service",
-                            "operationId": "ping",
-                            "responses": {"200": {"description": "ok"}},
+            "auth_mode": "none",
+            "auth_method": None,
+            "config": {
+                "shape": "openapi",
+                "openapi_spec": {
+                    "openapi": "3.0.0",
+                    "info": {
+                        "title": "Ping",
+                        "description": "Ping",
+                        "version": "1.0.0",
+                    },
+                    "servers": [{"url": "https://example.com"}],
+                    "paths": {
+                        "/ping": {
+                            "get": {
+                                "summary": "Ping the service",
+                                "operationId": "ping",
+                                "responses": {"200": {"description": "ok"}},
+                            }
                         }
-                    }
+                    },
                 },
             },
-            "custom_headers": [],
-            "passthrough_auth": False,
         },
-        headers=admin_user.headers,
+        admin_user,
     )
-    created.raise_for_status()
-    tool_id = int(created.json()["id"])
-    tool_name = f"custom__{tool_id}__ping"
-    persona = PersonaManager.create(
-        tool_ids=[tool_id], user_performing_action=admin_user
-    )
+    integration_id = created.id
+    tool_name = normalize_external_tool_name(f"custom__{integration_id}__ping")
+    persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
+    link_persona(persona.id, integration_id, {})
     mock_llm.conversation(
         nonce,
         Reply(text="Answer without the tool."),
@@ -535,22 +622,35 @@ def test_turns_the_server_starts_use_the_current_tool_selection(
         ),
         conditions=RequestConditions(prompt_contains=[nonce]),
     )
-    selection_url = f"{API_SERVER_URL}/chat/chat-session/{{}}/tool-selection"
+    options_url = f"{API_SERVER_URL}/chat/chat-session/{{}}/tool-options"
     try:
         session = ChatSessionManager.create(
             persona_id=persona.id, user_performing_action=admin_user
         )
         sent = ChatSessionManager.send_message(
-            session.id, f"Start without tools. {nonce}", admin_user, allowed_tool_ids=[]
+            session.id,
+            f"Start without tools. {nonce}",
+            admin_user,
+            tool_options=ToolOptions(allowed=[]),
         )
         assert sent.error is None
-        for message, selection, answer in (
-            (enabled, [tool_id], "Answer with the tool."),
+        for message, allowed, answer in (
+            (
+                enabled,
+                [
+                    {
+                        "type": "integration",
+                        "integration_id": integration_id,
+                        "actions": ["ping"],
+                    }
+                ],
+                "Answer with the tool.",
+            ),
             (blocked, [], "Answer without the tool again."),
         ):
             client.patch(
-                selection_url.format(session.id),
-                json={"allowed_tool_ids": selection, "preferred_tool_id": None},
+                options_url.format(session.id),
+                json={"allowed": allowed, "preferred": None},
                 headers=admin_user.headers,
             ).raise_for_status()
             _submit(session.id, admin_user, message)
@@ -565,9 +665,7 @@ def test_turns_the_server_starts_use_the_current_tool_selection(
             _wait_until(answered, f"the queued turn answers: {answer}")
     finally:
         assert PersonaManager.delete(persona, user_performing_action=admin_user)
-        client.delete(
-            f"{API_SERVER_URL}/admin/tool/custom/{tool_id}", headers=admin_user.headers
-        ).raise_for_status()
+        IntegrationManager.delete(integration_id, admin_user).raise_for_status()
     # Code mode defers the tool: a program finds it with `tool_search`.
     assert [
         tool_name in request.tools
@@ -650,4 +748,4 @@ def test_incognito_chat_has_no_child_agents(
         ).raise_for_status()
     normal_request, private_request = mock_llm.requests_in(nonce)
     assert SUBAGENT_TOOLS <= set(normal_request.tools)
-    assert not {*SUBAGENT_TOOLS, CODING_AGENT_TOOL_NAME} & set(private_request.tools)
+    assert not SUBAGENT_TOOLS & set(private_request.tools)

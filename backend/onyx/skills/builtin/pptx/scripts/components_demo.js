@@ -2,7 +2,7 @@
 // component, on the default monochrome palette. Doubles as a lint fixture: the
 // output must pass `python scripts/lint.py` with zero ERRORs.
 //
-//   node .opencode/skills/pptx/scripts/components_demo.js [outputs/components-demo.pptx]
+//   node /var/lib/onyx/skills/pptx/scripts/components_demo.js [components-demo.pptx]
 //
 // Uses tiny embedded placeholder PNGs so it runs with no asset setup; real
 // decks pass icon.js / chart.py / image-generation outputs as file paths.
@@ -18,7 +18,7 @@ const PLACEHOLDER_CHART =
   "image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAC0CAIAAABqhmJGAAABwUlEQVR42u3dsRGAIAxA0egxAGvZ2TiljZ1rsUFcI8J7E3Dh/qWDLTMD+KfdCEDAgIABAYOAAQEDAgYEDAIGBAwIGAQMCBgQMCBgEDAgYEDAgIBhDs0ImEzvvdqRxhg2MCBgEDAgYEDAIGBAwICAAQGDgAEBAwIGBAwCBgQMCBgEDAgYEDAgYBAwIGBAwICAQcCAgAEBg4ABAQMCBgQMAgYEDAgYBAwIGBAwIGAQMFBZM4Jl3c9b7UjXebgXGxgEDAgYEDAgYBAwIGBAwCBgQMCAgAEBg4ABAQMCBgQMAgYEDAgYwptYhLejsIEBAQMCBgEDAgYEDAgYBAwIGBAwCBgQMCBgQMAgYEDAgIBBwICAAQEDAgYBAwIGBAwIGAQMCBgQMAgYiIV/J/SLH9jAgIBBwICAAQEDAgYBAwIGBAwCBgQMCBgQMAgYEDAgYEDAIGBAwICAQcCAgAEBAwIGAQMCBgQMCBgEDAgYEDAIGBAwIGBAwCBgQMCAgEHAgIABAQMCBgEDAgYEDAgYBAwIGBAwCBgQMCBgQMAgYEDAgIABAYOAAQEDAoalbJlpCmADAwIGBAwCBgQMCBgQMAgYKOADbNwTab9X4BcAAAAASUVORK5CYII=";
 
 async function main() {
-  const outPath = process.argv[2] || "outputs/components-demo.pptx";
+  const outPath = process.argv[2] || "components-demo.pptx";
 
   const theme = C.defaultTheme();
   const pres = C.createPresentation(theme, { title: "Components Demo", author: "Demo" });
@@ -87,7 +87,7 @@ async function main() {
       { label: "Draft", desc: "Write the full text deck first" },
       { label: "Enhance", desc: "Add charts, icons, imagery" },
       { label: "Lint", desc: "Fix every mechanical defect" },
-      { label: "Ship", desc: "Save the deck to outputs" },
+      { label: "Ship", desc: "Save the deck" },
     ],
   });
 

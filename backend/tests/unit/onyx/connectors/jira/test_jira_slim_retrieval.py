@@ -116,4 +116,4 @@ def test_retrieve_all_slim_docs_perm_sync_resolves_permissions(
 
     assert [d.id for d in docs] == ["https://jira.example.com/browse/TEST-1"]
     assert all(d.external_access is external_access for d in docs)
-    mock_get_permissions.assert_called_once_with("TEST", add_prefix=False)
+    mock_get_permissions.assert_called_once_with("TEST")

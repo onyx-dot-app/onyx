@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -9,19 +8,18 @@ from onyx.db.llm import (
     fetch_llm_provider_by_zoom_voice_provider_id,
     remove_llm_provider,
 )
+from onyx.db.model_configuration import (
+    fetch_model_configuration_by_provider_id_and_name,
+)
 from onyx.db.models import (
     LLMModelFlow,
     LLMProvider,
     ModelConfiguration,
-    User,
     VoiceProvider,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.voice.interface import normalize_provider_type
-
-MIN_VOICE_PLAYBACK_SPEED = 0.5
-MAX_VOICE_PLAYBACK_SPEED = 2.0
 
 
 def fetch_voice_providers(db_session: Session) -> list[VoiceProvider]:
@@ -177,11 +175,8 @@ def ensure_zoom_decision_provider(
         ("zoom-decisions", "Zoom Decisions"),
         ("zoom-decisions-pro", "Zoom Decisions Pro"),
     ):
-        model = db_session.scalar(
-            select(ModelConfiguration).where(
-                ModelConfiguration.llm_provider_id == provider.id,
-                ModelConfiguration.name == name,
-            )
+        model = fetch_model_configuration_by_provider_id_and_name(
+            db_session, provider.id, name
         )
         if model is None:
             model = ModelConfiguration(
@@ -327,37 +322,3 @@ def deactivate_tts_provider(*, db_session: Session, provider_id: int) -> VoicePr
     db_session.flush()
     db_session.refresh(provider)
     return provider
-
-
-# User voice preferences
-
-
-def update_user_voice_settings(
-    db_session: Session,
-    user_id: UUID,
-    auto_send: bool | None = None,
-    auto_playback: bool | None = None,
-    playback_speed: float | None = None,
-) -> None:
-    """Update user's voice settings.
-
-    For all fields, None means "don't update this field".
-    """
-    values: dict[str, bool | float] = {}
-
-    if auto_send is not None:
-        values["voice_auto_send"] = auto_send
-    if auto_playback is not None:
-        values["voice_auto_playback"] = auto_playback
-    if playback_speed is not None:
-        values["voice_playback_speed"] = max(
-            MIN_VOICE_PLAYBACK_SPEED, min(MAX_VOICE_PLAYBACK_SPEED, playback_speed)
-        )
-
-    if values:
-        db_session.execute(
-            update(User)
-            .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-            .values(**values)
-        )
-        db_session.flush()

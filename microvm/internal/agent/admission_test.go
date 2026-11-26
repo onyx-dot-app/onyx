@@ -44,7 +44,7 @@ func TestMemoryAdmissionNumbers(t *testing.T) {
 	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
 	code, md := errorInfo(t, err)
 	want := map[string]string{
-		"mem_total_mib": "65536", "mem_available_mib": "6143", "mem_needed_mib": "6144", "vm_mem_mib": "4096",
+		"mem_total_mib": "65536", "mem_available_mib": "6143", "mem_needed_mib": "6144", "vm_mem_mib": "4096", "vm_mem_charge_mib": "4096",
 		"mem_starting_mib": "0", "mem_reserve_mib": "2048",
 	}
 	if code != codes.ResourceExhausted || !mapsEqual(md, want) {
@@ -114,6 +114,86 @@ func TestMemoryAdmissionCountsStartingVMs(t *testing.T) {
 	// Both run: nothing is starting.
 	if ni, _ := f.m.NodeInfo(); ni.MemStartingMiB != 0 {
 		t.Fatalf("starting %d after start", ni.MemStartingMiB)
+	}
+}
+
+// A starting VM counts as its guest memory divided by the divisor, rounded
+// up, both as the new VM and as a starting one.
+func TestMemoryAdmissionStartingDivisor(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.cfg.StartingMemDivisor = 2
+	f.l.gate = make(chan struct{})
+	ctx := context.Background()
+	// Reserve 2048 + two VMs at 4096 / 2: one MiB short of the second.
+	f.stats.availMiB = 2*2048 + 2048 - 1
+	done := make(chan error, 2)
+	go func() {
+		_, _, err := f.m.Create(ctx, req(sb1, 1))
+		done <- err
+	}()
+	waitStarting(t, f.m, sb1)
+	_, _, err := f.m.Create(ctx, req(sb2, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
+	_, md := errorInfo(t, err)
+	if md["vm_mem_mib"] != "4096" || md["vm_mem_charge_mib"] != "2048" || md["mem_starting_mib"] != "2048" || md["mem_needed_mib"] != "6144" {
+		t.Fatalf("metadata %v", md)
+	}
+	f.stats.availMiB++
+	go func() {
+		_, _, err := f.m.Create(ctx, req(sb2, 1))
+		done <- err
+	}()
+	waitStarting(t, f.m, sb2)
+	close(f.l.gate)
+	for range 2 {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// A memory.max on the VM slice caps the available memory: the node can
+// have memory that the slice cannot take.
+func TestMemoryAdmissionSliceRoom(t *testing.T) {
+	f := newFixture(t, 10)
+	ctx := context.Background()
+	f.stats.availMiB = 32 << 10
+	f.stats.sliceRoomMiB = 4096 + 2048 - 1
+	_, _, err := f.m.Create(ctx, req(sb1, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
+	if _, md := errorInfo(t, err); md["slice_room_mib"] != "6143" || md["mem_available_mib"] != "32768" || md["mem_needed_mib"] != "6144" {
+		t.Fatalf("metadata %v", md)
+	}
+	if !strings.Contains(err.Error(), "6143 MiB below its limit") {
+		t.Errorf("message %q", err)
+	}
+	f.stats.sliceRoomMiB++
+	if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
+		t.Fatal(err)
+	}
+	// An unreadable slice is a refusal, not an unlimited slice.
+	f.stats.sliceErr = errors.New("read memory.current: permission denied")
+	_, _, err = f.m.Create(ctx, req(sb2, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
+	if f.l.count() != 1 {
+		t.Fatalf("launches %d", f.l.count())
+	}
+}
+
+func TestMemChargeMiB(t *testing.T) {
+	for _, c := range []struct {
+		mem, divisor uint32
+		want         uint64
+	}{
+		{8192, 0, 8192},
+		{8192, 1, 8192},
+		{8192, 2, 4096},
+		{8191, 2, 4096},
+		{8192, 3, 2731},
+	} {
+		if got := memChargeMiB(c.mem, c.divisor); got != c.want {
+			t.Errorf("memChargeMiB(%d, %d) = %d, want %d", c.mem, c.divisor, got, c.want)
+		}
 	}
 }
 

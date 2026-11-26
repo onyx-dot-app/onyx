@@ -35,9 +35,9 @@ export async function navigateToAgentInHistorySidebar(
 export async function sendMessage(page: Page, message: string) {
   const chat = new ChatPage(page);
 
-  await page.locator("#onyx-chat-input-textbox").click();
-  await page.locator("#onyx-chat-input-textbox").fill(message);
-  await page.locator("#onyx-chat-input-send-button").click();
+  await chat.inputBar.textbox.click();
+  await chat.inputBar.fill(message);
+  await chat.inputBar.sendButton.click();
 
   // Wait on the latest turn, not on a count of AI messages: a long chat
   // mounts only the messages near the viewport.
@@ -52,42 +52,6 @@ export async function sendMessage(page: Page, message: string) {
     null,
     { timeout: 10000 }
   );
-}
-
-export async function verifyCurrentModel(page: Page, modelName: string) {
-  await new ChatPage(page).expectModelPill(modelName);
-}
-
-export async function selectModelFromInputPopover(
-  page: Page,
-  preferredModels: string[]
-): Promise<string> {
-  const chatPage = new ChatPage(page);
-  await chatPage.openModelList();
-  const { modelOptions, unselectedModelOptions } = chatPage;
-
-  for (const modelName of preferredModels) {
-    await chatPage.modelSearchInput.fill(modelName);
-    if ((await modelOptions.count()) > 0) {
-      const candidate =
-        (await unselectedModelOptions.count()) > 0
-          ? unselectedModelOptions.first()
-          : modelOptions.first();
-      return chatPage.chooseModelOption(candidate);
-    }
-  }
-
-  // Reset search so fallback sees all available models.
-  await chatPage.modelSearchInput.fill("");
-
-  if ((await unselectedModelOptions.count()) > 0) {
-    const fallback = unselectedModelOptions.first();
-    await expect(fallback).toBeVisible();
-    return chatPage.chooseModelOption(fallback);
-  }
-
-  await chatPage.closeModelPicker().catch(() => {});
-  return chatPage.readModelPillText();
 }
 
 export async function switchModel(page: Page, modelName: string) {

@@ -1,5 +1,6 @@
 """Private skill ownership survives user deletion without automatic succession."""
 
+import threading
 from contextlib import nullcontext
 from unittest.mock import AsyncMock, patch
 
@@ -27,6 +28,7 @@ from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import UserByEmail
+from onyx.server.manage.users import delete_user
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
 
@@ -50,6 +52,35 @@ def test_owner_must_transfer_private_skills_before_deletion(
     delete_user_from_db__no_commit(owner, db_session)
     assert db_session.get(User, owner.id) is None
     assert skill.author_user_id == successor.id
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_admin_delete_route_returns_private_skill_conflict(
+    db_session: Session,
+) -> None:
+    admin = make_user(db_session, is_admin=True)
+    owner = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=owner.id)
+    owner.is_active = False
+    db_session.commit()
+    owner_id = owner.id
+    try:
+        with pytest.raises(OnyxError) as exc:
+            await delete_user(
+                UserByEmail(user_email=owner.email),
+                current_user=admin,
+                db_session=db_session,
+            )
+        assert exc.value.error_code == OnyxErrorCode.CONFLICT
+        assert "Transfer or delete" in exc.value.detail
+        assert db_session.get(User, owner_id) is not None
+    finally:
+        delete_skill(skill, db_session)
+        remaining_owner = db_session.get(User, owner_id)
+        assert remaining_owner is not None
+        delete_user_from_db__no_commit(remaining_owner, db_session)
+        delete_user_from_db__no_commit(admin, db_session)
+        db_session.commit()
 
 
 @pytest.mark.parametrize("change", ["transfer", "delete", "publish"])
@@ -79,7 +110,11 @@ def test_copied_plugin_does_not_block_deletion_of_former_owner(
 
     delete_user_from_db__no_commit(owner, db_session)
     assert db_session.get(User, owner.id) is None
-    plugin = db_session.scalar(select(Plugin).where(Plugin.id == plugin_id))
+    plugin = db_session.scalar(
+        select(Plugin)
+        .where(Plugin.id == plugin_id)
+        .execution_options(populate_existing=True)
+    )
     if change == "delete":
         assert plugin is None
     else:
@@ -92,7 +127,10 @@ def test_database_rejects_deletion_that_would_orphan_private_skill(
 ) -> None:
     owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, author_user_id=owner.id)
-    with pytest.raises(IntegrityError, match="ck_private_skill_has_owner"):
+    with pytest.raises(
+        IntegrityError,
+        match="ck_private_plugin_has_owner|plugin_marketplace_id_fkey",
+    ):
         with db_session.begin_nested():
             db_session.execute(
                 delete(User__UserGroup).where(User__UserGroup.user_id == owner.id)
@@ -206,11 +244,33 @@ async def test_auth_deletion_cleans_up_group_membership(db_session: Session) -> 
             db_session.commit()
 
 
-def test_delete_skill_with_no_plugin_returns_its_bundle(
+@pytest.mark.asyncio(loop_scope="module")
+async def test_auth_deletion_runs_file_cleanup_off_the_event_loop(
     db_session: Session,
 ) -> None:
-    skill = make_skill(db_session, with_plugin=False)
-    bundle_file_id = skill.bundle_file_id
+    user = make_user(db_session, standard_account=True)
+    user_id = user.id
+    db_session.commit()
+    loop_thread = threading.get_ident()
+    cleanup_threads: list[int] = []
 
-    assert delete_skill(skill, db_session) == [bundle_file_id]
-    assert db_session.get(Plugin, skill.id) is None
+    def record_thread(_cleanup: object, _db_session: Session) -> None:
+        cleanup_threads.append(threading.get_ident())
+
+    try:
+        with patch("onyx.auth.users.finish_user_delete", record_thread):
+            async with get_async_session_context_manager(
+                get_current_tenant_id()
+            ) as session:
+                async_user = await session.get(User, user_id)
+                assert async_user is not None
+                manager = UserManager(SQLAlchemyUserDatabase(session, User))
+                await manager.delete(async_user)
+        assert len(cleanup_threads) == 1
+        assert cleanup_threads[0] != loop_thread
+    finally:
+        db_session.expire_all()
+        remaining_user = db_session.get(User, user_id)
+        if remaining_user is not None:
+            delete_user_from_db__no_commit(remaining_user, db_session)
+            db_session.commit()

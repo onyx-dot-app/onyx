@@ -7,6 +7,7 @@ import pytest
 from kubernetes import client
 from sqlalchemy.orm import Session
 
+from onyx.db.build_session import reserve_nextjs_port__no_commit
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession, Sandbox
 from onyx.server.features.build.configs import (
@@ -15,7 +16,6 @@ from onyx.server.features.build.configs import (
     SANDBOX_NAMESPACE,
     SandboxBackend,
 )
-from onyx.server.features.build.db.build_session import reserve_nextjs_port__no_commit
 from tests.common.craft.cleanup_worker import (
     isolated_cleanup_deployment as isolated_cleanup_deployment,
 )

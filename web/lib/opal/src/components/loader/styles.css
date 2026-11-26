@@ -75,14 +75,16 @@
 }
 
 /* Respect reduced-motion: hold the static octagon outline, no rotation. */
-@media (prefers-reduced-motion: reduce) {
-  .opal-loader-rotator,
-  .opal-loader-outline,
-  .opal-loader-mark {
+.opal-loader-rotator,
+.opal-loader-outline,
+.opal-loader-mark {
+  @variant motion-reduce {
     animation: none;
   }
+}
 
-  .opal-loader-mark {
+.opal-loader-mark {
+  @variant motion-reduce {
     opacity: 0;
   }
 }

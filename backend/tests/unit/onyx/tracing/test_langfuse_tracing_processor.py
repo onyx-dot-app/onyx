@@ -10,6 +10,7 @@ import pytest
 
 from onyx.tracing.framework.span_data import FunctionSpanData, GenerationSpanData
 from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
+from onyx.tracing.masking import MASKING_LENGTH
 
 
 def _make_trace(metadata: Mapping[str, Any]) -> MagicMock:
@@ -177,3 +178,41 @@ def test_on_span_end_exports_function_span_metadata() -> None:
 
     update: dict[str, Any] = observation.update.call_args.kwargs
     assert update["metadata"] == {"code_mode.index": 1}
+
+
+def test_on_span_end_bounds_a_large_function_output() -> None:
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+    span = _make_span("trace-123", "span-1")
+    output = "HEAD" + "x" * (2 * MASKING_LENGTH) + "TAIL"
+    span.span_data = FunctionSpanData(name="echo", input="{}", output=output)
+    span.error = None
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    exported = observation.update.call_args.kwargs["output"]
+    assert isinstance(exported, str)
+    assert len(exported) < MASKING_LENGTH + 100
+    assert exported.startswith("HEAD")
+    assert "TAIL[TRUNCATED" in exported
+
+
+def test_on_span_end_masks_a_bearer_token_across_the_cut() -> None:
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+    span = _make_span("trace-123", "span-1")
+    token = "Z" * 40
+    # The kept tail starts in the middle of the token.
+    tail = "y" * (MASKING_LENGTH // 5 - len(token) // 2)
+    output = "x" * (2 * MASKING_LENGTH) + "Authorization: Bearer " + token + tail
+    span.span_data = FunctionSpanData(name="echo", input="{}", output=output)
+    span.error = None
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    exported = observation.update.call_args.kwargs["output"]
+    assert isinstance(exported, str)
+    assert "[TRUNCATED" in exported
+    assert "Z" not in exported

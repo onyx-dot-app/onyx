@@ -72,10 +72,14 @@ type InputSingleBaseProps = Omit<
   onValueChange?: (value: string) => void;
   /** Disabled state */
   disabled?: boolean;
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
   /** External error state - overrides internal validation */
   isError?: boolean;
   /** Optional name for the field (for accessibility) */
   name?: string;
+  /** The field's accessible name, such as its row title. Defaults to `placeholder`. */
+  "aria-label"?: string;
   /** Right content slot for custom UI elements (e.g., refresh button) */
   rightChildren?: React.ReactNode;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
@@ -147,8 +151,9 @@ export type InputSingleSelectProps = InputSingleBaseProps & {
    *  group's rows left out, so a caller pages in only what is being read. */
   onReachEnd?: (shown: SelectOption[]) => void;
   /**
-   * Shown while empty, and always the field's accessible name, so it is
-   * required even with a `defaultOption` that keeps the trigger filled.
+   * Shown while empty, and the field's accessible name when `aria-label` is
+   * unset, so it is required even with a `defaultOption` that keeps the
+   * trigger filled.
    */
   placeholder: string;
 };

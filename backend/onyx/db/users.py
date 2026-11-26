@@ -2,13 +2,15 @@ import datetime
 import hashlib
 import struct
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, TypedDict, Unpack
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
+from pydantic import BaseModel
 from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
@@ -28,27 +30,27 @@ from onyx.db.models import (
     DocumentSet,
     DocumentSet__User,
     Marketplace,
-    MCPConnectionConfig,
     MCPServer,
     OAuthAccount,
     PermissionGrant,
     Persona,
     Persona__User,
-    Plugin,
     SamlAccount,
+    ScimUserMapping,
     User,
     User__ExternalUserGroupId,
     User__UserGroup,
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.utils import is_check_violation, is_fk_violation
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     get_sandbox_purge_targets,
     get_user_sandbox_blob_paths,
 )
+from onyx.db.utils import is_check_violation, is_fk_violation
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes_in_background,
 )
@@ -678,11 +680,6 @@ def reconcile_user_email__no_commit(
         .where(MCPServer.owner == old_email)
         .values(owner=normalized_new_email)
     )
-    db_session.execute(
-        update(MCPConnectionConfig)
-        .where(MCPConnectionConfig.user_email == old_email)
-        .values(user_email=normalized_new_email)
-    )
     return old_email, prior_emails
 
 
@@ -701,6 +698,13 @@ def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
     )
 
 
+def reload_oauth_account(
+    db_session: Session, oauth_account_id: UUID
+) -> OAuthAccount | None:
+    """The login account row as the database has it now."""
+    return db_session.get(OAuthAccount, oauth_account_id, populate_existing=True)
+
+
 def fetch_user_by_id(
     db_session: Session, user_id: UUID, for_update: bool = False
 ) -> User | None:
@@ -715,6 +719,14 @@ def fetch_user_by_id(
         # nullable side of an outer join, so defer it when locking.
         query = query.options(lazyload(User.oauth_accounts)).with_for_update()
     return query.first()
+
+
+async def get_user_from_async_session(
+    db_session: AsyncSession, user_id: UUID
+) -> User | None:
+    """Primary-key lookup: returns the instance the session already holds, if
+    any, without a query."""
+    return await db_session.get(User, user_id)
 
 
 def _generate_password_hash() -> str:
@@ -965,25 +977,67 @@ _PRIVATE_SKILLS_BLOCK_DELETE = (
 )
 
 
+class UserDeleteCleanup(BaseModel):
+    """What the caller does after the user delete commits."""
+
+    file_ids: list[str] = []
+    affected_user_ids: set[UUID] = set()
+
+
+def finish_user_delete(cleanup: UserDeleteCleanup, db_session: Session) -> None:
+    # onyx.skills.push imports this module.
+    from onyx.skills.push import push_skills_and_commit
+
+    delete_files_best_effort(cleanup.file_ids, "user delete cleanup")
+    if cleanup.affected_user_ids:
+        push_skills_and_commit(cleanup.affected_user_ids, db_session)
+
+
 def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
-) -> None:
+) -> UserDeleteCleanup:
+    """Removes the user's personal marketplaces too, and queues their profile
+    photo for deletion. The caller runs `finish_user_delete` after the
+    commit."""
+    # onyx.db.plugin imports this module through onyx.db.user_group.
+    from onyx.db.marketplace import delete_github_marketplace__no_commit
+    from onyx.db.plugin import private_plugins_blocking_user_delete
+
     # A private plugin lives in its owner's "My uploads". Published plugins stay
     # in the Organization library with no author.
-    if (
-        db_session.scalar(
-            select(Plugin.id)
-            .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-            .where(
-                Marketplace.kind == MarketplaceKind.USER_UPLOADS,
-                Marketplace.owner_user_id == user_to_delete.id,
-            )
-            .limit(1)
+    # An integration stays with no owner (ON DELETE SET NULL), with its
+    # install setting and its shares, so a private one stays private.
+    blocking = db_session.scalars(
+        private_plugins_blocking_user_delete(user_to_delete.id)
+    ).all()
+    if blocking:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            _PRIVATE_SKILLS_BLOCK_DELETE,
+            extra={
+                "private_plugins": [
+                    {"id": str(plugin.id), "name": plugin.name} for plugin in blocking
+                ],
+            },
         )
-        is not None
-    ):
-        raise OnyxError(OnyxErrorCode.CONFLICT, _PRIVATE_SKILLS_BLOCK_DELETE)
+    cleanup = UserDeleteCleanup()
+    if user_to_delete.profile_image_file_id:
+        cleanup.file_ids.append(user_to_delete.profile_image_file_id)
+    # A personal marketplace holds only copies of its repository.
+    for marketplace_id in db_session.scalars(
+        select(Marketplace.id)
+        .where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.owner_user_id == user_to_delete.id,
+        )
+        .order_by(Marketplace.id)
+    ).all():
+        affected, file_ids = delete_github_marketplace__no_commit(
+            marketplace_id, db_session
+        )
+        cleanup.file_ids.extend(file_ids)
+        cleanup.affected_user_ids |= affected - {user_to_delete.id}
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 
@@ -1020,11 +1074,11 @@ def delete_user_from_db__no_commit(
         # A private plugin added after the check above.
         if not (
             is_check_violation(exc, "ck_private_plugin_has_owner")
-            or is_check_violation(exc, "ck_private_skill_has_owner")
             or is_fk_violation(exc, "plugin_marketplace_id_fkey")
         ):
             raise
         raise OnyxError(OnyxErrorCode.CONFLICT, _PRIVATE_SKILLS_BLOCK_DELETE) from exc
+    return cleanup
 
 
 def delete_user_from_db(
@@ -1034,8 +1088,9 @@ def delete_user_from_db(
     # Collect before the cascade removes the rows; delete only after commit.
     sandbox_blob_paths = get_user_sandbox_blob_paths(db_session, user_to_delete.id)
     purge_targets = get_sandbox_purge_targets(db_session, user_to_delete.id)
-    delete_user_from_db__no_commit(user_to_delete, db_session)
+    cleanup = delete_user_from_db__no_commit(user_to_delete, db_session)
     db_session.commit()
+    finish_user_delete(cleanup, db_session)
     delete_sandbox_blobs_best_effort(sandbox_blob_paths)
     purge_harness_sandboxes_in_background(purge_targets)
 
@@ -1161,3 +1216,54 @@ def set_user_groups__no_commit(
         db_session.execute(insert_stmt)
 
     recompute_user_permissions__no_commit(user_id, db_session)
+
+
+def fetch_scim_synced_user_ids(db_session: Session, user_ids: list[UUID]) -> set[UUID]:
+    """The given users that have a SCIM mapping."""
+    return set(
+        db_session.scalars(
+            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
+        ).all()
+    )
+
+
+class UserProfileValues(TypedDict, total=False):
+    """Profile columns of `User` to save. A missing key keeps the saved value;
+    None clears it."""
+
+    personal_name: str | None
+    preferred_name: str | None
+    personal_role: str | None
+
+
+def update_user_profile__no_commit(
+    db_session: Session, user_id: UUID, **values: Unpack[UserProfileValues]
+) -> None:
+    if not values:
+        return
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(**values)
+    )
+
+
+def replace_user_profile_image_file_id(
+    user_id: UUID,
+    profile_image_file_id: str | None,
+    db_session: Session,
+) -> str | None:
+    """Set the user's profile photo and return the file id it replaced. The row
+    lock makes concurrent replacements each see the file that they replace."""
+    previous_file_id = db_session.scalar(
+        select(User.profile_image_file_id)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .with_for_update()
+    )
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(profile_image_file_id=profile_image_file_id)
+    )
+    db_session.commit()
+    return previous_file_id

@@ -6,10 +6,16 @@
  * them to `toast.error` directly.
  */
 
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
+import type {
+  PluginUploadPreview,
+  PluginUploadTarget,
+} from "@/lib/plugins/types";
 import type {
   CustomSkill,
   GitHubSkillsImportResult,
-  GitHubSkillsPreview,
+  OrganizationLibraryDefaultAccess,
+  OrganizationLibraryDefaultPolicy,
   Skill,
   SkillBundleContents,
   SkillEditableDetail,
@@ -20,9 +26,11 @@ import type {
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let errorCode: string | undefined;
+    let info: ErrorResponseBody | null = null;
     let detail = `Request failed (${res.status})`;
     try {
       const body = await res.json();
+      info = body;
       if (typeof body?.error_code === "string") errorCode = body.error_code;
       if (typeof body?.detail === "string") detail = body.detail;
       else if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
@@ -31,11 +39,9 @@ async function handle<T>(res: Response): Promise<T> {
     } catch {
       // Use the generic status message.
     }
-    const error = new Error(detail) as Error & {
-      errorCode: string | undefined;
-    };
-    error.errorCode = errorCode;
-    throw error;
+    throw Object.assign(new FetchError(detail, res.status, info), {
+      errorCode,
+    });
   }
   if (res.status === 204) {
     return undefined as T;
@@ -46,36 +52,6 @@ async function handle<T>(res: Response): Promise<T> {
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
-
-export async function previewGitHubSkills(
-  repository: string
-): Promise<GitHubSkillsPreview> {
-  const res = await fetch("/api/skills/github/preview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repository }),
-  });
-  return handle<GitHubSkillsPreview>(res);
-}
-
-export async function importGitHubSkills(
-  preview: Pick<GitHubSkillsPreview, "repository" | "revision" | "subpath">,
-  paths: string[],
-  sharing?: SkillShareUpdatePayload
-): Promise<GitHubSkillsImportResult> {
-  const res = await fetch("/api/skills/github/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      repository: preview.repository,
-      revision: preview.revision,
-      subpath: preview.subpath,
-      paths,
-      sharing,
-    }),
-  });
-  return handle<GitHubSkillsImportResult>(res);
-}
 
 export async function uploadSkillBundles(
   bundles: File[],
@@ -128,12 +104,50 @@ export async function bulkUpdateSkills(
   return result;
 }
 
+function pluginUploadForm(bundle: File, saveAsNew: boolean): FormData {
+  const form = new FormData();
+  form.append("bundle", bundle);
+  form.append("save_as_new", String(saveAsNew));
+  return form;
+}
+
+export async function inspectPluginUpload(
+  bundle: File,
+  saveAsNew: boolean
+): Promise<PluginUploadPreview> {
+  return handle<PluginUploadPreview>(
+    await fetch("/api/skills/plugins/inspect", {
+      method: "POST",
+      body: pluginUploadForm(bundle, saveAsNew),
+    })
+  );
+}
+
+export interface PluginUploadResult {
+  target: PluginUploadTarget;
+  plugin: CustomSkill;
+  enabled: boolean;
+  unchanged: boolean;
+  name_conflicts: string[];
+}
+
+export async function savePluginUpload(
+  bundle: File,
+  saveAsNew: boolean
+): Promise<PluginUploadResult> {
+  return handle<PluginUploadResult>(
+    await fetch("/api/skills/plugins", {
+      method: "POST",
+      body: pluginUploadForm(bundle, saveAsNew),
+    })
+  );
+}
+
 export interface CreateCustomSkillInput {
   name: string;
   description: string;
   instructions_markdown: string;
   auto_enable?: boolean;
-  external_app_id?: number;
   sharing?: SkillShareUpdatePayload;
 }
 
@@ -146,9 +160,6 @@ export async function createCustomSkillFromEditor(
   form.append("description", input.description);
   form.append("instructions_markdown", input.instructions_markdown);
   form.append("auto_enable", String(input.auto_enable ?? true));
-  if (input.external_app_id !== undefined) {
-    form.append("external_app_id", String(input.external_app_id));
-  }
   if (input.sharing) form.append("sharing", JSON.stringify(input.sharing));
   if (upload) form.append("upload", upload);
 
@@ -165,6 +176,18 @@ export function isSkillNameConflict(error: unknown): boolean {
     "errorCode" in error &&
     error.errorCode === "SKILL_NAME_CONFLICT"
   );
+}
+
+/** The skills that a turn-on would turn off, from a name-conflict error. */
+export function skillNameConflictNames(error: unknown): string[] {
+  if (!(error instanceof FetchError)) return [];
+  const names: unknown =
+    error.info && "conflict_names" in error.info
+      ? error.info.conflict_names
+      : undefined;
+  return Array.isArray(names)
+    ? names.filter((name): name is string => typeof name === "string")
+    : [];
 }
 
 export function isSkillVersionStale(error: unknown): boolean {
@@ -196,8 +219,15 @@ export async function setSkillEnabled(
   return handle<Skill>(res);
 }
 
+export interface SkillGroupSettingPayload {
+  group_id: number;
+  /** Null: the group uses the organization setting. */
+  installation_policy: SkillInstallationPolicy | null;
+}
+
 export interface SkillShareUpdatePayload {
-  installation_policy?: SkillInstallationPolicy;
+  /** Null: no own setting, so Default access applies. */
+  installation_policy?: SkillInstallationPolicy | null;
   user_shares?: {
     user_id: string;
     permission: SkillSharePermission;
@@ -207,6 +237,7 @@ export interface SkillShareUpdatePayload {
     permission: SkillSharePermission;
   }[];
   public_permission?: SkillSharePermission | null;
+  group_settings?: SkillGroupSettingPayload[];
 }
 
 export async function uploadUserSkillFiles(
@@ -333,4 +364,16 @@ export async function deleteUserSkill(skillId: string): Promise<void> {
     method: "DELETE",
   });
   await handle<void>(res);
+}
+
+/** Set the install setting of every published skill with no own setting. */
+export async function setOrganizationLibraryDefaultAccess(
+  policy: OrganizationLibraryDefaultPolicy
+): Promise<OrganizationLibraryDefaultAccess> {
+  const res = await fetch("/api/skills/organization-library/default-access", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ installation_policy: policy }),
+  });
+  return handle<OrganizationLibraryDefaultAccess>(res);
 }

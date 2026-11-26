@@ -1,4 +1,5 @@
 from collections.abc import Iterator, Sequence
+from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -35,8 +36,14 @@ from onyx.chat.mention_models import Mentions, PickedSkillMessage, RecordedMenti
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    IncognitoRecordMode,
+    QuestionAnsweredVia,
+    QuestionOutcome,
+)
+from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails, UserFile
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
     ChatLoadedFile,
@@ -44,6 +51,7 @@ from onyx.file_store.models import (
     FileDescriptor,
     FileToolMetadata,
 )
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import (
     GenerationRequestParams,
@@ -63,6 +71,8 @@ from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
     Packet,
     StreamingError,
+    ToolApprovalRequest,
+    ToolQuestionRequest,
 )
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
@@ -71,9 +81,19 @@ from onyx.tools.models import (
     PersonaToolConfiguration,
     SearchToolUsage,
     ToolCallInfo,
+    ToolOptions,
+    ToolPreference,
 )
-from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.models import (
+    CodeModeExecutionResult,
+    SavedCodeCell,
+)
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
+from onyx.tools.tool_implementations.question.models import (
+    ToolQuestion,
+    ToolQuestionAnswer,
+)
+from onyx.tools.tool_implementations.sandbox.models import PublishedFile, VmChatFile
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 
@@ -180,6 +200,24 @@ def accepted_input_messages(
     ]
 
 
+class ContextUserFiles(BaseModel):
+    """The user files of a chat's context: its project's files and its
+    custom agent's files. A file in both is the agent's."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    project: list[UserFile]
+    agent: list[UserFile]
+
+
+class PlacedChatFiles(BaseModel):
+    """The chat files in the chat's sandbox (files.place_chat_files)."""
+
+    files: list[VmChatFile]
+    # By file store ID: the paths of the chat's uploads.
+    upload_paths: dict[str, str]
+
+
 class FileContextResult(BaseModel):
     """Result of building a file's LLM context representation."""
 
@@ -212,24 +250,38 @@ class CitationMode(str, Enum):
 
 class PresentationMode(str, Enum):
     ANSWER = "answer"
+    RESEARCH = "research"
     PLAN = "plan"
     REPORT = "report"
-    CODING_THINKING = "coding_thinking"
-    CODING_ANSWER = "coding_answer"
     SILENT = "silent"
+
+
+class ToolApprovalDenial(BaseModel):
+    """Metadata of the result that a denied approval request gives the model:
+    why the call did not run. Saved responses drop it."""
+
+    # disabled: the action policy blocked the call when the user approved it,
+    # or the tool's server was deleted while the call waited.
+    outcome: Literal["rejected", "disabled"]
 
 
 class MessageRendering(BaseModel):
     """Chat display settings retained with one generated message for history replay."""
 
     mode: PresentationMode = PresentationMode.ANSWER
-    text_as_thinking: bool = False
-    think_tool: str | None = None
     is_clarification: bool = False
     citation_mode: CitationMode | None = None
     citation_documents: dict[int, str] = Field(default_factory=dict)
     document_ids: list[str] = Field(default_factory=list)
     pre_answer_seconds: float | None = None
+
+
+def read_message_rendering(value: dict[str, JsonValue]) -> MessageRendering:
+    """Hide text with an unknown display mode when replaying stored chat steps."""
+    mode = value.get("mode")
+    if isinstance(mode, str) and mode not in PresentationMode:
+        value = {**value, "mode": PresentationMode.SILENT}
+    return MessageRendering.model_validate(value)
 
 
 class ResponseRecord(BaseModel):
@@ -310,6 +362,8 @@ class AgentResultState(BaseModel):
     root_response_id: int
     status: RunStatus
     failure: RunFailure | None = None
+    # SUSPENDED with a checkpoint: the run waits for people, without an owner.
+    parked: bool = False
 
     @property
     def wakes_recipient(self) -> bool:
@@ -327,8 +381,14 @@ class AgentResultState(BaseModel):
         """An active background agent: an unfinished run that delivers this result.
 
         Only `spawn_agent` runs have result rows, so foreground workers never count.
+        A run that waits for the user without an owner (parked) counts.
         """
         return not self.status.is_terminal
+
+    @property
+    def is_running(self) -> bool:
+        """An active run that is not parked: it has, or had, an owner."""
+        return self.is_active and not self.parked
 
 
 class AgentWait(BaseModel):
@@ -358,6 +418,26 @@ class AgentInboxWork(BaseModel):
     parent_tool_call_id: str
 
 
+class ParkedRun(BaseModel):
+    """A parked run whose waits have all ended, on any branch of the chat."""
+
+    # The agent's conversation; the chat session itself for a root response.
+    agent_id: str
+    response_id: int
+    # The root response whose branch the run belongs to.
+    root_response_id: int
+    # The model, temperature, and the request's tool options that the run's
+    # checkpoint saved, which it continues with.
+    model_configuration_id: int | None = None
+    temperature: float | None = None
+    tool_options: ToolOptions | None = None
+
+    @property
+    def is_root(self) -> bool:
+        """Whether the run is a root response, which continues in a turn."""
+        return self.response_id == self.root_response_id
+
+
 class ChatBranch(BaseModel):
     chat_session_id: UUID
     message_ids: list[int]
@@ -368,14 +448,18 @@ class ChatInbox(BaseModel):
 
     branch: ChatBranch
     selected_response_id: int | None
-    # The running selected response and active background agents. Each can have
-    # lost its owner.
+    # The running selected response and running background agents. Each can
+    # have lost its owner; parked runs have none and are not listed.
     running_response_ids: list[int] = Field(default_factory=list)
     results: list[AgentResultState] = Field(default_factory=list)
     next_turn: QueuedChatTurn | None = None
     child_work: list[AgentInboxWork] = Field(default_factory=list)
     # Unfinished latest runs of agents whose messages wait for them.
     waiting_response_ids: list[int] = Field(default_factory=list)
+    # Parked runs whose waits have all ended, on any branch: root responses
+    # continue in a turn before any queued turn, and the stores of their
+    # branches resume agent runs.
+    resumable_runs: list[ParkedRun] = Field(default_factory=list)
 
     @property
     def unfinished_response_ids(self) -> list[int]:
@@ -537,12 +621,20 @@ class CreateChatSessionID(BaseModel):
     incognito: bool = False
 
 
+class ChatSessionNameInfo(BaseModel):
+    """The name the server gave a new chat, sent once it is saved."""
+
+    chat_session_id: UUID
+    chat_session_name: str
+
+
 AnswerStreamPart = (
     Packet
     | MessageResponseIDInfo
     | MultiModelMessageResponseIDInfo
     | StreamingError
     | CreateChatSessionID
+    | ChatSessionNameInfo
 )
 
 AnswerStream = Iterator[AnswerStreamPart]
@@ -556,6 +648,9 @@ class ToolCallResponse(BaseModel):
     tool_result: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
+    # Files that publish_files gave the user; each downloads from
+    # /chat/file/{file_id}.
+    published_files: list[PublishedFile] | None = None
     # Reasoning that led to the tool call
     pre_reasoning: str | None = None
 
@@ -595,6 +690,12 @@ class ChatFullResponse(BaseModel):
     # packet does. A server that omits it did not honor an incognito request.
     incognito: bool = False
     error_msg: str | None = None
+    # Set when the response stopped because tool calls wait for the user
+    # (stop reason `awaiting_user`): for approval decisions, or for answers to
+    # the agent's questions. After them the response continues in the chat
+    # session. Empty for a finished response.
+    pending_tool_approvals: list[ToolApprovalRequest] = []
+    pending_tool_questions: list[ToolQuestionRequest] = []
 
 
 class ChatHistoryResult(BaseModel):
@@ -797,7 +898,7 @@ class ChatFeatureState(BaseModel):
     reasoning_effort: ReasoningEffort
     include_citations: bool
     inject_memories: bool
-    preferred_tool_id: int | None = None
+    preferred_tool: ToolPreference | None = None
     code_mode: bool
     base_prompt: str
     custom_prompt: str | None
@@ -811,6 +912,8 @@ class ChatFeatureState(BaseModel):
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
     search_context: SearchContext
+    # Cells whose observations wait for the user's input.
+    code_cells: list[SavedCodeCell] = Field(default_factory=list)
 
 
 class ReservedChatResponse(BaseModel):
@@ -835,6 +938,15 @@ class ChatTurnSetup(BaseModel):
     persona: PersonaPromptConfig
     base_system_prompt: str
     tool_configuration: PersonaToolConfiguration
+    # The turn offers the sandbox tools (sandbox_tools.py:sandbox_tools_for_model).
+    sandbox_tools: bool
+    # The chat's files in its sandbox (chat/files.py:place_chat_files); none
+    # without the sandbox tools.
+    vm_chat_files: list[VmChatFile]
+    # The turn's first sandbox call copies them (SandboxTurn).
+    copy_vm_chat_files: bool
+    # The root agent gets the question tool (question_tool.py).
+    question_tool: bool = False
     research_tool_id: int | None
     checkpoint: CompactionCheckpoint | None
     # Child-result delivery has no new user message.
@@ -854,13 +966,19 @@ class ChatTurnSetup(BaseModel):
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
-    preferred_tool_id: int | None
-    # The preferred tool comes from the chat's saved selection, which can
+    preferred_tool: ToolPreference | None
+    # The preferred tool comes from the chat's saved options, which can
     # outlive the tool or its plugin; the turn then runs without it.
     preferred_tool_saved: bool = False
+    # Name the chat from its first question while the answer streams
+    # (`chat/session_naming.py`).
+    auto_name: bool = False
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext
+    # The user's memory settings as the turn started.
+    use_memories: bool
+    enable_memory_tool: bool
     # The turn offers the skill tools when the user had custom skills as it
     # started; the tools and each agent's catalog read the current skills.
     has_chat_skills: bool
@@ -873,6 +991,11 @@ class ChatTurnSetup(BaseModel):
     litellm_additional_headers: dict[str, str] | None = None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None
+    # Only server-side callers set it; the public request has no such field.
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE
+    # The suspended response that this turn continues after its approvals,
+    # under a new stream ID; None for a turn that starts a response.
+    resumed_response_id: int | None = None
 
 
 class ResponseOwner(BaseModel):
@@ -892,6 +1015,7 @@ class CheckpointToolAnswer(BaseModel):
     request_id: str
     decision: InputDecision
     result: dict[str, JsonValue] | None = None
+    standing: bool = False
 
 
 class CheckpointBinding(BaseModel):
@@ -923,6 +1047,12 @@ class ResponseCheckpoint(BaseModel):
     message_payloads: list[MessagePayload]
     input_messages: list[Message]
     input_payloads: list[MessagePayload]
+    # The saved model configuration that the response runs, its sampling
+    # temperature, and the tool options of its request; a parked response
+    # continues with them.
+    model_configuration_id: int | None = None
+    temperature: float | None = None
+    tool_options: ToolOptions | None = None
 
 
 class SavedCheckpoint(BaseModel):
@@ -937,8 +1067,81 @@ class ToolReplayData(BaseModel):
     search_docs: list[SearchDoc] = Field(default_factory=list)
 
 
+class SavedToolApproval(BaseModel):
+    """A saved approval request of a chat tool call (`approval_request`)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    # The response, by message ID, and the call of its step that the request
+    # belongs to.
+    chat_message_id: int
+    tool_call_id: str
+    tool_name: str
+    display_name: str
+    arguments: dict[str, JsonValue]
+    created_at: datetime
+    decision: ApprovalDecision | None
+    decided_via: ApprovalDecidedVia | None
+    decided_at: datetime | None
+
+
+class SavedToolQuestion(BaseModel):
+    """A saved question request of a chat response's call (`question_request`)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    chat_message_id: int
+    tool_call_id: str
+    questions: list[ToolQuestion]
+    answers: list[ToolQuestionAnswer] | None
+    message: str | None
+    outcome: QuestionOutcome | None
+    answered_via: QuestionAnsweredVia | None
+    created_at: datetime
+    resolved_at: datetime | None
+
+
+class AgentToolApproval(BaseModel):
+    """A background agent's approval request, shown at the root response's
+    call that started the agent."""
+
+    approval: SavedToolApproval
+    agent_name: str
+
+
+class ChatApprovals(BaseModel):
+    """The approval requests and questions of a page of chat responses, read
+    once for the replays of those responses."""
+
+    # The requests of the responses and of the runs that they started, by
+    # response (the request's chat message), in the order they were made.
+    requests: dict[int, list[SavedToolApproval]] = Field(default_factory=dict)
+    # The agent names of the responses of background agents.
+    agent_names: dict[int, str] = Field(default_factory=dict)
+    # The runs that each response's calls started, directly or through the
+    # runs they started, with the ID of the response's call.
+    started_runs: dict[int, list[tuple[int, str]]] = Field(default_factory=dict)
+    # The questions of the responses, by response, in the order they were
+    # asked. Only root responses ask.
+    questions: dict[int, list[SavedToolQuestion]] = Field(default_factory=dict)
+
+
 class ResponseReplayData(BaseModel):
-    """Detached source documents and tool identities for response replay."""
+    """Detached source documents, tool identities, approval requests and
+    questions for response replay."""
 
     tools: dict[tuple[str, str], ToolReplayData]
     documents: dict[str, SearchDoc]
+    # The approval requests of an ended or suspended response, in the order
+    # they were made, by response run ID and tool call ID.
+    approvals: dict[tuple[str, str], list[SavedToolApproval]]
+    # The requests of the background agents that the response started, by its
+    # run ID and the call that started each agent.
+    agent_approvals: dict[tuple[str, str], list[AgentToolApproval]] = Field(
+        default_factory=dict
+    )
+    # The questions of an ended or suspended response, by its run ID and the
+    # call that asked.
+    questions: dict[tuple[str, str], SavedToolQuestion] = Field(default_factory=dict)

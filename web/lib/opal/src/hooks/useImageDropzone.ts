@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { createElement, useCallback, type ReactElement } from "react";
 import { useDropzone, DropzoneOptions, FileRejection } from "react-dropzone";
 
 const ACCEPTED_IMAGE_TYPES = {
@@ -26,6 +26,8 @@ export interface UseImageDropzoneReturn {
   getRootProps: ReturnType<typeof useDropzone>["getRootProps"];
   /** Props to spread onto a hidden input element */
   getInputProps: ReturnType<typeof useDropzone>["getInputProps"];
+  /** The hidden file input, for callers that render no raw `<input>` */
+  fileInput: ReactElement;
   /** Programmatically open the file picker (for click-to-edit) */
   openFilePicker: () => void;
 }
@@ -64,6 +66,7 @@ export function useImageDropzone({
     isDragActive,
     getRootProps,
     getInputProps,
+    fileInput: createElement("input", getInputProps()),
     openFilePicker: open,
   };
 }

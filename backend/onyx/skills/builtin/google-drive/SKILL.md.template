@@ -34,7 +34,7 @@ open, by id. So:
 {{ACTION_AVAILABILITY_SECTION}}
 
 > **Path convention**: run helpers from the session workspace as
-> `python .opencode/skills/google-drive/<helper>.py <command> [args]`.
+> `python /var/lib/onyx/skills/google-drive/<helper>.py <command> [args]`.
 > `python <helper>.py <command> -h` shows a command's flags.
 
 ## Quick Reference

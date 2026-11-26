@@ -63,6 +63,8 @@ export type OpalStrings = {
   showFullMessage: string;
   /** The collapsed toast pile's label, e.g. "+2 more". */
   toastMoreCount: (count: number) => string;
+  /** The button beside the toast pile that closes every toast. */
+  toastCloseAll: string;
   selectAnOption: string;
   openCalendar: string;
   month: string;
@@ -99,6 +101,8 @@ export type OpalStrings = {
   dragToReorder: string;
   viewSelected: string;
   deselectAll: string;
+  selectAll: string;
+  selectRow: string;
   selectItemsToContinue: string;
   selectAnItemToContinue: string;
   singleItemSelected: string;
@@ -197,6 +201,7 @@ export const defaultOpalStrings: OpalStrings = {
   removeItem: (title) => `Remove ${title}`,
   showFullMessage: "Show the full message",
   toastMoreCount: (count) => `+${count} more`,
+  toastCloseAll: "Close all",
   selectAnOption: "Select an option",
   openCalendar: "Open calendar",
   month: "Month",
@@ -233,6 +238,8 @@ export const defaultOpalStrings: OpalStrings = {
   dragToReorder: "Drag to reorder",
   viewSelected: "View selected",
   deselectAll: "Deselect all",
+  selectAll: "Select all",
+  selectRow: "Select row",
   selectItemsToContinue: "Select items to continue",
   selectAnItemToContinue: "Select an item to continue",
   singleItemSelected: "Item selected",

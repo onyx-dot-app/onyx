@@ -13,7 +13,7 @@ tier gate requires Business or higher for the whole `/gateway` prefix.
 ## User experience
 
 - **A developer** creates a PAT with the `use:llm_gateway` scope, from the LLM
-  Gateway section of their settings or from Access Tokens. They point the OpenAI
+  Gateway section of Settings > 3rd Party Access or from Access Tokens. They point the OpenAI
   SDK, Codex or opencode at `<onyx-host>/api/gateway/v1`, or Claude Code at
   `<onyx-host>/api/gateway`, with the PAT as the bearer token. The client lists
   models, sends requests, and gets answers in the dialect it expects. The caller

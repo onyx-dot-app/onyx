@@ -9,7 +9,10 @@ from onyx.connectors.field_policy import (
     ScopeOpaque,
     ScopeToggle,
 )
-from onyx.connectors.microsoft_utils.config import MicrosoftCloudBinding
+from onyx.connectors.microsoft_utils.config import (
+    MicrosoftCloudBinding,
+    MicrosoftRateBudget,
+)
 from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 MAX_WORKERS = 10
@@ -30,7 +33,7 @@ _DOCUMENT_TYPE_TOGGLE = FieldPolicy(
 )
 
 
-class TeamsConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
+class TeamsConnectorConfig(MicrosoftCloudBinding, MicrosoftRateBudget, ConnectorConfig):
     teams: Annotated[
         list[str] | None,
         FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),

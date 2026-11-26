@@ -1,5 +1,5 @@
 import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
-import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
+import type { ChatToolOptions } from "@/lib/tools/types";
 import { mutate } from "swr";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -9,6 +9,7 @@ import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/types";
 import {
   BackendMessage,
+  ChatSessionNameInfo,
   DocumentsResponse,
   FileDescriptor,
   FileChatDisplay,
@@ -17,6 +18,7 @@ import {
   MultiModelMessageResponseIDInfo,
   RateLimitDetails,
   RATE_LIMITED_ERROR_CODE,
+  APPROVAL_PENDING_ERROR_CODE,
   ResearchType,
   RetrievalType,
   StreamingError,
@@ -25,7 +27,7 @@ import {
 } from "@/app/app/types";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet, StreamCursor } from "@/app/app/services/streamingModels";
-import type { ErrorResponseBody } from "@/lib/fetcher";
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import { isSessionEndedResponse } from "@/lib/auth/utils";
 import { revalidateCurrentUser } from "@/lib/users/svc";
 
@@ -151,6 +153,7 @@ export type PacketType =
   | StreamingError
   | MessageResponseIDInfo
   | MultiModelMessageResponseIDInfo
+  | ChatSessionNameInfo
   | StreamStopInfo
   | UserKnowledgeFilePacket
   | Packet;
@@ -179,12 +182,11 @@ export interface SendMessageParams {
   mentions?: ComposedMention[];
   parentMessageId: number | null;
   chatSessionId: string;
-  filters: SearchFiltersRequest | null;
+  // The tools, plugins and search filters of this request. A preferred tool
+  // is a preference; invocation is not guaranteed.
+  toolOptions: ChatToolOptions;
   signal?: AbortSignal;
   deepResearch?: boolean;
-  enabledToolIds?: number[];
-  // Preferred tool for this request; invocation is not guaranteed
-  preferredToolId?: number | null;
   // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
@@ -201,17 +203,18 @@ export interface SendMessageParams {
 
 export class ChatSendRejectedError extends Error {}
 
+/** The chat waits for a tool approval or answers; the server saved nothing. */
+export class ApprovalPendingError extends ChatSendRejectedError {}
+
 export async function* sendMessage({
   message,
   fileDescriptors,
   mentions,
   parentMessageId,
   chatSessionId,
-  filters,
+  toolOptions,
   signal,
   deepResearch,
-  enabledToolIds,
-  preferredToolId,
   modelProvider,
   modelVersion,
   modelConfigurationId,
@@ -227,10 +230,8 @@ export async function* sendMessage({
     parent_message_id: parentMessageId,
     file_descriptors: fileDescriptors,
     mentions: requestMentions(mentions ?? []),
-    internal_search_filters: filters,
+    tool_options: toolOptions,
     deep_research: deepResearch ?? false,
-    allowed_tool_ids: enabledToolIds,
-    preferred_tool_id: preferredToolId ?? null,
     llm_override:
       temperature || modelVersion || modelConfigurationId != null
         ? {
@@ -247,6 +248,8 @@ export async function* sendMessage({
     additional_context: additionalContext ?? null,
     // The web chat shows responses that background agents start later.
     accepts_follow_ups: true,
+    // The web chat updates the sidebar when the server names a new chat.
+    accepts_chat_session_name: true,
   };
 
   const body = JSON.stringify(payload);
@@ -295,6 +298,9 @@ export async function* sendMessage({
     }
 
     const message = data.detail ?? `HTTP error! status: ${response.status}`;
+    if (data.error_code === APPROVAL_PENDING_ERROR_CODE) {
+      throw new ApprovalPendingError(message);
+    }
     if (response.status < 500 && response.status !== 408) {
       throw new ChatSendRejectedError(message);
     }
@@ -352,7 +358,11 @@ export async function* resumeStream(
 
   if (!response.ok) {
     const data: ErrorResponseBody = await response.json().catch(() => ({}));
-    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+    throw new FetchError(
+      data.detail ?? `HTTP error! status: ${response.status}`,
+      response.status,
+      data
+    );
   }
 
   yield* readChatStream<PacketType | StreamCursor>(
@@ -454,14 +464,17 @@ export async function renameChatSession(
   return response;
 }
 
-export async function deleteChatSession(chatSessionId: string) {
+/** Throws when the server does not delete the session. */
+export async function deleteChatSession(chatSessionId: string): Promise<void> {
   const response = await fetch(
     `/api/chat/delete-chat-session/${chatSessionId}`,
     {
       method: "DELETE",
     }
   );
-  return response;
+  if (!response.ok) {
+    throw new Error(`Failed to delete chat session: ${response.status}`);
+  }
 }
 
 export async function deleteAllChatSessions() {
@@ -472,24 +485,6 @@ export async function deleteAllChatSessions() {
     },
   });
   return response;
-}
-
-export async function getAvailableContextTokens(
-  chatSessionId: string,
-  modelConfigurationId?: number | null
-): Promise<number | null> {
-  const params =
-    modelConfigurationId != null
-      ? `?model_configuration_id=${modelConfigurationId}`
-      : "";
-  const response = await fetch(
-    `/api/chat/available-context-tokens/${chatSessionId}${params}`
-  );
-  if (!response.ok) {
-    return null;
-  }
-  const data: { available_tokens: number } = await response.json();
-  return data?.available_tokens ?? null;
 }
 
 export function processRawChatHistory(

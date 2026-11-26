@@ -18,10 +18,10 @@ import socket
 import struct
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
 
 from docker.errors import APIError, NotFound
 from docker.models.containers import Container
+from pydantic import BaseModel, ConfigDict
 
 from onyx.utils.logger import setup_logger
 
@@ -37,9 +37,10 @@ _FRAME_STDOUT = 1
 _FRAME_STDERR = 2
 
 
-@dataclass(frozen=True)
-class ExecResult:
+class ExecResult(BaseModel):
     """Result of a one-shot ``run_in_container`` invocation."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     exit_code: int
     stdout: bytes

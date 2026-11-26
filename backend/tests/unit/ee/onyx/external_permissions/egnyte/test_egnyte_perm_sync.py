@@ -15,8 +15,6 @@ from ee.onyx.external_permissions.egnyte.access import (
     folder_access,
 )
 from ee.onyx.external_permissions.egnyte.group_sync import egnyte_groups
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.egnyte.access import EgnyteUnknownGroupError
 from onyx.connectors.egnyte.connector import EgnyteCheckpoint, EgnyteConnector
@@ -175,11 +173,7 @@ def _perm_sync_connector() -> tuple[EgnyteConnector, MagicMock]:
     return connector, ops
 
 
-def _prefixed(*group_ids: str) -> set[str]:
-    return {build_ext_group_name_for_onyx(g, DocumentSource.EGNYTE) for g in group_ids}
-
-
-def test_indexing_with_permissions_prefixes_documents_and_nodes() -> None:
+def test_indexing_with_permissions_yields_bare_ids_on_documents_and_nodes() -> None:
     connector, ops = _perm_sync_connector()
     items: list[Document | HierarchyNode] = []
     checkpoint = connector.build_dummy_checkpoint()
@@ -191,7 +185,7 @@ def test_indexing_with_permissions_prefixes_documents_and_nodes() -> None:
             if next_checkpoint is not None:
                 checkpoint = next_checkpoint
 
-    expected = _prefixed(_ADMINS, custom_group_id(_DOMAIN, "g-fin"))
+    expected = {_ADMINS, custom_group_id(_DOMAIN, "g-fin")}
     assert [
         item.external_access.external_user_group_ids
         for item in items
@@ -201,7 +195,7 @@ def test_indexing_with_permissions_prefixes_documents_and_nodes() -> None:
     ops.list_users.assert_called_once()
 
 
-def test_doc_sync_listing_keeps_bare_ids_on_documents_only() -> None:
+def test_doc_sync_listing_yields_bare_ids_on_documents_and_nodes() -> None:
     connector, _ops = _perm_sync_connector()
 
     items = [
@@ -216,7 +210,7 @@ def test_doc_sync_listing_keeps_bare_ids_on_documents_only() -> None:
     ] == [bare]
     assert [
         n.external_access.external_user_group_ids for n in nodes if n.external_access
-    ] == [_prefixed(*bare)]
+    ] == [bare]
 
 
 def test_private_folders_skip_the_permissions_listing_in_any_case() -> None:
@@ -239,7 +233,7 @@ def test_private_folders_skip_the_permissions_listing_in_any_case() -> None:
     ops.list_folder_page_with_permissions.assert_not_called()
     assert [
         n.external_access.external_user_group_ids for n in nodes if n.external_access
-    ] == [_prefixed(_ADMINS)]
+    ] == [{_ADMINS}]
 
 
 def test_a_permission_run_resuming_mid_folder_reads_the_folder_access() -> None:
@@ -262,7 +256,7 @@ def test_a_permission_run_resuming_mid_folder_reads_the_folder_access() -> None:
         d.external_access.external_user_group_ids
         for d in documents
         if d.external_access
-    ] == [_prefixed(_ADMINS, custom_group_id(_DOMAIN, "g-fin"))]
+    ] == [{_ADMINS, custom_group_id(_DOMAIN, "g-fin")}]
 
 
 def test_group_sync_validation_does_not_read_the_folder() -> None:

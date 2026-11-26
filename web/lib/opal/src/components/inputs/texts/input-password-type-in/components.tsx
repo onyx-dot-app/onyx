@@ -11,6 +11,7 @@ import { cn } from "@opal/utils";
 import { SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 import type { IconFunctionComponent } from "@opal/types";
+import { useInputDisabled } from "@opal/components/inputs/disabled";
 
 // Backend placeholder pattern - indicates a stored value that can't be revealed
 const BACKEND_PLACEHOLDER_PATTERN = /^•+$/; // All bullet characters (U+2022)
@@ -72,6 +73,10 @@ type InputPasswordTypeInProps = Omit<
  * - Optional `isNonRevealable` prop to disable reveal (for stored backend values)
  * - Optional `existingValue` prop: a stored value, shown as a tag, that edits
  *   replace whole
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too. `tooltip` passes on to `InputTypeIn`,
+ * which shows it.
  */
 function InputPasswordTypeIn({
   ref,
@@ -82,12 +87,13 @@ function InputPasswordTypeIn({
   onKeyDown,
   onFocus,
   onBlur,
-  disabled,
+  disabled: disabledProp,
   error,
   rightChildren,
   leftChildren,
   ...props
 }: InputPasswordTypeInProps) {
+  const disabled = useInputDisabled(disabledProp);
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const strings = useOpalStrings();
 

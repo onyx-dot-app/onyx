@@ -8,11 +8,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
+from onyx.chat.models import ChatApprovals
 from onyx.chat.presentation import replay_response
-from onyx.coding_agent.tool_definitions import (
-    CODING_AGENT_QUERY_KEY,
-    CODING_AGENT_REPO_KEY,
-)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.chat import (
@@ -31,8 +28,6 @@ from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
     CitationInfo,
-    CodingAgentFinal,
-    CodingAgentStart,
     CustomToolArgs,
     CustomToolDelta,
     CustomToolStart,
@@ -60,9 +55,6 @@ from onyx.server.query_and_chat.streaming_models import (
     SectionEnd,
 )
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
-)
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -333,44 +325,6 @@ def create_research_agent_packets(
     return packets
 
 
-def create_coding_agent_packets(
-    query: str,
-    repo: str,
-    answer: str | None,
-    turn_index: int,
-    tab_index: int = 0,
-) -> list[Packet]:
-    """Recreate the packet stream for a saved coding-agent tool call.
-
-    Mirrors what the live ``CodingAgentTool`` emits:
-    - ``CodingAgentStart(query, repo)`` opens the agent's section.
-    - ``CodingAgentFinal(answer)`` carries the inner agent's answer, which
-      the renderer displays as the agent's "Response" step.
-    - ``SectionEnd`` marks completion.
-
-    The outer chat-message bubble (rendered from ``chat_message.message`` via
-    ``create_message_packets`` at ``max_tool_turn + 1``) is the regular chat
-    agent's answer — separate from the coding agent's response, which stays
-    inside the agent's own timeline section.
-
-    Bash sub-calls aren't persisted (they're not top-level tool calls), so
-    they aren't replayed here — the renderer shows "Coding Task" only.
-    """
-    placement = Placement(turn_index=turn_index, tab_index=tab_index)
-    packets: list[Packet] = [
-        Packet(placement=placement, obj=CodingAgentStart(query=query, repo=repo)),
-    ]
-
-    if answer:
-        packets.append(
-            Packet(placement=placement, obj=CodingAgentFinal(answer=answer)),
-        )
-
-    packets.append(Packet(placement=placement, obj=SectionEnd()))
-
-    return packets
-
-
 def create_fetch_packets(
     fetch_docs: list[SavedSearchDoc],
     urls: list[str],
@@ -550,6 +504,9 @@ def translate_assistant_message_to_packets(
     chat_message: ChatMessage,
     tools_by_id: Mapping[int, Tool],
     db_session: Session,
+    chat_approvals: ChatApprovals | None = None,
+    *,
+    child_responses: Mapping[int, list[ChatMessage]],
 ) -> list[Packet]:
     """
     Translates an assistant message and tool calls to packet format.
@@ -557,13 +514,25 @@ def translate_assistant_message_to_packets(
     The final answer and citations are also a "step".
 
     `tools_by_id` holds the tools of the message's tool calls (see
-    `load_session_tools`), so replay does not query a tool per call.
+    `load_session_tools`), `chat_approvals` the approval requests and
+    questions of the page's responses (see `load_chat_approvals`), and
+    `child_responses` their child responses (see `load_child_responses`), so a
+    session replay does not query them per message.
     """
-    execution = read_chat_execution(chat_message)
-    if execution is not None:
-        replay = read_response_replay_data(execution, db_session)
+    read = read_chat_execution(chat_message, child_responses)
+    if read is not None:
+        execution, tool_calls = read
+        replay = read_response_replay_data(
+            execution, tool_calls, chat_message, db_session, chat_approvals
+        )
         return replay_response(
-            execution.response, replay.tools, execution.presentation, replay.documents
+            execution.response,
+            replay.tools,
+            execution.presentation,
+            replay.documents,
+            approvals=replay.approvals,
+            agent_approvals=replay.agent_approvals,
+            questions=replay.questions,
         )
     packet_list: list[Packet] = []
 
@@ -608,7 +577,6 @@ def translate_assistant_message_to_packets(
             # Process each tool call in this turn (single pass).
             turn_tool_packets: list[Packet] = []
             for tool_call in tool_calls_in_turn:
-                # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = (
                         tools_by_id.get(tool_call.tool_id)
@@ -616,7 +584,7 @@ def translate_assistant_message_to_packets(
                         else None
                     )
                     if tool is None:
-                        raise ValueError("Tool by specified id does not exist")
+                        continue
 
                     # Handle different tool types
                     if tool.in_code_tool_id in [
@@ -691,27 +659,6 @@ def translate_assistant_message_to_packets(
                             create_research_agent_packets(
                                 research_task=research_task,
                                 report_content=tool_call.tool_call_response,
-                                turn_index=turn_num,
-                                tab_index=tool_call.tab_index,
-                            )
-                        )
-
-                    elif tool.in_code_tool_id == CodingAgentTool.__name__:
-                        coding_query = cast(
-                            str,
-                            tool_call.tool_call_arguments.get(CODING_AGENT_QUERY_KEY)
-                            or "",
-                        )
-                        coding_repo = cast(
-                            str,
-                            tool_call.tool_call_arguments.get(CODING_AGENT_REPO_KEY)
-                            or "",
-                        )
-                        turn_tool_packets.extend(
-                            create_coding_agent_packets(
-                                query=coding_query,
-                                repo=coding_repo,
-                                answer=tool_call.tool_call_response,
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,
                             )

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-aonyx-menu"
+description = "Enables the aonyx_menu command without any pre-configured scope."
+commands.allow = ["aonyx_menu"]
+
+[[permission]]
+identifier = "deny-aonyx-menu"
+description = "Denies the aonyx_menu command without any pre-configured scope."
+commands.deny = ["aonyx_menu"]

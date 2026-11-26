@@ -69,7 +69,7 @@ def test_list_agents_hides_agents_that_finished_before_this_turn(
 
     lines = ListAgentsTool()._run(invocation, MagicMock()).text.splitlines()
 
-    assert [line.split(" ", 1)[0] for line in lines if line.startswith("/")] == listed
+    assert [line.split(":", 1)[0] for line in lines if line.startswith("/")] == listed
     assert any(line.startswith("Not shown") for line in lines) is bool(hidden)
     if hidden:
         assert lines[-1].startswith(f"Not shown: {hidden} finished agents")

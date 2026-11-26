@@ -26,9 +26,12 @@ export function makeComposerTools(
     enableAllSources: jest.fn(),
     disableAllSources: jest.fn(),
     notePendingSend: jest.fn(),
+    toolOptionsReady: true,
+    toolOptionsFailed: false,
+    retryToolOptions: jest.fn(),
     resolveToolOptions: () => ({
       deepResearch: false,
-      allowedToolIds: null,
+      allowed: null,
       preferredToolId: null,
       internalSearchFilters: null,
       llmOverride: null,

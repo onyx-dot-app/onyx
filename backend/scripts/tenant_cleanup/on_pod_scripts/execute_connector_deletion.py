@@ -30,6 +30,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 from onyx.db.connector_credential_pair import (
@@ -133,6 +134,7 @@ def mark_connector_for_deletion(
             OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},
+            expires=BEAT_EXPIRES_DEFAULT,
         )
         timing["send_task_seconds"] = time.time() - task_start
         timing["total_seconds"] = time.time() - start_time
@@ -255,6 +257,7 @@ def mark_all_connectors_for_deletion(tenant_id: str) -> dict[str, Any]:
             OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},
+            expires=BEAT_EXPIRES_DEFAULT,
         )
         task_time: float = time.time() - task_start
 

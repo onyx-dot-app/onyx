@@ -11,7 +11,7 @@ Call the Notion REST API as the connected user via the bundled helper.
 
 ## Usage
 
-    python .opencode/skills/notion/notion_api.py <command> [args]
+    python /var/lib/onyx/skills/notion/notion_api.py <command> [args]
 
 Read commands auto-paginate and prune empty fields. The writes are
 `create-page`, `append`, `comment`, `update-page`, `update-block`, and

@@ -197,7 +197,7 @@ func (s *Store) spool(ctx context.Context, root *os.Root, dir string, size int64
 	if err := f.Chmod(mode); err != nil {
 		return "", "", err
 	}
-	if err := s.own(root, tmp); err != nil {
+	if err := s.ownFile(f, tmp); err != nil {
 		return "", "", err
 	}
 	if err := f.Close(); err != nil {
@@ -610,4 +610,149 @@ func (s *Store) openDelete(sessionID, p string) (*os.Root, string, error) {
 	}
 	root, err := s.openSession(sessionID, false)
 	return root, rel, err
+}
+
+// Stat limits: paths per call, and their bytes in all, so the request fits
+// the daemon's gRPC message limit (4 MiB) and the answer, with a link
+// target of at most 4,096 bytes per path, the 16 MiB pass-through limit.
+const (
+	MaxStatPaths     = 1000
+	MaxStatPathBytes = 1 << 20
+)
+
+// StatErr is why a path's target has no facts.
+type StatErr int
+
+// Stat target errors.
+const (
+	StatOK StatErr = iota
+	// StatMissing: the path or a link on it leads to nothing.
+	StatMissing
+	// StatEscapes: a link on the path leads out of the session directory.
+	StatEscapes
+	// StatLoop: the links on the path loop.
+	StatLoop
+	// StatOther: another error, such as a file used as a directory.
+	StatOther
+)
+
+// PathStat is what Stat reports for one path: its own entry (Lstat) and,
+// through its links inside the session directory, its target (Stat).
+type PathStat struct {
+	Path string
+	// The entry itself (a broken link exists).
+	Exists bool
+	Type   Type
+	Mode   uint32
+	// LinkTarget is the stored target of a link; bytes that are not valid
+	// UTF-8 become U+FFFD.
+	LinkTarget string
+	// The target, set when TargetErr is StatOK.
+	TargetErr  StatErr
+	TargetType Type
+	TargetMode uint32
+	// Device and Inode identify the target: two paths with the same
+	// identity name one file.
+	Device, Inode uint64
+}
+
+// Stat reports what os.Root knows of session paths, one at a time. It reads
+// no content and fails only for the whole request (a bad path, a limit, a
+// cancel); a missing path or a link that leaves the session is a per-path
+// answer. A session that has no directory yet has only missing paths.
+func (s *Store) Stat(ctx context.Context, sessionID string, paths []string) ([]PathStat, error) {
+	if sessionID == "" {
+		return nil, fmt.Errorf("%w: StatFiles needs a session_id", ErrInvalid)
+	}
+	if len(paths) > MaxStatPaths {
+		return nil, fmt.Errorf("%w: %d paths; at most %d per call", ErrLimit, len(paths), MaxStatPaths)
+	}
+	size := 0
+	for _, p := range paths {
+		size += len(p)
+	}
+	if size > MaxStatPathBytes {
+		return nil, fmt.Errorf("%w: %d bytes of paths; at most %d per call", ErrLimit, size, MaxStatPathBytes)
+	}
+	rels := make([]string, len(paths))
+	for i, p := range paths {
+		rel, err := cleanPath(p)
+		if err != nil {
+			return nil, err
+		}
+		rels[i] = rel
+	}
+	out := make([]PathStat, len(rels))
+	sr, err := s.openSession(sessionID, false)
+	if errors.Is(err, ErrNotFound) {
+		for i, rel := range rels {
+			out[i] = PathStat{Path: rel, TargetErr: StatMissing}
+		}
+		return out, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sr.Close() }()
+	for i, rel := range rels {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		out[i] = statPath(sr, rel)
+	}
+	return out, nil
+}
+
+func statPath(root *os.Root, rel string) PathStat {
+	st := PathStat{Path: rel}
+	if fi, err := root.Lstat(rel); err == nil {
+		st.Exists = true
+		st.Type = typeOf(fi.Mode())
+		st.Mode = uint32(fi.Mode().Perm())
+		if st.Type == TypeSymlink {
+			if target, err := root.Readlink(rel); err == nil {
+				st.LinkTarget = strings.ToValidUTF8(target, "\uFFFD")
+			}
+		}
+	}
+	fi, err := root.Stat(rel)
+	if err != nil {
+		st.TargetErr = statErr(err)
+		return st
+	}
+	st.TargetType = typeOf(fi.Mode())
+	st.TargetMode = uint32(fi.Mode().Perm())
+	if sys, ok := fi.Sys().(*syscall.Stat_t); ok {
+		st.Device, st.Inode = uint64(sys.Dev), uint64(sys.Ino) //nolint:unconvert // Dev is int32 on darwin
+	}
+	return st
+}
+
+// errPathEscapes is the error that os.Root wraps for a path that leaves the
+// root (absolute link targets included). The os package does not export it.
+var errPathEscapes = func() error {
+	root, err := os.OpenRoot("/")
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = root.Close() }()
+	_, err = root.Lstat("..")
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr.Err
+	}
+	return nil
+}()
+
+func statErr(err error) StatErr {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return StatMissing
+	case errors.Is(err, syscall.ELOOP):
+		return StatLoop
+	case errPathEscapes != nil && errors.Is(err, errPathEscapes):
+		return StatEscapes
+	default:
+		return StatOther
+	}
 }

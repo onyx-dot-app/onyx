@@ -14,11 +14,17 @@ import { noProp } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
 import useUploadTarget from "@opal/components/inputs/uploads/useUploadTarget";
 import type { InputVariants, RichStr } from "@opal/types";
+import {
+  InputTooltip,
+  useInputDisabled,
+} from "@opal/components/inputs/disabled";
 
 /** The props every upload input takes, whatever it holds. */
 export interface UploadBaseProps {
   /** Visual state, as on the other inputs. @default "primary" */
   variant?: InputVariants;
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
   /** Shown while nothing is uploaded. Accepts `markdown()`. */
   placeholder?: string | RichStr;
   /** The control's id, so a `<label htmlFor>` names it and opens it. */
@@ -65,9 +71,13 @@ type UploadControlProps = UploadBaseProps & {
  * click (or Enter or Space) opens the file picker, and a file can be dropped
  * on it (see `useUploadTarget`). The select button at the end also opens the
  * picker. With a value, the × before it, or Delete or Backspace, clears it.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` sets the
+ * `"disabled"` variant and its `disabledTooltip` applies too.
  */
 export default function UploadControl({
-  variant = "primary",
+  variant: variantProp = "primary",
+  tooltip,
   id,
   name,
   onBlur,
@@ -85,6 +95,9 @@ export default function UploadControl({
   ...rest
 }: UploadControlProps) {
   const strings = useOpalStrings();
+  const variant: InputVariants = useInputDisabled(false)
+    ? "disabled"
+    : variantProp;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const isNonEditable = variant === "disabled" || variant === "readOnly";
   const hasValue: boolean = label !== null;
@@ -113,95 +126,97 @@ export default function UploadControl({
           : label;
 
   return (
-    <div
-      {...getRootProps({ className: "opal-input-upload" })}
-      data-drag={drag ?? undefined}
-    >
-      {fileInput}
-      <InputContainer
-        variant={variant}
-        // Focus moving to the picker is not the user leaving the field.
-        onFieldBlur={(e) => {
-          if (!pickerOpenRef.current) onBlur?.(e);
-        }}
+    <InputTooltip tooltip={tooltip}>
+      <div
+        {...getRootProps({ className: "opal-input-upload" })}
+        data-drag={drag ?? undefined}
       >
-        {/* The whole field picks files, as a button a label can point at;
-        the × beside it is its own button. Its name is the label, else its
-        text. Enter and Space open the picker, as on any button. */}
-        {/* oxlint-disable-next-line jsx-a11y/control-has-associated-label -- its text is the label inside InputTitleLine; an aria-label would override the <label> name */}
-        <button
-          id={id}
-          type="button"
-          disabled={isNonEditable}
-          data-testid={rest["data-testid"]}
-          className="opal-input-upload-trigger"
-          // A click only focuses, as some browsers do not focus a clicked
-          // button, so a copied file can be pasted next.
-          onClick={() => triggerRef.current?.focus()}
-          onDoubleClick={openFilePicker}
-          ref={triggerRef}
-          onKeyDown={(e) => {
-            // Enter and Space open the picker: the click they would send
-            // only focuses.
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              openFilePicker();
-              return;
-            }
-            // Delete or Backspace clears the value, as the × does.
-            if (e.key !== "Delete" && e.key !== "Backspace") return;
-            if (!hasValue) return;
-            e.preventDefault();
-            onClear();
+        {fileInput}
+        <InputContainer
+          variant={variant}
+          // Focus moving to the picker is not the user leaving the field.
+          onFieldBlur={(e) => {
+            if (!pickerOpenRef.current) onBlur?.(e);
           }}
         >
-          <InputTitleLine icon={SvgImport} iconMuted>
-            <span
-              className="opal-input-upload-label"
-              data-placeholder={shownLabel === null ? true : undefined}
-            >
-              <Text
-                as="p"
-                font={
-                  drag !== null
-                    ? "main-ui-action"
-                    : shownLabel === null
-                      ? "main-ui-muted"
-                      : "main-ui-body"
-                }
-                color="inherit"
-                maxLines={1}
-              >
-                {shownLabel ?? placeholder}
-              </Text>
-            </span>
-          </InputTitleLine>
-        </button>
-        {hasValue && !isNonEditable && drag === null && (
-          <Button
-            icon={SvgX}
-            onClick={noProp(() => {
-              onClear();
-              // The × goes with the value, so focus returns to the control.
-              triggerRef.current?.focus();
-            })}
+          {/* The whole field picks files, as a button a label can point at;
+        the × beside it is its own button. Its name is the label, else its
+        text. Enter and Space open the picker, as on any button. */}
+          {/* oxlint-disable-next-line jsx-a11y/control-has-associated-label -- its text is the label inside InputTitleLine; an aria-label would override the <label> name */}
+          <button
+            id={id}
             type="button"
-            prominence="tertiary"
+            disabled={isNonEditable}
+            data-testid={rest["data-testid"]}
+            className="opal-input-upload-trigger"
+            // A click only focuses, as some browsers do not focus a clicked
+            // button, so a copied file can be pasted next.
+            onClick={() => triggerRef.current?.focus()}
+            onDoubleClick={openFilePicker}
+            ref={triggerRef}
+            onKeyDown={(e) => {
+              // Enter and Space open the picker: the click they would send
+              // only focuses.
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openFilePicker();
+                return;
+              }
+              // Delete or Backspace clears the value, as the × does.
+              if (e.key !== "Delete" && e.key !== "Backspace") return;
+              if (!hasValue) return;
+              e.preventDefault();
+              onClear();
+            }}
+          >
+            <InputTitleLine icon={SvgImport} iconMuted>
+              <span
+                className="opal-input-upload-label"
+                data-placeholder={shownLabel === null ? true : undefined}
+              >
+                <Text
+                  as="p"
+                  font={
+                    drag !== null
+                      ? "main-ui-action"
+                      : shownLabel === null
+                        ? "main-ui-muted"
+                        : "main-ui-body"
+                  }
+                  color="inherit"
+                  maxLines={1}
+                >
+                  {shownLabel ?? placeholder}
+                </Text>
+              </span>
+            </InputTitleLine>
+          </button>
+          {hasValue && !isNonEditable && drag === null && (
+            <Button
+              icon={SvgX}
+              onClick={noProp(() => {
+                onClear();
+                // The × goes with the value, so focus returns to the control.
+                triggerRef.current?.focus();
+              })}
+              type="button"
+              prominence="tertiary"
+              size="sm"
+              tooltip={strings.clearFile}
+              aria-label={strings.clearFile}
+            />
+          )}
+          <Button
+            onClick={noProp(openFilePicker)}
+            type="button"
+            prominence="secondary"
             size="sm"
-            tooltip={strings.clearFile}
-            aria-label={strings.clearFile}
-          />
-        )}
-        <Button
-          onClick={noProp(openFilePicker)}
-          type="button"
-          prominence="secondary"
-          size="sm"
-          disabled={isNonEditable}
-        >
-          {selectLabel}
-        </Button>
-      </InputContainer>
-    </div>
+            disabled={isNonEditable}
+          >
+            {selectLabel}
+          </Button>
+        </InputContainer>
+      </div>
+    </InputTooltip>
   );
 }

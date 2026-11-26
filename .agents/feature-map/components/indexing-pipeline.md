@@ -94,7 +94,63 @@ that must run there goes before the exit.
 
 **Two batch stores.** `file_store/document_batch_storage.py:DocumentBatchStorage`
 holds raw batches in the file store; they cross the task boundary and survive a
-crash. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
+crash. `StubBatchStorage` in the same module holds the stub batches of the
+conversion stage (prefix `isb/`); the document batch cleanup also deletes them.
+`db/indexing_coordination.py:IndexingCoordination.claim_stub_batches` hands out
+stub batch numbers from the `stub_batches_*` counters on the attempt row. The
+`docconversion` worker (`background/celery/tasks/docconversion/tasks.py`) runs
+`background/indexing/run_docconversion.py:convert_stub_batch`: it loads one stub
+batch, calls the connector's `resolve_targets`, stores the document batch,
+deletes the stub batch, counts it converted and sends the docprocessing task.
+It deletes the stub batch before the send, so a redelivered task sends nothing
+twice. A batch that gives no document is stored empty and sent on too: the
+stored batch is the durable record until docprocessing counts it complete. The
+docprocessing priority follows docfetching's rule
+(`background/indexing/run_docfetching.py:select_docprocessing_priority`), and a
+FUTURE attempt checks it again for each batch. `dispatch_stub_batches` keeps at
+most `DOCCONVERSION_WINDOW_BATCHES` batches in flight.
+`background/indexing/listing_backpressure.py:ListingBackpressure` pauses the
+listing between checkpoints, once a minute at most, when the attempt's backlog
+(stub batches stored minus converted, on the attempt row) needs more than 30
+minutes to drain at the conversion rate of the last 10 minutes (from the
+newest check at or before the window start, so a long step still has a rate).
+The listing pauses in steps of one minute and measures again after each step,
+so the pause ends when the drain time falls under 30 minutes, and lasts at most
+20 minutes in all. The paused seconds metric grows at each 10-second poll. There
+is no pause before conversion converted 15 batches of the attempt, and the rate
+counts only the batches converted after that point, so a slow start of
+conversion is not in the rate. There is no pause while conversion drains fewer
+than 100
+documents per minute: slow conversion usually means other connectors load the
+workers, and a pause would only make the run longer. The documents per batch
+are the change in the attempt's stored documents (listed minus dropped as
+unchanged) over the change in its stored batches since the first check, so the
+small batches of an incremental run count as small, and a resumed attempt's
+batch numbers and taken-over batches do not count. The heartbeat thread keeps the attempt alive during a pause, and the
+pause checks for a stop or a cancel every 10 seconds. With
+`ENABLE_CONVERSION_STAGE` on,
+`background/indexing/run_docfetching.py:connector_document_extraction` only
+lists a connector that can do it (`connector_uses_conversion_stage`): it stores
+stub batches and dispatches them. The listing takes the attempt's choice to
+fetch permissions, so hierarchy nodes carry their permissions as on the
+fetching path. The attempt row keeps `uses_conversion_stage` and the last task
+that dispatched; a claim of no batch does not change it. An attempt that
+continues a failed one takes over its stub batches with new numbers; a change
+of the switch between attempts starts the listing again.
+The lister drops a listed document when this cc_pair indexed the same
+version (`backend/onyx/db/document.py:get_unchanged_document_ids`: same
+modified time and size, and a content hash), except in a run from the
+beginning and a run for a FUTURE index. The stored modified time marks the
+version in the index: `post_index` writes it only for a confirmed write. A
+reindex swap clears the hash, so the lister keeps such a document.
+`stubs_listed` and `stubs_skipped` on the attempt count both, and the failure
+ratio counts every listed document.
+`background/indexing/conversion_recovery.py:check_conversion_chain` runs in
+the watchdog: when stub batches wait, no conversion task exists and the last
+dispatcher is gone, it sends the lost batches again and counts that as a
+heartbeat. When every stub batch is converted but fewer batches are complete,
+it sends the stored document batches that have no docprocessing task. The watchdog fails the attempt only after two runs in a row in
+which a restart sent nothing. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
 local disk inside one docprocessing task, so a large batch is never in memory.
 
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
@@ -135,7 +191,8 @@ runs a thread in both phases that increments `IndexAttempt.heartbeat_counter`.
 `background/celery/tasks/docprocessing/tasks.py:validate_active_indexing_attempts`
 fails an attempt whose counter did not move for `HEARTBEAT_TIMEOUT_SECONDS`;
 after fetch ends, it waits instead while batches are only queued
-(`RedisDocprocessing`). It also fails a `NOT_STARTED` attempt older than
+(`RedisDocprocessing`, one counter pair per `BatchStage`: conversion and
+docprocessing). It also fails a `NOT_STARTED` attempt older than
 `NOT_STARTED_SCAN_THRESHOLD_HOURS` whose task Celery does not hold. An admin
 cancel sets `IndexAttempt.cancellation_requested`, which docfetching and the
 monitor poll. The watchdog kills the spawned process when its RSS passes
@@ -276,8 +333,15 @@ the error type on purpose in auth code.
    ignores rows with `targeted_reindex_job_id`. A targeted reindex and a full
    crawl run at the same time. The per-document row lock in
    `backend/onyx/db/document.py:prepare_to_modify_documents` keeps their writes
-   apart. The heartbeat check skips these attempts too; the targeted-reindex
-   job owns their lifecycle. Each pair's attempt ends FAILED when every target
+   apart. The heartbeat check and the primary worker startup orphan check
+   (`IndexingCoordination.get_orphaned_index_attempt_ids`) skip these attempts
+   too; the targeted-reindex job owns their lifecycle. The indexing validator fails a job and its open
+   attempts if the job waits over 10 minutes or runs over 30 minutes, plus a
+   five-minute grace period. The task locks the job at claim and completion,
+   so a late worker cannot revive a failed job, and it stops before the next
+   pair when the job failed. Submit and claim mark the tenant active, so the
+   work gate keeps `check_for_indexing`, which runs the validator, scheduled.
+   Each pair's attempt ends FAILED when every target
    of the pair failed again and SUCCESS otherwise. Each document that failed
    again gets a new error row on the attempt, and its first error stays open.
    A document that lands closes every open error it has on the pair.
@@ -334,6 +398,17 @@ the error type on purpose in auth code.
   `COMPLETED_WITH_ERRORS` (`indexing/persistent_indexing.py`). Without it, the
   task fails and the next attempt reissues the batch. Connector generator
   exceptions in docfetching fail the attempt either way.
+- **A document can point at a STUB parent.** When a document's parent node is
+  not stored yet, the document gets a STUB hierarchy node
+  (`redis/redis_hierarchy.py:resolve_parent_node_ids`), and the parent fills
+  it when it arrives. When an attempt's listing completed (success, or
+  `COMPLETED_WITH_ERRORS` where every failure names a document),
+  `backend/onyx/db/hierarchy.py:remove_unfilled_stub_hierarchy_nodes_for_cc_pair` moves
+  what is under a STUB that is still not filled to the source root and removes
+  the STUB. A failed or canceled attempt, or one with a failure that names no
+  document (a listing, a partition or a batch), keeps its STUBs. So does the
+  cleanup while another attempt of the pair (for example for the FUTURE search
+  settings) is not finished: the attempts share the pair's STUBs.
 - **The embedding rate limit blocks instead of failing.** The limit is one
   sliding window per tenant in Redis
   (`natural_language_processing/embedding_rate_limit.py`). A full window or a

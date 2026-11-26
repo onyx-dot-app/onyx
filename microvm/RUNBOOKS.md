@@ -110,6 +110,65 @@ failed pod.
 
 **Escalate** when a node with `onyx.app/kvm=true` gets no agent pod after the fix.
 
+### CraftFcNodeReportsStale
+
+**Meaning.** The agent on one node answers scrapes, but for 5 minutes the api_server has not
+accepted a node state report from it in the last 300 s (`craft.hostAgent.alerts.nodeReportStaleSeconds`).
+If the node had an accepted report since it registered, then after
+`SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default 180 s) without one the api_server places no new
+VMs on the node, and the next wake of a sandbox on the node starts it on a live node. VMs on the
+node continue to run. The api_server does not reconcile them. `CraftFcHostAgentDown` does not fire.
+
+The alert also fires when the agent has no accepted report since it started (the timestamp is 0,
+so the alert shows an age of about 56 years). The api_server still places VMs on a registered node
+that never reported. The agent sends reports only after its signing key registration succeeds, and
+the alert needs reports on (`--state-report-interval` above 0, the default 20 s).
+
+**Check.**
+
+```bash
+kubectl $K -n $NS logs "$(pod_on <node>)" --tail=300 | grep -E 'node state report|node signing key'
+kubectl $K -n $REL logs -l app=api-server --prefix --tail=500 \
+  | grep -E 'sandbox_fc_node_report_rejected|sandbox_node_signing_key_registered'
+```
+
+The dashboard panel "Time since last accepted report / key registration" shows both values per
+node. `craft_fc_host_agent_node_reports_total` and `craft_fc_host_agent_key_registrations_total`
+count each try by `result`.
+
+- `node signing key registration failed` with `HTTP 401`: the agent's registration secret does not
+  match `auth.sandboxNodeRegistration` of the api_server. This is the usual cause after a secret
+  rotation. The registered key expires 1 hour after the last good registration, then the reports
+  get `HTTP 401` too. So this alert fires about 1 hour after a wrong rotation.
+- `node state report failed` with `HTTP 401`, and `sandbox_fc_node_report_rejected` in the
+  api_server log: the api_server does not know the node key (for example after a Redis flush). The
+  agent registers again only every 20 minutes.
+- `HTTP 409` (`node has no registered agent_address`): the api_server has no agent address for
+  the node. The agent registered none (`no --advertise-address and no $POD_IP` at start-up), or the
+  address is gone from Redis. The agent sends it again at its next registration.
+- An error with no HTTP status (`result="failed"`): the agent cannot reach
+  `craft.hostAgent.apiServerUrl` (DNS, NetworkPolicy, ingress or WAF).
+- `HTTP 5xx` (`result="server_error"`): look for the error in the api_server log.
+
+**Fix.**
+
+- For a secret mismatch, make the agent's copy of the secret equal the api_server's value. With an
+  inline `auth.sandboxNodeRegistration` value, deploy again: the chart copies the value to the
+  agent namespace. With `craft.hostAgent.registrationExistingSecret`, update that Secret in the
+  agent namespace. The api_server and the agents read the value at start-up: restart the
+  api_server if its value changed, then the agents (`kubectl $K -n $NS rollout restart ds/$DS`).
+- For an unknown node key, delete the agent pod. The new agent registers at once, and adopts its
+  running VMs from the journal.
+- For a network error, fix the path to the api_server, or set `craft.hostAgent.apiServerUrl` to the
+  in-cluster URL of the api_server Service.
+
+The alert clears when reports are accepted again. After repeated failures the agent waits up to
+2 minutes between reports, so the first accepted report can come 2 minutes after the fix. The api_server places VMs on the node again
+after the first accepted report.
+
+**Escalate** when the reports stay rejected after the agent registered again
+(`node signing key registered` in the log).
+
 ### CraftFcCreateFailures
 
 **Meaning.** More than 20% (and at least 3) of admitted Creates on one node failed in 15
@@ -219,7 +278,8 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --since=1h \
 
 **Meaning.** More than 10% (and at least 10) of egress relay connections on one node failed in
 10 minutes, for 10 minutes. `upstream_failed`: sandbox-proxy did not answer an accepted
-connection. `over_cap`: a VM opened more than `--relay-max-conns` connections.
+connection. `over_cap`: a VM opened more than `--relay-max-conns` connections, or all VMs on the node
+together opened more than `--relay-max-conns-node`. The agent log says which cap.
 
 **Check.**
 
@@ -263,8 +323,45 @@ Compare "Guest memory allocated vs node memory" on the dashboard. When "in use" 
 - Drain the node (see "Drain a node") if one node stays full and others have space.
 - Stop VMs that the api_server does not know (see "Purge data").
 
-**Escalate** when VMs on the node are OOM-killed (`EXITED` in `agent List`, OOM in the node
-kernel log), or when host processes other than VMs use the memory.
+**Escalate** when VMs on the node are OOM-killed (`CraftFcVMOOMKills`), or when host processes
+other than VMs use the memory.
+
+### CraftFcVMOOMKills
+
+**Meaning.** The kernel OOM-killed a Firecracker process on one node in the last 15 minutes. That VM
+stopped (`EXITED`). One of three limits was hit: the VM's own scope limit (guest memory + overhead), the
+VM slice limit (`--slice-memory-percent`), or the node's memory (a node-wide OOM).
+
+**Check.**
+
+```bash
+agent NodeInfo   # mem_available_mib, mem_starting_mib
+agent List       # EXITED VMs
+# On the node:
+dmesg | grep 'oom-kill:'
+cat /sys/fs/cgroup/fcvms.slice/memory.events.local /sys/fs/cgroup/fcvms.slice/memory.max
+```
+
+The VM scope is gone after the kill, so read the kernel's `oom-kill:` line:
+
+- `constraint=CONSTRAINT_MEMCG` with `oom_memcg=/fcvms.slice/fcvm-<id>.scope`: the VM's own limit.
+- `constraint=CONSTRAINT_MEMCG` with `oom_memcg=/fcvms.slice`: the slice limit.
+- `constraint=CONSTRAINT_NONE`: the node ran out of memory.
+
+The kernel counts `oom_kill` in the cgroup of the killed process, so the slice's `oom_kill` does not
+tell which limit was hit. `oom` in the slice's `memory.events.local` counts the times that the slice
+itself reached its limit.
+
+**Fix.**
+
+- Slice limit: set `craft.hostAgent.startingMemDivisor` lower (1 counts each starting VM at its full
+  memory), lower `craft.hostAgent.maxVms`, or add nodes.
+- One VM over its own limit: the workload needs more memory than the VM has. Raise the template memory
+  (`--template-mem-mib`) only after a measurement.
+- Node-wide: something outside the slice uses the memory, or the slice limit is too high for the node.
+  Check `kubectl top node` and lower `craft.hostAgent.sliceMemoryPercent`.
+
+**Escalate** when kills continue after the divisor is 1, or when no VM was near its limit.
 
 ### CraftFcTemplateUnusable
 
@@ -306,6 +403,27 @@ draining node, then stops the VM.
 4. Wait until `agent NodeInfo` shows `drain.state` `DRAINED` (`agent List` shows the VMs that
    are left). Then remove or repair the node.
 5. To put the node back: `kubectl $K uncordon <node>` and `agent SetDrain '{"drain": false}'`.
+
+### The cluster autoscaler does not remove an idle KVM node
+
+The agent blocks scale-down while VMs run: it sets
+`cluster-autoscaler.kubernetes.io/scale-down-disabled=true` on its Node, and removes it when the
+node has had no VMs for `--scale-down-guard-grace` (chart `craft.hostAgent.scaleDownGuard.grace`,
+10 m).
+
+1. Check the annotation and its owner mark:
+   `kubectl $K get node <node> -o jsonpath='{.metadata.annotations}'`. The agent sets
+   `onyx.app/craft-fc-scale-down-guard=true` next to its value.
+2. If `agent NodeInfo` shows `vm_slots_used` 0 for longer than the grace and the annotation stays,
+   read the agent log for `scale-down guard`. A `patch` error with HTTP 403 means the agent has no
+   `patch` on nodes: check the ClusterRole whose name ends in `craft-fc-host-agent-node-annotate`.
+3. Without the owner mark, someone else set the annotation; the agent leaves it. Remove it by hand
+   if it is not needed: `kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disabled-`.
+4. To remove a node that runs VMs, use "Drain a node". The annotation goes after the grace, then
+   the autoscaler can remove the node.
+5. If you turn the guard off (`craft.hostAgent.scaleDownGuard.enabled=false`) or remove the agent
+   while a node has the annotation, the annotation and its mark stay. Remove both by hand:
+   `kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disabled- onyx.app/craft-fc-scale-down-guard-`.
 
 ### Rebuild a template
 
@@ -355,8 +473,9 @@ sandbox ID, the tenant ID and the time.
 `ods audit craft-fc` matches the guest kernel and Firecracker pins in
 `deployment/craft-fc/Dockerfile.artifacts` with the Amazon Linux 2023 advisories and the
 Firecracker GitHub advisories. CVE Alerts runs it every day with `--fail-on=high` and opens a
-`cve-alert` issue for each finding. Each release runs it with `--fail-on=critical` before it
-publishes the host agent.
+`cve-alert` issue for each finding. Each release runs it with `--fail-on=high` before it
+publishes the host agent, because Amazon rates kernel advisories "important" (high). If a
+bump must wait for the KVM tests, suppress the advisory with an expiry (step 2) to release.
 
 1. Read the advisory. A guest escape (Firecracker, the jailer, or KVM in the host kernel) is
    urgent: ship a patch release. A guest kernel issue goes in the next monthly bump, because
@@ -365,11 +484,11 @@ publishes the host agent.
    reason and an expiry. An ALAS ID covers all of its CVEs:
    `ods audit ignore add <ID> --ecosystem craft-fc --reason "<why>" --expires <YYYY-MM-DD>`.
 3. Else change the version. Follow "Change a version" in `deployment/craft-fc/README.md`: the
-   newest `microvm-kernel-<series>.*` tag of `amazonlinux/linux`, or the fixed Firecracker
-   release, with its SHA256 pins. In the same change, set `ARTIFACTS_TAG` in `microvm/Dockerfile`
-   to the new tag and update the binary pins in `microvm/internal/binaries`. The host agent build
-   checks that `ARTIFACTS_TAG` matches `Dockerfile.artifacts`. If no newer `microvm-kernel` tag has
-   the fix, escalate.
+   newest kernel tag of the series in `amazonlinux/linux` (`kernel<series>-<version>`, the AL2023
+   package source, or `microvm-kernel`), or the fixed Firecracker release, with its SHA256 pins.
+   In the same change, set `ARTIFACTS_TAG` in `microvm/Dockerfile` to the new tag and update the
+   binary pins in `microvm/internal/binaries`. The host agent build checks that `ARTIFACTS_TAG`
+   matches `Dockerfile.artifacts`. If no kernel tag of the series has the fix yet, escalate.
 4. Do the boot test, and run the "Craft Firecracker Host Agent KVM" workflow (full lane) on the
    branch. Until the new artifacts tag is published, CI builds the artifacts from the branch.
 5. Merge. Then publish `craft-fc-artifacts` from `main` (it pushes the `-source` tag first),
@@ -385,7 +504,5 @@ These have no Prometheus metric yet. Use the agent log:
 
 | Signal | Log line |
 |---|---|
-| Node state report push | `node state report failed` (with `failures`), then `node state report sent again` |
-| Node key registration | `node signing key registered` or `node signing key registration failed` |
 | Start-up template build | `template ready` or `template build at start-up failed` |
 | Balloon reclaim | none. The dashboard compares guest memory allocated with node memory in use |

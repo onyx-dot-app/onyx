@@ -17,16 +17,13 @@ from sqlalchemy.exc import OperationalError
 
 from onyx.cache import factory as cache_factory
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import (
-    TTL_KEY_NOT_FOUND,
-    TTL_NO_EXPIRY,
-    CacheBackendType,
-)
+from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY
 from onyx.cache.postgres_backend import (
     PostgresCacheBackend,
     PostgresCacheLock,
     cleanup_expired_cache_entries,
 )
+from onyx.configs.constants import CacheBackendType
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import CacheStore
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE

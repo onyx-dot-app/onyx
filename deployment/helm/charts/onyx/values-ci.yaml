@@ -20,7 +20,7 @@ opensearch:
   persistence:
     enabled: true
     size: 1Gi
-  opensearchJavaOpts: "-Xmx512m -Xms512m"
+  opensearchJavaOpts: "-Xmx512m -Xms512m -XX:-UseBASE64Intrinsics"
 
 nginx:
   enabled: false

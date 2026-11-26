@@ -1,0 +1,76 @@
+"use client";
+
+import React, { useCallback } from "react";
+import { StopReason } from "@/app/app/services/streamingModels";
+import {
+  FullChatState,
+  RenderType,
+} from "@/lib/timeline/chat/message/messageComponents/types";
+import type { TransformedStep } from "@/lib/timeline/chat/transformers";
+import {
+  TimelineRendererComponent,
+  TimelineRendererOutput,
+} from "@/lib/timeline/chat/TimelineRendererComponent";
+import { TimelineStepComposer } from "@/lib/timeline/chat/TimelineStepComposer";
+import type {
+  TimelineEntryStatus,
+  TimelineStepPosition,
+} from "@/lib/timeline/types";
+
+export interface ChatStepProps {
+  step: TransformedStep;
+  status: TimelineEntryStatus;
+  position: TimelineStepPosition;
+  chatState: FullChatState;
+  stopPacketSeen: boolean;
+  stopReason?: StopReason;
+  /** Shown at the end of the step's header, e.g. a memory's tag. */
+  headerAccessory?: React.ReactNode;
+}
+
+/**
+ * One chat step on the shared run card: its tool's renderer draws the body,
+ * and `RunStep` (through the composer) draws the header and status.
+ */
+export const ChatStep = React.memo(function ChatStep({
+  step,
+  status,
+  position,
+  chatState,
+  stopPacketSeen,
+  stopReason,
+  headerAccessory,
+}: ChatStepProps) {
+  const renderStep = useCallback(
+    (results: TimelineRendererOutput) => (
+      <TimelineStepComposer
+        results={results}
+        status={status}
+        headerAccessory={headerAccessory}
+      />
+    ),
+    [status, headerAccessory]
+  );
+
+  return (
+    <TimelineRendererComponent
+      packets={step.packets}
+      nestedCalls={step.nestedCalls}
+      chatState={chatState}
+      animate={!stopPacketSeen}
+      stopPacketSeen={stopPacketSeen}
+      stopReason={stopReason}
+      // Every step starts closed. The card drops its steps when it closes,
+      // so reopening it closes them all again.
+      defaultExpanded={false}
+      // Every step folds its body away, as in Craft: the renderer always
+      // draws its full view, never a compact or masked one.
+      renderTypeOverride={RenderType.FULL}
+      isLastStep={position.isLast}
+    >
+      {renderStep}
+    </TimelineRendererComponent>
+  );
+});
+
+export default ChatStep;

@@ -2,7 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 
 import { buildInternalSearchFilters } from "@/chat/sources";
 import {
-  computeAllowedToolIds,
+  computeAllowedEntries,
   displayableTools,
   FILE_READER_TOOL_ID,
   getIconForToolId,
@@ -28,19 +28,38 @@ function tool(over: Partial<ToolSnapshot> & { id: number }): ToolSnapshot {
   };
 }
 
-describe("computeAllowedToolIds", () => {
-  const tools = [tool({ id: 1 }), tool({ id: 2 }), tool({ id: 3 })];
+describe("computeAllowedEntries", () => {
+  const tools = [
+    tool({ id: 1, in_code_tool_id: SEARCH_TOOL_ID }),
+    tool({ id: 2, in_code_tool_id: WEB_SEARCH_TOOL_ID }),
+    // An OpenAPI tool: its plugin names it.
+    tool({ id: 3 }),
+  ];
+  const capability = (id: number) => ({ type: "capability", tool_id: id });
+  const plugin = (id: string) => ({ type: "plugin", plugin_id: id });
 
-  it("returns null when nothing is disabled (backend allows all)", () => {
-    expect(computeAllowedToolIds(tools, [])).toBeNull();
+  it("returns null when nothing is off (backend allows all)", () => {
+    expect(computeAllowedEntries(tools, [], [], ["p1"])).toBeNull();
   });
 
-  it("returns the enabled ids when some tools are disabled", () => {
-    expect(computeAllowedToolIds(tools, [2])).toEqual([1, 3]);
+  it("keeps every known plugin when a built-in tool is off", () => {
+    expect(computeAllowedEntries(tools, [2], [], ["p1", "p2"])).toEqual([
+      capability(1),
+      plugin("p1"),
+      plugin("p2"),
+    ]);
   });
 
-  it("returns [] when the user explicitly disables every tool", () => {
-    expect(computeAllowedToolIds(tools, [1, 2, 3])).toEqual([]);
+  it("leaves out a plugin that is off", () => {
+    expect(computeAllowedEntries(tools, [], ["p2"], ["p1", "p2"])).toEqual([
+      capability(1),
+      capability(2),
+      plugin("p1"),
+    ]);
+  });
+
+  it("returns [] when the user explicitly disables everything", () => {
+    expect(computeAllowedEntries(tools, [1, 2], ["p1"], ["p1"])).toEqual([]);
   });
 });
 

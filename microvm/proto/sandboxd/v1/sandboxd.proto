@@ -94,8 +94,11 @@ service Sandboxd {
   // (DeleteFile removes a link, not its target). Paths under /proc, /sys,
   // /dev and the daemon's own state (/run/craft-fc) fail with
   // INVALID_ARGUMENT: ListFiles and ZipFiles leave them out, and a recursive
-  // DeleteFile of a directory that holds one fails. UploadFile,
-  // CaptureSession and RestoreSession always need a session_id.
+  // DeleteFile of a directory that holds one fails. A path in the onyx
+  // root (/tmp/onyx, the daemon's --onyx-root) is the exception: the daemon
+  // follows no link out of it, and WriteFile replaces a link instead of
+  // following it. UploadFile, CaptureSession and RestoreSession always need
+  // a session_id.
 
   // ReadFile streams a regular file: the first message has its info, then
   // data chunks of at most 64 KiB.
@@ -119,6 +122,16 @@ service Sandboxd {
   // with recursive. A missing path is not an error (deleted is false).
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
 
+  // StatFiles reports what the kernel knows about session paths, in one
+  // call, so a caller can check every file of a change before it writes
+  // one. For each path: its own entry (lstat), and its target through the
+  // links inside the session directory (stat), or why there is none. It
+  // needs a session_id, reads no content, and answers per path: only a bad
+  // path, a limit or a cancel fails the call. At most 1,000 paths and
+  // 1 MiB of path bytes per call, so the request fits the daemon's 4 MiB
+  // message limit and the answer the 16 MiB pass-through limit.
+  rpc StatFiles(StatFilesRequest) returns (StatFilesResponse);
+
   // ZipFiles streams a deflate zip of the regular files under a directory.
   // The last message is the summary. A limit error ends the stream with a
   // status; drop the bytes received so far.
@@ -139,6 +152,18 @@ service Sandboxd {
   // a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
   // nothing. A capture and a restore of one session never run at once.
   rpc RestoreSession(stream RestoreSessionRequest) returns (RestoreSessionResponse);
+
+  // InstallSkill puts one skill in the skills folder (--skills-root), as
+  // <skills root>/<name>/. The first message is the header, the later ones
+  // carry a plain tar (no zstd) whose members are all under <name>/. If the
+  // folder already has the header's version in <name>/.version, the call
+  // reads no data and returns installed=false. Else the daemon extracts
+  // into a staging directory, checks size and SHA-256, writes .version,
+  // and then replaces the folder. The files are root's: directories 0755,
+  // files 0644 (0755 with an execute bit). A reader never sees a mix of
+  // old and new files. Bad archives fail as in RestoreSession and
+  // change nothing. Installs run one at a time.
+  rpc InstallSkill(stream InstallSkillRequest) returns (InstallSkillResponse);
 
   // Reserved for the browser. They return UNIMPLEMENTED.
   rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
@@ -636,6 +661,55 @@ message DeleteFileResponse {
   bool deleted = 1;
 }
 
+message StatFilesRequest {
+  string session_id = 1;
+  // Session-relative paths, as for ReadFile. "" or "." is the session
+  // directory.
+  repeated string paths = 2;
+}
+
+// Why a path's target has no facts.
+enum StatError {
+  STAT_ERROR_UNSPECIFIED = 0;
+  // The path or a link on it leads to nothing.
+  STAT_ERROR_MISSING = 1;
+  // A link on the path leads out of the session directory, also into a
+  // read-only root.
+  STAT_ERROR_ESCAPES = 2;
+  // The links on the path loop.
+  STAT_ERROR_LOOP = 3;
+  // Another error, such as a file used as a directory.
+  STAT_ERROR_OTHER = 4;
+}
+
+message PathStat {
+  // The requested path, cleaned as for ReadFile.
+  string path = 1;
+  // The entry itself exists: a file, a directory or a link, even a broken
+  // one.
+  bool exists = 2;
+  // The entry's own type (FILE_TYPE_SYMLINK for a link) and permission
+  // bits.
+  FileType type = 3;
+  uint32 mode = 4;
+  // FILE_TYPE_SYMLINK only: the link target as stored. Bytes that are not
+  // valid UTF-8 become U+FFFD.
+  string link_target = 5;
+  // STAT_ERROR_UNSPECIFIED when the target facts below are set.
+  StatError target_error = 6;
+  // The target after following links: type, permission bits, and its
+  // identity (two paths with the same device and inode name one file).
+  FileType target_type = 7;
+  uint32 target_mode = 8;
+  uint64 device = 9;
+  uint64 inode = 10;
+}
+
+message StatFilesResponse {
+  // One per requested path, in request order.
+  repeated PathStat stats = 1;
+}
+
 message ZipFilesRequest {
   string session_id = 1;
   // Directory to zip. Names in the zip are relative to it.
@@ -742,6 +816,33 @@ message RestoreSessionResponse {
   int64 expanded_bytes = 3;
   // Capture roots that the restore replaced.
   repeated string roots = 4;
+}
+
+message InstallSkillHeader {
+  // Folder name: one path part, not starting with ".".
+  string name = 1;
+  // Opaque version, at most 256 bytes, no line breaks.
+  string version = 2;
+  // Exact tar size and hex SHA-256.
+  int64 size_bytes = 3;
+  string sha256 = 4;
+  ArchiveLimits limits = 5;
+}
+
+message InstallSkillRequest {
+  oneof part {
+    // The first message.
+    InstallSkillHeader header = 1;
+    // Later messages: the tar bytes (at most 1 MiB each).
+    bytes data = 2;
+  }
+}
+
+message InstallSkillResponse {
+  // False when the folder already had the version.
+  bool installed = 1;
+  int64 files = 2;
+  int64 expanded_bytes = 3;
 }
 
 // Browser placeholders.

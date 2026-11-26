@@ -26,7 +26,7 @@ Variables from one run are not available in the next run unless the model writes
 Onyx copies these files into the working directory of each code run:
 
 - All files that the user attaches to the chat.
-- Word (`.docx`), PowerPoint (`.pptx`), Excel (`.xlsx`, `.xlsm`), and CSV files in the Agent's
+- Word (`.docx`), PowerPoint (`.pptx`), Excel (`.xlsx`, `.xlsm`), CSV, and code files in the Agent's
   [knowledge](/admins/agents/overview) or in the chat's Project.
 
 Onyx copies the original file, not its extracted text. The code can open a Word, PowerPoint, or Excel template,
@@ -40,6 +40,22 @@ The `CODE_INTERPRETER_MAX_STAGED_FILES` and `CODE_INTERPRETER_MAX_STAGED_BYTES` 
 together. If a code run has more files than the limits allow, Onyx first copies the files that the code names.
 Onyx always copies at least one file, even if that file is larger than `CODE_INTERPRETER_MAX_STAGED_BYTES`.
 The model gets a notice that names the files that Onyx did not copy.
+
+### Code files
+
+Users can upload source code, script, and config files, for example `.py`, `.js`, `.ts`, `.sh`, `.go`, `.ipynb`,
+and `.toml`. Onyx stores these files but does not index them, so search does not find them.
+A code file attached to a chat message goes into the prompt as text, and the code can run it.
+Project and agent files go into the prompt only when all of them fit in the context budget. If they do not fit,
+the model does not get their text, and search cannot find code files. With the vector database enabled,
+the model can then read a code file only with Code Interpreter,
+so turn it on for agents that use large projects with code. On Onyx Lite,
+an agent with the file reader enabled can read these files without Code Interpreter.
+Onyx rejects a code file that is not text or that is larger than the file token limit.
+
+The full list of extensions is `.py`, `.ipynb`, `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.tsx`, `.sh`, `.bash`, `.zsh`,
+`.ps1`, `.rb`, `.go`, `.rs`, `.java`, `.kt`, `.scala`, `.c`, `.h`, `.cc`, `.cpp`, `.hpp`, `.cs`, `.php`, `.swift`, `.r`,
+`.lua`, `.pl`, `.toml`, `.ini`, and `.cfg`.
 
 ## Availability
 
@@ -79,7 +95,3 @@ The following environment variables control the self-hosted Code Interpreter. Al
 | `CODE_INTERPRETER_MAX_OUTPUT_LENGTH` | `50000` | Maximum characters of stdout and stderr (each) returned to the model. Longer output is truncated. |
 | `CODE_INTERPRETER_MAX_STAGED_FILES` | `25` | Maximum number of chat, Agent, and Project files sent into one code run. |
 | `CODE_INTERPRETER_MAX_STAGED_BYTES` | `104857600` (100 MiB) | Maximum total size of chat, Agent, and Project files sent into one code run. |
-
-## Related
-
-The [Coding Agent](/admins/actions/coding_agent) action runs in the same Code Interpreter service.

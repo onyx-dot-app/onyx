@@ -85,6 +85,8 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     "skill": {"*": "allow", "customize-opencode": "deny"},
     "question": "allow",
     "webfetch": "allow",
+    # Onyx's web search, from the web-search plugin.
+    "web_search": "allow",
     # Connect-app tool: a no-op tool the agent calls to request connecting an
     # external app it isn't set up for.
     "connect_app": "ask",

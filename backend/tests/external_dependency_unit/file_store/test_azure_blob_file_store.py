@@ -371,7 +371,7 @@ class TestAzureBlobBackedFileStore:
         object_key = file_store._get_object_key(file_id)
 
         with patch(
-            "onyx.file_store.azure_blob_file_store.upsert_filerecord",
+            "onyx.file_store.file_store.upsert_filerecord",
             side_effect=RuntimeError("simulated DB failure"),
         ):
             with pytest.raises(RuntimeError, match="simulated DB failure"):
@@ -403,7 +403,7 @@ class TestAzureBlobBackedFileStore:
         )
 
         with patch(
-            "onyx.file_store.azure_blob_file_store.upsert_filerecord",
+            "onyx.file_store.file_store.upsert_filerecord",
             side_effect=RuntimeError("simulated DB failure"),
         ):
             with pytest.raises(RuntimeError, match="simulated DB failure"):

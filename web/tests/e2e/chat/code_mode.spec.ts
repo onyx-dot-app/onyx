@@ -12,7 +12,7 @@ const TOOL_OUTPUT = "3 orders";
 const MESSAGE = "You have three open orders.";
 // Code mode runs behind the scenes; none of it is user-facing copy.
 const CODE_MODE_TEXT =
-  /program output|await lookup_orders|\bcell\b|Ran code|continues|execute_code|wait_code/i;
+  /program output|await tools\.lookup_orders|\bcell\b|Ran code|continues|execute_code|wait_code/i;
 
 test.describe("Code mode", () => {
   test.beforeEach(() => {
@@ -31,7 +31,7 @@ test.describe("Code mode", () => {
       await mockChatEndpoint(
         page,
         buildMockCodeModeCellStream({
-          code: "orders = await lookup_orders()\nprint('program output')",
+          code: "orders = await tools.lookup_orders()\nprint('program output')",
           toolName: TOOL,
           toolOutput: TOOL_OUTPUT,
           message: MESSAGE,
@@ -41,7 +41,8 @@ test.describe("Code mode", () => {
 
       await sendMessage(page, "How many orders are open?");
       await expect(chatPage.aiMessage()).toContainText(MESSAGE);
-      await expect(chatPage.aiMessage()).toContainText("1 step");
+      // The one call is a step of its own.
+      await expect(chatPage.aiMessage()).toContainText(`Executed ${TOOL}`);
       // The call completes only in the wait observation or in the closing
       // record that follows the answer.
       await chatPage.expectCustomToolResult(TOOL, TOOL_OUTPUT);

@@ -2,9 +2,13 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from fastapi import Request
 
 from onyx.chat.models import PromptMetadata
+from onyx.chat.session_naming import (
+    generate_chat_session_name_or_fallback,
+    name_chat_session,
+    name_new_chat_session,
+)
 from onyx.configs.constants import MessageType
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import ChatMessage, LLMProvider, ModelConfiguration
@@ -15,9 +19,6 @@ from onyx.llm.models import AssistantMessage, TextContent
 from onyx.secondary_llm_flows.chat_session_naming import (
     DEFAULT_CHAT_SESSION_NAME,
     get_fallback_chat_session_name,
-)
-from onyx.server.query_and_chat.chat_backend import (
-    _generate_or_fallback_chat_session_name,
 )
 
 
@@ -78,30 +79,24 @@ def test_fallback_chat_session_name_handles_empty_history() -> None:
 def test_rate_limited_chat_naming_returns_fallback() -> None:
     first_user_message = "Explain cost-based usage metering"
     chat_history = [_chat_message(first_user_message, MessageType.USER)]
-    request = MagicMock()
     user = MagicMock()
     user.id = uuid4()
+    get_chat_llm = MagicMock()
 
-    with (
-        patch(
-            "onyx.server.query_and_chat.chat_backend.check_token_rate_limits",
-            side_effect=OnyxError(OnyxErrorCode.RATE_LIMITED),
-        ),
-        patch(
-            "onyx.server.query_and_chat.chat_backend.get_llm_for_persona"
-        ) as get_llm_for_persona,
+    with patch(
+        "onyx.chat.session_naming.check_token_rate_limits",
+        side_effect=OnyxError(OnyxErrorCode.RATE_LIMITED),
     ):
-        generated_name = _generate_or_fallback_chat_session_name(
+        generated_name = generate_chat_session_name_or_fallback(
             chat_history=chat_history,
-            request=request,
+            additional_headers=None,
             user=user,
             chat_session_id=uuid4(),
-            persona=None,
-            llm_override=None,
+            get_chat_llm=get_chat_llm,
         )
 
     assert generated_name == first_user_message
-    get_llm_for_persona.assert_not_called()
+    get_chat_llm.assert_not_called()
 
 
 def test_configured_naming_model_names_chat_without_session_model(
@@ -113,9 +108,8 @@ def test_configured_naming_model_names_chat_without_session_model(
     latest_message = _chat_message("Charge for tokens used", MessageType.ASSISTANT)
     latest_message.token_count = 2000
     oversized_message = _chat_message("A" * 3001, MessageType.USER)
-    request = Request(
-        {"type": "http", "headers": [(b"x-request-id", b"naming-request")]}
-    )
+    additional_headers = {"x-request-id": "naming-request"}
+    session_llm = MagicMock(side_effect=ValueError("Session model is unavailable"))
 
     def fetch_default(
         _session: object, flow: LLMModelFlowType
@@ -123,11 +117,7 @@ def test_configured_naming_model_names_chat_without_session_model(
         return utility_model if flow == LLMModelFlowType.CHAT_NAMING else None
 
     with (
-        patch("onyx.server.query_and_chat.chat_backend.check_token_rate_limits"),
-        patch(
-            "onyx.server.query_and_chat.chat_backend.LITELLM_PASS_THROUGH_HEADERS",
-            ["x-request-id"],
-        ),
+        patch("onyx.chat.session_naming.check_token_rate_limits"),
         patch("onyx.llm.factory.get_session_with_current_tenant") as session_factory,
         patch("onyx.llm.factory.fetch_default_model", side_effect=fetch_default),
         patch(
@@ -136,29 +126,24 @@ def test_configured_naming_model_names_chat_without_session_model(
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as utility_cost,
         patch("onyx.llm.factory.get_current_tenant_id", return_value="naming-tenant"),
         patch(
-            "onyx.server.query_and_chat.chat_backend.get_llm_for_persona",
-            side_effect=ValueError("Session model is unavailable"),
-        ) as session_llm,
-        patch(
-            "onyx.server.query_and_chat.chat_backend.check_llm_cost_limit_for_provider"
+            "onyx.chat.session_naming.check_llm_cost_limit_for_provider"
         ) as session_cost,
         patch(
-            "onyx.server.query_and_chat.chat_backend.get_llm_token_counter",
+            "onyx.chat.session_naming.get_llm_token_counter",
             return_value=len,
         ),
-        patch("onyx.server.query_and_chat.chat_backend.ensure_trace"),
+        patch("onyx.chat.session_naming.ensure_trace"),
         patch(
-            "onyx.server.query_and_chat.chat_backend.generate_chat_session_name",
+            "onyx.chat.session_naming.generate_chat_session_name",
             return_value="Usage metering",
         ) as generate,
     ):
-        title = _generate_or_fallback_chat_session_name(
+        title = generate_chat_session_name_or_fallback(
             chat_history=[first_message, latest_message, oversized_message],
-            request=request,
+            additional_headers=additional_headers,
             user=MagicMock(),
             chat_session_id=uuid4(),
-            persona=None,
-            llm_override=None,
+            get_chat_llm=session_llm,
         )
 
     assert title == "Usage metering"
@@ -188,64 +173,47 @@ def test_unset_utilities_check_session_provider_cost_once(
 ) -> None:
     naming_llm.config = naming_llm.config.model_copy(update={"api_key": "session-key"})
     user = MagicMock()
-    persona = MagicMock()
-    override = MagicMock()
-    request = Request(
-        {"type": "http", "headers": [(b"x-request-id", b"naming-request")]}
-    )
+    session_llm = MagicMock(return_value=naming_llm)
+    additional_headers = {"x-request-id": "naming-request"}
 
     with (
-        patch("onyx.server.query_and_chat.chat_backend.check_token_rate_limits"),
-        patch(
-            "onyx.server.query_and_chat.chat_backend.LITELLM_PASS_THROUGH_HEADERS",
-            ["x-request-id"],
-        ),
+        patch("onyx.chat.session_naming.check_token_rate_limits"),
         patch("onyx.llm.factory.get_session_with_current_tenant"),
         patch("onyx.llm.factory.fetch_default_model", return_value=None),
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as utility_cost,
         patch(
-            "onyx.server.query_and_chat.chat_backend.get_llm_for_persona",
-            return_value=naming_llm,
-        ) as session_llm,
-        patch(
-            "onyx.server.query_and_chat.chat_backend.get_session_with_current_tenant"
+            "onyx.chat.session_naming.get_session_with_current_tenant"
         ) as session_factory,
         patch(
-            "onyx.server.query_and_chat.chat_backend.get_current_tenant_id",
+            "onyx.chat.session_naming.get_current_tenant_id",
             return_value="naming-tenant",
         ),
         patch(
-            "onyx.server.query_and_chat.chat_backend.check_llm_cost_limit_for_provider"
+            "onyx.chat.session_naming.check_llm_cost_limit_for_provider"
         ) as session_cost,
         patch(
-            "onyx.server.query_and_chat.chat_backend.check_model_spend_limits"
+            "onyx.chat.session_naming.check_model_spend_limits"
         ) as session_model_limits,
         patch(
-            "onyx.server.query_and_chat.chat_backend.get_llm_token_counter",
+            "onyx.chat.session_naming.get_llm_token_counter",
             return_value=len,
         ),
-        patch("onyx.server.query_and_chat.chat_backend.ensure_trace"),
+        patch("onyx.chat.session_naming.ensure_trace"),
         patch(
-            "onyx.server.query_and_chat.chat_backend.generate_chat_session_name",
+            "onyx.chat.session_naming.generate_chat_session_name",
             return_value="Session title",
         ),
     ):
-        title = _generate_or_fallback_chat_session_name(
+        title = generate_chat_session_name_or_fallback(
             chat_history=[_chat_message("Explain usage metering", MessageType.USER)],
-            request=request,
+            additional_headers=additional_headers,
             user=user,
             chat_session_id=uuid4(),
-            persona=persona,
-            llm_override=override,
+            get_chat_llm=session_llm,
         )
 
     assert title == "Session title"
-    session_llm.assert_called_once_with(
-        persona=persona,
-        user=user,
-        llm_override=override,
-        additional_headers={"x-request-id": "naming-request"},
-    )
+    session_llm.assert_called_once_with()
     session_cost.assert_called_once_with(
         db_session=session_factory.return_value.__enter__.return_value,
         tenant_id="naming-tenant",
@@ -261,32 +229,27 @@ def test_unset_utilities_check_session_provider_cost_once(
 def test_configured_utility_failure_returns_text_fallback(
     failure_stage: str, utility_model: ModelConfiguration, naming_llm: MagicMock
 ) -> None:
+    session_llm = MagicMock()
     with (
-        patch("onyx.server.query_and_chat.chat_backend.check_token_rate_limits"),
+        patch("onyx.chat.session_naming.check_token_rate_limits"),
         patch("onyx.llm.factory.get_session_with_current_tenant"),
         patch("onyx.llm.factory.fetch_default_model", return_value=utility_model),
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as utility_cost,
         patch("onyx.llm.factory.llm_from_provider", return_value=naming_llm) as build,
         patch("onyx.llm.factory.get_current_tenant_id", return_value="naming-tenant"),
-        patch(
-            "onyx.server.query_and_chat.chat_backend.get_llm_for_persona"
-        ) as session_llm,
-        patch(
-            "onyx.server.query_and_chat.chat_backend.generate_chat_session_name"
-        ) as generate,
+        patch("onyx.chat.session_naming.generate_chat_session_name") as generate,
     ):
         if failure_stage == "cost":
             utility_cost.side_effect = OnyxError(OnyxErrorCode.RATE_LIMITED)
         else:
             build.side_effect = ValueError("Utility model is unavailable")
 
-        title = _generate_or_fallback_chat_session_name(
+        title = generate_chat_session_name_or_fallback(
             chat_history=[_chat_message("Explain usage metering", MessageType.USER)],
-            request=Request({"type": "http", "headers": []}),
+            additional_headers=None,
             user=MagicMock(),
             chat_session_id=uuid4(),
-            persona=None,
-            llm_override=None,
+            get_chat_llm=session_llm,
         )
 
     assert title == "Explain usage metering"
@@ -297,3 +260,95 @@ def test_configured_utility_failure_returns_text_fallback(
         build.assert_called_once()
     session_llm.assert_not_called()
     generate.assert_not_called()
+
+
+def test_new_chat_is_named_with_the_turns_model(naming_llm: MagicMock) -> None:
+    first_question = _chat_message("Explain usage metering", MessageType.USER)
+    chat_session = MagicMock(description=None, incognito_record_mode=None)
+
+    with (
+        patch("onyx.chat.session_naming.get_cache_backend"),
+        patch("onyx.chat.session_naming.get_session_with_current_tenant"),
+        patch(
+            "onyx.chat.session_naming.get_chat_session_by_id",
+            return_value=chat_session,
+        ),
+        patch(
+            "onyx.chat.session_naming.create_chat_history_chain",
+            return_value=[first_question],
+        ),
+        patch(
+            "onyx.chat.session_naming.save_chat_session_name_if_unnamed",
+            return_value=True,
+        ),
+        patch("onyx.chat.session_naming.check_token_rate_limits"),
+        patch("onyx.chat.session_naming.get_default_utility_llm", return_value=None),
+        patch("onyx.chat.session_naming.get_llm_for_persona") as session_llm,
+        patch("onyx.chat.session_naming.get_current_tenant_id"),
+        patch("onyx.chat.session_naming.check_llm_cost_limit_for_provider"),
+        patch("onyx.chat.session_naming.check_model_spend_limits"),
+        patch("onyx.chat.session_naming.get_llm_token_counter", return_value=len),
+        patch("onyx.chat.session_naming.ensure_trace"),
+        patch(
+            "onyx.chat.session_naming.generate_chat_session_name",
+            return_value="Usage metering",
+        ) as generate,
+    ):
+        name = name_new_chat_session(
+            chat_session_id=uuid4(),
+            user=MagicMock(),
+            chat_llm=naming_llm,
+            additional_headers=None,
+        )
+
+    assert name == "Usage metering"
+    assert generate.call_args.kwargs["llm"] is naming_llm
+    session_llm.assert_not_called()
+
+
+def test_naming_request_uses_the_users_chat_defaults() -> None:
+    chat_session = MagicMock(description=None)
+    user = MagicMock()
+
+    with (
+        patch("onyx.chat.session_naming.get_cache_backend"),
+        patch("onyx.chat.session_naming.get_session_with_current_tenant"),
+        patch(
+            "onyx.chat.session_naming.get_chat_session_by_id",
+            return_value=chat_session,
+        ),
+        patch(
+            "onyx.chat.session_naming.create_chat_history_chain",
+            return_value=[_chat_message("Explain usage metering", MessageType.USER)],
+        ),
+        patch("onyx.chat.session_naming.fetch_user_preferences") as fetch_preferences,
+        patch(
+            "onyx.chat.session_naming.save_chat_session_name_if_unnamed",
+            return_value=True,
+        ),
+        patch("onyx.chat.session_naming.check_token_rate_limits"),
+        patch("onyx.chat.session_naming.get_default_utility_llm", return_value=None),
+        patch("onyx.chat.session_naming.get_llm_for_persona") as session_llm,
+        patch("onyx.chat.session_naming.get_current_tenant_id"),
+        patch("onyx.chat.session_naming.check_llm_cost_limit_for_provider"),
+        patch("onyx.chat.session_naming.check_model_spend_limits"),
+        patch("onyx.chat.session_naming.get_llm_token_counter", return_value=len),
+        patch("onyx.chat.session_naming.ensure_trace"),
+        patch(
+            "onyx.chat.session_naming.generate_chat_session_name",
+            return_value="Usage metering",
+        ),
+    ):
+        name_chat_session(
+            chat_session_id=uuid4(),
+            user=user,
+            additional_headers=None,
+        )
+
+    session_llm.assert_called_once_with(
+        persona=chat_session.persona,
+        user=user,
+        user_defaults=fetch_preferences.return_value.chat_defaults,
+        llm_override=chat_session.llm_override,
+        additional_headers=None,
+    )

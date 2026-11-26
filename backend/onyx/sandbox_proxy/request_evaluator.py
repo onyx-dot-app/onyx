@@ -1,156 +1,120 @@
-"""Classify an intercepted HTTPS request into a gated action.
+"""Classify an intercepted HTTPS request into a gated action of an integration.
 
 A `None` result identifies unrelated traffic. MCP protocol requests retain their target.
 Exceptions are failures and must never authorize credential injection.
 """
 
 import json
-import re
-from collections import Counter
-from collections.abc import Iterable, Sequence
 from typing import Any, Protocol
 from urllib.parse import parse_qs
 from uuid import UUID
 
 from mitmproxy import http
+from sqlalchemy.orm import Session
 
-from onyx.db.action_policy import (
-    get_mcp_tool_default_policies,
-    mcp_tool_default_policy,
-)
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ActionPolicy, GatedAppKind
-from onyx.db.external_app import get_external_apps
-from onyx.db.mcp import get_craft_enabled_mcp_servers
-from onyx.db.models import ExternalApp, MCPServer
-from onyx.db.users import fetch_user_by_id
+from onyx.db.enums import ActionPolicy, IntegrationActionPolicyValue, IntegrationKind
+from onyx.db.integration import list_enabled_integrations_by_id
+from onyx.db.models import Integration
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
     MatchedAction,
-    recognize_actions,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
-from onyx.sandbox_proxy.models import (
-    McpProtocolRequest,
-    McpRpcClassification,
-    McpRpcKind,
-)
-from onyx.sandbox_proxy.resolvers.mcp_matching import (
-    AmbiguousMCPTargetError,
-    match_request,
-    parse_target,
-)
+from onyx.integrations.models import RequestMatch
+from onyx.integrations.registry import get_kind_handler
+from onyx.sandbox_proxy.models import McpProtocolRequest
+from onyx.sandbox_proxy.resolvers.mcp_matching import IntegrationMatchTarget, may_match
+from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# action_type for an unclassifiable request to a matched MCP host (fail closed).
-MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
+_ACTION_POLICY_FOR_VALUE: dict[IntegrationActionPolicyValue, ActionPolicy] = {
+    IntegrationActionPolicyValue.ALLOW: ActionPolicy.ALWAYS,
+    IntegrationActionPolicyValue.AUTO: ActionPolicy.ASK,
+    IntegrationActionPolicyValue.ASK: ActionPolicy.ASK,
+    IntegrationActionPolicyValue.BLOCKED: ActionPolicy.DENY,
+}
 
 
 class RequestEvaluator(Protocol):
     def evaluate(
-        self, request: http.Request, tenant_id: str, user_id: UUID
-    ) -> AllMatchedActions | McpProtocolRequest | None: ...
-
-
-class CompositeRequestEvaluator(RequestEvaluator):
-    """Runs sub-evaluators in order; first non-``None`` verdict wins.
-
-    External apps are tried before MCP: on a host that is both a connected
-    external app and a craft MCP server, the external-app attribution governs,
-    mirroring the credential resolvers' claim order.
-    """
-
-    def __init__(self, evaluators: Sequence[RequestEvaluator]) -> None:
-        self._evaluators = list(evaluators)
-
-    def evaluate(
-        self, request: http.Request, tenant_id: str, user_id: UUID
-    ) -> AllMatchedActions | McpProtocolRequest | None:
-        for evaluator in self._evaluators:
-            matched = evaluator.evaluate(request, tenant_id, user_id)
-            if matched is not None:
-                return matched
-        return None
-
-
-def resolve_app_for_url(
-    url: str,
-    apps: Iterable[ExternalApp],
-) -> ExternalApp | None:
-    """Return the first ``app`` whose any ``upstream_url_patterns`` entry matches
-    ``url``, or ``None`` if no connected app claims it.
-
-    ``apps`` is expected id-ordered (as ``get_external_apps`` returns it), so the
-    lowest-id app wins when patterns overlap. A malformed built-in regex is
-    skipped rather than failing resolution for every other app.
-    """
-    for app in apps:
-        for regex in app.upstream_url_regexes:
-            try:
-                if re.fullmatch(regex, url):
-                    return app
-            except re.error:
-                logger.warning(
-                    "skipping malformed upstream_url_pattern app_id=%s pattern=%r",
-                    app.id,
-                    regex,
-                )
-    return None
-
-
-class ExternalAppRequestEvaluator(RequestEvaluator):
-    """Matches a request against the tenant's connected external apps.
-
-    Opens its own short tenant-scoped DB session (mirrors ``IdentityResolver``):
-    load the tenant's apps, resolve the one owning the request URL, recognise the
-    catalog actions via ``recognize_actions``. Credentials do not affect recognition.
-    """
-
-    def evaluate(
         self,
         request: http.Request,
         tenant_id: str,
-        user_id: UUID,  # noqa: ARG002
-    ) -> AllMatchedActions | None:
-        with get_session_with_tenant(tenant_id=tenant_id) as db:
-            apps = get_external_apps(db, enabled_only=True)
-            app = resolve_app_for_url(request.url, apps)
-            if app is None:
-                return None
-
-            # Catalog path matchers test the URL path only; mitmproxy's
-            # `request.path` carries the query string, so drop it.
-            proxied = ProxiedRequest(
-                method=request.method or "",
-                path=(request.path or "").split("?", 1)[0],
-                body=request.raw_content,
-            )
-            matched_actions = recognize_actions(app, proxied)
-
-        return matched_actions.model_copy(update={"payload": _request_payload(request)})
+        user_id: UUID,
+    ) -> AllMatchedActions | McpProtocolRequest | None: ...
 
 
-class McpRequestEvaluator(RequestEvaluator):
-    """Gates craft-enabled MCP servers: proxy-authoritative per-tool approvals.
+def _proxied_request(request: http.Request) -> ProxiedRequest:
+    return ProxiedRequest(
+        method=request.method or "",
+        path=request.path or "",
+        body=request.raw_content,
+        url=request.url,
+        headers=dict(request.headers.items()),
+    )
 
-    Attributes a request to a craft MCP server by the same host + path-prefix
-    rule the credential resolver uses, scoped to the servers the sandbox user may
-    access, then parses the JSON-RPC body:
 
-    * protocol plumbing (handshake, discovery, resources) → ``McpProtocolRequest``;
-      the gate checks task app access without asking for action approval;
-    * ``tools/call`` → an ``AllMatchedActions`` over the invoked tool(s), each
-      carrying the default ASK policy; saved settings are resolved by the gate;
-    * unclassifiable body on a matched host → a single ``DENY`` action so the
-      gate fails closed instead of forwarding with injected credentials.
+def _matches(
+    candidates: list[tuple[Integration, IntegrationMatchTarget]],
+    request: ProxiedRequest,
+    db_session: Session,
+) -> list[tuple[Integration, RequestMatch]]:
+    matches: list[tuple[Integration, RequestMatch]] = []
+    for integration, target in candidates:
+        # An error blocks the request: skipping the integration could let a
+        # broader one claim it with its own credential.
+        if target.load_error is not None:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, target.load_error)
+        match = get_kind_handler(integration.kind).match_request(
+            integration, target, request, db_session
+        )
+        if match is not None:
+            matches.append((integration, match))
+    return matches
 
-    A request outside every server's ``server_url`` prefix isn't attributed here
-    (returns ``None``); the resolver still fails it closed at injection time.
+
+def _pick(
+    matches: list[tuple[Integration, RequestMatch]],
+) -> tuple[Integration, RequestMatch] | None:
+    """An API integration wins over an MCP server on a shared host, and the
+    lowest id wins between API integrations. Between MCP servers the longest
+    path prefix wins; a tie has no single owner, so nothing is picked and the
+    credential resolver blocks the request."""
+    api = [match for match in matches if match[0].kind is IntegrationKind.API]
+    if api:
+        return min(api, key=lambda match: match[0].id)
+    if not matches:
+        return None
+    longest = max(match.path_prefix_length for _, match in matches)
+    winners = [m for m in matches if m[1].path_prefix_length == longest]
+    if len(winners) > 1:
+        logger.warning(
+            "mcp_target_ambiguous integrations=%s",
+            sorted(integration.id for integration, _ in winners),
+        )
+        return None
+    return winners[0]
+
+
+class IntegrationRequestEvaluator(RequestEvaluator):
+    """Matches a request against the integrations that the sandbox owner
+    turned on. The gate applies the stored policies.
+
+    * an MCP protocol message gives ``McpProtocolRequest``;
+    * an MCP body that does not parse gives one blocked action;
+    * a request that no integration of the user claims gives ``None``. A
+      request to the host of an MCP server is then blocked by the
+      credential resolver.
     """
+
+    def __init__(self, usable: UsableIntegrations | None = None) -> None:
+        self._usable = usable or UsableIntegrations()
 
     def evaluate(
         self,
@@ -158,103 +122,58 @@ class McpRequestEvaluator(RequestEvaluator):
         tenant_id: str,
         user_id: UUID,
     ) -> AllMatchedActions | McpProtocolRequest | None:
+        candidates = [
+            target
+            for target in self._usable.targets(tenant_id)
+            if may_match(target, request)
+        ]
+        if not candidates:
+            return None
+        on = self._usable.get(tenant_id, user_id).on
+        candidates = [c for c in candidates if c.integration_id in on]
+        if not candidates:
+            return None
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            # Access-scoped candidates, so duplicate URLs split across groups
-            # attribute to the one the user can reach rather than colliding.
-            user = fetch_user_by_id(db, user_id)
-            # Missing user → no servers; ``None`` would skip the filter, so guard.
-            servers = (
-                get_craft_enabled_mcp_servers(db, user) if user is not None else []
-            )
-            servers_by_id = {s.id: s for s in servers}
-            targets = tuple(
-                t
-                for t in (
-                    parse_target(s.id, s.server_url) for s in servers_by_id.values()
+            integrations = {
+                integration.id: integration
+                for integration in list_enabled_integrations_by_id(
+                    db, [c.integration_id for c in candidates]
                 )
-                if t is not None
+            }
+            picked = _pick(
+                _matches(
+                    [
+                        (integrations[c.integration_id], c)
+                        for c in candidates
+                        if c.integration_id in integrations
+                    ],
+                    _proxied_request(request),
+                    db,
+                )
             )
-            try:
-                target = match_request(targets, request)
-            except AmbiguousMCPTargetError:
-                # No single target to gate against; the resolver fails any
-                # non-plumbing request closed at injection.
+            if picked is None:
                 return None
-            if target is None:
-                return None
-            server = servers_by_id[target.server_id]
-            gated_target = GatedTarget(
-                kind=GatedAppKind.MCP_SERVER, id=server.id, app_name=server.name
+            integration, match = picked
+            target = GatedTarget(
+                integration_id=integration.id,
+                kind=integration.kind,
+                app_name=integration.name,
             )
-
-            # Malformed managed requests stay denied, independently of user settings.
-            try:
-                classification = classify_mcp_request(request)
-                if classification.kind is McpRpcKind.PLUMBING:
-                    return McpProtocolRequest(target=gated_target)
-                actions = _mcp_tool_actions(
-                    classification,
-                    server,
-                    request,
-                    get_mcp_tool_default_policies(db, server.id),
-                )
-            except Exception:
-                logger.exception(
-                    "mcp_evaluator_error tenant=%s server=%s host=%s; denying",
-                    tenant_id,
-                    server.id,
-                    request.host,
-                )
-                actions = (
-                    MatchedAction(
-                        action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
-                        display_name="Unrecognized MCP request",
-                        description="MCP gating failed; blocked.",
-                        policy=ActionPolicy.DENY,
-                    ),
-                )
-
+        if not match.actions:
+            return McpProtocolRequest(target=target)
         return AllMatchedActions(
-            actions=actions, target=gated_target, payload=_request_payload(request)
-        )
-
-
-def _mcp_tool_actions(
-    classification: McpRpcClassification,
-    server: MCPServer,
-    request: http.Request,
-    default_policies: dict[str, ActionPolicy],
-) -> tuple[MatchedAction, ...]:
-    """One MatchedAction per invoked tool; a single DENY when unclassifiable."""
-    if classification.kind is McpRpcKind.UNCLASSIFIABLE:
-        path = (request.path or "").split("?", 1)[0]
-        return (
-            MatchedAction(
-                action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
-                display_name="Unrecognized MCP request",
-                description=(
-                    f"{request.method} {path} could not be parsed "
-                    "as an MCP tool call or protocol message; blocked."
-                ),
-                policy=ActionPolicy.DENY,
+            actions=tuple(
+                MatchedAction(
+                    action_type=action.action_key,
+                    display_name=action.display_name,
+                    description=action.description,
+                    policy=_ACTION_POLICY_FOR_VALUE[action.default_policy],
+                )
+                for action in match.actions
             ),
+            target=target,
+            payload=_request_payload(request),
         )
-    # One action per distinct tool (grants and policies key by tool name), with
-    # the batch multiplicity surfaced so the approval card doesn't understate a
-    # request that invokes the same tool several times.
-    counts: Counter[str] = Counter(classification.tool_names)
-    return tuple(
-        MatchedAction(
-            action_type=tool_name,
-            display_name=tool_name,
-            description=(
-                f"Call the “{tool_name}” tool on {server.name}."
-                + (f" This request invokes it {count} times." if count > 1 else "")
-            ),
-            policy=default_policies.get(tool_name, mcp_tool_default_policy(None)),
-        )
-        for tool_name, count in counts.items()
-    )
 
 
 def _request_payload(request: http.Request) -> dict[str, Any]:

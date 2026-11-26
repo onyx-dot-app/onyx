@@ -16,14 +16,13 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, ChatSessionSharedStatus
 from onyx.db.models import ChatSession, Document, ToolCall
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
-from onyx.file_store.utils import chat_image_gen_metadata
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -311,7 +310,9 @@ def _seed_image_gen_tool_call(chat_session_id: UUID, stamp_session: bool = True)
         file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type="image/png",
         file_metadata=(
-            chat_image_gen_metadata(chat_session_id) if stamp_session else None
+            {CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)}
+            if stamp_session
+            else None
         ),
     )
 

@@ -44,6 +44,7 @@ from onyx.utils.fleet_telemetry import (
 )
 from onyx.utils.fleet_telemetry_collector import collect_snapshots
 from onyx.utils.platform_utils import is_running_in_container, is_running_in_kubernetes
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 
 _MONITORING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
@@ -111,6 +112,7 @@ def cloud_check_alembic() -> bool | None:
 
             with get_session_with_shared_schema() as session:
                 try:
+                    # db-ops-outside-db: allow reads the alembic version of a tenant schema
                     result = session.execute(
                         text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')  # noqa: S608
                     )
@@ -216,6 +218,7 @@ def monitor_celery_queues_helper(
     n_docfetching = celery_get_queue_length(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
+    n_docconversion = celery_get_queue_length(OnyxCeleryQueues.DOCCONVERSION, r_celery)
     n_docprocessing = celery_get_queue_length(OnyxCeleryQueues.DOCPROCESSING, r_celery)
     n_port = celery_get_queue_length(OnyxCeleryQueues.PORT, r_celery)
 
@@ -271,6 +274,9 @@ def monitor_celery_queues_helper(
     n_docfetching_prefetched = celery_get_unacked_task_ids(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
+    n_docconversion_prefetched = celery_get_unacked_task_ids(
+        OnyxCeleryQueues.DOCCONVERSION, r_celery
+    )
     n_docprocessing_prefetched = celery_get_unacked_task_ids(
         OnyxCeleryQueues.DOCPROCESSING, r_celery
     )
@@ -279,6 +285,8 @@ def monitor_celery_queues_helper(
         f"Queue lengths: celery={n_celery} "
         f"docfetching={n_docfetching} "
         f"docfetching_prefetched={len(n_docfetching_prefetched)} "
+        f"docconversion={n_docconversion} "
+        f"docconversion_prefetched={len(n_docconversion_prefetched)} "
         f"docprocessing={n_docprocessing} "
         f"docprocessing_prefetched={len(n_docprocessing_prefetched)} "
         f"port={n_port} "
@@ -475,6 +483,13 @@ def cloud_monitor_celery_pidbox(
 )
 def monitor_opensearch_resources(*, tenant_id: str | None = None) -> None:  # noqa: ARG001
     refresh_resource_health()
+    try:
+        # EE: tells full admins about critical cluster issues.
+        fetch_ee_implementation_or_noop(
+            "onyx.utils.opensearch_notifications", "notify_admins_of_cluster_issues"
+        )()
+    except Exception:
+        task_logger.exception("Unable to notify admins of OpenSearch cluster issues")
 
 
 @shared_task(

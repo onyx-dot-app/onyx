@@ -273,7 +273,7 @@ def test_a_spawn_at_the_load_bound_evicts_an_idle_agent() -> None:
                 ),
                 generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             ),
-            name="duplicate label",
+            name=invocation.call_id,
             description="Task",
             messages=[],
             max_steps=1,
@@ -303,6 +303,67 @@ def test_a_spawn_at_the_load_bound_evicts_an_idle_agent() -> None:
 
     with patch("onyx.agents.agent_coordination.MAX_LOADED_AGENTS", 1):
         exercise()
+
+
+_NAME_ERROR = (
+    "Tool failed with error: Agent name must be a nonempty label without "
+    "slashes, other than . or .."
+)
+
+
+@pytest.mark.parametrize(
+    ("name", "error", "paths"),
+    [
+        (
+            "research",
+            "Tool failed with error: An agent at /root/research already exists. "
+            "Use send_message to continue it, or pick another name.",
+            ["/root/research"],
+        ),
+        (".", _NAME_ERROR, []),
+        ("..", _NAME_ERROR, []),
+    ],
+)
+def test_a_spawn_refuses_a_path_that_an_earlier_agent_holds(
+    name: str, error: str, paths: list[str]
+) -> None:
+    """Agents address each other by path, including finished agents, so a
+    path names one agent and is never `.` or `..`."""
+
+    def spawn(invocation: ToolInvocation) -> ToolResult:
+        invocation.agents.spawn_agent(
+            Agent(
+                FakeModelClient(
+                    lambda *_: AssistantMessage(content=[TextContent(text="Done")])
+                ),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            ),
+            name=name,
+            description="Task",
+            messages=[],
+            max_steps=1,
+        )
+        return ToolResult(content="Done")
+
+    parent = parent_agent(spawn)
+    coordinator = AgentCoordinator()
+    first = parent.start(max_steps=2, coordinator=coordinator)
+    first.result()
+    assert first.wait_for_idle(timeout=3)
+    second = parent.start(max_steps=2, coordinator=coordinator)
+    second.result()
+    assert second.wait_for_idle(timeout=3)
+
+    errors = [
+        message.text
+        for message in second.snapshot().messages
+        if isinstance(message, ToolResultMessage) and message.is_error
+    ]
+    assert errors == [error]
+    assert [
+        info.path for info in coordinator.discover_agents() if info.parent_id
+    ] == paths
+    assert coordinator.close(timeout=3)
 
 
 @pytest.mark.parametrize("cancelled", [False, True])

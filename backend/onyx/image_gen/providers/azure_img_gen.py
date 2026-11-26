@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.interfaces import (
     ImageGenerationProvider,
     ImageGenerationProviderCredentials,
@@ -48,9 +49,18 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
         cls,
         credentials: ImageGenerationProviderCredentials,
     ) -> AzureImageGenerationProvider:
-        assert credentials.api_key
-        assert credentials.api_base
-        assert credentials.api_version
+        if not credentials.api_key:
+            raise ImageProviderCredentialsError(
+                "Azure image generation needs an API key"
+            )
+        if not credentials.api_base:
+            raise ImageProviderCredentialsError(
+                "Azure image generation needs an API base"
+            )
+        if not credentials.api_version:
+            raise ImageProviderCredentialsError(
+                "Azure image generation needs an API version"
+            )
 
         return cls(
             api_key=credentials.api_key,

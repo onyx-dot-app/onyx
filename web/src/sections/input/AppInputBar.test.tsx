@@ -19,13 +19,8 @@ import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
-import type { MemberPlugin } from "@/lib/plugins/member";
 import { Button } from "@opal/components";
-import {
-  memberServer,
-  memberTool,
-  storedMcpTool,
-} from "@/sections/plugins/__tests__/memberPluginFixtures";
+import type { ToolSnapshot } from "@/lib/tools/types";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ChatState } from "@/app/app/types";
 import type { PickerSections } from "@/lib/skills/picker";
@@ -37,6 +32,34 @@ import {
   MAX_MENTIONS_PER_MESSAGE,
   type ComposedMessage,
 } from "@/lib/chat/types";
+
+function memberTool(overrides: Partial<ToolSnapshot> = {}): ToolSnapshot {
+  return {
+    id: 7,
+    name: "Reports API",
+    display_name: "Reports API",
+    description: "Read weekly reports and project summaries.",
+    definition: {},
+    custom_headers: [],
+    in_code_tool_id: null,
+    passthrough_auth: false,
+    enabled: true,
+    chat_selectable: true,
+    agent_creation_selectable: true,
+    default_enabled: false,
+    permissions: {},
+    ...overrides,
+  };
+}
+
+const storedMcpTool = memberTool({
+  id: 71,
+  name: "search_issues",
+  display_name: "Search issues",
+  description: "Find issues in the projects you can access.",
+  definition: null,
+  mcp_server_id: 7,
+});
 
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
@@ -55,9 +78,9 @@ jest.mock("@/lib/skills/hooks", () => {
     );
   return {
     ...actual,
-    useChatSkills: () =>
+    useChatSkills: (options: { builtIns: boolean }) =>
       mockChatSkills === null
-        ? actual.useChatSkills()
+        ? actual.useChatSkills(options)
         : { entries: mockChatSkills, onInputFocus: () => undefined },
   };
 });
@@ -90,7 +113,6 @@ jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  useRouter: () => ({}),
 }));
 jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
@@ -98,6 +120,30 @@ jest.mock("@/lib/navigation/hooks", () => ({
     chat: () => null,
     agent: () => null,
     project: () => null,
+  }),
+}));
+jest.mock("@/lib/integrations/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/integrations/hooks")>(
+    "@/lib/integrations/hooks"
+  ),
+  useAgentIntegrationIds: () => ({
+    integrationIds: [],
+    isLoading: false,
+    error: undefined,
+  }),
+  useAgentChatIntegrations: () => ({
+    integrationIds: [],
+    integrations: [],
+    isLoading: false,
+    error: undefined,
+    refresh: jest.fn(),
+  }),
+  useAgentIntegrationPreferences: () => ({
+    loaded: true,
+    error: undefined,
+    disabledIntegrationIds: () => [],
+    setIntegrationsDisabled: jest.fn(),
+    retry: jest.fn(),
   }),
 }));
 jest.mock("@/lib/agents/hooks", () => ({ useActiveAgent: () => undefined }));
@@ -142,15 +188,7 @@ const agent: MinimalAgent = {
   user_permission: "VIEWER",
 };
 
-const plugin: MemberPlugin = {
-  kind: "mcp",
-  server: memberServer(),
-  tools: [storedMcpTool],
-  connection: { kind: "connected", ownership: "user" },
-};
-
 function Composer({
-  plugins,
   agentId = 0,
   tools = agent.tools,
   inputBarRef,
@@ -158,7 +196,6 @@ function Composer({
   disabled = false,
   onSubmit = jest.fn(),
 }: {
-  plugins: readonly MemberPlugin[];
   agentId?: number;
   tools?: MinimalAgent["tools"];
   inputBarRef?: React.Ref<AppInputBarHandle>;
@@ -184,7 +221,6 @@ function Composer({
       <AppInputBar
         ref={inputBarRef}
         activeAgent={{ ...agent, id: agentId, tools }}
-        memberPlugins={plugins}
         toolConfiguration={configuration}
         llmManager={llmManager}
         stopGenerating={jest.fn()}
@@ -212,54 +248,10 @@ beforeEach(() => {
   mockProjectsContext.setCurrentMessageFiles.mockClear();
 });
 
-test("default Chat hides the preferred plugin pill until metadata confirms availability without clearing the selection", async () => {
-  const { rerender } = render(<Composer plugins={[]} />);
-  await setupUser().click(
-    screen.getByRole("button", { name: "Prefer selected tool" })
-  );
-  expect(screen.getByLabelText("Stored preferred tool")).toHaveTextContent(
-    String(storedMcpTool.id)
-  );
-  expect(
-    screen.queryByRole("button", { name: storedMcpTool.display_name })
-  ).not.toBeInTheDocument();
-  rerender(<Composer plugins={[plugin]} />);
-  expect(
-    screen.getByRole("button", { name: storedMcpTool.display_name })
-  ).toBeVisible();
-  rerender(
-    <Composer
-      plugins={[
-        {
-          ...plugin,
-          server: { ...plugin.server, user_enabled_in_chat: false },
-        },
-      ]}
-    />
-  );
-  expect(
-    screen.queryByRole("button", { name: storedMcpTool.display_name })
-  ).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Stored preferred tool")).toHaveTextContent(
-    String(storedMcpTool.id)
-  );
-});
-
-test("custom agents retain the preferred plugin pill without member metadata", async () => {
-  render(<Composer plugins={[]} agentId={8} />);
-  await setupUser().click(
-    screen.getByRole("button", { name: "Prefer selected tool" })
-  );
-  expect(
-    screen.getByRole("button", { name: storedMcpTool.display_name })
-  ).toBeVisible();
-});
-
 test("incognito greys out Deep Research and explains why", async () => {
   mockIncognitoEnabled = true;
   render(
     <Composer
-      plugins={[]}
       tools={[memberTool({ id: 1, in_code_tool_id: SEARCH_TOOL_ID })]}
     />
   );
@@ -293,9 +285,7 @@ describe("restore after a failed send", () => {
   test("puts the message, its picks and its files back into an empty composer", async () => {
     const inputBarRef = createRef<AppInputBarHandle>();
     const onSubmit = jest.fn();
-    render(
-      <Composer plugins={[]} inputBarRef={inputBarRef} onSubmit={onSubmit} />
-    );
+    render(<Composer inputBarRef={inputBarRef} onSubmit={onSubmit} />);
     act(() =>
       inputBarRef.current?.restore({
         message: "failed @code-review message",
@@ -318,7 +308,7 @@ describe("restore after a failed send", () => {
 
   test("keeps text typed while the send was pending", async () => {
     const inputBarRef = createRef<AppInputBarHandle>();
-    render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
+    render(<Composer inputBarRef={inputBarRef} />);
     await setupUser().type(screen.getByRole("textbox"), "newer draft");
     act(() =>
       inputBarRef.current?.restore({
@@ -337,7 +327,7 @@ describe("restore after a failed send", () => {
       projectFile("newer-file"),
     ] satisfies ProjectFile[];
     const inputBarRef = createRef<AppInputBarHandle>();
-    render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
+    render(<Composer inputBarRef={inputBarRef} />);
     act(() =>
       inputBarRef.current?.restore({
         message: "failed message",
@@ -359,7 +349,7 @@ test.each([
   "the composer accepts a normal send only when idle and enabled (%s, disabled=%s)",
   (chatState, disabled, accepts) => {
     const { container } = render(
-      <Composer plugins={[]} chatState={chatState} disabled={disabled} />
+      <Composer chatState={chatState} disabled={disabled} />
     );
     expect(container.querySelector("#onyx-chat-input")).toHaveAttribute(
       "data-accepts-send",
@@ -405,7 +395,7 @@ describe("`@` skill mentions", () => {
   }
 
   test("opens on `@` with the chat skills that start with the query", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     const input = screen.getByRole("textbox");
 
@@ -430,7 +420,7 @@ describe("`@` skill mentions", () => {
       const skillFetches = () =>
         fetchSpy.mock.calls.filter(([url]) => url === "/api/skills/chat")
           .length;
-      render(<Composer plugins={[]} />);
+      render(<Composer />);
       await waitFor(() => expect(skillFetches()).toBe(1));
 
       // A skill made in another tab or by another user.
@@ -440,6 +430,7 @@ describe("`@` skill mentions", () => {
           description: "Review code",
           short_description: null,
           version_id: "v1",
+          built_in_skill_id: null,
         },
       ];
       await act(async () => {
@@ -484,7 +475,7 @@ describe("`@` skill mentions", () => {
       .spyOn(global, "fetch")
       .mockImplementation(() => response.promise);
     try {
-      const { result } = renderHook(() => useChatSkills(), {
+      const { result } = renderHook(() => useChatSkills({ builtIns: true }), {
         wrapper: ({ children }) => (
           <SWRConfig value={{ provider: () => new Map() }}>
             {children}
@@ -510,19 +501,21 @@ describe("`@` skill mentions", () => {
         description: "Review code for bugs, style and missing tests",
         short_description: "Review code",
         version_id: "v1",
+        built_in_skill_id: null,
       },
       {
         name: "commit-message",
         description: "Write a commit message",
         short_description: null,
         version_id: "v2",
+        built_in_skill_id: null,
       },
     ];
     const fetchSpy = jest
       .spyOn(global, "fetch")
       .mockImplementation(async () => new Response(JSON.stringify(skills)));
     try {
-      render(<Composer plugins={[]} />);
+      render(<Composer />);
       const user = setupUser();
       await user.type(screen.getByRole("textbox"), "use @co");
 
@@ -538,6 +531,50 @@ describe("`@` skill mentions", () => {
       fetchSpy.mockRestore();
     }
   });
+
+  test.each([
+    [false, true],
+    [true, false],
+  ])(
+    "with incognito %s, the picker offers built-ins: %s",
+    async (incognito, offersBuiltIns) => {
+      mockChatSkills = null;
+      mockIncognitoEnabled = incognito;
+      const skills: ChatSkill[] = [
+        {
+          name: "pptx",
+          description: "Make decks",
+          short_description: null,
+          version_id: "b1",
+          built_in_skill_id: "pptx",
+        },
+        {
+          name: "plan",
+          description: "Plan work",
+          short_description: null,
+          version_id: "v1",
+          built_in_skill_id: null,
+        },
+      ];
+      const fetchSpy = jest
+        .spyOn(global, "fetch")
+        .mockImplementation(async () => new Response(JSON.stringify(skills)));
+      try {
+        render(<Composer />);
+        const user = setupUser();
+        await user.type(screen.getByRole("textbox"), "use @p");
+
+        await screen.findByTestId("skill-picker-row-plan");
+        if (offersBuiltIns) {
+          expect(screen.getByTestId("skill-picker-row-pptx")).toBeVisible();
+        } else {
+          expect(screen.queryByTestId("skill-picker-row-pptx")).toBeNull();
+        }
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    }
+  );
 
   test("at the mention limit, it offers only the skills already picked", async () => {
     const names = Array.from(
@@ -555,7 +592,7 @@ describe("`@` skill mentions", () => {
     };
     const picked = names.slice(0, MAX_MENTIONS_PER_MESSAGE);
     const inputBarRef = createRef<AppInputBarHandle>();
-    render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
+    render(<Composer inputBarRef={inputBarRef} />);
     act(() =>
       inputBarRef.current?.restore({
         message: picked.map((name) => `@${name}`).join(" "),
@@ -585,7 +622,7 @@ describe("`@` skill mentions", () => {
   }
 
   test("a click inside a word that matches nothing does not open it", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     await user.type(screen.getByRole("textbox"), "@codebar");
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
@@ -597,7 +634,7 @@ describe("`@` skill mentions", () => {
 
   test("the query is the whole word around the caret", async () => {
     const onSubmit = jest.fn();
-    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    render(<Composer onSubmit={onSubmit} />);
     const user = setupUser();
     await user.type(screen.getByRole("textbox"), "@codebar");
     clickAt("@code".length);
@@ -614,7 +651,7 @@ describe("`@` skill mentions", () => {
   });
 
   test("deleting the rest of a word opens it on the match", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     await user.type(screen.getByRole("textbox"), "@codebar");
     await user.keyboard("{Backspace}{Backspace}{Backspace}");
@@ -624,7 +661,7 @@ describe("`@` skill mentions", () => {
   });
 
   test("a caret move closes it and does not change its query", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     await user.type(screen.getByRole("textbox"), "@code");
     await screen.findByTestId("skill-picker-popover");
@@ -636,7 +673,7 @@ describe("`@` skill mentions", () => {
   });
 
   test("a caret move without key or mouse events closes it", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     await user.type(screen.getByRole("textbox"), "@code");
     await screen.findByTestId("skill-picker-popover");
@@ -653,7 +690,7 @@ describe("`@` skill mentions", () => {
   });
 
   test("Esc hides it until its `@` is deleted", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     await user.type(screen.getByRole("textbox"), "@co");
     await screen.findByTestId("skill-picker-popover");
@@ -665,7 +702,7 @@ describe("`@` skill mentions", () => {
   });
 
   test("a click in the input closes it without hiding the word", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     const input = screen.getByRole("textbox");
     await user.type(input, "@cod");
@@ -681,7 +718,7 @@ describe("`@` skill mentions", () => {
 
   test("a pick by Enter replaces the whole word around the caret", async () => {
     const onSubmit = jest.fn();
-    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    render(<Composer onSubmit={onSubmit} />);
     const user = setupUser();
     await user.type(screen.getByRole("textbox"), "use @cde");
     clickAt("use @c".length);
@@ -698,8 +735,19 @@ describe("`@` skill mentions", () => {
     });
   });
 
+  test("the arrow keys reach Manage skills, and Enter opens the Skills tab", async () => {
+    render(<Composer />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "use @co");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+
+    await user.keyboard("{ArrowUp}{Enter}");
+    expect(window.location.pathname).toBe("/app/customize/skills");
+    expect(skillTiles()).toHaveLength(0);
+  });
+
   test("hides the `/` prompt shortcuts while it is open", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     const input = screen.getByRole("textbox");
 
@@ -713,7 +761,7 @@ describe("`@` skill mentions", () => {
 
   test("a pick becomes a tile that sends its skill with the message", async () => {
     const onSubmit = jest.fn();
-    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    render(<Composer onSubmit={onSubmit} />);
     const user = setupUser();
 
     await pickCodeReview(user);
@@ -727,7 +775,7 @@ describe("`@` skill mentions", () => {
   });
 
   test("an IME Enter does not pick", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
     await user.type(screen.getByRole("textbox"), "use @co");
     await screen.findByTestId("skill-picker-popover");
@@ -742,7 +790,7 @@ describe("`@` skill mentions", () => {
   });
 
   test("the caret after a tile does not reopen the picker on its text", async () => {
-    render(<Composer plugins={[]} />);
+    render(<Composer />);
     const user = setupUser();
 
     await pickCodeReview(user);
@@ -752,7 +800,7 @@ describe("`@` skill mentions", () => {
 
   test("undoing a tile's removal restores its skill", async () => {
     const onSubmit = jest.fn();
-    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    render(<Composer onSubmit={onSubmit} />);
     const user = setupUser();
     await pickCodeReview(user);
 
@@ -774,7 +822,7 @@ describe("`@` skill mentions", () => {
 
   test("cut and pasted mention text is not a pick", async () => {
     const onSubmit = jest.fn();
-    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    render(<Composer onSubmit={onSubmit} />);
     const user = setupUser();
     await pickCodeReview(user);
     const input = screen.getByRole("textbox");
@@ -803,14 +851,14 @@ describe("`@` skill mentions", () => {
     jest.useFakeTimers();
     try {
       const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
-      const { unmount } = render(<Composer plugins={[]} />);
+      const { unmount } = render(<Composer />);
       await pickCodeReview(user);
       // The draft saves after a delay.
       act(() => jest.advanceTimersByTime(300));
       unmount();
 
       const onSubmit = jest.fn();
-      render(<Composer plugins={[]} onSubmit={onSubmit} />);
+      render(<Composer onSubmit={onSubmit} />);
       expect(screen.getByRole("textbox")).toHaveTextContent("use @code-review");
       expect(skillTiles()).toHaveLength(1);
       await user.type(screen.getByRole("textbox"), "now{Enter}");
@@ -871,7 +919,7 @@ describe("`@` skill mentions", () => {
       jest.useFakeTimers();
       try {
         const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
-        const first = render(<Composer plugins={[]} />);
+        const first = render(<Composer />);
         await compose(user);
         expect(skillTiles()).toHaveLength(expected.mentions.length);
         // The draft saves after a delay.
@@ -880,13 +928,7 @@ describe("`@` skill mentions", () => {
 
         const inputBarRef = createRef<AppInputBarHandle>();
         const onSubmit = jest.fn(() => inputBarRef.current?.reset());
-        render(
-          <Composer
-            plugins={[]}
-            inputBarRef={inputBarRef}
-            onSubmit={onSubmit}
-          />
-        );
+        render(<Composer inputBarRef={inputBarRef} onSubmit={onSubmit} />);
         expect(skillTiles()).toHaveLength(expected.mentions.length);
         await user.type(screen.getByRole("textbox"), "{Enter}");
         expect(onSubmit).toHaveBeenLastCalledWith(expected);
@@ -905,7 +947,7 @@ describe("`@` skill mentions", () => {
   test("voice input keeps the tiles, and its auto-send sends them", async () => {
     mockSttEnabled = true;
     const onSubmit = jest.fn();
-    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    render(<Composer onSubmit={onSubmit} />);
     await pickCodeReview(setupUser());
 
     const microphone = mockMicrophone;
@@ -926,7 +968,7 @@ describe("`@` skill mentions", () => {
   test("voice auto-send drops a mention whose tile the transcript removed", async () => {
     mockSttEnabled = true;
     const onSubmit = jest.fn();
-    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    render(<Composer onSubmit={onSubmit} />);
     await pickCodeReview(setupUser());
 
     const microphone = mockMicrophone;

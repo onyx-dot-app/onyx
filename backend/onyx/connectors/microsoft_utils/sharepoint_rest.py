@@ -20,6 +20,9 @@ from office365.runtime.http.request_options import RequestOptions
 from office365.runtime.paths.resource_path import ResourcePath
 from office365.sharepoint.client_context import ClientContext
 from office365.sharepoint.folders.folder import Folder
+from office365.sharepoint.listitems.collection import ListItemCollection
+from office365.sharepoint.listitems.listitem import ListItem
+from office365.sharepoint.lists.list import List as SpList
 from office365.sharepoint.permissions.securable_object import (
     RoleAssignmentCollection,
     SecurableObject,
@@ -46,8 +49,11 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     raise_microsoft_errors,
 )
 from onyx.connectors.microsoft_utils.models import (
+    LIBRARY_INHERITANCE_MAX_ITEMS,
     EntraMember,
     EntraMemberKind,
+    SharepointLibraryInheritance,
+    SharepointListItemInheritance,
     SharepointPrincipal,
     SharepointRoleAssignment,
     SharepointSecurable,
@@ -67,6 +73,20 @@ _ROLE_ASSIGNMENT_EXPAND = ["Member", "RoleDefinitionBindings"]
 # grant fewer readers than the source does, so the read fails instead.
 MAX_READ_ROWS = 1_000_000
 GET_SHAREPOINT_LIST_ITEM_ID_LABEL = "get_sharepoint_list_item_id"
+# SharePoint's largest page of list items.
+LIBRARY_ITEMS_PAGE_SIZE = 5000
+_LIBRARY_INHERITANCE_SELECT = [
+    "HasUniqueRoleAssignments",
+    "ItemCount",
+    "RootFolder/ServerRelativeUrl",
+]
+_LIST_ITEM_INHERITANCE_SELECT = [
+    "Id",
+    "FSObjType",
+    "FileRef",
+    "FileDirRef",
+    "HasUniqueRoleAssignments",
+]
 
 # Every read builds its query in a function and hands it to sleep_and_retry as
 # rebuild: the SDK answers a spent query with nothing, so a retry must send a
@@ -287,6 +307,106 @@ def read_folder_unique_id(context: ClientContext, server_relative_path: str) -> 
     return folder.unique_id
 
 
+def _list_item_inheritance(item: ListItem) -> SharepointListItemInheritance | None:
+    """None for a row SharePoint sent without one of the fields. The
+    caller then knows nothing of the item, which is the safe answer."""
+    values: dict[str, Any] = item.properties
+    raw_id = values.get("Id")
+    raw_kind = values.get("FSObjType")
+    file_ref = values.get("FileRef")
+    file_dir_ref = values.get("FileDirRef")
+    unique = values.get("HasUniqueRoleAssignments")
+    if (
+        raw_id is None
+        or raw_kind is None
+        or not isinstance(file_ref, str)
+        or not isinstance(file_dir_ref, str)
+        or not isinstance(unique, bool)
+    ):
+        return None
+    return SharepointListItemInheritance(
+        item_id=int(raw_id),
+        is_folder=int(raw_kind) == 1,
+        file_ref=file_ref,
+        file_dir_ref=file_dir_ref,
+        has_unique_role_assignments=unique,
+    )
+
+
+def read_library_inheritance(
+    context: ClientContext, list_id: str
+) -> SharepointLibraryInheritance | None:
+    """For each file and folder of a library, if it has role assignments of
+    its own. One read for each LIBRARY_ITEMS_PAGE_SIZE items, in the order of
+    the item ids, and each read retries on its own, so a throttled page does
+    not start the walk again. None for a library with more than
+    LIBRARY_INHERITANCE_MAX_ITEMS items, before or during the read."""
+
+    def build_library_query() -> Any:
+        return (
+            context.web.lists.get_by_id(list_id)
+            .select(_LIBRARY_INHERITANCE_SELECT)
+            .expand(["RootFolder"])
+            .get()
+        )
+
+    library: SpList = sleep_and_retry(
+        build_library_query(), "get_library_inheritance", rebuild=build_library_query
+    )
+    root_folder: str | None = library.root_folder.serverRelativeUrl
+    library_unique: bool | None = library.has_unique_role_assignments
+    item_count: int | None = library.item_count
+    if not root_folder or library_unique is None or item_count is None:
+        raise RuntimeError(f"SharePoint did not describe the library {list_id}")
+    if item_count > LIBRARY_INHERITANCE_MAX_ITEMS:
+        return None
+
+    items: list[SharepointListItemInheritance] = []
+    rows_read = 0
+    after_id = 0
+    while True:
+
+        def build_page_query(after_id: int = after_id) -> Any:
+            # The item id is indexed, so this filter works on a large list.
+            return (
+                context.web.lists.get_by_id(list_id)
+                .items.select(_LIST_ITEM_INHERITANCE_SELECT)
+                .filter(f"Id gt {after_id}")
+                .order_by("Id")
+                .top(LIBRARY_ITEMS_PAGE_SIZE)
+                .get()
+            )
+
+        page: ListItemCollection = sleep_and_retry(
+            build_page_query(),
+            "list_library_inheritance",
+            rebuild=build_page_query,
+        )
+        page_ids: list[int] = []
+        for item in page:
+            raw_id = item.properties.get("Id")
+            if raw_id is not None:
+                page_ids.append(int(raw_id))
+            row = _list_item_inheritance(item)
+            if row is not None:
+                items.append(row)
+        # SharePoint can send a short page before the end, so only an empty
+        # page ends the read.
+        if not page_ids:
+            break
+        rows_read += len(page_ids)
+        # The library can grow during the read.
+        if rows_read > LIBRARY_INHERITANCE_MAX_ITEMS:
+            return None
+        _check_read_size(items, f"Items of library `{list_id}`")
+        after_id = max(page_ids)
+    return SharepointLibraryInheritance(
+        root_folder_server_relative_url=root_folder,
+        has_unique_role_assignments=library_unique,
+        items=items,
+    )
+
+
 def read_list_item_id(graph_client: GraphClient, item: DriveItemData) -> int | None:
     """The item's id in its SharePoint list. The delta and children listings
     usually carry it, so Graph is asked only when they did not."""
@@ -483,6 +603,12 @@ class SharepointRestReads(SharepointPermissionReader):
             return read_site_group_users(
                 self._rest_context(site_url), group_name, max_rows
             )
+
+    def get_library_inheritance(
+        self, *, site_url: str, list_id: str
+    ) -> SharepointLibraryInheritance | None:
+        with raise_microsoft_errors():
+            return read_library_inheritance(self._rest_context(site_url), list_id)
 
     def get_folder_unique_id(self, *, site_url: str, server_relative_path: str) -> str:
         with raise_microsoft_errors():

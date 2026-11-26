@@ -16,8 +16,8 @@ placeholder shows).
 With `defaultOption` the select never reads as empty: an empty `value` resolves
 to it, and re-picking the selected option does nothing, like a native
 `<select>`. `onValueChange` never receives `""`.
-`placeholder` stays required: it is the field's accessible name even when the
-default keeps the trigger filled.
+`placeholder` stays required: it is the field's accessible name, unless
+`aria-label` sets one, even when the default keeps the trigger filled.
 
 `options` is a list of loose options and dividers in any order, like
 `<option>`s beside `<optgroup>`s: a divider is `{ title?, options }` and renders
@@ -112,8 +112,13 @@ leave the keyboard order.
 | `onSearchChange` | `(query: string) => void`      | —       | The search text as it changes, `""` when the list closes        |
 | `onReachEnd`   | `(shown: SelectOption[]) => void`   | —       | The rows scrolled near their end, with the unfolded rows on show |
 | `defaultOption` | `string`                            | —       | Option value an empty `value` resolves to; never empties then   |
-| `placeholder`   | `string`                            | —       | Shown while empty; always the accessible name (required)        |
+| `placeholder`   | `string`                            | —       | Shown while empty; the accessible name without `aria-label` (required) |
+| `aria-label`    | `string`                            | `placeholder` | The accessible name, such as the setting row's title      |
 | `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |
 | `rightChildren` | `React.ReactNode`                   | —       | Extra trigger-side controls                                     |
+| `tooltip`       | `string \| RichStr`                 | —       | Shown on hover, in any state                                    |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the field, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 Formik: `InputSingleSelectField` from `@opal/form`.

@@ -16,7 +16,6 @@ import { SettingsLayouts, InputVertical, toast, Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
-import type { TaskAppActionPolicies } from "@/lib/plugins/types";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
@@ -25,7 +24,7 @@ import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
-import { useEntryPicker } from "@/lib/skills/hooks";
+import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
 import type { CaretText } from "@/lib/contentEditable";
 import {
   CRAFT_PICKER_TRIGGER,
@@ -41,6 +40,7 @@ import type {
   ScheduledTaskCreateBody,
   ScheduledTaskDetail,
   ScheduledTaskPatchBody,
+  TaskIntegrationLink,
 } from "@/app/craft/v1/tasks/types";
 import {
   createScheduledTask,
@@ -79,14 +79,15 @@ export default function ScheduleTaskForm({
 }: ScheduleTaskFormProps) {
   const t = useTranslations("craft.tasks.form");
   const tActionPolicies = useTranslations("craft.actionPolicies");
+  const tScheduleEditor = useTranslations("craft.tasks.scheduleEditor");
   const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [actionPolicies, setActionPolicies] = useState<
-    TaskAppActionPolicies[] | null
+  const [integrations, setIntegrations] = useState<
+    TaskIntegrationLink[] | null
   >(null);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
@@ -94,12 +95,18 @@ export default function ScheduleTaskForm({
 
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
+  const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
+    useChatSkills({ builtIns: false });
   const { data: externalAppsData } = useUserExternalApps();
   const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
     () =>
-      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
-    [skillsData, externalAppsData, craftMcpData]
+      toPickerSections(
+        { builtins: skillsData?.builtins, customs: chatSkills.skills },
+        externalAppsData,
+        craftMcpData
+      ),
+    [skillsData, chatSkills, externalAppsData, craftMcpData]
   );
   const pickPromptEntry = useCallback(
     (entry: PickerEntry, token: CaretText) => {
@@ -145,7 +152,9 @@ export default function ScheduleTaskForm({
   const nameError = trimmedName.length === 0 ? t("errors.nameRequired") : null;
   const promptError =
     trimmedPrompt.length === 0 ? t("errors.promptRequired") : null;
-  const scheduleError = !compiled.ok ? compiled.error : null;
+  const scheduleError = !compiled.ok
+    ? tScheduleEditor(`errors.${compiled.error}`)
+    : null;
 
   const shownNameError = nameTouched ? nameError : null;
   const shownPromptError = promptTouched ? promptError : null;
@@ -155,7 +164,7 @@ export default function ScheduleTaskForm({
     !promptError &&
     !scheduleError &&
     !saving &&
-    actionPolicies !== null;
+    integrations !== null;
 
   // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
   // tooltip. A natively-disabled <button> is inert and never fires hover
@@ -165,11 +174,11 @@ export default function ScheduleTaskForm({
     : (nameError ??
       promptError ??
       scheduleError ??
-      (actionPolicies === null ? tActionPolicies("loading") : undefined));
+      (integrations === null ? tActionPolicies("loading") : undefined));
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
-      if (!compiled.ok || actionPolicies === null) return; // validation should already block, but typescript needs this
+      if (!compiled.ok || integrations === null) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
         const storagePayload = localPayloadToUtcPayload(mode, payload);
@@ -179,7 +188,7 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
-            action_policies: actionPolicies,
+            integrations,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -199,7 +208,7 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             run_immediately: runImmediately,
-            action_policies: actionPolicies,
+            integrations,
           };
           await createScheduledTask(body);
           await mutate(SWR_KEYS.scheduledTasks);
@@ -223,7 +232,7 @@ export default function ScheduleTaskForm({
       mode,
       mutate,
       payload,
-      actionPolicies,
+      integrations,
       navigation,
       trimmedName,
       trimmedPrompt,
@@ -311,6 +320,7 @@ export default function ScheduleTaskForm({
                 setPrompt(e.target.value);
                 promptPicker.onInput(e);
               }}
+              onFocus={onChatSkillsFocus}
               onBlur={() => setPromptTouched(true)}
               placeholder={t("fields.prompt.placeholder")}
               rows={6}
@@ -356,8 +366,8 @@ export default function ScheduleTaskForm({
         <Section alignItems="stretch">
           <TaskActionPolicies
             taskId={initial.taskId}
-            value={actionPolicies}
-            onChange={setActionPolicies}
+            value={integrations}
+            onChange={setIntegrations}
           />
         </Section>
       </SettingsLayouts.Body>

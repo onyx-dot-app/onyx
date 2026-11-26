@@ -9,10 +9,10 @@ NUM_RETURNED_HITS = 50
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
 # Maximum number of LLM cycles (one tool-call round-trip per cycle) before the
-# agent is forced to answer: the last cycle offers no tools. Default 6 covers the
-# common search → open_url pattern; raise via env when integrating with tool-heavy
-# MCPs that need more turns.
-MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
+# agent is forced to answer: the last cycle offers no tools. Default 30 leaves
+# room for multi-step work, such as paging through a long listing, while still
+# ending a runaway turn; set the env var to change it.
+MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 30)
 # The cycle cap when code mode applies. Programs batch tool calls, and each
 # wait_code observation of a running cell takes a cycle, so it is only a safety
 # cap, never lower than MAX_LLM_CYCLES.
@@ -124,3 +124,8 @@ CHAT_EXECUTION_TIMEOUT_S = 3600
 
 # Offer chat tools as Python functions inside `execute_code` instead of directly.
 CODE_MODE_ENABLED = os.environ.get("CODE_MODE_ENABLED", "false").lower() == "true"
+# "true" removes the postgres_query tool, which every turn with internal search
+# otherwise gets.
+DISABLE_POSTGRES_QUERY_TOOL = (
+    os.environ.get("DISABLE_POSTGRES_QUERY_TOOL", "false").lower() == "true"
+)

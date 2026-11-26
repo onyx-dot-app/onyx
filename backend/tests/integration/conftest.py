@@ -1,13 +1,16 @@
 import ast
 import os
+import socket
 import subprocess
-from collections.abc import Callable, Generator
+import threading
+from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+import uvicorn
 
 # Enables test-only server behavior, e.g. ToolCallDebug packets.
 os.environ["INTEGRATION_TESTS_MODE"] = "true"
@@ -64,6 +67,7 @@ from shared_configs.configs import MULTI_TENANT  # noqa: E402
 from tests.integration.common_utils import http_client  # noqa: E402
 from tests.integration.common_utils.constants import (  # noqa: E402
     ADMIN_USER_NAME,
+    API_SERVER_URL,
     GENERAL_HEADERS,
 )
 from tests.integration.common_utils.document_index import (  # noqa: E402
@@ -150,7 +154,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     (
         "light",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
-        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim",
+        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim,suggested_questions",
     ),
     (
         "heavy",
@@ -164,6 +168,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     ),
     ("scheduled_tasks", "scheduled_tasks"),
     ("docfetching", "connector_doc_fetching"),
+    ("docconversion", "docconversion"),
     ("monitoring", "monitoring"),
 ]
 
@@ -329,6 +334,36 @@ def _test_client(
             http_client.set_test_client(None)
 
 
+@pytest.fixture(scope="module")
+def streaming_api(_test_client: TestClient) -> Iterator[str]:
+    """Serve the initialized application without buffering streaming responses."""
+    started = threading.Event()
+
+    class StreamingServer(uvicorn.Server):
+        async def startup(self, sockets: list[socket.socket] | None = None) -> None:
+            await super().startup(sockets)
+            started.set()
+
+    server = StreamingServer(
+        uvicorn.Config(
+            _test_client.app,
+            host="127.0.0.1",
+            port=0,
+            lifespan="off",
+            log_level="warning",
+        )
+    )
+    assert _test_client.portal is not None
+    worker = _test_client.portal.start_task_soon(server.serve)
+    try:
+        assert started.wait(15), "Streaming API did not start"
+        port = server.servers[0].sockets[0].getsockname()[1]
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        worker.result(timeout=15)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def seed_dev_license_for_session(initialize_db: None) -> None:  # noqa: ARG001
     # ``reset_postgres`` re-seeds the dev license after every wipe, but tests
@@ -440,6 +475,34 @@ def basic_user(
             )
 
         return user
+
+
+@pytest.fixture
+def user_factory(
+    admin_user: DATestUser,
+) -> Generator[Callable[[], DATestUser], None, None]:
+    """Create basic users and delete them at teardown.
+
+    Deleting a user also deletes its rows and stored files, such as its
+    profile photo.
+    """
+    created: list[DATestUser] = []
+
+    def _create() -> DATestUser:
+        user = UserManager.create()
+        created.append(user)
+        return user
+
+    yield _create
+
+    for user in created:
+        UserManager.set_status(user, False, admin_user)
+        http_client.client.request(
+            "DELETE",
+            f"{API_SERVER_URL}/manage/admin/delete-user",
+            json={"user_email": user.email},
+            headers=admin_user.headers,
+        ).raise_for_status()
 
 
 @pytest.fixture(scope="session")

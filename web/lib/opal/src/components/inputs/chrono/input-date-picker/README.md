@@ -30,10 +30,14 @@ Segmented date field on the shared `.opal-input` chrome, the Figma `Input/Date`.
 | `onChange`  | `(date: Date \| null) => void` | —       | Fires on commit, `null` when cleared                                     |
 | `error`     | `boolean`                      | `false` | Error chrome on the field                                                |
 | `disabled`  | `boolean`                      | `false` | Disabled chrome, segments and calendar action inert, clear action hidden |
+| `tooltip`   | `string \| RichStr`            | —       | Shown on hover, in any state                                             |
 | `clearable` | `boolean`                      | `false` | Shows a clear action while a value is set and the field is enabled       |
 | `minDate`   | `Date`                         | —       | Earliest selectable day (inclusive)                                      |
 | `maxDate`   | `Date`                         | —       | Latest selectable day (inclusive)                                        |
 | `id`        | `string`                       | —       | Applied to the month segment for `<label htmlFor>`                       |
 | `placeholder` | `string`                     | —       | Shown instead of the empty segments until the field takes focus          |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the field, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 Date ranges (the Figma `Range` variant) are not implemented yet. The `Calendar` beneath already supports `mode="range"`, so a range picker is an API addition here, not a new surface.

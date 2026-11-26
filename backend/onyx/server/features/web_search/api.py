@@ -227,7 +227,7 @@ def _open_urls(
     return provider_type, results
 
 
-@router.post("/search", response_model=WebSearchWithContentResponse)
+@router.post("/search")
 def execute_web_search(
     request: WebSearchToolRequest,
     _: User = Depends(require_permission(Permission.READ_SEARCH)),
@@ -270,7 +270,7 @@ def execute_web_search(
     )
 
 
-@router.post("/search-lite", response_model=WebSearchToolResponse)
+@router.post("/search-lite")
 def execute_web_search_lite(
     request: WebSearchToolRequest,
     _: User = Depends(require_permission(Permission.READ_SEARCH)),
@@ -286,7 +286,7 @@ def execute_web_search_lite(
     return WebSearchToolResponse(results=search_results, provider_type=provider_type)
 
 
-@router.post("/open-urls", response_model=OpenUrlsToolResponse)
+@router.post("/open-urls")
 def execute_open_urls(
     request: OpenUrlsToolRequest,
     _: User = Depends(require_permission(Permission.READ_SEARCH)),

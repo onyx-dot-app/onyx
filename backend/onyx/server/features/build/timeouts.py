@@ -40,6 +40,8 @@ The client-I/O taxonomy (connect / RPC / bulk) is orthogonal to the ordering
 chain — a bulk transfer legitimately outlasts a provision deadline.
 """
 
+import os
+
 from onyx.server.features.build.configs import (
     PROMPT_SLOT_LEASE_SECONDS,
     SSE_KEEPALIVE_INTERVAL,
@@ -95,11 +97,9 @@ PROVISION_WAIT_SECONDS = 120.0
 # Turn family (roots: the per-origin hard caps)
 # =============================================================================
 
-# Hard caps: the executor aborts past these and persists a user-visible
-# error row. Independent per-origin policies (interactive is a latency
-# promise to a waiting user; scheduled runs are headless).
+# Hard cap: the executor aborts past this and persists a user-visible
+# error row.
 INTERACTIVE_TURN_HARD_CAP_SECONDS = 30 * 60
-SCHEDULED_RUN_HARD_CAP_SECONDS = 60 * 60
 
 # Past the soft budget the turn-budget plugin steers the agent to wrap up
 # (image/opencode-plugins/turn-budget.ts); the remainder is the wrap-up
@@ -107,9 +107,6 @@ SCHEDULED_RUN_HARD_CAP_SECONDS = 60 * 60
 TURN_SOFT_BUDGET_FRACTION = 0.4
 INTERACTIVE_TURN_SOFT_BUDGET_SECONDS = int(
     TURN_SOFT_BUDGET_FRACTION * INTERACTIVE_TURN_HARD_CAP_SECONDS
-)
-SCHEDULED_RUN_SOFT_BUDGET_SECONDS = int(
-    TURN_SOFT_BUDGET_FRACTION * SCHEDULED_RUN_HARD_CAP_SECONDS
 )
 
 # This close to the hard cap the plugin's converge steer escalates to
@@ -121,9 +118,9 @@ TURN_FINAL_NOTICE_MARGIN_SECONDS = 10 * 60
 # its own cap must always finalize itself first.
 TURN_RECLAIM_SLACK_SECONDS = 15 * 60
 
-# Redis TTL of the turn record + active-turn pointer (interactive turns only;
-# scheduled runs live in Postgres rows). Refreshed on every heartbeat; floor
-# is cap + slack so a live turn's admission block never evaporates under it.
+# Redis TTL of the turn record + active-turn pointer. Refreshed on every
+# heartbeat; floor is cap + slack so a live turn's admission block never
+# evaporates under it.
 ACTIVE_TURN_TTL_SECONDS = INTERACTIVE_TURN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS
 
 # Post-terminal retention of the turn record and the client_request_id →
@@ -158,6 +155,13 @@ RUNNER_STALE_AFTER_SECONDS = 6 * SSE_KEEPALIVE_INTERVAL
 # sweeper reclaims its QUEUED row. They must move together or
 # expired-but-unswept / swept-but-unexpired windows appear.
 QUEUE_RESIDENCY_SECONDS = 15 * 60
+
+# The same policy for scheduled-task runs (Celery expires and the stuck-QUEUED
+# sweepers must use the same value). Longer, so a burst of fires at one time
+# drains through the worker pool instead of failing.
+SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS = int(
+    os.environ.get("SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS") or 3 * 60 * 60
+)
 
 # =============================================================================
 # Fixed kit — client I/O taxonomy

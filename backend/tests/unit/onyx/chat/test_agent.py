@@ -3,6 +3,7 @@
 import json
 import queue
 import threading
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from functools import partial
 from unittest.mock import Mock
@@ -17,8 +18,11 @@ from onyx.agents.models import (
     AgentStep,
     RunStatus,
     StepInput,
+    StepResult,
 )
-from onyx.agents.runtime import Run
+from onyx.agents.runtime import Run, RunFailed
+from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
+from onyx.agents.tools import ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -28,15 +32,18 @@ from onyx.chat.models import (
     PersonaPromptConfig,
     PromptMetadata,
 )
-from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.presentation import (
+    ResponsePresenter,
+    project_response,
+    replay_response,
+)
 from onyx.chat.run_store import agent_result_message
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.models import MCPServer
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
+from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.model_response import (
@@ -63,10 +70,14 @@ from onyx.prompts.chat_prompts import (
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
-from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.query_and_chat.streaming_models import (
+    CustomToolStart,
+    OverallStop,
+    Packet,
+)
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile
+from onyx.tools.models import CapabilityEntry, ChatFile, ToolContext
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -104,7 +115,6 @@ def chat_agent(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=lambda text: len(text) // 4,
         is_subagent=is_subagent,
         create_subagent=lambda: chat_agent(
             llm, tools, code_mode=code_mode, is_subagent=True
@@ -116,23 +126,10 @@ def chat_agent(
 @pytest.mark.parametrize(
     "render, observer_fails", [(True, False), (False, False), (True, True)]
 )
-@pytest.mark.parametrize(
-    ("model_name", "deployment_name", "last_has_tools"),
-    [
-        ("test-model", None, True),
-        ("claude-haiku-4-5", None, True),
-        ("qwen3.7-plus", None, False),
-        ("z-ai/glm-5.3", None, False),
-        ("alias", "glm-5.3", False),
-    ],
-)
 def test_chat_preserves_parallel_tool_history_preference_and_packets(
     render: bool,
     observer_fails: bool,
     monkeypatch: pytest.MonkeyPatch,
-    model_name: str,
-    deployment_name: str | None,
-    last_has_tools: bool,
     multiple_operations: bool,
 ) -> None:
     class SecondOperation(EchoTool):
@@ -150,19 +147,6 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
             return "other"
 
     runs: list[Run] = []
-    monkeypatch.setattr(
-        ScriptedLLM,
-        "config",
-        property(
-            lambda self: LLMConfig(
-                model_provider="openai",
-                model_name=model_name,
-                deployment_name=deployment_name,
-                max_input_tokens=self.max_input_tokens,
-                temperature=0,
-            )
-        ),
-    )
     if observer_fails:
 
         def broken_observer(_presenter: ResponsePresenter, _event: AgentEvent) -> None:
@@ -223,8 +207,7 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
-        preferred_tool_id=1,
+        preferred_tool=CapabilityEntry(tool_id=1),
     )
     project = partial(
         project_response,
@@ -251,12 +234,7 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
         assert "The user selected these operations for this request: " in str(
             request["prompt"]
         )
-    if last_has_tools:
-        assert [tool["function"]["name"] for tool in llm.requests[1]["tools"]] == [
-            tool.name for tool in agent.application_tools
-        ]
-    else:
-        assert llm.requests[1]["tools"] is None
+    assert llm.requests[1]["tools"] == llm.requests[0]["tools"]
     assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.NONE
     assert [message.role for message in agent.state.messages] == [
         "user",
@@ -303,6 +281,191 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
     assert isinstance(packets[-1].obj, OverallStop)
 
 
+def _late_call(call_id: str, lead_in: str | None = None) -> Delta:
+    return Delta(
+        content=lead_in,
+        tool_calls=[
+            ChatCompletionDeltaToolCall(
+                id=call_id,
+                index=0,
+                function=ResponseFunctionCall(name="echo", arguments='{"value":"hi"}'),
+            )
+        ],
+    )
+
+
+def test_last_step_call_is_denied_and_the_extra_step_answers() -> None:
+    runs: list[Run] = []
+    output: queue.Queue[Packet] = queue.Queue()
+    llm = ScriptedLLM(
+        [_late_call("late-call", "Let me search for that."), Delta(content="Answer")]
+    )
+    agent = chat_agent(llm, [EchoTool()])
+    result = run_agent(
+        agent,
+        runs=runs,
+        messages=[UserMessage(content="Hello")],
+        max_steps=1,
+        listener=ResponsePresenter(
+            Emitter(model_idx=0, publish=output.put_nowait)
+        ).consume,
+    )
+    denied, extra = llm.requests
+    assert [tool["function"]["name"] for tool in denied["tools"]] == [
+        tool.name for tool in agent.application_tools
+    ]
+    assert extra["tools"] == denied["tools"]
+    assert denied["tool_choice"] == extra["tool_choice"] == ToolChoiceOptions.NONE
+    assert NO_TOOL_CAN_RUN_RESULT in str(extra["prompt"])
+    rejected = agent.state.messages[2]
+    assert isinstance(rejected, ToolResultMessage)
+    assert rejected.tool_call_id == "late-call" and rejected.is_error
+    assert rejected.text == NO_TOOL_CAN_RUN_RESULT
+    assert result.stop_reason == RunStatus.COMPLETE
+    assert result.output.text == "Answer"
+    snapshot = runs[-1].snapshot()
+    assert snapshot is not None and snapshot.answer_step_index == 1
+    projection = project_response(snapshot, tool_ids={})
+    assert projection.answer == "Answer"
+    assert projection.response is not None
+    # The denied call shows as a closed tool card, live and on replay.
+    live = [output.get_nowait() for _ in range(output.qsize())]
+    replayed = replay_response(projection.response, {}, projection.presentation, {})
+    cards = [
+        [
+            type(packet.obj).__name__
+            for packet in packets
+            if packet.placement
+            == next(
+                card.placement
+                for card in packets
+                if isinstance(card.obj, CustomToolStart)
+            )
+        ]
+        for packets in (live, replayed)
+    ]
+    assert cards[0] == cards[1]
+    assert cards[0][0] == "CustomToolStart" and cards[0][-1] == "SectionEnd"
+
+
+def test_extra_step_without_an_answer_fails_the_turn() -> None:
+    llm = ScriptedLLM([_late_call("late-call"), _late_call("again", " ")])
+    with pytest.raises(RunFailed):
+        run_agent(
+            chat_agent(llm, [EchoTool()]),
+            messages=[UserMessage(content="Hello")],
+            max_steps=1,
+        )
+    assert len(llm.requests) == 2
+
+
+def test_after_step_runs_on_the_denied_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: list[tuple[int, list[str]]] = []
+    after_step = ChatAgent._after_step
+
+    def observe(agent: ChatAgent, result: StepResult) -> bool:
+        observed.append(
+            (result.step.index, [message.text for message in result.tool_results])
+        )
+        return after_step(agent, result)
+
+    monkeypatch.setattr(ChatAgent, "_after_step", observe)
+    llm = ScriptedLLM([_late_call("late-call"), Delta(content="Answer")])
+    run_agent(
+        chat_agent(llm, [EchoTool()]),
+        messages=[UserMessage(content="Hello")],
+        max_steps=1,
+    )
+    assert observed == [(0, [NO_TOOL_CAN_RUN_RESULT]), (1, [])]
+
+
+_XML_CALL = (
+    '<function_calls><invoke name="echo"><parameter name="value">hi</parameter>'
+    "</invoke></function_calls>"
+)
+
+
+@pytest.mark.parametrize(
+    ("provider", "model_name", "sent_choice"),
+    [
+        ("openai", "qwen3.7-plus", ToolChoiceOptions.AUTO),
+        ("openai", "z-ai/glm-5.3", ToolChoiceOptions.AUTO),
+        ("ollama_chat", "llama3.2", ToolChoiceOptions.AUTO),
+        ("bedrock", "us.amazon.nova-pro-v1:0", ToolChoiceOptions.AUTO),
+        ("openai", "gpt-5", ToolChoiceOptions.NONE),
+    ],
+)
+def test_last_step_text_tool_call_follows_the_sent_tool_choice(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    model_name: str,
+    sent_choice: ToolChoiceOptions,
+) -> None:
+    """Under AUTO a text tool call is denied and the extra step answers; under
+    NONE the provider forbade calls, so the text is the answer."""
+    monkeypatch.setattr(
+        ScriptedLLM,
+        "config",
+        property(
+            lambda self: LLMConfig(
+                model_provider=provider,
+                model_name=model_name,
+                max_input_tokens=self.max_input_tokens,
+                temperature=0,
+            )
+        ),
+    )
+
+    def never_run(*_args: object, **_kwargs: object) -> ToolResult:
+        raise AssertionError("A call on the last step ran")
+
+    monkeypatch.setattr(EchoTool, "_run", never_run)
+    llm = ScriptedLLM([Delta(content=_XML_CALL), Delta(content="Answer")])
+    agent = chat_agent(llm, [EchoTool()])
+    result = run_agent(agent, messages=[UserMessage(content="Hello")], max_steps=1)
+
+    assert llm.requests[0]["tool_choice"] == sent_choice
+    if sent_choice == ToolChoiceOptions.NONE:
+        assert len(llm.requests) == 1
+        assert result.output.text == _XML_CALL
+        return
+    assert len(llm.requests) == 2
+    denied = agent.state.messages[2]
+    assert isinstance(denied, ToolResultMessage)
+    assert denied.is_error and denied.text == NO_TOOL_CAN_RUN_RESULT
+    assert result.stop_reason == RunStatus.COMPLETE
+    assert result.output.text == "Answer"
+
+
+def test_last_step_xml_without_a_tool_call_is_the_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ScriptedLLM,
+        "config",
+        property(
+            lambda self: LLMConfig(
+                model_provider="ollama_chat",
+                model_name="llama3.2",
+                max_input_tokens=self.max_input_tokens,
+                temperature=0,
+            )
+        ),
+    )
+    text = '<function_calls><invoke name="unknown"></invoke></function_calls>'
+    llm = ScriptedLLM([Delta(content=text)])
+    result = run_agent(
+        chat_agent(llm, [EchoTool()]),
+        messages=[UserMessage(content="Hello")],
+        max_steps=1,
+    )
+
+    assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.AUTO
+    assert len(llm.requests) == 1
+    assert result.stop_reason == RunStatus.COMPLETE
+    assert result.output.text == text
+
+
 class _PythonTool(EchoTool):
     @property
     def id(self) -> int:
@@ -334,24 +497,31 @@ def test_search_stages_files_only_when_python_needs_them(
         file_id="source-file",
     )
     search = SearchDocsResponse(
-        search_docs=[document], citation_mapping={1: "reference"}
+        search_docs=[document],
+        citation_mapping={1: "reference"},
+        openable_file_names={"source-file": "reference.txt"},
     )
     staged = ChatFile(
         filename="reference.txt", content=b"Evidence", file_id="source-file"
     )
-    loaded: list[SearchDoc] = []
+    loaded: dict[str, str] = {}
 
-    def stage(docs: list[SearchDoc]) -> list[ChatFile]:
-        loaded.extend(docs)
-        return [staged] if docs else []
+    def stage(file_names: Mapping[str, str]) -> list[ChatFile]:
+        loaded.update(file_names)
+        return [staged] if file_names else []
 
     monkeypatch.setattr(
         "onyx.chat.agent.build_python_chat_files_from_search_docs", stage
     )
-    monkeypatch.setattr(
-        "tests.unit.onyx.agents.fakes.EchoTool.run",
-        lambda *_args, **_kwargs: ToolResult(details=search, content="Evidence [1]"),
-    )
+    contexts: list[ToolContext] = []
+
+    def run(
+        _tool: EchoTool, _invocation: ToolInvocation, context: ToolContext
+    ) -> ToolResult:
+        contexts.append(context)
+        return ToolResult(details=search, content="Evidence [1]")
+
+    monkeypatch.setattr("tests.unit.onyx.agents.fakes.EchoTool.run", run)
     llm = ScriptedLLM(
         [
             *(
@@ -387,11 +557,18 @@ def test_search_stages_files_only_when_python_needs_them(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         chat_files=[staged] if already_available else [],
     )
     run_agent(agent, messages=[UserMessage(content="Find evidence twice")], max_steps=3)
-    assert loaded == ([document] if python_enabled and not already_available else [])
+    # The search tool names staged files only when the chat stages them.
+    assert [context.python_stages_search_files for context in contexts] == [
+        python_enabled
+    ] * 2
+    assert loaded == (
+        {"source-file": "reference.txt"}
+        if python_enabled and not already_available
+        else {}
+    )
     assert agent.chat_files == ([staged] if python_enabled or already_available else [])
     results = [
         item for item in agent.state.messages if isinstance(item, ToolResultMessage)
@@ -450,7 +627,6 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     runs: list[Run] = []
     run_agent(
@@ -482,7 +658,7 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
     stage_calls = 0
 
-    def stage(_docs: list[SearchDoc]) -> list[ChatFile]:
+    def stage(_file_names: Mapping[str, str]) -> list[ChatFile]:
         nonlocal stage_calls
         stage_calls += 1
         entered.set()
@@ -531,7 +707,6 @@ def test_cancelled_source_file_staging_drains_before_completion(
         None,
         None,
         llm,
-        len,
     )
     project = partial(
         project_response,
@@ -633,7 +808,6 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     for _ in range(2):
         output: queue.Queue[Packet] = queue.Queue()
@@ -737,7 +911,6 @@ def test_context_file_citations_keep_history_numbers_across_turns(
             persona=None,
             user_memory_context=None,
             llm=FakeModelClient(reply),
-            token_counter=len,
         )
         # Resume decodes feature state separately from the retained conversation.
         feature.restore_state(
@@ -814,7 +987,6 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         ),
         user_memory_context=None,
         llm=ScriptedLLM([]),
-        token_counter=len,
         reminders_enabled=False,
     )
     prepared = agent._prepare_step(
@@ -894,7 +1066,6 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
                 memories=[f"{name} works on billing."],
             ),
             llm=ScriptedLLM([]),
-            token_counter=len,
             inject_memories_in_prompt=inject_memories,
             reminders_enabled=False,
         )
@@ -973,14 +1144,13 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
         persona=None,
         user_memory_context=None,
         llm=FakeModelClient(reply),
-        token_counter=len,
         reminders_enabled=False,
     )
-    original = make_agent(messages=[], preferred_tool_id=1)
+    original = make_agent(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
     saved = TypeAdapter(dict[str, JsonValue]).validate_json(
         original.capture_state().model_dump_json()
     )
-    restored = make_agent(messages=[], preferred_tool_id=1)
+    restored = make_agent(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
     restored.restore_state(saved)
     outcome = run_agent(
         restored, messages=[UserMessage(content="Question")], max_steps=2
@@ -1068,7 +1238,7 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
 def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) -> None:
     configured = (
         CustomTool(
-            id=42,
+            integration_id=42,
             method_spec=MethodSpec(
                 name="list_agents",
                 raw_name="list_agents",
@@ -1081,13 +1251,18 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
         )
         if custom
         else MCPTool(
-            tool_id=42,
-            mcp_server=MCPServer(
-                id=42,
-                name="remote",
-                server_url="https://example.com",
-                oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
-                oauth_cimd_enabled=True,
+            integration_id=42,
+            integration_name="remote",
+            integration_description=None,
+            server_url="https://example.com",
+            transport=None,
+            acting_user_id=None,
+            credentials=CallCredentials(
+                integration_id=42,
+                auth_method=None,
+                connection_id=None,
+                connection_user_id=None,
+                headers={},
             ),
             tool_name="list_agents",
             tool_description="List remote agents",
@@ -1143,7 +1318,6 @@ def test_child_notification_remaps_citations() -> None:
     ]
     completions = [
         AgentCompletion(
-            agent_id=agent_id,
             agent_path="/root/research",
             run_id=run_id,
             status=RunStatus.COMPLETE,
@@ -1152,9 +1326,9 @@ def test_child_notification_remaps_citations() -> None:
                 metadata=ChatMessageMetadata(sources={1: document}),
             ),
         )
-        for agent_id, run_id, document in (
-            ("child", "123", child_document),
-            ("other-child", "456", other_child_document),
+        for run_id, document in (
+            ("123", child_document),
+            ("456", other_child_document),
         )
     ]
 
@@ -1167,13 +1341,9 @@ def test_child_notification_remaps_citations() -> None:
             )
         ]
         assert len(notifications) == 2
-        for notification, completion, citation in zip(
-            notifications, completions, (2, 3), strict=True
-        ):
+        for notification, citation in zip(notifications, (2, 3), strict=True):
             assert json.loads(notification.text.split("\n", 1)[1]) == {
                 "agent": "/root/research",
-                "agent_id": completion.agent_id,
-                "run_id": completion.run_id,
                 "status": "complete",
                 "answer": f"Child evidence [{citation}]",
             }
@@ -1201,7 +1371,6 @@ def test_child_notification_remaps_citations() -> None:
         persona=None,
         user_memory_context=None,
         llm=FakeModelClient(reply),
-        token_counter=len,
     )
     coordinator = AgentCoordinator(
         ownership=FakeRunOwnership(

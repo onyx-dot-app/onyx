@@ -1,6 +1,6 @@
 import io
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -8,14 +8,15 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.models import (
     AvailableFiles,
+    ContextUserFiles,
     FileContextResult,
+    PlacedChatFiles,
     PromptMetadata,
     SearchParams,
 )
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.db.enums import UserFileStatus
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import ChatMessage, Persona, UserFile
 from onyx.db.projects import get_user_files_from_project
@@ -40,11 +41,18 @@ from onyx.file_store.utils import (
 from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import UserMessage
 from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
+from onyx.server.features.build.sandbox.harness_base import (
+    AGENT_FILES_DIR,
+    CHAT_FILES_DIR,
+    PROJECT_FILES_DIR,
+    chat_file_name,
+)
 from onyx.server.query_and_chat.chat_utils import (
-    is_code_interpreter_staged_mime_type,
+    is_code_interpreter_staged_file,
     mime_type_to_chat_file_type,
 )
 from onyx.tools.models import ChatFile, SearchToolUsage
+from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -112,7 +120,7 @@ def load_context_user_files_for_tools(
     user_files: list[UserFileMetadata],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
-    """Stage tabular and Office project/persona files for code-interpreter as
+    """Stage tabular, Office and code project/persona files for code-interpreter as
     lazy ChatFile instances.
 
     Raw bytes are not read here; each ChatFile carries a loader closure that
@@ -131,7 +139,7 @@ def load_context_user_files_for_tools(
             continue
         seen_file_ids.add(user_file.file_id)
 
-        if not is_code_interpreter_staged_mime_type(user_file.file_type):
+        if not is_code_interpreter_staged_file(user_file.name, user_file.file_type):
             continue
 
         filename = _deduped_filename(
@@ -168,26 +176,46 @@ def resolve_context_user_files(
     project_id: int | None,
     user_id: UUID | None,
     db_session: Session,
-) -> list[UserFile]:
-    """Combine project files with a custom persona's files, without duplicates."""
-    user_files: list[UserFile] = []
-    if project_id:
-        user_files.extend(
-            get_user_files_from_project(
-                project_id=project_id,
-                user_id=user_id,
-                db_session=db_session,
-            )
+) -> ContextUserFiles:
+    agent = list(persona.user_files) if persona.id != DEFAULT_PERSONA_ID else []
+    seen = {user_file.id for user_file in agent}
+    project: list[UserFile] = []
+    for user_file in (
+        get_user_files_from_project(
+            project_id=project_id, user_id=user_id, db_session=db_session
         )
-    if persona.id != DEFAULT_PERSONA_ID and persona.user_files:
-        user_files.extend(persona.user_files)
-    seen_ids: set[UUID] = set()
-    selected_files: list[UserFile] = []
-    for user_file in user_files:
-        if user_file.id not in seen_ids:
-            seen_ids.add(user_file.id)
-            selected_files.append(user_file)
-    return selected_files
+        if project_id
+        else []
+    ):
+        if user_file.id not in seen:
+            seen.add(user_file.id)
+            project.append(user_file)
+    return ContextUserFiles(project=project, agent=agent)
+
+
+def place_chat_files(
+    uploads: Sequence[UserFile], context_files: ContextUserFiles
+) -> PlacedChatFiles:
+    """The chat files in the chat's sandbox, with their paths relative to the
+    chat's working directory: the chat's uploads (on every branch) in
+    attachments/, and the project's and the agent's files in
+    attachments/project/ and attachments/agent/.
+
+    Each file's name in its directory is `chat_file_name`'s."""
+    vm_chat_files: list[VmChatFile] = []
+    upload_paths: dict[str, str] = {}
+    for directory, user_files in (
+        (CHAT_FILES_DIR, uploads),
+        (PROJECT_FILES_DIR, context_files.project),
+        (AGENT_FILES_DIR, context_files.agent),
+    ):
+        for user_file in user_files:
+            file_id = user_file.file_id
+            path = f"{directory}/{chat_file_name(file_id, user_file.name)}"
+            vm_chat_files.append(VmChatFile(file_id=file_id, path=path))
+            if directory == CHAT_FILES_DIR:
+                upload_paths[file_id] = path
+    return PlacedChatFiles(files=vm_chat_files, upload_paths=upload_paths)
 
 
 def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
@@ -251,10 +279,12 @@ def extract_context_files(
         if DISABLE_VECTOR_DB:
             overflow_tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
         else:
+            # Search cannot find files that skipped indexing, so list them.
             overflow_tool_metadata = [
                 _build_tool_metadata(uf)
                 for uf in user_files
                 if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
+                or uf.status == UserFileStatus.SKIPPED
             ]
         return ExtractedContextFiles(
             file_texts=[],
@@ -344,9 +374,10 @@ def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata.model_copy(
         update={
-            "staged_for_tools": is_code_interpreter_staged_mime_type(
-                user_file.file_type
-            )
+            "staged_for_tools": is_code_interpreter_staged_file(
+                user_file.name, user_file.file_type
+            ),
+            "indexed": user_file.status != UserFileStatus.SKIPPED,
         }
     )
 
@@ -395,14 +426,18 @@ def build_file_context(
     token_count: int = 0,
     approx_char_count: int | None = None,
     content_pending: bool = False,
+    indexed: bool = True,
+    vm_path: str | None = None,
 ) -> FileContextResult:
-    """Build file content and tool metadata with the same file ID."""
+    """Build file content and tool metadata with the same file ID. `vm_path`:
+    the file's path in the chat's sandbox, if it has one."""
+    in_vm = "" if vm_path is None else f"\nIn the VM: {vm_path}"
     if file_type.use_metadata_only():
         message_text: str = (
-            f"File: {filename} (id={tool_file_id})\n"
+            f"File: {filename} (id={tool_file_id}){in_vm}\n"
             "Use the read_file or python tools to access this file's contents."
             if DISABLE_VECTOR_DB
-            else f"File: {filename}\n"
+            else f"File: {filename}{in_vm}\n"
             "This file's contents are not included here. Use your available "
             "tools to read it. Do not guess the contents and do not search "
             "the web for this file."
@@ -420,7 +455,7 @@ def build_file_context(
         notice = (
             CONTENT_PENDING_NOTICE if content_pending else CONTENT_UNAVAILABLE_NOTICE
         )
-        message_text = f"File: {filename}\n{notice}\nEnd of File"
+        message_text = f"File: {filename}{in_vm}\n{notice}\nEnd of File"
         message = UserMessage(
             content=message_text,
             metadata=PromptMetadata(
@@ -428,13 +463,15 @@ def build_file_context(
             ),
         )
     else:
-        message_text = f"File: {filename}\n{content_text or ''}\nEnd of File"
+        message_text = f"File: {filename}{in_vm}\n{content_text or ''}\nEnd of File"
         message = UserMessage(
             content=message_text,
             metadata=PromptMetadata(
-                token_count=token_count,
+                token_count=token_count + len(in_vm) // APPROX_CHARS_PER_TOKEN,
                 file_id=tool_file_id,
-                compaction_text=f"Attached file: {filename} (id={tool_file_id}). Contents omitted from summary input.",
+                compaction_text=f"Attached file: {filename} (id={tool_file_id})."
+                + ("" if vm_path is None else f" In the VM: {vm_path}.")
+                + " Contents omitted from summary input.",
             ),
         )
 
@@ -446,6 +483,7 @@ def build_file_context(
             if approx_char_count is not None
             else len(content_text or "")
         ),
+        indexed=indexed,
     )
 
     return FileContextResult(message=message, tool_metadata=metadata)
@@ -487,6 +525,7 @@ def _load_chat_file(
     token_count: int,
     content_pending: bool,
     include_text: bool = True,
+    indexed: bool = True,
 ) -> ChatLoadedFile:
     """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
@@ -576,6 +615,7 @@ def _load_chat_file(
         token_count=token_count,
         loader=_load_content,
         content_pending=content_pending,
+        indexed=indexed,
     )
 
 
@@ -589,7 +629,11 @@ def load_chat_files(
     if text_file_ids is not None and not text_file_ids:
         return [
             _load_chat_file(
-                item.descriptor, item.token_count, item.content_pending, False
+                item.descriptor,
+                item.token_count,
+                item.content_pending,
+                False,
+                item.indexed,
             )
             for item in inputs
         ]
@@ -607,6 +651,7 @@ def load_chat_files(
                         item.token_count,
                         item.content_pending,
                         text_file_ids is None or item.descriptor["id"] in text_file_ids,
+                        item.indexed,
                     ),
                 )
                 for item in inputs
@@ -617,51 +662,22 @@ def load_chat_files(
 
 
 def build_python_chat_files_from_search_docs(
-    search_docs: list[SearchDoc],
+    file_names: Mapping[str, str],
 ) -> list[ChatFile]:
-    """Load connector-backed search files for the code interpreter."""
-    if not search_docs:
-        return []
-
+    """Load search result files for the code interpreter, by file ID, under
+    the names that the search results give them
+    (`SearchDocsResponse.openable_file_names`)."""
     file_store = get_default_file_store()
 
     chat_files: list[ChatFile] = []
-    seen_file_ids: set[str] = set()
-    for doc in search_docs:
-        if not doc.file_id or doc.file_id in seen_file_ids:
-            continue
-        seen_file_ids.add(doc.file_id)
-
+    for file_id, filename in file_names.items():
         try:
-            record = file_store.read_file_record(doc.file_id)
+            content = file_store.read_file(file_id, mode="b").read()
         except Exception as e:
             logger.warning(
-                "file_id=%r not found in file store (%s); skipping.", doc.file_id, e
+                "Failed to read bytes for file_id=%r: %s; skipping.", file_id, e
             )
             continue
-
-        if record.file_origin not in (
-            FileOrigin.CONNECTOR,
-            FileOrigin.CONNECTOR_FILE_UPLOAD,
-        ):
-            logger.warning(
-                "file_id=%r has origin=%r, not eligible for code-interpreter staging; skipping.",
-                doc.file_id,
-                record.file_origin,
-            )
-            continue
-
-        try:
-            content = file_store.read_file(doc.file_id, mode="b").read()
-        except Exception as e:
-            logger.warning(
-                "Failed to read bytes for file_id=%r: %s; skipping.", doc.file_id, e
-            )
-            continue
-
-        filename = sandbox_filename_for_document(doc.semantic_identifier, doc.file_id)
-        chat_files.append(
-            ChatFile(filename=filename, content=content, file_id=doc.file_id)
-        )
+        chat_files.append(ChatFile(filename=filename, content=content, file_id=file_id))
 
     return chat_files

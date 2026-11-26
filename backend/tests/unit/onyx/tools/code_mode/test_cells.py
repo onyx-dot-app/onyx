@@ -37,6 +37,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCallStarted,
     CodeModeExecutionResult,
     CodeModeStdout,
+    ParkedProgram,
     SandboxLimits,
     SandboxResult,
 )
@@ -77,7 +78,7 @@ class Response:
             cells=self.cells,
             limits=limits,
         )
-        self.wait_tool = WaitCodeTool(self.cells)
+        self.wait_tool = WaitCodeTool(self.cells, self.execute.program)
         self.cancellation = CancellationSignal()
         self.recorded: list[Message] = list(history)
         self.events: dict[str, list[BaseModel]] = {}
@@ -182,7 +183,7 @@ def test_yield_returns_output_so_far_and_wait_returns_only_new_output() -> None:
     response = Response()
     started = time.monotonic()
     first = response.run(
-        "print('a')\nawait gate(value='x')\nprint('b')\n", yield_time_ms=1_000
+        "print('a')\nawait tools.gate(value='x')\nprint('b')\n", yield_time_ms=1_000
     )
     assert time.monotonic() - started >= 0.9
     details = _details(first)
@@ -212,7 +213,7 @@ def test_yield_control_ends_the_observation_at_once() -> None:
     response = Response()
     started = time.monotonic()
     result = response.run(
-        "print('a')\nyield_control()\nawait gate(value='x')\nprint('b')\n"
+        "print('a')\nyield_control()\nawait tools.gate(value='x')\nprint('b')\n"
     )
     # Far less than the default yield time.
     assert time.monotonic() - started < DEFAULT_EXECUTE_YIELD_MS / 2000
@@ -230,9 +231,9 @@ def test_events_between_observations_go_to_the_next_one() -> None:
         "async def tick():\n"
         "    await asyncio.sleep(0.1)\n"
         "    yield_control()\n"
-        "a, _ = await asyncio.gather(gate(value='x'), tick())\n"
+        "a, _ = await asyncio.gather(tools.gate(value='x'), tick())\n"
         "print(a)\n"
-        "await echo(value='y')\n"
+        "await tools.echo(value='y')\n"
     )
     [running] = _details(first).calls
     assert (running.index, running.state, running.is_error) == (0, "running", False)
@@ -374,6 +375,24 @@ def test_running_cell_limit_is_process_wide(monkeypatch: pytest.MonkeyPatch) -> 
     assert _details(Response().run("1\n")).status == "completed"
 
 
+def test_a_continuing_program_takes_the_next_slot_before_new_cells() -> None:
+    running = cells_module._RunningCells(1)
+    assert running.acquire("tenant")
+    cancellation = CancellationSignal()
+    continued = start_thread_future(
+        lambda: running.acquire("tenant", wait=cancellation), name="continued"
+    )
+    until(lambda: running._waiting == 1)
+    assert not running.acquire("tenant")
+
+    running.release("tenant", 0.0)
+    # The freed slot goes to the continuing program, not to a new cell.
+    assert not running.acquire("tenant")
+    assert continued.result(timeout=10)
+    running.release("tenant", 0.0)
+    assert running.acquire("tenant")
+
+
 def test_a_cell_whose_driver_cannot_start_ends_and_frees_its_slot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -393,6 +412,28 @@ def test_a_cell_whose_driver_cannot_start_ends_and_frees_its_slot(
     assert time.monotonic() - started < 1
     # The failed cell gave its slot back.
     assert _details(Response().run("1\n")).status == "completed"
+
+
+def test_a_cell_gives_its_slot_back_to_the_budget_it_took_it_from(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    taken = cells_module._RunningCells(1)
+    monkeypatch.setattr(cells_module, "_running_cells", taken)
+    response = Response()
+    running = response.run("await tools.gate(value='x')\n", yield_time_ms=100)
+    assert _details(running).status == "running"
+    # Another budget replaces the process-wide one while the cell runs.
+    replacement = cells_module._RunningCells(1)
+    monkeypatch.setattr(cells_module, "_running_cells", replacement)
+    assert replacement.acquire("tenant")
+    # The slots set the process-wide CELLS_RUNNING gauge; later tests expect 0.
+    try:
+        response.gate.set()
+        until(lambda: taken.acquire("tenant"))
+        taken.release("tenant", 0.0)
+        assert not replacement.acquire("tenant")
+    finally:
+        replacement.release("tenant", 0.0)
 
 
 def test_commits_follow_completion_order_and_saved_records_fold_to_the_same_store() -> (
@@ -422,7 +463,7 @@ def test_commits_follow_completion_order_and_saved_records_fold_to_the_same_stor
 
 def test_same_step_execute_and_wait_fold_to_the_live_store() -> None:
     response = Response()
-    response.run("yield_control()\nawait gate(value='x')\nstore('k', 'a')\n")
+    response.run("yield_control()\nawait tools.gate(value='x')\nstore('k', 'a')\n")
     # One step calls execute_code and wait_code; both see the same history. The
     # calls run one after the other so that A's commit lands before B's, but the
     # model's order saves B's result first.
@@ -446,7 +487,7 @@ def test_a_commit_keeps_writes_that_change_the_store_at_commit_time() -> None:
     response.run("store('x', 1)\n")
     # A starts with x == 1 and no y; B changes both before A ends.
     response.run(
-        "yield_control()\nawait gate(value='g')\nstore('x', 1)\nstore('y', None)\n"
+        "yield_control()\nawait tools.gate(value='g')\nstore('x', 1)\nstore('y', None)\n"
     )
     response.run("store('x', 2)\nstore('y', 5)\n")
     response.gate.set()
@@ -468,7 +509,7 @@ def test_concurrent_commits_together_stay_within_the_store_limits(
     monkeypatch.setattr(store_module, limit, 100)
     response = Response()
     # A and B start on the same empty store; each fits, both do not.
-    response.run("yield_control()\nawait gate(value='g')\nstore('a', 'x' * 60)\n")
+    response.run("yield_control()\nawait tools.gate(value='g')\nstore('a', 'x' * 60)\n")
     b = _details(response.run("store('b', 'y' * 60)\n")).commit
     assert b is not None
     response.gate.set()
@@ -492,7 +533,7 @@ def test_a_write_equal_to_the_start_store_reports_its_discard(
     response = Response()
     response.run("store('k', 'v')\n")
     # A writes the value it started with; B then replaces it and nears the limit.
-    response.run("yield_control()\nawait gate(value='g')\nstore('k', 'v')\n")
+    response.run("yield_control()\nawait tools.gate(value='g')\nstore('k', 'v')\n")
     assert _details(response.run("store('k', 'y' * 60)\n")).commit is not None
     response.gate.set()
     waited = response.wait(2)
@@ -508,7 +549,7 @@ def test_a_write_equal_to_the_start_store_reports_its_discard(
 def test_closing_record_lists_what_ran_after_the_last_observation() -> None:
     response = Response()
     first = response.run(
-        "import asyncio\nyield_control()\nawait echo(value='x')\nprint('after')\n"
+        "import asyncio\nyield_control()\nawait tools.echo(value='x')\nprint('after')\n"
         "store('done', True)\n"
     )
     until(lambda: response.ended(1))
@@ -546,9 +587,30 @@ def test_closing_record_lists_what_ran_after_the_last_observation() -> None:
     assert _details(later.run("load('done')\n")).result == "True"
 
 
+def test_a_closing_record_keeps_the_observation_budget_and_its_full_output() -> None:
+    response = Response()
+    invocation = response.invocation(
+        {"code": "yield_control()\nprint('z' * 1_500)\n", "max_output_chars": 300}
+    )
+    outcome = response.execute.run(invocation, ToolContext())
+    assert isinstance(outcome, ToolResult)
+    response.record(invocation, outcome)
+    until(lambda: response.ended(1))
+
+    amended = response.finish()["call_1"]
+
+    closing = _details(amended).closing
+    assert closing is not None and len(closing.stdout) < 400
+    assert "z" * 1_500 not in amended.content
+    assert isinstance(amended.full_value, str)
+    assert "z" * 1_500 in amended.full_value
+
+
 def test_a_failed_program_lists_the_calls_of_every_observation() -> None:
     response = Response()
-    response.run("await echo(value='x')\nyield_control()\nraise ValueError('boom')\n")
+    response.run(
+        "await tools.echo(value='x')\nyield_control()\nraise ValueError('boom')\n"
+    )
     failed = response.wait(1)
     assert _details(failed).status == "failed"
     assert _details(failed).calls == []
@@ -557,7 +619,9 @@ def test_a_failed_program_lists_the_calls_of_every_observation() -> None:
 
 def test_closing_record_lists_earlier_calls_of_a_stopped_program() -> None:
     response = Response()
-    response.run("await echo(value='x')\nyield_control()\nwhile True:\n    pass\n")
+    response.run(
+        "await tools.echo(value='x')\nyield_control()\nwhile True:\n    pass\n"
+    )
     amended = response.finish()["call_1"]
     assert amended.content.endswith(
         "Cell 1 stopped when the response ended.\n\nTool calls:\n[0] echo: ok\n"
@@ -662,7 +726,7 @@ def test_a_call_waiting_for_a_sequential_tool_stops_with_its_cell() -> None:
     response = Response()
     response.run(
         "import asyncio\nyield_control()\n"
-        "await asyncio.gather(seq(value='a'), seq(value='b'))\n"
+        "await asyncio.gather(tools.seq(value='a'), tools.seq(value='b'))\n"
     )
     until(lambda: len(response.cell(1)._calls) == 2)
     assert _details(response.wait(1, terminate=True)).status == "terminated"
@@ -676,8 +740,8 @@ def test_citations_do_not_collide_across_observations() -> None:
     response = Response()
     context = ToolContext(next_citation_num=1)
     first = response.run(
-        "await web_search(queries=['a'])\nyield_control()\nimport asyncio\n"
-        "await asyncio.sleep(0.2)\nawait web_search(queries=['b'])\n",
+        "await tools.web_search(queries=['a'])\nyield_control()\nimport asyncio\n"
+        "await asyncio.sleep(0.2)\nawait tools.web_search(queries=['b'])\n",
         context=context,
     )
     second = _details(response.wait(1))
@@ -781,7 +845,7 @@ def test_capacity_metrics_follow_one_program() -> None:
 
     response = Response()
     running = response.run(
-        "await gate(value='x')\nprint('done')\n", yield_time_ms=1_000
+        "await tools.gate(value='x')\nprint('done')\n", yield_time_ms=1_000
     )
     assert _details(running).status == "running"
     # A lone waiting program keeps its worker; its call holds a thread.
@@ -805,7 +869,7 @@ def test_a_crash_keeps_only_commits_whose_earlier_commits_are_saved() -> None:
     response.run("yield_control()\nstore('a', 1)\n")
     until(lambda: response.ended(1))
     # Cell 2 is stuck on a call; cell 3 does not wait for it.
-    stuck = response.run("await gate(value='x')\n", yield_time_ms=100)
+    stuck = response.run("await tools.gate(value='x')\n", yield_time_ms=100)
     assert _details(stuck).status == "running"
     started = time.monotonic()
     dependent = _details(response.run("store('b', load('a') + 1)\n"))
@@ -832,7 +896,7 @@ def test_the_first_program_after_a_crash_reports_the_dropped_writes_once() -> No
     # Cell 1 commits after its first observation; no saved record reports it.
     response.run("yield_control()\nstore('a', 1)\n")
     until(lambda: response.ended(1))
-    stuck = response.run("await gate(value='x')\n", yield_time_ms=100)
+    stuck = response.run("await tools.gate(value='x')\n", yield_time_ms=100)
     assert _details(stuck).status == "running"
     # Cell 3's commit follows cell 1's, so the crash drops it.
     assert _details(response.run("store('b', load('a') + 1)\n")).commit is not None
@@ -867,7 +931,7 @@ def test_a_cell_rejected_as_busy_leaves_the_dropped_writes_note_to_the_next(
     response = Response()
     response.run("yield_control()\nstore('a', 1)\n")
     until(lambda: response.ended(1))
-    stuck = response.run("await gate(value='x')\n", yield_time_ms=100)
+    stuck = response.run("await tools.gate(value='x')\n", yield_time_ms=100)
     assert _details(stuck).status == "running"
     assert _details(response.run("store('b', load('a') + 1)\n")).commit is not None
     response.gate.set()
@@ -908,7 +972,7 @@ def test_tenant_counters_follow_one_program_and_one_rejection(
     try:
         before = samples()
         response = Response()
-        running = response.run("await gate(value='x')\n", yield_time_ms=300)
+        running = response.run("await tools.gate(value='x')\n", yield_time_ms=300)
         assert _details(running).status == "running"
         refused = Response().run("1\n")
         response.gate.set()
@@ -933,7 +997,7 @@ def test_a_cell_that_ends_after_its_closing_record_commits_nothing(
     release = threading.Event()
     execute = cells_module.execute_program
 
-    def late_end(code: str, **kwargs: Any) -> SandboxResult:
+    def late_end(code: str, **kwargs: Any) -> SandboxResult | ParkedProgram:
         """Ignores the stop, then completes after its cell closed."""
         if code != "late":
             return execute(code, **kwargs)

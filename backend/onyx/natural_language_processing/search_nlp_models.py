@@ -1,13 +1,13 @@
 import asyncio
+import hashlib
 import json
 import threading
 import time
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from functools import partial, wraps
 from types import TracebackType
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 import httpx
 import requests
@@ -16,18 +16,14 @@ from aiobotocore.session import get_session
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
 from httpx import HTTPError
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import SecretStr
 from requests import JSONDecodeError, RequestException, Response
 from tenacity import (
     retry,
     retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
-    wait_exponential,
-    wait_random,
 )
-from tenacity.wait import wait_base
-from voyageai.error import RateLimitError as VoyageRateLimitError
 
 from onyx.configs.app_configs import (
     INDEXING_EMBEDDING_MODEL_NUM_THREADS,
@@ -43,7 +39,6 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.natural_language_processing.constants import (
     DEFAULT_COHERE_MODEL,
     DEFAULT_OPENAI_MODEL,
-    DEFAULT_VERTEX_MODEL,
     DEFAULT_VOYAGE_MODEL,
     EmbeddingModelTextType,
 )
@@ -53,12 +48,21 @@ from onyx.natural_language_processing.embedding_auth import (
     VertexEmbeddingAuth,
     build_embedding_auth,
 )
+from onyx.natural_language_processing.embedding_providers.gemini import (
+    format_gemini_embedding_text,
+    is_gemini_embedding_2_model,
+)
+from onyx.natural_language_processing.embedding_providers.vertex import (
+    embed_with_vertex,
+)
 from onyx.natural_language_processing.embedding_rate_limit import (
-    EmbeddingRateLimiter,
     EmbeddingWaitTimeoutError,
     EmbeddingWaitTotals,
     load_embedding_rate_limiter,
-    wait_sleeps,
+)
+from onyx.natural_language_processing.embedding_request_policy import (
+    EmbeddingRequestPolicy,
+    EmbeddingRetryBackoff,
 )
 from onyx.natural_language_processing.exceptions import (
     CohereBillingLimitError,
@@ -87,7 +91,6 @@ from shared_configs.configs import (
     MODEL_SERVER_READ_TIMEOUT,
     OPENAI_EMBEDDING_TIMEOUT,
     SKIP_WARM_UP,
-    VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType, RerankerProvider
 from shared_configs.model_server_models import (
@@ -110,111 +113,6 @@ _RETRY_TRIES = 8 if INDEXING_ONLY else 2
 _PASSAGE_RETRY_TRIES = 8
 # Model server: attempts for errors other than rate limits.
 _MODEL_SERVER_ERROR_TRIES = 3
-
-_T = TypeVar("_T")
-
-
-class EmbeddingRetryBackoff(BaseModel):
-    """Exponential backoff between embedding retries: waits of scale, 2*scale,
-    4*scale, ... seconds, capped at max, plus up to 2s of jitter."""
-
-    model_config = ConfigDict(frozen=True)
-
-    scale_seconds: float
-    max_seconds: float
-
-    def wait(self) -> wait_base:
-        return wait_exponential(
-            multiplier=self.scale_seconds, max=self.max_seconds
-        ) + wait_random(0, 2)
-
-
-@dataclass(frozen=True)
-class EmbeddingRequestPolicy:
-    """How embedding requests retry, the rate limit each request waits for,
-    and whether a provider rate limit blocks instead of failing."""
-
-    retry_backoff: EmbeddingRetryBackoff
-    retry_tries: int
-    rate_limiter: EmbeddingRateLimiter | None = None
-    should_stop: Callable[[], bool] | None = None
-    # Indexing blocks on a provider rate limit until the request goes
-    # through, so rate limits never fail documents.
-    block_on_provider_rate_limit: bool = False
-    wait_totals: EmbeddingWaitTotals | None = None
-
-    def send(self, request: Callable[[], _T]) -> _T:
-        """Sends one provider request under this policy. The rate limit and
-        provider throttling share one wait time limit per request."""
-        started_at = time.monotonic()
-        throttle_attempt = 0
-        while True:
-            if self.rate_limiter is not None:
-                self.rate_limiter.acquire(
-                    self.should_stop, started_at, self._add_rate_limit_wait
-                )
-            try:
-                return request()
-            except Exception as e:
-                if not (self.block_on_provider_rate_limit and is_rate_limit_error(e)):
-                    raise
-                start = time.monotonic()
-                try:
-                    for sleep_seconds in self._throttle_sleeps(
-                        throttle_attempt, started_at
-                    ):
-                        time.sleep(sleep_seconds)
-                finally:
-                    self._add_provider_throttle_wait(time.monotonic() - start)
-                throttle_attempt += 1
-
-    async def send_async(self, request: Callable[[], Awaitable[_T]]) -> _T:
-        """Sends one provider request under this policy. The rate limit and
-        provider throttling share one wait time limit per request."""
-        started_at = time.monotonic()
-        throttle_attempt = 0
-        while True:
-            if self.rate_limiter is not None:
-                await self.rate_limiter.acquire_async(
-                    self.should_stop, started_at, self._add_rate_limit_wait
-                )
-            try:
-                return await request()
-            except Exception as e:
-                if not (self.block_on_provider_rate_limit and is_rate_limit_error(e)):
-                    raise
-                start = time.monotonic()
-                try:
-                    for sleep_seconds in self._throttle_sleeps(
-                        throttle_attempt, started_at
-                    ):
-                        await asyncio.sleep(sleep_seconds)
-                finally:
-                    self._add_provider_throttle_wait(time.monotonic() - start)
-                throttle_attempt += 1
-
-    def _throttle_sleeps(self, attempt: int, started_at: float) -> Iterator[float]:
-        return wait_sleeps(
-            "The embedding provider rate-limited the request",
-            attempt,
-            started_at,
-            self.should_stop,
-        )
-
-    @property
-    def counts_every_request(self) -> bool:
-        """Whether this policy sees each HTTP request, so provider SDKs must
-        not retry on their own."""
-        return self.rate_limiter is not None or self.block_on_provider_rate_limit
-
-    def _add_rate_limit_wait(self, seconds: float) -> None:
-        if self.wait_totals is not None:
-            self.wait_totals.add_rate_limit_wait(seconds)
-
-    def _add_provider_throttle_wait(self, seconds: float) -> None:
-        if self.wait_totals is not None:
-            self.wait_totals.add_provider_throttle_wait(seconds)
-
 
 _QUERY_REQUEST_POLICY = EmbeddingRequestPolicy(
     retry_backoff=EmbeddingRetryBackoff(scale_seconds=_RETRY_DELAY, max_seconds=60),
@@ -365,32 +263,6 @@ def is_authentication_error(error: Exception) -> bool:
     )
 
 
-def is_rate_limit_error(error: BaseException) -> bool:
-    """Whether a provider refused the request because of its rate limit or quota."""
-    import openai
-    from google.genai import errors as genai_errors
-
-    # litellm's RateLimitError subclasses openai's.
-    if isinstance(
-        error,
-        (
-            ModelServerRateLimitError,
-            openai.RateLimitError,
-            VoyageRateLimitError,
-        ),
-    ):
-        return True
-    if isinstance(error, httpx.HTTPStatusError):
-        return error.response.status_code == 429
-    if isinstance(error, ApiError):
-        return error.status_code == 429
-    if isinstance(error, genai_errors.APIError):
-        return error.code == 429
-    return False
-
-
-_GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
-
 # Bifrost model IDs are `<provider>/<model>`; these routes accept `task_type`.
 _BIFROST_GOOGLE_MODEL_PREFIXES: tuple[str, ...] = ("gemini/", "vertex/")
 _BIFROST_OPENAI_MODEL_PREFIXES: tuple[str, ...] = ("openai/", "azure/")
@@ -432,38 +304,6 @@ def _bifrost_error_message(response: httpx.Response) -> str:
             if isinstance(message, str):
                 return message
     return response.text[:500] or f"HTTP {response.status_code}"
-
-
-# Gemini embedding-2 ignores task_type entirely; instead the documented way
-# to differentiate query vs. document is to wrap the input in Google's task
-# instruction format. The exact templates come from
-# https://ai.google.dev/gemini-api/docs/embeddings (Gemini Embedding 2 section).
-_GEMINI_EMBEDDING_2_PROMPT_TEMPLATES = {
-    "RETRIEVAL_QUERY": "task: search result | query: {text}",
-    "RETRIEVAL_DOCUMENT": "title: none | text: {text}",
-}
-
-
-def _is_gemini_embedding_2_model(model: str) -> bool:
-    return (
-        model.split("/")[-1]
-        .strip()
-        .lower()
-        .startswith(_GEMINI_EMBEDDING_2_MODEL_PREFIX)
-    )
-
-
-def _format_vertex_embedding_text(text: str, model: str, embedding_type: str) -> str:
-    if not _is_gemini_embedding_2_model(model):
-        return text
-
-    template = _GEMINI_EMBEDDING_2_PROMPT_TEMPLATES.get(embedding_type)
-    if template is None:
-        raise RuntimeError(
-            f"Unsupported Gemini embedding-2 task type: {embedding_type}"
-        )
-
-    return template.format(text=text)
 
 
 def format_embedding_error(
@@ -674,118 +514,16 @@ class CloudEmbedding:
         embedding_type: str,
         reduced_dimension: int | None,
     ) -> list[Embedding]:
-        from google import genai
-        from google.genai import types as genai_types
-
-        resolved_model = model or DEFAULT_VERTEX_MODEL
-
-        # ADC discovery can contact the GKE metadata server.
         if not isinstance(self.auth, VertexEmbeddingAuth):
             raise ValueError("Google embeddings require Vertex authentication.")
-        resolved = await asyncio.to_thread(self.auth.resolve_credentials)
-
-        client = genai.Client(
-            vertexai=True,
-            project=resolved.project_id,
-            location=resolved.location,
-            credentials=resolved.credentials,
+        return await embed_with_vertex(
+            texts,
+            auth=self.auth,
+            policy=self.policy,
+            model=model,
+            embedding_type=embedding_type,
+            reduced_dimension=reduced_dimension,
         )
-
-        # gemini-embedding-2 rejects task_type; embedding intent is conveyed
-        # via the instruction-formatted text instead. Older models continue
-        # to use task_type.
-        if _is_gemini_embedding_2_model(resolved_model):
-            embed_config = genai_types.EmbedContentConfig(
-                output_dimensionality=reduced_dimension,
-                auto_truncate=True,
-            )
-        else:
-            embed_config = genai_types.EmbedContentConfig(
-                task_type=embedding_type,
-                output_dimensionality=reduced_dimension,
-                auto_truncate=True,
-            )
-
-        async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
-            content_requests: list[Any] = [
-                genai_types.Content(
-                    parts=[
-                        genai_types.Part(
-                            text=_format_vertex_embedding_text(
-                                text=text,
-                                model=resolved_model,
-                                embedding_type=embedding_type,
-                            )
-                        )
-                    ]
-                )
-                for text in batch_texts
-            ]
-            response = await self.policy.send_async(
-                lambda: client.aio.models.embed_content(
-                    model=resolved_model,
-                    contents=content_requests,
-                    config=embed_config,
-                )
-            )
-
-            if not response.embeddings:
-                raise RuntimeError("Received empty embeddings from Google GenAI.")
-
-            embeddings: list[Embedding] = []
-            for idx, embedding in enumerate(response.embeddings):
-                if embedding.values is None:
-                    raise RuntimeError(
-                        f"Missing embedding values for input at index {idx}."
-                    )
-                embeddings.append(embedding.values)
-            return embeddings
-
-        # Process VertexAI batches sequentially to avoid additional intra-task fanout.
-        # The higher-level thread pool already provides concurrency; running these
-        # requests in parallel here was causing excessive memory usage.
-        batch_size = (
-            1
-            if _is_gemini_embedding_2_model(resolved_model)
-            else VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
-        )
-        batches = [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]
-        all_embeddings: list[Embedding] = []
-
-        logger.debug(
-            "VertexAI embedding: processing %s texts in %s batches (batch_size=%s)",
-            len(texts),
-            len(batches),
-            batch_size,
-        )
-
-        try:
-            for batch_idx, batch in enumerate(batches):
-                batch_embeddings = await _embed_batch(batch)
-                all_embeddings.extend(batch_embeddings)
-
-                # Log progress for large batches to track memory usage patterns
-                if batch_idx % 10 == 0 and batch_idx > 0:
-                    logger.debug(
-                        "VertexAI embedding progress: batch %s/%s, total_embeddings=%s",
-                        batch_idx,
-                        len(batches),
-                        len(all_embeddings),
-                    )
-
-            logger.debug(
-                "VertexAI embedding completed: %s embeddings generated",
-                len(all_embeddings),
-            )
-            return all_embeddings
-        finally:
-            # Ensure client is closed with a timeout to prevent hanging on stuck sessions
-            try:
-                await asyncio.wait_for(client.aio.aclose(), timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Google GenAI client aclose() timed out after 5s")
-            except Exception as e:
-                logger.warning("Error closing Google GenAI client: %s", e)
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -845,7 +583,7 @@ class CloudEmbedding:
 
         model: str = model_name
         is_google_model: bool = model.startswith(_BIFROST_GOOGLE_MODEL_PREFIXES)
-        is_gemini_embedding_2: bool = _is_gemini_embedding_2_model(model)
+        is_gemini_embedding_2: bool = is_gemini_embedding_2_model(model)
 
         async def send(payload: dict[str, Any]) -> httpx.Response:
             response: httpx.Response = await self.http_client.post(
@@ -877,7 +615,7 @@ class CloudEmbedding:
             payload: dict[str, Any] = {
                 "model": model,
                 "input": [
-                    _format_vertex_embedding_text(
+                    format_gemini_embedding_text(
                         text=text, model=model, embedding_type=embedding_type
                     )
                     for text in text_batch
@@ -1183,6 +921,7 @@ class EmbeddingModel:
         reduced_dimension: int | None = None,
         auth: CloudEmbeddingAuth | None = None,
     ) -> None:
+        self.query_embedding_cache_key: str | None = None
         self.api_key = api_key
         self.provider_type = provider_type
         self.query_prefix = query_prefix
@@ -1617,7 +1356,7 @@ class EmbeddingModel:
         retrim_content: bool = False,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> "EmbeddingModel":
-        return cls(
+        model = cls(
             server_host=server_host,
             server_port=server_port,
             model_name=search_settings.model_name,
@@ -1644,6 +1383,26 @@ class EmbeddingModel:
                 else None
             ),
         )
+        if search_settings.id is not None:
+            # Provider edits can change the effective deployment without a new settings ID.
+            provider = search_settings.cloud_provider
+            identity = (
+                search_settings.id,
+                model.model_name,
+                model.provider_type,
+                model.query_prefix,
+                model.normalize,
+                model.reduced_dimension,
+                model.api_url,
+                model.api_version,
+                model.deployment_name,
+                model.api_key,
+                provider.vertex_config if provider else None,
+            )
+            model.query_embedding_cache_key = hashlib.sha256(
+                json.dumps(identity, sort_keys=True).encode()
+            ).hexdigest()
+        return model
 
 
 class RerankingModel:

@@ -5,10 +5,22 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   createChatSession,
   processRawChatHistory,
+  resumeStream,
   sendMessage,
   setPreferredResponse,
+  ApprovalPendingError,
 } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
+import { toast } from "@opal/layouts";
+import {
+  readWaitingToolRequests,
+  useToolRequestUi,
+} from "@/lib/chat/toolApprovals";
+import {
+  claimStreamReader,
+  followChatStream,
+  refreshChatSession,
+} from "@/lib/chat/settleChatSession";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import {
@@ -30,7 +42,9 @@ jest.mock("next/navigation", () => {
   };
 });
 jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
-jest.mock("@opal/layouts", () => ({ toast: { error: jest.fn() } }));
+jest.mock("@opal/layouts", () => ({
+  toast: { error: jest.fn(), warning: jest.fn() },
+}));
 jest.mock("@/lib/languageModels/utils", () => ({
   structureValue: () => "model",
 }));
@@ -63,16 +77,34 @@ jest.mock("@/providers/IncognitoProvider", () => ({
     incognitoSessionId: null,
   }),
 }));
-jest.mock("@/app/app/services/lib", () => ({
-  updateLlmOverrideForChatSession: jest.fn(),
-  processRawChatHistory: jest.fn(() => new Map()),
-  sendMessage: jest.fn(),
-  setPreferredResponse: jest.fn(),
-  createChatSession: jest.fn(),
-  buildChatUrl: () => "/app?chatId=session",
-  ChatSendRejectedError: class extends Error {},
+jest.mock("@/app/app/services/lib", () => {
+  class ChatSendRejectedError extends Error {}
+  return {
+    updateLlmOverrideForChatSession: jest.fn(),
+    processRawChatHistory: jest.fn(() => new Map()),
+    sendMessage: jest.fn(),
+    resumeStream: jest.fn(),
+    setPreferredResponse: jest.fn(),
+    createChatSession: jest.fn(),
+    buildChatUrl: () => "/app?chatId=session",
+    ChatSendRejectedError,
+    ApprovalPendingError: class extends ChatSendRejectedError {},
+  };
+});
+jest.mock("@/lib/chat/settleChatSession", () => ({
+  ...jest.requireActual("@/lib/chat/settleChatSession"),
+  refreshChatSession: jest.fn(async () => {}),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
+  CHAT_STATUS_POLL_MS: 0,
+  readChatSessionStatus: jest.fn(async () => ({
+    is_processing: false,
+    current_stream: null,
+    has_startable_input: false,
+    approvals_version: "0",
+    has_active_subagents: false,
+    latest_response_id: null,
+  })),
   waitForChatResponseEnd: jest.fn(async () => null),
   fetchSettledChatSession: jest.fn(async () => ({
     messages: [],
@@ -88,8 +120,13 @@ const toolConfiguration: ToolConfigurationHandle = {
   toggleToolState: jest.fn(),
   clearPreferredTool: jest.fn(),
   preferredToolId: null,
+  preferredAction: null,
   disabledToolIds: [],
+  isIntegrationEnabled: jest.fn(() => true),
+  setIntegrationEnabled: jest.fn(),
+  allowed: null,
   ready: true,
+  optionsLoaded: true,
   filters: {
     selectedSources: null,
     documentSets: [],
@@ -412,6 +449,386 @@ test.each([false, true])(
   }
 );
 
+test("a lost stream keeps its waiting approval open after the server is idle", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  const idle = Promise.withResolvers<null>();
+  jest.mocked(waitForChatResponseEnd).mockReturnValueOnce(idle.promise);
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session", { incognito: true });
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "tool_approval_request",
+        approval_id: "approval",
+        tool_call_id: "call",
+        tool_name: "mcp__3__github__create_issue",
+        display_name: "Create issue",
+        arguments: {},
+        agent_name: null,
+      },
+    };
+    throw new Error("network error");
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  const tree = () =>
+    useChatSessionStore.getState().sessions.get("session")!.messageTree;
+  const waitingIds = () =>
+    readWaitingToolRequests(tree()).flatMap((item) =>
+      item.kind === "approval" ? [item.request.approval_id] : []
+    );
+
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Open an issue",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(waitForChatResponseEnd).toHaveBeenCalled());
+  const lost = [...tree().values()].find((message) => message.type === "error");
+  expect(lost?.packets.at(-1)?.obj.type).toBe("stop");
+  expect(waitingIds()).toEqual(["approval"]);
+
+  await act(async () => {
+    idle.resolve(null);
+    await sending;
+  });
+  // An idle server can still wait for the decision.
+  expect(waitingIds()).toEqual(["approval"]);
+});
+
+test("a continuation that names the send's own stream keeps the send as its only reader", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const answerEnds = Promise.withResolvers<void>();
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "tool_approval_request",
+        approval_id: "approval",
+        tool_call_id: "call",
+        tool_name: "mcp__3__github__create_issue",
+        display_name: "Create issue",
+        arguments: {},
+        agent_name: null,
+      },
+    };
+    await answerEnds.promise;
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  const tree = () =>
+    useChatSessionStore.getState().sessions.get("session")!.messageTree;
+  const waitingIds = () =>
+    readWaitingToolRequests(tree()).flatMap((item) =>
+      item.kind === "approval" ? [item.request.approval_id] : []
+    );
+
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Open an issue",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(waitingIds()).toEqual(["approval"]));
+
+  act(() =>
+    followChatStream("session", { stream_id: 12, response_ids: [12] }, "Check")
+  );
+
+  expect(resumeStream).not.toHaveBeenCalled();
+  // The answer keeps the output its send reader received.
+  expect(waitingIds()).toEqual(["approval"]);
+  await act(async () => {
+    answerEnds.resolve();
+    await sending;
+  });
+});
+
+test("a send reader's later flush keeps an answer that its continuation took over", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const takenOver = Promise.withResolvers<void>();
+  const answerEnds = Promise.withResolvers<void>();
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 31, reserved_assistant_message_id: 32 };
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "message_delta", content: "Before" },
+    };
+    await takenOver.promise;
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "message_delta", content: " stale" },
+    };
+    await answerEnds.promise;
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  const answer = () =>
+    [
+      ...useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.values(),
+    ].find((message) => message.messageId === 32);
+
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Open an issue",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(answer()?.packets).toHaveLength(1));
+
+  // A continuation of the answer claims it and writes its rows.
+  const continuedPacket = {
+    placement: { turn_index: 2, tab_index: 0 },
+    obj: { type: "message_delta" as const, content: "Continued" },
+  };
+  const continued = { ...answer()!, packets: [continuedPacket] };
+  act(() => {
+    expect(claimStreamReader({ stream_id: 940, response_ids: [32] })).toBe(
+      true
+    );
+    const store = useChatSessionStore.getState();
+    store.updateSessionMessageTree(
+      "session",
+      new Map(store.sessions.get("session")!.messageTree).set(
+        continued.nodeId,
+        continued
+      )
+    );
+  });
+  await act(async () => {
+    takenOver.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  expect(answer()?.packets).toEqual([continuedPacket]);
+  await act(async () => {
+    answerEnds.resolve();
+    await sending;
+  });
+  expect(answer()?.packets).toEqual([continuedPacket]);
+});
+
+test("a send refused for a waiting approval restores the draft and points at the card", async () => {
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  const store = useChatSessionStore.getState();
+  store.createSession("session");
+  const history = new Map<number, Message>([
+    [
+      1,
+      {
+        nodeId: 1,
+        messageId: 1,
+        type: "user",
+        message: "Question",
+        files: [],
+        packets: [],
+        toolCall: null,
+        parentNodeId: null,
+        latestChildNodeId: 2,
+        childrenNodeIds: [2],
+      },
+    ],
+    [
+      2,
+      {
+        nodeId: 2,
+        messageId: 2,
+        type: "assistant",
+        message: "",
+        files: [],
+        packets: [
+          {
+            placement: { turn_index: 1, tab_index: 0 },
+            obj: {
+              type: "tool_approval_request",
+              approval_id: "approval-1",
+              tool_call_id: "call-1",
+              tool_name: "mcp__3__github__create_issue",
+              display_name: "Create issue",
+              arguments: {},
+              agent_name: null,
+            },
+          },
+        ],
+        toolCall: null,
+        parentNodeId: 1,
+      },
+    ],
+  ]);
+  store.updateSessionMessageTree("session", history);
+  jest.mocked(sendMessage).mockImplementation(() => {
+    throw new ApprovalPendingError("A tool approval waits");
+  });
+  const restoreInputBar = jest.fn();
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar,
+    })
+  );
+
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Another question",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    })
+  );
+
+  expect(restoreInputBar).toHaveBeenCalledWith({
+    message: "Another question",
+    mentions: [],
+    files: [],
+  });
+  expect(toast.warning).toHaveBeenCalledWith("pendingToolApproval.toast");
+  expect(toast.error).not.toHaveBeenCalled();
+  expect(useToolRequestUi.getState().nudge?.requestId).toBe("approval-1");
+  expect(refreshChatSession).not.toHaveBeenCalled();
+});
+
+test("a send refused for an approval this chat does not show settles with the saved session", async () => {
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  jest.mocked(sendMessage).mockImplementation(() => {
+    throw new ApprovalPendingError("A tool approval waits");
+  });
+  const restoreInputBar = jest.fn();
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar,
+    })
+  );
+
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Another question",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    })
+  );
+
+  expect(restoreInputBar).toHaveBeenCalledWith({
+    message: "Another question",
+    mentions: [],
+    files: [],
+  });
+  expect(toast.warning).toHaveBeenCalledWith("pendingUserInput.toast");
+  expect(useToolRequestUi.getState().nudge).toBeNull();
+  // Settlement loads the saved session, which replays the server's cards.
+  expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+  expect(refreshChatSession).not.toHaveBeenCalled();
+});
+
 test("abort releases a reader with packets queued before its first paint", async () => {
   const queued = Promise.withResolvers<void>();
   useChatSessionStore.setState({
@@ -534,7 +951,13 @@ test.each([false, true])(
       })
     );
     expect(sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ preferredToolId: 3 })
+      expect.objectContaining({
+        toolOptions: {
+          allowed: null,
+          preferred: { type: "capability", tool_id: 3 },
+          internal_search_filters: expect.anything(),
+        },
+      })
     );
     expect(toolConfiguration.clearPreferredTool).not.toHaveBeenCalled();
     expect(toolConfiguration.setToolState).not.toHaveBeenCalled();
@@ -548,7 +971,11 @@ test.each([false, true])(
     );
     expect(sendMessage).toHaveBeenCalledTimes(2);
     expect(sendMessage).toHaveBeenLastCalledWith(
-      expect.objectContaining({ preferredToolId: 3 })
+      expect.objectContaining({
+        toolOptions: expect.objectContaining({
+          preferred: { type: "capability", tool_id: 3 },
+        }),
+      })
     );
   }
 );

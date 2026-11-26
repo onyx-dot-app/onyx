@@ -64,7 +64,7 @@ processes:
       -A onyx.background.celery.versioned_apps.light worker
       --pool=threads --concurrency=64 --prefetch-multiplier=8 --loglevel=INFO
       --hostname=light@%n
-      -Q vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft
+      -Q vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft,suggested_questions
     working_dir: ${ONYX_ZED_ROOT}/backend
     environment: *celery_environment
     log_location: ${ONYX_ZED_ROOT}/.zed/logs/celery-light.log
@@ -97,6 +97,18 @@ processes:
       - PYTHONPATH=.
       - SANDBOX_BACKEND=kubernetes
     log_location: ${ONYX_ZED_ROOT}/.zed/logs/celery-docfetching.log
+    namespace: celery
+
+  celery_docconversion:
+    command: >-
+      ${ONYX_ZED_ROOT}/.venv/bin/python ${ONYX_ZED_ROOT}/deployment/helm/dev/launch.py
+      --cluster-name onyx-dev --namespace onyx celery
+      -A onyx.background.celery.versioned_apps.docconversion worker
+      --pool=threads --prefetch-multiplier=1 --loglevel=INFO
+      --hostname=docconversion@%n -Q docconversion
+    working_dir: ${ONYX_ZED_ROOT}/backend
+    environment: *celery_debug_environment
+    log_location: ${ONYX_ZED_ROOT}/.zed/logs/celery-docconversion.log
     namespace: celery
 
   celery_docprocessing:

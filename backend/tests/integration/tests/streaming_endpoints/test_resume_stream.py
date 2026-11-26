@@ -1,16 +1,12 @@
 """Real HTTP streams replay accepted output, tail generation, and match saved history."""
 
 import json
-import socket
-import threading
 import time
 from collections.abc import Iterator
 from uuid import UUID
 
 import httpx
 import pytest
-import uvicorn
-from fastapi.testclient import TestClient
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -25,6 +21,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ChatHeartbeat,
     Packet,
 )
+from onyx.tools.models import ToolOptions
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -34,36 +31,6 @@ from tests.integration.mock_services.mock_llm_server.models import (
     Reply,
     RequestConditions,
 )
-
-
-@pytest.fixture(scope="module")
-def streaming_api(_test_client: TestClient) -> Iterator[str]:
-    """Serve the initialized application without buffering streaming responses."""
-    started = threading.Event()
-
-    class StreamingServer(uvicorn.Server):
-        async def startup(self, sockets: list[socket.socket] | None = None) -> None:
-            await super().startup(sockets)
-            started.set()
-
-    server = StreamingServer(
-        uvicorn.Config(
-            _test_client.app,
-            host="127.0.0.1",
-            port=0,
-            lifespan="off",
-            log_level="warning",
-        )
-    )
-    assert _test_client.portal is not None
-    worker = _test_client.portal.start_task_soon(server.serve)
-    try:
-        assert started.wait(15), "Streaming API did not start"
-        port = server.servers[0].sockets[0].getsockname()[1]
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        worker.result(timeout=15)
 
 
 def _answer_deltas(
@@ -119,7 +86,7 @@ def test_resume_replays_and_tails_in_flight_run(
         chat_session_id=session.id,
         message="Explain resume-contract.",
         parent_message_id=None,
-        allowed_tool_ids=[],
+        tool_options=ToolOptions(allowed=[]),
     )
     try:
         with httpx.Client(
@@ -176,7 +143,7 @@ def test_resume_after_completion_returns_404(
     response = ChatSessionManager.send_message(
         chat_session_id=session.id,
         message="completion-contract",
-        allowed_tool_ids=[],
+        tool_options=ToolOptions(allowed=[]),
         user_performing_action=admin_user,
     )
     assert response.error is None
@@ -218,7 +185,7 @@ def test_evicted_resume_buffer_preserves_completion_and_next_turn(
         chat_session_id=session.id,
         message="Explain eviction-contract.",
         parent_message_id=None,
-        allowed_tool_ids=[],
+        tool_options=ToolOptions(allowed=[]),
     )
     try:
         with httpx.Client(
@@ -250,12 +217,8 @@ def test_evicted_resume_buffer_preserves_completion_and_next_turn(
                 assert cache.exists(key)
                 cache.delete(key)
                 with http.stream("GET", resume_url) as failed_resume:
-                    if evicted_record == "chunk":
-                        assert failed_resume.status_code == 200
-                        assert list(failed_resume.iter_lines()) == []
-                    else:
-                        assert failed_resume.status_code == 404
-                        assert "No resumable stream" in failed_resume.read().decode()
+                    assert failed_resume.status_code == 404
+                    assert "No resumable stream" in failed_resume.read().decode()
                 assert (
                     _get_session_detail(session.id, admin_user).current_stream
                     is not None
@@ -273,7 +236,7 @@ def test_evicted_resume_buffer_preserves_completion_and_next_turn(
         followup = ChatSessionManager.send_message(
             chat_session_id=session.id,
             message="Continue eviction-contract.",
-            allowed_tool_ids=[],
+            tool_options=ToolOptions(allowed=[]),
             user_performing_action=admin_user,
         )
         assert followup.error is None

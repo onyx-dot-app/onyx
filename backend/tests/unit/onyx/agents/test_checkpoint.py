@@ -116,7 +116,6 @@ def checkpoint() -> ExecutionCheckpoint:
             )
         ],
         progress=RunProgress(
-            tool_configuration_digest="test-tool-configuration",
             step_limit=3,
             action=RunAction.TOOLS,
             options=GenerationOptions(),
@@ -183,7 +182,6 @@ def test_resume_rejects_finalized_tools_without_current_step_results(
 
 def test_finalized_tool_ids_serialize_in_stable_order() -> None:
     progress = RunProgress(
-        tool_configuration_digest="test-tool-configuration",
         step_limit=1,
         finalized_tool_call_ids={"z", "a"},
     )
@@ -191,14 +189,12 @@ def test_finalized_tool_ids_serialize_in_stable_order() -> None:
     assert RunProgress.model_validate_json(progress.model_dump_json()) == progress
 
 
-@pytest.mark.parametrize(
-    "mode", [PresentationMode.CODING_THINKING, PresentationMode.CODING_ANSWER]
-)
-def test_coding_rendering_survives_checkpoint_round_trip(
+@pytest.mark.parametrize("mode", [PresentationMode.PLAN, PresentationMode.REPORT])
+def test_message_rendering_survives_checkpoint_round_trip(
     mode: PresentationMode,
 ) -> None:
     captured = checkpoint()
-    rendering = MessageRendering(mode=mode, think_tool="think_tool")
+    rendering = MessageRendering(mode=mode)
     captured.run_state.steps[0].message.metadata = rendering
     storage = CheckpointStorage({**codec().payload_types, **CHECKPOINT_PAYLOAD_TYPES})
     serialized = storage.save(

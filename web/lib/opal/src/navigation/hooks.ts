@@ -341,19 +341,27 @@ function pathSegments(pathname: string): string {
 }
 
 /**
+ * The pathname of the page Next has rendered under `base`. It follows the
+ * router, not the URL: while `go()` has written the URL of a page that has
+ * not rendered yet, this still names the page on screen. Route groups name
+ * no URL segment. Call it in a component that the layout at `base` renders
+ * (e.g. the chrome), so the rendered segments are read below it.
+ */
+export function useRenderedPathname(base: string): string {
+  const segments = useSelectedLayoutSegments().filter(
+    (segment) => !segment.startsWith("(")
+  );
+  return segments.length > 0 ? `${base}/${segments.join("/")}` : base;
+}
+
+/**
  * Whether the URL is ahead of the route Next renders: `go()` wrote the URL of
  * a page that has not rendered yet. Call it in a component that the layout at
  * `base` renders (e.g. the chrome), so the rendered segments are read below it.
  */
 export function useRouteRendering(base: string): boolean {
   const pathname = usePathname();
-  // The rendered tree's segments, which follow the router, not the URL.
-  // Route groups name no URL segment.
-  const segments = useSelectedLayoutSegments().filter(
-    (segment) => !segment.startsWith("(")
-  );
-  const renderedPathname =
-    segments.length > 0 ? `${base}/${segments.join("/")}` : base;
+  const renderedPathname = useRenderedPathname(base);
   // Segments may come decoded while the URL keeps `%31`, so compare both
   // decoded, segment by segment.
   const rendering = pathSegments(renderedPathname) !== pathSegments(pathname);

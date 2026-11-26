@@ -52,6 +52,16 @@ You also need to define the underlying CSS variables (`--text-01`, etc.) in your
 `colors.css` or import a copy from Onyx. The preset references them but does not define them —
 they live with the consumer so the consumer controls the palette.
 
+### 3. Reduced motion (optional)
+
+Opal stops or shortens its animations when the OS asks for reduced motion
+(`prefers-reduced-motion: reduce`). To force reduced motion from your app, for
+example from a user setting, set `data-motion="reduced"` on `<html>`. Remove the
+attribute to follow the OS setting again.
+
+Opal's stylesheets and `prefersReducedMotion()` from `@onyx-ai/opal/utils`
+follow both signals.
+
 ## Usage
 
 ```tsx
@@ -80,7 +90,7 @@ function MyComponent() {
 | `@onyx-ai/opal/icons`           | SVG icon components                                  |
 | `@onyx-ai/opal/illustrations`   | Larger SVG illustrations                             |
 | `@onyx-ai/opal/types`           | Shared types (`RichStr`, `IconProps`, etc.)          |
-| `@onyx-ai/opal/utils`           | `cn`, `markdown` helpers                             |
+| `@onyx-ai/opal/utils`           | `cn`, `markdown`, `stripBidiControls` helpers        |
 | `@onyx-ai/opal/styles.css`      | Bundled component CSS                                |
 | `@onyx-ai/opal/tailwind-preset` | Tailwind preset with tokens                          |
 
@@ -162,6 +172,7 @@ The tag pattern must match `opal/v*.*.*` for the workflow to fire.
 - Imports inside the lib use the `@opal/` path alias; never `@/`.
 - Types/interfaces are declared at the top of `components.tsx` without `export`; everything is
   re-exported from a single `export { Foo, type FooProps };` block at the bottom.
+- For the bidi rule for untrusted text, see `stripBidiControls` in `src/utils.ts`.
 - See `web/AGENTS.md` for broader frontend standards.
 
 ## Third-party trademarks

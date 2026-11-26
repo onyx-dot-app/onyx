@@ -128,9 +128,9 @@ export interface ScopedWorld {
   grouplessDocSetId: number;
   grouplessDocSetName: string;
   ownActionId: number;
-  /** admin's, visible only via an agent in the managed group */
+  /** admin's Organization library action, on an agent in the managed group */
   connectedActionId: number;
-  /** admin's, on no agent — invisible */
+  /** admin's Organization library action, on no agent */
   orphanActionId: number;
 }
 
@@ -163,7 +163,7 @@ export const worldTest = test.extend<{}, { world: ScopedWorld }>({
         "public",
         []
       );
-      // an agent in the managed group is the only path from that group to an action
+      // an agent in the managed group that holds an admin action
       const bridgeAgentId = await adminClient.createAgent(
         `bridge-agent-${stamp}`,
         "",

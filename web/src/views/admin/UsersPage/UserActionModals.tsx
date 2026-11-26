@@ -1,20 +1,47 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
-import { Button, CopyButton, InputTypeIn, Text } from "@opal/components";
+import {
+  Button,
+  CopyButton,
+  InputTypeIn,
+  MessageCard,
+  Text,
+} from "@opal/components";
+import { IconLoader } from "@opal/loaders";
 import { richNodes } from "@opal/utils";
-import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
-import { ConfirmationModalLayout } from "@opal/layouts";
+import {
+  SvgArrowUpRight,
+  SvgUserPlus,
+  SvgUserX,
+  SvgXCircle,
+  SvgKey,
+} from "@opal/icons";
+import { ConfirmationModalLayout, Section } from "@opal/layouts";
 import { toast } from "@opal/layouts";
+import { useNavigation } from "@opal/navigation";
+import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { AccountType } from "@/lib/types";
+import {
+  TransferOwnershipView,
+  type TransferOwnershipTarget,
+} from "@/sections/modals/TransferOwnershipView";
 import {
   deactivateUser,
   activateUser,
   deleteUser,
   cancelInvite,
   resetPassword,
-} from "./svc";
+  transferPrivatePlugins,
+} from "@/views/admin/UsersPage/svc";
+import type {
+  FullUserSnapshot,
+  PrivatePlugin,
+} from "@/views/admin/UsersPage/types";
 
 // ---------------------------------------------------------------------------
 // Shared helper
@@ -25,7 +52,9 @@ async function runAction(
   successMessage: string,
   errorMessage: string,
   onDone: () => void,
-  setIsSubmitting: (v: boolean) => void
+  setIsSubmitting: (v: boolean) => void,
+  /** Shows a custom toast for `err` and returns true, or returns false. */
+  showErrorToast?: (err: unknown) => boolean
 ) {
   setIsSubmitting(true);
   try {
@@ -33,7 +62,9 @@ async function runAction(
     onDone();
     toast.success(successMessage);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : errorMessage);
+    if (!showErrorToast?.(err)) {
+      toast.error(err instanceof Error ? err.message : errorMessage);
+    }
   } finally {
     setIsSubmitting(false);
   }
@@ -229,10 +260,42 @@ export function ActivateUserModal({
 // Delete User Modal
 // ---------------------------------------------------------------------------
 
+const PRIVATE_SKILLS_TOAST_ID = "delete-user-private-skills";
+
+/**
+ * Closes the private-skills conflict toast when the Users page unmounts, so
+ * the toast leaves together with the page and not over it.
+ */
+export function useClosePrivateSkillsToastOnLeave() {
+  useEffect(() => () => toast.dismiss(PRIVATE_SKILLS_TOAST_ID), []);
+}
+
 interface DeleteUserModalProps {
   email: string;
   onClose: () => void;
   onMutate: () => void;
+}
+
+function isPrivatePlugin(value: unknown): value is PrivatePlugin {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "name" in value &&
+    typeof value.name === "string"
+  );
+}
+
+/** The private plugins that refused the delete, or null for another error. */
+function privatePluginsFrom(err: unknown): PrivatePlugin[] | null {
+  if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
+    return null;
+  }
+  const info: object = err.info;
+  const plugins = "private_plugins" in info ? info.private_plugins : null;
+  if (!Array.isArray(plugins) || plugins.length === 0) return null;
+  return plugins.filter(isPrivatePlugin);
 }
 
 export function DeleteUserModal({
@@ -242,7 +305,143 @@ export function DeleteUserModal({
 }: DeleteUserModalProps) {
   const t = useTranslations("admin.users");
   const { appName } = useSettings();
+  const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [privatePlugins, setPrivatePlugins] = useState<PrivatePlugin[] | null>(
+    null
+  );
+  const [transferTarget, setTransferTarget] =
+    useState<TransferOwnershipTarget>(null);
+  const owners = useSWR<FullUserSnapshot[]>(
+    privatePlugins ? SWR_KEYS.acceptedUsers : null,
+    errorHandlingFetcher
+  );
+  // The server accepts only an active standard user as the new owner.
+  const candidates = (owners.data ?? []).filter(
+    (user) =>
+      user.email !== email &&
+      user.is_active &&
+      user.account_type === AccountType.STANDARD
+  );
+
+  function showPrivateSkillsToast(err: unknown): boolean {
+    const plugins = privatePluginsFrom(err);
+    if (plugins) {
+      setPrivatePlugins(plugins);
+      return true;
+    }
+    if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
+      return false;
+    }
+    toast.error(t("deleteModal.toasts.blockedBySkills"), {
+      id: PRIVATE_SKILLS_TOAST_ID,
+      description: err.message,
+      duration: Infinity,
+      action: {
+        icon: SvgArrowUpRight,
+        label: t("deleteModal.toasts.openSkills"),
+        onClick: () => navigation.go("/admin/skills"),
+      },
+    });
+    return true;
+  }
+
+  function onDeleted() {
+    toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
+    onMutate();
+    onClose();
+  }
+
+  async function transferAllThenDelete(newOwner: string) {
+    const result = await transferPrivatePlugins(email, newOwner);
+    // The transfer is committed, so report the renames even if the delete fails.
+    if (result.renames.length > 0) {
+      toast.info(t("deleteModal.toasts.renamed"), {
+        description: result.renames
+          .map((rename) => `${rename.old_name} → ${rename.new_name}`)
+          .join(", "),
+      });
+    }
+    await deleteUser(email);
+  }
+
+  if (privatePlugins) {
+    const newOwner = transferTarget?.type === "user" ? transferTarget : null;
+    return (
+      <ConfirmationModalLayout
+        icon={(props) => (
+          <SvgUserX {...props} className="text-action-danger-05" />
+        )}
+        title={t("deleteModal.title")}
+        onClose={isSubmitting ? undefined : onClose}
+        submit={
+          <Button
+            disabled={isSubmitting || !newOwner}
+            variant="danger"
+            onClick={() => {
+              if (!newOwner) return;
+              runAction(
+                () =>
+                  transferAllThenDelete(newOwner.value.replace("user-", "")),
+                t("deleteModal.toasts.success"),
+                t("modals.toasts.error"),
+                onDeleted,
+                setIsSubmitting
+              );
+            }}
+          >
+            {t("deleteModal.transfer.submit.label")}
+          </Button>
+        }
+      >
+        <Section gap={3} height="auto" alignItems="stretch">
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("deleteModal.transfer.description", {
+                email,
+                count: privatePlugins.length,
+                strong: emailTag,
+              })
+            )}
+          </Text>
+          <Section gap={0.5} height="auto" alignItems="start">
+            {privatePlugins.map((plugin) => (
+              <Text key={plugin.id} font="main-ui-body" color="text-04">
+                {plugin.name}
+              </Text>
+            ))}
+          </Section>
+          {owners.isLoading ? (
+            <IconLoader />
+          ) : owners.error ? (
+            <Section alignItems="start" gap={2} height="auto">
+              <MessageCard
+                variant="error"
+                title={t("deleteModal.transfer.ownersLoadFailed")}
+              />
+              <Button
+                prominence="secondary"
+                onClick={() => void owners.mutate()}
+              >
+                {t("deleteModal.transfer.retry")}
+              </Button>
+            </Section>
+          ) : (
+            <TransferOwnershipView
+              agent={null}
+              groups={[]}
+              onSelectedTargetChange={setTransferTarget}
+              selectedTarget={transferTarget}
+              users={candidates.map((user) => ({
+                id: user.id,
+                email: user.email,
+              }))}
+            />
+          )}
+        </Section>
+      </ConfirmationModalLayout>
+    );
+  }
 
   return (
     <ConfirmationModalLayout
@@ -260,11 +459,9 @@ export function DeleteUserModal({
               () => deleteUser(email),
               t("deleteModal.toasts.success"),
               t("modals.toasts.error"),
-              () => {
-                onMutate();
-                onClose();
-              },
-              setIsSubmitting
+              onDeleted,
+              setIsSubmitting,
+              showPrivateSkillsToast
             )
           }
         >

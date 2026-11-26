@@ -1,5 +1,6 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.llm.well_known_providers.llm_provider_options import (
     get_recommendations,
@@ -33,10 +34,11 @@ def _visible_models_by_name(provider: LLMProviderView) -> list[str]:
     )
 
 
-@dataclass(frozen=True)
-class GatewaySelection:
+class GatewaySelection(BaseModel):
     """A gateway model pick: a specific accessible provider row + model name.
     Its ``wire_id`` is the id the gateway routes on."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     provider_id: int
     model_name: str
@@ -50,9 +52,10 @@ class GatewaySelection:
         return ONYX_GATEWAY_PROVIDER_ID, self.wire_id
 
 
-@dataclass(frozen=True)
-class LegacySelection:
+class LegacySelection(BaseModel):
     """A pre-gateway pick, keyed by provider type (no gateway routing)."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     provider_type: str
     model_name: str
@@ -77,10 +80,10 @@ def parse_agent_selection(
     if agent_provider == ONYX_GATEWAY_PROVIDER_ID:
         provider_id, separator, model_name = agent_model.partition("/")
         if separator and model_name and provider_id.isdigit():
-            return GatewaySelection(int(provider_id), model_name)
+            return GatewaySelection(provider_id=int(provider_id), model_name=model_name)
         return None
     if agent_provider:
-        return LegacySelection(agent_provider, agent_model)
+        return LegacySelection(provider_type=agent_provider, model_name=agent_model)
     return None
 
 

@@ -25,7 +25,7 @@ from onyx.agents.models import (
     messages_from_steps,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.chat.chat_processing_checker import get_processing_stream_id
+from onyx.chat.chat_processing_checker import get_processing_stream
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.stop_signal_checker import request_stop
@@ -33,11 +33,8 @@ from onyx.db.chat_inputs import submit_human_message__no_commit
 from onyx.db.chat_response import read_response_steps
 from onyx.db.enums import (
     IncognitoRecordMode,
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
+    IntegrationActionPolicyValue,
 )
-from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import ChatMessage, ChatResponseItem, Persona, Tool, ToolCall, User
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -80,6 +77,12 @@ from tests.external_dependency_unit.code_mode_helpers import (
     wait_step,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    give_access,
+    link_persona,
+    make_mcp_integration,
+    set_policy,
+)
 from tests.external_dependency_unit.mock_image_provider import (
     use_mock_image_generation_provider,
 )
@@ -183,7 +186,7 @@ def mcp_server_url() -> Generator[str, None, None]:
     sock.close()
 
 
-# Code mode includes the server ID in each MCP function namespace.
+# Code mode includes the integration ID in each MCP function namespace.
 MCP_SERVER = "acme"
 
 
@@ -194,45 +197,28 @@ def _persona_with_mcp_tool(
     tool_names: Sequence[str] = ("hello",),
     output_schema: dict[str, JsonValue] | None = None,
 ) -> tuple[Persona, str]:
-    mcp_server = create_mcp_server__no_commit(
-        owner_email=user.email,
-        name=MCP_SERVER,
-        description="In-process MCP server",
+    integration, _ = make_mcp_integration(
+        db_session,
         server_url=server_url,
-        auth_type=MCPAuthenticationType.NONE,
-        transport=MCPTransport.STREAMABLE_HTTP,
-        auth_performer=MCPAuthenticationPerformer.ADMIN,
-        db_session=db_session,
+        name=MCP_SERVER,
+        tools=tool_names,
+        description="Say hi.",
+        # FastMCP wraps a str result as {"result": str}.
+        output_schema=output_schema
+        or {
+            "type": "object",
+            "properties": {"result": {"type": "string"}},
+            "required": ["result"],
+        },
     )
-    db_session.flush()
-    tools = [
-        Tool(
-            name=name,
-            display_name=name.title(),
-            description="Say hi.",
-            mcp_server_id=mcp_server.id,
-            mcp_input_schema={
-                "type": "object",
-                "properties": {"name": {"type": "string"}},
-                "required": ["name"],
-            },
-            # FastMCP wraps a str result as {"result": str}.
-            mcp_output_schema=output_schema
-            or {
-                "type": "object",
-                "properties": {"result": {"type": "string"}},
-                "required": ["result"],
-            },
-            user_id=user.id,
-        )
-        for name in tool_names
-    ]
+    integration.description = "Greets people by name.\nSends no email."
+    give_access(db_session, [integration])
     persona = Persona(
         name=f"Code Mode Persona {uuid4().hex[:8]}",
         description="Persona with one MCP tool",
         system_prompt="You are a helpful assistant",
         task_prompt="",
-        tools=tools,
+        tools=[],
         document_sets=[],
         user_id=user.id,
         groups=[],
@@ -242,10 +228,14 @@ def _persona_with_mcp_tool(
         starter_messages=None,
         deleted=False,
     )
-    db_session.add_all([*tools, persona])
-    db_session.commit()
+    db_session.add(persona)
+    db_session.flush()
+    link_persona(db_session, persona.id, integration.id)
+    # These tests run programs, not approvals, so the tools run without asking.
+    for name in tool_names:
+        set_policy(db_session, integration.id, name, IntegrationActionPolicyValue.ALLOW)
     db_session.refresh(persona)
-    return persona, f"mcp__{mcp_server.id}__{MCP_SERVER}"
+    return persona, f"mcp__{integration.id}__{MCP_SERVER}"
 
 
 def _code_mode_packets(packets: Sequence[object]) -> list[Packet]:
@@ -299,9 +289,9 @@ def _assert_code_mode_block(packets: Sequence[object], program: str) -> None:
 
 def _press_stop(chat_session_id: UUID) -> None:
     cache = get_cache_backend()
-    stream_id = get_processing_stream_id(chat_session_id, cache)
-    assert stream_id is not None
-    request_stop(chat_session_id, cache, stream_id=stream_id)
+    stream = get_processing_stream(chat_session_id, cache)
+    assert stream is not None
+    request_stop(chat_session_id, cache, stream_id=stream.stream_id)
 
 
 def _stop_on_stdout(chat_session_id: UUID, text: str) -> Callable[[object], None]:
@@ -336,7 +326,7 @@ def test_code_mode_program_calls_mcp_tool_in_parallel(
     )
     program = (
         "import asyncio\n"
-        f"a, b = await asyncio.gather({namespace}__hello(name='alpha'), {namespace}__hello(name='beta'))\n"
+        f"a, b = await asyncio.gather(tools.{namespace}__hello(name='alpha'), tools.{namespace}__hello(name='beta'))\n"
         "print(a['result'] + ' | ' + b['result'])\n"
     )
     llm = ChatLLM([code_step("code", program), Delta(content="Both greetings worked.")])
@@ -415,7 +405,7 @@ def test_stored_values_reach_a_program_in_a_later_turn(
             [
                 code_step(
                     "store",
-                    f"greeting = await {namespace}__hello(name='alpha')\n"
+                    f"greeting = await tools.{namespace}__hello(name='alpha')\n"
                     "store('greeting', {'text': greeting['result']})\n"
                     "store('unused', None)\n"
                     "raise ValueError('after storing')\n",
@@ -485,7 +475,7 @@ def test_stop_keeps_the_calls_a_program_made(
         [
             code_step(
                 "code",
-                f"a = await {namespace}__hello(name='alpha')\nb = await {namespace}__slow(name='beta')\nprint(b)\n",
+                f"a = await tools.{namespace}__hello(name='alpha')\nb = await tools.{namespace}__slow(name='beta')\nprint(b)\n",
             )
         ]
     )
@@ -553,7 +543,7 @@ def test_stop_during_computation_saves_the_cancelled_program(
         [
             code_step(
                 "busy",
-                f"await {namespace}__hello(name='alpha')\nprint('looping')\nwhile True:\n    pass\n",
+                f"await tools.{namespace}__hello(name='alpha')\nprint('looping')\nwhile True:\n    pass\n",
             )
         ]
     )
@@ -651,7 +641,7 @@ def test_a_program_generates_an_image(
         [
             code_step(
                 "draw",
-                "images = await generate_image(prompt='A dog on a rocketship')\n"
+                "images = await tools.generate_image(prompt='A dog on a rocketship')\n"
                 "print(images[0]['file_id'])\n",
             ),
             Delta(content="Here is the dog."),
@@ -706,7 +696,7 @@ def test_wait_code_collects_the_result_of_a_yielded_cell(
             code_step(
                 "start",
                 "print('started')\nyield_control()\n"
-                f"greeting = await {namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
+                f"greeting = await tools.{namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
                 "store('greeting', greeting)\n",
             ),
             wait_step("wait", 1),
@@ -789,8 +779,8 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
             code_step(
                 "start",
                 "yield_control()\n"
-                f"greeting = await {namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
-                f"await {namespace}__slow(name='beta')\n",
+                f"greeting = await tools.{namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
+                f"await tools.{namespace}__slow(name='beta')\n",
             ),
             Delta(content="Answered early."),
         ],
@@ -857,7 +847,7 @@ def test_stop_during_wait_code_stops_the_cell(
         [
             code_step(
                 "start",
-                f"import asyncio\nawait {namespace}__hello(name='alpha')\nprint('a')\n"
+                f"import asyncio\nawait tools.{namespace}__hello(name='alpha')\nprint('a')\n"
                 "yield_control()\nprint('b')\nawait asyncio.sleep(60)\n",
             ),
             wait_step("wait", 1),
@@ -941,7 +931,7 @@ def test_an_unobserved_commit_after_a_later_one_keeps_the_live_store(
         [
             code_step(
                 "first",
-                f"yield_control()\nawait {namespace}__slow(name='a')\nstore('k', 'a')\n",
+                f"yield_control()\nawait tools.{namespace}__slow(name='a')\nstore('k', 'a')\n",
             ),
             code_step("second", "store('k', 'b')\n"),
             code_step("live", "print(load('k'))\n"),
@@ -997,7 +987,7 @@ def test_a_server_reported_tool_error_reaches_the_program_and_the_model(
             code_step(
                 "code",
                 "try:\n"
-                f"    await {namespace}__deny(name='onyx')\n"
+                f"    await tools.{namespace}__deny(name='onyx')\n"
                 "except Exception as error:\n"
                 "    print('caught', error)\n",
             ),
@@ -1080,7 +1070,7 @@ def test_mcp_media_results_reach_the_model_as_their_text(
     )
     program = ChatLLM(
         [
-            code_step("code", f"print(await {namespace}__chart(name='q2'))\n"),
+            code_step("code", f"print(await tools.{namespace}__chart(name='q2'))\n"),
             Delta(content="Charted."),
         ]
     )
@@ -1135,7 +1125,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
                 "[match] = await tool_search('say hi', limit=1)\n"
                 "print(match['name'])\n"
                 "print(match['stub'])\n"
-                f"greeting = await {namespace}__hello(name='alpha')\n"
+                f"greeting = await tools.{namespace}__hello(name='alpha')\n"
                 "print(greeting['result'])\n",
             ),
             Delta(content="Found it."),
@@ -1143,19 +1133,24 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     )
     assert final_answer(send(chat_session.id, user, llm, "Say hi.")) == "Found it."
 
-    # MCP functions are deferred: the description names the server, not the stub.
+    # MCP functions are deferred: the description lists their namespace with
+    # the first line of the integration's description, not the stub.
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
         if tool["function"]["name"] == "execute_code"
     ]
-    assert f"the MCP server `{namespace}`" in description
+    assert (
+        f"call each by the name in its stub):\n  - {namespace}: Greets people "
+        "by name.\n" in description
+    )
+    assert "Sends no email." not in description
     assert f"{namespace}__hello" not in description
 
     text = last_tool_text(llm, "find")
     assert f"Output:\n{namespace}__hello\n" in text
     # The stub types the result from the server's output schema.
-    assert f"-> Mcp{persona.tools[0].mcp_server_id}AcmeHelloResult" in text
+    assert f"-> Mcp{namespace.split('__')[1]}AcmeHelloResult" in text
     assert text.rstrip().endswith("Hello, alpha!")
 
 
@@ -1178,7 +1173,7 @@ def test_a_program_receives_the_structured_result_of_an_mcp_tool(
         db_session=db_session,
     )
     program = (
-        f"forecast = await {namespace}__forecast(name='Oslo')\n"
+        f"forecast = await tools.{namespace}__forecast(name='Oslo')\n"
         "print(type(forecast).__name__, forecast['city'], forecast['high'] + 1)\n"
     )
     llm = ChatLLM([code_step("code", program), Delta(content="Forecasted.")])
@@ -1214,7 +1209,7 @@ def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
             code_step(
                 "start",
                 "yield_control()\n"
-                f"reply = await {namespace}__slow(name='alpha')\n"
+                f"reply = await tools.{namespace}__slow(name='alpha')\n"
                 "print(reply['result'])\n",
             ),
             wait_step("waited", 1),

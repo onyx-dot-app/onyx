@@ -137,6 +137,17 @@ const nextConfig = {
         destination: "/app/:path*",
         permanent: true,
       },
+      // Released CLI binaries open these settings paths.
+      {
+        source: "/app/settings/general",
+        destination: "/app/settings/account",
+        permanent: true,
+      },
+      {
+        source: "/app/settings/accounts-access",
+        destination: "/app/settings/third-party-access",
+        permanent: true,
+      },
       // Legacy /assistants → /agents redirects (added in PR #8869).
       // Preserves backward compatibility for bookmarks, shared links, and
       // hardcoded URLs that still reference the old /assistants paths.
@@ -150,6 +161,74 @@ const nextConfig = {
         source: "/admin/craft/instructions",
         destination: "/admin/craft/preferences",
         permanent: true,
+      },
+      // Old plugin and action pages. Their ids are not integration ids.
+      {
+        source: "/admin/mcp-actions/:path*",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/openapi-actions",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/craft/apps",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/mcp/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/openapi/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/external-app/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      // The member plugin and skill pages moved to Customize. Next.js passes
+      // the query of the old URL on to the new one.
+      {
+        source: "/app/plugins",
+        destination: "/app/customize/plugins",
+        permanent: false,
+      },
+      {
+        source: "/app/plugins/:pluginId",
+        destination: "/app/customize/plugins/:pluginId",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills",
+        destination: "/app/customize/skills",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills/new",
+        destination: "/app/customize/skills/new",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills/edit/:id",
+        destination: "/app/customize/skills/:id?edit=1",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/plugins",
+        destination: "/app/customize/integrations",
+        permanent: false,
       },
       {
         source: "/admin/assistants/:path*",

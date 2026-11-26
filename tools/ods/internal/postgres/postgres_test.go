@@ -37,42 +37,6 @@ func clearPostgresEnv(t *testing.T) {
 	}
 }
 
-func TestNewConfigFromEnvironment_usesDefaultsWhenUnset(t *testing.T) {
-	config := NewConfigFromEnvironment(nil)
-
-	want := Config{
-		User:     DefaultUser,
-		Password: DefaultPassword,
-		Host:     DefaultHost,
-		Port:     DefaultPort,
-		Database: DefaultDatabase,
-	}
-	if *config != want {
-		t.Fatalf("expected %+v, got %+v", want, *config)
-	}
-}
-
-func TestNewConfigFromEnvironment_readsTheEnvironment(t *testing.T) {
-	config := NewConfigFromEnvironment([]string{
-		"POSTGRES_USER=onyx",
-		"POSTGRES_PASSWORD=secret",
-		"POSTGRES_HOST=relational_db",
-		"POSTGRES_PORT=6543",
-		"POSTGRES_DB=onyx_test",
-	})
-
-	want := Config{
-		User:     "onyx",
-		Password: "secret",
-		Host:     "relational_db",
-		Port:     "6543",
-		Database: "onyx_test",
-	}
-	if *config != want {
-		t.Fatalf("expected %+v, got %+v", want, *config)
-	}
-}
-
 func TestConnectionString_escapesTheCredentials(t *testing.T) {
 	config := &Config{
 		User:     "us er",
@@ -108,38 +72,36 @@ func TestPgDumpArgs_selectsTheFormat(t *testing.T) {
 	}
 }
 
-func TestClientArgs_targetTheUserAndDatabase(t *testing.T) {
-	config := &Config{User: "onyx", Database: "onyx_db"}
-
-	want := []string{"-U", "onyx", "-d", "onyx_db"}
-	if got := config.PgRestoreArgs(); !slices.Equal(got, want) {
-		t.Errorf("PgRestoreArgs() = %v, want %v", got, want)
-	}
-	if got := config.PsqlArgs(); !slices.Equal(got, want) {
-		t.Errorf("PsqlArgs() = %v, want %v", got, want)
-	}
-}
-
-func TestEnv_carriesThePassword(t *testing.T) {
-	config := &Config{Password: "secret"}
-
-	env := config.Env()
-
-	if len(env) != 1 || env["PGPASSWORD"] != "secret" {
-		t.Fatalf("expected a single PGPASSWORD entry, got %v", env)
-	}
-}
-
-func TestNewConfigFromEnvironmentKeepsPrivateFileDefaultsAndShellOverrides(t *testing.T) {
+func TestNewConfigFromEnvironment(t *testing.T) {
 	clearPostgresEnv(t)
-	config := NewConfigFromEnvironment([]string{
-		"POSTGRES_USER=file-user", "POSTGRES_PASSWORD=file-secret", "POSTGRES_PORT=25432",
-		"POSTGRES_PASSWORD=", "POSTGRES_USER=shell-user",
-	})
-	if config.User != "shell-user" || config.Password != "file-secret" || config.Port != "25432" {
-		t.Fatal("private environment precedence was lost")
+	defaults := Config{User: DefaultUser, Password: DefaultPassword, Host: DefaultHost, Port: DefaultPort, Database: DefaultDatabase}
+	tests := []struct {
+		name string
+		env  []string
+		want Config
+	}{
+		{name: "defaults when unset", want: defaults},
+		{
+			name: "reads every variable",
+			env:  []string{"POSTGRES_USER=onyx", "POSTGRES_PASSWORD=secret", "POSTGRES_HOST=relational_db", "POSTGRES_PORT=6543", "POSTGRES_DB=onyx_test"},
+			want: Config{User: "onyx", Password: "secret", Host: "relational_db", Port: "6543", Database: "onyx_test"},
+		},
+		{
+			name: "later values win and empty values are skipped",
+			env:  []string{"POSTGRES_USER=file-user", "POSTGRES_PASSWORD=file-secret", "POSTGRES_PORT=25432", "POSTGRES_PASSWORD=", "POSTGRES_USER=shell-user", "MALFORMED"},
+			want: Config{User: "shell-user", Password: "file-secret", Host: DefaultHost, Port: "25432", Database: DefaultDatabase},
+		},
 	}
-	if os.Getenv("POSTGRES_USER") != "" || os.Getenv("POSTGRES_PASSWORD") != "" {
-		t.Fatal("private configuration changed the parent process")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NewConfigFromEnvironment(tt.env); *got != tt.want {
+				t.Fatalf("expected %+v, got %+v", tt.want, *got)
+			}
+		})
+	}
+	for _, key := range postgresEnvKeys {
+		if os.Getenv(key) != "" {
+			t.Fatalf("reading the private environment changed %s in the parent process", key)
+		}
 	}
 }

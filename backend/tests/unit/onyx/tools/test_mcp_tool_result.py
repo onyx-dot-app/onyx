@@ -13,15 +13,10 @@ from pydantic import JsonValue
 
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.renderer import ToolRenderer
-from onyx.db.enums import (
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPOAuthProviderMode,
-)
-from onyx.db.models import MCPServer
+from onyx.db.enums import IntegrationAuthMethod
+from onyx.integrations.call_credentials import CallCredentials
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import ToolCall, ToolResult, ToolResultMessage
-from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
@@ -36,39 +31,27 @@ def _reject_non_finite_number(constant: str) -> float:
 MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 
 
-def _github_tool(*, user_managed_credentials: bool = False) -> MCPTool:
-    server = MCPServer(
-        id=1,
-        name="GitHub",
-        server_url="https://mcp.example",
-        auth_type=(
-            MCPAuthenticationType.API_TOKEN
-            if user_managed_credentials
-            else MCPAuthenticationType.NONE
-        ),
-        auth_performer=MCPAuthenticationPerformer.PER_USER,
-        transport=None,
-        oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
-        oauth_cimd_enabled=True,
-        oauth_authorization_endpoint=None,
-        oauth_token_endpoint=None,
-    )
+_CREDENTIALS = CallCredentials(
+    integration_id=1,
+    auth_method=IntegrationAuthMethod.API_KEY,
+    connection_id=7,
+    connection_user_id=None,
+    headers={"Authorization": "Bearer valid"},
+)
+
+
+def _github_tool() -> MCPTool:
     return MCPTool(
-        tool_id=1,
-        mcp_server=server,
+        integration_id=1,
+        integration_name="GitHub",
+        integration_description=None,
+        server_url="https://mcp.example",
+        transport=None,
         tool_name="list_issues",
         tool_description="List issues",
         tool_definition={"type": "object", "properties": {}},
-        resolved_credentials=(
-            ResolvedMCPCredentials(
-                connection_config_id=7,
-                connection_data={"headers": {"Authorization": "Bearer valid"}},
-                user_oauth_token=None,
-                auth_type=MCPAuthenticationType.API_TOKEN,
-            )
-            if user_managed_credentials
-            else None
-        ),
+        acting_user_id=None,
+        credentials=_CREDENTIALS,
     )
 
 
@@ -197,11 +180,11 @@ def test_server_reported_error_is_a_tool_error_not_an_auth_error(
                 content=[TextContent(type="text", text=message)], isError=True
             ),
         ),
-        patch(f"{MODULE}.mark_connection_config_reauth_required") as mark,
+        patch(f"{MODULE}.mark_api_key_rejected") as mark,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
         caplog.at_level(logging.INFO),
     ):
-        response = _run(_github_tool(user_managed_credentials=True))
+        response = _run(_github_tool())
 
     assert response.is_error
     assert json.loads(response.content) == {"error": message}
@@ -220,18 +203,13 @@ def test_rejected_user_credentials_still_require_reauthentication() -> None:
     )
     with (
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
-        patch(f"{MODULE}.get_session_with_current_tenant") as session,
-        patch(f"{MODULE}.mark_connection_config_reauth_required") as mark,
+        patch(f"{MODULE}.mark_api_key_rejected") as mark,
     ):
-        response = _run(_github_tool(user_managed_credentials=True))
+        response = _run(_github_tool())
 
     assert response.is_error
     assert "Authentication failed" in response.text
-    mark.assert_called_once_with(
-        7,
-        {"headers": {"Authorization": "Bearer valid"}},
-        session.return_value.__enter__.return_value,
-    )
+    mark.assert_called_once_with(_CREDENTIALS)
 
 
 @pytest.mark.parametrize(

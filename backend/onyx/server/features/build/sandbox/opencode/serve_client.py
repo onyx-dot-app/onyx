@@ -39,12 +39,12 @@ from __future__ import annotations
 import queue
 import time
 from collections.abc import Callable, Generator, Iterable
-from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any, cast
 from uuid import uuid4
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -73,6 +73,8 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     Error,
+    OnyxSearchMeta,
+    OnyxToolMeta,
     PromptResponse,
     TextPartMetadata,
     ToolCallProgress,
@@ -108,17 +110,18 @@ SandboxEvent = (
 
 
 # ---------------------------------------------------------------------------
-# Public dataclasses
+# Public models
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class ClientTimeouts:
+class ClientTimeouts(BaseModel):
     """HTTP timeouts for one ``OpencodeServeClient`` instance.
 
     Defaults come from ``configs.py``. Session initialization has a separate
     budget for cold directory startup.
     """
+
+    model_config = ConfigDict(strict=True)
 
     connect_timeout: float = OPENCODE_SERVE_CONNECT_TIMEOUT
     request_timeout: float = OPENCODE_SERVE_REQUEST_TIMEOUT
@@ -132,18 +135,19 @@ class ClientTimeouts:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _TurnState:
+class _TurnState(BaseModel):
     """Mutable per-turn state used by the translator.
 
     Each prompt driver or live subscriber owns one instance.
     """
 
+    model_config = ConfigDict(strict=True)
+
     session_id: str
     # Live readers replace identified parts; durable writers consume deltas.
     emit_part_snapshots: bool = False
     # ToolCallStart is emitted only on the FIRST sighting of a callID.
-    seen_tool_calls: set[str] = field(default_factory=set)
+    seen_tool_calls: set[str] = Field(default_factory=set)
     # PromptResponse is yielded at most once per turn; subsequent backstop
     # signals are no-ops.
     terminator_yielded: bool = False
@@ -151,25 +155,25 @@ class _TurnState:
     # already yielded as AgentMessageChunk content. Used to gap-fill when a
     # ``message.part.updated`` for a text part reveals more text than we've
     # delivered (which happens after an ``/event`` reconnect).
-    local_text: dict[str, str] = field(default_factory=dict)
+    local_text: dict[str, str] = Field(default_factory=dict)
     # MessageIDs of every assistant message in this turn. opencode creates
     # one assistant message per step, so a single user turn that involves
     # a tool call yields at least two: the message containing the
     # pre-tool thoughts + tool call, and a follow-up message containing
     # the post-tool synthesized answer. Text parts whose ``messageID``
     # isn't in this set are filtered (user echoes, prior-turn messages).
-    assistant_message_ids: set[str] = field(default_factory=set)
+    assistant_message_ids: set[str] = Field(default_factory=set)
     # PartID → "text" | "reasoning" | "tool" | ... (the delta routes on this).
-    part_types: dict[str, str] = field(default_factory=dict)
+    part_types: dict[str, str] = Field(default_factory=dict)
     # MessageIDs we've ruled out as assistant (user role, malformed body,
     # or fetch failed). Kept so subsequent deltas short-circuit without
     # re-issuing the REST hydrate.
-    user_message_ids: set[str] = field(default_factory=set)
+    user_message_ids: set[str] = Field(default_factory=set)
     # `task` callID → claimed child session (parallel tasks get distinct children).
-    task_child_by_call: dict[str, str] = field(default_factory=dict)
+    task_child_by_call: dict[str, str] = Field(default_factory=dict)
     # Descendant sessions share this parent turn stream but not opencode-local
     # ids. Keep each child session's message/part/tool caches isolated.
-    child_states: dict[str, _TurnState] = field(default_factory=dict)
+    child_states: dict[str, _TurnState] = Field(default_factory=dict)
     # Last LLM finish reason seen on any assistant message.updated. Only the
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
@@ -177,10 +181,10 @@ class _TurnState:
     # connect_app permission id → monotonic deadline. Timeout fallback only (the
     # decision endpoint answers directly); reject an undecided request for a clean
     # decline. A late reject after the user answered is a harmless no-op.
-    pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
-    connect_app_request_ids: set[str] = field(default_factory=set)
+    pending_connect_app_deadlines: dict[str, float] = Field(default_factory=dict)
+    connect_app_request_ids: set[str] = Field(default_factory=set)
     # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
-    summary_message_ids: set[str] = field(default_factory=set)
+    summary_message_ids: set[str] = Field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +210,7 @@ _TOOL_KIND: dict[str, str] = {
     "todo_write": "other",
     "webfetch": "fetch",
     "websearch": "search",
+    "web_search": "search",
     # opencode 1.15.x additions:
     "lsp": "other",
     "skill": "other",
@@ -229,6 +234,7 @@ _TOOL_TITLE: dict[str, str] = {
     "todo_write": "Updating todos",
     "webfetch": "Fetching web content",
     "websearch": "Searching web",
+    "web_search": "Searching web",
     # opencode 1.15.x additions:
     "lsp": "Checking code",
     "skill": "Running skill",
@@ -877,8 +883,35 @@ def _merge_field_meta(event: SandboxEvent, extra: dict[str, Any]) -> None:
     events; merge rather than overwrite so both survive ``model_dump``."""
     existing = getattr(event, "field_meta", None)  # ods: ignore[getattr]
     merged: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
-    merged.update(extra)
+    for key, value in extra.items():
+        # ``onyx`` is a namespace: merge its keys so neither side's are lost.
+        current = merged.get(key)
+        if key == "onyx" and isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = {**current, **value}
+        else:
+            merged[key] = value
     setattr(event, "field_meta", merged)  # noqa: B010
+
+
+def _onyx_search_meta(tool: str, part_state: dict[str, Any]) -> OnyxSearchMeta | None:
+    """The ``web_search`` plugin's queries and results, from its ``metadata``.
+
+    The plugin (``opencode-plugins/web-search.ts``) returns them as
+    ``metadata.onyxSearch``. Anything malformed is dropped, not raised: the
+    text output still reaches the model and the frontend."""
+    if tool != "web_search":
+        return None
+    metadata = part_state.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    search = metadata.get("onyxSearch")
+    if not isinstance(search, dict):
+        return None
+    try:
+        return OnyxSearchMeta.model_validate(search)
+    except ValidationError:
+        logger.warning("opencode-serve: web_search metadata did not validate")
+        return None
 
 
 def _emit_tool_events(
@@ -897,11 +930,12 @@ def _emit_tool_events(
 
     raw_status = part_state.get("status", "pending")
     status = _tool_status(raw_status)
-    if status == "completed":
-        metadata = part_state.get("metadata")
-        exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
-        if isinstance(exit_code, int) and exit_code != 0:
-            status = "failed"
+    metadata = part_state.get("metadata")
+    exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
+    if not isinstance(exit_code, int):
+        exit_code = None
+    if status == "completed" and exit_code is not None and exit_code != 0:
+        status = "failed"
     raw_input = part_state.get("input") or None
     raw_output = _wrap_raw_output(part_state)
     content = _synthesize_tool_content(tool, part_state)
@@ -914,8 +948,16 @@ def _emit_tool_events(
         # _meta is an ACP-reserved extensibility field. We use it to carry
         # the raw opencode tool name so the frontend can resolve a precise
         # title (otherwise tools with kind="other" — todowrite, task, lsp,
-        # skill, … — all fall through to "Running tool").
-        "_meta": {"toolName": tool},
+        # skill, … — all fall through to "Running tool"). ``onyx`` holds the
+        # Onyx data ACP has no field for (see ``OnyxToolMeta``).
+        "_meta": {
+            "toolName": tool,
+            "onyx": OnyxToolMeta(
+                cancelled=True if raw_status == "cancelled" else None,
+                search=_onyx_search_meta(tool, part_state),
+                exitCode=exit_code if tool == "bash" else None,
+            ).to_meta(),
+        },
     }
     if raw_input is not None:
         common["rawInput"] = raw_input
@@ -1147,7 +1189,8 @@ class OpencodeServeClient:
                     e,
                 )
                 time.sleep(delay)
-        assert last_exc is not None
+        if last_exc is None:
+            raise RuntimeError("Cold-pod retry loop ended without an error.")
         raise last_exc
 
     def _request(

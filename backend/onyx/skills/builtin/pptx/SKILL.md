@@ -6,7 +6,7 @@ license: Proprietary. LICENSE.txt has complete terms
 
 # PPTX Skill
 
-> **Path convention**: All commands run from the **session workspace** (your working directory). Never `cd` into the skill directory. Prefix all skill scripts with `.opencode/skills/pptx/`. All generated files (unpacked dirs, output presentations, thumbnails, PDFs, images) go in `outputs/`.
+> **Path convention**: Run all commands from your working directory, the chat session folder. The skill files are read-only at `/var/lib/onyx/skills/pptx/`. Never `cd` into the skill directory. Run skill scripts with their interpreter and the absolute path, for example `python /var/lib/onyx/skills/pptx/scripts/lint.py deck.pptx` or `node /var/lib/onyx/skills/pptx/scripts/icon.js`. Write all generated files (unpacked dirs, output presentations, thumbnails, PDFs, images) to the working directory. Give the finished deck to the user with `publish_files`.
 
 ## Quick Reference
 
@@ -16,20 +16,20 @@ license: Proprietary. LICENSE.txt has complete terms
 | Edit or create from template | Read [editing.md](editing.md) |
 | Create from scratch | Read [components.md](components.md) — tested layout library (default); [pptxgenjs.md](pptxgenjs.md) for raw layouts it doesn't cover |
 | Charts from real data | Read [charts.md](charts.md) — deck-styled matplotlib PNGs via `scripts/chart.py` |
-| Icons | `node .opencode/skills/pptx/scripts/icon.js <name> --color <hex>` — see [pptxgenjs.md](pptxgenjs.md#icons) |
-| Lint layout (QA step 0) | `python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx` |
+| Icons | `node /var/lib/onyx/skills/pptx/scripts/icon.js <name> --color <hex>` — see [pptxgenjs.md](pptxgenjs.md#icons) |
+| Lint layout (QA step 0) | `python /var/lib/onyx/skills/pptx/scripts/lint.py output.pptx` |
 
 ---
 
 ## Build Order (required)
 
-**A complete, text-viable deck must exist in `outputs/` before any asset
+**A complete, text-viable deck must exist in the working directory before any asset
 enhancement.** The worst outcome is a turn that ends with no deck at all.
 
 1. **Draft**: full deck — all slides, titles, text content, layout structure —
-   written and saved to `outputs/<name>.pptx`. On the template-editing path
+   written and saved to `<name>.pptx`. On the template-editing path
    this means an EARLY first clean+pack (see [editing.md](editing.md)): edits
-   stranded in `outputs/unpacked/` deliver nothing.
+   stranded in `unpacked/` deliver nothing.
 2. **Enhance in passes** (charts, icons), re-saving the deck after each pass.
 3. **Lint + QA** last (see QA below).
 
@@ -46,9 +46,9 @@ built. To reuse figures from a source PDF, extract the embedded images
 directly — no rendering, no cropping, no visual inspection:
 
 ```bash
-mkdir -p outputs/figs/
-pdfimages -png -p source.pdf outputs/figs/fig   # fig-<page>-<n>.png per image
-python -c "from PIL import Image; import glob; [print(p, Image.open(p).size) for p in sorted(glob.glob('outputs/figs/*.png'))]"
+mkdir -p figs/
+pdfimages -png -p source.pdf figs/fig   # fig-<page>-<n>.png per image
+python -c "from PIL import Image; import glob; [print(p, Image.open(p).size) for p in sorted(glob.glob('figs/*.png'))]"
 ```
 
 Pick figures by page number and pixel size (real figures are large; icons and
@@ -82,10 +82,10 @@ Once a template is chosen, follow [editing.md](editing.md). Use the from-scratch
 python -m markitdown presentation.pptx
 
 # Visual overview
-python .opencode/skills/pptx/scripts/thumbnail.py presentation.pptx
+python /var/lib/onyx/skills/pptx/scripts/thumbnail.py presentation.pptx
 
 # Raw XML
-python .opencode/skills/pptx/scripts/office/unpack.py presentation.pptx outputs/unpacked/
+python /var/lib/onyx/skills/pptx/scripts/office/unpack.py presentation.pptx unpacked/
 ```
 
 ---
@@ -214,13 +214,14 @@ Your first render is almost never correct. Approach QA as a bug hunt, not a conf
 Before any render or vision pass, run the deterministic layout linter — it catches the mechanical defects (off-slide shapes, sub-margin text, text overflow, overlapping text frames, low-contrast explicit colors, unknown fonts) with exact slide/shape references:
 
 ```bash
-python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx
+python /var/lib/onyx/skills/pptx/scripts/lint.py output.pptx
 ```
 
-- Exit 0 with `LINT_CLEAN` means no findings; nonzero means ERRORs exist.
+- Exit 0 with `LINT_CLEAN` means no findings. Exit 1 means ERRORs exist. Exit 2 means the linter did not run: for `ERROR_MISSING_DEPENDENCY`, run the install command on line 2, then run the linter again.
 - **Fix every ERROR** before moving on. Review each WARN and fix it unless the layout is genuinely intentional (e.g., a deliberate design overlap).
 - Re-run after each fix batch — it's instant, so lint until clean before spending time on rendering.
 - The linter checks contrast only for explicit solid colors; text over images/gradients is skipped and noted — verify those visually.
+- A shrink-to-fit frame (pptxgenjs `fit: "shrink"`) opens in PowerPoint at its stored scale, and LibreOffice previews shrink it anyway. The linter measures it at the stored scale, so fix an OVERFLOW there by shortening the text or setting a smaller font size.
 - **Content-dense decks** (analytical / consulting-style slides with intentionally tight margins) generate many advisory MARGIN warnings under the default profile. For those, lint with `--profile dense` (relaxes the margin warning from 0.5" to 0.25"); error-level checks are unchanged. Tight margins on a dense analytical slide are a deliberate style, not a defect — don't strip density to silence standard-profile MARGIN warnings.
 
 ### Content QA
@@ -287,8 +288,8 @@ Report ALL issues found, including minor ones.
 Convert presentations to individual slide images for visual inspection:
 
 ```bash
-python .opencode/skills/pptx/scripts/office/soffice.py --headless --convert-to pdf outputs/output.pptx
-pdftoppm -jpeg -r 150 outputs/output.pdf outputs/slide
+python /var/lib/onyx/skills/pptx/scripts/office/soffice.py --headless --convert-to pdf output.pptx
+pdftoppm -jpeg -r 150 output.pdf slide
 ```
 
 This creates `slide-01.jpg`, `slide-02.jpg`, etc.
@@ -296,7 +297,7 @@ This creates `slide-01.jpg`, `slide-02.jpg`, etc.
 To re-render specific slides after fixes:
 
 ```bash
-pdftoppm -jpeg -r 150 -f N -l N outputs/output.pdf outputs/slide-fixed
+pdftoppm -jpeg -r 150 -f N -l N output.pdf slide-fixed
 ```
 
 ---
@@ -306,5 +307,5 @@ pdftoppm -jpeg -r 150 -f N -l N outputs/output.pdf outputs/slide-fixed
 - `pip install "markitdown[pptx]"` - text extraction
 - `pip install Pillow` - thumbnail grids
 - `npm install -g pptxgenjs` - creating from scratch
-- LibreOffice (`soffice`) - PDF conversion (auto-configured for sandboxed environments via `.opencode/skills/pptx/scripts/office/soffice.py`)
+- LibreOffice (`soffice`) - PDF conversion (auto-configured for sandboxed environments via `/var/lib/onyx/skills/pptx/scripts/office/soffice.py`)
 - Poppler (`pdftoppm`) - PDF to images

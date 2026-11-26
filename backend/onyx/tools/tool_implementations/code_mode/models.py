@@ -9,19 +9,26 @@ from typing import Annotated, Literal, Self, get_args
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 from pydantic_monty import FunctionSnapshot, FutureSnapshot
 
-from onyx.agents.tools import ToolInvocation
+from onyx.agents.tools import NestedInputRequest, ToolInvocation
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.models import Message, ToolResultMessage
+from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchResult,
+    PublishedFiles,
+    SandboxExecResult,
+    SpilledOutput,
+)
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
+from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
 # Durable details of the tools that programs can call.
 CodeModeCallDetails = Annotated[
@@ -29,10 +36,12 @@ CodeModeCallDetails = Annotated[
     | CustomToolCallSummary
     | FinalImageGenerationResponse
     | FileReadResult
-    | LlmBashExecutionResult
     | LlmPythonExecutionResult
     | MemoryUpdated
-    | ToolExecutionError,
+    | ToolExecutionError
+    | SandboxExecResult
+    | ApplyPatchResult
+    | PublishedFiles,
     Field(discriminator="type"),
 ]
 CODE_MODE_CALL_DETAIL_TYPES: tuple[type[BaseModel], ...] = get_args(
@@ -247,6 +256,9 @@ class CodeModeExecutionResult(CellWindow):
     closing: CellClosing | None = None
     # Set on observation 0 of the first program after the store dropped commits.
     lost_store_writes: LostStoreWrites | None = None
+    # Set, with no `stdout` or `result`, when the observation's output went to
+    # the sandbox VM (sandbox/spill.py).
+    spilled: Annotated[SpilledOutput | None, OMITTED_WHEN_NONE] = None
 
     def windows(self) -> list[CellWindow]:
         """The observation's window, then its closing record's."""
@@ -333,8 +345,8 @@ class SandboxLimits(BaseModel):
     lifetime_seconds: float = Field(default=900.0, gt=0)
     max_tool_calls: int = Field(default=100, gt=0)
     # Characters of printed text, the result and the error collected for one
-    # observation, cut in the middle; bounds host memory and the text that the
-    # output budget tokenizes. About 16 times the default output budget.
+    # observation, cut in the middle; bounds host memory. 16 times the default
+    # output budget (tools/constants.py:DEFAULT_MAX_OUTPUT_CHARS).
     max_output_chars: int = Field(default=640_000, gt=0)
     # Bytes of compact JSON in the host copy of the last expression's value;
     # bounds host memory before the copy's repr() is cut to max_output_chars.
@@ -398,6 +410,9 @@ class PendingCall(BaseModel):
     external: ExternalCall
     # The call's thread; None while the call waits in the queue.
     future: Future[object] | None = None
+    # The handler returned AWAITS_INPUT: the call waits for the user's input,
+    # without a thread, until the caller runs it again (`_Run.requeue_waiting`).
+    awaits_input: bool = False
 
 
 class ProgramWaiting(BaseModel):
@@ -423,6 +438,42 @@ class ProgramSuspended(BaseModel):
 
     snapshot: bytes
     call_ids: list[int]
+
+
+class ProgramState(BaseModel):
+    """What a parked program needs besides its dump to continue."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # The calls that wait for input, by sandbox call id. Resuming runs them
+    # again through the handler.
+    waiting: dict[int, ExternalCall]
+    tool_calls: int
+    elapsed_seconds: float
+    type_check_notes: str | None = None
+
+
+class ParkedProgram(BaseModel):
+    """A program dumped while it waits only for calls that wait for the user's
+    input, so it can continue in any process (`sandbox.execute_program`)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    state: ProgramState
+    snapshot: bytes
+
+
+class SavedProgram(BaseModel):
+    """A parked program as its cell keeps it. The dump stays in memory until
+    the run's checkpoint saves it in the file store (`persist_checkpoint_files`)."""
+
+    state: ProgramState
+    dump: SavedChatFile
+    # The Monty version that made the dump; another version cannot load it.
+    monty_version: str
+    # The parameters schema of each waiting call's tool, by tool name; a
+    # restored call runs only with an unchanged schema.
+    parameters: dict[str, dict[str, JsonValue]]
 
 
 class ProgramCompleted(BaseModel):
@@ -516,8 +567,13 @@ class SearchableFunction(BaseModel):
     description: str
     # The function's stub with the declarations of its result types.
     stub: str
-    # Text that the search matches: the name (weighted), namespace and description.
+    # Text that the search matches: the name (weighted), namespace and
+    # description.
     text: str
+    # The argument schema's property names and descriptions; scored apart from
+    # `text`, so a large schema does not dilute it, and weighted lower
+    # (tool_search.py:PARAMETER_WEIGHT).
+    parameter_text: str
 
 
 class CellCallRecord(BaseModel):
@@ -543,13 +599,13 @@ class CellObserver(BaseModel):
 
     invocation: ToolInvocation
     number: int
-    # Tokens of output that the observation returns.
-    max_tokens: int
+    # Characters of output that the observation returns.
+    max_chars: int
 
 
 class ObservationCut(BaseModel):
     """An ended observation, taken under the cell lock and formatted after it, so
-    tokenizing large output does not hold up the cell."""
+    cutting large output does not hold up the cell."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -557,10 +613,49 @@ class ObservationCut(BaseModel):
     # The parts as collected; `saved` holds them cut for saving.
     details: CodeModeExecutionResult
     saved: CodeModeExecutionResult
-    max_tokens: int
+    max_chars: int
     # Every call of the cell, earlier observations' included, in index order.
     cell_calls: list[CodeModeCall]
     # Set when the observation reports the program's end.
     end: SandboxResult | None
     discarded: DiscardedWrites | None
     elided_chars: int
+
+
+class SavedObserver(BaseModel):
+    """The observation of a saved cell that waits for the user's input: its
+    call, number and output budget."""
+
+    call_id: str
+    number: int
+    max_chars: int
+
+
+class SavedCodeCell(BaseModel):
+    """A cell whose program parked for the user's input, saved with the
+    suspended run (`CodeCells.saved`)."""
+
+    cell_id: int
+    # The execute_code call that started the cell; nested call ids use it.
+    call_id: str
+    code: str
+    limits: SandboxLimits
+    observations: int
+    window: int
+    # None for a program that waits in the background, which no observation
+    # waits for.
+    observer: SavedObserver | None
+    calls: list[CellCallRecord]
+    # The input request that each waiting call waits for, by call index.
+    requests: dict[int, NestedInputRequest]
+    saved_chars: int
+    # The printed text of the current window.
+    stdout: str
+    lost_store_writes: LostStoreWrites | None
+    # The store that the program started with, and its writes since.
+    store: StoreSnapshot
+    store_writes: dict[str, JsonValue]
+    # Citation numbers that the response's nested calls used.
+    citations: dict[int, str]
+    staged_files: list[SavedChatFile]
+    program: SavedProgram

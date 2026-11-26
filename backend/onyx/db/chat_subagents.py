@@ -38,6 +38,7 @@ from onyx.chat.models import (
     ResponseLink,
     SavedAgentContext,
     SessionAncestor,
+    read_message_rendering,
 )
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
@@ -251,7 +252,7 @@ def read_agent_completions(
     sources = _cited_sources(
         db_session,
         [
-            (response.id, MessageRendering.model_validate(item.rendering))
+            (response.id, read_message_rendering(item.rendering))
             for response, item in rows
             if item is not None and item.rendering is not None
         ],
@@ -266,7 +267,6 @@ def read_agent_completions(
             output.metadata = ChatMessageMetadata(sources=sources[response.id])
         completions.append(
             AgentCompletion(
-                agent_id=str(response.chat_session_id),
                 agent_path=agent_path_from_ancestors(
                     response.chat_session_id, ancestors
                 ),
@@ -465,9 +465,16 @@ def _check_history_size(db_session: Session, response_ids: list[int]) -> None:
 
 
 def _load_history(
-    db_session: Session, branch: ChatBranch, agent: ChatSession
+    db_session: Session,
+    branch: ChatBranch,
+    agent: ChatSession,
+    before_response_id: int | None = None,
 ) -> SavedAgentContext:
-    links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
+    links = [
+        link
+        for link in _selected_response_links(db_session, branch, [agent.id])[agent.id]
+        if before_response_id is None or link.id < before_response_id
+    ]
     by_id = {link.id: link for link in links}
     response_ids = [link.id for link in links]
     _check_history_size(db_session, response_ids)
@@ -517,7 +524,7 @@ def _load_history(
     for sources in _cited_sources(
         db_session,
         [
-            (response.id, MessageRendering.model_validate(item.rendering))
+            (response.id, read_message_rendering(item.rendering))
             for response in reversed(responses)
             for item in response.response_items
             if item.rendering
@@ -528,10 +535,17 @@ def _load_history(
     return restored
 
 
-def load_agent_history(branch: ChatBranch, agent_id: str) -> SavedAgentContext:
+def load_agent_history(
+    branch: ChatBranch, agent_id: str, *, before_response_id: int | None = None
+) -> SavedAgentContext:
+    """The agent's saved conversation, or only its runs before
+    `before_response_id`."""
     with get_session_with_current_tenant() as db_session:
         return _load_history(
-            db_session, branch, visible_agent(db_session, branch, agent_id)
+            db_session,
+            branch,
+            visible_agent(db_session, branch, agent_id),
+            before_response_id,
         )
 
 

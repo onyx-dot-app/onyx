@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Text, type TextFont } from "@opal/components/text/components";
 import type { RichStr } from "@opal/types";
-import { cn } from "@opal/utils";
+import { cn, prefersReducedMotion } from "@opal/utils";
 
 interface ButtonLabelProps {
   children: string | RichStr;
@@ -21,13 +21,6 @@ const FALLBACK_MS = STEP_MS + 100;
 
 function textOf(label: string | RichStr): string {
   return typeof label === "string" ? label : label.raw;
-}
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
 }
 
 /**
@@ -135,6 +128,8 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   return (
     <span
       ref={ref}
+      // A hook for a host that hides labels by its own container's width
+      data-button-label=""
       className={cn(
         "overflow-x-clip whitespace-nowrap transition-opacity duration-150 ease-out motion-reduce:transition-none",
         responsiveHide ? "hidden md:inline-flex" : "inline-flex",

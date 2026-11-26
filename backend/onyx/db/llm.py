@@ -4,12 +4,14 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
-from sqlalchemy.orm.interfaces import LoaderOption
 
 from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.image_generation import (
     unlink_image_generation_models_for_provider__no_commit,
+)
+from onyx.db.model_configuration import (
+    fetch_model_configuration_by_provider_id_and_name,
 )
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
@@ -24,6 +26,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup,
+    UserPreferences,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
@@ -268,8 +271,7 @@ def _restore_masked_embedding_api_key(
     """Restore the stored key when the caller submits the masked placeholder.
 
     Reads mask the key, so a read-modify-write cycle would otherwise persist the
-    mask itself as the real credential. Mirrors resolve_masked_credentials in
-    onyx/db/external_app.py.
+    mask itself as the real credential.
     """
     if incoming is None:
         return incoming
@@ -978,21 +980,10 @@ def fetch_existing_models(
         select(ModelConfiguration)
         .join(LLMModelFlow)
         .where(LLMModelFlow.llm_model_flow_type.in_(flow_types))
-        .options(
-            selectinload(ModelConfiguration.llm_provider),
-            selectinload(ModelConfiguration.llm_model_flows),
-        )
+        .options(selectinload(ModelConfiguration.llm_provider))
     )
 
     return list(db_session.scalars(models).all())
-
-
-def _load_model_configurations_with_flows() -> LoaderOption:
-    """Flows ride along with the models: views read llm_model_flow_types per
-    model, which otherwise costs one query per model."""
-    return selectinload(LLMProviderModel.model_configurations).selectinload(
-        ModelConfiguration.llm_model_flows
-    )
 
 
 def fetch_existing_llm_providers(
@@ -1001,7 +992,6 @@ def fetch_existing_llm_providers(
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
     include_model_configurations: bool = True,
-    include_model_flows: bool = False,
 ) -> list[LLMProviderModel]:
     """Fetch all LLM providers with optional filtering.
 
@@ -1014,8 +1004,6 @@ def fetch_existing_llm_providers(
         include_model_configurations: If False, leave model_configurations
             unloaded. A provider can hold tens of thousands of rows, so callers
             that only need a page use fetch_model_configurations_page instead.
-        include_model_flows: Load each model's flows with it, for callers that
-            build LLMProviderView per model. Needs include_model_configurations.
     """
     stmt = select(LLMProviderModel)
 
@@ -1041,11 +1029,7 @@ def fetch_existing_llm_providers(
         selectinload(LLMProviderModel.personas),
     )
     if include_model_configurations:
-        stmt = stmt.options(
-            _load_model_configurations_with_flows()
-            if include_model_flows
-            else selectinload(LLMProviderModel.model_configurations)
-        )
+        stmt = stmt.options(selectinload(LLMProviderModel.model_configurations))
 
     providers = list(db_session.scalars(stmt).all())
     if only_public:
@@ -1119,7 +1103,6 @@ def fetch_model_configurations_page(
         .join(ranked, ranked.c.id == ModelConfiguration.id)
         .where(ranked.c.row_number > offset, ranked.c.row_number <= window_end + 1)
         .order_by(ModelConfiguration.llm_provider_id, ranked.c.row_number)
-        .options(selectinload(ModelConfiguration.llm_model_flows))
     )
     rows_by_provider: dict[int, list[ModelConfiguration]] = {
         provider_id: [] for provider_id in provider_ids
@@ -1182,6 +1165,20 @@ def fetch_first_accessible_llm_provider_by_type(
     return provider
 
 
+def fetch_first_llm_provider(
+    db_session: Session, provider: str
+) -> LLMProviderModel | None:
+    """The tenant's lowest-ID setup of this provider (the `provider` column,
+    e.g. "openai"), for background work that runs for the whole tenant, not
+    for one user."""
+    return db_session.scalars(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider == provider)
+        .order_by(LLMProviderModel.id.asc())
+        .limit(1)
+    ).first()
+
+
 def fetch_all_accessible_llm_providers(
     db_session: Session, user: User
 ) -> list[LLMProviderView]:
@@ -1224,9 +1221,7 @@ def fetch_all_llm_providers_accessible_in_any_context(
             include_slack_bot_personas=True,
         )
     }
-    provider_models = fetch_existing_llm_providers(
-        db_session, [], include_model_flows=True
-    )
+    provider_models = fetch_existing_llm_providers(db_session, [])
     user_group_ids = fetch_user_group_ids(db_session, user)
     can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
 
@@ -1251,21 +1246,22 @@ def fetch_all_llm_providers_accessible_in_any_context(
 
 
 def fetch_existing_llm_provider(
-    name: str, db_session: Session
+    name: str, db_session: Session, include_model_configurations: bool = True
 ) -> LLMProviderModel | None:
     # Duplicate names can predate upsert validation; order by id for determinism.
-    provider_model = db_session.scalar(
+    stmt = (
         select(LLMProviderModel)
         .where(LLMProviderModel.name == name)
         .order_by(LLMProviderModel.id)
         .options(
-            selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),
             selectinload(LLMProviderModel.personas),
         )
     )
+    if include_model_configurations:
+        stmt = stmt.options(selectinload(LLMProviderModel.model_configurations))
 
-    return provider_model
+    return db_session.scalar(stmt)
 
 
 def fetch_llm_provider_by_zoom_voice_provider_id(
@@ -1290,9 +1286,32 @@ def fetch_existing_llm_provider_by_id(
         )
     )
     if include_model_configurations:
-        stmt = stmt.options(_load_model_configurations_with_flows())
+        stmt = stmt.options(selectinload(LLMProviderModel.model_configurations))
 
     return db_session.scalar(stmt)
+
+
+def get_llm_provider_by_pk(
+    db_session: Session, provider_id: int
+) -> LLMProviderModel | None:
+    """Primary-key lookup. Unlike `fetch_existing_llm_provider_by_id`, this returns
+    the row the session already holds without a query, and adds no eager loads."""
+    return db_session.get(LLMProviderModel, provider_id)
+
+
+def add_llm_provider__no_commit(
+    db_session: Session, llm_provider: LLMProviderModel
+) -> None:
+    """Add a newly built provider row as is. The caller flushes to get its id."""
+    db_session.add(llm_provider)
+
+
+def add_model_configuration__no_commit(
+    db_session: Session, model_configuration: ModelConfiguration
+) -> None:
+    """Add a newly built model configuration row as is. The caller flushes to
+    get its id."""
+    db_session.add(model_configuration)
 
 
 def fetch_accessible_llm_provider_by_id(
@@ -1540,11 +1559,11 @@ def remove_llm_provider(
     # name or the provider id depending on the frontend writer, so match both.
     display_names = [provider.name] if provider.name else ["", str(provider.id)]
     db_session.execute(
-        update(User)
+        update(UserPreferences)
         .where(
             or_(
                 *(
-                    User.default_model.startswith(
+                    UserPreferences.default_model.startswith(
                         f"{display_name}__{provider.provider}__", autoescape=True
                     )
                     for display_name in display_names
@@ -1601,11 +1620,8 @@ def update_default_pointer_model(
     db_session: Session,
     flow_type: LLMModelFlowType,
 ) -> None:
-    model_config = db_session.scalar(
-        select(ModelConfiguration).where(
-            ModelConfiguration.llm_provider_id == provider_id,
-            ModelConfiguration.name == model_name,
-        )
+    model_config = fetch_model_configuration_by_provider_id_and_name(
+        db_session, provider_id, model_name
     )
     if model_config is None:
         raise ValueError(

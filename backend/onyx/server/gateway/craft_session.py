@@ -17,9 +17,9 @@ from fastapi import Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
+from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.utils.logger import setup_logger
 

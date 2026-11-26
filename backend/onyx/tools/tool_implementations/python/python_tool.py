@@ -1,7 +1,6 @@
 import hashlib
 import os
 import re
-from io import BytesIO
 from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter
@@ -17,13 +16,11 @@ from onyx.configs.app_configs import (
     CODE_INTERPRETER_MAX_STAGED_FILES,
     CODE_INTERPRETER_STAGING_CONCURRENCY,
 )
-from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
-from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.utils import (
     build_full_frontend_file_url,
-    chat_image_gen_metadata,
-    get_default_file_store,
+    chat_output_file_type,
+    save_chat_output_file,
 )
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import (
@@ -450,7 +447,6 @@ class PythonTool(Tool):
                 # Handle generated files
                 generated_files: list[PythonExecutionFile] = []
                 file_ids_to_cleanup: list[str] = []
-                file_store = get_default_file_store()
 
                 for workspace_file in result_event.files:
                     if workspace_file.kind != "file" or not workspace_file.file_id:
@@ -460,21 +456,12 @@ class PythonTool(Tool):
                         # Download file from Code Interpreter
                         file_content = client.download_file(workspace_file.file_id)
 
-                        # Determine MIME type from file extension
                         filename = workspace_file.path.split("/")[-1]
-                        mime_type = (
-                            guess_mime_type(filename) or "application/octet-stream"
-                        )
-
-                        # Save to Onyx file store
-                        onyx_file_id = file_store.save_file(
-                            content=BytesIO(file_content),
+                        onyx_file_id = save_chat_output_file(
+                            file_content,
                             display_name=filename,
-                            file_origin=FileOrigin.CHAT_IMAGE_GEN,
-                            file_type=mime_type,
-                            file_metadata=chat_image_gen_metadata(
-                                self._chat_session_id
-                            ),
+                            file_type=chat_output_file_type(filename),
+                            chat_session_id=self._chat_session_id,
                         )
 
                         generated_files.append(

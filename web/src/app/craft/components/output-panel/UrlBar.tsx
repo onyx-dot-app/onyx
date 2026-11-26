@@ -2,13 +2,14 @@
 
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputTypeIn, Text, Tooltip } from "@opal/components";
-import { SvgDownloadCloud, SvgExternalLink, SvgRevert } from "@opal/icons";
+import { Button } from "@opal/components";
+import { SvgDownloadCloud, SvgExternalLink } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
+import { PanelUrlBar } from "@/sections/output-panel/PanelUrlBar";
 import ShareButton from "@/app/craft/components/ShareButton";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
 
-export interface UrlBarProps {
+interface UrlBarProps {
   displayUrl: string;
   searchValue?: string;
   onSearchChange?: (value: string) => void;
@@ -28,6 +29,7 @@ export interface UrlBarProps {
   onScopeChange?: () => void;
 }
 
+/** Craft's URL bar: the shared bar with its reload, upload, download and share actions. */
 export default function UrlBar({
   displayUrl,
   searchValue,
@@ -50,46 +52,18 @@ export default function UrlBar({
   const t = useTranslations("craft.urlBar");
   const reloadLabel = refreshLabel ?? t("refresh.ariaLabel");
   return (
-    <div className="flex h-11 shrink-0 items-center gap-2 px-3 pb-2">
-      <Button
-        icon={isUserRefreshing ? IconLoader : SvgRevert}
-        prominence="tertiary"
-        size="sm"
-        disabled={!onRefresh || isRefreshing || isUserRefreshing}
-        onClick={onRefresh}
-        tooltip={reloadLabel}
-        aria-label={reloadLabel}
-        aria-busy={isRefreshing || isUserRefreshing}
-      />
-      <div
-        data-testid="url-bar-pill"
-        className="flex h-8 min-w-0 flex-1 items-center rounded-md bg-background-tint-02 px-2 overflow-hidden"
-      >
-        {onSearchChange ? (
-          <InputTypeIn
-            variant="internal"
-            icon="search"
-            value={searchValue ?? ""}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder={placeholder}
-            aria-label={placeholder}
-          />
-        ) : (
-          <Tooltip tooltip={displayUrl} side="bottom">
-            <div className="min-w-0 flex-1" data-testid="url-text-wrapper">
-              <Text
-                as="p"
-                dir="ltr"
-                font="secondary-body"
-                color="text-03"
-                maxLines={1}
-              >
-                {displayUrl}
-              </Text>
-            </div>
-          </Tooltip>
-        )}
-      </div>
+    <PanelUrlBar
+      displayUrl={displayUrl}
+      searchValue={searchValue}
+      onSearchChange={onSearchChange}
+      placeholder={placeholder}
+      refresh={{
+        label: reloadLabel,
+        onRefresh,
+        isRefreshing,
+        isUserRefreshing,
+      }}
+    >
       {uploadAction}
       {onDownloadRaw && (
         <Button
@@ -135,6 +109,6 @@ export default function UrlBar({
           onScopeChange={onScopeChange}
         />
       )}
-    </div>
+    </PanelUrlBar>
   );
 }

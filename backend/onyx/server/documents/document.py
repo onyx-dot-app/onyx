@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.access.access import censor_chunks_for_user
@@ -13,6 +13,8 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentSectionRequest
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.server.documents.models import ChunkInfo, DocumentInfo
@@ -45,7 +47,7 @@ def get_document_info(
     )
 
     if not inference_chunks:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Document not found")
 
     contents = [chunk.content for chunk in inference_chunks]
 
@@ -102,7 +104,7 @@ def get_chunk_info(
     )
 
     if not inference_chunks:
-        raise HTTPException(status_code=404, detail="Chunk not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chunk not found")
 
     chunk_content = inference_chunks[0].content
 

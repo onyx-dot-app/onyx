@@ -15,7 +15,7 @@ from onyx.background.celery.celery_redis import (
     celery_get_queue_length,
     celery_get_queued_task_ids,
 )
-from onyx.background.celery.tasks.pruning.tasks import (
+from onyx.background.celery.tasks.shared.prune_records import (
     reset_prune_and_cancel_sync_record,
 )
 from onyx.configs.app_configs import DOCUMENT_INDEX_SYNC_MAX_TASKS, JOB_TIMEOUT
@@ -27,7 +27,7 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
     OnyxRedisSignals,
 )
-from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector import delete_connector_row__no_commit, fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
     add_deletion_failure_message,
     delete_connector_credential_pair__no_commit,
@@ -632,7 +632,7 @@ def monitor_connector_deletion_taskset(
                 task_logger.info(
                     "Connector deletion - Found no credentials left for connector, deleting connector"
                 )
-                db_session.delete(connector)
+                delete_connector_row__no_commit(db_session, connector)
             db_session.commit()
 
             # The pair's doc permission sync checkpoint is a file, not a row

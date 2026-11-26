@@ -680,8 +680,21 @@ of memory and 5.5 GiB of ephemeral storage. The flag needs
 The `onyx` composition passes only `enable_craft_pod_sandbox_node_pool`; call
 the `gke` module directly to change the size.
 
-Like the other tainted pools, the pod sandbox pool starts with no nodes. The
-autoscaler adds a node when a pod sandbox needs one.
+Unlike the other tainted pools, the Firecracker pool and the pod sandbox pool
+start with one node in each zone of the cluster (when their minimum is above 0).
+Their first workloads are DaemonSets (the host agent and the sandbox image
+prepuller), and a DaemonSet never makes the autoscaler add a node. GKE does not
+grow an empty pool to its minimum. Later, the autoscaler scales each pool
+between its minimum and maximum. The start size applies only when the module
+creates a pool. On a Firecracker pool that has no nodes, resize it by hand.
+Use the cluster location (the `location` output: the region, or the zone of a
+zonal cluster). `--num-nodes` counts the nodes in each zone. The autoscaler
+then keeps the pool between its minimum and maximum:
+
+```bash
+gcloud container clusters resize <cluster> --node-pool <sandbox pool> \
+  --num-nodes 1 --location <cluster location>
+```
 
 ### Signed GCS URLs
 

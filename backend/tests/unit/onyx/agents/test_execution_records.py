@@ -9,6 +9,7 @@ from onyx.llm.models import (
     AssistantMessage,
     Message,
     MessageRole,
+    ReasoningItemBlock,
     RedactedThinkingBlock,
     TextContent,
     ThinkingBlock,
@@ -219,3 +220,49 @@ def test_replay_can_reuse_owned_content_without_mutating_the_message_list() -> N
     assert replay[1] is not assistant
     assert isinstance(replay[1], AssistantMessage)
     assert replay[1].content is not assistant.content
+
+
+def test_replay_drops_a_reasoning_item_whose_tool_call_was_lost() -> None:
+    """OpenAI rejects a reasoning item that is not followed by the text or
+    tool call it reasoned for, so a stopped tool call takes its item along."""
+    item = ReasoningItemBlock(id="rs_1", summary=["Plan."], encrypted_content="blob")
+    stopped = AssistantMessage(
+        content=[
+            ThinkingContent(text="Plan.", blocks=[item]),
+            ToolCall(id="call-1", name="search", arguments={}),
+        ],
+        stop_reason="aborted",
+    )
+    answered = AssistantMessage(
+        content=[
+            ThinkingContent(text="Plan.", blocks=[item]),
+            ToolCall(id="call-2", name="search", arguments={}),
+        ]
+    )
+    # An interrupted answer can leave text that is empty, which is no
+    # following item either.
+    silent = AssistantMessage(
+        content=[ThinkingContent(text="Plan.", blocks=[item]), TextContent(text="")],
+        stop_reason="aborted",
+    )
+    messages: list[Message] = [
+        stopped,
+        UserMessage(content="Continue"),
+        answered,
+        ToolResultMessage(content="found", tool_call_id="call-2", tool_name="search"),
+        silent,
+    ]
+
+    replay = messages_for_model(messages)
+
+    assert replay == messages[1:4]
+    assert format_provider_message(replay[1]).model_dump(exclude_none=True)[
+        "reasoning_items"
+    ] == [
+        {
+            "type": "reasoning",
+            "id": "rs_1",
+            "summary": [{"type": "summary_text", "text": "Plan."}],
+            "encrypted_content": "blob",
+        }
+    ]

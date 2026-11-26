@@ -215,7 +215,6 @@ def upsert_ingestion_doc(
         db_session=db_session,
         tenant_id=tenant_id,
         document_batch=[document],
-        request_id=None,
         adapter=adapter,
         written_search_settings_id=active_search_settings.primary.id,
     )
@@ -238,7 +237,6 @@ def upsert_ingestion_doc(
             db_session=db_session,
             tenant_id=tenant_id,
             document_batch=[document],
-            request_id=None,
             adapter=adapter,
             written_search_settings_id=sec_search_settings.id,
         )

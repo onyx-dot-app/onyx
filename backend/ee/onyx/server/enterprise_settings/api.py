@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -43,6 +43,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.serving import resolve_inline_disposition
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.server.utils import BasicAuthenticationError
@@ -51,7 +52,12 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
-admin_router = APIRouter(prefix="/admin/enterprise-settings")
+admin_router = APIRouter(
+    prefix="/admin/enterprise-settings",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.WHITELABEL))
+    ],
+)
 basic_router = APIRouter(prefix="/enterprise-settings")
 
 logger = setup_logger()
@@ -170,29 +176,22 @@ async def refresh_access_token(
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
             logger.warning("Full authentication required for user %s", user.id)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Full authentication required",
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED, "Full authentication required"
             )
         logger.error(
             "HTTP error occurred while refreshing token for user %s: %s",
             user.id,
             str(e),
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to refresh token",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to refresh token")
     except Exception as e:
         logger.error(
             "Unexpected error occurred while refreshing token for user %s: %s",
             user.id,
             str(e),
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "An unexpected error occurred")
 
 
 @admin_router.put("")
@@ -265,10 +264,7 @@ def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
             raise ValueError("get_onyx_file returned None!")
     except Exception:
         logger.exception("Faield to fetch logo file")
-        raise HTTPException(
-            status_code=404,
-            detail="No logo file found",
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No logo file found")
     else:
         return _logo_response(onyx_file, cache_control="no-cache")
 
@@ -280,10 +276,7 @@ def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
         if not onyx_file:
             raise ValueError("get_onyx_file returned None!")
     except Exception:
-        raise HTTPException(
-            status_code=404,
-            detail="No logotype file found",
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No logotype file found")
     else:
         return _logo_response(onyx_file, cache_control=None)
 
@@ -311,7 +304,7 @@ def upload_custom_analytics_script(
     try:
         store_analytics_script(script_upload)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @basic_router.get("/custom-analytics-script")
@@ -367,7 +360,11 @@ def get_active_scim_token(
     )
 
 
-@admin_router.post("/scim/token", status_code=201)
+@admin_router.post(
+    "/scim/token",
+    status_code=201,
+    dependencies=[Depends(restrict_in_playground(PlaygroundRestrictedFeature.SCIM))],
+)
 def create_scim_token(
     body: ScimTokenCreate,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),

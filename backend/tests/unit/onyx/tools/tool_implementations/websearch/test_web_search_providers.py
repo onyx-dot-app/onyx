@@ -4,6 +4,9 @@ from onyx.tools.tool_implementations.web_search.clients.brave_client import Brav
 from onyx.tools.tool_implementations.web_search.clients.firecrawl_client import (
     FirecrawlSearchClient,
 )
+from onyx.tools.tool_implementations.web_search.clients.parallel_client import (
+    ParallelSearchClient,
+)
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
     provider_requires_api_key,
@@ -18,6 +21,7 @@ def test_provider_requires_api_key() -> None:
     assert provider_requires_api_key(WebSearchProviderType.SERPER) is True
     assert provider_requires_api_key(WebSearchProviderType.GOOGLE_PSE) is True
     assert provider_requires_api_key(WebSearchProviderType.FIRECRAWL) is True
+    assert provider_requires_api_key(WebSearchProviderType.PARALLEL) is True
     assert provider_requires_api_key(WebSearchProviderType.SEARXNG) is False
 
 
@@ -128,6 +132,53 @@ def test_build_firecrawl_provider_rejects_invalid_timeout() -> None:
             provider_type=WebSearchProviderType.FIRECRAWL,
             api_key="test-api-key",
             config={"timeout_seconds": "not-an-int"},
+        )
+
+
+def test_build_parallel_provider_requires_api_key() -> None:
+    with pytest.raises(ValueError, match="API key is required"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.PARALLEL,
+            api_key=None,
+            config={},
+        )
+
+
+def test_build_parallel_provider_with_optional_config() -> None:
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.PARALLEL,
+        api_key="test-api-key",
+        config={
+            "num_results": "15",
+            "timeout_seconds": "45",
+            "mode": "basic",
+            "location": "DE",
+        },
+    )
+    assert isinstance(provider, ParallelSearchClient)
+    assert provider._num_results == 15  # noqa: SLF001
+    assert provider._timeout_seconds == 45  # noqa: SLF001
+    assert provider._mode == "basic"  # noqa: SLF001
+    assert provider._location == "de"  # noqa: SLF001
+
+
+def test_build_parallel_provider_defaults() -> None:
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.PARALLEL,
+        api_key="test-api-key",
+        config=None,
+    )
+    assert isinstance(provider, ParallelSearchClient)
+    assert provider._mode == "fast"  # noqa: SLF001
+    assert provider._timeout_seconds == 30  # noqa: SLF001
+
+
+def test_build_parallel_provider_rejects_invalid_timeout() -> None:
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.PARALLEL,
+            api_key="test-api-key",
+            config={"timeout_seconds": "-1"},
         )
 
 

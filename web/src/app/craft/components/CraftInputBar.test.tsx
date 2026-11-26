@@ -3,6 +3,7 @@ import { act, fireEvent, screen, within } from "@testing-library/react";
 import { deferred, render } from "@tests/setup/test-utils";
 import { draftKey } from "@/hooks/useDraft";
 import CraftInputBar from "@/app/craft/components/CraftInputBar";
+import type { PickerSections, PickerSkill } from "@/lib/skills/picker";
 import {
   UploadFileStatus,
   type BuildFile,
@@ -67,10 +68,29 @@ const PPTX_SKILLS = {
   ],
   customs: [],
 };
-let mockSkillsData: typeof PPTX_SKILLS | undefined;
+let mockSkillsData:
+  | {
+      builtins: typeof PPTX_SKILLS.builtins;
+      customs: { name: string; description: string; enabled: boolean }[];
+    }
+  | undefined;
 jest.mock("@/hooks/useUserSkills", () => ({
   __esModule: true,
   default: () => ({ data: mockSkillsData }),
+}));
+
+const mockChatSkills: {
+  entries: PickerSections;
+  onInputFocus: () => void;
+} = {
+  entries: { skills: [], apps: [], mcpServers: [] },
+  onInputFocus: () => undefined,
+};
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/skills/hooks")>(
+    "@/lib/skills/hooks"
+  ),
+  useChatSkills: () => mockChatSkills,
 }));
 
 jest.mock("@/hooks/useUserExternalApps", () => ({
@@ -320,6 +340,34 @@ describe("Craft `/` picker", () => {
     expect(screen.getByTestId("skill-picker-row-pptx")).toBeVisible();
     enterTextWithCaret("/ptxz", 5);
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  it("offers each skill of an uploaded plugin, not the plugin name", () => {
+    mockSkillsData = {
+      ...PPTX_SKILLS,
+      customs: [{ name: "review-kit", description: "Kit", enabled: true }],
+    };
+    const review: PickerSkill = {
+      kind: "skill",
+      slug: "review",
+      name: "review",
+      description: "Review code.",
+    };
+    mockChatSkills.entries = { skills: [review], apps: [], mcpServers: [] };
+    render(<CraftInputBar onSubmit={jest.fn()} isRunning={false} />);
+    enterTextWithCaret("/", 1);
+    expect(screen.getByTestId("skill-picker-row-review")).toBeVisible();
+    expect(screen.queryByTestId("skill-picker-row-review-kit")).toBeNull();
+    mockChatSkills.entries = { skills: [], apps: [], mcpServers: [] };
+  });
+
+  it("fetches the chat skills again when the input gains focus", () => {
+    const onInputFocus = jest.fn();
+    mockChatSkills.onInputFocus = onInputFocus;
+    render(<CraftInputBar onSubmit={jest.fn()} isRunning={false} />);
+    act(() => screen.getByRole("textbox", { name: "Message input" }).focus());
+    expect(onInputFocus).toHaveBeenCalledTimes(1);
+    mockChatSkills.onInputFocus = () => undefined;
   });
 });
 

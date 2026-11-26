@@ -119,8 +119,9 @@ welcome and auth pages); and the theme page's preview
    raster-only.
 3. `logo-size-bounds` **Keep both size bounds and the decode check.**
    `ee/onyx/server/enterprise_settings/store.py:MAX_LOGO_SIZE_BYTES` caps the
-   bytes read. `MAX_LOGO_PIXELS` caps the decoded
-   size, checked from the header before a full decode, because a small
+   bytes read (`utils/file.py:read_upload_within_limit`).
+   `utils/file.py:MAX_UPLOAD_IMAGE_PIXELS`, shared with the profile photo
+   upload, caps the decoded size, checked from the header before a full decode, because a small
    compressed file can decode to a huge bitmap.
    `server/runtime/onyx_runtime.py:OnyxRuntime.get_emailable_logo` decodes the
    stored logo with Pillow each time an email is sent, so a body that only has

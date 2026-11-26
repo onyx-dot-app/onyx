@@ -65,7 +65,7 @@ Its neighbours own:
 ```
 SearchTool._run -> SearchTool.search
   one DB session: ACL filters, document-set check, search settings,
-  federated registry, Slack token prefetch            no DB use after this
+  federated registry, Slack token prefetch            close prefetch session
   -> _expand_queries_and_decide_scope (parallel)
        semantic_query_rephrase, keyword_query_expansion   query_expansion.py
        decide_search_scope                                source_filter.py
@@ -86,14 +86,16 @@ SearchTool._run -> SearchTool.search
 The module docstring of `SearchTool` gives the authors' five-step design. Read
 it first.
 
-**Prefetch, then parallel work.** `search` reads everything it needs from the
-database in one short session. The lane workers use plain objects. This keeps
-parallel lanes from holding connections. Do not pass an ORM object or a session
-into a lane. `PersonaSearchInfo`
+**Prefetch, then parallel work.** `search` reads the settings and access filters
+in one short database session. The lane workers use plain objects. Do not pass
+an ORM object or a session into a lane. `PersonaSearchInfo`
 (`context/search/models.py`) is the detached snapshot of the agent's document
 sets, start date, attached documents and hierarchy nodes. Chat builds it in
 `db/tools.py:capture_persona_tool_configuration`, and the `/search` API builds
-its own.
+its own. The prefetched embedding model carries a key for its search settings and provider configuration.
+Workers use that key and the query text to reuse a vector from the tenant cache.
+Each search still runs retrieval with its current filters. Content-free turns
+skip the embedding cache.
 
 **Lanes and weights.** A call runs at most `MAX_QUERIES_PER_CALL` (3) of the
 model's queries; `SearchTool._run` drops the rest with a log warning, and the
@@ -102,6 +104,15 @@ own queries, the user's original message and the keyword queries each get a lane
 weight (`tools/tool_implementations/search/constants.py`). Keyword lanes use a
 low `hybrid_alpha`. A `hybrid_alpha` of exactly 0 skips embedding and runs pure
 keyword retrieval in `context/search/retrieval/search_runner.py:search_chunks`.
+In chat, each lane first passes a size check in `SearchTool._run_search_for_query`.
+ASCII text up to 512 characters runs at once. Text up to 8,192 characters runs
+only if the index analyzer (`DocumentIndex.count_keyword_terms`) finds at most
+1,000 terms and 500 distinct terms. Longer text is skipped, and other lanes do
+not wait for the check. Raw search skips the check.
+When the index rejects a lane for exceeding its clause limit
+(`document_index/opensearch/client.py:is_clause_limit_error`), fusion drops that
+lane and its weight. Other errors still fail the call, and a call whose every lane
+exceeds the limit returns a tool error.
 
 **Filters live in the index query.** For index lanes, source, document set,
 time, ACL, cc-pair access and project or agent scope compile into one
@@ -204,15 +215,42 @@ calls the index directly for admin document inspection.
    `tools/tool_implementations/search/search_tool.py:SearchTool._run_slack_search` gets no `effective_filters`, so time,
    document-set and agent filters do not limit Slack results. The token decides
    what comes back ([[federated-search#slack-results-have-no-acl]]).
+   Federated sources cannot apply tags, so a search with tag filters skips the
+   Slack lane and all federated retrieval (`SearchTool.run` and
+   `context/search/retrieval/search_runner.py:search_chunks`).
 4. `llm-and-rich-responses-differ` **The result `content` and `details` serve
    different readers.** The model reads the trimmed, cited string in `content`.
    `SearchDocsResponse.search_docs` holds every top section before selection,
    plus any decision-model pick from beyond the top hits.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
    list means none. Do not feed `details` fields back into the prompt. In chat,
-   `ChatAgent._finalize_tool` stages the connector files of all `search_docs`
-   for the Python tool, when the chat offers it, by `SearchDoc.file_id`, which
-   `populate_file_ids_on_sections` fills ([[code-execution]]). The saved result
+   `ChatAgent._finalize_tool` stages, for the Python tool when the chat offers
+   it and has no sandbox, the files that `SearchDocsResponse.openable_file_names`
+   maps to their names ([[code-execution]]); a file that fails to read is
+   logged and skipped, though the result still names it.
+   `SearchTool._build_search_result`
+   fills that map with one file record query over the documents'
+   `SearchDoc.file_id` (which `populate_file_ids_on_sections` fills):
+   connector files that the file store still has. The field is live only;
+   saved and streamed results lack it, and `SearchDoc.file_id` stays on every
+   document. The model's string names a shown result's file, with its
+   excerpt, only when a tool can open it: it passes `file_names` to
+   `convert_inference_sections_to_llm_string`. In a sandbox chat,
+   `ToolContext.sandbox_search_files` offers the shown results' files (at most
+   `SEARCH_FILE_MAX_BYTES`) to the turn's copy into the VM, and the result
+   gives the path in attachments/search/ that the copy returns
+   (`SEARCH_FILE_GUIDANCE`, [[code-execution]]); that file can be missing
+   when the model reads it, because the copy can still run or can skip it
+   (no access, over a limit or the cap, a failed write, or no response from
+   the VM), so the guidance tells the model to try again or search again.
+   In a chat without a sandbox that stages files (`ToolContext.python_stages_search_files`), it gives the
+   staged name (`FILE_ASSOCIATED_GUIDANCE`) from the same map that the
+   staging reads. A file that `ToolContext.chat_files` already has keeps its
+   staged name. Other names come from `harness_base.search_file_name`
+   (`chat_file_name` with a hash prefix of the file ID) and the raw title of
+   the first shown chunk with the file; a staged file that no shown chunk has
+   takes the first document's title. Other results, deep research and the search API show
+   `combined_content`. The saved result
    (`chat/response.py:_saved_message`) drops `search_docs` and the planning
    metadata. The `ToolCall` row keeps the selected documents, so replay and
    later turns cannot see the candidates before selection.

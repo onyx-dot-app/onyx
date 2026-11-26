@@ -15,6 +15,7 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import QueryHistoryType
 from onyx.db.enums import PluginPublishingPolicy, SupportedLanguage
 from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.playground import PlaygroundRestrictedFeature
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB = 200
@@ -130,7 +131,7 @@ class Settings(BaseModel):
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
 
-    # Workspace UI language for users without a stored User.language.
+    # Workspace UI language for users without a stored UserPreferences.language.
     default_language: SupportedLanguage = SupportedLanguage.EN
 
     # Workspace-wide switch for the LLM gateway (/api/gateway — direct model
@@ -141,6 +142,9 @@ class Settings(BaseModel):
     # Who can publish skills to the organization. Organization-wide skill
     # managers always publish at once.
     plugin_publishing: PluginPublishingPolicy = PluginPublishingPolicy.OPEN
+    # Whether members can share skills with people and groups.
+    # Organization-wide skill managers always can.
+    plugin_sharing: bool = True
 
     # Workspace-wide instructions injected into every Craft agent's AGENTS.md
     # as an "Organization instructions" section.
@@ -185,6 +189,11 @@ class UserSettings(Settings):
     # reads this instead of a build-time flag, so cloud and playground share
     # one web image.
     is_playground: bool = False
+    # The features the playground restricts (onyx/server/playground.py). Empty
+    # elsewhere. The web app disables each page and control from this list.
+    playground_restrictions: list[PlaygroundRestrictedFeature] = Field(
+        default_factory=list
+    )
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
     # Git details of the server's build (server/settings/build_info.py).

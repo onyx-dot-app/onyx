@@ -3,7 +3,6 @@
 import json
 import queue
 from collections.abc import Generator
-from contextlib import contextmanager
 from functools import partial
 from threading import Event
 from unittest.mock import MagicMock
@@ -14,7 +13,6 @@ from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
 from onyx.agents.models import (
     AgentCompletion,
-    AgentStep,
     InputMessageMetadata,
     InputSource,
     PreparedStep,
@@ -23,16 +21,14 @@ from onyx.agents.models import (
     StepInput,
     StepRecord,
 )
-from onyx.agents.runtime import Agent, Run, RunFailed
-from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.runtime import Run, RunFailed
+from onyx.agents.tools import AgentTool
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageMetadata
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.run_store import agent_result_message
-from onyx.coding_agent.agent import CodingAgent
-from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -46,7 +42,6 @@ from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_NAME,
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMTimeoutError
@@ -66,7 +61,6 @@ from onyx.llm.models import (
     ToolCall,
     ToolChoiceOptions,
     ToolDefinition,
-    ToolResult,
     ToolResultMessage,
     UserMessage,
 )
@@ -76,11 +70,6 @@ from onyx.server.query_and_chat.streaming_models import (
     IntermediateReportDelta,
     OverallStop,
     Packet,
-)
-from onyx.tools.models import ToolContext
-from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -107,83 +96,15 @@ def tool_delta(name: str, arguments: str = "{}", count: int = 1) -> Delta:
     )
 
 
-def test_coding_bash_order_history_and_final_answer() -> None:
-    runs: list[Run] = []
-    llm = ScriptedLLM(
-        [
-            tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}', 2),
-            tool_delta(GENERATE_ANSWER_TOOL_NAME),
-            Delta(content="Done"),
-        ],
-        128000,
-    )
-    bash = MagicMock(spec=BashTool)
-    bash.run.side_effect = [
-        ToolResult(details=None, content=value) for value in ["first", "second"]
-    ]
-    bash.name = "bash"
-    harness = CodingAgent(
-        repo="org/repo",
-        llm=llm,
-        token_counter=len,
-        user_identity=None,
-        bash_tool=bash,
-    )
-    result = run_agent(
-        harness,
-        runs=runs,
-        max_steps=3,
-        messages=[UserMessage(content="Read repository")],
-    )
-    assert len(llm.requests) == 3
-    assert result.output.text == "Done"
-    assert bash.run.call_count == 2
-    responses = [
-        message for message in harness.state.messages if message.role == "tool_result"
-    ]
-    assert [message.text for message in responses] == [
-        "first",
-        "second",
-        "Ready to produce the final answer.",
-    ]
-    # The provider repeats call-0 in the second step, which gets a new ID.
-    ids = [message.tool_call_id for message in responses]
-    assert ids[:2] == ["call-0", "call-1"] and ids[2] not in ids[:2]
-    assert llm.requests[-1]["tools"] == llm.requests[0]["tools"]
-    assert llm.requests[-1]["tool_choice"] == ToolChoiceOptions.NONE
-
-
-def test_cancel_after_coding_tools_prevents_final_model_call() -> None:
-    runs: list[Run] = []
-    llm = ScriptedLLM([tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}')], 128000)
-    bash = MagicMock(spec=BashTool)
-    signal = CancellationSignal()
-
-    def finish(_invocation: ToolInvocation, _context: ToolContext) -> ToolResult:
-        signal.cancel()
-        return ToolResult(content="done")
-
-    bash.run.side_effect = finish
-    bash.name = "bash"
-    harness = CodingAgent(
-        repo="org/repo",
-        llm=llm,
-        token_counter=len,
-        user_identity=None,
-        bash_tool=bash,
-    )
-    with pytest.raises(AgentCancelled):
-        run_agent(harness, runs=runs, max_steps=3, cancellation=signal)
-    assert len(llm.requests) == 1
-
-
 @pytest.mark.parametrize("render", [True, False])
-def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) -> None:
+def test_research_search_steps_are_bounded_and_report_is_generated(
+    render: bool,
+) -> None:
     runs: list[Run] = []
     llm = ScriptedLLM(
         [
-            tool_delta(THINK_TOOL_NAME, '{"reasoning":"inspect"}'),
-            tool_delta(THINK_TOOL_NAME, '{"reasoning":"compare"}'),
+            tool_delta(WebSearchTool.NAME, '{"value":"inspect"}'),
+            tool_delta(WebSearchTool.NAME, '{"value":"compare"}'),
             Delta(content="Report"),
         ],
         128000,
@@ -191,7 +112,9 @@ def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) 
     presentation = (
         ResponsePresenter(Emitter(queue.Queue[Packet]().put_nowait)) if render else None
     )
-    feature = ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
+    feature = ResearchAgent(
+        [ResearchWebSearchStub()], llm, len, None, "", ReasoningEffort.LOW
+    )
     result = run_agent(
         feature,
         runs=runs,
@@ -508,7 +431,6 @@ def test_research_receives_background_evidence_with_distinct_citations(
         for name in ("earlier", "child")
     ]
     completion = AgentCompletion(
-        agent_id="child",
         agent_path="/root/child",
         run_id="child-run",
         status=RunStatus.COMPLETE,
@@ -815,11 +737,10 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
     } == {1: "second", 2: "first"}
 
 
-@pytest.mark.parametrize("coding", [False, True])
-def test_repeated_runs_use_new_input_and_restore_tool_execution(coding: bool) -> None:
+def test_repeated_runs_use_new_input_and_restore_tool_execution() -> None:
     runs: list[Run] = []
     requests: list[GenerationRequest] = []
-    final_tool = GENERATE_ANSWER_TOOL_NAME if coding else GENERATE_REPORT_TOOL_NAME
+    final_tool = GENERATE_REPORT_TOOL_NAME
 
     def generate(
         request: GenerationRequest, _signal: CancellationSignal
@@ -832,17 +753,7 @@ def test_repeated_runs_use_new_input_and_restore_tool_execution(coding: bool) ->
         )
 
     llm = FakeModelClient(generate)
-    feature = (
-        CodingAgent(
-            repo="org/repo",
-            llm=llm,
-            token_counter=len,
-            user_identity=None,
-            bash_tool=MagicMock(spec=BashTool),
-        )
-        if coding
-        else ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
-    )
+    feature = ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
     first = run_agent(
         feature,
         runs=runs,
@@ -861,53 +772,6 @@ def test_repeated_runs_use_new_input_and_restore_tool_execution(coding: bool) ->
     assert "Second question" in requests[3].messages[-1].text
     assert "First question" not in requests[3].messages[-1].text
     assert second.output.text == "Report"
-
-
-def test_coding_rejects_run_after_sandbox_cleanup() -> None:
-    runs: list[Run] = []
-    requests: list[GenerationRequest] = []
-
-    def generate(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        requests.append(request)
-        return AssistantMessage(content=[TextContent(text="Done")])
-
-    feature = CodingAgent(
-        repo="org/repo",
-        llm=FakeModelClient(generate),
-        token_counter=len,
-        user_identity=None,
-        bash_tool=MagicMock(spec=BashTool),
-    )
-    run_agent(
-        feature,
-        runs=runs,
-        max_steps=1,
-        messages=[UserMessage(content="Read repository")],
-    )
-    previous = runs[-1].snapshot()
-    assert previous is not None
-    feature.is_sandbox_available = False
-    with pytest.raises(RunFailed) as failure:
-        run_agent(
-            feature,
-            runs=runs,
-            max_steps=1,
-            messages=[UserMessage(content="Continue")],
-        )
-    assert failure.value.failure.kind == RunFailureKind.EXECUTION
-    assert len(requests) == 1
-    failed = runs[-1].snapshot()
-    assert failed is not None and failed.status == "error"
-    assert failed.previous_run_id == previous.run_id
-    assert [message.text for message in failed.input_messages] == ["Continue"]
-    assert failed.messages == []
-    assert failed.steps == []
-    assert feature.state.messages[:-1] == [
-        *previous.input_messages,
-        *previous.messages,
-    ]
 
 
 @pytest.mark.parametrize("from_tool_result", [False, True])
@@ -972,51 +836,7 @@ def test_restored_research_preserves_history_and_source_numbers(
     assert feature.citation_mapping == {4: "reference"}
 
 
-def test_coding_prepared_request_keeps_decisions_when_history_changes() -> None:
-    bash = MagicMock(spec=BashTool)
-    bash.name = BASH_TOOL_NAME
-    feature = CodingAgent(
-        repo="org/repo",
-        llm=ScriptedLLM([], 128000),
-        token_counter=len,
-        user_identity=None,
-        bash_tool=bash,
-    )
-    history: list[Message] = [UserMessage(content="Inspect the repository")]
-    prepared = feature._prepare_step(
-        StepInput(
-            history=[],
-            input_messages=history,
-            messages=[],
-            step=AgentStep(index=0, limit=3),
-        )
-    )
-    assert prepared is not None
-    definitions = [tool.definition for tool in feature.tools]
-    initial = prepared.generation_request(history, tools=definitions)
-    final = feature._prepare_step(
-        StepInput(
-            history=[],
-            input_messages=history,
-            messages=[],
-            step=AgentStep(index=2, limit=3),
-        )
-    )
-    assert final is not None
-    rebuilt = prepared.generation_request(
-        [UserMessage(content="Compacted evidence")], tools=definitions
-    )
-
-    assert final.options.tool_choice == ToolChoiceOptions.NONE
-    assert rebuilt.options == initial.options
-    assert rebuilt.tools == initial.tools
-    assert BASH_TOOL_NAME in {tool.name for tool in rebuilt.tools}
-    assert rebuilt.messages[0] == initial.messages[0]
-    assert any(message.text == "Compacted evidence" for message in rebuilt.messages)
-    assert all(message.text != "Inspect the repository" for message in rebuilt.messages)
-
-
-@pytest.mark.parametrize("feature_name", ["coding", "research", "deep_research"])
+@pytest.mark.parametrize("feature_name", ["research", "deep_research"])
 def test_empty_final_response_fails_at_step_limit(feature_name: str) -> None:
     requests: list[GenerationRequest] = []
 
@@ -1028,15 +848,7 @@ def test_empty_final_response_fails_at_step_limit(feature_name: str) -> None:
         return AssistantMessage(content=[TextContent(text=text)])
 
     llm = FakeModelClient(reply)
-    if feature_name == "coding":
-        feature = CodingAgent(
-            repo="org/repo",
-            llm=llm,
-            token_counter=len,
-            user_identity=None,
-            bash_tool=MagicMock(spec=BashTool),
-        )
-    elif feature_name == "research":
+    if feature_name == "research":
         feature = ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
     else:
         feature = DeepResearchAgent(
@@ -1145,67 +957,3 @@ def test_research_result_failure_returns_tool_error_and_preserves_child(
         else "Invalid citation mapping"
     )
     assert expected_error in errors[0].content
-
-
-def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    entered = Event()
-    release = Event()
-    deleted = Event()
-    cleanup_started = Event()
-    release_cleanup = Event()
-
-    @contextmanager
-    def sandbox(repo: str, github_token: str | None) -> Generator[str, None, None]:
-        assert repo == "org/repo"
-        assert github_token is None
-        yield "test-sandbox"
-        cleanup_started.set()
-        assert release_cleanup.wait(5)
-        deleted.set()
-
-    def bash(
-        _self: BashTool, _invocation: ToolInvocation, _context: ToolContext
-    ) -> ToolResult:
-        entered.set()
-        assert release.wait(5)
-        assert not deleted.is_set()
-        return ToolResult(content="done")
-
-    module = "onyx.tools.tool_implementations.coding_agent.coding_agent_tool"
-    monkeypatch.setattr(f"{module}.coding_sandbox_session", sandbox)
-    monkeypatch.setattr(f"{module}.get_llm_token_counter", lambda _llm: len)
-    monkeypatch.setattr(BashTool, "_run", bash)
-    child_llm = ScriptedLLM([tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}')], 128000)
-    coding = CodingAgentTool(tool_id=1, llm=child_llm)
-    parent_llm = ScriptedLLM(
-        [
-            tool_delta(
-                coding.name, '{"query":"Read repository","github_repo":"org/repo"}'
-            )
-        ],
-        128000,
-    )
-    coordinator = AgentCoordinator()
-    parent = Agent(
-        parent_llm,
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[coding.bind(lambda: ToolContext())],
-    )
-    run = parent.start(max_steps=2, coordinator=coordinator)
-    try:
-        assert entered.wait(5)
-        run.cancel()
-        with pytest.raises(AgentCancelled):
-            run.result(timeout=5)
-        assert not run.wait_for_idle(timeout=0.05)
-        assert not deleted.is_set()
-        release.set()
-        assert cleanup_started.wait(5)
-        assert not run.wait_for_idle(timeout=0.05)
-    finally:
-        release.set()
-        release_cleanup.set()
-        assert run.wait_for_idle(timeout=5)
-    assert deleted.is_set()

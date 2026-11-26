@@ -128,7 +128,8 @@ def _create_mcp_client_function_runner(
             if len(client_tuple) == 3:
                 read, write, _ = client_tuple
             elif len(client_tuple) == 2:
-                assert isinstance(client_tuple, tuple)  # for type-checking
+                if not isinstance(client_tuple, tuple):
+                    raise TypeError("MCP client did not return a tuple.")
                 read, write = client_tuple
             else:
                 raise ValueError(
@@ -148,6 +149,15 @@ def _create_mcp_client_function_runner(
 
 def has_unauthorized_response(error: BaseException) -> bool:
     """Inspect transport exceptions without treating error messages as auth evidence."""
+    return _has_status_response(error, frozenset({401}))
+
+
+def has_auth_rejection_response(error: BaseException) -> bool:
+    """Whether the server answered 401 or 403."""
+    return _has_status_response(error, frozenset({401, 403}))
+
+
+def _has_status_response(error: BaseException, statuses: frozenset[int]) -> bool:
     pending = [error]
     seen: set[int] = set()
     while pending:
@@ -155,7 +165,10 @@ def has_unauthorized_response(error: BaseException) -> bool:
         if id(current) in seen:
             continue
         seen.add(id(current))
-        if isinstance(current, HTTPStatusError) and current.response.status_code == 401:
+        if (
+            isinstance(current, HTTPStatusError)
+            and current.response.status_code in statuses
+        ):
             return True
         if isinstance(current, BaseExceptionGroup):
             pending.extend(current.exceptions)

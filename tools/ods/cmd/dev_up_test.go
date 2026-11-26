@@ -75,26 +75,15 @@ func TestDetectDockerSock(t *testing.T) {
 	}
 }
 
-func TestEnsureDockerSock(t *testing.T) {
+func TestEnsureDockerSock_keepsAnExistingValue(t *testing.T) {
 	composeSkipUnlessLinux(t)
-
-	t.Run("keeps an existing value", func(t *testing.T) {
-		composeDevEnv(t)
-		t.Setenv("DOCKER_SOCK", "/already/set.sock")
-		ensureDockerSock()
-		if got := os.Getenv("DOCKER_SOCK"); got != "/already/set.sock" {
-			t.Fatalf("expected the existing value, got %q", got)
-		}
-	})
-
-	t.Run("sets the detected socket", func(t *testing.T) {
-		composeDevEnv(t)
-		t.Setenv("DOCKER_HOST", "unix:///detected.sock")
-		ensureDockerSock()
-		if got := os.Getenv("DOCKER_SOCK"); got != "/detected.sock" {
-			t.Fatalf("expected /detected.sock, got %q", got)
-		}
-	})
+	composeDevEnv(t)
+	t.Setenv("DOCKER_SOCK", "/already/set.sock")
+	t.Setenv("DOCKER_HOST", "unix:///detected.sock")
+	ensureDockerSock()
+	if got := os.Getenv("DOCKER_SOCK"); got != "/already/set.sock" {
+		t.Fatalf("expected the existing value, got %q", got)
+	}
 }
 
 func TestEnsureRemoteUser(t *testing.T) {

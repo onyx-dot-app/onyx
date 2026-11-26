@@ -32,11 +32,16 @@ class XmlToolCallContentFilter:
     """Streaming filter that strips XML-style tool call payload blocks from text.
 
     Text that could be the start of a split "<function_calls" marker is held
-    back until the next chunk (or flush) decides it.
+    back until the next chunk (or flush) decides it. Text from the first block
+    on is held until flush, because only the caller knows if a block holds a
+    call.
     """
 
     def __init__(self) -> None:
         self._pending = ""
+        # Raw text from the first block on; None until a block opens.
+        self._held_raw: list[str] | None = None
+        self._held_visible: list[str] = []
         self._inside_block = False
         # Empty until text is emitted.
         self._last_emitted_char = ""
@@ -45,8 +50,11 @@ class XmlToolCallContentFilter:
         self._drop_spaces = False
 
     def process(self, content: str) -> str:
+        if self._held_raw is not None:
+            self._held_raw.append(content)
         self._pending += content
         output_parts: list[str] = []
+        emitted = ""
         while True:
             if self._inside_block:
                 close = _FUNCTION_CALLS_CLOSE_RE.search(self._pending)
@@ -80,15 +88,30 @@ class XmlToolCallContentFilter:
             if open_match is None:
                 self._pending = self._pending[cut:]
                 break
+            if self._held_raw is None:
+                self._held_raw = [self._pending[cut:]]
+                emitted = "".join(output_parts)
+                output_parts = []
             self._pending = self._pending[open_match.end() :]
             self._inside_block = True
 
-        return "".join(output_parts)
+        if self._held_raw is None:
+            return "".join(output_parts)
+        self._held_visible.extend(output_parts)
+        return emitted
 
-    def flush(self) -> str:
-        # An incomplete block at stream end is dropped.
-        remaining = "" if self._inside_block else self._pending
+    def flush(self, keep_blocks: bool = False) -> str:
+        """Return the held text, with blocks removed unless `keep_blocks`."""
+        if keep_blocks and self._held_raw is not None:
+            remaining = "".join(self._held_raw)
+        else:
+            # An incomplete block at stream end is dropped.
+            remaining = "".join(self._held_visible) + (
+                "" if self._inside_block else self._pending
+            )
         self._pending = ""
+        self._held_raw = None
+        self._held_visible = []
         self._inside_block = False
         self._drop_spaces = False
         return remaining
@@ -295,8 +318,8 @@ def _try_match_json_to_tool(
         Tuple of (tool_name, tool_args) if matched, None otherwise
     """
     # Format 1: Direct tool call format {"name": "...", "arguments": {...}}
-    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
-        tool_name = json_obj["name"]
+    tool_name = json_obj.get("name")
+    if isinstance(tool_name, str) and tool_name in tool_name_to_def:
         arguments = _resolve_tool_arguments(json_obj)
         if arguments is not None:
             return (tool_name, arguments)
@@ -304,8 +327,8 @@ def _try_match_json_to_tool(
     # Format 2: Function call format {"function": {"name": "...", "arguments": {...}}}
     if "function" in json_obj and isinstance(json_obj["function"], dict):
         func_obj = json_obj["function"]
-        if "name" in func_obj and func_obj["name"] in tool_name_to_def:
-            tool_name = func_obj["name"]
+        tool_name = func_obj.get("name")
+        if isinstance(tool_name, str) and tool_name in tool_name_to_def:
             arguments = _resolve_tool_arguments(func_obj)
             if arguments is not None:
                 return (tool_name, arguments)

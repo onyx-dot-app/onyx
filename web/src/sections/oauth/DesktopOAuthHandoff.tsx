@@ -13,7 +13,6 @@ import {
 
 /** Hands a desktop-started OAuth callback from the browser back to the app. */
 export function DesktopOAuthHandoff() {
-  const t = useTranslations("common.oauthCallback.desktopHandoff");
   const [returnUrl, setReturnUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,6 +21,12 @@ export function DesktopOAuthHandoff() {
     loadPage(url);
   }, []);
 
+  return <ReturnToAppCard returnUrl={returnUrl} />;
+}
+
+/** Opens the desktop app at `returnUrl`, with a button for a second try. */
+export function ReturnToAppCard({ returnUrl }: { returnUrl: string | null }) {
+  const t = useTranslations("common.oauthCallback.desktopHandoff");
   return (
     <Section justifyContent="center" padding={4} className="min-h-screen">
       <div className="w-full max-w-md">

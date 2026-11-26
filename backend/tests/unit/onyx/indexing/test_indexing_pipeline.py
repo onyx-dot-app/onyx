@@ -22,6 +22,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     DocumentSource,
     ImageSection,
+    IndexAttemptMetadata,
     TabularSection,
     TextSection,
 )
@@ -62,6 +63,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import AssistantMessage, TextContent
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import ensure_trace, get_current_trace
 from onyx.tracing.framework.traces import TraceContentMode
 
 
@@ -349,7 +351,9 @@ def _failed_ids(result: IndexingPipelineResult) -> list[str]:
 
 
 def _index_batch_with_handler(
-    index_doc_batch_mock: Any, doc_ids: list[str]
+    index_doc_batch_mock: Any,
+    doc_ids: list[str],
+    on_indexable_batch: Callable[[], None] | None = None,
 ) -> IndexingPipelineResult:
     documents = [_make_doc(doc_id) for doc_id in doc_ids]
     with (
@@ -365,6 +369,7 @@ def _index_batch_with_handler(
             request_id=None,
             tenant_id="tenant",
             adapter=MagicMock(),
+            on_indexable_batch=on_indexable_batch,
         )
 
 
@@ -382,10 +387,22 @@ def _raise_for_bad_doc(**kwargs: Any) -> IndexingPipelineResult:
     )
 
 
+def test_trace_start_failure_does_not_retry_committed_work() -> None:
+    index = MagicMock(side_effect=_raise_for_bad_doc)
+    start_trace = Mock(side_effect=RuntimeError("trace unavailable"))
+    result = _index_batch_with_handler(index, ["a", "b"], start_trace)
+    assert not result.failures
+    index.assert_called_once()
+
+
 def test_batch_handler_fails_only_the_document_that_raises() -> None:
     index_doc_batch_mock = MagicMock(side_effect=_raise_for_bad_doc)
 
-    result = _index_batch_with_handler(index_doc_batch_mock, ["a", "bad", "b"])
+    start_trace = Mock()
+    result = _index_batch_with_handler(
+        index_doc_batch_mock, ["a", "bad", "b"], start_trace
+    )
+    start_trace.assert_called_once_with()
 
     assert result.new_docs == 2
     assert result.total_docs == 3
@@ -1021,11 +1038,41 @@ def test_document_ingestion_hook_mixed_batch() -> None:
 _PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
 
 
-def test_run_pipeline_owns_llm_enrichment_trace() -> None:
+@pytest.mark.parametrize(
+    "attempt",
+    [
+        None,
+        IndexAttemptMetadata(
+            connector_id=3,
+            credential_id=4,
+            attempt_id=8,
+            request_id="batch-request",
+            batch_num=2,
+        ),
+    ],
+)
+@pytest.mark.parametrize("changed", [True, False])
+def test_run_pipeline_owns_llm_enrichment_trace(
+    attempt: IndexAttemptMetadata | None,
+    changed: bool,
+) -> None:
     search_settings = SimpleNamespace(enable_contextual_rag=False)
-    expected_result = MagicMock()
+    expected_result = IndexingPipelineResult.empty(1)
     vision_llm = MagicMock()
     document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
+
+    active_ids: list[str] = []
+
+    def index(**kwargs: Any) -> IndexingPipelineResult:
+        if changed:
+            docs = kwargs["document_batch"]
+            kwargs["on_prepared"]({d.id for d in docs})
+            active = get_current_trace()
+            assert active is not None
+            active_ids.append(active.trace_id)
+            if len(docs) > 1:
+                raise RuntimeError("retry individually")
+        return expected_result
 
     with (
         patch(
@@ -1042,31 +1089,46 @@ def test_run_pipeline_owns_llm_enrichment_trace() -> None:
         ),
         patch(f"{_PATCH_PREFIX}._system_llm_enrichment_is_allowed", return_value=True),
         patch(
-            f"{_PATCH_PREFIX}.index_doc_batch_with_handler",
-            return_value=expected_result,
-        ) as index_doc_batch_with_handler,
-        patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
+            f"{_PATCH_PREFIX}.index_doc_batch",
+            side_effect=index,
+        ) as index_doc_batch,
+        patch(f"{_PATCH_PREFIX}.ensure_trace", wraps=ensure_trace) as ensure,
     ):
         result = run_indexing_pipeline(
             written_search_settings_id=1,
-            document_batch=[document],
-            request_id=None,
+            document_batch=[document, _make_doc("other")],
             embedder=MagicMock(),
             document_index=MagicMock(),
             db_session=MagicMock(),
             tenant_id="tenant",
-            adapter=MagicMock(),
+            adapter=MagicMock(index_attempt_metadata=attempt),
             chunker=MagicMock(),
         )
 
-    assert result is expected_result
+    assert not result.failures
+    assert get_current_trace() is None
+    if changed:
+        assert len(active_ids) == 3 and len(set(active_ids)) == 1
+    assert index_doc_batch.call_args.kwargs["image_summarization_llm"] is vision_llm
+    if not changed:
+        ensure.assert_not_called()
+        return
     ensure.assert_called_once_with(
         INDEXING_PIPELINE_TRACE_NAME,
+        metadata={
+            "tenant_id": "tenant",
+            **(
+                {
+                    "attempt_id": 8,
+                    "connector_id": 3,
+                    "request_id": "batch-request",
+                    "batch_num": 2,
+                }
+                if attempt
+                else {}
+            ),
+        },
         content_mode=TraceContentMode.METADATA_ONLY,
-    )
-    assert (
-        index_doc_batch_with_handler.call_args.kwargs["image_summarization_llm"]
-        is vision_llm
     )
 
 
@@ -1140,7 +1202,6 @@ def test_unavailable_vision_llm_does_not_enable_spend_gate() -> None:
         result = run_indexing_pipeline(
             written_search_settings_id=1,
             document_batch=[document],
-            request_id=None,
             embedder=MagicMock(),
             document_index=MagicMock(),
             db_session=MagicMock(),
@@ -1796,6 +1857,60 @@ def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
     assert hashes == {"doc1": doc.content_hash()}
 
 
+def _unchanged_box_doc_with_groups(
+    group_ids: set[str], stored_group_ids: list[str]
+) -> tuple[Document, MagicMock]:
+    updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.source = DocumentSource.BOX
+    doc.doc_updated_at = updated_at
+    doc.external_access = ExternalAccess(
+        external_user_emails=set(),
+        external_user_group_ids=group_ids,
+        is_public=False,
+    )
+    db_doc = _make_db_doc(
+        "doc1",
+        content_hash=doc.content_hash(),
+        doc_updated_at=updated_at,
+    )
+    db_doc.external_user_group_ids = stored_group_ids
+    return doc, db_doc
+
+
+def test_get_docs_to_update_compares_bare_group_ids_in_stored_form() -> None:
+    """Box yields bare ids and storage adds the prefix, so the stored form of
+    the same groups is no change."""
+    doc, db_doc = _unchanged_box_doc_with_groups(
+        {"Eng-Team", "box-group-1"}, ["box_eng-team", "box_box-group-1"]
+    )
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_bare_group_ids_stored_bare_are_a_change() -> None:
+    """Rows stored bare before the storage prefix are re-written once."""
+    doc, db_doc = _unchanged_box_doc_with_groups({"box-group-1"}, ["box-group-1"])
+
+    docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == [doc]
+
+
+def test_get_docs_to_update_added_bare_group_id_is_a_change() -> None:
+    doc, db_doc = _unchanged_box_doc_with_groups(
+        {"box-group-1", "box-group-2"}, ["box_box-group-1"]
+    )
+
+    docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == [doc]
+
+
 def test_get_docs_to_update_new_source_info_bypasses_both_gates_once() -> None:
     """A type or size the source newly reports is otherwise skipped forever by an
     unchanged timestamp and hash. Matching or no longer reported values skip."""
@@ -1919,6 +2034,85 @@ def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:
         )
 
     assert update_chunk_count.call_args.kwargs["document_ids"] == ["written"]
+
+
+def test_post_index_keeps_the_old_modified_time_for_a_failed_write() -> None:
+    """The stored modified time marks the version in the index. A failed write
+    left the old version there, so the run that lists the new version again
+    must not read it as indexed."""
+    new_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    context = MagicMock()
+    context.updatable_docs = [
+        MagicMock(id="written", doc_updated_at=new_time, doc_created_at=None),
+        MagicMock(id="failed", doc_updated_at=new_time, doc_created_at=None),
+    ]
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit"),
+        patch(f"{module}.update_docs_updated_at__no_commit") as update_updated_at,
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=MagicMock(doc_id_to_new_chunk_cnt={}),
+            db_session=MagicMock(),
+            index_to_secondary=False,
+            failed_document_ids={"failed"},
+        )
+
+    assert update_updated_at.call_args.kwargs["ids_to_new_updated_at"] == {
+        "written": new_time
+    }
+
+
+def test_post_index_keeps_the_modified_time_for_a_future_write() -> None:
+    """A FUTURE write goes to the secondary index. The stored modified time
+    marks the version in PRESENT, so the write must not move it: a FUTURE
+    attempt that fails before the swap would make PRESENT skip the change."""
+    new_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    context = MagicMock()
+    context.updatable_docs = [
+        MagicMock(id="written", doc_updated_at=new_time, doc_created_at=None)
+    ]
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit"),
+        patch(f"{module}.update_docs_updated_at__no_commit") as update_updated_at,
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=MagicMock(doc_id_to_new_chunk_cnt={}),
+            db_session=MagicMock(),
+            index_to_secondary=True,
+            failed_document_ids=set(),
+        )
+
+    assert update_updated_at.call_args.kwargs["ids_to_new_updated_at"] == {}
 
 
 def test_ancestors_come_from_the_raw_id_whenever_the_document_has_one() -> None:
@@ -2081,7 +2275,6 @@ def test_pipeline_configures_from_the_written_settings() -> None:
         run_indexing_pipeline(
             written_search_settings_id=7,
             document_batch=[],
-            request_id=None,
             embedder=MagicMock(),
             document_index=MagicMock(),
             db_session=MagicMock(),

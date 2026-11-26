@@ -6,11 +6,12 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import { useTranslations } from "next-intl";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { createSlackBot, updateSlackBot } from "./new/lib";
+import { createSlackBot, updateSlackBot } from "@/app/admin/bots/new/lib";
 import { Button, Divider } from "@opal/components";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { toast } from "@opal/layouts";
+import { parseErrorDetail } from "@/lib/fetcher";
 
 export const SlackTokensForm = ({
   isUpdate,
@@ -59,17 +60,32 @@ export const SlackTokensForm = ({
           if (refreshSlackBot) {
             refreshSlackBot();
           }
-          const responseJson = await response.json();
-          const botId = isUpdate ? existingSlackBotId : responseJson.id;
+          let botId = existingSlackBotId;
+          if (!isUpdate) {
+            const body: unknown = await response.json().catch((): null => null);
+            if (
+              typeof body === "object" &&
+              body !== null &&
+              "id" in body &&
+              typeof body.id === "number"
+            ) {
+              botId = body.id;
+            }
+          }
+
           toast.success(
             isUpdate
               ? t("tokensForm.updated.toast")
               : t("tokensForm.created.toast")
           );
-          navigation.go(`/admin/bots/${encodeURIComponent(botId)}`);
+          if (botId !== undefined) {
+            navigation.go(`/admin/bots/${encodeURIComponent(botId)}`);
+          }
         } else {
-          const responseJson = await response.json();
-          let errorMsg = responseJson.detail || responseJson.message;
+          let errorMsg = await parseErrorDetail(
+            response,
+            response.statusText || t("error.unknownOccurred.message")
+          );
 
           if (errorMsg.includes("Invalid bot token:")) {
             errorMsg = t("tokensForm.invalidBotToken.message");

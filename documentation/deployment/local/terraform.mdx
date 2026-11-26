@@ -259,6 +259,18 @@ The composed `onyx` module exposes the inputs you'll most often want to tune.
   Tune the group with the `craft_sandbox_node_*` variables.
 </ParamField>
 
+<ParamField path="craft_sandbox_runtime" type="string" default="pod">
+  `"firecracker"` prepares the sandbox node group for [Craft on
+  Firecracker](/deployment/kubernetes/craft-firecracker-eks): nested virtualization,
+  the `onyx.app/kvm=true` label and `NoSchedule` taint, `vm.max_map_count` `1048576`, and on-demand capacity.
+  It needs Intel `c8i`, `m8i`, or `r8i` types or Intel `.metal` types. A change replaces the sandbox nodes.
+</ParamField>
+
+<ParamField path="enable_craft_pod_sandbox_node_group" type="bool" default="false">
+  With `craft_sandbox_runtime = "firecracker"`, also create a small node group for pod sandboxes,
+  without the `onyx.app/kvm` taint. Size it with the `craft_pod_sandbox_node_*` variables.
+</ParamField>
+
 ### OpenSearch (optional)
 
 Managed OpenSearch is **off by default**.

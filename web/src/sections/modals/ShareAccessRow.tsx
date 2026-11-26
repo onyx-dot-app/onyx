@@ -2,56 +2,50 @@
 
 import { useMemo } from "react";
 
-import { Text } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
+import { Card, IconContainer } from "@opal/components";
+import { ContentAction, Section } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-
-interface ShareAvatarProps {
-  initial?: string;
-  icon?: IconFunctionComponent;
-}
-
-// No opal avatar primitive exists yet — the mock's dark initial/glyph circle
-// is the one hand-built piece in this file
-function ShareAvatar({ initial, icon: Icon }: ShareAvatarProps) {
-  return (
-    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background-neutral-inverted-00">
-      {Icon ? (
-        <Icon size={12} className="stroke-text-inverted-05" aria-hidden />
-      ) : (
-        <Text font="secondary-action" color="text-inverted-05">
-          {initial}
-        </Text>
-      )}
-    </div>
-  );
-}
 
 interface PermissionColumnsProps {
   rightChildren?: React.ReactNode;
   trailing?: React.ReactNode;
 }
 
-// Fixed 160px left-aligned permission column (mock: Column/Medium) so every
-// row's permission label starts at the same x, plus the far-right slot
+// A fixed 10rem permission column, so every row's permission label starts at
+// the same x, plus the far-right slot.
 function PermissionColumns({
   rightChildren,
   trailing,
 }: PermissionColumnsProps) {
   return (
-    <div className="flex shrink-0 items-center">
-      <div className="flex w-40 items-center justify-start">
+    <Section
+      flexDirection="row"
+      alignItems="center"
+      width="auto"
+      height="auto"
+      gap={0}
+      shrink={false}
+    >
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        alignItems="center"
+        width={10}
+        height="auto"
+      >
         {rightChildren}
-      </div>
+      </Section>
       {trailing}
-    </div>
+    </Section>
   );
 }
-
 export interface ShareAccessRowProps {
   icon: IconFunctionComponent;
-  /** Initial rendered in a dark avatar circle; omitted → the bare icon */
-  avatarInitial?: string;
+  /**
+   * Initials in a user avatar circle, from `getUserInitials`. Null shows the
+   * avatar's person glyph; omitted → the bare icon.
+   */
+  avatarInitials?: string | null;
   /** Icon rendered inside a dark avatar circle (groups, service accounts) */
   avatarIcon?: IconFunctionComponent;
   title?: string | RichStr;
@@ -65,7 +59,7 @@ export interface ShareAccessRowProps {
 
 export function ShareAccessRow({
   icon,
-  avatarInitial,
+  avatarInitials,
   avatarIcon,
   title,
   titleSlot,
@@ -77,46 +71,63 @@ export function ShareAccessRow({
   // the icon subtree instead of updating it.
   const LeadingIcon: IconFunctionComponent = useMemo(
     () =>
-      avatarInitial || avatarIcon
-        ? function ShareRowAvatarIcon() {
-            return <ShareAvatar initial={avatarInitial} icon={avatarIcon} />;
+      avatarInitials !== undefined
+        ? function ShareRowAvatar() {
+            return <IconContainer avatar="user" initials={avatarInitials} />;
           }
-        : icon,
-    [avatarInitial, avatarIcon, icon]
+        : avatarIcon
+          ? function ShareRowAvatarIcon() {
+              return <IconContainer avatar="icon" icon={avatarIcon} />;
+            }
+          : icon,
+    [avatarInitials, avatarIcon, icon]
   );
 
-  // ContentAction can't host a component title — the scope row (dropdown in
-  // the title position) keeps a layout-only flex of opal children
-  if (titleSlot) {
-    return (
-      <div className="flex min-h-11 w-full items-center justify-between gap-2 rounded-12 bg-background-tint-01 px-1 py-1">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center">
-            <LeadingIcon size={16} className="stroke-text-03" aria-hidden />
-          </div>
-          {titleSlot}
-        </div>
-        <PermissionColumns rightChildren={rightChildren} trailing={trailing} />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-11 w-full rounded-12 bg-background-tint-01 px-1">
-      <ContentAction
-        font="main-ui-action"
-        responsive
-        description={description}
-        icon={LeadingIcon}
-        padding={1}
-        rightChildren={
+    <Card color="background-tint-01" rounding={3} padding={0.5}>
+      {titleSlot ? (
+        // ContentAction can't host a component title, so the scope row
+        // (a dropdown in the title position) lays out its own row.
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="center"
+          height="auto"
+          gap={2}
+          padding={0.5}
+        >
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            height="auto"
+            gap={2}
+            grow={1}
+          >
+            <IconContainer icon={LeadingIcon} />
+            {titleSlot}
+          </Section>
           <PermissionColumns
             rightChildren={rightChildren}
             trailing={trailing}
           />
-        }
-        title={title ?? ""}
-      />
-    </div>
+        </Section>
+      ) : (
+        <ContentAction
+          font="main-ui-action"
+          responsive
+          description={description}
+          icon={LeadingIcon}
+          padding={1}
+          rightChildren={
+            <PermissionColumns
+              rightChildren={rightChildren}
+              trailing={trailing}
+            />
+          }
+          title={title ?? ""}
+        />
+      )}
+    </Card>
   );
 }

@@ -22,6 +22,7 @@ from onyx.prompts.tool_prompts import (
     INTERNAL_SEARCH_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
 )
+from onyx.server.features.build.sandbox.harness_base import search_file_name
 from onyx.server.query_and_chat.chat_backend import get_chat_session
 from onyx.server.query_and_chat.streaming_models import (
     CitationInfo,
@@ -111,16 +112,16 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         [
             code_step(
                 "search",
-                "r = await internal_search(queries=['Q2 revenue'])\n"
+                "r = await tools.internal_search(queries=['Q2 revenue'])\n"
                 "for doc in r['results']:\n"
                 "    print(doc['document'], doc['title'])\n"
                 "store('k', 1)\n",
             ),
             code_step(
                 "python",
-                "out = await run_python(code=\"import os\\nprint(os.listdir('.'))\")\n"
+                "out = await tools.run_python(code=\"import os\\nprint(os.listdir('.'))\")\n"
                 "print(out)\n"
-                "await internal_search(queries=['Q2 costs'])\n",
+                "await tools.internal_search(queries=['Q2 costs'])\n",
             ),
             Delta(content="Revenue grew [1]."),
         ]
@@ -128,7 +129,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
     with (
         patch("onyx.chat.files.get_default_file_store", return_value=file_store),
         patch(
-            "onyx.tools.tool_implementations.python.python_tool.get_default_file_store",
+            "onyx.file_store.utils.get_default_file_store",
             return_value=file_store,
         ),
         use_mock_search_pipeline([DocumentSource.GOOGLE_DRIVE]) as internal,
@@ -162,7 +163,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         if isinstance(message, SystemMessage)
     )
     assert CODE_MODE_GUIDANCE in system
-    assert INTERNAL_SEARCH_GUIDANCE in system
+    assert INTERNAL_SEARCH_GUIDANCE.format(name="tools.internal_search") in system
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in system
     # The real search tool's stub asks for one call per information need.
     [description] = [
@@ -175,7 +176,9 @@ def test_code_mode_citations_stream_save_reload_and_continue(
     assert f"List of up to {MAX_QUERIES_PER_CALL} search queries" in description
     assert "Output:\n1 Q2 revenue" in tool_text(first.requests[1]["prompt"], "search")
     # The searched document's file reaches the next program's Python tool.
-    assert f"Q2 revenue_{file_id}" in tool_text(first.requests[2]["prompt"], "python")
+    assert search_file_name(file_id, "Q2 revenue") in tool_text(
+        first.requests[2]["prompt"], "python"
+    )
     # The chat knows a program searched, so the next search reuses its expansion.
     assert rephrase.call_count == 1
     assert _citations(parts) == [(1, internal_doc)]
@@ -207,7 +210,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
     )
     assert python_program.status == "completed"
     assert python_program.stored_keys is None
-    assert f"Q2 revenue_{file_id}" in (python_program.stdout or "")
+    assert search_file_name(file_id, "Q2 revenue") in (python_program.stdout or "")
 
     # Turn 2: a new search gets numbers after the saved ones, and the answer can
     # cite both turns.
@@ -219,7 +222,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         [
             code_step(
                 "web",
-                "r = await web_search(queries=['beta topic'])\n"
+                "r = await tools.web_search(queries=['beta topic'])\n"
                 "print(r['results'][0]['document'])\n",
             ),
             cite_both,

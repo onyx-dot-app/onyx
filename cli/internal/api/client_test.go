@@ -1,9 +1,11 @@
 package api_test
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -92,5 +94,144 @@ func TestTestConnection_AWSELB403(t *testing.T) {
 	}
 	if !strings.Contains(authErr.Error(), "AWS load balancer") {
 		t.Fatalf("expected AWS load balancer message, got: %s", authErr.Error())
+	}
+}
+
+func TestDecideApprovalSendsDecision(t *testing.T) {
+	var gotPath, gotDecision string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		var body struct {
+			Decision string `json:"decision"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotDecision = body.Decision
+		_, _ = w.Write([]byte(`{"approval_id":"a1","decision":"APPROVED","decided_via":"SESSION_GRANT","continuation":{"stream_id":9,"response_ids":[4]}}`))
+	}))
+	defer srv.Close()
+
+	result, err := testutil.NewClient(srv.URL).DecideApproval(t.Context(), "a1", models.ApproveSession)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/api/chat/approvals/a1/decision" || gotDecision != "approve_session" {
+		t.Fatalf("request = %s %q", gotPath, gotDecision)
+	}
+	want := models.ApprovalDecisionResult{
+		ApprovalID:   "a1",
+		Decision:     "APPROVED",
+		DecidedVia:   "SESSION_GRANT",
+		Continuation: &models.ChatStream{StreamID: 9, ResponseIDs: []int{4}},
+	}
+	if !reflect.DeepEqual(result, want) {
+		t.Fatalf("result = %+v, want %+v", result, want)
+	}
+}
+
+func TestDecideApprovalNoLongerWaiting(t *testing.T) {
+	for _, status := range []int{http.StatusConflict, http.StatusNotFound} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(`{"error_code":"CONFLICT","detail":"This request was already decided or is no longer waiting"}`))
+		}))
+		_, err := testutil.NewClient(srv.URL).DecideApproval(t.Context(), "a1", models.RejectApproval)
+		srv.Close()
+		if !api.IsNoLongerWaiting(err) {
+			t.Errorf("status %d: IsNoLongerWaiting(%v) = false", status, err)
+		}
+	}
+	if api.IsNoLongerWaiting(&api.OnyxAPIError{StatusCode: http.StatusInternalServerError}) {
+		t.Error("a server error must stay retryable, not no longer waiting")
+	}
+}
+
+func TestAnswerQuestionsSendsTheAnswers(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotBody = r.URL.Path, nil
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"question_request_id":"q1","continuation":{"stream_id":9,"response_ids":[4]}}`))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	result, err := client.AnswerQuestions(t.Context(), "q1", models.QuestionAnswers{Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Team"}}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/api/chat/question-requests/q1/answers" {
+		t.Fatalf("path = %s", gotPath)
+	}
+	// Exactly one of answers and message is sent.
+	if want := map[string]any{"answers": []any{map[string]any{"question_id": "scope", "option_label": "Team"}}}; !reflect.DeepEqual(gotBody, want) {
+		t.Fatalf("body = %v, want %v", gotBody, want)
+	}
+	if want := (models.QuestionAnswersResult{QuestionRequestID: "q1", Continuation: &models.ChatStream{StreamID: 9, ResponseIDs: []int{4}}}); !reflect.DeepEqual(result, want) {
+		t.Fatalf("result = %+v, want %+v", result, want)
+	}
+
+	if _, err := client.AnswerQuestions(t.Context(), "q1", models.QuestionAnswers{Message: "Only Ana"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := map[string]any{"message": "Only Ana"}; !reflect.DeepEqual(gotBody, want) {
+		t.Fatalf("body = %v, want %v", gotBody, want)
+	}
+}
+
+func TestApprovalPendingIsNotNoLongerWaiting(t *testing.T) {
+	pending := &api.OnyxAPIError{StatusCode: http.StatusConflict, ErrorCode: api.ErrorCodeApprovalPending}
+	if api.IsNoLongerWaiting(pending) || !api.IsApprovalPending(pending) {
+		t.Fatal("a message refused while an approval waits must keep the questions open")
+	}
+	conflict := &api.OnyxAPIError{StatusCode: http.StatusConflict, ErrorCode: "CONFLICT"}
+	if !api.IsNoLongerWaiting(conflict) || api.IsApprovalPending(conflict) {
+		t.Fatal("an answered question must be no longer waiting")
+	}
+}
+
+func TestErrorCodeParsedFromJSONBody(t *testing.T) {
+	tests := []struct {
+		name, body, wantCode, wantDetail string
+	}{
+		{"onyx error", `{"error_code":"APPROVAL_PENDING","detail":"Approve or reject the pending requests"}`, "APPROVAL_PENDING", "Approve or reject the pending requests"},
+		{"plain fastapi error", `{"detail":"Not Found"}`, "", `{"detail":"Not Found"}`},
+		{"validation list", `{"error_code":"INVALID_INPUT","detail":[{"loc":["body"]}]}`, "INVALID_INPUT", `{"error_code":"INVALID_INPUT","detail":[{"loc":["body"]}]}`},
+		{"not json", `upstream failed`, "", "upstream failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+			_, err := testutil.NewClient(srv.URL).ListAgents(t.Context())
+			var apiErr *api.OnyxAPIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("want *OnyxAPIError, got %T: %v", err, err)
+			}
+			if apiErr.ErrorCode != tt.wantCode || apiErr.Detail != tt.wantDetail {
+				t.Errorf("got code=%q detail=%q", apiErr.ErrorCode, apiErr.Detail)
+			}
+		})
+	}
+}
+
+func TestApprovalPendingReachesStreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"error_code":"APPROVAL_PENDING","detail":"Approve or reject the pending requests before you send a message"}`))
+	}))
+	defer srv.Close()
+	sid := "session"
+	var got models.ErrorEvent
+	for event := range testutil.NewClient(srv.URL).SendMessageStream(t.Context(), "hi", &sid, 0, nil, nil, nil) {
+		if e, ok := event.(models.ErrorEvent); ok {
+			got = e
+		}
+	}
+	if got.ErrorCode != api.ErrorCodeApprovalPending || got.StatusCode != http.StatusConflict {
+		t.Fatalf("error event = %+v", got)
 	}
 }

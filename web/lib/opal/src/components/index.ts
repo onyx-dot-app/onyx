@@ -12,6 +12,24 @@ export {
   type ButtonProps,
 } from "@opal/components/buttons/button/components";
 
+/* AvatarButton */
+export {
+  AvatarButton,
+  type AvatarButtonProps,
+} from "@opal/components/buttons/avatar-button/components";
+
+/* FilePickerButton */
+export {
+  FilePickerButton,
+  type FilePickerButtonProps,
+} from "@opal/components/buttons/file-picker-button/components";
+
+/* FoldButton */
+export {
+  FoldButton,
+  type FoldButtonProps,
+} from "@opal/components/buttons/fold-button/components";
+
 /* SelectButton */
 export {
   SelectButton,
@@ -169,14 +187,19 @@ export {
   type IconTooltipStatus,
 } from "@opal/components/icon-tooltip/components";
 
-/* Log */
+/* Line */
+export { Line, type LineProps } from "@opal/components/lines/line/components";
 export {
-  Log,
-  type LogProps,
-  type LogStatus,
-  type LogVariant,
-  type LogWeight,
-} from "@opal/components/log/components";
+  type LineStatus,
+  type LineVariant,
+  type LineWeight,
+} from "@opal/components/lines/line-base/components";
+
+/* LogLine */
+export {
+  LogLine,
+  type LogLineProps,
+} from "@opal/components/lines/log-line/components";
 
 /* Divider */
 export {
@@ -184,6 +207,13 @@ export {
   type DividerProps,
   type DividerSpacing,
 } from "@opal/components/divider/components";
+
+/* Icon tints */
+export {
+  tintedIcon,
+  ICON_TINTS,
+  type IconTint,
+} from "@opal/components/icon-container/tint";
 
 /* IconContainer */
 export {
@@ -228,8 +258,15 @@ export {
   type CollapsibleProps,
   type CollapsibleRootProps,
   type CollapsibleTriggerProps,
+  type CollapsibleHeaderProps,
   type CollapsibleContentProps,
 } from "@opal/components/collapsible/components";
+
+/* ReadOnlyRegion */
+export {
+  ReadOnlyRegion,
+  type ReadOnlyRegionProps,
+} from "@opal/components/read-only-region/components";
 
 /* MessageCard */
 export {
@@ -415,6 +452,20 @@ export {
 
 /* Code */
 export { Code } from "@opal/components/code/components";
+
+/* CodePanel */
+export {
+  CodePanel,
+  type CodePanelProps,
+  type CodePanelHeaderProps,
+  type CodePanelLinesProps,
+  type CodePanelColumnsProps,
+  type CodePanelOutputProps,
+  type CodePanelContentProps,
+  type CodePanelFooterProps,
+  type CodePanelLine,
+  type CodePanelLineKind,
+} from "@opal/components/code-panel/components";
 
 /* Tabs */
 export {

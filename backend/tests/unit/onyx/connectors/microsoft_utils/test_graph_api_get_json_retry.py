@@ -21,6 +21,7 @@ from onyx.connectors.microsoft_utils.graph_client import (
     GRAPH_API_MAX_RETRIES,
     graph_api_get_json,
 )
+from onyx.connectors.microsoft_utils.request_pacer import MICROSOFT_USER_AGENT
 
 PAGE_URL = "https://graph.microsoft.com/v1.0/drives/abc/root/children"
 
@@ -128,5 +129,6 @@ def test_request_headers_are_retained_across_retries(
     expected = {
         "Prefer": "hierarchicalsharing",
         "Authorization": "Bearer fake-token",
+        "User-Agent": MICROSOFT_USER_AGENT,
     }
     assert captured_headers == [expected, expected]

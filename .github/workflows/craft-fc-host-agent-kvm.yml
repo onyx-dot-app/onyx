@@ -16,6 +16,7 @@ on:
       - "microvm/**"
       - "deployment/craft-fc/**"
       - ".github/workflows/craft-fc-host-agent-kvm.yml"
+      - "!**/*.md"
   schedule:
     # 09:00 UTC daily.
     - cron: "0 9 * * *"

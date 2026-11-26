@@ -1,5 +1,5 @@
 import abc
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from types import TracebackType
 from typing import Any, ClassVar, Generic, TypeAlias, TypeVar
 
@@ -10,7 +10,11 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     Document,
+    DocumentFailure,
     HierarchyNode,
+    ListingCounts,
+    ListingPayload,
+    ResolveTarget,
     SlimDocument,
 )
 from onyx.file_store.staging import RawFileCallback
@@ -42,11 +46,82 @@ class NormalizationResult(BaseModel):
     candidate_document_ids: list[str] = Field(default_factory=list)
 
 
+class SourceApiLimiter(abc.ABC):
+    """A budget for calls to a source API, which every worker that uses the
+    same credential shares. The worker builds it and passes it to the
+    connector, like the credentials provider. A connector must not build one:
+    connector code has no cache client."""
+
+    @abc.abstractmethod
+    def acquire(
+        self,
+        api: str,
+        cost: int,
+        user: str | None = None,
+        request_count: int = 1,
+        *,
+        bulk: bool = False,
+    ) -> None:
+        """Waits until the call fits the budget of ``api``, and of ``user``
+        when the source also limits each user. Call it before each request.
+        ``request_count`` is the number of requests in the call, more than 1 for a
+        batch: a source that counts requests charges that number, not
+        ``cost``. A ``bulk`` call, such as a content read of conversion, waits
+        after the other calls."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def report_rate_limit(
+        self, api: str, user: str | None, user_scope: bool, count: int = 1
+    ) -> None:
+        """Tells the limiter that the source refused ``count`` requests for
+        its rate. Report each refused try, from the thread that acquired its
+        slot: the limiter cuts on the refused share of the recent requests,
+        not on one refusal, and does not count a refusal of a request sent
+        before its last cut. ``user_scope`` is True when the source limited
+        the user, and False when it limited the whole credential."""
+        raise NotImplementedError
+
+    def report_retry_after(self, api: str, seconds: float) -> None:  # noqa: ARG002
+        """Tells the limiter that the source asked its callers to wait
+        ``seconds`` before the next request (Retry-After). A limiter with a
+        shared pause then holds every call of every worker for that time.
+        The default does nothing."""
+        return None
+
+
+class RunScopedCache(abc.ABC):
+    """A store of short-lived values that every worker of one listing run
+    shares, such as the permission lookups of conversion. The worker builds
+    it and passes it to the connector, like the source API limiter. A
+    connector names its entries and gives each one a lifetime. Both methods
+    fail soft: when the store cannot be reached, ``get`` returns None and
+    ``set`` keeps nothing."""
+
+    @abc.abstractmethod
+    def get(self, key: str) -> str | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set(self, key: str, value: str, ttl_seconds: int) -> None:
+        raise NotImplementedError
+
+
+# Builds the cache of one listing run, from the run id.
+RunScopedCacheFactory: TypeAlias = Callable[[str], RunScopedCache]
+
+
 class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
 
     # Optional raw-file persistence hook to save original file
     raw_file_callback: RawFileCallback | None = None
+
+    # Optional shared budget for the source's API calls.
+    source_api_limiter: SourceApiLimiter | None = None
+
+    # Optional builder of the cache that the workers of a listing run share.
+    run_scoped_cache_factory: RunScopedCacheFactory | None = None
 
     # True when the slim listing filters `start` by the same date as indexing,
     # so a prune can list only the documents from the indexing start.
@@ -97,6 +172,17 @@ class BaseConnector(abc.ABC, Generic[CT]):
     def set_allow_images(self, value: bool) -> None:
         """Implement if the underlying connector wants to skip/allow image downloading
         based on the application level image analysis setting."""
+
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        """Inject the shared budget for this connector's source API calls. A
+        connector that does not limit its calls ignores it."""
+        self.source_api_limiter = limiter
+
+    def set_run_scoped_cache_factory(self, factory: RunScopedCacheFactory) -> None:
+        """Inject the builder of the cache that the workers of one listing
+        run share. A connector that keeps nothing between workers ignores
+        it."""
+        self.run_scoped_cache_factory = factory
 
     def set_raw_file_callback(self, callback: RawFileCallback) -> None:
         """Inject the per-attempt raw-file persistence callback.
@@ -270,6 +356,10 @@ CheckpointOutput: TypeAlias = Generator[
 
 HierarchyOutput: TypeAlias = Generator[HierarchyNode, None, None]
 
+SlimCheckpointOutput: TypeAlias = Generator[
+    SlimDocument | HierarchyNode | ConnectorFailure, None, CT
+]
+
 
 class CheckpointedConnector(BaseConnector[CT]):
     @abc.abstractmethod
@@ -321,6 +411,43 @@ class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
         raise NotImplementedError
 
 
+class CheckpointedSlimConnector(BaseConnector[CT]):
+    """Optional. A slim listing that can stop and continue, with the same
+    contract as ``CheckpointedConnector``. One call lists a part of the
+    source, and the checkpoint it returns covers exactly what it yielded.
+
+    A connector that also implements ``CheckpointedConnector`` uses one
+    checkpoint model for the two listings. Do not move one checkpoint between
+    them."""
+
+    @abc.abstractmethod
+    def retrieve_slim_docs_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CT,
+        include_permissions: bool = False,
+    ) -> SlimCheckpointOutput[CT]:
+        """Yields slim documents, hierarchy nodes and failures. Returns the
+        next checkpoint. The listing is complete when its ``has_more`` is
+        False. A connector can yield ``SlimDocumentStub`` for a document that
+        the indexing filters keep."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def build_dummy_checkpoint(self) -> CT:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def validate_checkpoint_json(self, checkpoint_json: str) -> CT:
+        raise NotImplementedError
+
+    def listing_counts(self, checkpoint: CT) -> ListingCounts | None:  # noqa: ARG002
+        """Optional. What the listing behind ``checkpoint`` found, by document
+        type. None when the connector keeps no count."""
+        return None
+
+
 class Resolver(BaseConnector):
     @abc.abstractmethod
     def reindex(
@@ -335,6 +462,33 @@ class Resolver(BaseConnector):
         May also yield HierarchyNode objects for ancestor folders of resolved documents.
         """
         raise NotImplementedError
+
+    # The `ListingPayload` subclass the connector's listing writes, so a
+    # stored stub batch loads with its fields. None: the connector has none.
+    listing_payload_type: ClassVar[type[ListingPayload] | None] = None
+
+    def resolve_targets(
+        self,
+        targets: list[ResolveTarget],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Yields the documents for the targets. The default turns each
+        target into a failure and calls `reindex`, so it ignores the listing
+        payload. A connector overrides it to convert from the payload with
+        no more source calls than it needs."""
+        yield from self.reindex(
+            [
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=target.document_id,
+                        document_link=target.document_link,
+                    ),
+                    failure_message="Conversion target",
+                )
+                for target in targets
+            ],
+            include_permissions,
+        )
 
 
 class HierarchyConnector(BaseConnector):

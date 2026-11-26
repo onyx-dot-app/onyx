@@ -13,17 +13,20 @@ import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
 
 // Mirrors `onyx.db.enums.ExternalAppType` on the backend.
-export type ExternalAppType =
-  | "SLACK"
-  | "GOOGLE_CALENDAR"
-  | "GOOGLE_DRIVE"
-  | "GMAIL"
-  | "LINEAR"
-  | "GITHUB"
-  | "HUBSPOT"
-  | "NOTION"
-  | "ZENDESK"
-  | "CUSTOM";
+export const EXTERNAL_APP_TYPES = [
+  "SLACK",
+  "GOOGLE_CALENDAR",
+  "GOOGLE_DRIVE",
+  "GMAIL",
+  "LINEAR",
+  "GITHUB",
+  "HUBSPOT",
+  "NOTION",
+  "ZENDESK",
+  "CUSTOM",
+] as const;
+
+export type ExternalAppType = (typeof EXTERNAL_APP_TYPES)[number];
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
   {
@@ -50,88 +53,5 @@ export function getAppTypeLogo(
 // Keep in sync with backend Pydantic models in
 // `server/features/build/external_apps/models.py`.
 
-export interface OrgCredentialFieldDescriptor {
-  key: string;
-  label: string;
-  description: string;
-  secret: boolean;
-}
-
 // Mirrors `onyx.db.enums.ActionPolicy` on the backend.
 export type ActionPolicy = "ALWAYS" | "ASK" | "DENY";
-
-export interface EndpointDescriptor {
-  action_id: string;
-  normalised_name: string;
-  description: string;
-  // Policy a newly-created app seeds this action's selector with (admin can
-  // override). Mirrors `EndpointSpec.default_policy` on the backend.
-  default_policy: ActionPolicy;
-}
-
-export interface ActionPolicyView {
-  action_id: string;
-  normalised_name: string;
-  description: string;
-  state: ActionPolicy;
-}
-
-export interface BuiltInExternalAppDescriptor {
-  app_type: ExternalAppType;
-  name: string;
-  upstream_url_patterns: string[];
-  auth_template: Record<string, string>;
-  required_org_credential_fields: OrgCredentialFieldDescriptor[];
-  setup_instructions: string;
-  actions: EndpointDescriptor[];
-}
-
-export interface ExternalAppAdminResponse {
-  users_can_manage_policies: boolean;
-  id: number;
-  name: string;
-  app_type: ExternalAppType;
-  upstream_url_patterns: string[];
-  auth_template: Record<string, string>;
-  organization_credentials: Record<string, string>;
-  // Sorted `{placeholder}` names in the auth-template values; the backend owns
-  // the placeholder grammar.
-  credential_placeholder_keys: string[];
-  enabled: boolean;
-  actions: ActionPolicyView[];
-  associated_skills: {
-    id: string;
-    name: string;
-    is_valid: boolean | null;
-  }[];
-  // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
-  // admin may only set availability and policies (the UI hides the rest).
-  is_onyx_managed: boolean;
-}
-
-export interface ExternalAppUserResponse {
-  id: number;
-  name: string;
-  app_type: ExternalAppType;
-  service_urls?: string[];
-  credential_keys: string[];
-  credential_values: Record<string, string>;
-  authenticated: boolean;
-  // OAuth apps connect via a popup; others via the credential form.
-  supports_oauth: boolean;
-}
-
-/**
- * Built-in descriptors still available to add. Only one app per `app_type` is
- * allowed, so configured
- * types are dropped to avoid a duplicate-resource error. Cloud managed built-ins
- * are pre-provisioned (always configured) and never show here. CUSTOM apps have
- * no descriptor, so they never match and are left untouched.
- */
-export function availableBuiltInDescriptors(
-  descriptors: BuiltInExternalAppDescriptor[],
-  configuredApps: ExternalAppAdminResponse[]
-): BuiltInExternalAppDescriptor[] {
-  const configuredAppTypes = new Set(configuredApps.map((app) => app.app_type));
-  return descriptors.filter((d) => !configuredAppTypes.has(d.app_type));
-}

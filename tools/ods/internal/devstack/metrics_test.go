@@ -65,7 +65,7 @@ func TestMetricsPortsFollowProfile(t *testing.T) {
 	for _, tc := range []struct {
 		profile string
 		count   int
-	}{{ProfileMinimal, 0}, {ProfileDefault, 4}, {ProfileFull, 6}} {
+	}{{ProfileMinimal, 0}, {ProfileDefault, 5}, {ProfileFull, 7}} {
 		t.Run(tc.profile, func(t *testing.T) {
 			count := 0
 			for _, req := range AppPortRequests(Options{Profile: tc.profile}) {

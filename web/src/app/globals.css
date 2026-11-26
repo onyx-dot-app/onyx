@@ -2,7 +2,6 @@
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
 @import "./css/comet.css" layer(base);
-@import "./css/color-swatch.css" layer(base);
 @import "./css/divider.css" layer(base);
 @import "./css/general-layouts.css" layer(base);
 @import "./css/inputs.css" layer(base);
@@ -23,6 +22,17 @@
   If we ever want to remove these styles, we need to add an explicit border
   color utility to any element that depends on these defaults.
 */
+/* The page content's room for the chat's right panel toggle: its 12px inset
+   and its 36px button, which abuts the next button as the header's buttons
+   abut each other. The panel's size button sits beside it at the same 48px
+   (`end-12` in sections/chat/ChatRightPanel.tsx). Registered so the page can
+   ease it with the panel's slide. */
+@property --panel-toggle-reserve {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 48px;
+}
+
 @layer base {
   *,
   ::after,
@@ -63,8 +73,8 @@
     align-items: start;
   }
 
-  /* CJK system-font tail for the app font variables (composed into
-     --font-hanken-grotesk / --font-dm-mono in src/app/layout.tsx). Font
+  /* CJK system-font tail for the app font variables (composed into the
+     --font-* variables in src/app/layout.tsx). Font
      selection is per-character and first-match-wins, and macOS/Windows
      preinstall the fonts for every CJK language — so the active locale's
      fonts must come first or shared Han codepoints render with another
@@ -102,6 +112,45 @@
   :lang(ko) {
     word-break: keep-all;
   }
+}
+
+/* Font preferences. src/lib/appearance/preferences.ts owns the attribute values on <html>;
+   src/app/layout.tsx defines the webfont variables. Unlayered so they
+   override the --font-interface default in the unlayered tokens.css. */
+:root[data-interface-font="system"] {
+  --font-interface: var(--font-system);
+}
+
+:root[data-interface-font="opendyslexic"] {
+  --font-interface: var(--font-opendyslexic);
+  /* OpenDyslexic spaces letters and words widely; tighten both so text width
+     stays close to the default font. The typography presets in the interface
+     and content fonts read these, and em follows each element's font size.
+     Presets in other fonts, such as mono, keep their own spacing. */
+  --font-interface-letter-spacing: -0.06em;
+  --font-interface-word-spacing: -0.2em;
+  --font-content-letter-spacing: -0.06em;
+  --font-content-word-spacing: -0.2em;
+}
+
+/* Monospace text without a preset inherits spacing from the text around it;
+   it keeps the spacing it has without OpenDyslexic. */
+:root[data-interface-font="opendyslexic"]
+  :is(code, pre, kbd, samp, .font-mono) {
+  letter-spacing: normal;
+  word-spacing: normal;
+}
+
+:root[data-interface-font="atkinson"] {
+  --font-interface: var(--font-atkinson-hyperlegible-next);
+}
+
+/* The response font applies only inside chat responses: elsewhere the
+   main-content presets follow the interface font. */
+:root[data-response-font="default"] .response-text {
+  --font-content: var(--font-hanken-grotesk);
+  --font-content-letter-spacing: 0em;
+  --font-content-word-spacing: normal;
 }
 
 /* Markdown chat overrides — placed in `utilities` so they sit in the same
@@ -184,7 +233,7 @@
 
   .default-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #888 transparent;
+    scrollbar-color: var(--border-02) transparent;
     overflow-y: scroll;
     overflow-x: hidden;
   }

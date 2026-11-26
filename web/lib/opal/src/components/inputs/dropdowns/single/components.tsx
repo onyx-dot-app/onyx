@@ -21,8 +21,8 @@
  * `defaultOption`, and then never reads as empty: an empty value resolves to
  * it and re-picking any option is a no-op, like a native `<select>`. A
  * ComboBox takes none: its text is the filter, and a default would pre-fill
- * it with a label the user never chose. Either way `placeholder` names the
- * field for assistive technology.
+ * it with a label the user never chose. `aria-label` names the field for
+ * assistive technology, and falls back to `placeholder`.
  *
  * With no options a ComboBox degrades to a plain input.
  */
@@ -54,8 +54,15 @@ import {
 import { useValidation } from "./validation";
 import type { SingleSelectFieldProps } from "../types";
 import type { WithoutStyles } from "@opal/types";
+import { useInputDisabled } from "@opal/components/inputs/disabled";
 
+/**
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too. The trigger `InputTypeIn` shows
+ * `tooltip`.
+ */
 function SingleSelectField(props: WithoutStyles<SingleSelectFieldProps>) {
+  const disabled = useInputDisabled(props.disabled);
   const fieldContext = useContext(FieldContext);
   const autoId = useId();
   const fieldId = fieldContext?.baseId || props.name || `combo-box-${autoId}`;
@@ -63,11 +70,15 @@ function SingleSelectField(props: WithoutStyles<SingleSelectFieldProps>) {
     // Tab walks the rows from either trigger: the field keeps focus.
     <Dropdown
       id={fieldId}
-      disabled={props.disabled ?? false}
+      disabled={disabled}
       tabKey="walk"
       container={props.container}
     >
-      <SingleSelectFieldInner {...props} fieldId={fieldId} />
+      <SingleSelectFieldInner
+        {...props}
+        disabled={disabled}
+        fieldId={fieldId}
+      />
     </Dropdown>
   );
 }
@@ -83,6 +94,7 @@ function SingleSelectFieldInner({
   defaultOption,
   disabled = false,
   placeholder,
+  "aria-label": ariaLabel,
   isError: externalIsError,
   onValidationError,
   name,
@@ -353,7 +365,7 @@ function SingleSelectFieldInner({
           <InputTypeIn
             name={name}
             placeholder={placeholder}
-            aria-label={placeholder}
+            aria-label={ariaLabel ?? placeholder}
             aria-invalid={!isValid}
             aria-describedby={!isValid ? `${fieldId}-error` : undefined}
             readOnly={!typeIn}
@@ -435,7 +447,7 @@ function SingleSelectFieldInner({
 
         <Dropdown.Data
           items={items}
-          label={placeholder ?? ""}
+          label={ariaLabel ?? placeholder}
           query={typeIn ? inputValue : undefined}
           highlightExactQuery={typeIn}
           search={

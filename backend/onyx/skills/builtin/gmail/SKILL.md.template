@@ -19,7 +19,7 @@ actions to the user.
 
 ## Usage
 
-    python .opencode/skills/gmail/gmail_api.py <command> [args]
+    python /var/lib/onyx/skills/gmail/gmail_api.py <command> [args]
 
 {{#IF_CLOUD_SCOPE}}
 Only `send` and `draft-create` are available. Prefer `draft-create` when an

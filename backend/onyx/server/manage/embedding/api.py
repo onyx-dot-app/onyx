@@ -30,13 +30,19 @@ from onyx.server.manage.embedding.models import (
     TestEmbeddingResponse,
 )
 from onyx.server.manage.embedding.probe import probe_embedding_dimension
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
 
 
-admin_router = APIRouter(prefix="/admin/embedding")
+admin_router = APIRouter(
+    prefix="/admin/embedding",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.EMBEDDING))
+    ],
+)
 basic_router = APIRouter(prefix="/embedding")
 
 
@@ -79,7 +85,7 @@ def test_embedding_configuration(
     return TestEmbeddingResponse(dimension=dimension)
 
 
-@admin_router.get("", response_model=list[EmbeddingModelDetail])
+@admin_router.get("")
 def list_embedding_models(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),

@@ -4,7 +4,7 @@
 # Pull requests and pushes to main build and check the image, with no push.
 # Two paths publish it to Docker Hub:
 # - a manual dispatch on main, with a numeric version (for example 0.5.0);
-# - craft-runtime-release.yml on each stable and beta Onyx tag, with the
+# - craft-runtime-release.yml on each stable, beta and nightly Onyx tag, with the
 #   Onyx tag as the image tag (for example v5.3.0). The chart defaults to it.
 # A publish first audits the image (OS packages and Go modules), the guest
 # kernel and Firecracker pins (ods audit craft-fc). The build job also runs
@@ -25,6 +25,7 @@ on:
       - "microvm/**"
       - "deployment/craft-fc/**"
       - ".github/workflows/craft-fc-host-agent.yml"
+      - "!**/*.md"
   push:
     branches:
       - main
@@ -89,7 +90,7 @@ jobs:
           # The same tag that craft-fc-artifacts.yml derives (no revision suffix).
           kernel_tag="$(sed -n 's/^ARG KERNEL_TAG=//p' "${CRAFT_FC_DIR}/Dockerfile.artifacts")"
           fc_version="$(sed -n 's/^ARG FC_VERSION=//p' "${CRAFT_FC_DIR}/Dockerfile.artifacts")"
-          kernel="${kernel_tag#microvm-kernel-}"
+          kernel="$(sed -E 's/^(microvm-)?kernel[0-9.]*-//' <<<"${kernel_tag}")"
           derived="${kernel%.amzn2023}-fc${fc_version#v}"
           if [ "${tag%-r[0-9]*}" != "${derived}" ]; then
             echo "::error::ARTIFACTS_TAG ${tag} does not match Dockerfile.artifacts (${derived})."
@@ -203,12 +204,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${RELEASE}" = true ]; then
-            pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+            pattern='^(v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?|nightly-latest-[0-9]{8})$'
           else
             pattern='^[0-9]+\.[0-9]+\.[0-9]+$'
           fi
           if ! [[ "${IMAGE_TAG}" =~ ${pattern} ]]; then
-            echo "::error::${IMAGE_TAG} is not a version: use 0.1.0 for a dispatch, or an Onyx tag such as v5.3.0 for a release."
+            echo "::error::${IMAGE_TAG} is not a version: use 0.1.0 for a dispatch, or an Onyx tag such as v5.3.0 or nightly-latest-20261123 for a release."
             exit 1
           fi
 
@@ -304,8 +305,9 @@ jobs:
         working-directory: tools/ods
         run: go build -o "${RUNNER_TEMP}/ods-audit" ./odsaudit
 
-      # The same gate as the other release images: an unignored critical in
-      # the image or in the guest kernel and Firecracker pins stops the tag.
+      # An unignored critical in the image stops the tag, as for the other
+      # release images. Amazon rates kernel advisories "important" (high), so
+      # the kernel and Firecracker pins gate at high.
       - name: Audit the pushed image, the guest kernel and Firecracker
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -314,7 +316,7 @@ jobs:
           set -euo pipefail
           status=0
           "${RUNNER_TEMP}/ods-audit" image "${REGISTRY_IMAGE}@${DIGEST}" --fail-on=critical --strict || status=1
-          "${RUNNER_TEMP}/ods-audit" craft-fc --fail-on=critical || status=1
+          "${RUNNER_TEMP}/ods-audit" craft-fc --fail-on=high || status=1
           exit "${status}"
 
       - name: Tag the checked image

@@ -42,6 +42,8 @@ Rules for the Create parameters:
 
 - `vcpus` and `mem_mib` must equal the template's. A snapshot restore keeps the template's shape
   (`TEMPLATE_SHAPE_MISMATCH`).
+- Onyx requests a 32 GiB scratch disk by default and keeps larger template disks. The template stays
+  small (1 GiB by default); per-VM growth is sparse. Existing VMs keep their size until recreated.
 - `scratch_gib` must be at least the template's scratch size, and at most `--max-scratch-gib`. The scratch
   disk can only grow. The agent extends the disk and tells Firecracker the new size. The guest daemon must
   then grow the file system in `Init` with the `EXT4_IOC_RESIZE_FS` ioctl on the mount point (the online
@@ -141,7 +143,10 @@ a URL (`internal/server/saves.go`, `internal/transfer`).
   extracts into a staging directory and replaces the session's capture roots only after the size and
   SHA-256 match. A mismatch is `ARCHIVE_MISMATCH` (agent) or `ARCHIVE_INVALID` (daemon); the session
   does not change.
-- URLs and redirect targets must be `https`, unless `--transfer-allow-http` (a test object store).
+- URLs and redirect targets must be `https`, unless `--transfer-allow-http`. The flag then allows
+  `http` to any host: the agent does not check the destination. Use it only for an object store
+  inside the cluster or a test store. The chart sets it only for the bundled in-cluster object
+  store (cluster-internal HTTP).
   `--transfer-timeout` (default 10 min) bounds one upload or one single-GET restore. A ranged restore
   uses one timeout for the whole download (all parts, queued parts included), so set it for the
   longest expected restore. Errors and logs show the URL without its query string.
@@ -170,7 +175,8 @@ process. VMs and their programs keep running; callers retry.
    Each VM gets its own cgroup (the scope) in the host slice, outside the agent's container cgroup, so it
    survives an agent restart. The scope has `memory.max` = guest memory + `--vm-mem-overhead-mib` and
    `cpu.max` = one CPU per vCPU (see Memory, admission and drain). The jailer gives it its own UID/GID (from `--uid-base`, `--uid-count`), a
-   chroot and a PID namespace.
+   chroot and a PID namespace. The agent starts the command in a new, empty network namespace (loopback
+   only), so Firecracker cannot reach the pod network. The VM has no NIC; vsock uses Unix sockets.
 4. The agent checks the PID (`comm` is `firecracker`, the cgroup is the VM scope), restores the snapshot
    and resumes the VM.
 
@@ -228,6 +234,13 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 (`<chroot>/root/v.sock_3128`) → sandbox-proxy (`--egress-proxy`). Design: `plans/craft-fc-d1-egress-identity.md`
 (D1-A). The proxy side is PR #17174 (`backend/onyx/sandbox_proxy/sandbox_identity/signed.py`).
 
+- With `--egress-proxy-tls-ca`, `--egress-proxy-tls-cert` and `--egress-proxy-tls-key`, every proxy
+  connection uses mTLS (TLS 1.3): the relay checks the proxy certificate against the CA and
+  `--egress-proxy-tls-server-name` (default: the `--egress-proxy` host), and shows its client certificate.
+  A failed handshake gets a 502, and so does a proxy alert, close or reset before the proxy's first byte
+  (TLS 1.3 refuses a client certificate after the client handshake ends); the relay never falls back to plain TCP. A partial or unloadable setup
+  stops the agent at start. The relay reads the files again on the next connection after they change.
+  The Helm chart turns this on with Firecracker (`craft.hostAgent.relayTls`, proxy port 8443).
 - The relay reads one request head per connection, with strict parsing (no bare LF, no obs-fold, at most
   64 KiB). A bad head gets a 400 and never reaches the proxy.
 - It removes every `Proxy-Authorization` and `X-Onyx-Session-Hint` from the VM, then adds
@@ -239,7 +252,10 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   (Firecracker vsock does not carry a half-close). The idle timeout is `--relay-idle-timeout` (default
   15 min; a value under 180 s becomes 180 s). Every VM connection gets its own proxy connection.
 - One VM can have at most `--relay-max-conns` open relay connections (default 256). The relay closes a
-  new connection over the cap at once, so one VM cannot use up the agent's memory or file descriptors.
+  new connection over the cap at once, so one VM cannot use up the agent's file descriptors. All VMs
+  together can have at most `--relay-max-conns-node` (default 2048), the same way. One connection uses up
+  to about 100 KiB of agent memory (the 64 KiB head buffer, or two 16 KiB copy buffers plus TLS buffers),
+  so the node cap bounds relay memory.
   An accept error (for example `EMFILE`) does not stop the relay: it waits (5 ms, doubling up to 1 s)
   and accepts again.
 - The token is an EdDSA JWT: header `{"alg":"EdDSA","typ":"JWT","kid"}`, claims `sub`
@@ -387,7 +403,8 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   | `craft_fc_host_agent_vm_memory_allocated_bytes`, `_vm_vcpus_allocated` | gauge | |
   | `craft_fc_host_agent_node_memory_total_bytes`, `_node_memory_available_bytes`, `_node_disk_free_bytes` | gauge | |
   | `craft_fc_host_agent_vm_memory_private_bytes` | gauge | |
-  | `craft_fc_host_agent_node_stats_errors` | gauge | `stat`: memory, disk, vm_memory |
+  | `craft_fc_host_agent_vm_slice_oom_kills_total` | counter | |
+  | `craft_fc_host_agent_node_stats_errors` | gauge | `stat`: memory, disk, vm_memory, slice_oom |
   | `craft_fc_host_agent_rpc_requests_total` | counter | `method` (HostAgent method, else `unknown`), `code` (gRPC) |
   | `craft_fc_host_agent_rpc_duration_seconds` | histogram | `method` |
   | `craft_fc_host_agent_transfer_duration_seconds` | histogram (0.5 s to 600 s) | `method`: CaptureSession, UploadCapture, RestoreSession |
@@ -409,7 +426,10 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   kernel can drop, and they are not in this sum. Balloon free page reporting and the guest daemon's idle reclaim (`--reclaim-idle`) lower the sum, so
   its drop shows the reclaim. Compare it with `vm_memory_allocated_bytes` to see how much of the guest
   memory the VMs wrote. If a read fails (other than for a VM that exits during the scrape), the gauge is left out of that
-  scrape and `node_stats_errors{stat="vm_memory"}` is 1. `rpc_duration_seconds` keeps the default buckets (up to 10 s); use
+  scrape and `node_stats_errors{stat="vm_memory"}` is 1. `vm_slice_oom_kills_total` counts the increases of
+  `oom_kill` in the VM slice's `memory.events` (hierarchical: the slice and its VM scopes, for a scope
+  limit, the slice limit or a node-wide OOM) since the agent started; a recreated slice cgroup keeps the
+  count going. Each kill stops a VM. `RUNBOOKS.md` (CraftFcVMOOMKills) says how to tell the limits apart. A failed read sets `node_stats_errors{stat="slice_oom"}`. `rpc_duration_seconds` keeps the default buckets (up to 10 s); use
   `transfer_duration_seconds` for session saves and restores. The template metrics count the start-up
   build and each `BuildTemplate` call from `--rootfs-dir`; `template_ready` is 0 before the first build
   and after a failed one.
@@ -457,7 +477,7 @@ Package `internal/template` reads and checks templates; `internal/tplbuild` buil
 | `scratch.ext4` | `scratch` (`/dev/vdb`) | empty ext4, `--template-scratch-gib`; never mounted in the template |
 | `managed.ext4` | `managed` (`/dev/vdc`, read-only) | empty ext4 (8 MiB); the managed drive slot |
 | `upload-a.ext4`, `upload-b.ext4` | `upload_a`, `upload_b` (`/dev/vdd`, `/dev/vde`, read-only) | 1 MiB placeholders for the later upload bundles; never mounted |
-| `managed-b.ext4` | `managed_b` (`/dev/vdf`, read-only; layout 3) | 1 MiB placeholder: managed slot B, the spare for a swap; never mounted in the template |
+| `managed-b.ext4` | `managed_b` (`/dev/vdf`, read-only) | 1 MiB placeholder: managed slot B, the spare for a swap; never mounted in the template |
 | `vmstate`, `mem` | | full snapshot |
 | `manifest.json` | | see below |
 
@@ -522,7 +542,7 @@ A pinned template or image, or one that a VM took since, stays. Each removal is 
 (`image GC removed unused images`) and counted in `image_gc_removed_total`. Without `--rootfs-dir`
 templates are not swept.
 
-Flags: `--rootfs-dir`, `--egress-ca` or `--egress-ca-configmap`, `--template-vcpus` (2), `--template-mem-mib` (4096),
+Flags: `--rootfs-dir`, `--egress-ca` or `--egress-ca-configmap`, `--template-vcpus` (2), `--template-mem-mib` (8192),
 `--template-scratch-gib` (1), `--template-keep` (2), `--template-build-timeout` (5 min). The guest kernel
 is `<artifacts-dir>/vmlinux`; the agent copies it to `<data-dir>/kernel/vmlinux-<sha256[:16]>`.
 
@@ -546,21 +566,18 @@ Before every restore, Create checks:
 2. The key against the node: layout version, Firecracker version, CPU model, host kernel release, guest
    kernel SHA256 and (for a template whose root drive has a CA) the CA. One mismatch is `TEMPLATE_INCOMPATIBLE` with the fields.
 3. The files against `files`. The first check of a template after an agent start hashes every file (about
-   8 GiB for a 4 GiB VM). The agent then keeps each file's fingerprint (inode, size, mtime, ctime). Later
+   12 GiB for an 8 GiB VM). The agent then keeps each file's fingerprint (inode, size, mtime, ctime). Later
    checks compare the fingerprints and hash again only if one changed. A changed file is
    `TEMPLATE_INCOMPATIBLE`.
 
-Layouts: the agent builds layout 5 and still restores layouts 2 to 4.
+Layouts: the agent builds layout 5 and restores layouts 4 and 5. It refuses older layouts
+(`TEMPLATE_INCOMPATIBLE`) because their VMs have no balloon, and builds a new template.
 
 - Layout 5: the drives of layout 4, plus slots A and B of the `user-uploads` and `spaces` managed mounts
   (`/dev/vdg` to `/dev/vdj`, see Managed drive). `TemplateInfo.managed_mounts` lists all three mounts.
-- Layout 4: the drives of layout 3, plus the balloon device (see Memory, admission and drain).
-  Firecracker accepts a balloon only before boot, and a restore keeps it, so the template VM has it.
-  `TemplateInfo.balloon` is true.
-- Layout 3: six drives, managed slot B last, so the older drives keep their guest devices. No balloon: its
-  VMs never give free memory back to the node.
-- Layout 2: five drives. Its VMs cannot swap the managed drive (`MANAGED_SWAP_UNSUPPORTED`).
-  `TemplateInfo.managed_slots` says which one a template is.
+- Layout 4: six drives, managed slot B last (`/dev/vdf`), and the balloon device (see Memory, admission
+  and drain). Firecracker accepts a balloon only before boot, and a restore keeps it, so the template VM
+  has it. `TemplateInfo.managed_slots` is 2.
 
 `internal/kvmtest/helpers_test.go` (`buildTemplate`) uses the same pipeline for the older KVM tests.
 
@@ -571,7 +588,9 @@ Results: `plans/craft-sandbox-bench/results/mem.md` (decision test) and `results
 **Balloon.** Layout 4 templates boot with the Firecracker balloon: `amount_mib` 0, `deflate_on_oom`,
 statistics every 5 s, free page reporting on, free page hinting off (a developer preview with a memory
 corruption race). The balloon never inflates: a guest that works against an inflated balloon is many
-times slower. Free page reporting gives the pages that the guest frees back to the node.
+times slower. Free page reporting gives the pages that the guest frees back to the node. The agent restores
+no template without the balloon (layout 4 and later). `TestCoreKVM` (PR smoke lane) checks the balloon of a
+restored VM, its statistics, and the guest's balloon driver and `CONFIG_PAGE_REPORTING`.
 
 **Guest side** (guest daemon flags, `cmd/guest-daemon/README.md`):
 
@@ -591,13 +610,36 @@ guest OOM killer acts. Keep the default overhead unless a test of the VM shape s
 safe. A Firecracker that grows past the limit is OOM-killed; the kernel kills that VM only, and the agent
 shows it as `EXITED` and cleans it up. `io.max` is not set.
 
-**Admission.** Create needs `MemAvailable` (measured, `/proc/meminfo`) >= guest memory of the VMs that are
-starting + `mem_mib` + `--min-free-mem-mib` (default 2048). Starting VMs count at their full size because
-their memory is not in use yet; running VMs count at what they use, because the balloon returns what the
-guests free. The check runs under the agent lock, so two Creates never take the same memory. A refusal is
-`CAPACITY_MEMORY` with the numbers in the message and in `ErrorInfo.metadata`: `mem_total_mib`,
-`mem_available_mib`, `mem_needed_mib`, `vm_mem_mib`, `mem_starting_mib`, `mem_reserve_mib`. `NodeInfo`
-returns `mem_reserve_mib` and `mem_starting_mib`.
+At start the agent sets `MemoryMax` of the slice (`systemctl set-property --runtime <slice>`) to
+`--slice-memory-percent` of `MemTotal` (default 85; 0 sets `MemoryMax=infinity` and only logs a failure). Admission counts what
+running guests use, and idle guests give memory back, so the VMs can together ask for more memory than the
+node has. With the cap the kernel OOM killer acts inside the slice and kills a VM, not kubelet or
+containerd. kubelet does not see VM memory, so it cannot evict anything for it.
+
+**Admission.** Create needs available memory >= the charge of the VMs that are starting + the charge of
+the new VM + `--min-free-mem-mib` (default 2048). Available memory is `MemAvailable` (measured,
+`/proc/meminfo`), and at most the room of the VM slice below its `MemoryMax`: `memory.max` less the
+slice's `memory.current` without its file page cache (`active_file` + `inactive_file`), read from the host
+cgroup tree (`/proc/1/root/sys/fs/cgroup/<slice>`). Without the slice cap, a start could push the slice
+into an OOM kill while the node still has memory. The charge of a VM is its guest memory divided by
+`--starting-mem-divisor` (default 2, 1 to 16), rounded up: 4096 MiB for the default 8 GiB VM. Starting
+VMs count at their charge because their memory is not in use yet; running VMs count at what they use,
+because the balloon returns what the guests free. The check runs under the agent lock, so two Creates
+never take the same memory. A refusal is `CAPACITY_MEMORY` with the numbers in the message and in
+`ErrorInfo.metadata`: `mem_total_mib`, `mem_available_mib` (`MemAvailable`), `slice_room_mib` (with a
+slice cap), `mem_needed_mib`, `vm_mem_mib` (guest memory), `vm_mem_charge_mib`, `mem_starting_mib`,
+`mem_reserve_mib`. `NodeInfo` returns `mem_reserve_mib` and `mem_starting_mib` (the charge of the
+starting VMs). The agent owns admission: the api_server ranks nodes by `mem_available_mib` and tries the
+next node when one refuses.
+
+**Starting memory divisor.** Firecracker maps guest memory lazily, and a VM restored from a template
+snapshot touches only part of it. So the node can admit more 8 GiB VMs than its memory holds. The cgroup
+limit of each VM stays at its full guest memory + overhead, so one VM can still use all of its memory.
+The risk: if many VMs use most of their memory at the same time, the slice reaches its `MemoryMax` and
+the kernel OOM killer stops a VM (the agent shows it as `EXITED`). `vm_slice_oom_kills_total` counts
+these kills and the `CraftFcVMOOMKills` alert fires on them. Tune the divisor with the measured use: set
+`--starting-mem-divisor 1` (Helm `craft.hostAgent.startingMemDivisor`) to count each starting VM at its
+full size, or raise it when VMs use little memory.
 
 **VM cap.** `--max-vms` (default 0, no cap) caps the Firecracker processes of the node: VMs that are not
 exited (starting VMs too), template build VMs and processes in doubt. Over it, Create and template builds
@@ -609,7 +651,8 @@ returns `max_vms` and `vm_slots_used` (what the cap counts), and placement skips
 
 **Drain.** The node drains while the manual flag is set (`SetDrain`, kept in `<data-dir>/drain.json`
 across restarts) or while its Node has a taint from `--drain-taints` (default
-`node.kubernetes.io/unschedulable`, which `kubectl cordon` and `kubectl drain` set). With
+`node.kubernetes.io/unschedulable`, which `kubectl cordon` and `kubectl drain` set, and
+`ToBeDeletedByClusterAutoscaler`). With
 `--watch-node-drain`, the agent reads its own Node (`--node-id`, from `$NODE_NAME`) every
 `--drain-poll-interval` (default 10 s) with the pod's ServiceAccount (RBAC: `get` on nodes). The first read
 runs before the API serves. If a read fails, the agent keeps the last taints and shows the error in
@@ -629,6 +672,23 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
   `NodeInfo` scans the processes again, so a doubt whose process exited clears. Clearing the manual flag does not end a drain that a
   taint causes.
 
+**Cluster autoscaler.** VMs are not pods, so the cluster autoscaler (GKE, AKS, the EKS
+cluster-autoscaler) sees a KVM node with VMs as empty and can remove it. With `--scale-down-guard`,
+the agent sets the Node annotation `cluster-autoscaler.kubernetes.io/scale-down-disabled=true` while
+the node runs VMs (starting, running, template builds and processes in doubt) and while no process
+scan has worked since the agent started; with processes in doubt, each check scans the processes
+again, so a doubt whose process exited stops holding the node. It checks when a Create
+or a template build takes a slot, and every 10 s from the first check after recovery; while VMs run,
+each check reads the Node and sets the annotation again if someone removed it. It removes the
+annotation when the node has had no VMs for `--scale-down-guard-grace` (default 10 m; after an agent
+restart the grace starts again). It patches only its own Node (RBAC: `get` and `patch` on nodes) and
+marks its value with `onyx.app/craft-fc-scale-down-guard=true`. It leaves a `true` value without this
+mark, and never removes it; it replaces any other value without the mark while VMs run. A failed
+patch is logged once per failure streak and tried again; it never blocks VM work. The default
+`--drain-taints` also has `ToBeDeletedByClusterAutoscaler`, the taint the autoscaler sets (without a
+cordon) before it removes a node. This is a second guard only: the autoscaler removes a node with only
+DaemonSet pods seconds after the taint. Karpenter does not read this annotation.
+
 ### Managed drive
 
 Each VM has three managed mounts, each a read-only, noexec ext4 drive: `skills` (`/mnt/skills`),
@@ -644,9 +704,11 @@ with no restart. Firecracker cannot add a drive after boot, so every mount has t
 New drives go after the old ones, so older guest devices do not move. At Create, slot A of each mount
 has the template's empty ext4 placeholder and attach mounts it; slot B is never mounted by attach. A VM
 has only the mounts of its layout that its root drive's guest daemon serves (rootfs manifest
-`managed_mounts`, kept in the template manifest as `guest_mounts`; `TemplateInfo.managed_mounts`); attach
-puts an empty read-only tmpfs on a mount with no drive. A swap of another mount fails with
-`MANAGED_SWAP_UNSUPPORTED`. An image is not tied to a mount: `SwapManaged` names the mount
+`managed_mounts`, kept in the template manifest as `guest_mounts`; `TemplateInfo.managed_mounts`). A root
+drive that lists no managed mounts serves `skills` only. The current root drive serves `user-uploads` and
+`spaces`: skills go to the guest daemon's skills folder (`InstallSkill`), and the `skills` drives stay
+unmounted. Attach puts an empty read-only tmpfs on a mount with no drive. A swap of another
+mount fails with `MANAGED_SWAP_UNSUPPORTED`. An image is not tied to a mount: `SwapManaged` names the mount
 (`mount`, default `skills`).
 
 **Images.** `PutManagedImage` streams a zip (first message: SHA256 and size; then data, at most 4 MiB per
@@ -712,8 +774,8 @@ the device fails with `EBUSY` while any mount holds it) gives that.
 Flags: `--managed-keep` (3), `--managed-max-zip-mib` (256), `--managed-max-mib` (512),
 `--managed-max-files` (50000), `--managed-max-builds` (1), `--managed-swap-timeout` (30 s per VM).
 
-Errors: `MANAGED_IMAGE_MISSING`, `MANAGED_BUNDLE_INVALID`, `MANAGED_SWAP_UNSUPPORTED` (layout 2 template,
-or a daemon without `MountManaged`), `MANAGED_SLOT_BUSY`, `MANAGED_MOUNT_FAILED` (the old drive stays
+Errors: `MANAGED_IMAGE_MISSING`, `MANAGED_BUNDLE_INVALID`, `MANAGED_SWAP_UNSUPPORTED` (a VM
+with one managed slot that the agent adopted from its journal, or a daemon without `MountManaged`), `MANAGED_SLOT_BUSY`, `MANAGED_MOUNT_FAILED` (the old drive stays
 mounted), `GUEST_KEY_REJECTED` (wrong `sandboxd_key`), `GUEST_UNREACHABLE`.
 
 ## Generated code
@@ -748,8 +810,8 @@ go mod tidy
 
 - Unit tests: `go test -race ./...`. They use a fake VMM and run in CI.
 - KVM tests: build tag `kvm`, on a KVM host. The older tests use the kit rootfs (`onyxdotapp/sandbox`
-  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and guest
-  kernel 6.18.25. The egress and pass-through tests use the proxy harness in
+  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and the
+  pinned guest kernel. The egress and pass-through tests use the proxy harness in
   `internal/kvmtest/testdata/harness`.
 - `check-kvm.sh smoke|full ARTIFACTS_DIR SOURCE_IMAGE` (as root) prepares a host and runs them: the data
   dir, the root drives, the agent image, then one test at a time. CI

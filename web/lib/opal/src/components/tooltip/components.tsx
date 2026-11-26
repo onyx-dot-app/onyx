@@ -52,6 +52,19 @@ interface TooltipProps {
   suppressed?: boolean;
 
   /**
+   * Shows the tooltip from a hover the caller tracks itself, for a hover area
+   * larger than the trigger: an input whose whole row shows its reason. Radix's
+   * own hover and focus are then ignored. Keep it set for the tooltip's life.
+   */
+  open?: boolean;
+
+  /**
+   * Radix's own open state, for a caller that sets `open` and also needs the
+   * plain hover (e.g. to show it from either). Without `open` it is not needed.
+   */
+  onOpenChange?: (open: boolean) => void;
+
+  /**
    * Delay in milliseconds before the tooltip appears on hover.
    * Passed to `TooltipPrimitive.Root`.
    */
@@ -78,6 +91,23 @@ function isRtl(): boolean {
   );
 }
 
+/**
+ * Keeps the tooltip open on a press of a disabled control inside the trigger.
+ * Radix closes on the trigger's pointer down and click, and skips that for a
+ * prevented event. A disabled control's tooltip gives the reason, so a press
+ * (including a click on its label) shows it until blur or the pointer leaves.
+ * A link keeps its native action: an `allowClick` region stays clickable.
+ */
+function keepOpenOnDisabledPress(event: React.SyntheticEvent<HTMLElement>) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest("a[href]")) return;
+  const disabledElement = target.closest('[aria-disabled="true"]');
+  if (disabledElement && event.currentTarget.contains(disabledElement)) {
+    event.preventDefault();
+  }
+}
+
 /** Radix positions by physical side, so `start` and `end` follow `dir`. */
 function physicalSide(side: TooltipSide): "top" | "bottom" | "left" | "right" {
   if (side === "top" || side === "bottom") return side;
@@ -98,7 +128,8 @@ function physicalSide(side: TooltipSide): "top" | "bottom" | "left" | "right" {
  * drops any open change that already matches the value it was given, so a
  * caller that gates `open` on something other than the hover state stops
  * hearing about closes and holds a hover that ended. Use `suppressed` to turn
- * a tooltip off instead.
+ * a tooltip off instead. `open` is only for a hover the caller tracks itself;
+ * `onOpenChange` then only reports Radix's own hover, never gates it.
  *
  * @example
  * ```tsx
@@ -120,6 +151,8 @@ function Tooltip({
   side = "end",
   align = "center",
   suppressed,
+  open,
+  onOpenChange,
   delayDuration,
   sideOffset = 4,
   children,
@@ -164,6 +197,8 @@ function Tooltip({
 
   return (
     <TooltipPrimitive.Root
+      open={open}
+      onOpenChange={onOpenChange}
       delayDuration={delayDuration}
       /* Radix closes on a pointer that leaves the trigger from the content
       itself, which tracks the pointer across the gap between the two. A
@@ -184,6 +219,8 @@ function Tooltip({
               ? trackPointer
               : undefined
         }
+        onPointerDown={keepOpenOnDisabledPress}
+        onClick={keepOpenOnDisabledPress}
       >
         {children}
       </TooltipPrimitive.Trigger>

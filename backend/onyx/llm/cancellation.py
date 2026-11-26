@@ -3,7 +3,8 @@
 import asyncio
 import threading
 from collections.abc import AsyncGenerator, Callable, Generator, Iterator
-from contextlib import contextmanager
+from concurrent.futures import Future
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar, copy_context
 from functools import wraps
 from typing import Literal, ParamSpec, TypeVar
@@ -98,6 +99,23 @@ def cancellation_scope(signal: CancellationSignal) -> Iterator[None]:
         yield
     finally:
         _current_signal.reset(token)
+
+
+def wait_for_future[T](
+    future: Future[T], timeout_seconds: float, signal: CancellationSignal | None
+) -> T:
+    """The result of `future`, waited for at most `timeout_seconds` and not
+    past a cancel of `signal`: then it raises AgentCancelled, or TimeoutError
+    after the timeout. The work goes on without the caller."""
+    done = threading.Event()
+    future.add_done_callback(lambda _: done.set())
+    with nullcontext() if signal is None else signal.on_cancel(done.set):
+        done.wait(timeout_seconds)
+    if not future.done():
+        if signal is not None:
+            signal.check()
+        raise TimeoutError(f"the work did not end in {timeout_seconds:g} seconds")
+    return future.result()
 
 
 _P = ParamSpec("_P")

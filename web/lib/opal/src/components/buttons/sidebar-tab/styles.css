@@ -20,7 +20,9 @@
    =========================================================================== */
 
 .opal-sidebar-tab {
-  @apply relative;
+  /* `isolate` keeps the overlay's and actions' z-indexes inside the tab, so
+     they never paint over modals or lightboxes. */
+  @apply relative isolate;
 
   --sidebar-tab-label-opacity: 1;
   --sidebar-tab-label-visibility: visible;

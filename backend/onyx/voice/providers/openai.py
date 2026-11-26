@@ -18,6 +18,7 @@ import aiohttp
 
 from onyx.llm.cancellation import isolated_async_context
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.voice.interface import (
     STREAM_FAILED_ERROR,
@@ -454,21 +455,39 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
         }
 
         try:
-            async with self._session.post(
-                url, headers=headers, json=payload
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    self._logger.error("OpenAI TTS error: %s", error_text)
-                    return
+            with (
+                ensure_trace("voice_tts"),
+                traced_llm_call(
+                    flow=LLMFlow.TTS,
+                    model=self.model,
+                    provider="openai",
+                ) as span,
+            ):
+                try:
+                    async with self._session.post(
+                        url, headers=headers, json=payload
+                    ) as response:
+                        if response.status != 200:
+                            span.set_error(
+                                {
+                                    "message": f"Speech request returned HTTP {response.status}",
+                                    "data": None,
+                                }
+                            )
+                            error_text = await response.text()
+                            self._logger.error("OpenAI TTS error: %s", error_text)
+                            return
 
-                # Use 8192 byte chunks for smoother streaming
-                # (larger chunks = more complete MP3 frames, better playback)
-                async for chunk in response.content.iter_chunked(8192):
-                    if self._closed:
-                        break
-                    if chunk:
-                        await self._audio_queue.put(chunk)
+                        # Use 8192 byte chunks for smoother streaming
+                        # (larger chunks = more complete MP3 frames, better playback)
+                        async for chunk in response.content.iter_chunked(8192):
+                            if self._closed:
+                                break
+                            if chunk:
+                                await self._audio_queue.put(chunk)
+                except Exception:
+                    span.set_error({"message": "Speech request failed", "data": None})
+                    raise
         except Exception as e:
             self._logger.error("OpenAIStreamingSynthesizer synthesis error: %s", e)
 

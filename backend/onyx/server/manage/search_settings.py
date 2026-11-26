@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -49,6 +49,7 @@ from onyx.db.enums import (
 from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
 from onyx.db.llm import (
     fetch_default_model,
+    fetch_model_configuration_by_id,
     update_default_contextual_model,
     update_no_default_contextual_rag_provider,
 )
@@ -110,6 +111,7 @@ from onyx.server.manage.models import (
     VectorQuantizationSupport,
 )
 from onyx.server.models import IdReturn
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.audit import (
@@ -135,7 +137,12 @@ from shared_configs.embedding_models import (
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.utils import clean_model_name
 
-router = APIRouter(prefix="/search-settings")
+router = APIRouter(
+    prefix="/search-settings",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.EMBEDDING))
+    ],
+)
 logger = setup_logger()
 
 
@@ -805,7 +812,7 @@ def delete_search_settings_endpoint(
             search_settings_id=deletion_request.search_settings_id,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @router.get("/vector-quantization-support", dependencies=[Depends(require_vector_db)])
@@ -1281,9 +1288,7 @@ def validate_contextual_rag_model(
                 "model is configured, and no tenant default exists.",
             )
         return
-    from onyx.db.models import ModelConfiguration
-
-    model = db_session.get(ModelConfiguration, model_configuration_id)
+    model = fetch_model_configuration_by_id(db_session, model_configuration_id)
     if model is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

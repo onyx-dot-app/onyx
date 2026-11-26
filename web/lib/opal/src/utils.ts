@@ -50,6 +50,40 @@ export function countryCodeToFlag(code: string | null | undefined): string {
   return String.fromCodePoint(first, second);
 }
 
+// Embedding, override and isolate controls, and the directional marks.
+const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/g;
+
+/**
+ * Text without its bidi controls, for display or parsing only.
+ *
+ * Bidi rule for untrusted text: strip the controls from paths and labels with
+ * this function, so they show their characters in their own order. Show all
+ * untrusted text in an element with a `dir` attribute, which isolates it so it
+ * cannot reorder the text around it: `dir="ltr"` for code and paths,
+ * `dir="auto"` for labels. Patches and errors are isolated but keep their
+ * exact characters. A label that is the only text of its own flex item has
+ * no neighbors to reorder, so it needs only the strip.
+ */
+export function stripBidiControls(text: string): string {
+  return text.replace(BIDI_CONTROLS, "");
+}
+
+/**
+ * Inline markdown for a code span holding any text, backticks included: the
+ * fence is one backtick longer than the longest run inside. Line breaks show
+ * as spaces, since a code span cannot cross a line. Use inside `markdown()`,
+ * e.g. `markdown(\`Read ${codeSpan(path)}\`)`.
+ */
+export function codeSpan(text: string): string {
+  const line = text.replace(/[\r\n]+/g, " ");
+  const longestRun = Math.max(
+    0,
+    ...(line.match(/`+/g) ?? []).map((run) => run.length)
+  );
+  const fence = "`".repeat(longestRun + 1);
+  return `${fence} ${line} ${fence}`;
+}
+
 export function escapeMarkdown(value: string): string {
   return value
     .replace(/[!-/:-@[-`{-~]/g, (character) => `&#${character.charCodeAt(0)};`)
@@ -155,6 +189,21 @@ export function findScrollParent(element: Element): Element | null {
   return null;
 }
 
+/**
+ * True when the OS asks for reduced motion or the app forces it with
+ * `data-motion="reduced"` on `<html>`, the attribute the `motion-reduce:` and
+ * `motion-safe:` variants (`_reference.css`) also read. False on the server.
+ */
+export function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    document.documentElement.dataset.motion === "reduced" ||
+    (typeof window.matchMedia === "function" &&
+      // A stubbed `matchMedia` (e.g. in tests) can return nothing.
+      window.matchMedia("(prefers-reduced-motion: reduce)")?.matches === true)
+  );
+}
+
 /** Where `smoothScroll` goes: to a scroll offset, or by a distance from here. */
 export type SmoothScrollTarget = { top: number } | { by: number };
 
@@ -183,8 +232,7 @@ export function smoothScroll(
   const from = scroller.scrollTop;
   const delta = "by" in target ? target.by : target.top - from;
   if (Math.abs(delta) < 1) return Promise.resolve();
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce || duration <= 0) {
+  if (prefersReducedMotion() || duration <= 0) {
     scroller.scrollTop = from + delta;
     return Promise.resolve();
   }
@@ -221,4 +269,30 @@ export function smoothScrollToCenter(
     { by: box.top + box.height / 2 - (view.top + view.height / 2) },
     options
   );
+}
+
+// Seeded randomness, for a component that picks its own variation.
+
+export type NonEmpty<T> = readonly [T, ...T[]];
+
+/**
+ * A pseudo-random generator seeded from a string. Seeded from `useId`, it
+ * gives each instance its own choice (e.g. a loader's shape), the same on the server and the client and
+ * on every render.
+ */
+export function seededRandom(seed: string): () => number {
+  let state = 2166136261;
+  for (let index = 0; index < seed.length; index++) {
+    state = Math.imul(state ^ seed.charCodeAt(index), 16777619);
+  }
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let value = Math.imul(state ^ (state >>> 15), 1 | state);
+    value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function pick<T>(items: NonEmpty<T>, random: () => number): T {
+  return items[Math.floor(random() * items.length)] ?? items[0];
 }

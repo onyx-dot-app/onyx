@@ -5,15 +5,35 @@ import {
   Message,
   ChatSessionSharedStatus,
   BackendChatSession,
+  ChatStream,
   FeedbackType,
 } from "@/app/app/types";
 import {
   getLatestMessageChain,
+  getLatestTurn,
   getMessageByMessageId,
   MessageTreeState,
 } from "../services/messageTree";
 import { useMemo } from "react";
-import type { ChatToolSelection } from "@/lib/tools/types";
+import {
+  readPanelPreferences,
+  savePanelPreferences,
+} from "@/lib/outputPanel/preferences";
+import {
+  CHAT_PANEL_STORAGE_PREFIX,
+  INITIAL_RIGHT_PANEL,
+  rightPanelReducer,
+  showsFiles,
+  showsSources,
+  type ChatRightPanelAction,
+  type ChatRightPanelState,
+} from "@/lib/chat/rightPanel";
+import type { ChatToolOptions } from "@/lib/tools/types";
+import {
+  addLoadedPublishedFiles,
+  NO_LOADED_PUBLISHED_FILES,
+  type LoadedPublishedFiles,
+} from "@/lib/chat/publishedFiles";
 
 /** An error that belongs to the session, not to a saved message. */
 export interface SessionError {
@@ -35,17 +55,28 @@ interface ChatSessionData {
   chatSessionSharedStatus: ChatSessionSharedStatus;
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
-  sendAcknowledged?: Promise<number | null>;
+  sendAcknowledged?: Promise<ChatStream | null>;
   // Resolves after the reader applies its final packets and message state.
   readerFinished?: Promise<void>;
   hasPerformedInitialScroll: boolean;
-  documentSidebarVisible: boolean;
+  // The chat's right panel (lib/chat/rightPanel.ts). It stays while the
+  // panel is closed, so reopening it, or coming back to the chat, restores
+  // its tabs, size, search and seen files.
+  rightPanel: ChatRightPanelState;
   hasSentLocalUserMessage: boolean;
 
   // Session-specific state (previously global)
   isFetchingChatMessages: boolean;
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
+  // An older page failed to load, so `hasOlderMessages` was turned off to
+  // stop retrying; reopening the chat tries again.
+  olderMessagesFailed: boolean;
+  // What the chat's loads gave of its published files
+  // (lib/chat/publishedFiles.ts)
+  loadedPublishedFiles: LoadedPublishedFiles;
+  // The `approvals_version` of the load whose approval requests the chat shows.
+  approvalsVersion?: string;
   isLoadingOlderMessages: boolean;
   uncaughtError: SessionError | null;
   loadingError: string | null;
@@ -60,13 +91,13 @@ interface ChatSessionData {
   incognito?: boolean;
   // The chat's saved tools and search filters, owned by the server; the tab's
   // only copy for a chat that stores no content. Undefined until known.
-  toolSelection?: ChatToolSelection | null;
-  // The user's changes to that selection that the server has not confirmed;
+  toolOptions?: ChatToolOptions | null;
+  // The user's changes to those options that the server has not confirmed;
   // the composer shows them over the server's copy.
-  toolSelectionEdits?: Partial<ChatToolSelection>;
-  // Counts the server's confirmations of that selection; a chat load that
+  toolOptionsEdits?: Partial<ChatToolOptions>;
+  // Counts the server's confirmations of those options; a chat load that
   // started before the latest one carries an older copy.
-  toolSelectionVersion?: number;
+  toolOptionsVersion?: number;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -91,6 +122,17 @@ interface ChatSessionStore {
   ) => void;
   updateSessionData: (
     sessionId: string,
+    updates: Partial<ChatSessionData>
+  ) => void;
+  /**
+   * Applies a load of the chat from the server, of sequence `loadSequence`
+   * (`startChatLoad`): the load's approvals version and published files, with
+   * `updates` for the rest.
+   */
+  applyLoadedSession: (
+    sessionId: string,
+    loaded: BackendChatSession,
+    loadSequence: number,
     updates: Partial<ChatSessionData>
   ) => void;
   updateSessionMessageTree: (
@@ -127,13 +169,8 @@ interface ChatSessionStore {
     sessionId: string,
     hasPerformedInitialScroll: boolean
   ) => void;
-  updateDocumentSidebarVisible: (
-    sessionId: string,
-    documentSidebarVisible: boolean
-  ) => void;
-  updateCurrentDocumentSidebarVisible: (
-    documentSidebarVisible: boolean
-  ) => void;
+  /** Applies a right panel transition to the open chat. */
+  updateCurrentRightPanel: (action: ChatRightPanelAction) => void;
   updateHasSentLocalUserMessage: (
     sessionId: string,
     hasSentLocalUserMessage: boolean
@@ -177,7 +214,7 @@ interface ChatSessionStore {
   initializeSession: (
     sessionId: string,
     backendSession?: BackendChatSession,
-    toolSelectionVersion?: number
+    toolOptionsVersion?: number
   ) => void;
   cleanupOldSessions: (maxSessions?: number) => void;
 }
@@ -197,12 +234,31 @@ const createInitialSessionData = (
   selectedNodeIdForDocDisplay: null,
   abortController: new AbortController(),
   hasPerformedInitialScroll: true,
-  documentSidebarVisible: false,
+  rightPanel: {
+    ...INITIAL_RIGHT_PANEL,
+    // The chat's panel width from session storage, as Craft keeps its panel's
+    proportion:
+      readPanelPreferences(
+        `${CHAT_PANEL_STORAGE_PREFIX}${sessionId}`,
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Parses untrusted browser storage at the I/O boundary.
+        (stored: unknown) =>
+          typeof stored === "object" &&
+          stored !== null &&
+          "proportion" in stored &&
+          typeof stored.proportion === "number" &&
+          stored.proportion > 0 &&
+          stored.proportion < 1
+            ? stored.proportion
+            : undefined
+      ) ?? INITIAL_RIGHT_PANEL.proportion,
+  },
   hasSentLocalUserMessage: false,
 
   // Session-specific state defaults
   isFetchingChatMessages: false,
   hasOlderMessages: false,
+  olderMessagesFailed: false,
+  loadedPublishedFiles: NO_LOADED_PUBLISHED_FILES,
   isLoadingOlderMessages: false,
   uncaughtError: null,
   loadingError: null,
@@ -267,6 +323,24 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       newSessions.set(sessionId, newSession);
 
       return { sessions: newSessions };
+    });
+  },
+
+  applyLoadedSession: (
+    sessionId: string,
+    loaded: BackendChatSession,
+    loadSequence: number,
+    updates: Partial<ChatSessionData>
+  ) => {
+    get().updateSessionData(sessionId, {
+      approvalsVersion: loaded.approvals_version,
+      loadedPublishedFiles: addLoadedPublishedFiles(
+        get().sessions.get(sessionId)?.loadedPublishedFiles ??
+          NO_LOADED_PUBLISHED_FILES,
+        loaded,
+        loadSequence
+      ),
+      ...updates,
     });
   },
 
@@ -407,21 +481,17 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, { hasPerformedInitialScroll });
   },
 
-  updateDocumentSidebarVisible: (
-    sessionId: string,
-    documentSidebarVisible: boolean
-  ) => {
-    get().updateSessionData(sessionId, { documentSidebarVisible });
-  },
-
-  updateCurrentDocumentSidebarVisible: (documentSidebarVisible: boolean) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateDocumentSidebarVisible(
-        currentSessionId,
-        documentSidebarVisible
-      );
-    }
+  updateCurrentRightPanel: (action: ChatRightPanelAction) => {
+    const { currentSessionId, sessions } = get();
+    const session = currentSessionId ? sessions.get(currentSessionId) : null;
+    if (!currentSessionId || !session) return;
+    const rightPanel = rightPanelReducer(session.rightPanel, action);
+    if (rightPanel === session.rightPanel) return;
+    get().updateSessionData(currentSessionId, { rightPanel });
+    if (rightPanel.proportion !== session.rightPanel.proportion)
+      savePanelPreferences(`${CHAT_PANEL_STORAGE_PREFIX}${currentSessionId}`, {
+        proportion: rightPanel.proportion,
+      });
   },
 
   updateHasSentLocalUserMessage: (
@@ -565,24 +635,24 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   initializeSession: (
     sessionId: string,
     backendSession?: BackendChatSession,
-    toolSelectionVersion: number = 0
+    toolOptionsVersion: number = 0
   ) => {
     const existingSession = get().sessions.get(sessionId);
-    // A load that started before a save was confirmed holds a stale selection.
-    // The server never clears a stored selection, so a load without one keeps
+    // A load that started before a save was confirmed holds stale options.
+    // The server never clears stored options, so a load without them keeps
     // the tab's copy: that chat stores none, and the tab holds the only copy.
-    const selectionIsCurrent =
-      (existingSession?.toolSelectionVersion ?? 0) === toolSelectionVersion &&
-      (backendSession?.tool_selection != null ||
-        existingSession?.toolSelection == null);
+    const optionsAreCurrent =
+      (existingSession?.toolOptionsVersion ?? 0) === toolOptionsVersion &&
+      (backendSession?.tool_options != null ||
+        existingSession?.toolOptions == null);
     const initialData: Partial<ChatSessionData> = {
       isLoaded: true,
       description: backendSession?.description,
       personaId: backendSession?.persona_id,
       incognito: backendSession?.incognito ?? false,
       ...(backendSession &&
-        selectionIsCurrent && {
-          toolSelection: backendSession.tool_selection ?? null,
+        optionsAreCurrent && {
+          toolOptions: backendSession.tool_options ?? null,
         }),
     };
 
@@ -673,16 +743,8 @@ export const useCurrentResponseStopped = () =>
       ? sessions.get(currentSessionId)
       : null;
     if (!currentSession) return false;
-    const tree = currentSession.messageTree;
-    const latest = getLatestMessageChain(tree).at(-1);
-    if (!latest) return false;
     // Each model of a multi-model turn is a sibling that ends with its own stop.
-    const turn =
-      latest.parentNodeId === null
-        ? [latest]
-        : (tree.get(latest.parentNodeId)?.childrenNodeIds ?? [latest.nodeId])
-            .map((nodeId) => tree.get(nodeId))
-            .filter((node): node is Message => node !== undefined);
+    const turn = getLatestTurn(currentSession.messageTree);
     return (
       turn.length > 0 &&
       turn.every((node) => node.packets.at(-1)?.obj.type === "stop")
@@ -745,13 +807,46 @@ export const useIsFetchingChatMessages = () =>
     return currentSession?.isFetchingChatMessages ?? false;
   });
 
-export const useDocumentSidebarVisible = () =>
+/** The open chat's right panel (lib/chat/rightPanel.ts). */
+export const useCurrentRightPanelState = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
     const currentSession = currentSessionId
       ? sessions.get(currentSessionId)
       : null;
-    return currentSession?.documentSidebarVisible || false;
+    return currentSession?.rightPanel ?? INITIAL_RIGHT_PANEL;
+  });
+
+/** Whether the open chat's right panel shows Sources. */
+export const useSourcesShown = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession ? showsSources(currentSession.rightPanel) : false;
+  });
+
+/** Whether the open chat's right panel is open, on any tab. */
+export const useRightPanelShown = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return (
+      (currentSession?.rightPanel ?? INITIAL_RIGHT_PANEL).mode !== "closed"
+    );
+  });
+
+/** Whether the open chat's right panel shows the Files list or a file. */
+export const useFilesShown = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession ? showsFiles(currentSession.rightPanel) : false;
   });
 
 /**

@@ -35,6 +35,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     PILL_FOLDER_ID,
     PUBLIC_RANGE,
     RESTRICTED_ACCESS_FOLDER_ID,
+    SHORTCUTTED_3_FOLDER_ID,
     TEST_USER_1_DRIVE_B_FOLDER_ID,
     TEST_USER_1_DRIVE_B_ID,
     TEST_USER_1_EXTRA_DRIVE_1_ID,
@@ -287,6 +288,7 @@ def test_gdrive_perm_sync_with_real_data(
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
             *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+            SHORTCUTTED_3_FOLDER_ID,
             *PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
         )
     )

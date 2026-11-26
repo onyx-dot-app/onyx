@@ -1,0 +1,93 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Onyx v2",
+  "version": "0.1.0",
+  "identifier": "app.onyx.desktop.v2",
+  "build": {
+    "beforeDevCommand": "bun run vite:dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run vite:build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'",
+      "freezePrototype": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Onyx for desktop",
+    "longDescription": "The Onyx desktop app connects to your Onyx server.\nIt gives you chat, search and a launcher in a native window.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/256x256.png",
+      "icons/512x512.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      },
+      "allowDowngrades": false,
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "windows/installer-hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      },
+      "wix": {
+        "fragmentPaths": [
+          "windows/installer-guards.wxs"
+        ],
+        "componentGroupRefs": [
+          "OnyxInstallerGuards"
+        ]
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libc6 (>= 2.35)",
+          "ca-certificates",
+          "xdg-utils"
+        ],
+        "section": "utils",
+        "desktopTemplate": "linux/onyx-v2.desktop",
+        "files": {
+          "/usr/share/doc/onyx-v2/copyright": "linux/copyright"
+        }
+      }
+    },
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "onyx"
+        ]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDNTMyMTg5MTVGMDI1RUQKUldUdEpmQVZpU0ZUclBwMDJ2VmtXS2Yxd3Y5eUQ2aWZRRXNSOXFva0VsNjRlRERNdzhteDNDdzEK",
+      "endpoints": [
+        "https://desktop.onyx.app/updates/stable/{{target}}-{{arch}}/latest.json"
+      ],
+      "requireSignedVersion": true
+    }
+  }
+}

@@ -136,11 +136,16 @@ bun install
 
 #### Backend
 
-Set up pre-commit hooks (`ruff` / `ruff format`):
+Set up the git hooks (`ruff` / `ruff format` and the others in `.pre-commit-config.yaml`).
+[prek](https://github.com/j178/prek) runs them, and `uv sync` installs it:
 
 ```bash
-uv run pre-commit install
+uv run prek install
 ```
+
+If you installed the hooks with `pre-commit` before, run `uv run prek install --force` once instead.
+Without `--force`, prek keeps the old hooks as `*.legacy` and runs them too. They fail, because
+`uv sync` removes `pre-commit`.
 
 We also use `ty` for static type checking. Onyx is fully type-annotated, and we want to keep it that way! To run the ty checks manually:
 
@@ -338,10 +343,10 @@ On macOS, you will need to install [Docker Desktop](https://www.docker.com/produ
 
 ### Formatting and Linting
 
-macOS will likely require you to remove some quarantine attributes on some of the hooks for them to execute properly. After installing pre-commit, run the following command:
+macOS will likely require you to remove some quarantine attributes on some of the hooks for them to execute properly. After installing the hooks, run the following command:
 
 ```bash
-sudo xattr -r -d com.apple.quarantine ~/.cache/pre-commit
+sudo xattr -r -d com.apple.quarantine ~/.cache/prek
 ```
 
 ---

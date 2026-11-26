@@ -8,11 +8,12 @@ import { useOpalStrings } from "@opal/strings";
 // Types
 // ---------------------------------------------------------------------------
 
-type ProgressBarColor = "blue" | "green" | "red" | "purple";
+type ProgressBarColor = "blue" | "green" | "amber" | "red" | "purple";
 
 const FILL_COLORS: Record<ProgressBarColor, string> = {
   blue: "bg-theme-blue-05",
   green: "bg-theme-green-05",
+  amber: "bg-theme-amber-05",
   red: "bg-status-error-05",
   purple: "bg-theme-purple-05",
 };
@@ -46,7 +47,7 @@ function ProgressBar({
   return (
     <div
       ref={ref}
-      className="opal-progress-bar bg-background-tint-00"
+      className="opal-progress-bar bg-background-tint-02"
       role="progressbar"
       aria-label={ariaLabel ?? strings.progress}
       aria-valuenow={value}

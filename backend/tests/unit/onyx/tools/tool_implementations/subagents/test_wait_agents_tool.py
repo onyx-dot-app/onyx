@@ -21,7 +21,7 @@ def test_wait_agents_refuses_while_a_code_cell_is_open() -> None:
 def test_an_empty_agent_list_waits_for_all_agents() -> None:
     """The saved wait holds the same agents that the call reports."""
     invocation = MagicMock(spec=ToolInvocation)
-    invocation.arguments = {"agent_ids": []}
+    invocation.arguments = {"targets": []}
     invocation.agents.agent_id = "root"
     invocation.agents.discover_agents.return_value = [
         AgentInfo(

@@ -25,7 +25,7 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 | Supervisor | `craft-init` (PID 1) starts the daemon and restarts it when it exits. The daemon is not PID 1. |
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/`. |
 | Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drives). It does nothing if init already attached them. |
-| Managed mounts | `skills` on `/mnt/skills` (slots `/dev/vdc`, `/dev/vdf`), `user-uploads` on `/mnt/user-uploads` (`/dev/vdg`, `/dev/vdh`), `spaces` on `/mnt/spaces` (`/dev/vdi`, `/dev/vdj`). Attach mounts slot A of each (`MANAGED_MOUNTS` in `init.conf`); slot B is never mounted by attach. `MountManaged` changes the drive of one mount. Needs a guest kernel with `MOVE_MOUNT_BENEATH` (6.5+). |
+| Managed mounts | `user-uploads` on `/mnt/user-uploads` (`/dev/vdg`, `/dev/vdh`), `spaces` on `/mnt/spaces` (`/dev/vdi`, `/dev/vdj`). Attach mounts slot A of each (`MANAGED_MOUNTS` in `init.conf`); slot B is never mounted by attach. `MountManaged` changes the drive of one mount. Needs a guest kernel with `MOVE_MOUNT_BENEATH` (6.5+). |
 | Sessions | One directory per session: `/home/onyx/workspaces/<session_id>`. The build makes `/home/onyx` and `/home/onyx/workspaces`, owned by the sandbox user. |
 | Egress relay | Init sends SIGHUP to the PID in `/run/craft-fc/egress-relay.pid`. |
 | Scratch disk | ext4 on `/mnt/scratch`. Init grows it to the device size, and fails if the device is still smaller than `scratch_bytes` after about 1 s. |
@@ -42,7 +42,7 @@ executions), `--max-running` (64), `--max-tracked` (64 records, running and ende
 managed calls off), `--ca-anchor`
 (`/usr/local/share/ca-certificates/craft-egress-ca.crt`), `--ca-bundle` (`/etc/ssl/certs/ca-certificates.crt`;
 empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty to skip), `--certutil`
-(`/usr/bin/certutil`), the file flags (`--sessions-root`,
+(`/usr/bin/certutil`), the file flags (`--sessions-root`, `--onyx-root`, `--skills-root`,
 `--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
 `--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
 `--capture-zstd-level`, `--file-owner`; see Files), `--command-user` (`1000:1000`; empty runs commands as
@@ -97,7 +97,9 @@ agent, every call also carries `x-sandbox-id`.
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
 | `ReadFile`, `WriteFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files, or any VM path with no session ID (see Files). |
 | `UploadFile` | A free name in a session directory (`attachments/` by default). Always needs a session ID. |
+| `StatFiles` | Up to 1,000 session paths (1 MiB of path bytes) in one call, through `os.Root`: each path's own entry (exists, type, mode, link target) and its target through the links inside the session (type, mode, device and inode), or why there is none (missing, escapes the session, loop, other). `os.Root` follows at most 8 links per path. Reads no content. Always needs a session ID. |
 | `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
+| `InstallSkill` | Puts one skill in `--skills-root` (default `/var/lib/onyx/skills`), as root. See Skills. |
 | `BrowserStart`, `BrowserStop` | Reserved for the browser. `UNIMPLEMENTED`. |
 | `ManagedStatus(mount)` | The slot on the mount point (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
 | `MountManaged(mount, slot, size_bytes, fs_uuid)` | Makes the slot the drive on the mount point, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). A slot in use that is mounted beneath the top mount with the requested UUID is a swap that stopped before its detach: the call detaches the old top mount and finishes it. The node agent calls it during `SwapManaged`. |
@@ -143,11 +145,16 @@ Files (`internal/guestd/files`):
   fail with `INVALID_ARGUMENT`; `ListFiles` and `ZipFiles` leave them out, and a recursive `DeleteFile` of a
   directory that holds one fails. `UploadFile` and the
   session saves always need a session.
+- A path with no `session_id` in `/tmp/onyx` (`--onyx-root`, the files that Onyx writes outside every
+  session) is confined like a session path: the daemon opens that directory as an `os.Root`, so a link
+  that a command made never takes a call out of it (`INVALID_ARGUMENT`). A write replaces a link in
+  the last part instead of following it. A write with `make_parents` makes a missing onyx root. An
+  onyx root that is a link, or one under a denied path, fails.
 - With a session, every path is relative to `/home/onyx/workspaces/<session_id>/` (`--sessions-root`). Leading `/` are
   dropped, so `/attachments/a.pdf` is `attachments/a.pdf`. The daemon opens that directory as an `os.Root`. A
   path with a `..` part, a NUL byte or bad UTF-8, a path over 4096 bytes, a name over 255 bytes, or a
   symlink that leaves the directory fails with `INVALID_ARGUMENT`. Only `ReadFile`, `ListFiles` and
-  `ZipFiles` follow a top-level session link into `--read-link-roots` (default `/mnt/skills`,
+  `ZipFiles` follow a top-level session link into `--read-link-roots` (default the skills root,
   `/mnt/user-uploads` and `/mnt/spaces`).
 - `ReadFile` streams the file info, then 64 KiB chunks. `offset`/`length` read a range. More than
   `--max-file-bytes` (1 GiB) in one call fails with `LIMIT_EXCEEDED`.
@@ -161,9 +168,12 @@ Files (`internal/guestd/files`):
   response would pass 12 MiB. Links are listed, not followed. Names that are not valid UTF-8
   are left out.
 - Owner: the files and directories that `WriteFile`, `UploadFile` and `RestoreSession` make, and a
-  sessions root or session directory that the daemon makes, belong to `--file-owner` (default
-  `1000:1000`, the image's `sandbox` user; empty keeps root). Directories that exist keep their owner,
-  also the parents of the sessions root. If the owner change fails, the call fails.
+  sessions root, session directory or onyx root that the daemon makes, belong to `--file-owner` (default
+  `1000:1000`, the image's `sandbox` user; empty keeps root). Directories that exist keep their owner;
+  the parent of the sessions root must exist. The daemon changes the owner through an open handle,
+  never a link's target. If the owner change fails, the call fails.
+- The sessions root, a session directory and the onyx root must not be links, also when a command
+  replaces one while a call opens it (`INVALID_ARGUMENT`).
 - `DeleteFile` removes a file or a link (never its target); a directory needs `recursive`.
 - `ZipFiles` streams a deflate zip of the regular files under a directory. It checks
   `--max-zip-bytes` (1 GiB) and 100,000 files before it sends the first byte.
@@ -267,3 +277,20 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o guestd-kvm.test ./internal/guest
 # KVM_WORK_DIR, KVM_VMS=20, KVM_BOOT_ARGS, KVM_TEMPLATE_ARGS (craft.scratch=defer), KVM_RELAY_BIN.
 ./guestd-kvm.test -test.v -test.run 'TestDaemonKVM|TestRestoreKVM'
 ```
+
+## Skills
+
+`InstallSkill` puts one skill at `<skills root>/<name>/` (`--skills-root`, default `/var/lib/onyx/skills`).
+The daemon refuses a skills root that is a link or that another user owns. The image makes its parents
+root's, so the sandbox user cannot swap it.
+
+- The header has the folder name (one path part, not starting with `.`), an opaque version (at most 256
+  bytes, no line breaks), the exact size and SHA-256 of the data, and limits. The data is a plain tar (no
+  zstd) whose members are all under `<name>/`.
+- If `<name>/.version` already holds the version, the call reads no data and returns `installed=false`.
+- Else it extracts into `.craft-restore-<random>` in the skills root with the `RestoreSession` checks,
+  writes `.version` last, and swaps the folder into place with the `RestoreSession` swap (two renames). A reader never sees a mix
+  of old and new files; between the two renames the folder is missing. A failed install changes nothing.
+- The files are root's: directories 0755, files 0644, or 0755 when the tar gave them an execute bit. The
+  sandbox user can read and run a skill but not change it.
+- Installs run one at a time. Each install first cleans up after an install that did not finish.

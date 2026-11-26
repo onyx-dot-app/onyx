@@ -404,8 +404,10 @@ async def submit_question(
         "chat_session_info": {"persona_id": 0},
         "parent_message_id": None,
         "file_descriptors": [],
-        "allowed_tool_ids": [internal_search_tool_id],
-        "preferred_tool_id": internal_search_tool_id,
+        "tool_options": {
+            "allowed": [{"type": "capability", "tool_id": internal_search_tool_id}],
+            "preferred": {"type": "capability", "tool_id": internal_search_tool_id},
+        },
         "stream": False,
     }
 

@@ -24,15 +24,20 @@ import {
   InputTypeInTag,
   InputTypeIn,
   InputSwitch,
+  MessageCard,
   Text,
   type TagItem,
 } from "@opal/components";
+import { SvgLock } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Settings, toSettings } from "@/lib/settings/types";
+import { usePlaygroundRestriction } from "@/lib/playground/hooks";
+import { PlaygroundRestrictedFeature } from "@/lib/playground/types";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { Tier } from "@/lib/tiers/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
+import RetentionField from "@/views/admin/RetentionField";
 import type { RichStr } from "@opal/types";
 import type {
   IncognitoAvailability,
@@ -60,6 +65,7 @@ interface ToggleRowProps {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
+  disabledTooltip?: string | RichStr;
 }
 
 function ToggleRow({
@@ -68,14 +74,17 @@ function ToggleRow({
   checked,
   onCheckedChange,
   disabled,
+  disabledTooltip,
 }: ToggleRowProps) {
   return (
-    <InputHorizontal title={title} description={description} withLabel>
-      <InputSwitch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
-      />
+    <InputHorizontal
+      title={title}
+      description={description}
+      withLabel
+      disabled={disabled}
+      disabledTooltip={disabledTooltip}
+    >
+      <InputSwitch checked={checked} onCheckedChange={onCheckedChange} />
     </InputHorizontal>
   );
 }
@@ -162,6 +171,8 @@ export default function SecurityHardeningPage() {
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
   // Groups and perm sync are Business+, so the restriction is meaningless below.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const plans = usePlans();
   const { authTypeMetadata, isLoading: authTypeLoading } =
     useAuthTypeMetadata();
   // Single-tenant at runtime, not just by build flag. The explicit === false
@@ -181,6 +192,9 @@ export default function SecurityHardeningPage() {
   // Invite-only lives in workspace settings, not SecuritySettings, so it has
   // its own save path.
   const workspaceSettings = useSettings();
+  const anonymousAccess = usePlaygroundRestriction(
+    PlaygroundRestrictedFeature.ANONYMOUS_ACCESS
+  );
   const saveWorkspaceSettings = useCallback(
     async (updates: Partial<Settings>) => {
       const newSettings: Settings = {
@@ -191,7 +205,9 @@ export default function SecurityHardeningPage() {
         await mutate(
           SWR_KEYS.settings,
           async () => {
-            await updateAdminSettings(newSettings);
+            // Send only the changed fields so a stale copy cannot revert
+            // another admin's change.
+            await updateAdminSettings(updates);
             return newSettings;
           },
           {
@@ -402,6 +418,41 @@ export default function SecurityHardeningPage() {
                   void saveSettings({ allow_renamed_account_claim: checked })
                 }
               />
+
+              {/* The reason sits outside the dimmed row, so it keeps its
+                  contrast and a keyboard user reads it without the tooltip. */}
+              {anonymousAccess.restricted && (
+                <MessageCard
+                  icon={SvgLock}
+                  title={anonymousAccess.title}
+                  description={anonymousAccess.description}
+                />
+              )}
+              {/* The row appears once the setting is known, so it never
+                  shows a value it does not have. */}
+              {anonymousAccess.known && (
+                <ToggleRow
+                  title={t("authentication.anonymousUsers.title")}
+                  description={markdown(
+                    t("authentication.anonymousUsers.description")
+                  )}
+                  checked={
+                    !anonymousAccess.restricted &&
+                    (workspaceSettings.anonymous_user_enabled ?? false)
+                  }
+                  onCheckedChange={(checked) =>
+                    void saveWorkspaceSettings({
+                      anonymous_user_enabled: checked,
+                    })
+                  }
+                  disabled={anonymousAccess.restricted}
+                  disabledTooltip={
+                    anonymousAccess.restricted
+                      ? anonymousAccess.tooltip
+                      : undefined
+                  }
+                />
+              )}
 
               {!isMultiTenant && (
                 <>
@@ -743,6 +794,77 @@ export default function SecurityHardeningPage() {
                         ),
                       },
                     ]}
+                  />
+                </div>
+              </InputHorizontal>
+
+              <InputHorizontal
+                title={t("adminControls.queryHistory.title")}
+                description={t("adminControls.queryHistory.description")}
+                withLabel
+                responsive
+              >
+                <div className="w-full sm:w-60">
+                  <InputSingleSelect
+                    value={
+                      workspaceSettings.query_history_type ??
+                      QueryHistoryType.NORMAL
+                    }
+                    onValueChange={(value) =>
+                      void saveWorkspaceSettings({
+                        // SAFETY: the options only hold QueryHistoryType values.
+                        query_history_type: value as QueryHistoryType,
+                      })
+                    }
+                    defaultOption={QueryHistoryType.NORMAL}
+                    placeholder={tInputSelect("placeholder.fallback")}
+                    options={[
+                      {
+                        value: QueryHistoryType.NORMAL,
+                        title: t("adminControls.queryHistory.normal.label"),
+                        description: t(
+                          "adminControls.queryHistory.normal.description"
+                        ),
+                      },
+                      {
+                        value: QueryHistoryType.ANONYMIZED,
+                        title: t("adminControls.queryHistory.anonymized.label"),
+                        description: t(
+                          "adminControls.queryHistory.anonymized.description"
+                        ),
+                      },
+                      {
+                        value: QueryHistoryType.DISABLED,
+                        title: t("adminControls.queryHistory.disabled.label"),
+                        description: t(
+                          "adminControls.queryHistory.disabled.description"
+                        ),
+                      },
+                    ]}
+                  />
+                </div>
+              </InputHorizontal>
+
+              {/* Below Enterprise only the dropdown is locked. */}
+              <InputHorizontal
+                title={t("adminControls.retention.title")}
+                description={t("adminControls.retention.description", {
+                  appName: workspaceSettings.appName,
+                })}
+                tag={!enterpriseTier ? plans[Tier.ENTERPRISE].tag : undefined}
+                withLabel
+                responsive
+              >
+                <div className="w-full sm:w-60">
+                  <RetentionField
+                    value={
+                      workspaceSettings.maximum_chat_retention_days ?? null
+                    }
+                    onSave={(maximum_chat_retention_days) =>
+                      void saveWorkspaceSettings({
+                        maximum_chat_retention_days,
+                      })
+                    }
                   />
                 </div>
               </InputHorizontal>

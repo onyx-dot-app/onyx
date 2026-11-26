@@ -1,16 +1,26 @@
 """Helpers for reading skill source content."""
 
-from collections.abc import Collection, Iterator
-from pathlib import Path
+from collections.abc import Collection, Iterable
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.plugin import get_stored_version_content, get_visible_versions_skill_md
+from onyx.db.plugin import (
+    SkillKey,
+    get_skills_bundle_paths,
+    get_stored_version_content,
+    get_visible_versions_skill_md,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
-from onyx.skills.built_in import BuiltInSkillDefinition
+from onyx.prompts.skill_prompts import SKILL_FILES_LINE
+from onyx.server.features.build.sandbox.models import chat_skill_folder
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    BuiltInSkillDefinition,
+    iter_builtin_skill_files,
+)
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
@@ -19,30 +29,22 @@ from onyx.skills.bundle import (
     read_stored_bundle,
     strip_skill_md_frontmatter,
 )
-from onyx.skills.models import CustomSkillBundleContents
+from onyx.skills.models import ChatSkill, CustomSkillBundleContents
+from onyx.skills.rendering import resolve_skill_dir_placeholder
 from onyx.skills.validation import read_stored_bundle_bytes
+from onyx.tools.constants import LOAD_SKILL_TOOL_NAME
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
-    """Yield source files, excluding hidden paths and Python caches."""
-    for path in sorted(source_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        if any(
-            part == "__pycache__" or part.startswith(".")
-            for part in path.relative_to(source_dir).parts
-        ):
-            continue
-        yield path
-
-
-def read_builtin_skill_instructions(definition: BuiltInSkillDefinition) -> str:
-    source_path = definition.source_dir / SKILL_MD_NAME
+def read_builtin_skill_instructions(
+    definition: BuiltInSkillDefinition, path: str = ""
+) -> str:
+    source_dir = definition.source_dir / path
+    source_path = source_dir / SKILL_MD_NAME
     if not source_path.is_file():
-        source_path = definition.source_dir / f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}"
+        source_path = source_dir / f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}"
     if not source_path.is_file():
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -99,25 +101,24 @@ def read_version_contents(
 
 
 def read_versions_skill_md(
-    version_ids: Collection[UUID],
+    skills: Collection[SkillKey],
     user_id: UUID,
     db_session: Session,
-) -> dict[UUID, str]:
-    """The whole SKILL.md, frontmatter included, of each version whose skill
-    the user can see now, from one query. A version that stores no SKILL.md
-    text opens its bundle. A version that is gone, hidden from the user or
-    unreadable is left out."""
-    if not version_ids:
+) -> dict[SkillKey, str]:
+    if not skills:
         return {}
-    skill_md: dict[UUID, str] = {}
-    for version_id, stored in get_visible_versions_skill_md(
-        version_ids, user_id, db_session
+    skill_md: dict[SkillKey, str] = {}
+    for key, stored in get_visible_versions_skill_md(
+        skills, user_id, db_session
     ).items():
         if stored.skill_md is not None:
-            skill_md[version_id] = stored.skill_md
+            skill_md[key] = stored.skill_md
+            continue
+        version_id, path = key
+        if path:
             continue
         try:
-            skill_md[version_id], _ = read_stored_bundle(
+            skill_md[key], _ = read_stored_bundle(
                 read_skill_bundle_blob(stored.bundle_file_id, str(version_id))
             )
         except OnyxError:
@@ -126,4 +127,71 @@ def read_versions_skill_md(
                 version_id,
                 exc_info=True,
             )
+    return skill_md
+
+
+def _has_other_files(paths: Iterable[str]) -> bool:
+    """Whether a skill folder's paths, relative to it, name a file that only
+    load_skill brings into the sandbox."""
+    return any(
+        path not in (SKILL_MD_NAME, f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}")
+        for path in paths
+    )
+
+
+def _files_line(skill: ChatSkill) -> str:
+    return SKILL_FILES_LINE.format(
+        folder=chat_skill_folder(skill.name), load_tool=LOAD_SKILL_TOOL_NAME
+    )
+
+
+def read_chat_skills_md(
+    skills: Collection[ChatSkill],
+    user_id: UUID,
+    db_session: Session,
+    *,
+    with_sandbox: bool,
+) -> dict[SkillKey, str]:
+    """``with_sandbox`` (a chat with the sandbox tools): a custom skill's text
+    names its VM folder, and a skill with files besides SKILL.md starts with
+    the line that says to load them."""
+    custom_keys = {
+        (skill.version_id, skill.path)
+        for skill in skills
+        if skill.built_in_skill_id is None
+    }
+    skill_md = read_versions_skill_md(custom_keys, user_id, db_session)
+    bundle_paths = (
+        get_skills_bundle_paths(custom_keys, db_session) if with_sandbox else {}
+    )
+    for skill in skills:
+        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id or "")
+        if definition is None:
+            key = (skill.version_id, skill.path)
+            if with_sandbox and key in skill_md:
+                folder = chat_skill_folder(skill.name)
+                text = resolve_skill_dir_placeholder(skill_md[key], folder)
+                paths = bundle_paths.get(key)
+                prefix = f"{skill.path}/" if skill.path else ""
+                # A version with no file list may have files: keep the line.
+                if paths is None or _has_other_files(
+                    path.removeprefix(prefix)
+                    for path in paths
+                    if path.startswith(prefix)
+                ):
+                    text = _files_line(skill) + text
+                skill_md[key] = text
+            continue
+        try:
+            instructions = read_builtin_skill_instructions(definition, skill.path)
+        except OnyxError:
+            logger.warning("Could not read built-in skill %s", skill.name)
+            continue
+        source_dir = definition.source_dir / skill.path
+        if _has_other_files(
+            path.relative_to(source_dir).as_posix()
+            for path in iter_builtin_skill_files(source_dir)
+        ):
+            instructions = _files_line(skill) + instructions
+        skill_md[(skill.version_id, skill.path)] = instructions
     return skill_md

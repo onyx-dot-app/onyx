@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-user-file"
+description = "Enables the delete_user_file command without any pre-configured scope."
+commands.allow = ["delete_user_file"]
+
+[[permission]]
+identifier = "deny-delete-user-file"
+description = "Denies the delete_user_file command without any pre-configured scope."
+commands.deny = ["delete_user_file"]

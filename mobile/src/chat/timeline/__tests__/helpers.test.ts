@@ -2,7 +2,6 @@ import { describe, expect, it } from "@jest/globals";
 
 import { type Packet } from "@/chat/streamingModels";
 import {
-  isCodingAgentPackets,
   isPythonToolPackets,
   isReasoningPackets,
   isSearchToolPackets,
@@ -65,15 +64,6 @@ describe("packetUtils / packetHelpers", () => {
     expect(
       isPythonToolPackets([
         makePlacedPacket({ type: "python_tool_start", code: "x" }),
-      ]),
-    ).toBe(true);
-    expect(
-      isCodingAgentPackets([
-        makePlacedPacket({
-          type: "coding_agent_start",
-          query: "q",
-          repo: null,
-        }),
       ]),
     ).toBe(true);
   });

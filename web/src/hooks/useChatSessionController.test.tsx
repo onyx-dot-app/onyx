@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import useChatSessionController from "@/hooks/useChatSessionController";
@@ -28,9 +29,6 @@ jest.mock("@/providers/IncognitoProvider", () => ({
     setIncognitoSessionId: jest.fn(),
   }),
 }));
-jest.mock("@/lib/projects/svc", () => ({
-  getProjectFilesForSession: async () => [],
-}));
 jest.mock("@/app/app/services/lib", () => ({
   processRawChatHistory: jest.fn(),
   nameChatSession: jest.fn(),
@@ -38,6 +36,15 @@ jest.mock("@/app/app/services/lib", () => ({
   resumeStream: jest.fn(),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
+  CHAT_STATUS_POLL_MS: 0,
+  readChatSessionStatus: jest.fn(async () => ({
+    is_processing: false,
+    current_stream: null,
+    has_startable_input: false,
+    approvals_version: "0",
+    has_active_subagents: false,
+    latest_response_id: null,
+  })),
   waitForChatResponseEnd: jest.fn(),
   fetchSettledChatSession: jest.fn(),
 }));
@@ -53,33 +60,15 @@ function backendSession(busy: boolean): BackendChatSession {
   } as unknown as BackendChatSession;
 }
 
-function mountController() {
-  return renderHook(() =>
-    useChatSessionController({
-      existingChatSessionId: "session",
-      searchParams: new ReadonlyURLSearchParams(),
-      setSelectedDocuments: jest.fn(),
-      setCurrentMessageFiles: jest.fn(),
-      chatSessionIdRef: { current: null },
-      loadedIdSessionRef: { current: null },
-      chatInputBarRef: { current: null },
-      isInitialLoad: { current: true },
-      submitOnLoadPerformed: { current: false },
-      refreshChatSessions: jest.fn(),
-      onSubmit: jest.fn(),
-    })
-  );
-}
-
-beforeEach(() => {
-  jest.mocked(processRawChatHistory).mockImplementation(() => new Map());
-  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
-  jest.spyOn(global, "fetch").mockImplementation(async (url) => {
+/** Serves a session load; status and pending-message reads get their own bodies. */
+function serveSession(session: BackendChatSession) {
+  jest.mocked(global.fetch).mockImplementation(async (url) => {
     const path = String(url);
     const status: ChatSessionStatus = {
-      is_processing: true,
-      current_stream: null,
+      is_processing: Boolean(session.is_processing || session.current_stream),
+      current_stream: session.current_stream ?? null,
       has_startable_input: false,
+      approvals_version: "0",
       has_active_subagents: false,
       latest_response_id: null,
     };
@@ -88,9 +77,36 @@ beforeEach(() => {
         ? []
         : path === SWR_KEYS.chatSessionStatus("session")
           ? status
-          : backendSession(true);
+          : session;
     return new Response(JSON.stringify(body));
   });
+}
+
+function mountController(wrapper?: typeof StrictMode) {
+  return renderHook(
+    ({ sessionId }: { sessionId: string }) =>
+      useChatSessionController({
+        existingChatSessionId: sessionId,
+        searchParams: new ReadonlyURLSearchParams(),
+        setSelectedDocuments: jest.fn(),
+        setCurrentMessageFiles: jest.fn(),
+        chatSessionIdRef: { current: null },
+        loadedIdSessionRef: { current: null },
+        chatInputBarRef: { current: null },
+        isInitialLoad: { current: true },
+        submitOnLoadPerformed: { current: false },
+        refreshChatSessions: jest.fn(),
+        onSubmit: jest.fn(),
+      }),
+    { initialProps: { sessionId: "session" }, wrapper }
+  );
+}
+
+beforeEach(() => {
+  jest.mocked(processRawChatHistory).mockImplementation(() => new Map());
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  jest.spyOn(global, "fetch");
+  serveSession(backendSession(true));
   jest.mocked(fetchSettledChatSession).mockResolvedValue(backendSession(false));
 });
 
@@ -99,8 +115,71 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
+/** Holds each history load open; the test resolves them in any order. */
+function holdHistoryLoads() {
+  const loads: {
+    signal: AbortSignal | undefined;
+    response: ReturnType<typeof deferred<Response>>;
+  }[] = [];
+  jest.mocked(global.fetch).mockImplementation(async (url, init) => {
+    if (!String(url).startsWith("/api/chat/get-chat-session/"))
+      return new Response(JSON.stringify(null));
+    const response = deferred<Response>();
+    loads.push({ signal: init?.signal ?? undefined, response });
+    return response.promise;
+  });
+  return loads;
+}
+
+test("a StrictMode remount cancels the first history load and applies one", async () => {
+  const loads = holdHistoryLoads();
+  mountController(StrictMode);
+  await waitFor(() => expect(loads).toHaveLength(2));
+  expect(loads[0]!.signal?.aborted).toBe(true);
+  expect(loads[1]!.signal?.aborted).toBe(false);
+  await act(async () => {
+    for (const load of loads)
+      load.response.resolve(
+        new Response(JSON.stringify(backendSession(false)))
+      );
+  });
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+        ?.isFetchingChatMessages
+    ).toBe(false)
+  );
+  expect(processRawChatHistory).toHaveBeenCalledTimes(1);
+});
+
+test("opening a chat requests only its history", async () => {
+  mountController();
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+        ?.isFetchingChatMessages
+    ).toBe(false)
+  );
+  await act(async () => {});
+  expect(
+    jest
+      .mocked(global.fetch)
+      .mock.calls.filter(([url]) => String(url).includes("/projects/"))
+  ).toEqual([]);
+});
+
+test("switching chats cancels the earlier history load", async () => {
+  const loads = holdHistoryLoads();
+  const view = mountController();
+  await waitFor(() => expect(loads).toHaveLength(1));
+  view.rerender({ sessionId: "other" });
+  await waitFor(() => expect(loads).toHaveLength(2));
+  expect(loads[0]!.signal?.aborted).toBe(true);
+  expect(loads[1]!.signal?.aborted).toBe(false);
+});
+
 test("reloaded setup stays busy until execution and history are settled", async () => {
-  const idle = deferred<number | null>();
+  const idle = deferred<null>();
   const history = deferred<BackendChatSession>();
   jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
   jest.mocked(fetchSettledChatSession).mockReturnValue(history.promise);
@@ -168,13 +247,10 @@ test("a resumed save error survives a failed readiness check and retry", async (
   jest
     .mocked(processRawChatHistory)
     .mockImplementation(() => new Map([[42, { ...reserved }]]));
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      ...backendSession(true),
-      current_stream: { stream_id: 42 },
-    }),
-  } as Response);
+  serveSession({
+    ...backendSession(true),
+    current_stream: { stream_id: 42, response_ids: [42] },
+  });
   jest.mocked(resumeStream).mockImplementation(async function* () {
     yield {
       error: "Response could not be saved",
@@ -235,13 +311,10 @@ test("a resumed stream keeps updating its session while another chat is selected
   jest
     .mocked(processRawChatHistory)
     .mockImplementation(() => new Map([[42, { ...reserved }]]));
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      ...backendSession(true),
-      current_stream: { stream_id: 42 },
-    }),
-  } as Response);
+  serveSession({
+    ...backendSession(true),
+    current_stream: { stream_id: 42, response_ids: [42] },
+  });
   jest.mocked(resumeStream).mockImplementation(async function* () {
     await nextPacket.promise;
     yield {
@@ -276,6 +349,77 @@ test("a resumed stream keeps updating its session while another chat is selected
   );
 });
 
+test("a reload replays the current stream into the rows it names, from its start", async () => {
+  const finish = deferred<void>();
+  const answer: Message = {
+    nodeId: 42,
+    messageId: 42,
+    type: "assistant",
+    message: "",
+    files: [],
+    packets: [],
+    toolCall: null,
+    parentNodeId: null,
+  };
+  jest
+    .mocked(processRawChatHistory)
+    .mockImplementation(() => new Map([[42, { ...answer }]]));
+  // A cursor of the stream that paused the answer does not apply to this one.
+  const store = useChatSessionStore.getState();
+  store.createSession("session");
+  store.updateSessionData("session", {
+    messageTree: new Map([
+      [
+        42,
+        {
+          ...answer,
+          packets: [
+            {
+              placement: { turn_index: 0, tab_index: 0 },
+              obj: { type: "message_delta", content: "Paused" },
+            },
+          ],
+          replay: { streamId: 42, cursor: 5 },
+        },
+      ],
+    ]),
+  });
+  // A continuation stream ID is not a message ID.
+  serveSession({
+    ...backendSession(true),
+    current_stream: { stream_id: 900, response_ids: [42] },
+  });
+  jest.mocked(resumeStream).mockImplementation(async function* () {
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: "Continued" },
+    };
+    yield { stream_id: 900, next_cursor: 1, replay_complete: true };
+    await finish.promise;
+  });
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
+  const mounted = mountController();
+  try {
+    await waitFor(() =>
+      expect(
+        useChatSessionStore
+          .getState()
+          .sessions.get("session")
+          ?.messageTree.get(42)
+      ).toMatchObject({ replay: { streamId: 900, cursor: 1 }, packetCount: 1 })
+    );
+    expect(resumeStream).toHaveBeenCalledWith(
+      "session",
+      900,
+      0,
+      expect.any(AbortSignal)
+    );
+  } finally {
+    await act(async () => finish.resolve());
+    mounted.unmount();
+  }
+});
+
 test("returning after a disconnected Stop releases a now-idle session", async () => {
   const store = useChatSessionStore.getState();
   store.createSession("session");
@@ -284,10 +428,7 @@ test("returning after a disconnected Stop releases a now-idle session", async ()
     .getState()
     .sessions.get("session")
     ?.abortController.abort();
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => backendSession(false),
-  } as Response);
+  serveSession(backendSession(false));
   jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   mountController();
   await waitFor(() =>
@@ -331,10 +472,7 @@ test.each([false, true])(
         [2, failure],
       ]),
     });
-    jest.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: async () => backendSession(busy),
-    } as Response);
+    serveSession(backendSession(busy));
     jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
     mountController();
     await waitFor(() =>
@@ -363,7 +501,7 @@ test.each([
 ])(
   "incognito recovery preserves local content (busy: $busy, aborted: $aborted)",
   async ({ busy, aborted }) => {
-    const idle = deferred<number | null>();
+    const idle = deferred<null>();
     const question: Message = {
       nodeId: -101,
       messageId: 1,
@@ -399,10 +537,7 @@ test.each([
       chatState: aborted ? "streaming" : "unconfirmed",
       messageTree: localMessages,
     });
-    jest.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({ ...backendSession(busy), incognito: true }),
-    } as Response);
+    serveSession({ ...backendSession(busy), incognito: true });
     jest.mocked(processRawChatHistory).mockReturnValue(
       new Map([
         [1, { ...question, nodeId: 1, latestChildNodeId: 2, message: "" }],
@@ -434,7 +569,9 @@ test.each([
       ],
       packetCount: 1,
     });
-    expect(fetchSettledChatSession).not.toHaveBeenCalled();
+    // Reads look for a parked answer and for approval changes; local content
+    // that holds no approval request stays.
+    expect(fetchSettledChatSession).toHaveBeenCalled();
   }
 );
 
@@ -476,7 +613,7 @@ test.each([
             },
           ]
         : [],
-      replayCursor: knownIds ? 1 : undefined,
+      replay: knownIds ? { streamId: 42, cursor: 1 } : undefined,
     };
     const root: Message = {
       ...question,
@@ -499,14 +636,11 @@ test.each([
       chatState: "unconfirmed",
       messageTree: localMessages,
     });
-    jest.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        ...backendSession(true),
-        incognito: true,
-        current_stream: { stream_id: 42 },
-      }),
-    } as Response);
+    serveSession({
+      ...backendSession(true),
+      incognito: true,
+      current_stream: { stream_id: 42, response_ids: [42] },
+    });
     jest.mocked(processRawChatHistory).mockReturnValue(
       new Map([
         [
@@ -540,7 +674,7 @@ test.each([
             parentNodeId: 1,
             message: "",
             packets: [],
-            replayCursor: undefined,
+            replay: undefined,
           },
         ],
       ])
@@ -576,14 +710,14 @@ test.each([
       expect(chain[0]?.message).toBe(question.message);
       expect(chain[1]).toMatchObject({
         messageId: 42,
-        replayCursor: 2,
+        replay: { streamId: 42, cursor: 2 },
         packetCount: hasLocalResponse && knownIds ? 2 : 1,
       });
       expect(chain[1]?.packets.at(-1)?.obj).toEqual({
         type: "message_delta",
         content: " recovered",
       });
-      expect(answer.replayCursor).toBe(knownIds ? 1 : undefined);
+      expect(answer.replay?.cursor).toBe(knownIds ? 1 : undefined);
       expect(answer.packets).toHaveLength(knownIds ? 1 : 0);
     } finally {
       await act(async () => finish.resolve());
@@ -623,13 +757,10 @@ test("recovery replay does not mutate retained local messages", async () => {
     chatState: "unconfirmed",
     messageTree: localMessages,
   });
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      ...backendSession(true),
-      current_stream: { stream_id: 42 },
-    }),
-  } as Response);
+  serveSession({
+    ...backendSession(true),
+    current_stream: { stream_id: 42, response_ids: [42] },
+  });
   jest.mocked(resumeStream).mockImplementation(async function* () {
     await finish.promise;
     yield {
@@ -651,7 +782,7 @@ test("recovery replay does not mutate retained local messages", async () => {
 });
 
 test("Stop targets a reloaded multi-model stream without replay", async () => {
-  const idle = deferred<number | null>();
+  const idle = deferred<null>();
   const question: Message = {
     nodeId: 41,
     messageId: 41,
@@ -678,13 +809,11 @@ test("Stop targets a reloaded multi-model stream without replay", async () => {
           [question, ...responses].map((message) => [message.nodeId, message])
         )
     );
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      ...backendSession(true),
-      current_stream: { stream_id: question.nodeId },
-    }),
-  } as Response);
+  serveSession({
+    ...backendSession(true),
+    // Rows that this load does not have, so nothing can replay.
+    current_stream: { stream_id: question.nodeId, response_ids: [44, 45] },
+  });
   jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
   mountController();
   await waitFor(() => expect(waitForChatResponseEnd).toHaveBeenCalled());
@@ -726,14 +855,11 @@ test("Stop targets the replay response and waits for its incognito tail", async 
   jest
     .mocked(processRawChatHistory)
     .mockImplementation(() => new Map([[42, reserved]]));
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      ...backendSession(true),
-      incognito: true,
-      current_stream: { stream_id: 42 },
-    }),
-  } as Response);
+  serveSession({
+    ...backendSession(true),
+    incognito: true,
+    current_stream: { stream_id: 42, response_ids: [42] },
+  });
   jest.mocked(resumeStream).mockImplementation(async function* () {
     await finish.promise;
     yield {
@@ -785,10 +911,7 @@ test("reopening with an aborted owner waits for its reader before recovery", asy
     sendAcknowledged: acknowledgement,
     readerFinished: reader.promise,
   });
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => backendSession(false),
-  } as Response);
+  serveSession(backendSession(false));
   jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   mountController();
   await waitFor(() => expect(processRawChatHistory).toHaveBeenCalled());
@@ -814,7 +937,7 @@ test("an earlier Stop cannot release input while a replacement replay has unread
     .sessions.get("session")!.abortController;
   store.updateSessionData("session", {
     chatState: "cancelling",
-    sendAcknowledged: Promise.resolve(42),
+    sendAcknowledged: Promise.resolve({ stream_id: 42, response_ids: [42] }),
     readerFinished: oldReader.promise,
   });
   const stopping = settleChatSession({
@@ -837,14 +960,11 @@ test("an earlier Stop cannot release input while a replacement replay has unread
   jest
     .mocked(processRawChatHistory)
     .mockImplementation(() => new Map([[42, reserved]]));
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      ...backendSession(true),
-      incognito: true,
-      current_stream: { stream_id: 42 },
-    }),
-  } as Response);
+  serveSession({
+    ...backendSession(true),
+    incognito: true,
+    current_stream: { stream_id: 42, response_ids: [42] },
+  });
   jest.mocked(resumeStream).mockImplementation(async function* () {
     await replayTail.promise;
     yield {
@@ -901,14 +1021,11 @@ test("restoration commits content with its cursor and retries only the retained 
   jest
     .mocked(processRawChatHistory)
     .mockImplementation(() => new Map([[42, { ...reserved }]]));
-  jest.mocked(global.fetch).mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      ...backendSession(true),
-      incognito: true,
-      current_stream: { stream_id: 42 },
-    }),
-  } as Response);
+  serveSession({
+    ...backendSession(true),
+    incognito: true,
+    current_stream: { stream_id: 42, response_ids: [42] },
+  });
   jest
     .mocked(waitForChatResponseEnd)
     .mockRejectedValueOnce(new Error("Offline"));
@@ -950,7 +1067,7 @@ test("restoration commits content with its cursor and retries only the retained 
       .sessions.get("session")!
       .messageTree.get(42)!;
     expect(retained).toMatchObject({
-      replayCursor: 2,
+      replay: { streamId: 42, cursor: 2 },
       restoredPacketCount: 2,
       packetCount: 2,
     });
@@ -985,7 +1102,10 @@ test("restoration commits content with its cursor and retries only the retained 
       .getState()
       .sessions.get("session")!
       .messageTree.get(42)!;
-    expect(resumed).toMatchObject({ replayCursor: 3, packetCount: 3 });
+    expect(resumed).toMatchObject({
+      replay: { streamId: 42, cursor: 3 },
+      packetCount: 3,
+    });
     expect(resumed.packets.at(-1)?.obj).toEqual({
       type: "message_delta",
       content: " interrupted",
@@ -1000,7 +1120,7 @@ test.each([false, true])(
   "interrupted initial restoration retains its acknowledged prefix (network error: %s)",
   async (networkError) => {
     jest.spyOn(console, "error").mockImplementation(() => {});
-    const idle = deferred<number | null>();
+    const idle = deferred<null>();
     const reserved: Message = {
       nodeId: 42,
       messageId: 42,
@@ -1014,14 +1134,11 @@ test.each([false, true])(
     jest
       .mocked(processRawChatHistory)
       .mockImplementation(() => new Map([[42, { ...reserved }]]));
-    jest.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        ...backendSession(true),
-        incognito: true,
-        current_stream: { stream_id: 42 },
-      }),
-    } as Response);
+    serveSession({
+      ...backendSession(true),
+      incognito: true,
+      current_stream: { stream_id: 42, response_ids: [42] },
+    });
     jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
     jest.mocked(resumeStream).mockImplementationOnce(async function* () {
       yield {
@@ -1049,7 +1166,7 @@ test.each([false, true])(
         .messageTree.get(42)!;
       expect(retained).toMatchObject({
         type: "assistant",
-        replayCursor: 1,
+        replay: { streamId: 42, cursor: 1 },
         restoredPacketCount: 1,
         packetCount: 1,
       });
@@ -1076,7 +1193,7 @@ test.each([false, true])(
 test.each([false, true])(
   "incognito failures close existing display content only after confirmed idle (content: %s)",
   async (hasContent) => {
-    const idle = deferred<number | null>();
+    const idle = deferred<null>();
     const reserved: Message = {
       nodeId: 42,
       messageId: 42,
@@ -1090,14 +1207,11 @@ test.each([false, true])(
     jest
       .mocked(processRawChatHistory)
       .mockImplementation(() => new Map([[42, { ...reserved }]]));
-    jest.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        ...backendSession(true),
-        incognito: true,
-        current_stream: { stream_id: 42 },
-      }),
-    } as Response);
+    serveSession({
+      ...backendSession(true),
+      incognito: true,
+      current_stream: { stream_id: 42, response_ids: [42] },
+    });
     jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
     jest.mocked(resumeStream).mockImplementationOnce(async function* () {
       if (hasContent)
@@ -1163,7 +1277,10 @@ test.each([false, true])(
       );
     }
     const controller = new AbortController();
-    const acknowledgement = Promise.resolve(99);
+    const acknowledgement = Promise.resolve({
+      stream_id: 99,
+      response_ids: [99],
+    });
     const reader = Promise.resolve();
     const tree = new Map<number, Message>();
     act(() =>
@@ -1177,7 +1294,7 @@ test.each([false, true])(
     );
     const stale = {
       ...backendSession(true),
-      current_stream: { stream_id: 42 },
+      current_stream: { stream_id: 42, response_ids: [42] },
     } as BackendChatSession;
     await act(async () => {
       if (bodyPending) body.resolve(stale);
