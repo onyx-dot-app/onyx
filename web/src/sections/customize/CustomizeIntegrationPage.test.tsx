@@ -264,10 +264,10 @@ test("an action that asks offers a switch named by its visible label", async () 
     "actions"
   );
   const toggle = await screen.findByRole("switch", {
-    name: "Don't ask me about Create issue",
+    name: "Don't ask me for Create issue",
   });
   expect(
-    screen.queryByRole("switch", { name: "Don't ask me about List issues" })
+    screen.queryByRole("switch", { name: "Don't ask me for List issues" })
   ).not.toBeInTheDocument();
   // The policy is a tag; only the action that asks gets the labelled switch.
   expect(screen.getByText("Ask")).toBeVisible();
