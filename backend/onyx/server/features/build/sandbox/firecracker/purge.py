@@ -1,14 +1,16 @@
-"""Delete hooks for Firecracker harness sandboxes.
+"""Delete hooks for harness sandboxes.
 
 Onyx calls these after a Craft session, a chat session, a user or a tenant
-is deleted. They do nothing unless harness sandboxes run on Firecracker
-(`SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`), and they never
-raise: a failure is logged. The heavy client stack loads only when enabled.
+is deleted. They do nothing unless harness sandboxes run (today on
+Firecracker: `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`), and
+they never raise: a failure is logged. They call the `HarnessSandbox` purge
+methods of `get_harness_sandbox()`. The heavy client stack loads only when
+enabled.
 
-- Session: its save archive, its directory on the running VM and its exec
-  records.
-- Sandbox (user or tenant delete): the VM is stopped (the node agent removes
-  its disk), and every save archive and record of the sandbox goes.
+- Session: its save archive, its directory on the running sandbox and its
+  exec records.
+- Sandbox (user or tenant delete): the sandbox is stopped (its disk goes
+  with it), and every save archive and record of the sandbox goes.
 - Chat retention: each saved session that retention no longer keeps is
   purged as on session delete.
 """
@@ -33,10 +35,10 @@ def purge_harness_session(
         return
     try:
         from onyx.server.features.build.sandbox.harness_factory import (
-            get_firecracker_sandbox,
+            get_harness_sandbox,
         )
 
-        get_firecracker_sandbox().purge_session(
+        get_harness_sandbox().purge_session(
             tenant_id=get_current_tenant_id(),
             sandbox_id=sandbox_id,
             session_id=session_id,
@@ -90,10 +92,10 @@ def purge_harness_sandboxes(targets: dict[UUID, list[UUID]]) -> None:
     tenant_id = get_current_tenant_id()
     try:
         from onyx.server.features.build.sandbox.harness_factory import (
-            get_firecracker_sandbox,
+            get_harness_sandbox,
         )
 
-        sandbox = get_firecracker_sandbox()
+        sandbox = get_harness_sandbox()
     except Exception:
         logger.exception("sandbox_fc_sandbox_purge_failed: no harness sandbox")
         return
