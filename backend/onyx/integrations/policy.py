@@ -33,7 +33,7 @@ from onyx.db.enums import (
 from onyx.db.integration import get_integration_by_id, list_integrations_by_ids
 from onyx.db.integration_access import load_user_integration_states
 from onyx.db.integration_policy import (
-    get_chat_session_persona_id,
+    get_chat_session,
     get_policy_rows,
     get_session_granted_actions,
     list_in_flight_task_links,
@@ -377,19 +377,65 @@ def persona_link_settings(
     }
 
 
+def apply_tool_options(
+    held: Mapping[int, AgentIntegration],
+    allowed: Mapping[int, frozenset[str] | None] | None,
+    *,
+    keep_required: bool,
+) -> dict[int, AgentIntegration]:
+    """The integrations of ``held`` that the tool options keep. ``allowed``
+    maps each kept integration to the action keys to keep (None keeps each);
+    None keeps each integration. An action that the options drop is Blocked.
+    With ``keep_required``, a Required integration that the options leave out
+    stays with each action, since a member cannot turn it off."""
+    if allowed is None:
+        return dict(held)
+    kept: dict[int, AgentIntegration] = {}
+    for integration_id, agent_integration in held.items():
+        if integration_id not in allowed:
+            if (
+                keep_required
+                and agent_integration.installation_policy
+                == PluginInstallationPolicy.REQUIRED
+            ):
+                kept[integration_id] = agent_integration
+            continue
+        actions = allowed[integration_id]
+        settings = agent_integration.settings
+        kept[integration_id] = (
+            agent_integration
+            if actions is None
+            else agent_integration.model_copy(
+                update={
+                    "settings": ActionSettings(
+                        default=LinkValue.BLOCKED,
+                        actions={key: settings.value_for(key) for key in actions},
+                    )
+                }
+            )
+        )
+    return kept
+
+
 def chat_session_integrations(
     db_session: Session, user_id: UUID, chat_session_id: UUID
 ) -> dict[int, AgentIntegration]:
-    """``chat_integrations`` of the agent of the chat."""
-    persona_id = get_chat_session_persona_id(db_session, chat_session_id)
-    if persona_id is None:
+    """``chat_integrations`` of the agent of the chat, narrowed by the chat's
+    saved tool options as its tools are."""
+    chat_session = get_chat_session(db_session, chat_session_id)
+    if chat_session is None or chat_session.persona_id is None:
         return {}
-    return chat_integrations(
-        db_session,
-        user_id,
-        persona_id,
-        persona_link_settings(db_session, persona_id),
-        chat_session_id,
+    options = chat_session.tool_options
+    return apply_tool_options(
+        chat_integrations(
+            db_session,
+            user_id,
+            chat_session.persona_id,
+            persona_link_settings(db_session, chat_session.persona_id),
+            chat_session_id,
+        ),
+        options.allowed_integrations() if options is not None else None,
+        keep_required=True,
     )
 
 

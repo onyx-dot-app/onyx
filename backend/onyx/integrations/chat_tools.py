@@ -12,7 +12,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import IntegrationAuthMode, PluginInstallationPolicy
+from onyx.db.enums import IntegrationAuthMode
 from onyx.db.integration import (
     list_api_apps_by_integration,
     list_external_apps_by_integration,
@@ -36,7 +36,7 @@ from onyx.integrations.models import (
     PolicyRows,
 )
 from onyx.integrations.policy import (
-    AgentIntegration,
+    apply_tool_options,
     chat_integrations,
     resolve_action_policies,
 )
@@ -53,7 +53,6 @@ def _integration_tools(
     db_session: Session,
     integration: Integration,
     link_settings: ActionSettings,
-    kept_actions: frozenset[str] | None,
     user: User,
     request: IntegrationChatRequest,
     *,
@@ -63,15 +62,9 @@ def _integration_tools(
     granted_actions: set[str] | None = None,
     config: IntegrationConfig | None = None,
 ) -> list[Tool]:
-    """``link_settings``: the settings of the agent for the integration.
-    ``kept_actions``: the action keys that the tool options keep; None keeps
-    each."""
+    """``link_settings``: the settings of the agent for the integration,
+    narrowed by the tool options."""
     acting_user = None if user.is_anonymous else user
-    actions = [
-        action
-        for action in actions
-        if kept_actions is None or action.key in kept_actions
-    ]
     policies = resolve_action_policies(
         db_session,
         integration=integration,
@@ -139,34 +132,6 @@ def _integration_tools(
     )
 
 
-def _keep_required_integrations(
-    user: User,
-    request: IntegrationChatRequest,
-    held: Mapping[int, AgentIntegration],
-) -> IntegrationChatRequest:
-    """Add each integration that the admin made Required for the user to the
-    tool options, with all its actions. A member cannot turn a Required
-    integration off, so tool options that leave it out cannot drop it."""
-    if request.allowed_integrations is None or user.is_anonymous:
-        return request
-    required = {
-        integration_id
-        for integration_id, agent_integration in held.items()
-        if agent_integration.installation_policy == PluginInstallationPolicy.REQUIRED
-        and integration_id not in request.allowed_integrations
-    }
-    if not required:
-        return request
-    return request.model_copy(
-        update={
-            "allowed_integrations": {
-                **request.allowed_integrations,
-                **dict.fromkeys(required),
-            }
-        }
-    )
-
-
 def build_integration_chat_tools(
     db_session: Session, user: User, request: IntegrationChatRequest
 ) -> list[Tool]:
@@ -176,26 +141,27 @@ def build_integration_chat_tools(
     connect. An API integration with neither an ``api_app`` nor a preset
     gives none. A Blocked action gives no tool; an Ask action carries its
     approval scope."""
-    held = chat_integrations(
-        db_session,
-        user.id,
-        request.persona_id,
-        {
-            link.integration_id: link.action_settings
-            for link in request.integration_links
-        },
-        request.chat_session_id,
-        for_everyone_only=user.is_anonymous,
-    )
-    request = _keep_required_integrations(user, request, held)
     # The tool options pick the integrations and actions. The settings of
     # the agent link still apply, so a request cannot drop a Blocked one.
-    allowed = request.allowed_integrations
+    held = apply_tool_options(
+        chat_integrations(
+            db_session,
+            user.id,
+            request.persona_id,
+            {
+                link.integration_id: link.action_settings
+                for link in request.integration_links
+            },
+            request.chat_session_id,
+            for_everyone_only=user.is_anonymous,
+        ),
+        request.allowed_integrations,
+        keep_required=not user.is_anonymous,
+    )
     selected = {
         integration_id: agent_integration
         for integration_id, agent_integration in held.items()
-        if (allowed is None or integration_id in allowed)
-        and agent_integration.integration.enabled
+        if agent_integration.integration.enabled
         and not (
             user.is_anonymous
             and agent_integration.integration.auth_mode
@@ -229,7 +195,6 @@ def build_integration_chat_tools(
                 db_session,
                 integration,
                 agent_integration.settings,
-                None if allowed is None else allowed[integration_id],
                 user,
                 request,
                 actions=actions[integration_id],

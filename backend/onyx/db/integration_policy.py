@@ -133,12 +133,8 @@ def list_persona_integration_links(
     )
 
 
-def get_chat_session_persona_id(
-    db_session: Session, chat_session_id: UUID
-) -> int | None:
-    return db_session.scalar(
-        select(ChatSession.persona_id).where(ChatSession.id == chat_session_id)
-    )
+def get_chat_session(db_session: Session, chat_session_id: UUID) -> ChatSession | None:
+    return db_session.get(ChatSession, chat_session_id)
 
 
 def list_task_integration_links(
