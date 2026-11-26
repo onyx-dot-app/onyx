@@ -229,12 +229,12 @@ def get_owned_chat_session(
     )
 
 
-def get_chat_session_id_for_user(
+def get_chat_session_for_user(
     db_session: Session, chat_session_id: UUID, user_id: UUID
-) -> UUID | None:
-    """The id when the chat is the user's and is not deleted."""
+) -> ChatSession | None:
+    """The chat when it is the user's and is not deleted."""
     return db_session.scalar(
-        select(ChatSession.id).where(
+        select(ChatSession).where(
             ChatSession.id == chat_session_id,
             ChatSession.user_id == user_id,
             ChatSession.deleted.is_(False),

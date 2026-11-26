@@ -13,7 +13,6 @@ from onyx.db.enums import (
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
-    ChatSession,
     Integration,
     IntegrationActionPolicy,
     Persona__Integration,
@@ -131,10 +130,6 @@ def list_persona_integration_links(
             .order_by(Persona__Integration.integration_id)
         ).all()
     )
-
-
-def get_chat_session(db_session: Session, chat_session_id: UUID) -> ChatSession | None:
-    return db_session.get(ChatSession, chat_session_id)
 
 
 def list_task_integration_links(

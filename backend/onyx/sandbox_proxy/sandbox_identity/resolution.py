@@ -19,7 +19,7 @@ from typing import Protocol
 from uuid import UUID
 
 from onyx.db.build_session import get_build_session_id_for_user
-from onyx.db.chat import get_chat_session_id_for_user
+from onyx.db.chat import get_chat_session_for_user
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.sandbox import get_sandbox_owner_id
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
@@ -134,7 +134,8 @@ class IdentityResolver(SandboxIdentityResolver):
         gives a chat request more than the Allow actions of that chat.
         """
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            return get_chat_session_id_for_user(db, session_id, user_id)
+            chat_session = get_chat_session_for_user(db, session_id, user_id)
+            return chat_session.id if chat_session is not None else None
 
 
 def build_ip_lookup() -> SandboxIPLookup:

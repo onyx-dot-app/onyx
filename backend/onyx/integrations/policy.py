@@ -25,6 +25,7 @@ from pydantic import BaseModel, InstanceOf, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.db.chat import get_chat_session_for_user
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
     IntegrationKind,
@@ -33,7 +34,6 @@ from onyx.db.enums import (
 from onyx.db.integration import get_integration_by_id, list_integrations_by_ids
 from onyx.db.integration_access import load_user_integration_states
 from onyx.db.integration_policy import (
-    get_chat_session,
     get_policy_rows,
     get_session_granted_actions,
     list_in_flight_task_links,
@@ -419,11 +419,14 @@ def apply_tool_options(
 
 def chat_session_integrations(
     db_session: Session, user_id: UUID, chat_session_id: UUID
-) -> dict[int, AgentIntegration]:
+) -> dict[int, AgentIntegration] | None:
     """``chat_integrations`` of the agent of the chat, narrowed by the chat's
-    saved tool options as its tools are."""
-    chat_session = get_chat_session(db_session, chat_session_id)
-    if chat_session is None or chat_session.persona_id is None:
+    saved tool options as its tools are. None when the chat is not a chat of
+    the user that is not deleted."""
+    chat_session = get_chat_session_for_user(db_session, chat_session_id, user_id)
+    if chat_session is None:
+        return None
+    if chat_session.persona_id is None:
         return {}
     options = chat_session.tool_options
     return apply_tool_options(
@@ -453,7 +456,7 @@ def resolve_chat_action_policies(
     uses it for a request from the VM of the chat. It reads the integrations
     that chat tool construction reads, so an integration the user cannot use
     on the agent is Blocked."""
-    held = chat_session_integrations(db_session, user_id, chat_session_id).get(
+    held = (chat_session_integrations(db_session, user_id, chat_session_id) or {}).get(
         integration.id
     )
     return resolve_action_policies(

@@ -13,7 +13,6 @@ from uuid import UUID
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.chat import get_chat_session_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
     ActionPolicy,
@@ -197,8 +196,9 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         or not, so a chat reads the integrations of its agent."""
         if session_tag is not None:
             with get_session_with_tenant(tenant_id=tenant_id) as db:
-                if get_chat_session_id_for_user(db, session_tag, user_id) is not None:
-                    return chat_session_integrations(db, user_id, session_tag).keys()
+                held = chat_session_integrations(db, user_id, session_tag)
+            if held is not None:
+                return held.keys()
         return self._usable.get(tenant_id, user_id).on
 
 
