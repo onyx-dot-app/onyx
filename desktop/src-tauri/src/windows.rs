@@ -55,12 +55,13 @@ fn local_window(
     title: &str,
     size: (f64, f64),
 ) -> Result<WebviewWindow, String> {
-    // A hidden window that waits for `release_window` is not reused: its page
-    // is from the finished command. Its reply has gone by now.
-    if retiring().contains(label) {
-        close(app, label);
-    }
     if let Some(window) = app.get_webview_window(label) {
+        // A window that waits to close is wanted again: it stays (its
+        // pending replies still reach it), with a fresh page, because the
+        // page shows the end of the command that hid it.
+        if with_retire(label, Retire::reopen) {
+            let _ = window.eval("location.reload()");
+        }
         bring_forward(app, &window);
         return Ok(window);
     }
@@ -458,42 +459,102 @@ pub fn fit_to_content(window: &WebviewWindow, content_height: f64) -> Result<(),
     Ok(())
 }
 
-/// Local windows that a command hid instead of destroying: the command was
-/// called from that window, and its reply was still on its way.
-static RETIRING: std::sync::Mutex<std::collections::BTreeSet<String>> =
-    std::sync::Mutex::new(std::collections::BTreeSet::new());
+/// The pending command calls of one local window, and whether a command
+/// hid it to be destroyed once they all have their reply.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Retire {
+    pending: u32,
+    retiring: bool,
+}
 
-fn retiring() -> std::sync::MutexGuard<'static, std::collections::BTreeSet<String>> {
-    RETIRING.lock().unwrap_or_else(|p| p.into_inner())
+impl Retire {
+    /// A call that may hide its caller started.
+    pub(crate) fn begin(&mut self) {
+        self.pending += 1;
+    }
+
+    /// The window should go. True when it can be destroyed now: no reply is
+    /// on its way to it.
+    pub(crate) fn close(&mut self) -> bool {
+        self.retiring = true;
+        self.pending == 0
+    }
+
+    /// A reply arrived (`release_window`). True when the window can be
+    /// destroyed now.
+    pub(crate) fn release(&mut self) -> bool {
+        self.pending = self.pending.saturating_sub(1);
+        self.retiring && self.pending == 0
+    }
+
+    /// The window is wanted again while it waits to close: it stays, and its
+    /// pending replies still reach it. True if it was waiting to close.
+    pub(crate) fn reopen(&mut self) -> bool {
+        std::mem::replace(&mut self.retiring, false)
+    }
+
+    fn idle(self) -> bool {
+        self.pending == 0 && !self.retiring
+    }
+}
+
+static RETIRE: std::sync::Mutex<std::collections::BTreeMap<String, Retire>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// Runs `f` on the record of `label`, and drops a record with nothing left.
+fn with_retire<T>(label: &str, f: impl FnOnce(&mut Retire) -> T) -> T {
+    let mut all = RETIRE.lock().unwrap_or_else(|p| p.into_inner());
+    let entry = all.entry(label.to_string()).or_default();
+    let result = f(entry);
+    if entry.idle() {
+        all.remove(label);
+    }
+    result
+}
+
+fn is_retiring(label: &str) -> bool {
+    RETIRE
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(label)
+        .is_some_and(|r| r.retiring)
+}
+
+/// A command that may close the window it came from started. The page's
+/// `release_window` after the reply ends it. The IPC reply goes to the web
+/// view after the command returns, on another thread; destroying the web
+/// view first can crash the app on macOS (the reply touches a freed
+/// WKURLSchemeTask, tauri-apps/tauri#5519).
+pub fn begin_call(label: &str) {
+    with_retire(label, Retire::begin);
 }
 
 /// Whether a command must not destroy `label` now: the command was called
-/// from that window. The IPC reply goes to the window's web view after the
-/// command returns, on another thread; destroying the web view first can
-/// crash the app on macOS (the reply touches a freed WKURLSchemeTask).
+/// from that window.
 pub(crate) fn defers_close(label: &str, caller: Option<&str>) -> bool {
     caller == Some(label)
 }
 
-/// Closes `label` from a command called by the window `caller`. The
-/// caller's own window is only hidden; the page calls `release_window`
-/// once it has the reply, and then it is destroyed.
+/// Closes `label` from a command called by the window `caller`. A window
+/// with pending calls is only hidden; it is destroyed when the last reply
+/// has arrived (`release`).
 pub fn close_from(app: &AppHandle, label: &str, caller: Option<&str>) {
-    if !defers_close(label, caller) {
-        close(app, label);
-        return;
+    if defers_close(label, caller) {
+        // The caller's own call is pending, also if it did not register.
+        with_retire(label, |r| {
+            if r.pending == 0 {
+                r.begin();
+            }
+        });
     }
-    if let Some(window) = app.get_webview_window(label) {
-        retiring().insert(label.to_string());
-        let _ = window.hide();
-    }
+    close(app, label);
 }
 
-/// The page of `label` has the reply of the command that hid it: destroy it
-/// now. The destroy is queued from another thread, so it runs on a later
-/// turn of the main loop, after this call's own reply.
+/// The page of `label` has a reply. When it was the last one and the
+/// window waits to close, the destroy is queued from another thread, so it
+/// runs on a later turn of the main loop, after this call's own reply.
 pub fn release(app: &AppHandle, label: &str) {
-    if !retiring().remove(label) {
+    if !with_retire(label, Retire::release) {
         return;
     }
     let app = app.clone();
@@ -501,19 +562,34 @@ pub fn release(app: &AppHandle, label: &str) {
     tauri::async_runtime::spawn(async move {
         let handle = app.clone();
         let _ = app.run_on_main_thread(move || {
-            // Shown again meanwhile (opened by another flow): keep it.
-            let hidden = handle
-                .get_webview_window(&label)
-                .is_some_and(|w| !w.is_visible().unwrap_or(true));
-            if hidden {
-                close(&handle, &label);
+            // Reopened, or a new call started meanwhile: keep it.
+            let ready = RETIRE
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .get(&label)
+                .is_some_and(|r| r.retiring && r.pending == 0);
+            if ready {
+                destroy(&handle, &label);
             }
         });
     });
 }
 
+/// Closes a local window: at once, or, while a reply is on its way to it,
+/// hidden now and destroyed after the last reply.
 pub fn close(app: &AppHandle, label: &str) {
-    retiring().remove(label);
+    if with_retire(label, Retire::close) {
+        destroy(app, label);
+    } else if let Some(window) = app.get_webview_window(label) {
+        let _ = window.hide();
+    }
+}
+
+fn destroy(app: &AppHandle, label: &str) {
+    RETIRE
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(label);
     if let Some(window) = app.get_webview_window(label) {
         // Closes the WebView2 page first: a destroyed window can leave it
         // running.
@@ -717,10 +793,10 @@ pub fn show_primary(app: &AppHandle) {
 /// Like `show_primary`, but never brings `closing` forward: a window that is
 /// being closed can still be found for a moment.
 pub fn show_primary_except(app: &AppHandle, closing: &str) {
-    let hidden = retiring().clone();
+    // A window that waits to close is skipped; `route` reopens it if needed.
     for label in PRIMARY
         .into_iter()
-        .filter(|label| *label != closing && !hidden.contains(*label))
+        .filter(|label| *label != closing && !is_retiring(label))
     {
         if let Some(window) = app.get_webview_window(label) {
             bring_forward(app, &window);
@@ -733,6 +809,29 @@ pub fn show_primary_except(app: &AppHandle, closing: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_window_closes_only_after_its_last_reply() {
+        use super::Retire;
+        let mut r = Retire::default();
+        // Sign out, then Change server, from the same window.
+        r.begin();
+        r.begin();
+        assert!(!r.close(), "two replies are on their way");
+        assert!(!r.release(), "one reply is still on its way");
+        assert!(r.release(), "the last reply arrived");
+
+        // No call pending: it closes at once.
+        assert!(Retire::default().close());
+
+        // Reopened while it waits: it stays, also after the reply.
+        let mut r = Retire::default();
+        r.begin();
+        assert!(!r.close());
+        assert!(r.reopen());
+        assert!(!r.release());
+        assert!(!Retire::default().reopen());
+    }
 
     #[test]
     fn a_command_hides_its_own_window_and_closes_others() {

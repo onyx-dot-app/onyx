@@ -432,8 +432,10 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
   Rust client follows a redirect only on the server's origin (scheme, host and port), so a
   password or an SSO code never goes to another host or over plain HTTP.
 - A command never destroys the window it was called from (sign-in, save server, Change server,
-  sign-out). It hides that window (`windows::close_from`); the page calls `release_window` once
-  it has the reply, and the window is destroyed on a later turn of the main loop. The reply goes
+  sign-out). Those commands count their pending calls per window (`windows::begin_call`); the page
+  calls `release_window` once it has each reply. A window with a pending call is only hidden when
+  it closes, and is destroyed on a later turn of the main loop after its last reply. A window that
+  is opened again while it waits to close stays, with its page reloaded. The reply goes
   to the web view from another thread after the command returns, and on macOS a reply to a
   destroyed web view can crash the app (tauri-apps/tauri#5519).
 

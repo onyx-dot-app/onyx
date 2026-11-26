@@ -169,6 +169,7 @@ pub async fn save_server(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    windows::begin_call(window.label());
     let caller = Some(window.label());
     let _saving = SAVING_SERVER.lock().await;
     server_locked(&state)?;
@@ -254,6 +255,7 @@ pub async fn login(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    windows::begin_call(window.label());
     let server = state.server()?;
     let epoch = state.epoch();
     let token = state.api.login(&server, &email, &password).await?;
@@ -400,6 +402,7 @@ fn sign_out_notice(revoked: bool, cleared: bool) -> Option<&'static str> {
 
 #[tauri::command]
 pub async fn sign_out(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    windows::begin_call(window.label());
     end_session(&app).await?;
     windows::open_login(&app)?;
     windows::close_from(&app, windows::PREFERENCES, Some(window.label()));
@@ -410,6 +413,7 @@ pub async fn sign_out(app: AppHandle, window: tauri::WebviewWindow) -> Result<()
 /// server (`save_server`).
 #[tauri::command]
 pub async fn change_server(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    windows::begin_call(window.label());
     open_change_server(&app, Some(window.label()))
 }
 

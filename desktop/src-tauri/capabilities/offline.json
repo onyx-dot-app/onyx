@@ -5,6 +5,7 @@
   "local": true,
   "windows": ["offline"],
   "permissions": [
+    "allow-release-window",
     "core:event:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
