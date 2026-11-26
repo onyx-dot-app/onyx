@@ -9,6 +9,11 @@ jest.mock("next/navigation", () => ({
   usePathname: () => window.location.pathname,
   useSearchParams: () => new URLSearchParams(window.location.search),
 }));
+const mockRefreshSkillLists = jest.fn(() => Promise.resolve(true));
+jest.mock("@/lib/skills/cache", () => ({
+  ...jest.requireActual("@/lib/skills/cache"),
+  refreshSkillListsChecked: () => mockRefreshSkillLists(),
+}));
 jest.mock("@/sections/marketplaces/AddMarketplaceModal", () => ({
   __esModule: true,
   default: ({
@@ -44,3 +49,16 @@ test.each([
     );
   }
 );
+
+test("an added marketplace refreshes the plugin list", async () => {
+  render(<AddSkillMenu upload="plugin" />);
+  const user = setupUser();
+
+  await user.click(screen.getByRole("button", { name: "Add" }));
+  await user.click(
+    await screen.findByRole("menuitem", { name: "Add marketplace" })
+  );
+  await user.click(screen.getByRole("button", { name: "Finish add" }));
+
+  await waitFor(() => expect(mockRefreshSkillLists).toHaveBeenCalled());
+});
