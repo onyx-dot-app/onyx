@@ -23,8 +23,9 @@ annotations:
     - kind: changed
       description: The published chart has the newest stable Onyx tag as its
         appVersion. With the default global.version "latest", the Firecracker
-        image tags and SANDBOX_FC_TEMPLATE follow it. With an appVersion
-        before v6.0.0, "auto" acts as "pod".
+        image tags and SANDBOX_FC_TEMPLATE follow it, and an appVersion
+        before v6.0.0 makes "auto" act as "pod". The appVersion no longer
+        gives the Firecracker tags for "edge" or "beta".
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

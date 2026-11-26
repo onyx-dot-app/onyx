@@ -132,7 +132,7 @@ def test_published_v6_chart_takes_the_release_images(tmp_path: Path) -> None:
     assert data["SANDBOX_RUNTIME"] == "auto"
 
 
-@pytest.mark.parametrize("version", ["latest", "latest-dev", "edge"])
+@pytest.mark.parametrize("version", ["latest", "latest-dev"])
 def test_published_pre_v6_chart_keeps_pod_sandboxes(
     tmp_path: Path, version: str
 ) -> None:
@@ -170,3 +170,28 @@ def test_pinned_global_version_wins_over_app_version(tmp_path: Path) -> None:
     assert agent["spec"]["template"]["spec"]["containers"][0]["image"].endswith(
         ":v6.1.0"
     )
+
+
+@pytest.mark.parametrize("version", ["edge", "beta"])
+def test_app_version_says_nothing_about_edge_or_beta(
+    tmp_path: Path, version: str
+) -> None:
+    """The appVersion is the release behind "latest" only. "edge" and "beta"
+    keep "auto", and they take the Firecracker tags only from explicit values."""
+    floating = [*_REGISTRATION, "--set-string", f"global.version={version}"]
+    docs = _docs(_render_published(tmp_path / "v5", "v5.2.0", floating))
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "auto"
+    assert _find(docs, "DaemonSet", "onyx-craft-fc-host-agent") is None
+
+    explicit = [
+        *floating,
+        "--set-string",
+        "craft.hostAgent.image.tag=v6.0.0",
+        "--set-string",
+        "craft.hostAgent.rootfs.version=v6.0.0",
+    ]
+    docs = _docs(_render_published(tmp_path / "v5-tags", "v5.2.0", explicit))
+    assert _find(docs, "DaemonSet", "onyx-craft-fc-host-agent") is not None
+
+    docs = _docs(_render_published(tmp_path / "v6", "v6.0.0", floating))
+    assert _find(docs, "DaemonSet", "onyx-craft-fc-host-agent") is None

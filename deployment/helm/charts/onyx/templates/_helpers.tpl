@@ -309,19 +309,27 @@ Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
 
 {{/*
 "true" when the Onyx images are a release before v6.0.0: global.version,
-or the chart appVersion when global.version floats (latest, edge, beta,
-also with "-dev"), or an api or celery_shared image tag that overrides it.
-A published chart carries the newest stable tag as its appVersion
-(helm-chart-releases.yml), which is the release that "latest" points at.
+or the chart appVersion for "latest" (onyx.craftAppVersionIsLatest), or
+an api or celery_shared image tag that overrides it.
 */}}
 {{- define "onyx.craftPreV6App" -}}
-{{- $v := trimSuffix "-dev" (toString .Values.global.version) -}}
-{{- if not (include "onyx.craftFcPinned" $v) -}}{{- $v = toString .Chart.AppVersion -}}{{- end -}}
+{{- $v := toString .Values.global.version -}}
+{{- if include "onyx.craftAppVersionIsLatest" . -}}{{- $v = toString .Chart.AppVersion -}}{{- end -}}
 {{- $old := false -}}
 {{- range list $v (dig "image" "tag" "" (.Values.api | default dict)) (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}
 {{- if include "onyx.craftPreV6Version" (toString .) -}}{{- $old = true -}}{{- end -}}
 {{- end -}}
 {{- if $old -}}true{{- end -}}
+{{- end }}
+
+{{/*
+"true" when global.version is empty, "latest" or "latest-dev". A published
+chart carries the newest stable Onyx tag as its appVersion
+(helm-chart-releases.yml), the release that "latest" points at. It says
+nothing about "edge" or "beta" images.
+*/}}
+{{- define "onyx.craftAppVersionIsLatest" -}}
+{{- if has (trimSuffix "-dev" (toString .Values.global.version)) (list "" "latest") -}}true{{- end -}}
 {{- end }}
 
 {{/* "true" when the tag is a release before v6.0.0, also a short one such as 5 or 5.1. */}}
@@ -474,14 +482,14 @@ locked
 {{/*
 Onyx release tag for the Craft Firecracker images, without the "-dev"
 suffix of the debug image twins: global.version when it is pinned, else the
-chart appVersion when it is pinned and v6.0.0 or later, else empty. Releases
-publish the agent and the root drive only under pinned tags
-(craft-runtime-release.yml), and only from v6 on for an appVersion.
+chart appVersion when global.version is "latest" and the appVersion is a
+pinned v6.0.0 or later, else empty. Releases publish the agent and the root
+drive only under pinned tags (craft-runtime-release.yml), from v6 on.
 */}}
 {{- define "onyx.craftFcReleaseTag" -}}
 {{- $app := toString .Chart.AppVersion -}}
 {{- $appTag := "" -}}
-{{- if not (include "onyx.craftPreV6Version" $app) -}}{{- $appTag = include "onyx.craftFcReleaseTagOf" $app -}}{{- end -}}
+{{- if and (include "onyx.craftAppVersionIsLatest" .) (not (include "onyx.craftPreV6Version" $app)) -}}{{- $appTag = include "onyx.craftFcReleaseTagOf" $app -}}{{- end -}}
 {{- include "onyx.craftFcReleaseTagOf" (toString .Values.global.version) | default $appTag -}}
 {{- end }}
 

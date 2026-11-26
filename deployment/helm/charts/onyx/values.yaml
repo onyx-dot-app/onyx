@@ -2148,10 +2148,11 @@ craft:
   #   egress certificates, with or without ENABLE_CRAFT. Without KVM nodes
   #   the agent has no pods, and the backend offers no sandbox tools. Without
   #   the inputs, the chart renders no Firecracker parts. With Onyx images
-  #   before v6.0.0 (global.version, else the chart appVersion, or
-  #   api.image.tag or celery_shared.image.tag), "auto" acts as "pod". A
-  #   published chart has the newest stable Onyx tag as its appVersion, so
-  #   the default "latest" needs no pin.
+  #   before v6.0.0 (global.version, or the chart appVersion when
+  #   global.version is "latest", or api.image.tag or
+  #   celery_shared.image.tag), "auto" acts as "pod". A published chart
+  #   has the newest stable Onyx tag as its appVersion, so the default
+  #   "latest" needs no pin. "edge" and "beta" need explicit image tags.
   # - "firecracker": the same parts always; the chart fails on a missing input.
   # - "pod": no Firecracker. Craft (ENABLE_CRAFT) uses pod sandboxes.
   # - "off": no sandbox parts. Not with ENABLE_CRAFT.
