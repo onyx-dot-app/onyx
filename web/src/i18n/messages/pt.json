@@ -13576,6 +13576,16 @@
         "title": "Arquivos",
         "viewAll": "{count, plural, one {Ver # arquivo} other {Ver todos os # arquivos}}"
       }
+    },
+    "find": {
+      "capped": "Pesquisou {count, plural, one {a última mensagem} other {as últimas # mensagens}}",
+      "close": "Fechar localização",
+      "count": "{current} de {total}",
+      "label": "Localizar na sessão",
+      "loadingOlder": "Carregando mensagens anteriores…",
+      "next": "Próximo resultado",
+      "placeholder": "Localizar na sessão",
+      "previous": "Resultado anterior"
     }
   },
   "common": {
@@ -16742,6 +16752,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "Trocar modelo"
+        },
+        "findInChat": {
+          "label": "Localizar na sessão"
         },
         "nextChat": {
           "label": "Próxima sessão"

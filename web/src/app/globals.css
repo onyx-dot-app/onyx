@@ -1,6 +1,7 @@
 @import "@onyx-ai/opal/root.css";
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
+@import "./css/chat-find.css" layer(base);
 @import "./css/comet.css" layer(base);
 @import "./css/divider.css" layer(base);
 @import "./css/general-layouts.css" layer(base);

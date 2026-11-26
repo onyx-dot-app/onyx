@@ -13576,6 +13576,16 @@
         "title": "الملفات",
         "viewAll": "{count, plural, one {عرض # ملف} other {عرض كل الملفات (#)}}"
       }
+    },
+    "find": {
+      "capped": "تم البحث في {count, plural, zero {# رسالة} one {آخر رسالة} two {آخر رسالتين} few {آخر # رسائل} many {آخر # رسالة} other {آخر # رسالة}}",
+      "close": "إغلاق البحث",
+      "count": "{current} من {total}",
+      "label": "البحث في الجلسة",
+      "loadingOlder": "جارٍ تحميل الرسائل الأقدم…",
+      "next": "التطابق التالي",
+      "placeholder": "البحث في الجلسة",
+      "previous": "التطابق السابق"
     }
   },
   "common": {
@@ -16742,6 +16752,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "تغيير النموذج"
+        },
+        "findInChat": {
+          "label": "البحث في الجلسة"
         },
         "nextChat": {
           "label": "الجلسة التالية"

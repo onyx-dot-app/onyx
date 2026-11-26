@@ -21,6 +21,7 @@ import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
 import MessageTime from "@/lib/timeline/chat/message/MessageTime";
 import { HumanMessageBubble } from "@/lib/timeline/chat/message/HumanMessage";
+import { chatFindInlineKey } from "@/lib/chatFind/match";
 import type {
   TransformedStep,
   TurnGroup,
@@ -589,6 +590,10 @@ const AgentMessage = React.memo(function AgentMessage({
                     <HumanMessageBubble
                       content={section.userMessage.message}
                       mentions={section.userMessage.mentions}
+                      findKey={chatFindInlineKey(
+                        nodeId,
+                        section.userMessage.id
+                      )}
                     />
                   </Section>
                 )}

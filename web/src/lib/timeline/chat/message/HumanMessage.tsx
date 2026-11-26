@@ -21,6 +21,8 @@ import type {
 } from "@/lib/chat/types";
 import type { IconFunctionComponent } from "@opal/types";
 import { useTranslations } from "next-intl";
+import { chatFindTextKey } from "@/lib/chatFind/match";
+import { CHAT_FIND_UNFOLD_EVENT } from "@/lib/chatFind/highlights";
 
 interface MessageEditingProps {
   content: string;
@@ -105,16 +107,26 @@ interface HumanMessageBubbleProps {
   content: string;
   // What the question mentioned; each `@name` shows as a chip.
   mentions?: ComposedMention[];
+  /** Marks the text for find in chat (`chatFindTextKey`). */
+  findKey?: string;
 }
 
 export function HumanMessageBubble({
   content,
   mentions,
+  findKey,
 }: HumanMessageBubbleProps) {
   const t = useTranslations("chat.messages.humanMessage");
   const [textElement, setTextElement] = useState<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
   const clipped = useOverflow(textElement);
+  useEffect(() => {
+    if (!textElement) return;
+    const unfold = () => setExpanded(true);
+    textElement.addEventListener(CHAT_FIND_UNFOLD_EVENT, unfold);
+    return () =>
+      textElement.removeEventListener(CHAT_FIND_UNFOLD_EVENT, unfold);
+  }, [textElement]);
   const body = useMemo(() => {
     if (!mentions?.length) return content;
     const parts: React.ReactNode[] = [];
@@ -162,13 +174,17 @@ export function HumanMessageBubble({
       >
         <div
           ref={setTextElement}
+          data-chat-find-fold={clipped && !expanded ? "closed" : undefined}
           className={cn(
             !expanded && "max-h-72 overflow-hidden",
             clipped &&
               "[mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
           )}
         >
-          <div className="inline-block align-middle">
+          <div
+            className="inline-block align-middle"
+            data-chat-find-text={findKey}
+          >
             {/* Not a `p`: the chips' badges are blocks. */}
             <Text dir="auto" font="main-content-body" color="text-04">
               {body}
@@ -355,7 +371,11 @@ const HumanMessage = React.memo(function HumanMessage({
         ) : (
           <div className="flex justify-end">
             {!isMobile && copyEditButton}
-            <HumanMessageBubble content={content} mentions={mentions} />
+            <HumanMessageBubble
+              content={content}
+              mentions={mentions}
+              findKey={chatFindTextKey("user", nodeId)}
+            />
           </div>
         )}
         <Section

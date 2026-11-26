@@ -72,6 +72,7 @@ import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/lib/chatScroll/components/ChatScrollContainer";
+import ChatFind from "@/sections/chat/ChatFind";
 import {
   ProjectContextPanel,
   ProjectChatSessionList,
@@ -981,6 +982,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                         wide={wideChatActive}
+                        overlay={<ChatFind />}
                         footer={
                           <div
                             aria-hidden

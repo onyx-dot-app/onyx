@@ -27,7 +27,9 @@ import {
   SvgCpu,
   SvgChevronUp,
   SvgChevronDown,
+  SvgSearch,
 } from "@opal/icons";
+import { openChatFind, useChatFindStore } from "@/lib/chatFind/store";
 import type { IconFunctionComponent } from "@opal/types";
 
 /**
@@ -194,6 +196,8 @@ export default function ChatSearchCommandMenu({
     action?.();
   };
 
+  // Only a chat whose find bar has mounted can open it.
+  const findAvailable = useChatFindStore((state) => state.mounted > 0);
   const shortcutItems: ShortcutAction[] = [
     {
       value: "new-session",
@@ -230,6 +234,17 @@ export default function ChatSearchCommandMenu({
       hotkey: CHAT_SHORTCUTS.nextChat,
       run: shortcutActions.nextChat,
     },
+    ...(findAvailable
+      ? [
+          {
+            value: "find-in-chat",
+            icon: SvgSearch,
+            label: t("chatSearch.shortcuts.findInChat.label"),
+            hotkey: CHAT_SHORTCUTS.find,
+            run: openChatFind,
+          },
+        ]
+      : []),
   ];
   const searchTerm = searchValue.trim().toLowerCase();
   const visibleShortcutItems =
