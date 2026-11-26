@@ -75,7 +75,7 @@ interface ToolFieldsProps {
   fields: ToolField[];
 }
 
-function ToolFields({ fields }: ToolFieldsProps) {
+export function ToolFields({ fields }: ToolFieldsProps) {
   return (
     <Section
       alignItems="stretch"

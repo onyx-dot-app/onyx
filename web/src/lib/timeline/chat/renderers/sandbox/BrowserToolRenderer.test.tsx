@@ -85,3 +85,23 @@ test("a done navigation and a page read say what they did", () => {
   renderStatus(packets("browser_snapshot", {}, true));
   expect(screen.getByText("Read the page")).toBeInTheDocument();
 });
+
+test("a done call keeps its request and the page's response", () => {
+  const toolPackets: CustomToolPacket[] = [
+    ...packets("browser_act", { action: "click", ref: "e12" }, false),
+    {
+      placement,
+      obj: {
+        type: PacketType.CUSTOM_TOOL_DELTA,
+        tool_name: "browser_act",
+        response_type: "text",
+        data: "Clicked the Sign in button",
+      },
+    },
+    { placement, obj: { type: PacketType.SECTION_END } },
+  ];
+  renderStatus(toolPackets);
+  expect(screen.getByText("Used the page")).toBeInTheDocument();
+  expect(screen.getByText("click")).toBeInTheDocument();
+  expect(screen.getByText("Clicked the Sign in button")).toBeInTheDocument();
+});

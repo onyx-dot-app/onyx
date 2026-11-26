@@ -1,9 +1,8 @@
 import { type ComponentProps, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { Text } from "@opal/components";
-import { Section } from "@opal/layouts";
+import { CodePanel } from "@opal/components";
+import type { JsonValue } from "@/lib/json";
 import { SvgGlobe } from "@opal/icons";
-import { richNodes } from "@opal/utils";
 import {
   type CustomToolPacket,
   type Packet,
@@ -11,10 +10,9 @@ import {
   readCustomToolCall,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
-import {
-  SandboxCallContent,
-  SandboxCallError,
-} from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
+import { SandboxCallContent } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
+import { ToolFields } from "@/lib/timeline/chat/message/messageComponents/renderers/CustomToolRenderer";
+import { flatFields, isEmptyPayload } from "@/lib/timeline/chat/toolPayload";
 
 /** The sandbox's browser tools (backend `browser_tools.py:BROWSER_TOOLS`). */
 const BROWSER_TOOL_NAMES: ReadonlySet<string> = new Set([
@@ -58,18 +56,32 @@ export function BrowserToolRenderer({
   children,
 }: BrowserToolRendererProps) {
   const t = useTranslations("chat.messages.timeline.sandbox.browser");
-  const { toolName, call, error } = useMemo(() => {
+  const tCustom = useTranslations("chat.messages.customTool");
+  const { toolName, call, error, data, toolArgs } = useMemo(() => {
     let toolName = "";
+    let toolArgs: JsonValue | undefined = undefined;
     let error: string | null = null;
+    let data: JsonValue | undefined = undefined;
     for (const { obj } of packets) {
       if (obj.type === PacketType.CUSTOM_TOOL_START) {
         toolName = obj.tool_name;
-      } else if (obj.type === PacketType.CUSTOM_TOOL_DELTA && obj.error) {
-        error = obj.error.message;
+      } else if (obj.type === PacketType.CUSTOM_TOOL_ARGS) {
+        toolArgs = obj.tool_args;
+      } else if (obj.type === PacketType.CUSTOM_TOOL_DELTA) {
+        data = obj.data;
+        if (obj.error) error = obj.error.message;
       }
     }
-    return { toolName, call: readCustomToolCall(packets), error };
+    return {
+      toolName,
+      call: readCustomToolCall(packets),
+      error,
+      data,
+      toolArgs,
+    };
   }, [packets]);
+  const argFields = useMemo(() => flatFields(toolArgs), [toolArgs]);
+  const dataFields = useMemo(() => flatFields(data), [data]);
 
   useEffect(() => {
     if (call.isComplete) onComplete();
@@ -117,17 +129,47 @@ export function BrowserToolRenderer({
       status = t("check.status", { phase });
   }
 
+  const showArgs = !isEmptyPayload(toolArgs);
+  const showData = !isEmptyPayload(data);
+  // The request, then the page's response or the call's error.
   const content =
-    url || error ? (
+    showArgs || showData || error ? (
       <SandboxCallContent renderType={renderType}>
-        <Section alignItems="stretch" gap={1} height="fit">
-          {url && (
-            <Text as="p" font="secondary-mono" color="text-03">
-              {richNodes(<span dir="ltr">{url}</span>)}
-            </Text>
+        <CodePanel>
+          {showArgs && (
+            <>
+              <CodePanel.Header
+                title={tCustom("requestBlock.label")}
+                copyText={JSON.stringify(toolArgs, null, 2)}
+              />
+              {argFields ? (
+                <CodePanel.Content>
+                  <ToolFields fields={argFields} />
+                </CodePanel.Content>
+              ) : (
+                <CodePanel.Output>
+                  {JSON.stringify(toolArgs, null, 2)}
+                </CodePanel.Output>
+              )}
+            </>
           )}
-          {error && <SandboxCallError error={error} />}
-        </Section>
+          {(showData || error) && (
+            <>
+              <CodePanel.Header title={tCustom("responseBlock.label")} />
+              {error ? (
+                <CodePanel.Output error>{error}</CodePanel.Output>
+              ) : dataFields ? (
+                <CodePanel.Content>
+                  <ToolFields fields={dataFields} />
+                </CodePanel.Content>
+              ) : (
+                <CodePanel.Output>
+                  {typeof data === "string" ? data : JSON.stringify(data)}
+                </CodePanel.Output>
+              )}
+            </>
+          )}
+        </CodePanel>
       </SandboxCallContent>
     ) : null;
 
