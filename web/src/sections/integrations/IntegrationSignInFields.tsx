@@ -9,6 +9,8 @@ import {
 } from "@opal/components";
 import { SvgPlus, SvgTrash } from "@opal/icons";
 import { InputVertical, Section } from "@opal/layouts";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import type {
   AuthMethod,
   AuthMode,
@@ -33,6 +35,18 @@ interface IntegrationSignInFieldsProps {
   disabled: boolean;
 }
 
+/** The server lets only an organization-wide action manager pick Onyx
+ * login. A saved Onyx login stays so the form shows it. */
+function useAllowedMethods(
+  methods: readonly AuthMethod[],
+  current: AuthMethod | null
+): readonly AuthMethod[] {
+  const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_ACTIONS);
+  return isGlobalHolder || current === "onyx_login"
+    ? methods
+    : methods.filter((method) => method !== "onyx_login");
+}
+
 export default function IntegrationSignInFields(
   props: IntegrationSignInFieldsProps
 ) {
@@ -48,9 +62,10 @@ export default function IntegrationSignInFields(
 export function SignInModeField({
   draft,
   onChange,
-  methods,
+  methods: allMethods,
   disabled,
 }: IntegrationSignInFieldsProps) {
+  const methods = useAllowedMethods(allMethods, draft.authMethod);
   const authModes = AUTH_MODES.filter(
     (mode) => mode === "none" || methodsForMode(methods, mode).length > 0
   );
@@ -90,11 +105,12 @@ export function SignInModeField({
 export function SignInMethodFields({
   draft,
   onChange,
-  methods,
+  methods: allMethods,
   shape,
   showErrors,
   disabled,
 }: IntegrationSignInFieldsProps) {
+  const methods = useAllowedMethods(allMethods, draft.authMethod);
   const providerModes = PROVIDER_MODES[shape];
   const fitting = methodsForMode(methods, draft.authMode);
   const t = useTranslations("admin.integrations.signIn");

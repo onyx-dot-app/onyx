@@ -31,6 +31,14 @@ jest.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
+let mockGlobalHolder = false;
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: mockGlobalHolder,
+    isScopedManager: false,
+  }),
+}));
+
 const URL_DETAIL = "/api/admin/integrations/1";
 const URL_ACTIONS = `${URL_DETAIL}/actions`;
 const NO_ACTIONS = { default_policy: null, actions: [] };
@@ -69,6 +77,9 @@ async function inPanel() {
   return within(activePanel());
 }
 
+beforeEach(() => {
+  mockGlobalHolder = false;
+});
 afterEach(() => jest.restoreAllMocks());
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -262,6 +273,7 @@ test("saves the sign-in settings", async () => {
 });
 
 test("offers the Onyx login sign-in for an MCP server", async () => {
+  mockGlobalHolder = true;
   mockFetch({
     [URL_DETAIL]: makeDetail({
       auth_mode: "individual",

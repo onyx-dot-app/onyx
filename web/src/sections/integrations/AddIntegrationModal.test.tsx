@@ -159,6 +159,32 @@ describe("MCP server", () => {
     expect(mode).toHaveValue(copy.signIn.mode.individual);
   });
 
+  test("a group-scoped manager cannot pick Onyx login", async () => {
+    mockGlobalHolder = false;
+    mockProbe.mockResolvedValue(OAUTH_PROBE);
+    const { user } = open({ kind: "mcp_server" });
+    await fillConnect(
+      user,
+      "Docs",
+      add.mcp.url.title,
+      "https://mcp.example.com/mcp"
+    );
+    await screen.findByText(add.mcp.probe.oauth);
+
+    await user.click(
+      screen.getByRole("button", { name: `Expand ${add.advanced}` })
+    );
+    await user.click(
+      screen.getByRole("combobox", { name: copy.signIn.method.title })
+    );
+    expect(
+      await screen.findByRole("option", { name: copy.signIn.method.oauth2 })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: copy.signIn.method.onyxLogin })
+    ).not.toBeInTheDocument();
+  });
+
   test("a server with no detected transport does not keep the last one", async () => {
     mockProbe.mockResolvedValueOnce(OAUTH_PROBE).mockResolvedValueOnce({
       kind: "unreachable",
