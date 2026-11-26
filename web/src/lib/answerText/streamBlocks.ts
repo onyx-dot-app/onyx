@@ -28,10 +28,14 @@ function closesMath(line: string, fence: string): boolean {
 /**
  * Whether `text` ends inside a fenced code block that is not closed yet. A
  * fence in a block quote or list item also ends with its container: at a
- * line with fewer quote markers, or with text left of the fence.
+ * line with fewer quote markers, or with text left of the list item's
+ * content. The fence's own 0-3 leading spaces never end it.
  */
 export function endsInOpenCodeFence(text: string): boolean {
   let fence: { marker: string; depth: number; indent: number } | null = null;
+  // Content offset of the list item open outside the fence, 0 for none.
+  let listContent = 0;
+  let afterBlank = false;
   for (const line of text.split("\n")) {
     const quotes = /^(?:[ \t]*>)*/.exec(line)?.[0] ?? "";
     const depth = quotes.split(">").length - 1;
@@ -55,8 +59,20 @@ export function endsInOpenCodeFence(text: string): boolean {
       /^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*)(`{3,}(?![^`\n]*`)|~{3,})/.exec(
         rest
       );
-    if (opener?.[2])
-      fence = { marker: opener[2], depth, indent: opener[1]?.length ?? 0 };
+    if (opener?.[2]) {
+      const prefix = opener[1] ?? "";
+      const inList = /[-*+\d]/.test(prefix);
+      fence = {
+        marker: opener[2],
+        depth,
+        indent: inList ? prefix.length : Math.min(prefix.length, listContent),
+      };
+    } else if (rest.trim() !== "") {
+      const item = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/.exec(rest);
+      if (item) listContent = item[0].length;
+      else if (afterBlank && !/^[ \t]/.test(rest)) listContent = 0;
+    }
+    afterBlank = rest.trim() === "";
   }
   return fence !== null;
 }
