@@ -10534,7 +10534,7 @@
         "mcp_server": "MCP server",
         "openapi": "REST app",
         "preset": "App",
-        "custom": "Custom app",
+        "custom": "URL-pattern app",
         "graphql": "GraphQL app"
       },
       "signInSummary": "{mode, select, none {No sign-in} shared {{method, select, oauth2 {Organization account (OAuth)} api_key {Organization API key} onyx_login {Onyx login} managed {Managed by Onyx} other {Organization account}}} individual {{method, select, oauth2 {Each user (OAuth)} api_key {Each user (API key)} onyx_login {Onyx login} managed {Managed by Onyx} other {Each user}}} other {Unknown}}",
@@ -10701,7 +10701,7 @@
           },
           "usesDefault": "Uses default",
           "setByAdmin": "Set by admin",
-          "alwaysAsks": "Craft asks before each request that matches no other action. You cannot set Allow.",
+          "alwaysAsks": "Onyx asks before each request that matches no other action. You cannot set Allow.",
           "useDefaults": "Use defaults",
           "readOnly": "Read-Only Actions",
           "write": "Write Actions",
@@ -11071,7 +11071,7 @@
         "loadFailed": "Could not load the integrations.",
         "lock": {
           "adminBlocked": "Allow is not available: an admin blocked this action.",
-          "alwaysAsks": "Allow is not available: Craft asks for approval for each of these requests.",
+          "alwaysAsks": "Allow is not available: Onyx asks for approval for each of these requests.",
           "adminFinal": "Allow is not available: the admin setting of this integration is final."
         },
         "noActions": "This integration has no actions yet.",

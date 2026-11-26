@@ -135,7 +135,7 @@ export default function IntegrationActionsTab({
     );
   }
 
-  // Craft asks for an action that always asks, even when it is set to Allow.
+  // Onyx asks for an action that always asks, even when it is set to Allow.
   function applied(action: IntegrationAction, value: PolicyValue): PolicyValue {
     return action.always_asks && value === "allow" ? "ask" : value;
   }

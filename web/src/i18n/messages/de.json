@@ -10534,7 +10534,7 @@
         "mcp_server": "MCP-Server",
         "openapi": "REST-App",
         "preset": "App",
-        "custom": "Eigene App",
+        "custom": "URL-Muster-App",
         "graphql": "GraphQL-App"
       },
       "signInSummary": "{mode, select, none {Keine Anmeldung} shared {{method, select, oauth2 {Organisationskonto (OAuth)} api_key {API-Schlüssel der Organisation} onyx_login {Onyx-Anmeldung} managed {Von Onyx verwaltet} other {Organisationskonto}}} individual {{method, select, oauth2 {Jeder Nutzer (OAuth)} api_key {Jeder Nutzer (API-Schlüssel)} onyx_login {Onyx-Anmeldung} managed {Von Onyx verwaltet} other {Jeder Nutzer}}} other {Unbekannt}}",
@@ -10701,7 +10701,7 @@
           },
           "usesDefault": "Verwendet Standard",
           "setByAdmin": "Vom Admin festgelegt",
-          "alwaysAsks": "Craft fragt vor jeder Anfrage nach, die zu keiner anderen Aktion passt. Sie können Erlauben nicht festlegen.",
+          "alwaysAsks": "Onyx fragt vor jeder Anfrage nach, die zu keiner anderen Aktion passt. Sie können Erlauben nicht festlegen.",
           "useDefaults": "Standards verwenden",
           "readOnly": "Lesende Aktionen",
           "write": "Schreibende Aktionen",
@@ -11071,7 +11071,7 @@
         "loadFailed": "Die Integrationen konnten nicht geladen werden.",
         "lock": {
           "adminBlocked": "Erlauben ist nicht verfügbar: Ein Administrator hat diese Aktion blockiert.",
-          "alwaysAsks": "Erlauben ist nicht verfügbar: Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
+          "alwaysAsks": "Erlauben ist nicht verfügbar: Onyx fragt bei jeder dieser Anfragen nach einer Freigabe.",
           "adminFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellung dieser Integration ist endgültig."
         },
         "noActions": "Diese Integration hat noch keine Aktionen.",

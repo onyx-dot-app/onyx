@@ -10534,7 +10534,7 @@
         "mcp_server": "خادم MCP",
         "openapi": "تطبيق REST",
         "preset": "تطبيق",
-        "custom": "تطبيق مخصص",
+        "custom": "تطبيق أنماط URL",
         "graphql": "تطبيق GraphQL"
       },
       "signInSummary": "{mode, select, none {بدون تسجيل دخول} shared {{method, select, oauth2 {حساب المؤسسة (OAuth)} api_key {مفتاح API للمؤسسة} onyx_login {تسجيل الدخول إلى Onyx} managed {يديره Onyx} other {حساب المؤسسة}}} individual {{method, select, oauth2 {كل مستخدم (OAuth)} api_key {كل مستخدم (مفتاح API)} onyx_login {تسجيل الدخول إلى Onyx} managed {يديره Onyx} other {كل مستخدم}}} other {غير معروف}}",
@@ -10701,7 +10701,7 @@
           },
           "usesDefault": "يستخدم الافتراضي",
           "setByAdmin": "حدده المسؤول",
-          "alwaysAsks": "يطلب Craft الموافقة قبل كل طلب لا يطابق أي إجراء آخر. لا يمكنك تعيين السماح.",
+          "alwaysAsks": "يطلب Onyx الموافقة قبل كل طلب لا يطابق أي إجراء آخر. لا يمكنك تعيين السماح.",
           "useDefaults": "استخدام القيم الافتراضية",
           "readOnly": "إجراءات القراءة فقط",
           "write": "إجراءات الكتابة",
@@ -11071,7 +11071,7 @@
         "loadFailed": "تعذر تحميل التكاملات.",
         "lock": {
           "adminBlocked": "السماح غير متاح: حظر أحد المسؤولين هذا الإجراء.",
-          "alwaysAsks": "السماح غير متاح: يطلب Craft الموافقة على كل طلب من هذه الطلبات.",
+          "alwaysAsks": "السماح غير متاح: يطلب Onyx الموافقة على كل طلب من هذه الطلبات.",
           "adminFinal": "السماح غير متاح: إعداد المسؤول لهذا التكامل نهائي."
         },
         "noActions": "لا يحتوي هذا التكامل على إجراءات بعد.",

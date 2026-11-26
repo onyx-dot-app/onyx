@@ -10534,7 +10534,7 @@
         "mcp_server": "MCP 서버",
         "openapi": "REST 앱",
         "preset": "앱",
-        "custom": "사용자 지정 앱",
+        "custom": "URL 패턴 앱",
         "graphql": "GraphQL 앱"
       },
       "signInSummary": "{mode, select, none {로그인 없음} shared {{method, select, oauth2 {조직 계정(OAuth)} api_key {조직 API 키} onyx_login {Onyx 로그인} managed {Onyx에서 관리} other {조직 계정}}} individual {{method, select, oauth2 {각 사용자(OAuth)} api_key {각 사용자(API 키)} onyx_login {Onyx 로그인} managed {Onyx에서 관리} other {각 사용자}}} other {알 수 없음}}",
@@ -10701,7 +10701,7 @@
           },
           "usesDefault": "기본값 사용 중",
           "setByAdmin": "관리자가 설정함",
-          "alwaysAsks": "Craft는 다른 작업과 일치하지 않는 각 요청 전에 확인합니다. 허용으로 설정할 수 없습니다.",
+          "alwaysAsks": "Onyx는 다른 작업과 일치하지 않는 각 요청 전에 확인합니다. 허용으로 설정할 수 없습니다.",
           "useDefaults": "기본값 사용",
           "readOnly": "읽기 전용 액션",
           "write": "쓰기 액션",
@@ -11071,7 +11071,7 @@
         "loadFailed": "통합을 불러오지 못했습니다.",
         "lock": {
           "adminBlocked": "허용을 사용할 수 없습니다: 관리자가 이 작업을 차단했습니다.",
-          "alwaysAsks": "허용을 사용할 수 없습니다: Craft는 이러한 요청마다 승인을 요청합니다.",
+          "alwaysAsks": "허용을 사용할 수 없습니다: Onyx는 이러한 요청마다 승인을 요청합니다.",
           "adminFinal": "허용을 사용할 수 없습니다: 이 통합의 관리자 설정은 확정되어 있습니다."
         },
         "noActions": "이 통합에는 아직 작업이 없습니다.",

@@ -10534,7 +10534,7 @@
         "mcp_server": "Servidor MCP",
         "openapi": "App REST",
         "preset": "Aplicativo",
-        "custom": "Aplicativo personalizado",
+        "custom": "Aplicativo de padrões de URL",
         "graphql": "App GraphQL"
       },
       "signInSummary": "{mode, select, none {Sem login} shared {{method, select, oauth2 {Conta da organização (OAuth)} api_key {Chave de API da organização} onyx_login {Login do Onyx} managed {Gerenciado pelo Onyx} other {Conta da organização}}} individual {{method, select, oauth2 {Cada usuário (OAuth)} api_key {Cada usuário (chave de API)} onyx_login {Login do Onyx} managed {Gerenciado pelo Onyx} other {Cada usuário}}} other {Desconhecido}}",
@@ -10701,7 +10701,7 @@
           },
           "usesDefault": "Usa o padrão",
           "setByAdmin": "Definido pelo administrador",
-          "alwaysAsks": "O Craft pergunta antes de cada solicitação que não corresponde a nenhuma outra ação. Não é possível definir Permitir.",
+          "alwaysAsks": "O Onyx pergunta antes de cada solicitação que não corresponde a nenhuma outra ação. Não é possível definir Permitir.",
           "useDefaults": "Usar padrões",
           "readOnly": "Ações somente leitura",
           "write": "Ações de gravação",
@@ -11071,7 +11071,7 @@
         "loadFailed": "Não foi possível carregar as integrações.",
         "lock": {
           "adminBlocked": "Permitir não está disponível: um administrador bloqueou esta ação.",
-          "alwaysAsks": "Permitir não está disponível: o Craft pede aprovação para cada uma dessas solicitações.",
+          "alwaysAsks": "Permitir não está disponível: o Onyx pede aprovação para cada uma dessas solicitações.",
           "adminFinal": "Permitir não está disponível: a configuração do administrador desta integração é definitiva."
         },
         "noActions": "Esta integração ainda não tem ações.",

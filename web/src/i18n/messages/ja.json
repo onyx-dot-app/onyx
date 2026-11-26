@@ -10534,7 +10534,7 @@
         "mcp_server": "MCP サーバー",
         "openapi": "REST アプリ",
         "preset": "アプリ",
-        "custom": "カスタムアプリ",
+        "custom": "URL パターンアプリ",
         "graphql": "GraphQL アプリ"
       },
       "signInSummary": "{mode, select, none {ログインなし} shared {{method, select, oauth2 {組織アカウント (OAuth)} api_key {組織の API キー} onyx_login {Onyx ログイン} managed {Onyx が管理} other {組織アカウント}}} individual {{method, select, oauth2 {各ユーザー (OAuth)} api_key {各ユーザー (API キー)} onyx_login {Onyx ログイン} managed {Onyx が管理} other {各ユーザー}}} other {不明}}",
@@ -10701,7 +10701,7 @@
           },
           "usesDefault": "デフォルトを使用",
           "setByAdmin": "管理者が設定",
-          "alwaysAsks": "Craft は、他のアクションに一致しない各リクエストの前に確認します。許可は設定できません。",
+          "alwaysAsks": "Onyx は、他のアクションに一致しない各リクエストの前に確認します。許可は設定できません。",
           "useDefaults": "デフォルトを使用",
           "readOnly": "読み取りアクション",
           "write": "書き込みアクション",
@@ -11071,7 +11071,7 @@
         "loadFailed": "統合を読み込めませんでした。",
         "lock": {
           "adminBlocked": "許可は選べません: 管理者がこのアクションをブロックしました。",
-          "alwaysAsks": "許可は使用できません: Craft はこれらのリクエストごとに承認を求めます。",
+          "alwaysAsks": "許可は使用できません: Onyx はこれらのリクエストごとに承認を求めます。",
           "adminFinal": "許可は選べません: この統合の管理者設定は確定しています。"
         },
         "noActions": "この統合にはまだアクションがありません。",

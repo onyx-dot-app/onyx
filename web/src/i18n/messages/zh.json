@@ -10534,7 +10534,7 @@
         "mcp_server": "MCP 服务器",
         "openapi": "REST 应用",
         "preset": "应用",
-        "custom": "自定义应用",
+        "custom": "URL 模式应用",
         "graphql": "GraphQL 应用"
       },
       "signInSummary": "{mode, select, none {无需登录} shared {{method, select, oauth2 {组织账户 (OAuth)} api_key {组织 API 密钥} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {组织账户}}} individual {{method, select, oauth2 {每个用户 (OAuth)} api_key {每个用户 (API 密钥)} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {每个用户}}} other {未知}}",
@@ -10701,7 +10701,7 @@
           },
           "usesDefault": "使用默认值",
           "setByAdmin": "由管理员设置",
-          "alwaysAsks": "对于不匹配任何其他操作的每个请求，Craft 都会先询问。您无法设置为允许。",
+          "alwaysAsks": "对于不匹配任何其他操作的每个请求，Onyx 都会先询问。您无法设置为允许。",
           "useDefaults": "使用默认值",
           "readOnly": "只读操作",
           "write": "写入操作",
@@ -11071,7 +11071,7 @@
         "loadFailed": "无法加载集成。",
         "lock": {
           "adminBlocked": "无法选择允许：管理员已阻止此操作。",
-          "alwaysAsks": "无法使用允许：Craft 会为每个此类请求请求批准。",
+          "alwaysAsks": "无法使用允许：Onyx 会为每个此类请求请求批准。",
           "adminFinal": "无法选择允许：此集成的管理员设置为最终设置。"
         },
         "noActions": "此集成还没有操作。",

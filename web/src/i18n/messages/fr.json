@@ -10534,7 +10534,7 @@
         "mcp_server": "Serveur MCP",
         "openapi": "App REST",
         "preset": "Application",
-        "custom": "Application personnalisée",
+        "custom": "Application à modèles d'URL",
         "graphql": "App GraphQL"
       },
       "signInSummary": "{mode, select, none {Aucune connexion} shared {{method, select, oauth2 {Compte de l’organisation (OAuth)} api_key {Clé API de l’organisation} onyx_login {Connexion Onyx} managed {Géré par Onyx} other {Compte de l’organisation}}} individual {{method, select, oauth2 {Chaque utilisateur (OAuth)} api_key {Chaque utilisateur (clé API)} onyx_login {Connexion Onyx} managed {Géré par Onyx} other {Chaque utilisateur}}} other {Inconnu}}",
@@ -10701,7 +10701,7 @@
           },
           "usesDefault": "Valeur par défaut",
           "setByAdmin": "Défini par l’administrateur",
-          "alwaysAsks": "Craft demande avant chaque requête qui ne correspond à aucune autre action. Vous ne pouvez pas définir Autoriser.",
+          "alwaysAsks": "Onyx demande avant chaque requête qui ne correspond à aucune autre action. Vous ne pouvez pas définir Autoriser.",
           "useDefaults": "Utiliser les valeurs par défaut",
           "readOnly": "Actions en lecture seule",
           "write": "Actions d’écriture",
@@ -11071,7 +11071,7 @@
         "loadFailed": "Impossible de charger les intégrations.",
         "lock": {
           "adminBlocked": "Autoriser n'est pas disponible : un administrateur a bloqué cette action.",
-          "alwaysAsks": "Autoriser n'est pas disponible : Craft demande une approbation pour chacune de ces requêtes.",
+          "alwaysAsks": "Autoriser n'est pas disponible : Onyx demande une approbation pour chacune de ces requêtes.",
           "adminFinal": "Autoriser n'est pas disponible : le réglage administrateur de cette intégration est définitif."
         },
         "noActions": "Cette intégration n'a pas encore d'actions.",
