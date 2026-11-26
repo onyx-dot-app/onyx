@@ -835,7 +835,11 @@ def sign_in_host(integration: Integration, db_session: Session) -> str | None:
     tool = get_openapi_tool_for_integration(integration.id, db_session)
     if tool is not None and tool.openapi_schema is not None:
         try:
-            destinations["openapi_url"] = openapi_to_url(tool.openapi_schema)
+            # The admin page saves the base URL without a trailing slash,
+            # which older releases kept: the destination is the same.
+            destinations["openapi_url"] = openapi_to_url(tool.openapi_schema).rstrip(
+                "/"
+            )
         except ValueError:
             destinations["openapi_url"] = None
     api_app = get_api_app_for_integration(integration.id, db_session)

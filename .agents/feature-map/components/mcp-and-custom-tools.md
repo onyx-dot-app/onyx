@@ -640,7 +640,8 @@ default agent, is Blocked.
    [[craft-scheduled-tasks#task-choices-default-ask]]).
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
    setting resets connections.** `integrations/connections.py:sign_in_settings_for`
-   includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL, the
+   includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL
+   (without a trailing slash, which older releases kept), the
    GraphQL endpoint URL, the app URL patterns and the preset host values. An admin PATCH that changes it
    sets every connection to Needs reconnect. A new destination must never
    receive credentials that were given for the old one. Only a global action
