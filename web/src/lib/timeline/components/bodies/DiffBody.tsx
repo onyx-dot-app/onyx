@@ -127,12 +127,16 @@ export function DiffBody(props: DiffBodyProps) {
         />
       ) : (
         <CodePanel.Columns>
+          {/* Each side is its own table, so lines do not wrap: a wrapped
+              line would push its side's rows out of line with the other. */}
           <CodePanel.Lines
             lineNumbers
+            wrap={false}
             lines={diffLines.map((line) => toSideLine(line, "old"))}
           />
           <CodePanel.Lines
             lineNumbers
+            wrap={false}
             lines={diffLines.map((line) => toSideLine(line, "new"))}
           />
         </CodePanel.Columns>
