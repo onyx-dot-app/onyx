@@ -53,6 +53,7 @@ import {
 import { retainedFileViewers } from "@/lib/outputPanel/tabs";
 import { getFileIcon } from "@/lib/utils";
 import { useSettings } from "@/lib/settings/hooks";
+import { useIncognito } from "@/providers/IncognitoProvider";
 import { PreviewActionsSlotContext } from "@/sections/file-preview/FloatingFooter";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import { OutputPanelLayout } from "@/sections/output-panel/OutputPanelLayout";
@@ -829,7 +830,9 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const state = useCurrentRightPanelState();
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
   const files = usePublishedFiles("current");
-  const browserAvailable = useSettings().chat_browser_available ?? false;
+  const { incognitoEnabled } = useIncognito();
+  const browserAvailable =
+    (useSettings().chat_browser_available ?? false) && !incognitoEnabled;
   const reloadFiles = useCallback(async () => {
     if (sessionId !== null) await reloadChatPublishedFiles(sessionId);
   }, [sessionId]);
