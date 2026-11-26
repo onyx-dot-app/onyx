@@ -1,18 +1,8 @@
 {
-  "$schema": "https://schema.tauri.app/config/2.0.0",
-  "app": {
-    "windows": [
-      {
-        "title": "Onyx",
-        "label": "main",
-        "url": "index.html",
-        "create": false,
-        "width": 1232,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
-        "transparent": false
-      }
-    ]
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "publisher": "Onyx",
+    "homepage": "https://onyx.app",
+    "copyright": "Copyright (c) 2023-present DanswerAI, Inc."
   }
 }

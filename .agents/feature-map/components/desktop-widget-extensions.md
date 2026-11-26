@@ -2,7 +2,7 @@
 
 > Thin clients that bring Onyx outside the main web app: a Tauri desktop
 > shell, a chat widget that a site embeds, and a Chrome extension. None runs
-> product logic, and only the widget and desktop v2's launcher call the chat
+> product logic, and only the widget and the desktop launcher call the chat
 > endpoints themselves.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
@@ -14,12 +14,11 @@ deployments only.
 ## User experience
 
 - **A desktop user** installs the app for macOS, Windows or Linux. On first
-  launch it asks for the server URL (default `https://cloud.onyx.app`), then
-  shows the normal web app in a native window with global shortcuts and a
-  summon shortcut. On macOS the window has a custom titlebar with Back and
-  Forward buttons. Links from a
-  chat open in the system browser. A server that cannot be reached shows the
-  settings page again.
+  launch it asks for the server URL, signs in natively, then shows the normal
+  web app in a native window. A global shortcut opens a launcher panel that
+  asks or searches without the main window. Links to other sites open in the
+  system browser. A server that cannot be reached shows a bundled offline
+  window that reconnects by itself.
 - **A visitor to a customer's site** sees a chat launcher or an inline chat
   box. Answers stream as in the main app. There is no login screen. The site
   owner either puts a scoped API key in the page, or gives the widget a
@@ -51,16 +50,22 @@ This component holds the desktop shell, the widget, the Chrome extension, and
 the framed pages and framed sign-in path in the web app that only these clients
 need. Each client has a README with its build and design notes.
 
-It also holds desktop v2 (`desktop-v2/`), a preview native app that
-installs beside v1 and is not the default. It is built for macOS, and as
-unsigned CI previews for Windows and Linux; only macOS has a release. It signs in through
+The desktop app (`desktop/`) is a native Tauri 2 app for macOS, Windows and
+Linux. It keeps the earlier web-view shell's bundle ID (`app.onyx.desktop`)
+and name. The installers upgrade it in place (the MSI does a major upgrade),
+except the Windows setup program (`.exe`): the old per-user copy stays, and
+the app retires it at the user's first launch (uninstall entry first, then the
+old shortcuts, `onyx.exe` and `uninstall.exe`, and the folder only if it is then
+empty; the old uninstaller never runs, because it would delete this app's data
+folders). The first launch imports the old server
+URL. Version tags release it with
+the server, except beta and cloud tags (the `ods release classify` routing). It signs in through
 `/api/auth/mobile/login`, hands the token to the remote web UI as the session
 cookie, and gives IPC only to its bundled windows. The main window never runs
 the web sign-in: a load of `/auth/login`, `/auth/signup`, an `/api/auth/.../authorize`
 URL, or an identity provider page whose `redirect_uri` is a server `/auth/` path
-makes v2 hand the cookie over again, or end the session and show its own
-sign-in window. A change to those paths must keep this check. It has its own CI build
-and release; v1's release does not build it. Its launcher panel (global
+makes the app hand the cookie over again, or end the session and show its own
+sign-in window. A change to those paths must keep this check. Its launcher panel (global
 shortcut) calls the chat endpoints from Rust with the bearer token:
 `POST /chat/create-chat-session`, then `POST /chat/send-chat-message`
 (`origin "unknown"`), and it reads the streamed packets (text, citations,
@@ -75,8 +80,8 @@ calls `POST /search/send-search-message`, with `filters.source_type` for a
 source filter. A change to those request or packet shapes must keep the
 launcher working. IT can preset the server and lock
 some settings with managed policy (MDM profile, Windows registry policy, or a
-Linux policy file). The v2 README lists the keys. When the server cannot be
-reached, v2 shows a bundled offline window that polls `GET /api/version` and
+Linux policy file). The desktop README lists the keys. When the server cannot be
+reached, the app shows a bundled offline window that polls `GET /api/version` and
 the web UI root `GET /` without a session (a 5xx from either counts as down),
 then checks the session with `GET /api/me`, and loads the web UI again when
 all answer, so `/api/version` must stay public. Sign-out
@@ -92,21 +97,18 @@ verification ([[auth-and-identity]]), or the acting-user rules for the widget
 
 ## Architecture
 
-**Desktop.** `desktop/src-tauri/src/main.rs:main` loads the config
-(`desktop/src-tauri/src/config.rs:load_config`), builds the window, and
-registers shortcuts, the tray and a navigation plugin. `desktop/src/index.html`
-is the fallback page for a missing or unreachable server. It calls the Tauri
-commands `get_bootstrap_state`, `check_server_reachable` and `set_server_url`
-(`desktop/src-tauri/src/commands.rs`), then sends the webview to the server.
-**File → Settings** sends the focused window back to this page at the
-platform app origin (`desktop/src-tauri/src/window.rs:settings_url`):
-`tauri://localhost`, but `http://tauri.localhost` on Windows. On
-macOS, `desktop/src-tauri/src/window.rs:eval_titlebar_script` injects
-`desktop/src/titlebar.js` on every page load. It reserves the titlebar strip and
-keeps the root layout, toasts and modals below it, so installed apps stay
-correct against any server version. The Rust side calls the server
-only for `/api/version` and a reachability check. The webview holds the cookie
-session.
+**Desktop.** `desktop/src-tauri/src/main.rs:main` reads the config
+(`desktop/src-tauri/src/config.rs:ConfigStore`, after
+`desktop/src-tauri/src/migration.rs:import_previous` on a first launch) and the
+managed policy (`desktop/src-tauri/src/policy.rs:read`), then
+`desktop/src-tauri/src/windows.rs:route` opens onboarding, sign-in or the main
+window. The local windows are React pages in `desktop/src/pages/`, built by
+Vite; they call the commands in
+`desktop/src-tauri/src/commands.rs`. The session token sits in the OS
+credential store (`desktop/src-tauri/src/session_store.rs`).
+`desktop/src-tauri/src/main_window.rs:open_url` loads the server in the main
+window with the token as the session cookie, and
+`desktop/src-tauri/src/main_window.rs:classify` decides where each navigation goes.
 
 **Widget.**
 ```
@@ -222,60 +224,30 @@ panel picks up the new session when the user returns.
 
 ## Contracts and traps
 
-1. `desktop-capabilities-reach-every-server` **Every desktop capability
-   applies to every server the user enters.**
-   `desktop/src-tauri/capabilities/main.json` grants window dragging,
-   double-click maximize and `shell:default` to the remote pattern
-   `http://*:*` and `https://*:*`, because the server URL is user-set. A new
-   permission reaches any page that any configured server serves. Add one
-   only for a native feature the webview calls. The same holds for each app
-   command in the `generate_handler!` list in
-   `desktop/src-tauri/src/main.rs`: `desktop/src-tauri/build.rs` declares no
-   app manifest, so local pages (the bundled settings page) can call every
-   registered command, and Tauri rejects them from remote pages. Popup
-   windows (`popup-*` labels) get only `shell:default` from
-   `desktop/src-tauri/capabilities/popup.json`, because they can host an
-   OAuth provider or another third-party site. On macOS, wry 0.55 popups
-   share the opener's `WKUserContentController`, so their IPC runs with the
-   `main` grant.
+1. `desktop-ipc-local-windows-only` **Only the bundled windows get IPC.**
+   Each file in `desktop/src-tauri/capabilities/` sets `"local": true` and
+   names its window. Remote server pages in the main window and popups get
+   only window dragging and title-bar zoom, and only on the configured server
+   origin (`desktop/src-tauri/src/main_window.rs:allow_window_dragging`). A new
+   command that a server page can call would reach every page of any server
+   that a user enters. Keep commands for the local windows.
 2. `os-opener-scheme-allowlist` **Only `http`, `https`, `mailto` and `tel`
-   reach the OS opener.**
-   `desktop/src-tauri/src/window.rs:is_externally_openable` gates popups and
-   the `open_in_browser` command, and
-   `desktop/src-tauri/src/window.rs:should_open_in_external_browser` has its
-   own scheme match for in-page navigation. Change both together. A `file:` or
-   custom scheme would let a link on a hostile page open local files or apps.
-3. `external-nav-only-from-chat` **In-page navigation leaves the app only from
-   a chat.** `should_open_in_external_browser` returns true only when the
-   current URL is a chat session (`is_chat_session_url`: `/app` with a
-   `chatId`), and then only for `mailto`, `tel` or an `http(s)` link to another
-   origin. This keeps the settings and login flows inside the app. The app
-   origin (`desktop/src-tauri/src/window.rs:is_app_origin_url`) is exempt, because on Windows the
-   bundled Settings page is an `http://tauri.localhost` URL.
-4. `desktop-popup-routing` **Script popups stay in the app; plain links go to
-   the browser.** `desktop/src-tauri/src/window.rs:classify_new_window` opens
-   `about:blank`, same-origin pages and popups with size features in an app
-   window that keeps the session cookies and `window.opener`. Other `http(s)`
-   popups go to the browser. OAuth flows that use
-   `web/src/lib/oauth/launch.ts:launchOAuth` do not use a popup in the app.
-   They open the provider in the system browser with a `.desktop` state
-   suffix. The browser-side callback page opens
-   `onyx://oauth-callback?path=...&origin=...`. The browser often has no Onyx
-   session, so `web/src/proxy.ts` serves `.desktop` callbacks from
-   `/oauth/desktop-handoff` before any auth gate
-   (`web/src/lib/oauth/desktopCallback.ts` holds the path allowlist). Then
-   `desktop/src-tauri/src/oauth_handoff.rs` accepts only allowlisted callback
-   paths on the configured server. When the main window is on that server, it
-   first offers the callback to it (`__ONYX_DESKTOP__.claimOAuthCallback`): a
-   page still waiting on that state runs it in a hidden same-origin iframe. If
-   no page claims it within 2s, the shell loads it in an app window. Either
-   way the callback reports completion through `BroadcastChannel`.
-   Two cases still open `about:blank` inside the click, navigate it, and wait
-   for a `postMessage`: desktop builds without the `oauthInBrowser` flag, and
-   flows that do not use `launchOAuth`, such as the Craft setup card.
-   `desktop/tests/webdriver_smoke.py` drives the real binary through these
-   rules, `confirm()` and downloads. Add a check there when the web app starts
-   to depend on a new browser behaviour.
+   reach the OS opener.** `desktop/src-tauri/src/main_window.rs:classify`
+   blocks every other scheme, and `classify_popup` and the navigation handlers
+   use it. A `file:` or custom scheme would let a link on a hostile page open
+   local files or apps.
+3. `desktop-main-window-server-origin` **The main window shows only the
+   configured server.** `classify` allows a same-origin `http(s)` or `blob:`
+   URL and `about:blank`/`about:srcdoc`; another site opens in the system
+   browser. Popups (`classify_popup`) may also show other HTTPS sites, for
+   OAuth consent and identity providers.
+4. `desktop-oauth-handoff-legacy` **The `.desktop` OAuth handoff serves the
+   old desktop app only.** `web/src/proxy.ts` serves `.desktop` state
+   callbacks from `/oauth/desktop-handoff`, and
+   `web/src/lib/oauth/desktopCallback.ts` holds the path allowlist. The earlier
+   desktop app (before this native app) opened these callbacks through
+   `onyx://oauth-callback`. Installs of it stay in use until users upgrade, so
+   keep the handoff page working for them.
 5. `widget-credential-public` **A widget credential is visible to anyone who
    can read the page.** The API key sits in an HTML attribute, or, for a
    self-hosted build, in the bundle (`widget/vite.config.ts` `define`). The
@@ -344,11 +316,11 @@ panel picks up the new session when the user returns.
     requests `<all_urls>` host access and injects the selection icon on every
     page. The host grant may also be what lets the panel iframe send its
     auth cookie (Known issues).
-14. `v2-window-commands-async` **A desktop v2 command that can open a window
+14. `desktop-window-commands-async` **A desktop command that can open a window
     must be `async`.** Tauri runs a sync command on the main thread inside the
     WebView2 message handler. A window built there deadlocks on Windows: the
     new window stays blank and the app stops. macOS and Linux do not show it.
-    `desktop-v2/src-tauri/src/commands.rs:commands_that_open_windows_are_async`
+    `desktop/src-tauri/src/commands.rs:commands_that_open_windows_are_async`
     fails for a sync command that calls a window-opening helper. Add a new
     helper of that kind to its `OPENS_WINDOWS` list.
 
@@ -397,12 +369,14 @@ panel picks up the new session when the user returns.
   message model. List the handled types with
   `grep -n 'case "' widget/src/services/stream-parser.ts`. Old bundles on
   customer sites ignore the new type ([[#widget-bundle-outlives-backend]]).
-- `desktop-native-feature` **Add a desktop native feature.** Copy the `check_server_reachable` command
-  in `desktop/src-tauri/src/commands.rs`, and register it in the
-  `generate_handler!` list in `desktop/src-tauri/src/main.rs`. Add the
-  narrowest permission to `desktop/src-tauri/capabilities/main.json`
-  ([[#desktop-capabilities-reach-every-server]]). Validate the input in the
-  command, because any server page can call it. Add a Rust unit test next to
+- `desktop-native-feature` **Add a desktop native feature.** Copy the
+  `get_prefs` command in `desktop/src-tauri/src/commands.rs`, and register it
+  in the `generate_handler!` list in `desktop/src-tauri/src/main.rs` and in
+  `COMMANDS` in `desktop/src-tauri/build.rs`, which generates its
+  `allow-<command>` permission. Grant it only to the local window that needs it, in
+  `desktop/src-tauri/capabilities/<window>.json`
+  ([[#desktop-ipc-local-windows-only]]). A command that opens a window must be
+  `async` ([[#desktop-window-commands-async]]). Add a Rust unit test next to
   the code.
 - `run-widget-local` **Run the widget against a local backend.** `cd widget && bun run dev`, with
   a `backend-url` attribute and a scoped API key. `widget/README.md` covers
@@ -421,14 +395,12 @@ panel picks up the new session when the user returns.
 
 ## Verification
 
-- Desktop: `cd desktop/src-tauri && cargo test && cargo clippy`. Tests sit in
-  `#[cfg(test)]` modules next to the code. The clippy config warns on
-  `unwrap`, `expect` and `panic`.
-  For runtime behaviour, build the app and run
-  `python3 desktop/tests/webdriver_smoke.py desktop/src-tauri/target/debug/onyx`
-  (needs `tauri-driver`, `WebKitWebDriver` and a display; Linux only).
-  WKWebView on macOS differs: check dialogs, popups and downloads there by
-  hand.
+- Desktop, from the repository root: `mkdir -p desktop/dist`, then
+  `(cd desktop/src-tauri && cargo test --locked && cargo clippy --all-targets --locked -- -D warnings)`
+  and `(cd desktop && bun run typecheck)`. Tests sit in `#[cfg(test)]` modules
+  next to the code. `.github/workflows/desktop.yml` runs the same checks on
+  macOS, Windows and Linux and builds unsigned installers. On macOS,
+  `desktop/README.md` describes the QA harness (`desktop/src-tauri/src/qa.rs`).
 - Widget: `cd widget && bun run type-check && bun run test` (tests in
   `widget/tests/`, also run by `.github/workflows/pr-quality-checks.yml`). By hand, send a message, reload,
   and confirm the transcript returns.
