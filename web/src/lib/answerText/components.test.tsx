@@ -144,3 +144,21 @@ test("a code block keeps its wrap choice when the answer finishes", async () => 
 
   expect(screen.getByRole("button", { name: "Wrap" })).toBeInTheDocument();
 });
+
+test.each([
+  ["closed", "<details>\n<summary>More</summary>\n\nBody text\n\n</details>"],
+  [
+    "open",
+    "<details open>\n<summary>More</summary>\n\nBody text\n\n</details>",
+  ],
+])("the cursor marker for a trailing %s details block", (state, content) => {
+  const { container } = render(
+    <ResponseCursorScope working>
+      <AnswerMarkdown content={content} streaming cursor />
+    </ResponseCursorScope>
+  );
+  const marker = container.querySelector("[data-response-cursor]");
+  expect(marker).not.toBeNull();
+  const inside = container.querySelector("details")?.contains(marker);
+  expect(inside).toBe(state === "open");
+});

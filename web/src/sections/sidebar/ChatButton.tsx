@@ -510,8 +510,9 @@ const ChatButton = memo(
     const updatedDate = new Date(chatSession.time_updated);
     const hasUpdatedDate = !Number.isNaN(updatedDate.getTime());
     const timeLabel = hasUpdatedDate ? (
-      <span className="mx-1 shrink-0">
+      <div className="mx-1 shrink-0">
         <Text
+          as="p"
           font="secondary-body"
           color="text-03"
           wordWrap="whitespace-nowrap"
@@ -524,7 +525,7 @@ const ChatButton = memo(
               })
             : t("chatButton.updatedNow.label")}
         </Text>
-      </span>
+      </div>
     ) : null;
     const restingMarker = runStatusMarker ?? timeLabel;
     const optionsButton = (
