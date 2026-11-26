@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"os"
@@ -62,22 +61,9 @@ func (b *Browser) launchService(r *running, env []string) (*proc, error) {
 		"ONYX_BROWSER_SOCKET="+b.SocketPath(),
 		"ONYX_SESSIONS_ROOT="+b.cfg.SessionsRoot,
 	)
-	stderr := &tail{max: stderrTailBytes}
-	cmd := &exec.Cmd{
-		Path: b.cfg.Node, Args: []string{b.cfg.Node, b.cfg.ServiceScript},
-		Dir: "/", Env: env, Stdout: io.Discard, Stderr: stderr,
-	}
-	// Chrome's group: a kill of the group also ends the service.
-	b.prepare(r.group, cmd)
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	s := &proc{pid: cmd.Process.Pid, done: make(chan struct{}), stderr: stderr}
-	go func() {
-		_ = cmd.Wait()
-		close(s.done)
-	}()
-	return s, nil
+	cmd := &exec.Cmd{Path: b.cfg.Node, Args: []string{b.cfg.Node, b.cfg.ServiceScript}, Env: env}
+	// Chrome's cgroup: a kill of the cgroup also ends the service.
+	return b.startProc(r.group, cmd)
 }
 
 // prepareSocketDir makes the socket dir, owned by the command user, and
