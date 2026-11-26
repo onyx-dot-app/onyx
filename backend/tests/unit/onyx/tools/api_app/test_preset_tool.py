@@ -374,3 +374,12 @@ def test_only_a_rejected_sign_in_asks_the_user_to_connect(
     assert isinstance(result.details, CustomToolCallSummary)
     assert (result.details.error is not None) is expected
     assert result.details.integration_id == 7
+
+
+def test_the_approval_card_names_the_action_without_the_integration() -> None:
+    """The card shows the integration name apart from the action."""
+    tool = _tool("github.issues.create")
+    assert tool.display_name == "GitHub: github.issues.create"
+    details = tool.approval_details({"method": "POST", "url": "https://x"})
+    assert details is not None
+    assert details.display_name == "github.issues.create"

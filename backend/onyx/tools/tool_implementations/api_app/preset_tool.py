@@ -34,6 +34,7 @@ from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolErrorInfo,
     IntegrationActionRef,
+    ToolApprovalDetails,
     ToolApprovalScope,
     ToolContext,
 )
@@ -181,6 +182,13 @@ class PresetActionTool(Tool):
     @property
     def display_name(self) -> str:
         return f"{self._settings.integration_name}: {self._display_name}"
+
+    def approval_details(
+        self,
+        arguments: dict[str, JsonValue],  # noqa: ARG002
+    ) -> ToolApprovalDetails | None:
+        # The card names the integration on its own.
+        return ToolApprovalDetails(display_name=self._display_name)
 
     def tool_definition(self) -> ToolDefinition:
         return ToolDefinition(
