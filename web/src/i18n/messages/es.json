@@ -6723,12 +6723,6 @@
             "description": "Selecciona los modelos que se pueden usar en toda la aplicación.",
             "title": "Modelos"
           },
-          "foldButton": {
-            "label": "Plegar los modelos"
-          },
-          "moreButton": {
-            "label": "Más modelos"
-          },
           "refetch": {
             "label": "Actualizar modelos",
             "errorToast": "No se pudieron obtener los modelos"

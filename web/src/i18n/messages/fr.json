@@ -6723,12 +6723,6 @@
             "description": "Sélectionnez les modèles autorisés dans toute l'application.",
             "title": "Modèles"
           },
-          "foldButton": {
-            "label": "Replier les modèles"
-          },
-          "moreButton": {
-            "label": "Plus de modèles"
-          },
           "refetch": {
             "label": "Actualiser les modèles",
             "errorToast": "Échec de la récupération des modèles"

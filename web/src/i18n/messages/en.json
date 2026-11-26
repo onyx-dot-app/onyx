@@ -6723,12 +6723,6 @@
             "description": "Select models to allow for usage throughout the app.",
             "title": "Models"
           },
-          "foldButton": {
-            "label": "Fold Models"
-          },
-          "moreButton": {
-            "label": "More Models"
-          },
           "refetch": {
             "label": "Refresh models",
             "errorToast": "Failed to fetch models"

@@ -6723,12 +6723,6 @@
             "description": "Selecione os modelos que podem ser usados em todo o app.",
             "title": "Modelos"
           },
-          "foldButton": {
-            "label": "Recolher modelos"
-          },
-          "moreButton": {
-            "label": "Mais modelos"
-          },
           "refetch": {
             "label": "Atualizar modelos",
             "errorToast": "Falha ao buscar os modelos"
