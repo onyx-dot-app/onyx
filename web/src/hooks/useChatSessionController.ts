@@ -214,7 +214,10 @@ export default function useChatSessionController({
       const toolOptionsVersion =
         useChatSessionStore.getState().sessions.get(existingChatSessionId)
           ?.toolOptionsVersion ?? 0;
-      const loadSequence = startChatLoad();
+      const chatLoad = startChatLoad(
+        useChatSessionStore.getState().sessions.get(existingChatSessionId)
+          ?.messageTree
+      );
       let response: Response;
       try {
         response = await fetch(chatPageUrl(existingChatSessionId), {
@@ -363,7 +366,7 @@ export default function useChatSessionController({
           .applyLoadedSession(
             chatSession.chat_session_id,
             chatSession,
-            loadSequence,
+            chatLoad,
             {
               hasOlderMessages,
               olderMessagesFailed: false,

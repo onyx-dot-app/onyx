@@ -867,7 +867,7 @@ type SectionSegment =
   | { kind: "images"; key: string; images: GeneratedImage[] }
   /** Auth cards, which lead the section's answer. */
   | { kind: "extras" }
-  /** Files from every publish_files call, after the ended section's answer. */
+  /** Files from every publishing call, after the ended section's answer. */
   | { kind: "files" };
 
 /** The packet turn of a timeline turn; code mode renumbers timeline turns. */

@@ -75,6 +75,7 @@ from onyx.db.sso_provider import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.fleet_telemetry import LoginFailure
 from onyx.utils.url import sanitize_next_url
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import (
@@ -394,7 +395,7 @@ async def oidc_login_for_provider(
 
 
 @router.get("/callback")
-@redirect_sso_errors_to_web
+@redirect_sso_errors_to_web(LoginFailure.OIDC)
 async def oidc_login_callback(
     request: Request,
     code: str | None = None,
@@ -434,7 +435,7 @@ async def oidc_login_callback(
 
 
 @router.get("/{provider_name}/callback")
-@redirect_sso_errors_to_web
+@redirect_sso_errors_to_web(LoginFailure.OIDC)
 async def oidc_login_callback_for_provider(
     provider_name: str,
     request: Request,

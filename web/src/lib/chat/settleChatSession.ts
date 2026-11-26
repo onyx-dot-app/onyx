@@ -6,8 +6,11 @@ import {
   getMessageByMessageId,
 } from "@/app/app/services/messageTree";
 import { FetchError } from "@/lib/fetcher";
-import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
-import { startChatLoad } from "@/lib/chat/publishedFiles";
+import {
+  mergeLatestChatPage,
+  reloadChatPublishedFiles,
+} from "@/lib/chat/pagedSession";
+import { type ChatLoad, startChatLoad } from "@/lib/chat/publishedFiles";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 import {
@@ -35,6 +38,13 @@ interface SettleChatSessionOptions {
   /** A send failed before it attached a reader. */
   preparationError?: SessionError;
 }
+
+// Tools whose calls can change the chat's published files without file
+// packets. An artifact list or read reloads the list too.
+const PUBLISHED_FILE_TOOL_NAMES = new Set([
+  "library_manage_library",
+  "artifact",
+]);
 
 /** The rows a stream writes, in model-index order; null when one is missing. */
 function streamResponses(
@@ -226,12 +236,12 @@ const refreshingSessions = new Map<
  * reader. Incognito keeps its content locally: only its answers that hold
  * approval requests or questions take their saved copies, which only a chat
  * that saves content has. `savedLoad` is a latest page that the caller
- * loaded already, with its load sequence (`startChatLoad`).
+ * loaded already, with its load (`startChatLoad`).
  */
 export function refreshChatSession(
   sessionId: string,
   errorMessage: string,
-  savedLoad?: { page: BackendChatSession; loadSequence: number }
+  savedLoad?: { page: BackendChatSession; chatLoad: ChatLoad }
 ): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   if (!session) return Promise.resolve();
@@ -251,7 +261,8 @@ export function refreshChatSession(
   };
   const refresh = (async () => {
     try {
-      const loadSequence = savedLoad?.loadSequence ?? startChatLoad();
+      const chatLoad =
+        savedLoad?.chatLoad ?? startChatLoad(session.messageTree);
       const saved =
         savedLoad?.page ?? (await fetchSettledChatSession(sessionId));
       const store = useChatSessionStore.getState();
@@ -287,7 +298,7 @@ export function refreshChatSession(
         const messageTree = new Map(latest.messageTree);
         for (const [nodeId, copy] of copies)
           if (asksUser(copy.packets)) messageTree.set(nodeId, copy);
-        store.applyLoadedSession(sessionId, saved, loadSequence, {
+        store.applyLoadedSession(sessionId, saved, chatLoad, {
           messageTree,
         });
         if (saved.current_stream)
@@ -302,7 +313,7 @@ export function refreshChatSession(
         stream
       );
       const busy = Boolean(saved.is_processing || saved.current_stream);
-      store.applyLoadedSession(sessionId, saved, loadSequence, {
+      store.applyLoadedSession(sessionId, saved, chatLoad, {
         messageTree,
         hasOlderMessages: merged.hasOlderMessages,
         selectedNodeIdForDocDisplay: merged.selectedNodeIdForDocDisplay,
@@ -466,8 +477,12 @@ export async function settleChatSession({
       await refreshChatSession(sessionId, errorMessage);
       return;
     }
+    // The saved history brings the chat's published files with it.
+    let historyLoaded = false;
     if (refreshHistory || mode === "recovery") {
-      const loadSequence = startChatLoad();
+      const chatLoad = startChatLoad(
+        useChatSessionStore.getState().sessions.get(sessionId)?.messageTree
+      );
       const settled = session?.incognito
         ? undefined
         : await fetchSettledChatSession(sessionId);
@@ -476,7 +491,7 @@ export async function settleChatSession({
         preserveHandoffError();
         await refreshChatSession(sessionId, errorMessage, {
           page: settled,
-          loadSequence,
+          chatLoad,
         });
         return;
       }
@@ -489,7 +504,8 @@ export async function settleChatSession({
         const latestType = getLatestMessageChain(merged.messageTree).at(
           -1
         )?.type;
-        store.applyLoadedSession(sessionId, settled, loadSequence, {
+        historyLoaded = true;
+        store.applyLoadedSession(sessionId, settled, chatLoad, {
           ...merged,
           uncaughtError:
             current.uncaughtError?.affectsRunStatus !== false &&
@@ -580,6 +596,27 @@ export async function settleChatSession({
       sendAcknowledged: undefined,
       readerFinished: undefined,
     });
+    const tree = useChatSessionStore
+      .getState()
+      .sessions.get(sessionId)?.messageTree;
+    if (
+      !historyLoaded &&
+      stream &&
+      tree &&
+      streamResponses(tree, stream)?.some((response) =>
+        response.packets.some(
+          (packet) =>
+            packet.obj.type === "custom_tool_delta" &&
+            PUBLISHED_FILE_TOOL_NAMES.has(packet.obj.tool_name)
+        )
+      )
+    )
+      void reloadChatPublishedFiles(sessionId).catch((error: unknown) =>
+        console.error("Could not reload the chat's published files", {
+          sessionId,
+          error,
+        })
+      );
   } catch (error) {
     if (!ownsSettlement()) return;
     console.error("Could not confirm chat completion", error);

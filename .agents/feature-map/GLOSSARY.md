@@ -111,19 +111,20 @@ usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
 - Craft: `ActionApproval` rows (`action_approval`) that the sandbox proxy writes and waits on
   (`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`), with "approve for session" scoped
   to a Craft session. See [[craft-external-apps]].
-- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP calls, with no
+- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP, OpenAPI and
+  built-in tool calls (a built-in action has no integration and an `onyx:` key), with no
   deadline; the response is saved while they wait. "Approve for this chat" is
   scoped to a chat session. See [[mcp-and-custom-tools#chat-approval-durable-wait]].
   The root agent's questions (`QuestionRequest`, "tool question") wait the
   same way.
 
 **"Sandbox"** means four things.
-- Code mode's sandbox: Monty worker processes that run `execute_code`
+- Code mode's sandbox: Monty worker processes that run code mode programs
   programs, with no files or network. See [[code-execution]].
 - A Craft sandbox: the pod or Docker container of opencode sessions. See
   [[craft-sandboxes]].
 - A harness sandbox: the user's Firecracker VM behind `HarnessSandbox`, which
-  the chat sandbox tools (`tools/tool_implementations/sandbox/sandbox_tools.py:sandbox_tools_for_model`) use. See [[craft-sandboxes]] and [[code-execution]].
+  the chat sandbox tools (`tools/tool_implementations/sandbox/sandbox_tools.py:SANDBOX_TOOLS`) use. See [[craft-sandboxes]] and [[code-execution]].
 - The `sandbox` table: one row per user, which Craft and harness sandboxes
   share.
 
@@ -204,7 +205,7 @@ mobile code checks for it. See [[streaming-protocol]].
 |---|---|
 | Timeline entry | One item on the shared timeline rail (`web/src/lib/timeline/types.ts:TimelineEntry`): a chat packet group or a Craft tool call or thinking block. It is not a step or a section. See [[chat-frontend]] and [[craft-frontend]]. |
 | Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them (default 30; when code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or `MAX_LLM_CYCLES` when higher); the last one offers no tools, so the model must answer. See [[agent-runtime]] and [[core-chat-loop]]. |
-| Cell / observation (code mode) | A cell is one running code mode program; it can outlive the tool call that started it, but not its response. An observation is one `execute_code` or `wait_code` call on a cell: it reports what the cell did in one time window and saves one `CodeModeExecutionResult` (`cell_id`, `observation` 0, 1, ...). See [[code-execution]]. |
+| Cell / observation (code mode) | A cell is one running code mode program; it can outlive the tool call that started it, but not its response. An observation is one run or wait call on a cell (`execute_code`, then `wait`, or `poll` for Claude models): it reports what the cell did in one time window and saves one `CodeModeExecutionResult` (`cell_id`, `observation` 0, 1, ...). See [[code-execution]]. |
 | Run | One execution of an agent on the shared runtime (`agents/runtime.py:Run`). Its `RunState` records the input, steps, outcome and child runs. In a session that keeps content, a chat response's root run ID is its assistant `ChatMessage` ID. A content-free incognito run uses generated IDs. See [[agent-runtime#run-id-is-message-id]]. |
 | Stream ID | The key that the processing fence, the stop fence and the stream buffer share. See [[core-chat-loop]]. |
 | Presenter and renderer | `ResponsePresenter` and `MessageRenderer` turn runtime events into packets. They never drive execution. See [[core-chat-loop#presentation-does-not-drive-execution]]. |

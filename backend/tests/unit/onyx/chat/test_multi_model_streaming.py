@@ -3330,6 +3330,7 @@ def test_writer_reports_tool_usage_once_after_reader_disconnect(
         QueryObservation,
         observe_chat_packets,
     )
+    from onyx.utils.fleet_telemetry import ToolKind
 
     released = threading.Event()
     observation = QueryObservation(channel="api", mode=QueryMode.CHAT)
@@ -3338,10 +3339,10 @@ def test_writer_reports_tool_usage_once_after_reader_disconnect(
         emitter: Emitter = args[4]
         current = CURRENT_QUERY_OBSERVATION.get()
         assert current is observation
-        current.tool_started(is_search=True)
+        current.tool_started(ToolKind.SEARCH)
         emitter.emit(Packet(placement=Placement(turn_index=0), obj=ReasoningStart()))
         assert released.wait(timeout=5)
-        current.tool_started(is_search=False)
+        current.tool_started(ToolKind.WEB_SEARCH)
         if fails:
             raise RuntimeError("private failure after tool usage")
 

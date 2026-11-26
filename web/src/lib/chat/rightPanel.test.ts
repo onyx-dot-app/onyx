@@ -29,6 +29,7 @@ function file(artifactId: string, version = 1): PublishedFile {
     artifact_id: `artifact-${artifactId}`,
     version,
     thumbnail_file_id: null,
+    chat_id: null,
   };
 }
 
@@ -108,6 +109,13 @@ describe("rightPanelReducer", () => {
     );
     expect(openCardFileAction(file("a", 2), files)).toEqual(
       openFile("a", 2, false)
+    );
+  });
+
+  test("a link that names a version pins its tab to that version", () => {
+    const files = [file("a", 2), file("b")];
+    expect(openCardFileAction(file("a", 2), files, true)).toEqual(
+      openFile("a", 2, true)
     );
   });
 

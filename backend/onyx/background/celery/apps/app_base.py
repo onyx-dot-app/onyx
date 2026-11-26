@@ -737,6 +737,7 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.tabular_rechunk",
     "onyx.background.celery.tasks.doc_permission_syncing",
     "onyx.background.celery.tasks.hierarchyfetching",
+    "onyx.background.celery.tasks.chat_artifact_indexing",
     # EE modules that are vector-DB-dependent
     "ee.onyx.background.celery.tasks.doc_permission_syncing",
     "ee.onyx.background.celery.tasks.external_group_syncing",

@@ -66,7 +66,9 @@ class DocumentChunker:
         )
 
         if not payloads:
-            payloads.append(ChunkPayload(text="", links={0: ""}))
+            # A title-only chunk still links to the document.
+            link = (sections[0].link if sections else None) or ""
+            payloads.append(ChunkPayload(text="", links={0: link}))
 
         return [
             payload.to_doc_aware_chunk(

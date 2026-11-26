@@ -52,7 +52,9 @@ spec:
             - containerPort: 5557 # worker communication
             - containerPort: 9646 # Prometheus /metrics
           # No ONYX_API_KEY here: the master only coordinates — user
-          # greenlets (and API calls) run on the workers.
+          # greenlets (and API calls) run on the workers. The master assigns
+          # users to classes, so set ONYX_LONGCONV_USERS here as well as on
+          # the workers.
           env:
             - name: LOCUST_HOST
               value: "https://<your-onyx-url>"

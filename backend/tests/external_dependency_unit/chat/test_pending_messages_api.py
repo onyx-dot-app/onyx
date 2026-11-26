@@ -632,7 +632,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
     """A send reaches the response at its next step boundary.
 
     With code mode, the send arrives while a program runs and the step waits
-    on it with `wait_code`; the program finishes before the next step reads it.
+    on it with `wait`; the program finishes before the next step reads it.
     """
     path = f"/chat/chat-session/{chat.id}/pending-messages"
     entered, release, waiting = Event(), Event(), Event()
@@ -687,7 +687,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
                 content=[
                     ModelToolCall(
                         id="wait",
-                        name="wait_code",
+                        name="wait",
                         arguments={"cell_id": 1, "yield_time_ms": 30000},
                     )
                 ]
@@ -1215,7 +1215,7 @@ def test_a_send_after_a_failed_turn_continues_the_conversation(
     ]
     [(kind, result_text)] = history[3:]
     assert kind == "UserMessage"
-    assert result_text.startswith("Background agent result")
+    assert result_text.startswith("<agent_notification>")
     assert "Worker stopped early" in result_text
     db_session.expire_all()
     question = db_session.scalar(
@@ -2447,7 +2447,7 @@ def _idle_worker_with_queued_message(
                 ModelToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "worker", "instruction": "Initial task"},
+                    arguments={"task_name": "worker", "message": "Initial task"},
                 )
             ]
         )
@@ -2728,7 +2728,7 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
                 ModelToolCall(
                     id="spawn",
                     name=SPAWN_AGENT_TOOL_NAME,
-                    arguments={"name": "worker", "instruction": "Long task"},
+                    arguments={"task_name": "worker", "message": "Long task"},
                 )
             ]
         )

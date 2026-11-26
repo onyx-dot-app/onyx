@@ -13,6 +13,8 @@ from typing import Any, Dict, List
 
 import psycopg2
 import pytest
+from psycopg2.extensions import TRANSACTION_STATUS_IDLE
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -494,3 +496,38 @@ class TestPostgresBackedFileStore:
 
         record = pg_file_store.read_file_record(file_id)
         assert record.file_metadata == metadata
+
+    # ── failed commit ──────────────────────────────────────────────
+
+    def test_a_failed_commit_keeps_nothing_and_leaves_the_connection_idle(
+        self, pg_file_store: PostgresBackedFileStore
+    ) -> None:
+        """The rollback drops the record and the Large Object; the pooled
+        connection goes back without an open transaction."""
+        file_id = f"{uuid.uuid4()}.txt"
+        connections: list[Any] = []
+
+        def fail(session: Session) -> None:
+            connections.append(_get_raw_connection(session))
+            raise RuntimeError("the caller's commit check failed")
+
+        with get_session_with_current_tenant() as db_session:
+            event.listen(db_session, "before_commit", fail, once=True)
+            with pytest.raises(RuntimeError):
+                pg_file_store.save_file(
+                    content=BytesIO(b"never kept"),
+                    display_name="never.txt",
+                    file_origin=FileOrigin.OTHER,
+                    file_type="text/plain",
+                    file_id=file_id,
+                    db_session=db_session,
+                )
+        [connection] = connections
+        assert connection.get_transaction_status() == TRANSACTION_STATUS_IDLE
+        with get_session_with_current_tenant() as db_session:
+            assert (
+                get_file_content_by_file_id_optional(
+                    file_id=file_id, db_session=db_session
+                )
+                is None
+            )

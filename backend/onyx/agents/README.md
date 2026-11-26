@@ -232,13 +232,14 @@ Errors, including `AgentCancelled`, are logged; the run still becomes idle and r
 Chat's root agent gets it from `create_chat_agent` to end per-run tool state; subagents share the root's tools and install no `on_drained` hook.
 The sandbox tools end their sandbox turn there, which starts the session save.
 
-Two optional tool callbacks cover interception and enrichment:
+Optional tool callbacks cover interception and enrichment:
 
 | Callback | Contract |
 | --- | --- |
 | `before_tool_call` | Return a `ToolResult` to skip execution, `PendingToolInput` to await input, or `None` to proceed. |
 | `after_tool_call` | Enrich an already accepted result. Failure preserves that result and fails the run. |
 | `prepare_tool_result` | Replace a completed result before the run records and streams it. Failure fails the run. An amendment's preparation runs under the run's cancellation signal; when it fails or stops, the amendment applies as the release hook made it. |
+| `unknown_tool_hint` | Give the result of a call of a tool that the agent does not offer; `None` keeps the default result. Chat agents say how to call a code mode function from a program, and name the tool that they offer for another tool family's name. |
 
 Callbacks receive copies, except `prepare_tool_result`. Its `ToolResultContext`, like `ToolInvocation.recorded_results`, references the run's objects, since results can be large: the hook must not change them and returns a new result instead.
 `Run.record_tool_results` calls it for every result, one at a time in the order the calls complete, with the results of the step that the run recorded before.
@@ -261,7 +262,7 @@ A request that no `NestedInputWait` holds stays open: the run saves it in `RunPr
 Its answer goes to `AgentTool.continue_open_input` of the tool that made the call, such as for a program that waits in the background.
 The tool returns the requests that it took; the run ends those, and offers the others again at its next wake.
 The run offers one call's answered requests together, so a tool keeps all requests that one task waits for under one call.
-For example, a code cell opens all of its requests under the call that started it, also while a `wait_code` call observes it.
+For example, a code cell opens all of its requests under the call that started it, also while a wait call observes it.
 The `before_tool_call` hook then sees the step of that call; for a cell rebuilt from a saved run, it sees the step in which the cell continued.
 Open requests end with the run.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
@@ -272,7 +273,7 @@ For example, deep research normalizes a child report's citations before returnin
 Approval is separate from the callbacks. An `AgentTool` lists the call names that need the user's approval in `approval_required`: its own name, or the names of calls it makes for the model.
 The runtime gates those calls through the coordinator's `ToolApprovals` (`AgentCoordinator(approvals=...)`).
 A call whose `before_tool_call` request the user approves runs without asking `ToolApprovals`.
-`ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
+`ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call or the call needs no approval. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
 `ToolApprovals.withdraw_approval(request_id)` ends the request of a call that a tool made for the model when that call stops waiting while the run goes on: its program ended or its park was refused.
 The runtime logs a `withdraw_approval` that raises, so the waiting call still ends.
 The requests of a run that ends are the application's to close; the run store does it when it releases the run.
@@ -280,7 +281,7 @@ Answers live in `RunProgress.human_tool_answers`. A request ends with the answer
 To stop a run with answers, such as the user's rejection on Stop, submit them and cancel while holding `Run.execution_lock`; the run applies them only after it sees the cancellation.
 A direct call whose answer denies it or supplies its result keeps that result, so the model sees it in later runs.
 The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
-`PendingToolInput.display_name` carries the application's name for the action to the card that shows the request.
+`PendingToolInput.display_name` and `display_arguments` carry the application's name for the action and what it shows of the call to the card that shows the request.
 Without `ToolApprovals`, such a call returns an error result.
 
 The runtime records a tool's raw result before calling `after_tool_call`.
@@ -374,8 +375,8 @@ A successful completion callback marks those child failures as handled.
 
 Spawning returns an `agent_id` for later messages and a `run_id` for that execution.
 Agents nest at most `MAX_CHILD_DEPTH` levels below the root: the root, its children, and their children.
-An agent at that depth is built without `spawn_agent`; it keeps the tools that reach existing agents.
-An active background agent is an unfinished run (running or suspended) with a result row; only `spawn_agent` runs have one.
+An agent at that depth is built without the spawn tool; it keeps the tools that reach existing agents.
+An active background agent is an unfinished run (running or suspended) with a result row; only the spawn tool's runs have one.
 Chat runs at most `MAX_RUNNING_AGENTS` active background agents on a branch; a spawn beyond that is a tool error,
 and inbox work for an idle agent waits until a run finishes.
 Every run checks the chat owner's token rate limits: a user's turn when it is sent or leaves the queue,
@@ -425,7 +426,7 @@ A subagent waits for those results before finishing, or before its last step, an
 this releases its execution thread until it can incorporate the results.
 The root can finish its response while background children continue.
 
-Chat's root can also end its turn with `wait_agents` and get one follow-up for those children;
+Chat's root can also end its turn with its wait tool (`wait_agent`; the Claude tool shape has none, so its root answers each result as its agent finishes) and get one follow-up for those children. Each result names the agents that still run.
 `.agents/feature-map/components/chat-persistence.md` describes the wait rule.
 Foreground tools retain their `ChildRunWait` result path.
 
@@ -605,6 +606,7 @@ A new execution owner can register the same run ID once ownership is released.
 Pass executable tools to `Agent(tools=...)`; the runtime restores the saved step's declarations and execution permissions against them.
 A saved call runs only when the agent still has its tool with the same `parameters` schema; descriptions, other tools, their order and phases can differ.
 An approved call whose tool is gone or changed gets `UNAVAILABLE_CALL_MESSAGE` instead, and later steps use the current tools.
+A call that already started, then waited for nested input or child runs or lost its owner, and whose tool is gone gets `STOPPED_CALL_MESSAGE`: it may have had effects.
 `Agent.resume(..., deadline_at=...)` replaces the saved deadline.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.

@@ -12,9 +12,23 @@ from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.models import UserFile
 from onyx.db.projects import get_project_user_files_by_file_ids
 from onyx.db.user_file import get_user_file_by_id
-from onyx.file_processing.file_types import guess_mime_type
+from onyx.file_processing.extract_file_text import (
+    XLSX_TRUNCATION_MARKER,
+    extract_text_pages,
+)
+from onyx.file_processing.file_types import (
+    OnyxFileExtensions,
+    get_file_ext,
+    guess_mime_type,
+)
+from onyx.file_store.constants import (
+    ARTIFACT_TEXT_FILE_PREFIX,
+    ARTIFACT_TEXT_MAX_CHARS,
+    ARTIFACT_TEXT_MAX_FILE_BYTES,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import (
+    ArtifactText,
     ChatFileType,
     FileDescriptor,
     InMemoryChatFile,
@@ -34,12 +48,13 @@ def plaintext_file_name_for_id(file_id: str) -> str:
     return f"plaintext_{file_id}"
 
 
-def store_plaintext(file_id: str, plaintext_content: str) -> bool:
+def store_plaintext(cache_key: str, plaintext_content: str) -> bool:
     """
-    Store plaintext content for a file in the file store.
+    Store text in the file store under `cache_key` (plaintext_file_name_for_id,
+    or ARTIFACT_TEXT_FILE_PREFIX + a file_id).
 
     Args:
-        file_id: The ID of the file (user_file or artifact_file)
+        cache_key: The file store ID of the cached text
         plaintext_content: The plaintext content to store (may be the empty
             string, which is still cached so that files we cannot extract
             text from don't get re-attempted on every retrieval)
@@ -47,21 +62,101 @@ def store_plaintext(file_id: str, plaintext_content: str) -> bool:
     Returns:
         bool: True if storage was successful, False otherwise
     """
-    plaintext_file_name = plaintext_file_name_for_id(file_id)
     try:
         file_store = get_default_file_store()
         file_content = BytesIO(plaintext_content.encode("utf-8"))
         file_store.save_file(
             content=file_content,
-            display_name=f"Plaintext for {file_id}",
+            display_name=f"Plaintext for {cache_key}",
             file_origin=FileOrigin.PLAINTEXT_CACHE,
             file_type="text/plain",
-            file_id=plaintext_file_name,
+            file_id=cache_key,
         )
         return True
     except Exception as e:
-        logger.warning("Failed to store plaintext for %s: %s", file_id, e)
+        logger.warning("Failed to store plaintext %s: %s", cache_key, e)
         return False
+
+
+def get_or_extract_plaintext(
+    cache_key: str,
+    extract_fn: Callable[[], str],
+    store_on_miss: bool = True,
+) -> str:
+    """Read cached text, or extract it without replacing a pending worker result."""
+    file_store = get_default_file_store()
+
+    # Try cached plaintext first.
+    try:
+        plaintext_io = file_store.read_file(cache_key, mode="b")
+        return plaintext_io.read().decode("utf-8")
+    except Exception:
+        logger.info("Cache miss for %s", cache_key)
+
+    # Cache miss — extract and store.  We cache the result unconditionally
+    # (including the empty string) so that files we cannot extract text from
+    # (e.g. .zip, or any extension without a handler in extract_file_text)
+    # don't get re-fetched from object storage and re-attempted on every
+    # subsequent chat turn.  Transient extraction errors surface as raised
+    # exceptions, not empty returns, so they propagate without poisoning the
+    # cache.  Callers pass store_on_miss=False when another writer owns the
+    # canonical plaintext for this key (e.g. the user-file worker, whose
+    # result may include image captions this inline extraction can't produce).
+    content_text = extract_fn()
+    if store_on_miss:
+        store_plaintext(cache_key, content_text)
+    return content_text
+
+
+# The text of published files (chat artifacts), by page. A version's text is
+# extracted wherever it is first needed and cached under
+# ARTIFACT_TEXT_FILE_PREFIX + file_id; later calls reuse the cached text. A
+# version's file never changes, so its cached text never goes stale. The text
+# of a file whose format has pages ends each page with a form feed; the text
+# of any other file has none. Page text loses its own form feeds.
+_PAGE_END = "\f"
+
+
+def get_or_extract_artifact_text(
+    file_id: str, file_name: str, file_size: int
+) -> ArtifactText | None:
+    """The text of the published file version `file_id`, from the cache or
+    extracted and cached on a miss; None for a file over
+    ARTIFACT_TEXT_MAX_FILE_BYTES. `file_name` picks the parser. A file
+    store read error raises and caches nothing."""
+    if file_size > ARTIFACT_TEXT_MAX_FILE_BYTES:
+        return None
+
+    def extract() -> str:
+        extracted = extract_text_pages(
+            get_default_file_store().read_file(file_id, mode="b", use_tempfile=True),
+            file_name,
+        )
+        if not extracted.paged:
+            return "".join(extracted.pages).replace(_PAGE_END, "")[
+                :ARTIFACT_TEXT_MAX_CHARS
+            ]
+        text = "".join(
+            page.replace(_PAGE_END, "") + _PAGE_END for page in extracted.pages
+        )
+        if len(text) <= ARTIFACT_TEXT_MAX_CHARS:
+            return text
+        return text[: ARTIFACT_TEXT_MAX_CHARS - 1] + _PAGE_END
+
+    text = get_or_extract_plaintext(f"{ARTIFACT_TEXT_FILE_PREFIX}{file_id}", extract)
+    paged = text.endswith(_PAGE_END)
+    pages = text[:-1].split(_PAGE_END) if paged else [text]
+    return ArtifactText(
+        pages=pages,
+        paged=paged,
+        # The sheet parser ends each sheet that it cut with the marker row.
+        truncated=len(text) >= ARTIFACT_TEXT_MAX_CHARS
+        or (
+            paged
+            and get_file_ext(file_name) in OnyxFileExtensions.SPREADSHEET_EXTENSIONS
+            and any(page.endswith(XLSX_TRUNCATION_MARKER) for page in pages)
+        ),
+    )
 
 
 # --- Convenience wrappers for callers that use user-file UUIDs ---
@@ -74,7 +169,9 @@ def user_file_id_to_plaintext_file_name(user_file_id: UUID) -> str:
 
 def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> bool:
     """Store plaintext content for a user file (delegates to :func:`store_plaintext`)."""
-    return store_plaintext(str(user_file_id), plaintext_content)
+    return store_plaintext(
+        user_file_id_to_plaintext_file_name(user_file_id), plaintext_content
+    )
 
 
 def load_chat_file_by_id(file_id: str) -> InMemoryChatFile:
@@ -114,7 +211,7 @@ def load_user_file_content(user_file: UserFileMetadata) -> InMemoryChatFile:
         file_io = file_store.read_file(plaintext_file_name, mode="b")
         plaintext_bytes = file_io.read()
         # An empty plaintext entry is a "we tried and there is no text"
-        # sentinel written by `_get_or_extract_plaintext` / `store_plaintext`
+        # sentinel written by `get_or_extract_plaintext` / `store_plaintext`
         # for unprocessable files (e.g. .zip).  Treat it as a cache miss
         # here so downstream tools (code interpreter, file reader) still
         # receive the original bytes instead of an empty file.

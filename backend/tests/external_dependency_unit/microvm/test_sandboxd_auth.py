@@ -28,6 +28,7 @@ from onyx.microvm.daemon_client import (
     SandboxDaemonKeyNotSetError,
     sandbox_daemon_error,
 )
+from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2, sandboxd_pb2_grpc
 from onyx.microvm.lifecycle import (
     SandboxVmUnusableError,
@@ -295,11 +296,18 @@ def test_daemon_errors_are_typed(
         )
     assert isinstance(sandbox_daemon_error(rpc_exc.value), MethodNotAllowedError)
 
-    node.agent.vms.pop(str(sandbox_id))
+    node.agent.vms[str(sandbox_id)].state = hostagent_pb2.VM_STATE_EXITED
     with pytest.raises(VmNotRunningError):
         sandbox_daemon(client_factory, placed).init(
             generation=placed.vm.generation, scratch_gib=4, env={}, session_ids=[]
         )
+
+    node.agent.vms.pop(str(sandbox_id))
+    with pytest.raises(HostAgentError) as gone:
+        sandbox_daemon(client_factory, placed).init(
+            generation=placed.vm.generation, scratch_gib=4, env={}, session_ids=[]
+        )
+    assert gone.value.reason is HostAgentErrorReason.SANDBOX_NOT_FOUND
 
 
 @pytest.mark.parametrize(

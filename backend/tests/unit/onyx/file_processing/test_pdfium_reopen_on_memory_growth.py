@@ -28,8 +28,10 @@ def _extract_with_rss(rss_at_open: int, rss_after: int) -> tuple[str, int]:
         patch.object(pypdfium2, "PdfDocument", wraps=pypdfium2.PdfDocument) as opens,
         patch.object(pdfium_text.psutil, "Process", return_value=process),
     ):
-        text = pdfium_text.extract_pdf_text_pdfium(
-            (FIXTURES / "multipage.pdf").read_bytes(), None
+        text = "".join(
+            pdfium_text.extract_pdf_pages_pdfium(
+                (FIXTURES / "multipage.pdf").read_bytes(), None
+            )
         )
     return text, opens.call_count
 

@@ -418,8 +418,8 @@ def test_deep_research_has_the_skills_and_reads_the_rest_of_a_long_pick(
     first_step, next_step = mock_llm.requests_in("orchestrator")
     # The question shows the start of the skill and where the rest begins.
     assert (
-        f'name="{skill.name}" and start_char={MAX_SKILL_PROMPT_BYTES}'
-        in first_step.prompt_text
+        f'Read the rest of skill "{skill.name}" from '
+        f"start_char={MAX_SKILL_PROMPT_BYTES}." in first_step.prompt_text
     )
     assert next_step.tool_result(read_rest.id) == skill_md[MAX_SKILL_PROMPT_BYTES:]
     assert skill_md[:MAX_SKILL_PROMPT_BYTES] in first_step.prompt_text

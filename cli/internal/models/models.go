@@ -188,12 +188,14 @@ type ApprovalDecisionResult struct {
 	Continuation *ChatStream `json:"continuation"`
 }
 
-// ToolQuestionAnswer is the user's answer to one of the agent's questions: a
-// listed option's label, a note, or both.
+// ToolQuestionAnswer is the user's answer to one of the agent's questions:
+// the labels of its chosen options, in the question's order, a note, or
+// both. This client chooses at most one option, which also answers a
+// multi-select question.
 type ToolQuestionAnswer struct {
-	QuestionID  string `json:"question_id"`
-	OptionLabel string `json:"option_label,omitempty"`
-	UserNote    string `json:"user_note,omitempty"`
+	QuestionID   string   `json:"question_id"`
+	OptionLabels []string `json:"option_labels,omitempty"`
+	UserNote     string   `json:"user_note,omitempty"`
 }
 
 // QuestionAnswers answers a question request: Answers from its card, one for

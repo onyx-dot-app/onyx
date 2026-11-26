@@ -112,6 +112,7 @@ from onyx.file_store.models import ExtractedContextFiles
 from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -127,7 +128,12 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, FileReadResult, ToolContext
-from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
+from onyx.tools.tool_implementations.subagents.models import (
+    ChatConfiguration,
+)
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_SHAPES,
+)
 from onyx.tools.tool_implementations.subagents.subagent_tools import (
     InterruptAgentTool,
     SendMessageTool,
@@ -266,7 +272,7 @@ def spawn_call(call_id: str, name: str, instruction: str) -> ToolCall:
     return ToolCall(
         id=call_id,
         name="spawn_agent",
-        arguments={"name": name, "instruction": instruction},
+        arguments={"task_name": name, "message": instruction},
     )
 
 
@@ -347,7 +353,11 @@ def spawning_root(
     return fake_agent(
         replies(calls(spawn_call(name, name, instruction)), text(answer)),
         agent_id=str(branch[0]),
-        tools=[SpawnAgentTool(create_child, max_steps=max_steps).bind(ToolContext)],
+        tools=[
+            SpawnAgentTool(
+                create_child, AGENT_SHAPES[ToolFamily.OPENAI], max_steps=max_steps
+            ).bind(ToolContext)
+        ],
     )
 
 
@@ -1463,7 +1473,11 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             text("Agent started"),
         ),
         agent_id=str(branch[0]),
-        tools=[SpawnAgentTool(create_leaf, max_steps=4).bind(ToolContext)],
+        tools=[
+            SpawnAgentTool(
+                create_leaf, AGENT_SHAPES[ToolFamily.OPENAI], max_steps=4
+            ).bind(ToolContext)
+        ],
     )
     first_view = first_owner.bind(first_coordinator, build_agent=no_restore)
     try:
@@ -1636,7 +1650,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         else:
             assert len(received) == 1
             assert received[0].id == f"agent-result:{direct_child.run_id}"
-            notification = json.loads(received[0].text.split("\n", 1)[1])
+            notification = json.loads(received[0].text.splitlines()[2])
             assert notification["status"] == (
                 "cancelled" if cancel_child else "complete"
             )
@@ -1928,7 +1942,11 @@ def test_message_from_an_earlier_turn_continues_the_recipients_latest_run(
             state=state,
             agent_id=agent_id,
             previous_run_id=previous_run_id,
-            tools=[SendMessageTool(max_steps=2).bind(ToolContext)],
+            tools=[
+                SendMessageTool(AGENT_SHAPES[ToolFamily.OPENAI], max_steps=2).bind(
+                    ToolContext
+                )
+            ],
         )
 
     def restore_child(history: SavedAgentContext, _depth: int) -> Agent:
@@ -1962,7 +1980,11 @@ def test_message_from_an_earlier_turn_continues_the_recipients_latest_run(
             text("Started"),
         ),
         agent_id=root_id,
-        tools=[SpawnAgentTool(child, max_steps=3).bind(ToolContext)],
+        tools=[
+            SpawnAgentTool(child, AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3).bind(
+                ToolContext
+            )
+        ],
     )
     try:
         first = first_root.start(
@@ -2014,7 +2036,11 @@ def test_message_from_an_earlier_turn_continues_the_recipients_latest_run(
         later = fake_agent(
             later_reply,
             agent_id=root_id,
-            tools=[SendMessageTool(max_steps=2).bind(ToolContext)],
+            tools=[
+                SendMessageTool(AGENT_SHAPES[ToolFamily.OPENAI], max_steps=2).bind(
+                    ToolContext
+                )
+            ],
         ).start(
             messages=[
                 UserMessage(id=f"chat:{later_question.id}", content="Continue C")
@@ -2329,7 +2355,11 @@ def test_follow_ups_answer_unread_results_under_a_hidden_question(
     def create_child() -> Agent:
         return fake_agent(
             child_reply,
-            tools=[SpawnAgentTool(create_leaf, max_steps=3).bind(ToolContext)],
+            tools=[
+                SpawnAgentTool(
+                    create_leaf, AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3
+                ).bind(ToolContext)
+            ],
         )
 
     root = spawning_root(
@@ -2610,9 +2640,11 @@ def test_interrupt_stops_one_run_without_a_result_or_follow_up(
         return fake_agent(
             child_reply,
             tools=[
-                SpawnAgentTool(lambda: fake_agent(leaf_reply), max_steps=3).bind(
-                    ToolContext
-                ),
+                SpawnAgentTool(
+                    lambda: fake_agent(leaf_reply),
+                    AGENT_SHAPES[ToolFamily.OPENAI],
+                    max_steps=3,
+                ).bind(ToolContext),
                 InterruptAgentTool().bind(ToolContext),
             ],
         )
@@ -2643,7 +2675,9 @@ def test_interrupt_stops_one_run_without_a_result_or_follow_up(
         root_reply,
         agent_id=str(branch[0]),
         tools=[
-            SpawnAgentTool(create_child, max_steps=3).bind(ToolContext),
+            SpawnAgentTool(
+                create_child, AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3
+            ).bind(ToolContext),
             InterruptAgentTool().bind(ToolContext),
         ],
     )
@@ -2729,7 +2763,12 @@ def test_agent_message_to_the_root_waits_for_its_next_run(
     root = spawning_root(
         branch,
         lambda: fake_agent(
-            child_reply, tools=[SendMessageTool(max_steps=2).bind(ToolContext)]
+            child_reply,
+            tools=[
+                SendMessageTool(AGENT_SHAPES[ToolFamily.OPENAI], max_steps=2).bind(
+                    ToolContext
+                )
+            ],
         ),
         name="research",
         instruction="Research",
@@ -3000,7 +3039,12 @@ def test_results_follow_up_restores_through_the_spawner_after_another_sender(
 
     def worker_agent() -> Agent:
         return fake_agent(
-            worker_reply, tools=[SendMessageTool(max_steps=3).bind(ToolContext)]
+            worker_reply,
+            tools=[
+                SendMessageTool(AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3).bind(
+                    ToolContext
+                )
+            ],
         )
 
     def spawned(request: GenerationRequest, name: str) -> bool:
@@ -3028,7 +3072,11 @@ def test_results_follow_up_restores_through_the_spawner_after_another_sender(
     def research_agent() -> Agent:
         return fake_agent(
             research_reply,
-            tools=[SpawnAgentTool(worker_agent, max_steps=3).bind(ToolContext)],
+            tools=[
+                SpawnAgentTool(
+                    worker_agent, AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3
+                ).bind(ToolContext)
+            ],
         )
 
     root = spawning_root(
@@ -3156,7 +3204,11 @@ def test_spawning_stops_at_the_running_agent_cap(
         replies(calls(*spawns), text("Started")),
         agent_id=str(branch[0]),
         tools=[
-            SpawnAgentTool(lambda: fake_agent(blocked), max_steps=2).bind(ToolContext)
+            SpawnAgentTool(
+                lambda: fake_agent(blocked),
+                AGENT_SHAPES[ToolFamily.OPENAI],
+                max_steps=2,
+            ).bind(ToolContext)
         ],
     )
     view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))

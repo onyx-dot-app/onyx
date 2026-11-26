@@ -142,17 +142,22 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     A replayed call has no `file_tool_progress`
     - `apply_patch_start` (with `patch` and `tool_name`) and `apply_patch_end` show a file edit and the files it changed
     - `publish_files_start` (with `files` and `description`) and `publish_files_end` show the files that the model
-    gave the user. Each file in `publish_files_end` has `file_id`, `artifact_id`, `version`, `name`, `title`, `path`,
-    `display_path`, `size` and `mime_type`. Download it from `/chat/file/{file_id}`. `path` is absolute in the VM.
-    Every publish of one `path` in a chat is a version of one artifact:
+    gave the user. Each file in `publish_files_end` has `file_id`, `artifact_id`, `version`, `chat_id`, `name`, `title`,
+    `path`, `display_path`, `size` and `mime_type`. Download it from `/chat/file/{file_id}`.
+    `path` is absolute in the VM. Every publish of one `path` in a chat is a version of one artifact:
     it has the same `artifact_id` and the next `version`, from 1.
+    A replace adds a version to an artifact of any of the user's chats. `chat_id` is the chat that owns the artifact,
+    which can differ from the chat that sent the packet. It is null in results saved before the field existed.
     A file published before chat artifacts existed has no artifact,
     so its message replays `artifact_id` and `version` as null. Treat each such file as an artifact of its own:
     the web app uses its `file_id` as its artifact's key. `display_path` is the path to show:
     relative to the chat's working directory, or absolute for a file outside it. A PDF,
     PowerPoint or Word file that rendered has `thumbnail_file_id`, a JPEG of its first page,
     640 pixels on its longer side. Download it from `/chat/file/{thumbnail_file_id}`. Other files,
-    and files published without a thumbnail, have null. `error` is set when the call failed; then it published no file
+    and files published without a thumbnail, have null.
+    Get a PowerPoint or Word file as a PDF from `GET /chat/file/{file_id}?preview=pdf`.
+    If it returns 409 `PREVIEW_NOT_READY`, `POST /chat/file/{file_id}/preview` makes the PDF.
+    `error` is set when the call failed; then it published no file
     - A call that the user stopped, or that stopped with its code mode program, has no end packet. Stopping a
     command call also stops the command. A command that a Ctrl-C (`write_stdin` with `\u0003`)
     ended gets an `exec_end` whose `completion` is `canceled`
@@ -391,6 +396,7 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
       # Used by Onyx itself, not for Connectors you create
       NOT_APPLICABLE = "not_applicable"
       USER_FILE = "user_file"
+      CHAT_ARTIFACT = "chat_artifact"
       CRAFT_FILE = "craft_file"
       FEDERATED_SLACK = "federated_slack"
     ```

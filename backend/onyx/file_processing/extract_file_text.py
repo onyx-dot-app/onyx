@@ -36,7 +36,7 @@ from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.pdf_image_utils import iter_pdf_extracted_images
 from onyx.file_processing.pdfium_text import (
     TEXT_SECTION_SEPARATOR,
-    extract_pdf_text_pdfium,
+    extract_pdf_pages_pdfium,
 )
 from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
@@ -251,6 +251,21 @@ def read_pdf_file(
     under a deadline: a child of a child is orphaned when the outer one is
     killed, so PDFium runs in the caller's process instead.
     """
+    pages, metadata, images = _read_pdf_pages(
+        file, pdf_pass, extract_images, image_callback, isolate_pdfium
+    )
+    return TEXT_SECTION_SEPARATOR.join(pages), metadata, images
+
+
+def _read_pdf_pages(
+    file: IO[Any],
+    pdf_pass: str | None,
+    extract_images: bool,
+    image_callback: Callable[[bytes, str], None] | None,
+    isolate_pdfium: bool,
+) -> tuple[list[str], dict[str, Any], Sequence[tuple[bytes, str]]]:
+    """read_pdf_file with the text of each page. A PDF that cannot be read
+    gives no pages."""
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
     from pypdfium2 import PdfiumError
@@ -283,7 +298,7 @@ def read_pdf_file(
                 logger.error(
                     "Encrypted PDF could not be decrypted, returning empty text."
                 )
-                return "", metadata, []
+                return [], metadata, []
 
         # Basic PDF metadata
         if pdf_reader.metadata is not None:
@@ -300,22 +315,20 @@ def read_pdf_file(
         # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
         try:
             if isolate_pdfium:
-                text = run_in_isolated_process(
-                    extract_pdf_text_pdfium,
+                pages = run_in_isolated_process(
+                    extract_pdf_pages_pdfium,
                     file_bytes,
                     decrypt_password,
                     timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
                 )
             else:
-                text = extract_pdf_text_pdfium(file_bytes, decrypt_password)
+                pages = extract_pdf_pages_pdfium(file_bytes, decrypt_password)
         except (PdfiumError, IsolatedProcessError) as pdfium_err:
             logger.warning(
                 "PDFium text extraction failed (%s); falling back to pypdf",
                 pdfium_err,
             )
-            text = TEXT_SECTION_SEPARATOR.join(
-                page.extract_text() for page in pdf_reader.pages
-            )
+            pages = [page.extract_text() for page in pdf_reader.pages]
 
         if extract_images:
             # Images are best-effort: a failure here must not discard the text.
@@ -332,7 +345,7 @@ def read_pdf_file(
             except Exception:
                 logger.exception("Failed to extract pdf images")
 
-        return text, metadata, extracted_images
+        return pages, metadata, extracted_images
 
     except PdfStreamError as e:
         # Malformed/truncated PDF content — a per-document content issue, not
@@ -346,7 +359,7 @@ def read_pdf_file(
         # non-fatal skip.
         logger.warning("Failed to read PDF, skipping content extraction: %s", e)
 
-    return "", metadata, []
+    return [], metadata, []
 
 
 def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
@@ -845,6 +858,68 @@ def extract_file_text_locally(
         return file_io_to_text(file)
 
     raise ValueError("Unknown file extension or not recognized as text data")
+
+
+class PagedText(NamedTuple):
+    """The text of a file, by page when its format has pages: a PDF's pages,
+    a PowerPoint file's slides or a spreadsheet's sheets. Any other file is
+    one text and `paged` is False."""
+
+    pages: list[str]
+    paged: bool
+
+
+# The marker that markitdown writes before each slide of a PowerPoint file.
+_SLIDE_MARKER = re.compile(r"^<!-- Slide number: \d+ -->$\n?", re.MULTILINE)
+
+
+def extract_text_pages(file: IO[Any], file_name: str) -> PagedText:
+    """The text of a file by page, from the parsers that extract_file_text
+    uses: Unstructured when an admin set its key, which gives no pages, and
+    otherwise, or when Unstructured fails, the local parser for the file's
+    extension. A file that no parser reads, or whose content a parser
+    rejects, gives no text. An OSError (I/O, network, timeout) or a
+    MemoryError raises, so the caller caches nothing and can retry."""
+    use_unstructured = bool(get_unstructured_api_key())
+    try:
+        if use_unstructured:
+            try:
+                return PagedText([unstructured_to_text(file, file_name)], paged=False)
+            except Exception as unstructured_error:
+                logger.error(
+                    "Failed to process with Unstructured: %s. Falling back to normal processing.",
+                    unstructured_error,
+                )
+        extension = get_file_ext(file_name)
+        file.seek(0)
+        if extension == ".pdf":
+            pages, _, _ = _read_pdf_pages(
+                file,
+                pdf_pass=None,
+                extract_images=False,
+                image_callback=None,
+                isolate_pdfium=True,
+            )
+            return PagedText(pages, paged=True)
+        if extension == ".pptx":
+            before_first, *slides = _SLIDE_MARKER.split(pptx_to_text(file, file_name))
+            if not slides:
+                return PagedText([before_first], paged=False)
+            # Any text before the first marker belongs to the first slide.
+            return PagedText([before_first + slides[0], *slides[1:]], paged=True)
+        if extension in OnyxFileExtensions.SPREADSHEET_EXTENSIONS:
+            return PagedText(
+                [csv_text for csv_text, _ in xlsx_sheet_extraction(file, file_name)],
+                paged=True,
+            )
+        return PagedText(
+            [extract_file_text_locally(file, file_name, extension)], paged=False
+        )
+    except (OSError, MemoryError):
+        raise
+    except Exception as e:
+        logger.warning("Failed to extract text from %s: %s", file_name, e)
+        return PagedText([""], paged=False)
 
 
 class ExtractionResult(NamedTuple):

@@ -31,6 +31,7 @@ import {
 import type { ChatToolOptions } from "@/lib/tools/types";
 import {
   addLoadedPublishedFiles,
+  type ChatLoad,
   NO_LOADED_PUBLISHED_FILES,
   type LoadedPublishedFiles,
 } from "@/lib/chat/publishedFiles";
@@ -128,14 +129,14 @@ interface ChatSessionStore {
     updates: Partial<ChatSessionData>
   ) => void;
   /**
-   * Applies a load of the chat from the server, of sequence `loadSequence`
+   * Applies the page of `chatLoad`, a load of the chat from the server
    * (`startChatLoad`): the load's approvals version and published files, with
    * `updates` for the rest.
    */
   applyLoadedSession: (
     sessionId: string,
     loaded: BackendChatSession,
-    loadSequence: number,
+    chatLoad: ChatLoad,
     updates: Partial<ChatSessionData>
   ) => void;
   updateSessionMessageTree: (
@@ -344,7 +345,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   applyLoadedSession: (
     sessionId: string,
     loaded: BackendChatSession,
-    loadSequence: number,
+    chatLoad: ChatLoad,
     updates: Partial<ChatSessionData>
   ) => {
     get().updateSessionData(sessionId, {
@@ -353,7 +354,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
         get().sessions.get(sessionId)?.loadedPublishedFiles ??
           NO_LOADED_PUBLISHED_FILES,
         loaded,
-        loadSequence
+        chatLoad
       ),
       ...updates,
     });

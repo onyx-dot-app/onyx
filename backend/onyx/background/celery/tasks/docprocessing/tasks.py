@@ -1,5 +1,6 @@
 import gc
 import os
+import threading
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -183,6 +184,34 @@ from shared_configs.contextvars import (
 )
 
 logger = setup_logger()
+
+# A collection scans every tracked object, and most of them are the modules and
+# mappers a worker loads once. Those stay frozen between full collections, so
+# the collection after each batch scans only what the batches made.
+FULL_GC_INTERVAL_SECONDS = 300.0
+_last_full_gc_at: float | None = None
+_full_gc_lock = threading.Lock()
+
+
+def _collect_batch_garbage() -> None:
+    global _last_full_gc_at
+    now = time.monotonic()
+    with _full_gc_lock:
+        full = (
+            _last_full_gc_at is None
+            or now - _last_full_gc_at >= FULL_GC_INTERVAL_SECONDS
+        )
+        if full:
+            _last_full_gc_at = now
+    if not full:
+        gc.collect()
+        return
+    # Objects of a batch that runs in another thread are frozen too. The next
+    # full collection takes them back, so no cycle outlives one interval.
+    gc.unfreeze()
+    gc.collect()
+    gc.freeze()
+
 
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s).
@@ -2305,7 +2334,7 @@ def _docprocessing_task(
         # the except block under PERSISTENT_INDEXING needs to safely inspect it.
         documents = None
         with time_stage(IndexAttemptStage.GC_COLLECT, index_attempt_id):
-            gc.collect()
+            _collect_batch_garbage()
 
         # FIX: Log final memory usage to track problematic tenants/CC pairs
         emit_process_memory(

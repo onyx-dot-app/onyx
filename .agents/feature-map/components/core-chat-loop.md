@@ -46,7 +46,7 @@
   ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A Stop of a live turn
   rejects its waiting requests.
 - **The agent asks the user a question.** The root agent's question tool
-  shows 1-3 multiple-choice questions and waits like an approval request. The
+  shows 1-4 multiple-choice questions and waits like an approval request. The
   user answers on the card, or types a message, which the agent reads as the
   answer to every waiting question of the response; a Stop of a live turn
   cancels the questions ([[tools-framework]]).
@@ -266,7 +266,7 @@ Background children keep running; the same control thread renews their owner
 leases until they finish. After admission is released, it does not check the
 turn's Stop key, admission lease or deadline. When a child releases ownership, the turn
 dispatches queued input and root results again; that dispatch also ends a root's
-`wait_agents` wait. `ChatRunStore` scans child
+wait-tool wait. `ChatRunStore` scans child
 inboxes after a notification and while children run on the branch. It starts
 child work only while its response is on the selected branch, and resumes the
 parked agent runs of its own branch whether or not it is selected. A dispatch
@@ -330,7 +330,9 @@ termination grace period is much shorter, so it ends running turns first
    packets. Feature state that a later step needs lives on the agent, such as
    `ChatAgent.search_context` and its citation mapping, and is captured in
    `ChatFeatureState` for restoration. `ChatFeatureState.code_mode` keeps the
-   mode, so a restored run keeps its tool layout. All tools in one step read the same
+   mode, so a restored run keeps code mode on or off; the tool names and
+   arguments come from the active model's tool family
+   (`LLMConfig.tool_family`). All tools in one step read the same
    `ChatAgent._tool_context`; citation and search state advance only in
    `ChatAgent._after_step`, after every call in the step finishes.
 6. `persist-once-per-model` **One final outcome per model.** A new way to end a

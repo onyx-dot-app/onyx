@@ -23,6 +23,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_name import normalize_external_tool_name
 from tests.external_dependency_unit.answer.stream_test_utils import final_answer
 from tests.external_dependency_unit.code_mode_helpers import (
@@ -153,6 +154,7 @@ def test_a_chat_calls_an_mcp_action(
     chat = _chat(db_session, integration_agent, user)
     first = (
         code_step(
+            OPENAI_CODE_MODE,
             "call",
             f"r = await tools.{integration_agent.hello}(name='alpha')\nprint(r['result'])\n",
         )
@@ -175,6 +177,7 @@ def test_a_chat_calls_an_openapi_action(
     chat = _chat(db_session, integration_agent, user)
     first = (
         code_step(
+            OPENAI_CODE_MODE,
             "call",
             f"r = await tools.{integration_agent.list_orders}()\nprint(r)\n",
         )
@@ -203,6 +206,7 @@ def test_an_ask_action_in_a_program_opens_one_request(
     llm = ChatLLM(
         [
             code_step(
+                OPENAI_CODE_MODE,
                 "call",
                 f"r = await tools.{integration_agent.hello}(name='alpha')\nprint(r)\n",
             )

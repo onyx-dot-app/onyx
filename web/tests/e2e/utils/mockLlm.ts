@@ -45,8 +45,10 @@ export const MOCK_LLM_MODELS = [
   { name: "mock-model-alt", displayName: "Mock Alt Model" },
 ] as const;
 export const MOCK_LLM_DEFAULT_MODEL = MOCK_LLM_MODELS[0];
+/** The code mode run tool of every tool family (backend code_mode/shapes.py). */
+const CODE_MODE_RUN_TOOL = "execute_code";
 /**
- * Whether the backend offers tools through `execute_code` programs. Set
+ * Whether the backend offers tools through code mode programs. Set
  * CODE_MODE_ENABLED for the runner to the backend's value; CI sets both.
  */
 export const CODE_MODE_ENABLED =
@@ -132,9 +134,9 @@ export function mockLlmToolCallReply(
     : invocations.map((invocation) => `await ${invocation}`).join("\n");
   return {
     tool_calls: [
-      { id: calls[0]!.id, name: "execute_code", arguments: { code } },
+      { id: calls[0]!.id, name: CODE_MODE_RUN_TOOL, arguments: { code } },
     ],
-    conditions: { offers: ["execute_code"] },
+    conditions: { offers: [CODE_MODE_RUN_TOOL] },
   };
 }
 

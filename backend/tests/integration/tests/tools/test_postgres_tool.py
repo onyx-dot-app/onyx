@@ -37,6 +37,8 @@ _ADMIN_CALL_ID = "call_pg_history_admin"
 _BASIC_CALL_ID = "call_pg_history_basic"
 _SCOPED_CALL_ID = "call_pg_scoped_count"
 _PAGING_PROGRAM_ID = "call_pg_paging_program"
+_CONTENT_COUNT_CALL_ID = "call_pg_content_count"
+_CONTENT_LIST_CALL_ID = "call_pg_content_list"
 
 
 def _search_tool_id(admin_user: DATestUser) -> int:
@@ -109,6 +111,78 @@ def test_postgres_tool_counts_documents(
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
     assert "2 matching documents." in _tool_result(mock_llm, "count", _COUNT_CALL_ID)
+
+
+def test_postgres_tool_matches_document_content(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    tag = uuid4().hex[:8]
+
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+    cc_pair = CCPairManager.create_from_scratch(
+        source=DocumentSource.INGESTION_API,
+        user_performing_action=admin_user,
+    )
+    search_tool_id = _search_tool_id(admin_user)
+    contents = [
+        f"Notes on the {tag} rollout plan for next quarter",
+        f"The plan for {tag} is not a rollout yet",
+    ]
+    for i, content in enumerate(contents):
+        DocumentManager.seed_doc_with_content(
+            cc_pair=cc_pair,
+            content=content,
+            api_key=api_key,
+            document_id=f"pgtool-{tag}-{i}",
+        )
+    DocumentManager.wait_until_searchable(contents, admin_user)
+
+    content_filter: dict[str, str | bool] = {
+        "table": "document",
+        "content_contains": f"{tag} rollout",
+        "title_contains": f"pgtool-{tag}",
+    }
+    mock_llm.conversation(
+        "content",
+        tool_call_reply(
+            ToolCall(
+                id=_CONTENT_COUNT_CALL_ID,
+                name=_TOOL_NAME,
+                arguments={**content_filter, "count": True},
+            ),
+            ToolCall(
+                id=_CONTENT_LIST_CALL_ID, name=_TOOL_NAME, arguments=content_filter
+            ),
+            tool_choice="auto",
+        ),
+        _answer_after(_CONTENT_COUNT_CALL_ID),
+    )
+    persona = PersonaManager.create(
+        user_performing_action=admin_user, tool_ids=[search_tool_id]
+    )
+    chat_session = ChatSessionManager.create(
+        persona_id=persona.id, user_performing_action=admin_user
+    )
+    response = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="Which test documents mention the rollout?",
+        user_performing_action=admin_user,
+    )
+
+    assert response.error is None, f"Unexpected stream error: {response.error}"
+    # With code mode on, one program runs both calls and its output comes back
+    # under the first call's id.
+    results = [
+        result
+        for request in mock_llm.requests_in("content")
+        for call_id in (_CONTENT_COUNT_CALL_ID, _CONTENT_LIST_CALL_ID)
+        if (result := request.tool_result(call_id)) is not None
+    ]
+    output = "\n".join(results)
+    # The count ends its line with "." and the listing with ":".
+    assert "1 matching documents" in output
+    assert f"pgtool-{tag}-0" in output
+    assert f"pgtool-{tag}-1" not in output
 
 
 def test_postgres_tool_chat_history_is_user_scoped(

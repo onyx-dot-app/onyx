@@ -109,6 +109,11 @@ export const SWR_KEYS = {
   chatFilePreview: (fileId: string) => `chat-file-preview:${fileId}`,
   // The start of a text file, for its tile in the chat's Files list
   chatFileTileText: (fileId: string) => `chat-file-tile-text:${fileId}`,
+  // A published file's version, the newest when `version` is null
+  chatArtifact: (artifactId: string, version: number | null) =>
+    `/api/chat/artifacts/${artifactId}${
+      version === null ? "" : `?version=${version}`
+    }`,
   chatSessionStatus: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/status`,
   chatSessionAgents: (sessionId: string) =>

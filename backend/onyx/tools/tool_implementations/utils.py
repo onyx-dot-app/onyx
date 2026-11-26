@@ -2,6 +2,7 @@ import json
 from collections.abc import Mapping
 
 from onyx.context.search.models import InferenceSection
+from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.tools.constants import MAX_OUTPUT_CHARS
 from onyx.tools.models import (
     CodeModeResultKind,
@@ -72,9 +73,10 @@ def cut_middle(
     )
 
 
-def output_chars(requested: int) -> int:
-    """A requested `max_output_chars`, clamped to 1..MAX_OUTPUT_CHARS."""
-    return min(max(requested, 1), MAX_OUTPUT_CHARS)
+def output_chars_from_tokens(requested: int) -> int:
+    """A requested token budget as a character budget, clamped to
+    1..MAX_OUTPUT_CHARS."""
+    return min(max(requested * APPROX_CHARS_PER_TOKEN, 1), MAX_OUTPUT_CHARS)
 
 
 FILE_ASSOCIATED_GUIDANCE = (

@@ -13,13 +13,7 @@ import { SvgFolderPlus } from "@opal/icons";
 import { Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
-interface CreateProjectModalProps {
-  initialProjectName?: string;
-}
-
-export default function CreateProjectModal({
-  initialProjectName,
-}: CreateProjectModalProps) {
+export default function CreateProjectModal() {
   const t = useTranslations("chat");
   const { createProject } = useProjectsContext();
   const appPosition = useAppPosition();
@@ -44,10 +38,9 @@ export default function CreateProjectModal({
           onClose={() => modal.toggle(false)}
         />
         <Formik
-          initialValues={{ projectName: initialProjectName ?? "" }}
+          initialValues={{ projectName: "" }}
           validationSchema={validationSchema}
           validateOnMount
-          enableReinitialize
           onSubmit={async (values, { setSubmitting }) => {
             const name = values.projectName.trim();
             try {

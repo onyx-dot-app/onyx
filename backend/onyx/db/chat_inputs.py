@@ -647,7 +647,7 @@ def agent_result_states(
 def agent_waits(
     session: Session, chat_session_id: UUID, branch: ChatBranch
 ) -> list[AgentWait]:
-    """The root's `wait_agents` calls on the branch that can hold unread results.
+    """The root's wait calls on the branch that can hold unread results.
 
     Calls before the oldest unread result's root response hold nothing, so
     they are skipped.

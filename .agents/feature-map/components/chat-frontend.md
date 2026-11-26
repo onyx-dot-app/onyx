@@ -85,8 +85,9 @@
   agent results do not become user message bubbles. A "Subagent results received" divider shows above each
   automatic follow-up response. That response shows its model label but
   cannot be regenerated.
-- **A tool call needs approval.** An approval card shows the tool's
-  arguments. Every card that waits for a decision shows in one region after
+- **A tool call needs approval.** An approval card shows the payload that
+  the tool gives for the call (`ToolApprovalRequest.arguments`), or the call's arguments
+  when the tool gives none. Every card that waits for a decision shows in one region after
   the last message (`sections/chat/ToolApprovalsRegion.tsx`, rendered by
   `ChatUI`), oldest response first and in packet order, from the replies and
   from their background subagents alike. A multi-model card names its model;
@@ -157,13 +158,16 @@
   refreshes. A subagent's card blocks no send.
   What each decision does is in [[mcp-and-custom-tools]].
 - **The agent asks the user questions.** A question card
-  (`ToolQuestionCard`) shows 1-3 questions, one per page; each offers its
+  (`ToolQuestionCard`) shows 1-4 questions, one per page; each offers its
   options in the model's order, recommended first, and an "Other" field
   for the user's own answer. A card with more than one question shows "Question N of M"
   and Back and Next buttons; the choices stay when the page changes, and
-  picking an option does not change the page. For every question the user
-  picks one option or writes in Other; typing in Other clears the option
-  and picking an option clears Other. The user submits on the last page,
+  picking an option does not change the page. For a single-select question
+  the user picks one option (a radio group) or writes in Other; typing in
+  Other clears the option and picking an option clears Other. A question
+  with `multi_select` reads "Choose all that apply." and shows its options
+  as checkboxes; the user toggles any of them and can also write in Other.
+  The record joins several chosen options as a list. The user submits on the last page,
   where Submit replaces Next. Submit stays disabled, with a hint that
   names the unanswered questions, until each question has an answer.
   Waiting cards show in their own region after the approval
@@ -221,8 +225,10 @@
   the turn ends (stopped and failed turns too), each file that the turn
   published shows as a download card after the answer, with its title (else
   its file name), type and size. As in Craft, a reply shows at most five
-  cards, then a "View all N files" button that opens the panel's Files list;
-  a page without the panel shows every card. Every publish of one path in a chat is a version of one
+  cards of the chat's own files, then a "View all N files" button that opens
+  the panel's Files list; a file of another chat, which that list leaves out,
+  always shows as a card (`belongsToChat`, the chat ID from
+  `PublishedFilesPanel`). A page without the panel shows every card. Every publish of one path in a chat is a version of one
   artifact (`artifact_id`, `version`). A click opens the card's version in
   its artifact's tab in the right panel; a page without the panel (NRF)
   opens it in the preview modal. Each card shows only its file; a later publish of the same path adds
@@ -257,7 +263,10 @@
   starts (`lib/chat/publishedFiles.ts:startChatLoad`), and a load's list
   replaces the chat's list only when no load that started later gave it, so an
   older load never overwrites a newer list. The button is off while the reload
-  runs, and a failure shows a toast. A file tab's URL bar shows the file's
+  runs, and a failure shows a toast. Settlement runs the same reload when a
+  settled stream's answers hold a finished `library_manage_library` or
+  `artifact` call (a `custom_tool_delta`), whose changes send no file packets,
+  unless it loaded the saved history. A file tab's URL bar shows the file's
   path, then the preview's actions: source toggle, copy and download. It
   opens at half the page; the user drags its edge, or uses the arrow keys on
   the edge, to resize it, and the width is kept per chat through a reload. A
@@ -290,23 +299,25 @@
   Sources cannot close or move, and a file tab cannot move before them. File
   tabs of one shown name show their paths. An artifact has one tab, which
   follows its newest version: a reload's list or a live publish of a newer
-  version updates an open tab. A card of an older version pins the tab to
-  that version, labelled "v{version} of {latest}"; the newest version has no
-  label. The five most recent file viewers stay
+  version updates an open tab. A card of an older version, or an artifact
+  link that names a version, pins the tab to that version, labelled "v{version} of {latest}"; the newest version has no
+  label. A tab's name comes from the list, so a reload after a rename
+  updates it, also on a pinned tab. The five most recent file viewers stay
   mounted, so switching back does not load the file again; a hidden one
   leaves layout (`content-visibility: hidden`). During a drag of the panel's
   edge, the content follows the width live, as in Craft, under an overlay
   so the pointer hovers nothing in it. A file tab and
   the preview modal show a file the same way: markdown as a document, a CSV
   or workbook as a grid with a sheet bar, a PDF one page at a time with page
-  thumbnails and zoom, a PowerPoint deck one slide at a time with a slide
-  list, a Word file as pages scaled to fit the width, an image fit to the
+  thumbnails and zoom (each thumbnail in its page's shape), a PowerPoint deck
+  or a Word file in the same PDF view, from the PDF that the server converts
+  it to, an image fit to the
   panel, HTML as its page in a sandboxed frame, SVG as an image, and code,
   data and text as highlighted source with line numbers (plain text wraps
-  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF and
-  slide views share Craft's toolbar and resizable thumbnail column
+  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF view
+  shares Craft's toolbar and resizable thumbnail column
   (`sections/file-preview/PreviewControls.tsx`). The column is one tab stop,
-  the current page or slide, and the arrow keys move it, with focus. A
+  the current page, and the arrow keys move it, with focus. A
   preview under 480 px wide, as on a phone, starts with the column hidden:
   `lib/filePreview/hooks.ts:useThumbnailColumn` measures the row that holds
   the column and the page when it mounts, before the first paint, then
@@ -314,11 +325,14 @@
   the counts, copy, download and source toggle over the content's bottom. In
   the panel, the visible file's actions move to the URL bar's row through
   `PreviewActionsSlotContext` (`sections/file-preview/FloatingFooter.tsx`);
-  the counts and an image's actual-size toggle stay at the bottom. A loader shows only when a load takes over 300 ms. A file over its
-  format's limit (5 MB of text, 20 MB for Word or PowerPoint, 100 MB for a
-  PDF), a legacy `.ppt` and other types show one card with a download
-  instead. So does a failed load, with a retry, and a PDF, deck, Word file or
-  image that does not render, such as a HEIC image.
+  the counts and an image's actual-size toggle stay at the bottom. A loader shows only when a load takes over 300 ms;
+  for a Word or PowerPoint file it also says, in a live region, that the
+  preview is being prepared, because the first conversion can take a while.
+  A file over its format's limit (5 MB of text, 100 MB for a PDF), a legacy
+  `.ppt` and other types show one card with a download instead. So does a
+  failed load, with a retry, a Word or PowerPoint file that the server cannot
+  convert (its own "No preview for this file" copy), and a PDF or image that
+  does not render, such as a HEIC image.
   Closing the panel
   keeps its tabs, so reopening it, or coming back to the chat, restores them.
   A closed panel cannot be focused, and closing it returns focus to the
@@ -516,7 +530,29 @@ section began (`buildSectionSegments` owns the placement)
 `/api/chat/file/{file_id}`; a click calls `PublishedFilesPanelContext`'s
 `openFile` and the view-all button its `showFiles`, which the chat page
 (`CHAT_FILES_PANEL`) and the shared view provide; without one, the card opens
-`PreviewModal` and every card shows). The right panel (`sections/chat/ChatRightPanel.tsx`)
+`PreviewModal` and every card shows). An artifact link in an answer
+(`{WEB_DOMAIN}/app/artifacts/<artifact_id>[/v<N>]`, which the artifact tools
+give the model; `lib/chat/publishedFiles.ts:parseArtifactLink`, any origin)
+calls the same `openFile` with the file that `GET
+/api/chat/artifacts/{artifact_id}?version=N` gives
+(`lib/timeline/chat/message/MemoizedTextComponents.tsx:MemoizedLink`), also a file of
+another chat, pinned to the version that the link names. A response that
+arrives after the user switched chats, or after a later artifact link click, opens nothing. A modified or middle click, or a page without the panel, keeps
+the link's new tab. The route `app/app/artifacts/[...link]`
+(`sections/chat/ArtifactLinkPage.tsx`) resolves a link outside a chat by the
+metadata route's `access`: the `owner` goes with `artifactId` and
+`artifactVersion` to the owning chat, a `chat_reader` (a public share) to
+the chat's shared view (`app/app/shared/[chatId]`), and `file_only` (a
+version that a chat the user can read holds, such as a reader of another
+chat whose replace added it; only a link with `/v<N>`) shows the file alone
+with `PublishedFilePreview` and `DownloadButton`, with no chat. A response
+that arrives after the user left the link's URL sends the user nowhere.
+`lib/chat/hooks.ts:useOpenArtifactFromUrl` (on the chat page and the shared
+view) opens the version once the chat has loaded, pinned when the URL names
+a version, then drops the parameters. Any other user gets not-found. `parseArtifactLink` and the
+backend's `parse_artifact_url` read the same example links
+(`backend/tests/unit/onyx/tools/sandbox/artifact_links.json`).
+The right panel (`sections/chat/ChatRightPanel.tsx`)
 is built from the output-panel parts that it shares with Craft's panel
 (`sections/output-panel/` and `lib/outputPanel/`): the presentational parts,
 the tab rules, and `sections/output-panel/PanelResize.tsx:useOutputPanelWorkspace`, which measures
@@ -536,8 +572,16 @@ reports that it failed. Its loader,
 `/api/chat/file/{id}` once with the default cache mode. The response's name
 and type pick the format (`lib/filePreview/format.ts:resolveFilePreviewFormat`).
 A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
-the workbook, and an image or an unsupported file reads no body: the image
-loads from the file URL in an `<img>`. SVG loads as text, because the server
+the workbook. A Word or PowerPoint file reads its stored PDF (`?preview=pdf`);
+on a 409 with error code `PREVIEW_NOT_READY` it asks the server to convert the
+file in the owner's sandbox (POST `/{id}/preview`), and the PDF view shows the
+result. The download stays the original file. Both responses read at most the
+browser's PDF limit. A 422 with error code `PREVIEW_UNAVAILABLE` from either
+call (no sandbox, a file over the server's limit, a failed conversion) shows
+the download card without a retry; other failures keep the retry. A name in one
+of these formats skips the request for the original. `lib/chat/svc.ts:fetchChatFile`
+owns the method and URL of each form (`ChatFileVariant`). An image or an unsupported
+file reads no body: the image loads from the file URL in an `<img>`. SVG loads as text, because the server
 serves it as `application/octet-stream`, and renders from a `data:` URL. HTML
 renders through `srcdoc` with an empty `sandbox`: an opaque origin with no
 scripts, so it cannot reach Onyx's page, cookies or API, and the sandbox
@@ -551,15 +595,7 @@ loosening this policy; the page's CSP applies too. Other bodies
 are read up to the format's limit while they stream, because the server sends
 no length. Text over 200,000 characters shows without highlighting, and
 markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
-the build's `/pdfjs/` assets, with `isEvalSupported` off. A Word file renders
-through `lib/docx/renderDocx.ts`, which sanitizes it, into a shadow root. A
-PowerPoint deck parses in the browser with `@jvmr/pptx-to-html` through
-`lib/pptx/renderPptx.ts`, which sanitizes each slide: no script, no style
-element, and no image or CSS `url()` from outside the deck: a style property
-with any `url()` that is not an embedded image goes. Each slide
-renders into its own shadow root, scaled from the deck's slide size. The
-parser uses namespaced selectors that jsdom lacks, so Jest tests give its
-output.
+the build's `/pdfjs/` assets, with `isEvalSupported` off.
 Markdown shows raw HTML as text. Craft's previewers read sandbox paths, not
 chat files. Published files belong to the chat, not to a branch.
 `lib/chat/publishedFiles.ts:chatPublishedFiles` owns the Files list: the
@@ -569,18 +605,24 @@ the loads, such as live publishes and an answer that resumes after an
 approval, merged per artifact (`artifactKey`) into its highest version. A
 file saved without `artifact_id` is its own one-version artifact. The
 session's `loadedPublishedFiles` holds the list, the sequence of the load
-that gave it, and the file IDs that the loads' packets replayed
-(`addLoadedPublishedFiles`; every load and settle applies it with the
-sequence it took as its fetch started, and an older page adds its packets). A replayed file that the
-list leaves out stays out: an older version, a file saved without an
-artifact or one whose object is missing. Without a list, the packets give all the
-files.
+that gave it, and the file IDs that the list covers: the files that the
+loads' packets replayed, and the files that the chat's packets held when a
+load with a list started (`addLoadedPublishedFiles`; every load and settle
+applies the `ChatLoad` that it took as its fetch started, and an older page
+adds its packets). A covered file that the list leaves out stays out: an
+older version, a deleted file, a file saved without an artifact or one whose
+object is missing. So a live publish on a message that a reload's page
+leaves out does not come back after a delete. Without a list, the packets give all the
+files. A version that the chat added to another chat's artifact (its
+`chat_id` is that chat) stays out, as the list leaves it out; its reply
+card shows it.
 A shared chat has no live publishes, so its load's list alone gives its
 files, until the panel's reload adds a newer page's list. A file tab (`ChatRightPanelState.fileTabs`, keyed by
 `rightPanelFileTab`, the artifact) keeps the file that it opened with and
-whether it is pinned: both card openers (`openPublishedFileInChat`, the
+whether it is pinned: both panel openers (`openPublishedFileInChat`, the
 shared view's opener) build the action with `openCardFileAction`, which
-pins it when the chat's files hold a newer version (`newestVersion`). A card
+pins it when an artifact link names the version (`pinVersion`) or the chat's
+files hold a newer version (`newestVersion`). A card
 saved without `artifact_id` whose file the list holds opens the listed
 file, so the card and its tile share one tab. The panel shows a pinned tab's file, else the newest
 version of its artifact, so a card always opens its own file, also one that
@@ -700,7 +742,7 @@ packet of a started tool, such as a code mode closing record, joins its group,
 and the answer stays shown. The stop packet sets `finalAnswerComing` again
 when the latest display group is text, not a user message. Nothing follows the
 stop, so the text of a step that ends the response with a tool call, such as
-`wait_agents`, is the answer. A cancelled or failed turn shows its latest text
+`wait_agent`, is the answer. A cancelled or failed turn shows its latest text
 the same way, as its saved answer does. Live,
 the closing record follows the answer. On replay, it follows its tab's section
 end, before the answer's `message_start`. Both orders give the same groups.
@@ -713,7 +755,7 @@ The mobile app copies the group end and step-kind rules in
 **Code mode steps.** Code mode runs behind the scenes: the timeline shows the
 tool calls a program makes, not the program.
 `lib/timeline/chat/transformers.ts:expandCodeModeSteps`
-turns each nested call of an `execute_code` or `wait_code` group into its own
+turns each nested call of a run or wait group into its own
 step, drawn by that tool's renderer as a direct call would be. The packet
 processor adds each nested packet to its call as the packet arrives, and after
 each processed batch builds `GroupedPacket.nestedCalls` for each group with
@@ -724,7 +766,7 @@ renderers of finished calls do not redraw. A call is its cell and
 `sub_turn_index`, as `CodeModeRenderer` (`backend/onyx/chat/renderer.py`)
 states, so the latest report replaces the earlier ones in place. Pacing
 compares the last packet of each step, because a new report can have as many
-packets as the old one. The program, its output, `wait_code`
+packets as the old one. The program, its output, wait tool (`wait` or `poll`)
 calls, yields and closing records have no step. A program without tool calls
 shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
 in one pass: a program runs from `code_mode_start` until a `code_mode_delta`

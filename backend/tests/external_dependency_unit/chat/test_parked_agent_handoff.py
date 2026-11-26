@@ -30,6 +30,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -43,8 +44,11 @@ from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat.chat_backend import (
     get_chat_session_processing_status,
 )
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolApprovalScope, ToolContext
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_SHAPES,
+)
 from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_chat_tool_approvals import (
@@ -58,7 +62,7 @@ from tests.external_dependency_unit.chat.test_chat_tool_approvals import (
     owned_runs,
 )
 from tests.external_dependency_unit.chat.test_run_store import chat_agent
-from tests.external_dependency_unit.chat.test_wait_agents import ScriptedLLM
+from tests.external_dependency_unit.chat.test_wait_agent import ScriptedLLM
 from tests.unit.onyx.agents.fakes import FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool, until
 
@@ -73,7 +77,9 @@ def _reply(request: GenerationRequest, _signal: CancellationSignal) -> Assistant
         return AssistantMessage(content=[TextContent(text=results[-1].text)])
     return AssistantMessage(
         content=[
-            ToolCall(id="program", name=CodeModeTool.NAME, arguments={"code": PROGRAM})
+            ToolCall(
+                id="program", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": PROGRAM}
+            )
         ]
     )
 
@@ -179,14 +185,16 @@ def _park_agent(
                 content=[
                     ToolCall(
                         id="spawn",
-                        name=SpawnAgentTool.name,
-                        arguments={"name": "mailer", "instruction": "Email the team"},
+                        name=SPAWN_AGENT_TOOL_NAME,
+                        arguments={"task_name": "mailer", "message": "Email the team"},
                     )
                 ]
             )
         ),
         tools=[
-            SpawnAgentTool(lambda: _agent(tool, None), max_steps=3).bind(ToolContext)
+            SpawnAgentTool(
+                lambda: _agent(tool, None), AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3
+            ).bind(ToolContext)
         ],
         gated=[tool],
     )
@@ -454,15 +462,17 @@ def test_a_host_that_cannot_start_ends_only_the_agents_of_its_model(
                 content=[
                     ToolCall(
                         id=f"spawn-{name}",
-                        name=SpawnAgentTool.name,
-                        arguments={"name": name, "instruction": "Email the team"},
+                        name=SPAWN_AGENT_TOOL_NAME,
+                        arguments={"task_name": name, "message": "Email the team"},
                     )
                     for name in ("mailer", "notifier")
                 ]
             )
         ),
         tools=[
-            SpawnAgentTool(lambda: _agent(tool, None), max_steps=3).bind(ToolContext)
+            SpawnAgentTool(
+                lambda: _agent(tool, None), AGENT_SHAPES[ToolFamily.OPENAI], max_steps=3
+            ).bind(ToolContext)
         ],
         gated=[tool],
     )

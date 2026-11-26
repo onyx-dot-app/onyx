@@ -91,6 +91,7 @@ from onyx.db.enums import (
     CapabilityCheckRunStatus,
     CapabilityCheckTrigger,
     CapabilityReportRunStatus,
+    ChatArtifactIndexStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
     ConnectorEventStatus,
@@ -3737,7 +3738,8 @@ class ApprovalRequest(Base):
         ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=True
     )
     # The integration of the action. Keys session grants and the policy
-    # re-check. NULL after the integration is deleted.
+    # re-check. NULL for a built-in Onyx action, and after the integration is
+    # deleted.
     integration_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
@@ -3747,8 +3749,8 @@ class ApprovalRequest(Base):
         ),
         nullable=True,
     )
-    # The action key that the request asks to run, such as an MCP tool name
-    # or an OpenAPI operationId.
+    # The action key that the request asks to run, such as an MCP tool name,
+    # an OpenAPI operationId, or `onyx:<operation>` for a built-in action.
     action_id: Mapped[str] = mapped_column(String, nullable=False)
     # The call of the response's step whose card shows the request: the call
     # that waits, or the call whose tool, such as a program, made it. Places
@@ -3758,7 +3760,8 @@ class ApprovalRequest(Base):
     # request's record and the result the model sees.
     tool_name: Mapped[str] = mapped_column(String, nullable=False)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
-    # The arguments of the call that waits, as its card shows them.
+    # What the card shows of the call that waits: its arguments, or what its
+    # tool's approval_details gives.
     arguments: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -5721,22 +5724,31 @@ class FileContent(Base):
 
 
 class ChatArtifact(Base):
-    """A file that the model published from its sandbox (publish_files) into a
+    """A file that the model published from its sandbox (artifact_operations) into a
     root chat, across its versions (ChatArtifactVersion): every publish of one
     VM path in the chat. Its files inherit the chat's access, and a hard chat
     delete deletes them
     (db/chat.py:delete_messages_and_files_from_chat_session) before the
-    cascade from the chat removes the rows."""
+    cascade from the chat removes the rows. Its newest available version is
+    one search document, visible only to the owner; every path that removes
+    the row or deletes its chat removes the document after its commit
+    (indexing/chat_artifact_index.py:delete_chat_artifacts_from_index)."""
 
     __tablename__ = "chat_artifact"
     __table_args__ = (
         # Also the index of the chat's artifacts
         UniqueConstraint("chat_session_id", "path"),
-        # The user's artifacts by latest publish (artifacts_list).
+        # The user's artifacts by latest change (library_list).
         Index(
             "ix_chat_artifact_user_id_updated_at",
             "user_id",
             desc("updated_at"),
+        ),
+        # The artifacts that the indexing beat sends.
+        Index(
+            "ix_chat_artifact_index_pending",
+            "id",
+            postgresql_where=text("index_status = 'PENDING'"),
         ),
     )
 
@@ -5755,13 +5767,35 @@ class ChatArtifact(Base):
     )
     # The absolute, normalized VM path
     path: Mapped[str] = mapped_column(Text, nullable=False)
+    # The name that a rename gave it; NULL: the newest available version's
+    # file name (db/chat.py:_newest_available_version reads the effective
+    # name).
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     # The first publish
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    # The latest publish
+    # The latest change (publish or rename)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    # The search index's copy of the newest available version. Every publish
+    # sets PENDING (save_chat_artifact), the indexing task sets INDEXED
+    # (background/celery/tasks/chat_artifact_indexing), and a chat delete sets
+    # REMOVED (stop_indexing_chat_artifacts__no_commit).
+    index_status: Mapped[ChatArtifactIndexStatus] = mapped_column(
+        Enum(
+            ChatArtifactIndexStatus,
+            native_enum=False,
+            name="chatartifactindexstatus",
+        ),
+        nullable=False,
+        server_default=ChatArtifactIndexStatus.PENDING.value,
+    )
+    # Pickups by the indexing task since the latest change. Counted before the
+    # slow work, so a worker the kernel kills mid-file still spent one.
+    index_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
     )
 
 
@@ -5784,10 +5818,23 @@ class ChatArtifactVersion(Base):
         unique=True,
     )
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Why the version exists, at most VERSION_REASON_MAX_CHARS
+    # (sandbox/models.py), as a replace, an update or a restore gave it.
+    version_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     # A JPEG of the file's first page (FileOrigin.CHAT_ARTIFACT_THUMBNAIL),
     # with the version's access and deletes. A version stays valid without
     # it, so a deleted thumbnail only clears the link.
     thumbnail_file_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
+    # The PDF of a PowerPoint or Word file (FileOrigin.CHAT_FILE_PREVIEW),
+    # from the render of its thumbnail or of its first conversion, with the
+    # version's deletes. Served only through the file's own preview requests
+    # (`GET /chat/file/{file_id}?preview=pdf`, `POST .../preview`).
+    preview_file_id: Mapped[str | None] = mapped_column(
         String,
         ForeignKey("file_record.file_id", ondelete="SET NULL"),
         nullable=True,
@@ -7455,6 +7502,16 @@ class UserFile(Base):
 
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The PDF of a PowerPoint or Word file (FileOrigin.CHAT_FILE_PREVIEW),
+    # from its first conversion, with the user file's deletes. Served only
+    # through the file's own preview requests
+    # (`GET /chat/file/{file_id}?preview=pdf`, `POST .../preview`).
+    preview_file_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
 
     projects: Mapped[list["UserProject"]] = relationship(
         "UserProject",
@@ -7485,6 +7542,9 @@ class UserFile(Base):
             "user_id",
             postgresql_where=text("status = 'COMPLETED'"),
         ),
+        # Backs the lookup of a chat file's user file (several can share one
+        # file), as for its preview (db/chat.py:get_chat_file_preview_row).
+        Index("ix_user_file_file_id", "file_id"),
     )
 
 

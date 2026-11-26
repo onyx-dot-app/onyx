@@ -31,8 +31,15 @@
   MCP tool's `retrieval_only` mode.
 - **An EE user** on the Search page gets ranked documents and the LLM's picks.
   If selection fails, the page still shows the documents.
-- When no connector, federated connector or user file exists, or the vector DB
-  is off, the model is not offered the tool.
+- When no connector, federated connector, user file or indexed published file
+  exists, or the vector DB is off, the model is not offered the tool.
+- **Published files.** A file that the model published in one of the user's
+  chats shows in that user's unscoped searches, with source `chat_artifact`,
+  and its citation opens the file's artifact link. Other users, agents with
+  knowledge and project chats never find it
+  ([[file-store-and-user-files]] "Published file text and search").
+  In a sandbox chat, `library_search` searches only the user's published
+  files through the same retrieval ([[code-execution]]).
 
 ---
 
@@ -292,7 +299,14 @@ calls the index directly for admin document inspection.
     `USER_FILE` unless the user's own filter excludes it
     (`tools/tool_implementations/search/search_tool.py:SearchTool.search`). Project-only searches
     ignore user filters.
-11. `decision-path-gate` **The decision path needs a configured model, a turn
+11. `owner-only-sources-need-no-filter` **Owner-only sources need no search
+    filter.** User files and published files (`CHAT_ARTIFACT`) carry their
+    owner's email in the ACL and no knowledge-scope fields, so an unscoped
+    search finds them through the ACL, and a knowledge-scoped search never
+    does (`document_index/FILTER_SEMANTICS.md`, "Owner-only sources"). A new
+    private source must follow the same rule, not add a filter to
+    `document_index/opensearch/search.py:DocumentQuery._get_search_filters`.
+12. `decision-path-gate` **The decision path needs a configured model, a turn
     that persists content and, on cloud, a flag.**
     `tools/tool_implementations/search/search_tool.py:SearchTool._resolve_decision_client`
     runs at most once per search call. It returns a client only when the DECISION
@@ -301,27 +315,27 @@ calls the index directly for admin document inspection.
     tenant. With the NoOp flag provider (self-hosted) the flag counts as on.
     The decision client carries no incognito request policy, so content-free
     turns must keep LLM selection. There is no env var.
-12. `rerank-one-request` **One ranking is one decision request.**
+13. `rerank-one-request` **One ranking is one decision request.**
     `secondary_llm_flows/decision_rerank_expansion.py:rank_sections_listwise`
     asks one comparative yes/no question per section. Predicate probabilities
     compare only within one request, so never split the pool across requests
     or merge scores from two calls. Keep the pool below
     `MAX_DECISION_QUESTIONS`; the function raises above it. A refused question
     ranks its section last.
-13. `decision-falls-back-to-llm` **Every decision-path failure falls back to
+14. `decision-falls-back-to-llm` **Every decision-path failure falls back to
     LLM selection in the same search.** A client that cannot be built (such as
     on a cost limit), a failed or timed-out ranking call, or a refusal of
     every question makes `SearchTool.search` run `select_sections_for_expansion`
     and expand with the LLM. Background expansions call the decision model
     only, with `llm_fallback=False`, because most of those sections are not
     selected; a failed one expands again in the normal pass if it is selected.
-14. `decision-client-before-cost-check` **The decision client resolves before
+15. `decision-client-before-cost-check` **The decision client resolves before
     the primary cost check.** When selection uses the primary model and its
     budget is exhausted, search still ranks and expands with the decision
     model, with no LLM fallback. A failed rerank then raises the primary
     model's budget error. Keep `_resolve_decision_client` ahead of
     `check_primary_llm_cost` in `SearchTool.search`.
-15. `retrieval-only-makes-no-model-calls` **`retrieval_only` makes no LLM or
+16. `retrieval-only-makes-no-model-calls` **`retrieval_only` makes no LLM or
     decision-model call.**
     `tools/tool_implementations/search/search_tool.py:SearchTool.search` skips
     query expansion, scope and time detection, and the Slack lane, and returns

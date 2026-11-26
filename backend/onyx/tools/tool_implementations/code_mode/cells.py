@@ -1,6 +1,6 @@
 """Cells: code mode programs that keep running across the tool calls of a response.
 
-A cell is one running program. Each `execute_code` or `wait_code` call is one
+A cell is one running program. Each call of the run or wait tool is one
 observation: it reports what the cell did in one time window. `CodeCells` owns the
 cells of one response: ids, limits, store commit order and the closing records.
 `CodeCell` owns one program: its driver thread, tool calls, output window and
@@ -105,6 +105,7 @@ from onyx.tools.tool_implementations.code_mode.sandbox import (
     execute_program,
     suspended_bytes,
 )
+from onyx.tools.tool_implementations.code_mode.shapes import CodeModeShape
 from onyx.tools.tool_implementations.code_mode.store import (
     ProgramStore,
     changed_writes,
@@ -420,6 +421,7 @@ def _closing_amendment(
     closing: CellClosing,
     *,
     max_chars: int,
+    wait_name: str,
     saved_closing: CellClosing | None = None,
     cell_calls: Sequence[CodeModeCall] = (),
     end: SandboxResult | None = None,
@@ -430,14 +432,15 @@ def _closing_amendment(
 
     The closing record reads like an observation of what the cell did after
     this one, cut to `max_chars`; the details save `saved_closing`, its parts
-    cut, when it is set. `cell_calls`, `end`, `discarded` and `elided_chars`
-    are as for `format_content`.
+    cut, when it is set. `cell_calls`, `end`, `discarded`, `elided_chars` and
+    `wait_name` are as for `format_content`.
     """
     closing_content = format_content(
         closing,
         heading=closing_heading(details.cell_id, closing),
         status=closing.status,
         cell_id=details.cell_id,
+        wait_name=wait_name,
         cell_calls=cell_calls,
         max_chars=max_chars,
         end=end,
@@ -462,7 +465,9 @@ def _closing_amendment(
 
 
 def _interrupted_amendments(
-    results: Sequence[ToolResultMessage], live_cell_ids: Collection[int]
+    results: Sequence[ToolResultMessage],
+    live_cell_ids: Collection[int],
+    wait_name: str,
 ) -> list[ToolResultAmendment]:
     """Closing records for cells of a restored run: their last saved observation
     reports them running, and no live cell continues them.
@@ -485,6 +490,7 @@ def _interrupted_amendments(
             CellClosing(reason="interrupted", status="cancelled"),
             # The saved results do not keep the observation's budget.
             max_chars=DEFAULT_MAX_OUTPUT_CHARS,
+            wait_name=wait_name,
             cell_calls=[
                 call if call.state != "running" else call.unfinished()
                 for _, call in sorted(calls[cell_id].items())
@@ -498,7 +504,7 @@ def _interrupted_amendments(
 
 
 def _unresumed_amendment(
-    saved: SavedCodeCell, results: Sequence[ToolResultMessage]
+    saved: SavedCodeCell, results: Sequence[ToolResultMessage], wait_name: str
 ) -> ToolResultAmendment | None:
     """The final record of a saved cell when the run ends before the cell
     resumes. The program stops as a live parked cell does, keeping its output
@@ -550,6 +556,7 @@ def _unresumed_amendment(
             closing,
             # The saved results do not keep the observation's budget.
             max_chars=DEFAULT_MAX_OUTPUT_CHARS,
+            wait_name=wait_name,
             saved_closing=closing.model_copy(
                 update={"stdout": stdout.cut(DEFAULT_MAX_OUTPUT_CHARS)}
             ),
@@ -578,6 +585,7 @@ def _unresumed_amendment(
         heading=observation_heading(details),
         status=details.status,
         cell_id=saved.cell_id,
+        wait_name=wait_name,
         cell_calls=calls,
         max_chars=observer.max_chars,
         end=end,
@@ -700,6 +708,7 @@ class CodeCell:
         *,
         cell_id: int,
         program: Program,
+        shape: CodeModeShape,
         citations: CitationAllocator,
         store: _StoreCommits,
         invocation: ToolInvocation,
@@ -707,12 +716,14 @@ class CodeCell:
         saved: SavedCodeCell | None = None,
     ) -> None:
         """A new cell, or with `saved` a parked one saved in another process,
-        which `invocation` continues or observes."""
+        which `invocation` continues or observes. `shape` names the tools in
+        the text the model reads."""
         self.id = cell_id
         self._program = program
+        self._shape = shape
         self._citations = citations
         self._store = store
-        # The execute_code call that started the cell; nested call ids use it.
+        # The run call that started the cell; nested call ids use it.
         self._call_id = invocation.call_id
         self._lock = threading.Lock()
         self._changed = threading.Condition(self._lock)
@@ -1020,12 +1031,19 @@ class CodeCell:
         max_chars: int,
         terminate: bool,
     ) -> ToolOutcome:
-        """A wait_code observation: new output, the final result, or termination."""
+        """A wait observation: new output, the final result, or termination."""
+        shape = self._shape
         with self._lock:
             if self._closed:
-                raise _rejected(closed_cell_text(self.id, None, returned_end=True))
+                raise _rejected(
+                    closed_cell_text(
+                        self.id, None, returned_end=True, run_name=shape.run_name
+                    )
+                )
             if self._observer is not None or self._waiting is not None:
-                raise _rejected(f"Cell {self.id} already has an active wait_code call.")
+                raise _rejected(
+                    f"Cell {self.id} already has an active {shape.wait_name} call."
+                )
             observer = self._attach(invocation, context, max_chars)
         if terminate:
             self.stop("terminated")
@@ -1151,6 +1169,7 @@ class CodeCell:
             details,
             closing,
             max_chars=budget,
+            wait_name=self._shape.wait_name,
             saved_closing=closing.model_copy(
                 update={
                     "stdout": self._stdout.cut(budget),
@@ -1349,6 +1368,7 @@ class CodeCell:
                 heading=observation_heading(cut.details),
                 status=status,
                 cell_id=cut.details.cell_id,
+                wait_name=self._shape.wait_name,
                 cell_calls=cut.cell_calls,
                 max_chars=cut.max_chars,
                 end=cut.end,
@@ -1892,7 +1912,9 @@ class CodeCells:
     user's input is saved when the run suspends (`saved`, `restore`).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, shape: CodeModeShape) -> None:
+        # Names the tools in the text the model reads.
+        self.shape = shape
         self._lock = threading.Lock()
         self._open()
 
@@ -1932,15 +1954,17 @@ class CodeCells:
             )
             if len(open_ids) >= MAX_OPEN_CELLS:
                 names = ", ".join(str(cell_id) for cell_id in open_ids)
+                wait = self.shape.wait_name
                 raise _rejected(
                     f"At most {MAX_OPEN_CELLS} cells can be open in one response. "
-                    f"Open cells: {names}. Get their results with wait_code, or stop "
-                    "one with wait_code(cell_id=N, terminate=true)."
+                    f"Open cells: {names}. Get their results with {wait}, or stop "
+                    f"one with {wait}(cell_id=N, terminate=true)."
                 )
             history = _recorded_cell_ids(invocation.recorded_results)
             cell_id = max(self._highest_id, *history, 0) + 1
             snapshot = self._store.snapshot(invocation.recorded_results)
             cell = CodeCell(
+                shape=self.shape,
                 cell_id=cell_id,
                 program=program,
                 citations=self._citations,
@@ -1974,9 +1998,10 @@ class CodeCells:
             if cell is None and saved is not None:
                 if saved.observer is not None:
                     raise _rejected(
-                        f"Cell {cell_id} already has an active wait_code call."
+                        f"Cell {cell_id} already has an active {self.shape.wait_name} call."
                     )
                 cell = CodeCell(
+                    shape=self.shape,
                     cell_id=cell_id,
                     program=programs(saved.code, saved.limits),
                     citations=self._citations,
@@ -2006,6 +2031,7 @@ class CodeCells:
                             None,
                         ),
                         returned_end=observations[-1].status != "running",
+                        run_name=self.shape.run_name,
                     )
                 )
         if cell is None:
@@ -2042,6 +2068,7 @@ class CodeCells:
             )
             if saved is not None:
                 cell: CodeCell | None = CodeCell(
+                    shape=self.shape,
                     cell_id=saved.cell_id,
                     program=programs(saved.code, saved.limits),
                     citations=self._citations,
@@ -2085,6 +2112,7 @@ class CodeCells:
                     for request in saved.requests.values()
                 ):
                     self._cells[saved.cell_id] = CodeCell(
+                        shape=self.shape,
                         cell_id=saved.cell_id,
                         program=programs(saved.code, saved.limits),
                         citations=self._citations,
@@ -2114,7 +2142,7 @@ class CodeCells:
     def restore(self, saved: Sequence[SavedCodeCell]) -> None:
         """Take the saved cells of a suspended run; each waits until its
         observation continues (`resume`), or until its requests have answers
-        or wait_code observes it when no observation waits."""
+        or a wait call observes it when no observation waits."""
         with self._lock:
             for cell in saved:
                 self._saved[cell.cell_id] = cell
@@ -2198,10 +2226,17 @@ class CodeCells:
             *(
                 amendment
                 for saved in unresumed
-                if (amendment := _unresumed_amendment(saved, results)) is not None
+                if (
+                    amendment := _unresumed_amendment(
+                        saved, results, self.shape.wait_name
+                    )
+                )
+                is not None
             ),
             *_interrupted_amendments(
-                results, {*(cell.id for cell in cells), *saved_ids}
+                results,
+                {*(cell.id for cell in cells), *saved_ids},
+                self.shape.wait_name,
             ),
         ]
         # A hook failure that no observation raised fails the run, as for a

@@ -21,6 +21,8 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
+from onyx.tools.ordering import ToolRank
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
@@ -80,6 +82,8 @@ class TestNormalizeParametersSchema:
 
 
 class _StaticTool(Tool):
+    rank = ToolRank.INTEGRATION
+
     def __init__(self, name: str) -> None:
         self._name = name
 
@@ -217,7 +221,7 @@ class TestMCPToolLLMNames:
         assert all(tool.display_name == "shared" for tool in tools)
         assert method.name == "shared"
         assert method.raw_name == "shared"
-        stubs = build_tool_stubs(tools)
+        stubs = build_tool_stubs(OPENAI_CODE_MODE, tools)
         assert set(stubs.functions) == set(names)
         assert all(
             function.tool.name == name for name, function in stubs.functions.items()

@@ -37,6 +37,7 @@ from onyx.server.saml import (
     prepare_from_fastapi_request,
     upsert_saml_user,
 )
+from onyx.utils.fleet_telemetry import LoginFailure
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -411,7 +412,7 @@ async def _start_saml_login(request: Request, config: SAMLProviderConfig) -> Res
 
 
 @router.post("/callback")
-@redirect_sso_errors_to_web
+@redirect_sso_errors_to_web(LoginFailure.SAML)
 async def saml_login_callback_post(
     request: Request,
     db_session: Session = Depends(get_session),
@@ -420,7 +421,7 @@ async def saml_login_callback_post(
 
 
 @router.get("/complete")
-@redirect_sso_errors_to_web
+@redirect_sso_errors_to_web(LoginFailure.SAML)
 async def saml_login_complete(
     request: Request,
     ticket: str,

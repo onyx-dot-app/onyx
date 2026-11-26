@@ -193,8 +193,10 @@ from a stop. A turn-level Stop drops packets after it, except
 `tool_approval_resolved` (`chat/execution.py:ChatTurnExecution._publish`), so
 each request's resolution precedes the `stop` packet. For a code mode
 program's call, the events carry `nested_call`, and
-the packet sits on the `execute_code` or `wait_code` card with the nested
-call's name and arguments. Every client gets them
+the packet sits on the run or wait card with the nested
+call's name. A request's `arguments` is the tool's approval payload
+(`Tool.approval_details`), or the call's arguments when the tool gives none.
+Every client gets them
 ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]); web, mobile,
 the widget and the CLI mirror them. A question call
 (`chat/renderer.py:QuestionToolRenderer`) sends only `tool_question_request`
@@ -205,10 +207,12 @@ replay rules. Saved-session replay sends the request,
 and its resolution once decided, for each request of an ended or suspended
 response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
-`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`), and the
-prompt of the tools in `chat/renderer.py:PROMPT_ARGUMENT_TOOLS`
-(`generate_image`), while the model writes it, with the tool name as
-`tool_type`. The image step shows the prompt until the revised prompts arrive. Native model reasoning streams
+`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python` and the code mode run tool of
+every shape), and the prompt of the tools in `chat/renderer.py:PROMPT_ARGUMENT_TOOLS`
+(`generate_image`), while the model writes it, with the tool name as `tool_type`; the code
+mode run tool of every shape is `execute_code` (backend
+`tools/constants.py:EXECUTE_CODE_TOOL_NAME`), the type that clients know (client `CODE_MODE_TOOL_TYPE`). The image step shows
+the prompt until the revised prompts arrive. Native model reasoning streams
 as reasoning packets.
 
 Each call's streamed arguments report at most once per
@@ -249,10 +253,10 @@ final `code_mode_delta` with `replace_stdout` replaces live output that stopped
 at the output limit, so live output matches replay. The final delta also
 lists `stored_keys`, the keys the program saved with `store()`, and
 `tool_call_count`, the calls the cell started so far (the model's text reports
-the same count). Each `execute_code` and `wait_code` call is its own code
+the same count). Each call of the run or wait tool is its own code
 mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
-arguments (`None` and 0 for `execute_code`, the cell id and 1 for
-`wait_code`, whose `code` is empty), so live and replay send the same start.
+arguments (`None` and 0 for the run tool, `execute_code`, the cell id and
+1 for the wait tool, `wait` or `poll`, whose `code` is empty), so live and replay send the same start.
 The final delta of a saved observation carries the exact `cell_id` and
 `observation`; a call that failed or was cancelled before it saved one leaves
 them `None`. Its `status` adds `running` (the cell still runs; the final delta
@@ -271,8 +275,13 @@ follows the observation's packets and section end in a new tab. The sandbox
 tools ([[code-execution]]) start with `exec_command_start`, `write_stdin_start`
 or `apply_patch_start`, stream the command output in `exec_output_delta`, and
 end with `exec_end` or `apply_patch_end`. A tool with its own end packet
-(`chat/renderer.py:OWN_END_PACKETS`: the sandbox tools and `publish_files`,
-each with its end packet type) always sends its own start packet. When its arguments are not valid, for
+(`chat/renderer.py:OWN_END_PACKETS`: the sandbox tools, each with its end
+packet type; and every call that shows the publish card,
+`publish_card_files`) always sends its own start packet. The renderer
+picks the end packet with the start packet, so an `artifact` call
+gets the publish card only for a publish (a missing or null `action`, as
+`parse_tool_arguments` reads it), and a failed list or read ends
+on the generic card. When its arguments are not valid, for
 example cut off or of a wrong type, the start packet has empty values (a file
 tool's patch is empty, with no file header), so the end packet never lands on a
 generic card (`ToolRenderer.start`). A failed call ends with that end packet's
@@ -286,9 +295,12 @@ that the model got (cut to its character budget), which replaces the streamed
 preview. When the output went to a file in the sandbox VM, it is the head and
 tail of the output with a plain note instead ([[code-execution]]); `session_id` is set while the command runs, and `error` (with no
 output) when the call failed. A replayed call sends the start and `exec_end`
-only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `publish_files`
-call starts with `publish_files_start`: `files`, the `{path, title}` entries
-as the model wrote them, and `description`. It ends with
+only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `library_create_library_file` or `library_replace_library_file`
+call, or an `artifact` publish without `path` (its `file_path` and `title`, or each of its
+`file_paths`, as the entries), starts with `publish_files_start`: `files`, the `{path, title}` entries
+as the model wrote them, and `description`. An `artifact` publish with `path`
+copies a stored file as a version (an update) and shows the generic card
+(`chat/renderer.py:publish_card_files`). It ends with
 `publish_files_end`:
 `files`, one `PublishedFile` per entry in the same order, or `error` and no
 files when the call published none (it publishes all or none). A
@@ -296,8 +308,10 @@ files when the call published none (it publishes all or none). A
 publish gives a new one), `artifact_id` and `version` (every publish of one
 `path` in the chat is a version of one artifact, numbered from 1; both are
 null in details saved without them, and such a file is an artifact of its
-own), `name` (the file name, which the download keeps), `title` (null when the
-model gave none), `path` (absolute and normalized in the VM),
+own), `chat_id` (the root chat that owns the artifact, which a replace from
+another chat keeps; null in details saved without it), `name` (the file name,
+which the download keeps), `title` (null when the model gave none; a replace
+without one keeps the newest version's title), `path` (absolute and normalized in the VM),
 `display_path` (the path to show: relative
 to the chat's working directory, or the whole path outside it; derived from
 `path`), `size` in bytes, `mime_type` and `thumbnail_file_id` (a JPEG of the
@@ -562,7 +576,7 @@ its background task end ([[#pure-asgi-middleware]]).
 ## Known issues
 
 - Only the web client knows `publish_files_start` and `publish_files_end`, so
-  the mobile, widget and CLI clients show nothing for a `publish_files` call
+  the mobile, widget and CLI clients show nothing for a publishing call
   ([[#unknown-packet-renders-nothing]]).
 - The web enum keeps `MESSAGE_END`. The mobile enum keeps `MESSAGE_END` and
   `TOP_LEVEL_BRANCHING`. The backend sends neither. Mobile drops

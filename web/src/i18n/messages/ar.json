@@ -510,6 +510,9 @@
         "userFile": {
           "description": "الملفات المرفوعة في الدردشة"
         },
+        "chatArtifact": {
+          "description": "الملفات المنشورة في الدردشة"
+        },
         "googleSites": {
           "description": "صفحات مستضافة على Google"
         },
@@ -12367,6 +12370,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "سؤال"
+        },
+        "artifactError": {
+          "message": "هذا الملف غير متاح."
         }
       },
       "messageEditing": {
@@ -12817,6 +12823,9 @@
           "placeholder": "أخرى: اكتب إجابتك الخاصة",
           "ariaLabel": "إجابة أخرى عن {header}"
         },
+        "multiSelect": {
+          "hint": "اختر كل ما ينطبق."
+        },
         "submit": "إرسال",
         "page": {
           "progress": "السؤال {current} من {total}",
@@ -13072,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# سطر} other {# أسطر}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# كلمة} other {# كلمات}}"
-      },
       "copyButton": {
         "tooltip": "نسخ المحتوى"
       },
@@ -13098,6 +13104,13 @@
       "renderError": {
         "title": "تعذّرت معاينة هذا الملف",
         "description": "تعذّر عرض الملف هنا. نزّل الملف لفتحه."
+      },
+      "unavailable": {
+        "title": "لا تتوفر معاينة لهذا الملف",
+        "description": "تعذّر إنشاء معاينة لهذا الملف. نزّل الملف لفتحه."
+      },
+      "preparing": {
+        "status": "جارٍ تجهيز المعاينة. قد يستغرق ذلك بعض الوقت."
       },
       "unsupported": {
         "title": "معاينة هذا النوع من الملفات غير مدعومة حاليًا",
@@ -13146,30 +13159,6 @@
         },
         "error": {
           "description": "تعذّر تحميل ملف PDF."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "عناصر التحكم في العرض التقديمي"
-        },
-        "thumbnails": {
-          "toggle": "إظهار الصور المصغّرة للشرائح أو إخفاؤها",
-          "resize": "تغيير حجم الصور المصغّرة للشرائح"
-        },
-        "slides": {
-          "label": "الشرائح"
-        },
-        "previous": {
-          "label": "الشريحة السابقة"
-        },
-        "next": {
-          "label": "الشريحة التالية"
-        },
-        "slide": {
-          "counter": "الشريحة {current} من {total}"
-        },
-        "empty": {
-          "label": "لا توجد شرائح في هذا العرض التقديمي"
         }
       }
     },
