@@ -148,13 +148,13 @@ def send_tool_request(
     url: str,
     *,
     headers: dict[str, str],
+    ssrf: OutboundSSRFParams,
     max_response_bytes: int | None = None,
     json_body: JsonValue | None = None,
 ) -> ToolResponse:
-    """Send one request with the SSRF checks of a custom tool. A redirect is
+    """Send one request with the SSRF checks of ``ssrf``. A redirect is
     refused, so a credential header never goes to a second host. Raises
     ``ToolRequestError``."""
-    params = tool_request_ssrf_params()
     body: dict[str, Any] = {} if json_body is None else {"json": json_body}
     try:
         response = ssrf_safe_request(
@@ -162,9 +162,9 @@ def send_tool_request(
             method=method,
             headers=headers,
             timeout=TOOL_REQUEST_TIMEOUT,
-            allow_private_network=params.allow_private_network,
-            block_loopback_and_link_local=params.block_loopback_and_link_local,
-            block_link_local_only=params.block_link_local_only,
+            allow_private_network=ssrf.allow_private_network,
+            block_loopback_and_link_local=ssrf.block_loopback_and_link_local,
+            block_link_local_only=ssrf.block_link_local_only,
             stream=True,
             **body,
         )

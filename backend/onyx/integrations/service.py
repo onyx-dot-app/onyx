@@ -608,6 +608,9 @@ def introspect_graphql_endpoint(
             "POST",
             endpoint_url,
             headers={},
+            # An admin setup fetch: the admin SSRF level, as for the spec URL
+            # import and MCP servers, not the chat tool policy.
+            ssrf=outbound_ssrf_params(get_security_settings().ssrf_protection_level),
             max_response_bytes=_MAX_SPEC_BYTES,
             json_body={"query": get_introspection_query(descriptions=True)},
         )

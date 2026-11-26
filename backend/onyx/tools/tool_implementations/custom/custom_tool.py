@@ -207,6 +207,7 @@ class ApiTool(Tool):
                 method,
                 url,
                 headers=self.headers,
+                ssrf=tool_request_ssrf_params(),
                 json_body=request_body,
             )
         except ToolRequestError as e:

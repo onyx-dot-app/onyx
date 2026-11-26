@@ -1113,6 +1113,34 @@ def test_graphql_and_spec_fetches_refuse_blocked_hosts(
 
 
 @pytest.mark.parametrize(
+    ("level", "reaches"),
+    [
+        (SSRFProtectionLevel.VALIDATE_ALL, False),
+        (SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK, True),
+    ],
+)
+def test_introspection_follows_the_admin_ssrf_level(
+    monkeypatch: pytest.MonkeyPatch, level: SSRFProtectionLevel, reaches: bool
+) -> None:
+    """Introspection is an admin setup fetch, like the spec URL import and an
+    MCP server: a private host needs the Allow private network level. Chat
+    tool calls keep their own policy (ENG-4421)."""
+    from onyx.integrations import service
+    from onyx.server.features.integrations.models import GraphQLIntrospectRequest
+
+    settings = unittest.mock.MagicMock()
+    settings.ssrf_protection_level = level
+    monkeypatch.setattr(service, "get_security_settings", lambda: settings)
+    response = _response({"data": None})
+    with patch("onyx.utils.url._pinned_request", return_value=response) as pinned:
+        with pytest.raises(OnyxError):
+            service.introspect_graphql_endpoint(
+                GraphQLIntrospectRequest(endpoint_url="http://10.0.0.1/graphql")
+            )
+    assert pinned.called is reaches
+
+
+@pytest.mark.parametrize(
     "data",
     [None, {"__schema": {"queryType": {"name": "Query"}}}],
 )

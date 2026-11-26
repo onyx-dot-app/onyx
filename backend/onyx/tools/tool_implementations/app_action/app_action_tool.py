@@ -49,6 +49,7 @@ from onyx.tools.tool_implementations.http_request import (
     fresh_call_credentials,
     note_rejected_credential,
     send_tool_request,
+    tool_request_ssrf_params,
 )
 from onyx.tools.tool_name import app_action_tool_name
 from onyx.utils.logger import setup_logger
@@ -293,6 +294,7 @@ class AppActionTool(Tool):
                     _allowed_model_headers(arguments.get("headers")),
                     credentials.headers,
                 ),
+                ssrf=tool_request_ssrf_params(),
                 json_body=body,
                 max_response_bytes=APP_ACTION_MAX_RESPONSE_BYTES,
             )
