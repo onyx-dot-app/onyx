@@ -14,7 +14,6 @@ REQUEST_BODY = "requestBody"
 # The operation keys of an OpenAPI path item. Its other keys, such as
 # `parameters` and `summary`, apply to the whole path.
 OPENAPI_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
-MAX_OPENAPI_DOCUMENT_BYTES = 5 * 1024 * 1024
 
 
 class _OpenApiYamlLoader(yaml.SafeLoader):
@@ -43,8 +42,6 @@ _OpenApiYamlLoader.add_implicit_resolver(
 
 def parse_openapi_document(document: str) -> dict[str, Any]:
     """An OpenAPI document stored as JSON or YAML text."""
-    if len(document.encode()) > MAX_OPENAPI_DOCUMENT_BYTES:
-        raise ValueError("The spec is larger than 5 MB.")
     try:
         parsed = json.loads(document)
     except json.JSONDecodeError:

@@ -216,6 +216,13 @@ def test_a_pasted_spec_has_the_size_limit_of_a_spec_url() -> None:
         _import(json.dumps(spec))
 
 
+def test_a_saved_spec_larger_than_the_import_limit_still_parses() -> None:
+    spec = _callable_spec()
+    spec["info"]["description"] = "x" * (5 * 1024 * 1024)
+
+    assert parse_openapi_document(json.dumps(spec)) == spec
+
+
 def test_yaml_timestamps_stay_text() -> None:
     spec = parse_openapi_document(
         "openapi: 3.0.0\ninfo:\n  title: T\n  x-added: 2015-02-22T20:00:45.000Z\n"

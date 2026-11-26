@@ -180,7 +180,6 @@ from onyx.server.security.store import get_security_settings
 from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
 from onyx.tools.tool_implementations.custom.graphql_tool import introspection_to_sdl
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
-    MAX_OPENAPI_DOCUMENT_BYTES,
     openapi_to_url,
     parse_openapi_document,
     validate_openapi_schema,
@@ -196,7 +195,7 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
-_MAX_SPEC_BYTES = MAX_OPENAPI_DOCUMENT_BYTES
+_MAX_SPEC_BYTES = 5 * 1024 * 1024
 _SPEC_FETCH_TIMEOUT_SECONDS = 15
 
 _CLIENT_CREDENTIAL_KEYS = ("client_id", "client_secret")
@@ -524,6 +523,10 @@ def _imported_view(document: str) -> OpenApiConfigView:
 def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigView:
     """The base URL and the endpoint lines of a spec to import."""
     if request.openapi_document is not None:
+        if len(request.openapi_document.encode()) > _MAX_SPEC_BYTES:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "The spec is larger than 5 MB."
+            )
         return _imported_view(request.openapi_document)
     if request.spec_url is None:
         raise RuntimeError("Bug: the model requires the spec text or a URL.")
