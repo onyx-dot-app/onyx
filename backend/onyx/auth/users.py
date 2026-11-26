@@ -2849,7 +2849,9 @@ def _cookie_strategy(db_session: AsyncSession) -> Strategy[User, uuid.UUID]:
         )
     if AUTH_BACKEND == AuthBackend.REDIS:
         return get_redis_strategy()
-    return get_jwt_strategy()
+    if AUTH_BACKEND == AuthBackend.JWT:
+        return get_jwt_strategy()
+    raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
 
 async def read_websocket_cookie_user(websocket: WebSocket) -> User | None:
