@@ -244,6 +244,10 @@ It does not have an action catalog.
   Its **Overview** tab asks you to add it again as a custom REST API.
 </Note>
 
+The upgrade to this release turns a custom App with one URL pattern of the form `https://host/path/*` into a custom REST
+API with the base URL `https://host/path`. The App keeps its agents, sign-ins and approval settings.
+A custom App with other URL patterns stays as it is.
+
 You cannot change the URL patterns of an existing custom App. To change them,
 add the API again as a custom REST API and delete the custom App.
 You can change its sign-in settings on its **Configuration** tab.

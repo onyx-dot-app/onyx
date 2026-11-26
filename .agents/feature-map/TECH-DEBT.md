@@ -49,21 +49,14 @@ link here from **Known issues** and do not restate the entry.
   its URL patterns: an admin can change its name and sign-in, or delete it.
   Create refuses the shape, and chat offers no tool for it.
 - **Why:** Existing rows must keep loading until their admins delete them.
+  Revision `933a21d46472` turns an app with one `https://host/path/*`
+  pattern into a REST app; no base URL covers the other apps.
 - **Where:** `backend/onyx/integrations/craft.py`,
   `backend/onyx/integrations/chat_tools.py`,
   `backend/onyx/integrations/kinds/api.py`,
   `backend/onyx/integrations/models.py:ApiShape`.
 - **Ends when:** No URL-pattern app remains. Then remove their runtime
   handling in these files and `ApiShape.CUSTOM`.
-- **Owner:** rohoswagger. **Added:** 2026-11-24.
-
-## Request-body `$ref` left unresolved
-
-- **What:** Request-body schemas with local `$ref` (for example
-  `#/components/schemas/Pet`) reach the chat tool unresolved.
-- **Why:** The parser resolves local `$ref`s for parameters only.
-- **Where:** `backend/onyx/tools/tool_implementations/custom/openapi_parsing.py:MethodSpec.get_request_body_schema`.
-- **Ends when:** Body schemas resolve local refs the way parameters do.
 - **Owner:** rohoswagger. **Added:** 2026-11-24.
 
 ## Usage-limit counters accept only `CALENDAR_WEEK`
