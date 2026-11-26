@@ -23,7 +23,7 @@ from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.kinds import api as api_kind
-from onyx.integrations.kinds.api import ApiKindHandler
+from onyx.integrations.kinds.api import ApiKindHandler, chat_tool_name
 from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import BUILTIN_ACTION_PREFIX, ApiShape
 from onyx.sandbox_proxy.resolvers.mcp_matching import IntegrationMatchTarget
@@ -450,6 +450,9 @@ def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id
     assert tools[0].approval == scope
     assert tools[0].integration_action == IntegrationActionRef(
         integration_id=integration.id, action="get_USER_ID"
+    )
+    assert tools[0].name == chat_tool_name(
+        ApiShape.OPENAPI, integration.id, "get_USER_ID"
     )
 
 

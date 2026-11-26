@@ -205,7 +205,7 @@ def test_schema_references_are_inlined_into_the_tool() -> None:
     }
     assert "$ref" not in json.dumps(inline_path_parameters(spec)["paths"])
 
-    (tool,) = build_custom_tools_from_openapi_schema_and_headers(
+    (tool,) = build_rest_tools(
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
@@ -319,7 +319,7 @@ def test_a_spec_that_expands_too_far_keeps_its_tools_and_later_refs() -> None:
     spec["paths"]["/other"] = {"post": copy.deepcopy(spec["paths"]["/things"]["post"])}
     spec["paths"]["/other"]["post"]["operationId"] = "addOther"
 
-    tools = build_custom_tools_from_openapi_schema_and_headers(
+    tools = build_rest_tools(
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),

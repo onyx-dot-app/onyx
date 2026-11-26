@@ -305,7 +305,7 @@ class RestTool(ApiTool):
         super().__init__(
             integration_id=integration_id,
             action_key=action_key,
-            name=api_app_tool_name(integration_id, method_spec.raw_name),
+            name=api_app_tool_name(integration_id, action_key),
             display_name=method_spec.display_name,
             description=method_spec.summary,
             parameters=method_spec.to_tool_definition().parameters,
