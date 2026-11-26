@@ -549,3 +549,14 @@ def test_import_skips_an_operation_with_a_numbered_path_parameter() -> None:
 
     assert [line.split(":")[0] for line in view.skipped] == ["GET /{0}"]
     assert json.loads(view.openapi_document) == _callable_spec()
+
+
+def test_a_yaml_alias_is_refused() -> None:
+    nested = "a: &a [x, x]\n" + "".join(
+        f"{chr(98 + i)}: &{chr(98 + i)} [*{chr(97 + i)}, *{chr(97 + i)}]\n"
+        for i in range(3)
+    )
+
+    with pytest.raises(ValueError, match="aliases"):
+        parse_openapi_document(nested)
+    assert parse_openapi_document("openapi: 3.0.0\nx: &a 1\n")["x"] == 1

@@ -6,6 +6,7 @@ from urllib.parse import quote, urlencode
 
 import yaml
 from pydantic import BaseModel, JsonValue
+from yaml.composer import ComposerError
 
 from onyx.llm.models import ToolDefinition
 from onyx.tools.tool_name import sanitize_tool_name
@@ -19,7 +20,18 @@ OPENAPI_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "
 class _OpenApiYamlLoader(yaml.SafeLoader):
     """Keeps timestamps as text: the parsed spec must stay JSON. As in YAML
     1.2, only true and false are booleans: ``on``, ``off``, ``yes`` and ``no``
-    stay text."""
+    stay text. Refuses aliases: a few nested aliases expand to gigabytes, and
+    OpenAPI reuses parts with ``$ref``."""
+
+    def compose_node(self, parent: Any, index: Any) -> Any:
+        if self.check_event(yaml.AliasEvent):
+            raise ComposerError(
+                None,
+                None,
+                "YAML aliases (*name) are not supported. Use $ref.",
+                self.peek_event().start_mark,
+            )
+        return super().compose_node(parent, index)
 
 
 def _construct_timestamp(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> str:
