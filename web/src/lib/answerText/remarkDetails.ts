@@ -1,8 +1,11 @@
 import type { MarkdownAstNode } from "@/lib/answerText/remarkGithubAlerts";
 
 const DETAILS_TOKEN =
-  /<details(?:\s+open)?\s*>|<summary>[\s\S]*?<\/summary>|<\/details>/gi;
+  /<details\b[^>]*>|<summary>[\s\S]*?<\/summary>|<\/details>/gi;
 const DETAILS_OPEN = /^<details(\s+open)?\s*>$/i;
+// Any opener, also one with other attributes: it stays raw HTML, but its
+// closing tag must not end an outer disclosure.
+const ANY_DETAILS_OPEN = /^<details\b[^>]*>$/i;
 const SUMMARY = /^<summary>([\s\S]*?)<\/summary>$/i;
 const DETAILS_CLOSE = /^<\/details>$/i;
 // Tags inside these regions are text, so a block that holds one stays whole.
@@ -81,7 +84,7 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
       let depth = 1;
       for (let j = i + 2; j < nodes.length && close < 0; j++) {
         const tag = htmlValue(nodes[j]);
-        if (DETAILS_OPEN.test(tag)) depth++;
+        if (ANY_DETAILS_OPEN.test(tag)) depth++;
         else if (DETAILS_CLOSE.test(tag) && --depth === 0) close = j;
       }
     }
@@ -90,7 +93,8 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
       continue;
     }
     const title = decodeReferences(
-      (summary[1] ?? "").replace(/<[^>]*>/g, "").trim()
+      // Only real tags go; a comparison such as `x < 5 > 3` stays text.
+      (summary[1] ?? "").replace(/<\/?[a-z][^<>]*>/gi, "").trim()
     );
     out.push({
       type: "details",
