@@ -410,6 +410,42 @@ test("resolves a relative server of a spec imported from a URL", async () => {
   );
 });
 
+test("keeps the Base URL when a spec imported from a URL has no single server", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": {
+      ...OPENAPI_VIEW,
+      endpoints: ["GET /pets List pets"],
+      base_url: "",
+    },
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const endpoints = await view.findByRole("textbox", {
+    name: copy.add.rest.endpoints.title,
+  });
+  await u.type(
+    view.getByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://docs.example.com/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+
+  await waitFor(() => expect(endpoints).toHaveValue("GET /pets List pets"));
+  expect(
+    view.getByRole("textbox", { name: copy.add.rest.baseUrl.title })
+  ).toHaveValue(OPENAPI_VIEW.base_url);
+});
+
 test("sends the stored lines unchanged when only the Base URL changes", async () => {
   // The backend keeps the operation of a line sent as shown, also one whose
   // line does not parse back to it.

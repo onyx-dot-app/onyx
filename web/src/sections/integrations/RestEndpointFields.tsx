@@ -71,12 +71,12 @@ export default function RestEndpointFields({
     try {
       const view = await importOpenApiSpec(body);
       const specUrl = "spec_url" in body ? body.spec_url : null;
-      // A file gives no URL to resolve a relative server against, so the
-      // Base URL stays.
+      // A file gives no URL to resolve a relative server against, and a spec
+      // with no single server gives no URL, so the Base URL stays.
       onChange({
         ...restDraftFrom(view),
         baseUrl:
-          specBaseUrl(view.base_url, specUrl) ??
+          specBaseUrl(view.base_url, view.base_url.trim() ? specUrl : null) ??
           (draft.baseUrl.trim() || view.base_url),
       });
       setSkipped(view.skipped);
