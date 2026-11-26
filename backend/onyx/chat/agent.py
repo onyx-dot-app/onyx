@@ -9,13 +9,14 @@ from onyx.agents.models import (
     AgentState,
     PreparedStep,
     ReleaseFailed,
+    RunHooks,
     StepInput,
     StepResult,
     ToolCallContext,
     ToolResultAmendment,
     ToolResultContext,
 )
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.runtime import Agent, AgentFeature
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
@@ -140,7 +141,7 @@ def _offered_preference(
     return preference
 
 
-class ChatFeature:
+class ChatFeature(AgentFeature):
     """Chat step preparation and result handling for the shared runtime: an
     AgentFeature. `agent` builds the agent that runs it."""
 

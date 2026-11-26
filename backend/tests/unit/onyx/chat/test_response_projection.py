@@ -15,12 +15,13 @@ from onyx.agents.models import (
     AgentInfo,
     ExecutionStatus,
     PreparedStep,
+    RunHooks,
     RunState,
     RunStatus,
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent, Run, RunHooks
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store

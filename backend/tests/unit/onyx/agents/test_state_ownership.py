@@ -16,11 +16,12 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
+    RunHooks,
     StepInput,
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.models import PromptMetadata
 from onyx.chat.prompt_formatting import prepare_model_messages

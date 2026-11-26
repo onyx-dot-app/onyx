@@ -9,8 +9,8 @@ import pytest
 from pydantic import JsonValue
 
 from onyx.agents.events import AgentEvent, ToolEndEvent, ToolStartEvent, ToolUpdateEvent
-from onyx.agents.models import ToolCallContext
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.models import RunHooks, ToolCallContext
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolProgress
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.interfaces import GenerationContext

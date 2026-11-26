@@ -12,7 +12,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 
 from onyx.agents.compaction import (
     CheckpointMismatchError,
@@ -59,9 +59,12 @@ from onyx.agents.models import (
     InputMessageMetadata,
     PreparedStep,
     ReleaseFailed,
+    ReleaseHook,
     RunAction,
+    RunConfig,
     RunFailure,
     RunFailureKind,
+    RunHooks,
     RunOutcome,
     RunProgress,
     RunResult,
@@ -229,49 +232,6 @@ def _capture_unsettled_child(state: RunState) -> RunState:
     return snapshot
 
 
-# Called with the run's recorded tool results; returns final results of its calls,
-# or raises ReleaseFailed to fail the run after it applies them.
-ReleaseHook = Callable[[list[ToolResultMessage]], list[ToolResultAmendment]]
-
-
-class RunHooks(BaseModel):
-    """What a feature gives one run: its tools and the hooks that decide its
-    steps. An absent hook (None) differs from one that changes nothing: the
-    run then uses its default behavior. `bind` returns the hooks themselves,
-    so an agent without feature state passes `feature=RunHooks(...)`."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    # The feature's tools for this run, bound to its live state; the agent's
-    # own tools come first.
-    tools: tuple[AgentTool, ...] = ()
-    prepare_step: Callable[[StepInput], PreparedStep] | None = None
-    after_step: Callable[[StepResult], bool] | None = None
-    before_tool_call: (
-        Callable[[ToolCallContext], ToolResult | PendingToolInput | None] | None
-    ) = None
-    after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult] | None = None
-    # Replaces a completed result before the run records and streams it, so
-    # the live events, the saved history and the model see the same result.
-    # Results arrive one at a time, in the order calls complete.
-    prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = None
-    # The result of a call of a tool that the agent does not have, when it
-    # says what to call instead; None: the default result.
-    unknown_tool_hint: Callable[[str], str | None] | None = None
-    on_finish: ReleaseHook | None = None
-    # Called when the run suspends, before its state is captured.
-    on_suspend: ReleaseHook | None = None
-    # The feature state to save when the run suspends, for immediate
-    # serialization; nested values may be borrowed.
-    capture_state: Callable[[], BaseModel] | None = None
-
-    def bind(self) -> "RunHooks":
-        return self
-
-    def restore_state(self, state: Mapping[str, JsonValue]) -> None:  # noqa: ARG002
-        raise ValueError("These hooks save no feature state")
-
-
 class AgentFeature(Protocol):
     """Application state and decisions of an agent, such as chat's citations
     and code cells. A feature never holds its Agent or a Run, so a finished
@@ -285,30 +245,6 @@ class AgentFeature(Protocol):
         """Before the run starts again elsewhere, restore what `capture_state`
         saved; read borrowed state without changing it."""
         ...
-
-
-class RunConfig(BaseModel):
-    """What one execution of a run uses: set when its agent starts it, and
-    released when its work drains or it hands off."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    llm: LLM
-    # The step without a prepare_step hook: the agent's instructions and options.
-    defaults: PreparedStep
-    tools: tuple[AgentTool, ...]
-    tool_phases: Mapping[str, frozenset[str]]
-    # Calls that wait for the user's approval before they run; see
-    # AgentTool.approval_required.
-    approval_required: frozenset[str]
-    # The agent's context, with the run's own cancellation signal.
-    generation_context: GenerationContext
-    hooks: RunHooks
-    # Called after each finish or suspension, once the run's work (its tool
-    # threads and the work of its foreground children) has drained, on the
-    # thread that ended that work, so it must be short. Errors, including
-    # AgentCancelled, are logged and do not stop the run's cleanup.
-    on_drained: Callable[[], None] | None
 
 
 class Agent:

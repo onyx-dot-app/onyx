@@ -180,7 +180,8 @@ ChatTurnExecution.run: one chat-response thread per model
   create_chat_agent -> construct_tools               [[tools-framework]]
   ChatRunStore: response ownership lease and record  [[agent-runtime]]
     (sessions that keep content only)
-  open the trace, ChatFeature (or DeepResearchFeature)   [[agent-runtime]]
+  open the trace, the agent of ChatFeature           [[agent-runtime]]
+    (or DeepResearchFeature) from its agent()
     .start, each step:
     ChatFeature._prepare_step: prompt and tool set     [[context-assembly]]
     compaction when history passes the budget        [[agent-runtime]]

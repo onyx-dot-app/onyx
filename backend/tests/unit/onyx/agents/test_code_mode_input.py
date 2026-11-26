@@ -24,13 +24,14 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    RunHooks,
     RunState,
     RunStatus,
     ToolCallContext,
     ToolResultAmendment,
     ToolResultContext,
 )
-from onyx.agents.runtime import Agent, Run, RunHooks
+from onyx.agents.runtime import Agent, AgentFeature, Run
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
 from onyx.agents.tools import (
     HumanToolAnswer,
@@ -124,7 +125,7 @@ class SavedCells(BaseModel):
     cells: list[SavedCodeCell]
 
 
-class CellsFeature:
+class CellsFeature(AgentFeature):
     """Saves and restores the cells of one agent and ends them with its runs,
     as chat's feature does."""
 

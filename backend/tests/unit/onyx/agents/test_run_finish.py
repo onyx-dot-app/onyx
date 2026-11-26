@@ -19,13 +19,14 @@ from onyx.agents.models import (
     PreparedStep,
     ReleaseFailed,
     RunFailureKind,
+    RunHooks,
     RunState,
     RunStatus,
     ToolCallContext,
     ToolResultAmendment,
     ToolResultContext,
 )
-from onyx.agents.runtime import Agent, Run, RunHooks
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,

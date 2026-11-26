@@ -8,10 +8,11 @@ from pydantic import JsonValue
 
 from onyx.agents.events import ToolResultAmendedEvent
 from onyx.agents.models import (
+    RunHooks,
     RunStatus,
     ToolResultAmendment,
 )
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import (

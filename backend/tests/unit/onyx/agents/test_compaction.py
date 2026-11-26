@@ -29,6 +29,7 @@ from onyx.agents.models import (
     InputMessageMetadata,
     InputSource,
     PreparedStep,
+    RunHooks,
     RunState,
     RunStatus,
     StepInput,
@@ -38,7 +39,6 @@ from onyx.agents.runtime import (
     Agent,
     Run,
     RunFailed,
-    RunHooks,
     _compact_context,
     _truncate_context,
 )

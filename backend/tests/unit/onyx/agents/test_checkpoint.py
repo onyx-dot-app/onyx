@@ -14,6 +14,7 @@ from onyx.agents.models import (
     ExecutionCheckpoint,
     ExecutionStatus,
     RunAction,
+    RunHooks,
     RunProgress,
     RunState,
     RunStatus,
@@ -21,7 +22,7 @@ from onyx.agents.models import (
     ToolCallContext,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
     AgentTool,
     HumanToolAnswer,

@@ -1,8 +1,8 @@
 """A result that a release hook sets for an ended call reaches the saved replay."""
 
 from onyx.agents.events import ToolResultAmendedEvent
-from onyx.agents.models import ToolResultAmendment
-from onyx.agents.runtime import Agent, Run, RunHooks
+from onyx.agents.models import RunHooks, ToolResultAmendment
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response

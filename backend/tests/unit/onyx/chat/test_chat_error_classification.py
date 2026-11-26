@@ -4,8 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from onyx.agents.models import RunState, StepResult
-from onyx.agents.runtime import Agent, RunFailed, RunHooks
+from onyx.agents.models import RunHooks, RunState, StepResult
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.chat.errors import (
     _REFUSAL_FINISH_REASONS,
     EmptyLLMResponseError,

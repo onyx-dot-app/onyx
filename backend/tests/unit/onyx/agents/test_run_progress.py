@@ -12,6 +12,7 @@ from onyx.agents.models import (
     PreparedStep,
     RunAction,
     RunFailureKind,
+    RunHooks,
     RunProgress,
     RunState,
     RunStatus,
@@ -19,7 +20,7 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent, Run, RunFailed, RunHooks
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext

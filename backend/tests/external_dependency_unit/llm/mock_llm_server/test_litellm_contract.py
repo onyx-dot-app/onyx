@@ -9,8 +9,8 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from onyx.agents.models import PreparedStep
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.models import PreparedStep, RunHooks
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage

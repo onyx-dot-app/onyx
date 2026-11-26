@@ -8,16 +8,12 @@ from pydantic import JsonValue
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
+    RunHooks,
     RunState,
     StepInput,
     StepResult,
 )
-from onyx.agents.runtime import (
-    Agent,
-    RunFailed,
-    RunHooks,
-    result_from_snapshot,
-)
+from onyx.agents.runtime import Agent, AgentFeature, RunFailed, result_from_snapshot
 from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import (
@@ -97,7 +93,7 @@ MAX_ORCHESTRATOR_CYCLES = 8
 MAX_ORCHESTRATOR_CYCLES_REASONING = 4
 
 
-class DeepResearchFeature:
+class DeepResearchFeature(AgentFeature):
     """Clarify a question, coordinate research children, and write a report:
     an AgentFeature. `agent` builds the agent that runs it."""
 

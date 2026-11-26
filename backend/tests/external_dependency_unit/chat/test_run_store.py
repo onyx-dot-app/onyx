@@ -27,6 +27,7 @@ from onyx.agents.models import (
     InputSource,
     MessageDelivery,
     PreparedStep,
+    RunHooks,
     RunProgress,
     RunState,
     RunStatus,
@@ -34,7 +35,7 @@ from onyx.agents.models import (
     ToolCallContext,
     messages_from_steps,
 )
-from onyx.agents.runtime import Agent, Run, RunFailed, RunHooks
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentLifetime,
     AgentTool,

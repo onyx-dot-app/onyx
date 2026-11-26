@@ -11,11 +11,12 @@ from onyx.agents.models import (
     CompactionCheckpoint,
     ExecutionStatus,
     RunFailureKind,
+    RunHooks,
     RunState,
     RunStatus,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, RunFailed, RunHooks
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tool_execution import STOPPED_CALL_MESSAGE
 from onyx.agents.tools import (
     AgentTool,

@@ -26,10 +26,11 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    RunHooks,
     RunStatus,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.runtime import Agent, AgentFeature
 from onyx.agents.tools import (
     HumanToolAnswer,
     InputDecision,
@@ -92,7 +93,7 @@ def _ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
     )
 
 
-class _AskingFeature:
+class _AskingFeature(AgentFeature):
     """Chat whose `send` calls wait for approval (`_ask_for_send`)."""
 
     def __init__(self, chat: ChatFeature) -> None:

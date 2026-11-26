@@ -10,13 +10,14 @@ import pytest
 from onyx.agents.models import (
     ExecutionStatus,
     PreparedStep,
+    RunHooks,
     RunState,
     RunStatus,
     StepInput,
     StepRecord,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, Run, RunHooks
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext

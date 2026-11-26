@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from opensearchpy import AuthorizationException, RequestError, TransportError
 
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.models import RunHooks
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.models import (

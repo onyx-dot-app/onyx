@@ -16,18 +16,13 @@ from onyx.agents.models import (
     ExecutionCheckpoint,
     PreparedStep,
     RunFailureKind,
+    RunHooks,
     RunStatus,
     StepInput,
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import (
-    Agent,
-    Run,
-    RunFailed,
-    RunHooks,
-    RunReleased,
-)
+from onyx.agents.runtime import Agent, AgentFeature, Run, RunFailed, RunReleased
 from onyx.agents.tools import (
     AgentTool,
     HumanToolAnswer,
@@ -643,7 +638,7 @@ def test_an_answer_that_changes_only_standing_applies_on_resume() -> None:
         assert resumed.wait_for_idle(3)
 
 
-class _FailingRestoration:
+class _FailingRestoration(AgentFeature):
     def bind(self) -> RunHooks:
         return RunHooks(capture_state=self.capture_state)
 
@@ -659,7 +654,7 @@ class _FeatureState(BaseModel):
     sources: dict[str, list[str]] = Field(default_factory=dict)
 
 
-class _StatefulFeature:
+class _StatefulFeature(AgentFeature):
     def __init__(self) -> None:
         self.state = _FeatureState()
 

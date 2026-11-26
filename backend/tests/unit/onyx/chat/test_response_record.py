@@ -12,13 +12,14 @@ from onyx.agents.models import (
     InputMessageMetadata,
     InputSource,
     PreparedStep,
+    RunHooks,
     RunState,
     RunStatus,
     StepRecord,
     ToolCallContext,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent, Run, RunFailed, RunHooks
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
 from onyx.chat.models import ChatSearchResult
 from onyx.chat.response import response_record, response_snapshot

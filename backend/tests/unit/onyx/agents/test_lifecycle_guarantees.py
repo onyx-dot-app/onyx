@@ -22,12 +22,13 @@ from onyx.agents.models import (
     AgentState,
     PreparedStep,
     RunFailureKind,
+    RunHooks,
     RunStatus,
     StepInput,
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, RunFailed, RunHooks
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, InputMode, PendingToolInput, ToolInvocation
 from onyx.chat.agent import ChatFeature
 from onyx.chat.emitter import Emitter

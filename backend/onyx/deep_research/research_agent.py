@@ -7,10 +7,11 @@ from pydantic import JsonValue
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
+    RunHooks,
     StepInput,
     StepResult,
 )
-from onyx.agents.runtime import Agent, RunHooks
+from onyx.agents.runtime import Agent, AgentFeature
 from onyx.agents.tools import AgentTool
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
@@ -78,7 +79,7 @@ RESEARCH_STEP_OUTPUT_TOKENS = 1000
 RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 
 
-class ResearchFeature:
+class ResearchFeature(AgentFeature):
     """Investigate one question and return a report with source references:
     an AgentFeature. `agent` builds the agent that runs it."""
 

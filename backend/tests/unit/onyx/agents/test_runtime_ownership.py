@@ -18,13 +18,14 @@ from onyx.agents.models import (
     ExecutionStatus,
     PreparedStep,
     RunFailureKind,
+    RunHooks,
     RunState,
     RunStatus,
     StepInput,
     StepRecord,
     StepResult,
 )
-from onyx.agents.runtime import Agent, Run, RunFailed, RunHooks
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.llm.cancellation import (
     AgentCancelled,

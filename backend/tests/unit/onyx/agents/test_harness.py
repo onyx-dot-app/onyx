@@ -12,12 +12,13 @@ from onyx.agents.events import AgentEvent, AgentEventType, ToolEndEvent
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
+    RunHooks,
     RunState,
     StepInput,
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, Run, RunFailed, RunHooks
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
