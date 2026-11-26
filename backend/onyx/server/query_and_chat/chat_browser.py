@@ -19,7 +19,8 @@ server went away) closes with 1012, which the viewer retries.
 """
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from typing import Final
 from uuid import UUID, uuid4
 
@@ -96,6 +97,16 @@ _UPLOAD_TIMEOUT_SECONDS = 600.0
 BROWSER_DOWNLOADS_DIR = "downloads"
 BROWSER_DOWNLOAD_MAX_BYTES = 256 << 20
 _MAX_DOWNLOAD_NAME_BYTES = 255
+
+
+@contextmanager
+def _sandbox_errors_as_onyx_errors() -> Iterator[None]:
+    """Raises a sandbox, host agent or guest daemon failure as
+    SERVICE_UNAVAILABLE."""
+    try:
+        yield
+    except (HarnessSandboxError, HostAgentError, SandboxDaemonError) as e:
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
 
 
 def _check_browser_chat(chat_session_id: UUID, user: User, db_session: Session) -> None:
@@ -330,7 +341,7 @@ def upload_chat_browser_files(
             )
     sandbox = get_harness_sandbox()
     paths: list[str] = []
-    try:
+    with _sandbox_errors_as_onyx_errors():
         for upload in files:
             # A unique folder keeps two uploads apart.
             name = safe_file_name((upload.filename or "",))
@@ -339,8 +350,6 @@ def upload_chat_browser_files(
                 ref, path, upload.file, timeout_seconds=_UPLOAD_TIMEOUT_SECONDS
             )
             paths.append(path)
-    except (HarnessSandboxError, HostAgentError, SandboxDaemonError) as e:
-        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
     return BrowserUploadResponse(paths=paths)
 
 
@@ -352,10 +361,8 @@ def clear_chat_browser_data(
     """Stop the user's browser and delete its profile and the profile's
     save: sign-ins, cookies and site storage of all the user's chats."""
     ref = _browser_ref(chat_session_id, user)
-    try:
+    with _sandbox_errors_as_onyx_errors():
         get_harness_sandbox().clear_browser_data(ref)
-    except (HarnessSandboxError, HostAgentError, SandboxDaemonError) as e:
-        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
 
 
 @router.get("/sessions/{chat_session_id}/browser/downloads/{name}")
@@ -373,18 +380,17 @@ def download_chat_browser_file(
         or len(name.encode()) > _MAX_DOWNLOAD_NAME_BYTES
     ):
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Not a valid file name.")
-    try:
-        data = get_harness_sandbox().read_file(
-            ref,
-            f"{BROWSER_DOWNLOADS_DIR}/{name}",
-            max_bytes=BROWSER_DOWNLOAD_MAX_BYTES,
-        )
-    except SandboxFileNotFoundError as e:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Download not found.") from e
-    except SandboxFileTooLargeError as e:
-        raise OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, str(e)) from e
-    except (HarnessSandboxError, HostAgentError, SandboxDaemonError) as e:
-        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
+    with _sandbox_errors_as_onyx_errors():
+        try:
+            data = get_harness_sandbox().read_file(
+                ref,
+                f"{BROWSER_DOWNLOADS_DIR}/{name}",
+                max_bytes=BROWSER_DOWNLOAD_MAX_BYTES,
+            )
+        except SandboxFileNotFoundError as e:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Download not found.") from e
+        except SandboxFileTooLargeError as e:
+            raise OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, str(e)) from e
     return Response(
         content=data,
         media_type="application/octet-stream",
