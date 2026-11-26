@@ -32,7 +32,7 @@ def _make_tool(mock_provider: Any) -> WebSearchTool:
 
     with (
         patch(
-            "onyx.tools.tool_implementations.web_search.web_search_tool.get_session_with_current_tenant"
+            "onyx.tools.tool_implementations.web_search.web_search_tool.get_session_with_current_tenant_if_none"
         ) as mock_session_ctx,
         patch(
             "onyx.tools.tool_implementations.web_search.web_search_tool.fetch_active_web_search_provider",

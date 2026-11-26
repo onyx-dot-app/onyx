@@ -1,5 +1,4 @@
 import json
-from contextlib import ExitStack
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -8,7 +7,9 @@ from typing_extensions import override
 from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant_if_none,
+)
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
@@ -64,10 +65,8 @@ class WebSearchTool(Tool):
         self._id = tool_id
 
         # Get web search provider from database
-        with ExitStack() as stack:
-            if db_session is None:
-                db_session = stack.enter_context(get_session_with_current_tenant())
-            provider_model = fetch_active_web_search_provider(db_session)
+        with get_session_with_current_tenant_if_none(db_session) as session:
+            provider_model = fetch_active_web_search_provider(session)
             if provider_model is None:
                 raise RuntimeError("No web search provider configured.")
             provider_type = WebSearchProviderType(provider_model.provider_type)
