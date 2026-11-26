@@ -45,29 +45,39 @@ def _response(
 
 def _now_blocked(
     db_session: Session,
-    row: ActionApproval,
+    rows: list[ActionApproval],
     integration_id: int,
     chat_session_id: UUID,
     user_id: UUID,
-) -> bool:
-    """True when the integration is gone or turned off, or the current
-    policies block one of the request's actions, as the proxy's final check
-    finds."""
+) -> set[UUID]:
+    """The requests of `rows` that the proxy's final check now refuses: the
+    integration is gone or turned off, or the current policies block one of
+    their actions."""
+    if not rows:
+        return set()
     integration = get_integration_by_id(integration_id, db_session)
     if integration is None or not integration.enabled:
-        return True
+        return {row.approval_id for row in rows}
     policies = resolve_chat_action_policies(
         db_session,
         integration=integration,
         action_keys={
             action["action_type"]
+            for row in rows
             for action in row.actions
             if isinstance(action.get("action_type"), str)
         },
         user_id=user_id,
         chat_session_id=chat_session_id,
     )
-    return EffectivePolicy.BLOCKED in policies.values()
+    return {
+        row.approval_id
+        for row in rows
+        if any(
+            policies.get(action.get("action_type")) == EffectivePolicy.BLOCKED
+            for action in row.actions
+        )
+    }
 
 
 def decide_command_approval(
@@ -76,7 +86,7 @@ def decide_command_approval(
     """Approve the request once or for the rest of its command, or reject
     it. Approving for the command also approves the command's other waiting
     requests that the grant covers. Approving a request that the current
-    policies block saves a rejection by the policy. Repeating a saved
+    policies block saves a rejection by the policy, also for a covered one. Repeating a saved
     decision returns it; a different one, or a request that no longer waits,
     is a conflict."""
     command_id = row.command_id
@@ -84,8 +94,8 @@ def decide_command_approval(
     integration_id = row.integration_id
     if chat_session_id is None or command_id is None or integration_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
-    blocked = choice != ApprovalChoice.REJECT and _now_blocked(
-        db_session, row, integration_id, chat_session_id, user_id
+    blocked = choice != ApprovalChoice.REJECT and bool(
+        _now_blocked(db_session, [row], integration_id, chat_session_id, user_id)
     )
     if blocked:
         choice = ApprovalChoice.REJECT
@@ -155,7 +165,9 @@ def decide_command_approval(
     approval_cache.send_wakes([row.approval_id], decision, cache)
 
     covered_ids: list[UUID] = []
+    blocked_ids: list[UUID] = []
     if for_command:
+        covered_rows: list[ActionApproval] = []
         for other in action_approval.list_pending_command_action_approvals(
             db_session,
             chat_session_id=chat_session_id,
@@ -176,25 +188,42 @@ def decide_command_approval(
                 )
             except CACHE_TRANSIENT_ERRORS:
                 covered = False
-            if covered and action_approval.try_record_decision(
+            if covered:
+                covered_rows.append(other)
+        # The grant covers only the Ask actions, and an admin may have
+        # blocked another action of a request while it waited.
+        now_blocked = _now_blocked(
+            db_session, covered_rows, integration_id, chat_session_id, user_id
+        )
+        for other in covered_rows:
+            other_blocked = other.approval_id in now_blocked
+            if action_approval.try_record_decision(
                 db_session,
                 approval_id=other.approval_id,
-                decision=ApprovalDecision.APPROVED,
-                decided_via=ApprovalDecidedVia.COMMAND_GRANT,
+                decision=ApprovalDecision.REJECTED
+                if other_blocked
+                else ApprovalDecision.APPROVED,
+                decided_via=ApprovalDecidedVia.POLICY
+                if other_blocked
+                else ApprovalDecidedVia.COMMAND_GRANT,
                 created_after=cutoff,
             ):
-                covered_ids.append(other.approval_id)
+                (blocked_ids if other_blocked else covered_ids).append(
+                    other.approval_id
+                )
         # Commit the decisions before the proxy wakes and reads them.
         db_session.commit()
         approval_cache.send_wakes(covered_ids, decision, cache)
+        approval_cache.send_wakes(blocked_ids, ApprovalDecision.REJECTED, cache)
 
     logger.info(
         "command_approval_decided approval_id=%s command_id=%s decision=%s "
-        "decided_via=%s covered=%s",
+        "decided_via=%s covered=%s blocked=%s",
         row.approval_id,
         command_id,
         decision.value,
         decided_via.value,
         len(covered_ids),
+        len(blocked_ids),
     )
     return _response(decided, decided_via)

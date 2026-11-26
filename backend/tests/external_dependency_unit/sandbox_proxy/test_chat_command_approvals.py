@@ -631,6 +631,62 @@ def test_the_command_grants_together_cover_a_waiting_request(
         approvals.end(cancelled=False)
 
 
+def test_a_command_grant_rejects_a_covered_request_that_the_policies_now_block(
+    db_session: Session, chat: _Chat
+) -> None:
+    """The grant covers only the Ask actions of a waiting request. When an
+    admin blocked its other action, the proxy refuses it, so the scan saves
+    a rejection by the policy and still approves the other covered ones."""
+    command_id, reports, _approvals = _command(chat)
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    create, listing = "issues.create", "issues.list"
+    with_allowed = _matched(chat.integration_id).model_copy(
+        update={
+            "actions": (
+                *_matched(chat.integration_id, create).actions,
+                MatchedAction(
+                    action_type=listing,
+                    display_name=listing,
+                    description=listing,
+                    policy=ActionPolicy.ALWAYS,
+                ),
+            )
+        }
+    )
+    first = _HeldRequest(gate, ctx, _matched(chat.integration_id, create))
+    blocked = _HeldRequest(gate, ctx, with_allowed)
+    normal = _HeldRequest(gate, ctx, _matched(chat.integration_id, create))
+    reports.wait_for(lambda: len(reports.cards()) == 3)
+    set_policy(
+        db_session, chat.integration_id, listing, IntegrationActionPolicyValue.BLOCKED
+    )
+
+    _decide(db_session, chat, first.approval_id, ApprovalChoice.APPROVE_COMMAND)
+
+    assert first.result() == ApprovalDecision.APPROVED
+    assert normal.result() == ApprovalDecision.APPROVED
+    assert blocked.result() == ApprovalDecision.REJECTED
+    db_session.expire_all()
+    rows = {
+        row.approval_id: (row.decision, row.decided_via)
+        for row in db_session.scalars(
+            select(ActionApproval).where(
+                ActionApproval.approval_id.in_(
+                    [normal.approval_id, blocked.approval_id]
+                )
+            )
+        )
+    }
+    assert rows == {
+        normal.approval_id: (
+            ApprovalDecision.APPROVED,
+            ApprovalDecidedVia.COMMAND_GRANT,
+        ),
+        blocked.approval_id: (ApprovalDecision.REJECTED, ApprovalDecidedVia.POLICY),
+    }
+
+
 def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
     db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
 ) -> None:
