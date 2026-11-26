@@ -120,3 +120,30 @@ test("a loose task list keeps the checkbox out of the paragraph", () => {
   expect(container.querySelector("p [role='checkbox']")).toBeNull();
   expect(container.querySelector("p")).toHaveTextContent("Done");
 });
+
+test("an inner details with attributes keeps later text in the outer one", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        '<details>\n<summary>Outer</summary>\n\n<details class="x">\n<summary>Inner</summary>\n\nInner body\n\n</details>\n\nStill outer\n\n</details>\n\nAfter.'
+      }
+    />
+  );
+  const outer = container.querySelector("details");
+  expect(outer?.querySelector("summary")).toHaveTextContent(/^Outer$/);
+  expect(outer).toHaveTextContent("Still outer");
+  expect(outer).not.toHaveTextContent("After.");
+});
+
+test("a summary keeps comparison text", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Check x < 5 > 3</summary>\n\nBody\n\n</details>"
+      }
+    />
+  );
+  expect(container.querySelector("summary")).toHaveTextContent(
+    /^Check x < 5 > 3$/
+  );
+});
