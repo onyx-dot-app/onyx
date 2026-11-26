@@ -543,7 +543,7 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
     if request.openapi_document is not None:
         if len(request.openapi_document.encode()) > _MAX_SPEC_BYTES:
             raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT, "The spec is larger than 5 MB."
+                OnyxErrorCode.PAYLOAD_TOO_LARGE, "The spec is larger than 5 MB."
             )
         return _imported_view(request.openapi_document)
     if request.spec_url is None:
@@ -569,7 +569,7 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
                 body.extend(chunk)
                 if len(body) > _MAX_SPEC_BYTES:
                     raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
                         "The spec is larger than 5 MB.",
                     )
     except (requests.RequestException, SSRFException, ValueError) as e:
@@ -617,12 +617,15 @@ def introspect_graphql_endpoint(
             OnyxErrorCode.INVALID_INPUT,
             f"Onyx could not reach the endpoint: {e.failure.value}",
         ) from e
-    if not response.ok or response.truncated:
+    if not response.ok:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"The endpoint answered with HTTP {response.status_code}."
-            if not response.ok
-            else "The schema is larger than 5 MB.",
+            f"The endpoint answered with HTTP {response.status_code}.",
+        )
+    if response.truncated:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            "The schema is larger than 5 MB. Upload a smaller SDL file.",
         )
     try:
         sdl = introspection_to_sdl(json.loads(response.body))
