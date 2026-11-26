@@ -156,6 +156,11 @@ export function useSkillBulkActions({
       );
       if (result.succeeded.length)
         toast.success(nounCopy("updated", { count: result.succeeded.length }));
+      // The report sits at the top of the list, out of view of a row menu.
+      if (result.failed.length)
+        toast.error(
+          nounCopy("partialFailure", { count: result.failed.length })
+        );
       setSharingOpen(false);
       deleteModal.toggle(false);
       if (!(await refreshSkillListsChecked(mutate, cache)))

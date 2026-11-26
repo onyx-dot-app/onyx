@@ -5,6 +5,7 @@ import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useSkillBulkActions } from "@/sections/skills/useSkillBulkActions";
+import { toast } from "@opal/layouts";
 
 const mockBulkUpdateSkills = jest.fn();
 jest.mock("@/lib/skills/api", () => ({
@@ -89,6 +90,24 @@ test("a row delete keeps the selection of other plugins", async () => {
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull()
   );
   expect(screen.getByTestId("selection")).toHaveTextContent(toggling.id);
+});
+
+test("a failed delete shows an error toast", async () => {
+  mockBulkUpdateSkills.mockResolvedValue({
+    succeeded: [],
+    failed: [{ skill_id: target.id, detail: "In use" }],
+  });
+  const error = jest.spyOn(toast, "error");
+  const user = setupUser();
+  render(<Harness items={[toggling, target]} />);
+
+  await user.click(screen.getByRole("button", { name: "delete target" }));
+  await user.click(await screen.findByRole("button", { name: "Delete" }));
+
+  await waitFor(() =>
+    expect(error).toHaveBeenCalledWith("1 plugin could not be updated")
+  );
+  error.mockRestore();
 });
 
 function CachedNames() {
