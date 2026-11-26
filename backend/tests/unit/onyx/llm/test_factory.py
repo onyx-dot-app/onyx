@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -566,6 +566,94 @@ class TestPolicyFnForwarding:
             assert (
                 mock_from_provider.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
             )
+
+
+class TestCallerSession:
+    """A caller's open session serves the reads; no second session opens."""
+
+    def test_default_llm_reads_on_the_callers_session(self) -> None:
+        caller_session = MagicMock()
+        model = MagicMock()
+        with (
+            patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
+            patch("onyx.llm.factory.fetch_default_model", return_value=model) as fetch,
+            patch("onyx.llm.factory.LLMProviderView") as view,
+            patch("onyx.llm.factory.llm_from_provider"),
+        ):
+            get_default_llm(db_session=caller_session)
+        sessions.assert_not_called()
+        assert fetch.call_args.args[0] is caller_session
+        # The client needs no groups or personas, so the view reads neither.
+        assert view.from_model.call_args.kwargs["include_access"] is False
+
+    def test_persona_llm_passes_the_callers_session_on(self) -> None:
+        caller_session = MagicMock()
+        persona = MagicMock()
+        persona.default_model_configuration_id = None
+        with (
+            patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
+            patch("onyx.llm.factory.get_default_llm") as default_llm,
+        ):
+            get_llm_for_persona(
+                persona=persona,
+                user=MagicMock(),
+                user_defaults=None,
+                db_session=caller_session,
+            )
+        sessions.assert_not_called()
+        assert default_llm.call_args.kwargs["db_session"] is caller_session
+
+    def test_without_a_session_one_opens(self) -> None:
+        with (
+            patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
+            patch(
+                "onyx.llm.factory.fetch_default_model", return_value=MagicMock()
+            ) as fetch,
+            patch("onyx.llm.factory.LLMProviderView"),
+            patch("onyx.llm.factory.llm_from_provider"),
+        ):
+            get_default_llm()
+        sessions.assert_called_once()
+        assert fetch.call_args.args[0] is sessions.return_value.__enter__.return_value
+
+
+def test_provider_view_without_access_reads_no_groups_or_personas() -> None:
+    # from_model catches an error from a relationship read, so count the reads.
+    reads: list[str] = []
+
+    class _Unloaded:
+        def __init__(self, name: str) -> None:
+            self._name = name
+
+        def __iter__(self) -> Iterator[int]:
+            reads.append(self._name)
+            return iter(())
+
+    provider = MagicMock(spec=LLMProviderModel)
+    provider.id = 1
+    provider.name = "p"
+    provider.provider = "openai"
+    provider.api_key = None
+    provider.zoom_voice_provider_id = None
+    provider.api_base = None
+    provider.api_version = None
+    provider.custom_config = None
+    provider.is_public = True
+    provider.is_auto_mode = False
+    provider.deployment_name = None
+    provider.groups = _Unloaded("groups")
+    provider.personas = _Unloaded("personas")
+
+    view = LLMProviderView.from_model(
+        provider, model_configurations=[], include_access=False
+    )
+
+    assert view.groups == []
+    assert view.personas == []
+    assert reads == []
+
+    LLMProviderView.from_model(provider, model_configurations=[])
+    assert reads == ["groups", "personas"]
 
 
 class TestUnconfiguredOverrideModel:

@@ -238,6 +238,7 @@ class LLMProviderView(LLMProvider):
         include_api_key: bool = True,
         model_configurations: list["ModelConfigurationModel"] | None = None,
         next_model_configuration_offset: int | None = None,
+        include_access: bool = True,
     ) -> "LLMProviderView":
         # ``model_configurations`` is one page of the provider's rows when the
         # caller paged them, otherwise the loaded relationship is used.
@@ -245,15 +246,25 @@ class LLMProviderView(LLMProvider):
         # ``include_api_key=False`` skips the decrypt + credential-access audit
         # for callers that only need catalog metadata (e.g. the Craft gateway
         # model list, which never uses the real key — the proxy injects it).
+        # ``include_access=False`` leaves groups and personas empty and reads
+        # neither, for callers that only build an LLM client from the view.
         # Safely get groups - handle detached instance case
         try:
-            groups = [group.id for group in llm_provider_model.groups]
+            groups = (
+                [group.id for group in llm_provider_model.groups]
+                if include_access
+                else []
+            )
         except Exception:
             # If groups relationship can't be loaded (detached instance), use empty list
             groups = []
         # Safely get personas - similar handling as groups
         try:
-            personas = [persona.id for persona in llm_provider_model.personas]
+            personas = (
+                [persona.id for persona in llm_provider_model.personas]
+                if include_access
+                else []
+            )
         except Exception:
             personas = []
 

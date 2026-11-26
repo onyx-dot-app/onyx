@@ -179,6 +179,7 @@ def get_llm_for_persona(
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+    db_session: Session | None = None,
 ) -> LLM:
     """Get the appropriate LLM for a persona, with the following priority:
     1. LLM override (model configuration id, else provider + model version)
@@ -187,10 +188,14 @@ def get_llm_for_persona(
 
     `user_defaults` are the user's own chat defaults
     (`UserPreferences.chat_defaults`); None applies none.
+
+    `db_session` is the caller's open session; None opens one.
     """
     if persona is None:
         logger.warning("No persona provided, using default LLM")
-        return get_default_llm(policy_fn=policy_fn, user_defaults=user_defaults)
+        return get_default_llm(
+            policy_fn=policy_fn, user_defaults=user_defaults, db_session=db_session
+        )
 
     mc_id_override = llm_override.model_configuration_id if llm_override else None
     provider_name_override = llm_override.model_provider if llm_override else None
@@ -207,60 +212,74 @@ def get_llm_for_persona(
             additional_headers=additional_headers,
             policy_fn=policy_fn,
             user_defaults=user_defaults,
+            db_session=db_session,
         )
 
-    with get_session_with_current_tenant() as db_session:
-        resolved = _resolve_provider_and_model(
-            persona,
-            provider_name_override,
-            model_version_override,
-            db_session,
-            model_configuration_override_id=mc_id_override,
-        )
-        if resolved is None:
-            return get_default_llm(
-                temperature=temperature_override,
+    if db_session is None:
+        with get_session_with_current_tenant() as new_session:
+            return get_llm_for_persona(
+                persona=persona,
+                user=user,
+                user_defaults=user_defaults,
+                llm_override=llm_override,
                 additional_headers=additional_headers,
                 policy_fn=policy_fn,
-                user_defaults=user_defaults,
-            )
-        provider_model, model, model_config = resolved
-
-        user_group_ids = fetch_user_group_ids(db_session, user)
-
-        if not can_user_access_llm_provider(
-            provider_model,
-            user_group_ids,
-            persona,
-            # must match db/llm.py's gate; a mismatch silently swaps in the default model
-            has_global_permission(user, Permission.MANAGE_LLMS),
-        ):
-            logger.warning(
-                "User %s with persona %s cannot access provider %s. Falling back to default provider.",
-                user.id,
-                persona.id,
-                provider_model.name,
-            )
-            return get_default_llm(
-                temperature=temperature_override,
-                additional_headers=additional_headers,
-                policy_fn=policy_fn,
-                user_defaults=user_defaults,
+                db_session=new_session,
             )
 
-        # Checked after access so a caller without access learns nothing about
-        # the provider's models. A name with no saved configuration runs outside
-        # visibility, price overrides and usage attribution.
-        if model_version_override and model_config is None:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Model '{model}' is not configured on this provider.",
-            )
-
-        llm_provider = LLMProviderView.from_model(
-            provider_model,
-            model_configurations=[model_config] if model_config else [],
+    resolved = _resolve_provider_and_model(
+        persona,
+        provider_name_override,
+        model_version_override,
+        db_session,
+        model_configuration_override_id=mc_id_override,
+    )
+    if resolved is None:
+        return get_default_llm(
+            temperature=temperature_override,
+            additional_headers=additional_headers,
+            policy_fn=policy_fn,
+            user_defaults=user_defaults,
+            db_session=db_session,
         )
+    provider_model, model, model_config = resolved
+
+    user_group_ids = fetch_user_group_ids(db_session, user)
+
+    if not can_user_access_llm_provider(
+        provider_model,
+        user_group_ids,
+        persona,
+        # must match db/llm.py's gate; a mismatch silently swaps in the default model
+        has_global_permission(user, Permission.MANAGE_LLMS),
+    ):
+        logger.warning(
+            "User %s with persona %s cannot access provider %s. Falling back to default provider.",
+            user.id,
+            persona.id,
+            provider_model.name,
+        )
+        return get_default_llm(
+            temperature=temperature_override,
+            additional_headers=additional_headers,
+            policy_fn=policy_fn,
+            user_defaults=user_defaults,
+            db_session=db_session,
+        )
+
+    # Checked after access so a caller without access learns nothing about
+    # the provider's models. A name with no saved configuration runs outside
+    # visibility, price overrides and usage attribution.
+    if model_version_override and model_config is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Model '{model}' is not configured on this provider.",
+        )
+
+    llm_provider = LLMProviderView.from_model(
+        provider_model,
+        model_configurations=[model_config] if model_config else [],
+    )
 
     return llm_from_provider(
         model_name=model,
@@ -427,23 +446,35 @@ def get_default_llm(
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
     user_defaults: UserChatDefaults | None = None,
+    db_session: Session | None = None,
 ) -> LLM:
-    with get_session_with_current_tenant() as db_session:
-        model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    """`db_session` is the caller's open session; None opens one."""
+    if db_session is None:
+        with get_session_with_current_tenant() as new_session:
+            return get_default_llm(
+                temperature=temperature,
+                additional_headers=additional_headers,
+                policy_fn=policy_fn,
+                user_defaults=user_defaults,
+                db_session=new_session,
+            )
 
-        if not model:
-            raise ValueError("No default LLM model found")
+    model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
-        return llm_from_provider(
-            model_name=model.name,
-            llm_provider=LLMProviderView.from_model(
-                model.llm_provider, model_configurations=[model]
-            ),
-            temperature=temperature,
-            additional_headers=additional_headers,
-            policy_fn=policy_fn,
-            user_defaults=user_defaults,
-        )
+    if not model:
+        raise ValueError("No default LLM model found")
+
+    return llm_from_provider(
+        model_name=model.name,
+        # The client does not use the provider's groups and personas.
+        llm_provider=LLMProviderView.from_model(
+            model.llm_provider, model_configurations=[model], include_access=False
+        ),
+        temperature=temperature,
+        additional_headers=additional_headers,
+        policy_fn=policy_fn,
+        user_defaults=user_defaults,
+    )
 
 
 def _provider_view_within_cost_limit(

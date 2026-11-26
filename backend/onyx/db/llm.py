@@ -3,7 +3,7 @@ from enum import Enum, auto
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session, load_only, selectinload
+from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 
 from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
@@ -1436,7 +1436,8 @@ def fetch_default_model(
 ) -> ModelConfiguration | None:
     model_config = db_session.scalar(
         select(ModelConfiguration)
-        .options(selectinload(ModelConfiguration.llm_provider))
+        # Many-to-one: a join loads the provider without a second statement.
+        .options(joinedload(ModelConfiguration.llm_provider))
         .join(LLMModelFlow)
         .where(
             LLMModelFlow.llm_model_flow_type == flow_type,
