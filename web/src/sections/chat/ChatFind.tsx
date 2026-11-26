@@ -305,7 +305,7 @@ function ChatFindBar() {
       />
       {hasQuery && olderPages === "capped" && (
         <div className="mt-1 rounded-08 bg-background-neutral-00 px-3 py-1">
-          <Text font="secondary-body" color="text-03">
+          <Text as="p" font="secondary-body" color="text-03">
             {t("capped", { count: messages.length })}
           </Text>
         </div>
