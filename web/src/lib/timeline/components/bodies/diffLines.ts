@@ -272,6 +272,9 @@ export interface ParsedPatch {
 
 /** The most patch lines shown; the rest is a count. Totals keep all lines. */
 const MAX_PATCH_LINES = 2000;
+/** The most file panels shown; a delete has no lines, so lines alone do not
+ *  bound them. Later files are counted as omitted. */
+const MAX_PATCH_FILES = 100;
 
 /** A heredoc wrapper around a patch (`<<EOF` ... `EOF`), as the tool accepts. */
 const HEREDOC_OPEN = /^<<['"]?(\w+)['"]?\s*$/;
@@ -315,7 +318,7 @@ export function parseApplyPatch(patch: string): ParsedPatch {
       count++;
       isNewFile = header?.[1] === "Add";
       file = null;
-      if (shown < MAX_PATCH_LINES) {
+      if (shown < MAX_PATCH_LINES && parsed.files.length < MAX_PATCH_FILES) {
         file = {
           path: header?.[2] ?? "",
           change:
