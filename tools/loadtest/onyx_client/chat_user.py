@@ -18,7 +18,6 @@ see README.md.
 
 from __future__ import annotations
 
-import copy
 import os
 import time
 import uuid
@@ -202,13 +201,22 @@ class OnyxChatUser(HttpUser):
         )
         counts.active += 1
         counts.started += 1
+        # Stream counts are added when the turn ends, so every count is of
+        # finished turns.
+        analyzer = ChatStreamAnalyzer()
         try:
-            self._chat_turn()
+            self._chat_turn(analyzer)
         finally:
             counts.active -= 1
             counts.finished += 1
+            for name in workload_metrics.STREAM_COUNTS:
+                setattr(
+                    counts,
+                    name,
+                    getattr(counts, name) + getattr(analyzer.summary, name),
+                )
 
-    def _chat_turn(self) -> None:
+    def _chat_turn(self, analyzer: ChatStreamAnalyzer) -> None:
         message = self.messages[
             self.message_order[self.turn_index % len(self.messages)]
         ]
@@ -224,10 +232,24 @@ class OnyxChatUser(HttpUser):
             self._fire("total_turn", setup_start, exception=exc)
             return
 
-        analyzer = ChatStreamAnalyzer()
+        # In a multi-turn session, total_turn is also reported by the turn's
+        # range of session turns, so latency growth over a session shows.
+        session_turn = (
+            workload_metrics.turn_range(self._session_turn + 1)
+            if self.max_session_turns > 1
+            else None
+        )
+        start = time.perf_counter()
+
+        def fire_turn(
+            response_length: int = 0, exception: Exception | None = None
+        ) -> None:
+            self._fire("total_turn", start, response_length, exception)
+            if session_turn is not None:
+                self._fire(f"turn {session_turn}", start, response_length, exception)
+
         disconnect_target = self.disconnect_after_milestone
         disconnected = False
-        start = time.perf_counter()
         try:
             # name= groups the auto-recorded HTTP metric; with stream=True its
             # response_time is time-to-headers only — the real signal is in
@@ -242,12 +264,10 @@ class OnyxChatUser(HttpUser):
             ) as response:
                 if response.status_code != 200:
                     response.failure(f"HTTP {response.status_code}")
-                    self._fire(
-                        "total_turn",
-                        start,
+                    fire_turn(
                         exception=Exception(
                             f"HTTP {response.status_code}: {response.text[:200]}"
-                        ),
+                        )
                     )
                     # Abandon a multi-turn session that just errored so the
                     # next turn starts fresh rather than reusing a bad session.
@@ -255,24 +275,7 @@ class OnyxChatUser(HttpUser):
                     return
 
                 for line in response.iter_lines(decode_unicode=True):
-                    before = copy.copy(analyzer.summary)
-                    milestones = analyzer.feed(line)
-                    after = analyzer.summary
-                    counts = workload_metrics.local[self.scenario_prefix]
-                    counts.packets += after.packets - before.packets
-                    counts.answer_chars += after.answer_chars - before.answer_chars
-                    counts.search_calls += after.search_calls - before.search_calls
-                    counts.reasoning_packets += (
-                        after.reasoning_packets - before.reasoning_packets
-                    )
-                    counts.citations += after.citations - before.citations
-                    counts.code_programs += after.code_programs - before.code_programs
-                    counts.code_waits += after.code_waits - before.code_waits
-                    counts.nested_search_calls += (
-                        after.nested_search_calls - before.nested_search_calls
-                    )
-                    counts.code_failures += after.code_failures - before.code_failures
-                    for milestone in milestones:
+                    for milestone in analyzer.feed(line):
                         self._fire(milestone, start)
                         if disconnect_target and milestone == disconnect_target:
                             disconnected = True
@@ -283,7 +286,7 @@ class OnyxChatUser(HttpUser):
                 # socket so the server sees the client drop; the sample is ok.
                 response.success()
         except Exception as exc:
-            self._fire("total_turn", start, exception=exc)
+            fire_turn(exception=exc)
             self._session_id = None  # don't reuse a session after a failure
             return
 
@@ -304,13 +307,9 @@ class OnyxChatUser(HttpUser):
 
         summary = analyzer.summary
         if analyzer.completed_ok():
-            self._fire("total_turn", start, response_length=summary.answer_chars)
+            fire_turn(response_length=summary.answer_chars)
         else:
-            self._fire(
-                "total_turn",
-                start,
-                exception=Exception(analyzer.failure_reason()),
-            )
+            fire_turn(exception=Exception(analyzer.failure_reason()))
 
 
 class BasicChatUser(OnyxChatUser):

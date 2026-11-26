@@ -60,6 +60,9 @@ from onyx.db.postgres_tool_models import (
     DocumentScope,
     GroupCount,
 )
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
+from onyx.llm.cancellation import check_cancelled
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import POSTGRES_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
@@ -71,6 +74,14 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.ordering import ToolRank
+from onyx.tools.tool_implementations.postgres.content import (
+    CONTENT_FILTER_AVAILABLE,
+    MAX_COUNT,
+    ContentCursor,
+    ContentFilter,
+    ContentPath,
+    date_field_for_order,
+)
 from onyx.tools.tool_implementations.postgres.models import (
     CHAT_HISTORY_TABLES,
     PostgresQueryArgs,
@@ -121,6 +132,7 @@ _FILTER_FIELDS_BY_TABLE: dict[PostgresToolTable, frozenset[str]] = {
             "updated_before",
             "owned_by",
             "parent_hierarchy_node_id",
+            "content_contains",
         }
     ),
     PostgresToolTable.HIERARCHY_NODE: frozenset(
@@ -174,6 +186,8 @@ _ANY_OF_FIELDS = frozenset(
     }
 )
 _MAX_ANY_OF_VALUES = 20
+# Longer document content phrases are rejected.
+_MAX_CONTENT_PHRASE_CHARS = 200
 
 _GENERAL_FIELDS = frozenset(
     {"table", "count", "group_by", "limit", "cursor", "order_by"}
@@ -221,7 +235,7 @@ _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "created_after": _prop("string", "chat_session: ISO date lower bound."),
     "created_before": _prop("string", "chat_session: ISO date upper bound, exclusive."),
     "chat_session_id": _any_of_prop("string", "chat_message: only messages in this session (UUID)."),
-    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text."),
+    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text. document: documents whose text contains this word or phrase (with the default analyzer, matches are whole-word and case-insensitive, and word forms such as plurals match; the start of the title, the indexed metadata and any AI-generated summaries are matched together with the text as one string; Salesforce is searched only under public connectors; each indexed section of a document is matched on its own, so a phrase that crosses two sections can be missed). Slow on documents: use it only when the user wants an exhaustive list or count by content, add date, source or folder filters when you can, and use search to answer questions about what documents say. Document listings with it order by date only."),
     "message_type": _prop("string", "chat_message: filter by author.", ["user", "assistant"]),
     "sent_after": _prop("string", "chat_message: ISO date lower bound."),
     "sent_before": _prop("string", "chat_message: ISO date upper bound, exclusive."),
@@ -322,6 +336,33 @@ def _parse_any_of(field: str, value: Any) -> list[Any]:
     return list(dict.fromkeys(parsed))
 
 
+def _validate_document_content_filter(
+    phrases: list[str], group_by: str | None, order_by: DocumentOrder
+) -> None:
+    if not CONTENT_FILTER_AVAILABLE:
+        raise _reject(
+            "'content_contains' is not available for documents on this "
+            "deployment. Use search to find documents by what they say."
+        )
+    if group_by is not None:
+        raise _reject(
+            "'group_by' does not work with a document content_contains filter."
+        )
+    if date_field_for_order(order_by) is None:
+        raise _reject(
+            "Document listings with content_contains order by date only: use "
+            "'updated_desc', 'updated_asc', 'created_desc' or 'created_asc'."
+        )
+    for phrase in phrases:
+        if not phrase.strip():
+            raise _reject("'content_contains' values must not be blank.")
+        if len(phrase) > _MAX_CONTENT_PHRASE_CHARS:
+            raise _reject(
+                f"'content_contains' values for documents take at most "
+                f"{_MAX_CONTENT_PHRASE_CHARS} characters. Use a shorter phrase."
+            )
+
+
 def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
     all_filter_fields = frozenset().union(*_FILTER_FIELDS_BY_TABLE.values())
 
@@ -405,6 +446,11 @@ def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
             else _parse_filter_value(field, value)
         )
 
+    if table == PostgresToolTable.DOCUMENT and "content_contains" in parsed:
+        _validate_document_content_filter(
+            parsed["content_contains"], group_by, order_by
+        )
+
     if table == PostgresToolTable.SEARCH_DOC and parsed.get("chat_message_id") is None:
         raise _reject(
             "Table 'search_doc' requires 'chat_message_id' — the past chat "
@@ -423,8 +469,12 @@ _INVALID_CURSOR_MESSAGE = (
 
 def _document_query_key(args: PostgresQueryArgs, scope: DocumentScope) -> str:
     """Identifies the filters and scope that a cursor belongs to."""
+    filters = _table_filters(args)
+    # Cursors issued before documents took content_contains have no such key.
+    if filters.get("content_contains") is None:
+        filters.pop("content_contains", None)
     query = {
-        "filters": _table_filters(args),
+        "filters": filters,
         "order_by": args.order_by.value,
         "scope": scope.model_dump(mode="json"),
     }
@@ -432,13 +482,17 @@ def _document_query_key(args: PostgresQueryArgs, scope: DocumentScope) -> str:
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
-def _encode_cursor(cursor: DocumentCursor, query_key: str) -> str:
+def _encode_cursor(
+    cursor: DocumentCursor, query_key: str, content_path: ContentPath | None = None
+) -> str:
     value = cursor.sort_value
     payload = {
         "u": value.isoformat() if isinstance(value, datetime) else value,
         "i": cursor.document_id,
         "q": query_key,
     }
+    if content_path is not None:
+        payload["p"] = content_path.value
     token = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
     return token.rstrip("=")
 
@@ -463,6 +517,22 @@ def _decode_cursor(token: str, query_key: str, order: DocumentOrder) -> Document
             "without a cursor."
         )
     return cursor
+
+
+def _decode_content_cursor(
+    token: str, query_key: str, order: DocumentOrder
+) -> ContentCursor:
+    cursor = _decode_cursor(token, query_key, order)
+    try:
+        padded = token + "=" * (-len(token) % 4)
+        path = ContentPath(json.loads(base64.urlsafe_b64decode(padded.encode()))["p"])
+    except (ValueError, KeyError) as e:
+        raise _reject(_INVALID_CURSOR_MESSAGE) from e
+    if isinstance(cursor.sort_value, str):
+        raise _reject(_INVALID_CURSOR_MESSAGE)
+    return ContentCursor(
+        path=path, sort_value=cursor.sort_value, document_id=cursor.document_id
+    )
 
 
 # ============================ Row formatting ============================
@@ -606,9 +676,11 @@ def _format_document_page(
     continued: bool,
     next_cursor: str | None,
     order: DocumentOrder,
+    partial: bool = False,
 ) -> str:
     """`total` is set on a first page that has more pages after it, when the
-    count finished in time."""
+    count finished in time. `partial` marks a page cut short by the time
+    budget: its cursor only shows that more documents remain to check."""
     if not lines:
         if continued:
             return "No more matching documents."
@@ -623,6 +695,8 @@ def _format_document_page(
     label = _ORDER_LABELS[order]
     if continued:
         header = f"The next {len(lines)} matching documents, {label}:"
+    elif partial:
+        header = f"The first {len(lines)} matching documents, {label}:"
     elif total is None:
         header = (
             f"The first {len(lines)} matching documents, {label} (more match; "
@@ -631,9 +705,9 @@ def _format_document_page(
     else:
         header = f"Showing {len(lines)} of {total} matching documents, {label}:"
     footer = (
-        "More documents match. To get the next page, call again with the same "
-        "filters, order_by and cursor set to this next_cursor value.\n"
-        f"next_cursor: {next_cursor}"
+        f"{'More documents may match' if partial else 'More documents match'}. "
+        "To get the next page, call again with the same filters, order_by and "
+        f"cursor set to this next_cursor value.\nnext_cursor: {next_cursor}"
     )
     return header + "\n" + "\n".join(lines) + "\n" + footer
 
@@ -660,9 +734,11 @@ class PostgresTool(Tool):
         "semantic search. Use it to count or exhaustively list documents by "
         "metadata (source, title substring, update date, owner, folder), to "
         "browse source folder structure, to find the user's past conversations "
-        "or messages, and to look up which documents a past answer cited. Not "
-        "for questions about document content or meaning — use search for "
-        "those. Results are permission-scoped to the current user. Document "
+        "or messages, and to look up which documents a past answer cited. With "
+        "content_contains it also lists or counts every document whose text "
+        "contains a phrase; that is slow, so use it only for exhaustive "
+        "listings or counts by content. For questions about what documents "
+        "say, use search. Results are permission-scoped to the current user. Document "
         "listings come in pages: pass each page's next_cursor back as cursor "
         "to go through every matching document."
     )
@@ -800,7 +876,19 @@ class PostgresTool(Tool):
     ) -> ToolResult:
         user_email = self._user.email
         external_group_ids = get_user_external_group_ids(db_session, self._user)
-        filters: dict[str, Any] = {**_table_filters(args), "scope": self._scope}
+        table_filters = _table_filters(args)
+        phrases: list[str] | None = table_filters.pop("content_contains")
+        if phrases is not None:
+            return self._execute_document_content(
+                db_session,
+                args,
+                phrases,
+                table_filters,
+                external_group_ids,
+                context,
+                call_index,
+            )
+        filters: dict[str, Any] = {**table_filters, "scope": self._scope}
         if args.count and args.group_by is not None:
             groups = count_documents_grouped_for_tool(
                 db_session,
@@ -867,6 +955,99 @@ class PostgresTool(Tool):
                 next_cursor=next_cursor,
                 order=args.order_by,
             ),
+            context,
+            call_index,
+        )
+
+    def _execute_document_content(
+        self,
+        db_session: Session,
+        args: PostgresQueryArgs,
+        phrases: list[str],
+        filters: dict[str, Any],
+        external_group_ids: list[str],
+        context: ToolContext,
+        call_index: int,
+    ) -> ToolResult:
+        document_index = get_default_document_index(
+            get_current_search_settings(db_session), None
+        )
+        # Built first: its time budget covers the phrase checks too.
+        content_filter = ContentFilter(
+            db_session=db_session,
+            document_index=document_index,
+            user=self._user,
+            external_group_ids=external_group_ids,
+            filters=filters,
+            scope=self._scope,
+            phrases=phrases,
+        )
+        for phrase in phrases:
+            check_cancelled()
+            if document_index.count_phrase_terms(phrase) == 0:
+                raise _reject(
+                    f"'content_contains' value {phrase!r} has no searchable words "
+                    "(only common words such as 'the' or 'and'). Use a more "
+                    "specific phrase."
+                )
+        if args.count:
+            count = content_filter.count()
+            if count.is_complete:
+                return ToolResult(content=_format_count(count.count, "documents"))
+            return ToolResult(
+                content=(
+                    f"At least {count.count} matching documents. Counting by "
+                    f"content stops at {MAX_COUNT} documents or when it takes "
+                    "too long; add date, source or folder filters for an exact count."
+                )
+            )
+        query_key = _document_query_key(args, self._scope)
+        after = (
+            _decode_content_cursor(args.cursor, query_key, args.order_by)
+            if args.cursor is not None
+            else None
+        )
+        page = content_filter.list_page(args.order_by, after, args.limit)
+        next_cursor = (
+            _encode_cursor(
+                DocumentCursor(
+                    sort_value=page.next_cursor.sort_value,
+                    document_id=page.next_cursor.document_id,
+                ),
+                query_key,
+                page.next_cursor.path,
+            )
+            if page.next_cursor is not None
+            else None
+        )
+
+        def _format(lines: list[str]) -> str:
+            if page.is_partial and not lines:
+                return (
+                    "No matches yet: matching by content took too long to search "
+                    "further. More documents may match. Call again with the same "
+                    "filters and cursor set to this next_cursor value, or add "
+                    f"date, source or folder filters.\nnext_cursor: {next_cursor}"
+                )
+            text = _format_document_page(
+                lines,
+                total=None,
+                continued=after is not None,
+                next_cursor=next_cursor,
+                order=args.order_by,
+                partial=page.is_partial,
+            )
+            if not page.is_partial:
+                return text
+            return (
+                "Matching by content took too long to fill this page, so it may "
+                "show fewer documents than asked for. Continue with the cursor "
+                "below, or add date, source or folder filters.\n" + text
+            )
+
+        return _citable_rows_result(
+            [_document_to_search_doc(doc, source) for doc, source in page.rows],
+            _format,
             context,
             call_index,
         )

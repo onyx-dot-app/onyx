@@ -26,6 +26,9 @@ from scenarios.long_conversation import LongConversationUser
 class CompressionUser(LongConversationUser):
     abstract = False
 
+    # ONYX_LONGCONV_USERS pins long-lived chats only; compression users weight.
+    fixed_count = 0
+
     scenario_prefix: str = "compress"
     # Large messages by default so history grows fast (ONYX_MSG_CHARS overrides).
     default_msg_chars: int = 8000
