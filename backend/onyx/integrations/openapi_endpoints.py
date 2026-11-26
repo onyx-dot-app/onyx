@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     OPENAPI_METHODS,
     TOOL_HTTP_METHODS,
+    InlineBudget,
     check_unique_name,
     openapi_operations,
     openapi_to_method_spec,
@@ -371,10 +372,11 @@ def drop_uncallable_operations(
     to drop, the text stays as it was."""
     skipped: list[str] = []
     seen_names: dict[str, str] = {}
+    budget = InlineBudget()
     for path, path_item, method, operation in openapi_operations(spec):
         try:
             method_spec = openapi_to_method_spec(
-                spec, path, path_item, method, operation
+                spec, path, path_item, method, operation, budget
             )
             method_spec.validate_spec()
             check_unique_name(method_spec, seen_names)

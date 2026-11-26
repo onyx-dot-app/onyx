@@ -23,6 +23,7 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    _MAX_INLINED_NODES,
     REQUEST_BODY,
     inline_path_parameters,
     openapi_to_method_specs,
@@ -266,6 +267,68 @@ def test_pointers_into_lists_and_with_escapes_resolve() -> None:
             },
         }
     }
+
+
+def _exploding_spec() -> dict[str, Any]:
+    """Each schema refers to the one below it twice, so the body inlines to
+    about 2**20 values."""
+    schemas: dict[str, Any] = {"S0": {"type": "string"}}
+    for i in range(1, 21):
+        below = {"$ref": f"#/components/schemas/S{i - 1}"}
+        schemas[f"S{i}"] = {"type": "object", "properties": {"a": below, "b": below}}
+    return {
+        "openapi": "3.0.3",
+        "info": {"title": "Big", "version": "1.0"},
+        "servers": [{"url": "https://big.example.com"}],
+        "components": {"schemas": schemas},
+        "paths": {
+            "/things": {
+                "post": {
+                    "operationId": "addThing",
+                    "summary": "Add a thing",
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/S20"}
+                            }
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+
+def _count_values(value: Any) -> int:
+    if isinstance(value, dict):
+        return 1 + sum(_count_values(item) for item in value.values())
+    if isinstance(value, list):
+        return 1 + sum(_count_values(item) for item in value)
+    return 1
+
+
+def test_a_spec_that_expands_too_far_keeps_its_tools_and_later_refs() -> None:
+    spec = _exploding_spec()
+    # Two operations share one budget.
+    spec["paths"]["/other"] = {"post": copy.deepcopy(spec["paths"]["/things"]["post"])}
+    spec["paths"]["/other"]["post"]["operationId"] = "addOther"
+
+    tools = build_custom_tools_from_openapi_schema_and_headers(
+        1,
+        spec,
+        dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
+    )
+
+    assert sorted(t.name for t in tools) == [
+        "custom__1__addOther",
+        "custom__1__addThing",
+    ]
+    definitions = [t.tool_definition().parameters for t in tools]
+    # Past the budget, the references stay as written.
+    assert all('"$ref"' in json.dumps(d) for d in definitions)
+    # The copies stay within the budget; the rest is the spec's own small
+    # schemas, at most a few values for each level of the chain.
+    assert sum(_count_values(d) for d in definitions) <= _MAX_INLINED_NODES + 1000
 
 
 def test_a_spec_with_path_parameters_validates_and_builds_tools() -> None:

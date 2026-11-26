@@ -192,18 +192,29 @@ def resolve_ref(openapi_spec: dict[str, Any], value: Any) -> Any:
 
 
 # Shared schemas can reuse each other so much that inlining them grows
-# exponentially, as YAML aliases do.
-_MAX_INLINED_REFS = 1000
+# exponentially, as YAML aliases do. This caps the JSON values that the
+# inlining of one spec copies.
+_MAX_INLINED_NODES = 200_000
 
 
-def inline_refs(openapi_spec: dict[str, Any], value: Any) -> Any:
+class InlineBudget:
+    """The values left to copy for the inlining of one spec. One budget
+    covers all the operations of the spec."""
+
+    def __init__(self) -> None:
+        self.remaining = _MAX_INLINED_NODES
+
+
+def inline_refs(openapi_spec: dict[str, Any], value: Any, budget: InlineBudget) -> Any:
     """``value`` with each local ``$ref`` in it replaced by a copy of what it
-    points to. A reference that is cyclic, not local, missing, or past
-    ``_MAX_INLINED_REFS`` becomes ``{}``, which admits any value."""
-    inlined = 0
+    points to. A reference that is cyclic, not local, or missing becomes
+    ``{}``, which admits any value. Once ``budget`` runs out, the rest stays
+    as written, with its references."""
 
     def inline(node: Any, open_refs: frozenset[str]) -> Any:
-        nonlocal inlined
+        if budget.remaining <= 0:
+            return node
+        budget.remaining -= 1
         if isinstance(node, list):
             return [inline(item, open_refs) for item in node]
         if not isinstance(node, dict):
@@ -212,9 +223,8 @@ def inline_refs(openapi_spec: dict[str, Any], value: Any) -> Any:
         if not isinstance(ref, str):
             return {key: inline(item, open_refs) for key, item in node.items()}
         target = resolve_ref(openapi_spec, node)
-        if target is node or ref in open_refs or inlined >= _MAX_INLINED_REFS:
+        if target is node or ref in open_refs:
             return {}
-        inlined += 1
         resolved = inline(target, open_refs | {ref})
         siblings = {
             key: inline(item, open_refs) for key, item in node.items() if key != "$ref"
@@ -244,15 +254,20 @@ def operation_parameters(
 
 
 def resolved_operation(
-    openapi_spec: dict[str, Any], path_item: dict[str, Any], operation: dict[str, Any]
+    openapi_spec: dict[str, Any],
+    path_item: dict[str, Any],
+    operation: dict[str, Any],
+    budget: InlineBudget,
 ) -> dict[str, Any]:
     """``operation`` with the parameters of its path item and with the local
     references in its parameters and request body inlined."""
     resolved = dict(operation)
     if parameters := operation_parameters(openapi_spec, path_item, operation):
-        resolved["parameters"] = inline_refs(openapi_spec, parameters)
+        resolved["parameters"] = inline_refs(openapi_spec, parameters, budget)
     if "requestBody" in operation:
-        resolved["requestBody"] = inline_refs(openapi_spec, operation["requestBody"])
+        resolved["requestBody"] = inline_refs(
+            openapi_spec, operation["requestBody"], budget
+        )
     return resolved
 
 
@@ -262,6 +277,7 @@ def openapi_to_method_spec(
     path_item: dict[str, Any],
     method_name: str,
     method: dict[str, Any],
+    budget: InlineBudget,
 ) -> MethodSpec:
     raw_name = method.get("operationId")
     if not raw_name:
@@ -279,7 +295,7 @@ def openapi_to_method_spec(
         summary=summary,
         path=path,
         method=method_name,
-        spec=resolved_operation(openapi_spec, path_item, method),
+        spec=resolved_operation(openapi_spec, path_item, method, budget),
     )
 
 
@@ -304,9 +320,10 @@ def inline_path_parameters(openapi_spec: dict[str, Any]) -> dict[str, Any]:
     variable defaults filled in. Releases before the api_app table read only
     this shape from ``tool.openapi_schema``."""
     paths: dict[str, dict[str, Any]] = {}
+    budget = InlineBudget()
     for path, path_item, method_name, method in openapi_operations(openapi_spec):
         paths.setdefault(path, {})[method_name] = resolved_operation(
-            openapi_spec, path_item, method
+            openapi_spec, path_item, method, budget
         )
     servers = openapi_spec.get("servers")
     if not isinstance(servers, list):
@@ -349,9 +366,10 @@ def check_unique_name(method_spec: MethodSpec, seen_names: dict[str, str]) -> No
 def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
     method_specs = []
     seen_names: dict[str, str] = {}
+    budget = InlineBudget()
     for path, path_item, method_name, method in openapi_operations(openapi_spec):
         method_spec = openapi_to_method_spec(
-            openapi_spec, path, path_item, method_name, method
+            openapi_spec, path, path_item, method_name, method, budget
         )
         check_unique_name(method_spec, seen_names)
         method_specs.append(method_spec)
