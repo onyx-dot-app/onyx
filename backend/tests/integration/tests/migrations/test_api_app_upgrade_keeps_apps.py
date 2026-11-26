@@ -571,6 +571,12 @@ def upgraded(
         yield engine, seeded, before
     finally:
         engine.dispose()
+        downgrade_postgres(
+            database=POSTGRES_DB,
+            config_name="alembic",
+            revision="base",
+            clear_data=True,
+        )
         upgrade_postgres(database=POSTGRES_DB, config_name="alembic", revision="head")
 
 
