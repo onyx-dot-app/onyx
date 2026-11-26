@@ -1085,7 +1085,9 @@ def test_graphql_and_spec_fetches_refuse_blocked_hosts(
     monkeypatch: pytest.MonkeyPatch, url: str
 ) -> None:
     """The GraphQL endpoint save, the introspection call and the spec URL
-    import refuse a metadata or loopback host and open no connection."""
+    import refuse a metadata or loopback host and open no connection. The two
+    setup fetches answer BAD_GATEWAY with the SSRF Protection hint."""
+    from onyx.error_handling.error_codes import OnyxErrorCode
     from onyx.integrations import service
     from onyx.server.features.integrations.models import (
         GraphQLConfigInput,
@@ -1096,6 +1098,7 @@ def test_graphql_and_spec_fetches_refuse_blocked_hosts(
     settings = unittest.mock.MagicMock()
     settings.ssrf_protection_level = SSRFProtectionLevel.VALIDATE_ALL
     monkeypatch.setattr(service, "get_security_settings", lambda: settings)
+    hint = "SSRF Protection to Disabled" if url == _LOOPBACK_URL else "never permitted"
     with patch("onyx.utils.url._pinned_request") as pinned:
         with pytest.raises(OnyxError):
             service._graphql_endpoint_url(
@@ -1103,13 +1106,47 @@ def test_graphql_and_spec_fetches_refuse_blocked_hosts(
                     endpoint_url=url, graphql_schema="type Query { a: Int }"
                 )
             )
-        with pytest.raises(OnyxError):
+        with pytest.raises(OnyxError) as introspection:
             service.introspect_graphql_endpoint(
                 GraphQLIntrospectRequest(endpoint_url=url)
             )
-        with pytest.raises(OnyxError):
+        with pytest.raises(OnyxError) as spec_fetch:
             service.import_openapi_document(OpenApiEndpointsRequest(spec_url=url))
     pinned.assert_not_called()
+    for error in (introspection.value, spec_fetch.value):
+        assert error.error_code is OnyxErrorCode.BAD_GATEWAY
+        assert hint in error.detail
+
+
+@pytest.mark.parametrize("status", [404, 500])
+def test_a_setup_fetch_that_answers_an_error_is_a_bad_gateway(status: int) -> None:
+    from onyx.error_handling.error_codes import OnyxErrorCode
+    from onyx.integrations import service
+    from onyx.server.features.integrations.models import (
+        GraphQLIntrospectRequest,
+        OpenApiEndpointsRequest,
+    )
+
+    response = _response({"error": "no"}, status=status)
+    response.__enter__.return_value = response
+    with (
+        patch.object(service, "get_security_settings"),
+        patch(
+            "onyx.utils.url._validate_and_resolve_url",
+            return_value=("1.2.3.4", "api.example.com", 443),
+        ),
+        patch("onyx.utils.url._pinned_request", return_value=response),
+    ):
+        with pytest.raises(OnyxError) as introspection:
+            service.introspect_graphql_endpoint(
+                GraphQLIntrospectRequest(endpoint_url="https://api.example.com/graphql")
+            )
+        with pytest.raises(OnyxError) as spec_fetch:
+            service.import_openapi_document(
+                OpenApiEndpointsRequest(spec_url="https://api.example.com/spec.json")
+            )
+    assert introspection.value.error_code is OnyxErrorCode.BAD_GATEWAY
+    assert spec_fetch.value.error_code is OnyxErrorCode.BAD_GATEWAY
 
 
 @pytest.mark.parametrize(

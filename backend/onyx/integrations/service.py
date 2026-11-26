@@ -176,7 +176,7 @@ from onyx.server.features.integrations.models import (
 )
 from onyx.server.features.mcp.client import discover_mcp_tools
 from onyx.server.features.mcp.ssrf import validate_mcp_url
-from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.models import outbound_ssrf_params, ssrf_error_hint
 from onyx.server.security.store import get_security_settings
 from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
 from onyx.tools.tool_implementations.custom.graphql_tool import introspection_to_sdl
@@ -187,6 +187,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 )
 from onyx.tools.tool_implementations.http_request import (
     ToolRequestError,
+    ToolRequestFailure,
     send_tool_request,
 )
 from onyx.utils.encryption import is_masked_credential, mask_string
@@ -539,7 +540,8 @@ def _imported_view(document: str) -> OpenApiConfigView:
 
 
 def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigView:
-    """The base URL and the endpoint lines of a spec to import."""
+    """The base URL and the endpoint lines of a spec to import. A spec URL
+    that Onyx cannot fetch is ``BAD_GATEWAY``."""
     if request.openapi_document is not None:
         if len(request.openapi_document.encode()) > _MAX_SPEC_BYTES:
             raise OnyxError(
@@ -548,11 +550,12 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
         return _imported_view(request.openapi_document)
     if request.spec_url is None:
         raise RuntimeError("Bug: the model requires the spec text or a URL.")
+    spec_url = request.spec_url.strip()
     policy = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
     body = bytearray()
     try:
         with ssrf_safe_get(
-            request.spec_url.strip(),
+            spec_url,
             timeout=_SPEC_FETCH_TIMEOUT_SECONDS,
             trust_env=False,
             allow_private_network=policy.allow_private_network,
@@ -560,9 +563,9 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
             block_link_local_only=policy.block_link_local_only,
             stream=True,
         ) as response:
-            if response.status_code != 200:
+            if not 200 <= response.status_code < 300:
                 raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
+                    OnyxErrorCode.BAD_GATEWAY,
                     f"The spec URL answered with HTTP {response.status_code}.",
                 )
             for chunk in response.iter_content(chunk_size=64 * 1024):
@@ -572,9 +575,14 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
                         OnyxErrorCode.PAYLOAD_TOO_LARGE,
                         "The spec is larger than 5 MB.",
                     )
-    except (requests.RequestException, SSRFException, ValueError) as e:
+    except (SSRFException, ValueError) as e:
         raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, f"Onyx could not fetch the spec: {e}"
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Onyx cannot fetch the spec: {e}{ssrf_error_hint(spec_url, e)}",
+        ) from e
+    except requests.RequestException as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, f"Onyx could not fetch the spec: {e}"
         ) from e
     view = _imported_view(body.decode("utf-8", errors="replace"))
     # The client hides the base URL field for the single server URL of a
@@ -601,7 +609,7 @@ def introspect_graphql_endpoint(
     request: GraphQLIntrospectRequest,
 ) -> GraphQLConfigInput:
     """The schema of an endpoint that answers an introspection query with no
-    sign-in."""
+    sign-in. An endpoint that Onyx cannot reach is ``BAD_GATEWAY``."""
     endpoint_url = request.endpoint_url.strip()
     try:
         response = send_tool_request(
@@ -615,13 +623,17 @@ def introspect_graphql_endpoint(
             json_body={"query": get_introspection_query(descriptions=True)},
         )
     except ToolRequestError as e:
+        reason: str = e.failure.value
+        if e.failure is ToolRequestFailure.BLOCKED and isinstance(
+            e.__cause__, Exception
+        ):
+            reason = f"{e.__cause__}{ssrf_error_hint(endpoint_url, e.__cause__)}"
         raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Onyx could not reach the endpoint: {e.failure.value}",
+            OnyxErrorCode.BAD_GATEWAY, f"Onyx could not reach the endpoint: {reason}"
         ) from e
     if not response.ok:
         raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
+            OnyxErrorCode.BAD_GATEWAY,
             f"The endpoint answered with HTTP {response.status_code}.",
         )
     if response.truncated:
