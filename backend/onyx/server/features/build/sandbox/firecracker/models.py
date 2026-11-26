@@ -1,4 +1,4 @@
-"""Pydantic models of the Firecracker harness sandbox state."""
+"""Pydantic models of the harness sandbox state."""
 
 from pydantic import BaseModel, ConfigDict
 
@@ -45,6 +45,16 @@ class SessionSave(BaseModel):
     # Top-level directories in the archive (what a restore replaces).
     roots: list[str]
     saved_at: float
+
+
+class CapturedArchive(BaseModel):
+    """A session archive that a SessionTransfer captured and stored."""
+
+    file_id: str
+    size_bytes: int
+    sha256: str
+    # Top-level directories and files in the archive.
+    roots: list[str]
 
 
 class IdSet(BaseModel):

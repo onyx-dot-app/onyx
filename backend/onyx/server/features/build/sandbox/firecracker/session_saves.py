@@ -28,7 +28,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AbstractContextManager, contextmanager
 from uuid import UUID
 
-from pydantic import BaseModel, SecretStr
+from pydantic import SecretStr
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -71,7 +71,10 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     set_session_save,
     wanted_since,
 )
-from onyx.server.features.build.sandbox.firecracker.models import SessionSave
+from onyx.server.features.build.sandbox.firecracker.models import (
+    CapturedArchive,
+    SessionSave,
+)
 from onyx.server.features.build.sandbox.harness_base import (
     CHAT_FILES_DIR,
     HarnessSandboxError,
@@ -136,16 +139,6 @@ class ArchiveStorage(abc.ABC):
     @abc.abstractmethod
     def delete(self, file_id: str) -> None:
         pass
-
-
-class CapturedArchive(BaseModel):
-    """A session archive that a transfer captured and stored."""
-
-    file_id: str
-    size_bytes: int
-    sha256: str
-    # Top-level directories and files in the archive.
-    roots: list[str]
 
 
 class SessionTransfer(abc.ABC):
