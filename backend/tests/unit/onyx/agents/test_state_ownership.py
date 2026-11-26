@@ -158,6 +158,37 @@ def test_default_model_accepts_application_metadata_without_chat_policy() -> Non
     assert "private metadata" not in str(llm.requests)
 
 
+def test_finalized_result_keeps_the_recorded_details_without_a_copy() -> None:
+    finalized: list[ToolResult] = []
+
+    def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
+        finalized.append(result)
+        return result
+
+    agent = Agent(
+        FakeModelClient(_model),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            _tool(
+                lambda _: ToolResult(
+                    content="found",
+                    details=CustomToolCallSummary(
+                        tool_name="lookup", response_type="json", tool_result={"id": 1}
+                    ),
+                )
+            )
+        ],
+        feature=RunHooks(after_tool_call=finalize),
+    )
+    run = agent.start(max_steps=2)
+    run.result()
+    assert run.wait_for_idle(2)
+    [result] = finalized
+    recorded = run._state.steps[0].tools[run._state.steps[0].message.tool_calls[0].id]
+    assert recorded.result is not None
+    assert recorded.result.details is result.details
+
+
 @pytest.mark.parametrize("replace", [False, True])
 def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
     requests: list[list[Message]] = []

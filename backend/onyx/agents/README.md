@@ -320,7 +320,7 @@ The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
 - `call_id`, `call_index`, `messages` — the call's identity and logical working history: one tuple that all calls
-  of the step share, of the run's messages. Read only. Read result details from `recorded_results`, which holds every result.
+  of the step share, of the run's messages, tool results with their details. Read only.
 - `recorded_results` — every recorded tool result before the call, with details and without
   compaction: earlier steps, then this step's completed results in call order. Read only.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.

@@ -858,7 +858,9 @@ class Run:
         """The caller holds the execution lock."""
         for call in calls:
             execution = record.tools[call.id]
-            recorded = execution.result = _tool_result_message(result, call, message_id)
+            recorded = execution.result = _tool_result_message(
+                result, call, message_id
+            ).model_copy(deep=True)
             execution.status = (
                 ExecutionStatus.ERROR if result.is_error else ExecutionStatus.COMPLETE
             )
@@ -1016,7 +1018,7 @@ class Run:
                 )
                 execution.result = _tool_result_message(
                     result, call, waits[0].message_id
-                )
+                ).model_copy(deep=True)
                 execution.status = (
                     ExecutionStatus.ERROR
                     if result.is_error
@@ -1100,6 +1102,8 @@ class Run:
             with self.execution_lock:
                 if self.is_accepting and not self.cancellation_signal.cancelled:
                     if finalized and after_tool_call is not None:
+                        # Built from the recorded result: the hook returns a
+                        # new result and keeps nothing.
                         execution.result = _tool_result_message(
                             result, call, message_id
                         )
@@ -1607,7 +1611,9 @@ class Run:
                 )
                 continue
             index, message_id, execution, call = located
-            execution.result = _tool_result_message(amendment.result, call, message_id)
+            execution.result = _tool_result_message(
+                amendment.result, call, message_id
+            ).model_copy(deep=True)
             amended_ids.add(execution.result.id)
             if self.event_delivery:
                 self.event_delivery.publish(
@@ -2380,7 +2386,7 @@ def _tool_result_message(
         terminate=result.terminate,
         tool_call_id=call.id,
         tool_name=call.name,
-    ).model_copy(deep=True)
+    )
 
 
 def _record_answer(
