@@ -337,7 +337,7 @@ test("the Skills tab opens the instructions of one skill", async () => {
   expect(await screen.findByText("Write the plan first.")).toBeInTheDocument();
 });
 
-test("a synced plugin names its repository and hides restore and publish", async () => {
+test("a synced plugin says it changes in GitHub and hides restore and publish", async () => {
   window.history.replaceState(
     null,
     "",
@@ -390,7 +390,6 @@ test("a synced plugin names its repository and hides restore and publish", async
       "This plugin syncs from GitHub, so you change it in GitHub."
     )
   ).toBeInTheDocument();
-  expect(screen.queryByText("Synced from acme/plugins")).toBeNull();
   expect(await screen.findByText("Version 1")).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Restore version 1" })
