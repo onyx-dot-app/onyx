@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -275,12 +276,16 @@ func TestExitedServiceIsLogged(t *testing.T) {
 	if _, _, err := b.Start(ctx, profile, env); err != nil {
 		t.Fatal(err)
 	}
-	svc := servicePID(b)
+	b.mu.Lock()
+	svc, done := b.run.svc.pid, b.run.svc.done
+	b.mu.Unlock()
 	if err := syscall.Kill(svc, syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
-	for alive(svc) {
-		time.Sleep(10 * time.Millisecond)
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the killed service did not exit")
 	}
 	if _, _, err := b.Start(ctx, profile, env); err != nil {
 		t.Fatal(err)
@@ -314,6 +319,9 @@ func TestDialServiceRefusesAListenerOfAnotherUser(t *testing.T) {
 		t.Fatalf("dial a listener of the service user: %v", err)
 	}
 	_ = c.Close()
+	if runtime.GOOS != "linux" {
+		t.Skip("peer credentials are checked only on Linux")
+	}
 	b.cfg.Credential = &syscall.Credential{Uid: uint32(os.Geteuid()) + 1}
 	if c, err := b.DialService(ctx); err == nil || !strings.Contains(err.Error(), "uid") {
 		if c != nil {
