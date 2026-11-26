@@ -2293,7 +2293,9 @@ async def test_a_command_grant_covers_the_same_action_only(
     """ "Approve for this command" lets the same action through with no card;
     another action of the app is held."""
     addon, cache = _command_gate(monkeypatch)
-    approval_cache.grant_command_actions(_COMMAND, 42, ["slack.messages.write"], cache)
+    approval_cache.grant_command_actions(
+        _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], cache
+    )
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     inserted = _spy_approval_insert(monkeypatch)
     _approved_command_row(monkeypatch)
@@ -2309,12 +2311,94 @@ async def test_a_command_grant_covers_the_same_action_only(
     assert inserted[0]["command_id"] == _COMMAND
     assert inserted[0]["session_id"] is None
 
-    other, _ = _command_gate(
+    other, other_cache = _command_gate(
         monkeypatch, match=make_matched_actions(action_type="slack.channels.write")
+    )
+    approval_cache.grant_command_actions(
+        _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], other_cache
     )
     other_spy = _spy_pipeline(other, monkeypatch, decision=ApprovalDecision.APPROVED)
     await other.request(make_flow(proxy_auth=_basic_auth(_COMMAND_TAG)))
     assert len(other_spy.persisted) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_request_cancelled_during_the_foreground_check_leaves_no_parked_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sandbox closes the socket after the row is saved but before the
+    wait: the row ends and the proxy no longer counts it as parked."""
+    addon, _ = _command_gate(monkeypatch)
+    approval_id = uuid4()
+
+    def persist(ctx: SessionContext, *_args: Any) -> UUID:
+        addon._parked.add(ctx.tenant_id, approval_id)
+        return approval_id
+
+    checks: list[SessionContext] = []
+
+    def cancelled(ctx: SessionContext) -> bool:
+        # The first check comes before the row is saved.
+        checks.append(ctx)
+        if len(checks) > 1:
+            raise asyncio.CancelledError()
+        return True
+
+    claims: list[UUID] = []
+
+    def claim(aid: UUID, _tenant_id: str) -> ApprovalDecision:
+        claims.append(aid)
+        return ApprovalDecision.EXPIRED
+
+    monkeypatch.setattr(addon, "_persist_approval_row", persist)
+    monkeypatch.setattr(addon, "_apply_session_grant", lambda *_a, **_k: None)
+    monkeypatch.setattr(addon, "_command_in_foreground", cancelled)
+    monkeypatch.setattr(addon, "_claim_expired_or_read_winner", claim)
+
+    with pytest.raises(asyncio.CancelledError):
+        await addon.request(make_flow(proxy_auth=_basic_auth(_COMMAND_TAG)))
+
+    assert claims == [approval_id]
+    assert addon._parked.snapshot() == []
+
+
+@pytest.mark.asyncio
+async def test_a_command_grant_of_another_chat_covers_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A grant belongs to the chat that approved it: a request that names the
+    command from another chat asks again."""
+    addon, cache = _command_gate(monkeypatch, foreground=False)
+    approval_cache.grant_command_actions(
+        _COMMAND, uuid4(), 42, ["slack.messages.write"], cache
+    )
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
+    assert not spy.persisted and not spy.dispatched
+
+
+@pytest.mark.asyncio
+async def test_a_process_left_by_an_ended_command_gets_no_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The harness saw the command end: a process that it left running asks
+    again, and with no call to show a card it is refused."""
+    addon, cache = _command_gate(monkeypatch, foreground=False)
+    approval_cache.grant_command_actions(
+        _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], cache
+    )
+    approval_cache.drop_command_grants(_COMMAND, cache)
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
+    assert not spy.persisted and not spy.dispatched
 
 
 @pytest.mark.asyncio
@@ -2324,7 +2408,9 @@ async def test_a_command_grant_covers_the_command_after_it_leaves_the_foreground
     """The call stops waiting on the command, which still runs: its grant
     still sends the same action; another Ask action has no card to show."""
     addon, cache = _command_gate(monkeypatch)
-    approval_cache.grant_command_actions(_COMMAND, 42, ["slack.messages.write"], cache)
+    approval_cache.grant_command_actions(
+        _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], cache
+    )
     approval_cache.clear_command_foreground(_COMMAND, cache)
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     inserted = _spy_approval_insert(monkeypatch)
@@ -2344,7 +2430,7 @@ async def test_a_command_grant_covers_the_command_after_it_leaves_the_foreground
         foreground=False,
     )
     approval_cache.grant_command_actions(
-        _COMMAND, 42, ["slack.messages.write"], other_cache
+        _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], other_cache
     )
     other_spy = _spy_pipeline(other, monkeypatch, decision=ApprovalDecision.APPROVED)
     other_flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
@@ -2358,11 +2444,22 @@ async def test_a_command_grant_row_stores_the_size_of_a_large_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A row that a command grant approves stores what a card would show, not
-    the whole body."""
-    body = {"text": "x" * (128 * 1024)}
+    the whole body. The proxy does not encode a body far over the budget."""
+    body = {"text": "x" * (1024 * 1024)}
     raw = json.dumps(body).encode()
+    dumps = gate.json.dumps
+    encoded: list[int] = []
+
+    def counting_dumps(value: Any, *args: Any, **kwargs: Any) -> str:
+        text = dumps(value, *args, **kwargs)
+        encoded.append(len(text))
+        return text
+
+    monkeypatch.setattr(gate.json, "dumps", counting_dumps)
     addon, cache = _command_gate(monkeypatch, match=make_matched_actions(payload=body))
-    approval_cache.grant_command_actions(_COMMAND, 42, ["slack.messages.write"], cache)
+    approval_cache.grant_command_actions(
+        _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], cache
+    )
     _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     inserted = _spy_approval_insert(monkeypatch)
     _approved_command_row(monkeypatch)
@@ -2377,6 +2474,7 @@ async def test_a_command_grant_row_stores_the_size_of_a_large_body(
         "path": "/api/chat.postMessage",
         "body_bytes": len(raw),
     }
+    assert all(length < len(raw) for length in encoded)
 
 
 @pytest.mark.asyncio
@@ -2405,7 +2503,7 @@ async def test_a_command_grant_does_not_cover_an_action_that_asks_since(
 
     addon, cache = _command_gate(monkeypatch, match=_MATCH_MULTI_ASK)
     monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
-    approval_cache.grant_command_actions(_COMMAND, 42, [upload], cache)
+    approval_cache.grant_command_actions(_COMMAND, UUID(_TAG_UUID), 42, [upload], cache)
     inserted = _spy_approval_insert(monkeypatch)
     monkeypatch.setattr(
         gate.action_approval,
@@ -2435,7 +2533,9 @@ async def test_a_command_grant_never_covers_a_request_that_always_asks(
     addon, cache = _command_gate(
         monkeypatch, match=make_matched_actions(action_type="unspecified")
     )
-    approval_cache.grant_command_actions(_COMMAND, 42, ["unspecified"], cache)
+    approval_cache.grant_command_actions(
+        _COMMAND, UUID(_TAG_UUID), 42, ["unspecified"], cache
+    )
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
 
     await addon.request(make_flow(proxy_auth=_basic_auth(_COMMAND_TAG)))
@@ -2448,7 +2548,9 @@ async def test_blocked_wins_over_a_command_grant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     addon, cache = _command_gate(monkeypatch, policy=ActionPolicy.DENY)
-    approval_cache.grant_command_actions(_COMMAND, 42, ["slack.messages.write"], cache)
+    approval_cache.grant_command_actions(
+        _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], cache
+    )
     spy = _spy_pipeline(addon, monkeypatch)
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 

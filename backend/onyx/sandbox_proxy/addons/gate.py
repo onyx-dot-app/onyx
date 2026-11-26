@@ -448,37 +448,44 @@ class GateAddon:
                     approval_id = self._persist_approval_row(
                         ctx, matched_actions, payload
                     )
-                    # Close the race with a session grant created during persistence.
-                    if (
-                        await asyncio.to_thread(
-                            self._apply_session_grant,
-                            ctx,
-                            matched_actions,
-                            payload,
-                            approval_id=approval_id,
-                        )
-                        is not None
-                    ):
+                    try:
+                        # Close the race with a session grant created during persistence.
+                        if (
+                            await asyncio.to_thread(
+                                self._apply_session_grant,
+                                ctx,
+                                matched_actions,
+                                payload,
+                                approval_id=approval_id,
+                            )
+                            is not None
+                        ):
+                            self._parked.remove(ctx.tenant_id, approval_id)
+                            decision = ApprovalDecision.APPROVED
+                        elif ctx.chat_command_id is not None and not (
+                            await asyncio.to_thread(self._command_in_foreground, ctx)
+                        ):
+                            # The command's call ended during persistence, so no
+                            # card can show this request.
+                            self._parked.remove(ctx.tenant_id, approval_id)
+                            decision = await asyncio.to_thread(
+                                self._claim_expired_or_read_winner,
+                                approval_id,
+                                ctx.tenant_id,
+                            )
+                            if decision is not ApprovalDecision.APPROVED:
+                                flow.response = _approval_needs_tool(matched_actions)
+                                return
+                        else:
+                            decision = await self._await_decision(
+                                approval_id, ctx, matched_actions
+                            )
+                    except asyncio.CancelledError:
+                        # Cancelled before the wait took the row over (the
+                        # wait cleans up itself; a repeat changes nothing).
                         self._parked.remove(ctx.tenant_id, approval_id)
-                        decision = ApprovalDecision.APPROVED
-                    elif ctx.chat_command_id is not None and not (
-                        await asyncio.to_thread(self._command_in_foreground, ctx)
-                    ):
-                        # The command's call ended during persistence, so no
-                        # card can show this request.
-                        self._parked.remove(ctx.tenant_id, approval_id)
-                        decision = await asyncio.to_thread(
-                            self._claim_expired_or_read_winner,
-                            approval_id,
-                            ctx.tenant_id,
-                        )
-                        if decision is not ApprovalDecision.APPROVED:
-                            flow.response = _approval_needs_tool(matched_actions)
-                            return
-                    else:
-                        decision = await self._await_decision(
-                            approval_id, ctx, matched_actions
-                        )
+                        self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
+                        raise
                     self._write_response_for_decision(flow, decision)
                     if decision is not ApprovalDecision.APPROVED:
                         return
@@ -819,6 +826,7 @@ class GateAddon:
         try:
             return approval_cache.command_grants_cover(
                 command_id,
+                ctx.session_id,
                 matched_actions.target.integration_id,
                 action_types,
                 self._cache_factory(ctx.tenant_id),
@@ -1534,12 +1542,17 @@ def _approval_payload(
         "method": flow.request.method,
         "path": flow.request.path,
     }
-    if matched_actions.payload and (
-        len(json.dumps(matched_actions.payload)) <= _CARD_BODY_MAX_BYTES
+    raw_bytes = len(flow.request.raw_content or b"")
+    # The size check runs on the event loop: a body far over the budget is
+    # not encoded. Its JSON is at least about half as long as the raw body.
+    if (
+        matched_actions.payload
+        and raw_bytes <= 2 * _CARD_BODY_MAX_BYTES
+        and len(json.dumps(matched_actions.payload)) <= _CARD_BODY_MAX_BYTES
     ):
         payload["body"] = matched_actions.payload
-    elif flow.request.raw_content:
-        payload["body_bytes"] = len(flow.request.raw_content)
+    elif raw_bytes:
+        payload["body_bytes"] = raw_bytes
     return payload
 
 

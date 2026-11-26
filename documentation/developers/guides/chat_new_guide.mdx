@@ -249,6 +249,8 @@ A `tool_approval_resolved` packet with `approval_id` and `outcome` ends each req
 Stop applies only while the answer runs. When you stop a running answer,
 Onyx rejects each call of the answer that waits.
 The stream sends the `tool_approval_resolved` packet with `rejected` before its `stop` packet.
+A request of a VM command is different:
+it ends with `cancelled` (see [Approvals of VM commands](#approvals-of-vm-commands)).
 If you close the stream after you send the stop, read the chat session to get the outcomes.
 After the stream ends with `awaiting_user`, a stop does not end the wait, and the requests still wait.
 A stop without a `stream_id` still pauses the queue of the chat session:
@@ -290,6 +292,7 @@ The call does not return while a request of its command waits.
 - `approve_once` sends the request.
 - `approve_command` sends the request, and the later requests of the same action from the same command,
   until the command exits. A request of a different action asks again.
+  A process that the command leaves running after it exits does not get this approval.
   It is not available when `can_approve_for_command` is `false`.
 - `reject` refuses the request. The command gets a `403` response.
 - `approve_session` is the same as `approve_once`. Onyx keeps no chat-wide approval for these requests.

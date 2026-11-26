@@ -416,7 +416,7 @@ The command waits while the card waits.
 | Option | Effect |
 | --- | --- |
 | **Approve once** | The request continues. |
-| **Approve for this command** | The request continues. Later requests of the same action of the app in this command continue without a card, until the command ends. |
+| **Approve for this command** | The request continues. Later requests of the same action of the app in this command continue without a card, until the command ends. A process that the command leaves running does not get this approval. |
 | **Reject** | The request fails. The command gets an error. |
 
 **Approve for this command** is not available for an action that always asks. By default,

@@ -15,9 +15,11 @@ ID, and two more keys:
 * `approval:command:{command_id}:foreground` — the chat session of a command
   that a call of the chat's run waits on. The call sets and renews it; the
   proxy holds an Ask request of the command only while it is set.
-* `approval:command:{command_id}:grant:{integration_id}:{action}` — one key
-  per action that the user approved for the rest of the command. Plain keys,
-  not a set, so the TTL applies on every cache backend.
+* `approval:command:{command_id}:grant:{chat_session_id}:{integration_id}:{action}`
+  — one key per action that the user of the chat approved for the rest of the
+  command. Plain keys,
+  not a set, so the TTL applies on every cache backend. The harness drops
+  them when it sees the command end (`drop_command_grants`).
 """
 
 import asyncio
@@ -48,8 +50,9 @@ SESSION_GRANT_TTL_S = 60 * 60
 # The call that waits on a command renews the key each second; a lost API
 # process leaves it for this long.
 COMMAND_FOREGROUND_TTL_S = 60
-# A command grant applies only while the command is in the foreground, which
-# an exited command never is again. The TTL matches the VM's command deadline.
+# Only for a command end that nobody reads: the harness drops the grants of a
+# command when it sees the command end. The TTL matches the VM's command
+# deadline, so a grant covers the command while it runs.
 COMMAND_GRANT_TTL_S = 4 * 60 * 60
 
 
@@ -200,8 +203,17 @@ def _command_foreground_key(command_id: UUID) -> str:
     return f"approval:command:{command_id}:foreground"
 
 
-def _command_grant_key(command_id: UUID, integration_id: int, action_type: str) -> str:
-    return f"approval:command:{command_id}:grant:{integration_id}:{action_type}"
+def _command_grant_prefix(command_id: UUID) -> str:
+    return f"approval:command:{command_id}:grant:"
+
+
+def _command_grant_key(
+    command_id: UUID, chat_session_id: UUID, integration_id: int, action_type: str
+) -> str:
+    return (
+        f"{_command_grant_prefix(command_id)}"
+        f"{chat_session_id}:{integration_id}:{action_type}"
+    )
 
 
 def mark_command_foreground(
@@ -239,13 +251,16 @@ def command_grant_actions(actions: Iterable[ActionLike]) -> list[str]:
 
 def grant_command_actions(
     command_id: UUID,
+    chat_session_id: UUID,
     integration_id: int,
     action_types: Iterable[str],
     cache: CacheBackend,
 ) -> None:
     for action_type in set(action_types):
         cache.set(
-            _command_grant_key(command_id, integration_id, action_type),
+            _command_grant_key(
+                command_id, chat_session_id, integration_id, action_type
+            ),
             b"1",
             ex=COMMAND_GRANT_TTL_S,
         )
@@ -253,17 +268,23 @@ def grant_command_actions(
 
 def command_grants_cover(
     command_id: UUID,
+    chat_session_id: UUID,
     integration_id: int,
     action_types: Iterable[str],
     cache: CacheBackend,
 ) -> bool:
-    """Whether the user approved every one of `action_types` (non-empty) for
-    the rest of the command."""
+    """Whether the user of the chat approved every one of `action_types`
+    (non-empty) for the rest of the command."""
     keys = {
-        _command_grant_key(command_id, integration_id, action_type)
+        _command_grant_key(command_id, chat_session_id, integration_id, action_type)
         for action_type in action_types
     }
     return bool(keys) and cache.exists_many(keys) == keys
+
+
+def drop_command_grants(command_id: UUID, cache: CacheBackend) -> None:
+    """The command ended: a process that it left running gets no grant."""
+    cache.delete_prefix(_command_grant_prefix(command_id))
 
 
 def pop_announcement(

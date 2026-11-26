@@ -41,6 +41,22 @@ def _response(
     )
 
 
+def _wake(
+    approval_ids: list[UUID], decision: ApprovalDecision, cache: CacheBackend
+) -> None:
+    """Wake the parked proxies. A missed wake leaves a proxy to its wait
+    timeout."""
+    for approval_id in approval_ids:
+        try:
+            approval_cache.send_wake(approval_id, decision, cache)
+        except CACHE_TRANSIENT_ERRORS as error:
+            logger.warning(
+                "command_approval_wake_failed approval_id=%s error=%s",
+                approval_id,
+                error,
+            )
+
+
 def _now_blocked(
     db_session: Session, row: ActionApproval, chat_session_id: UUID, user_id: UUID
 ) -> bool:
@@ -94,6 +110,9 @@ def decide_command_approval(
         if choice == ApprovalChoice.REJECT
         else ApprovalDecision.APPROVED
     )
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+    )
     decided_via = (
         ApprovalDecidedVia.POLICY
         if blocked
@@ -101,9 +120,7 @@ def decide_command_approval(
         if for_command
         else ApprovalDecidedVia.USER
     )
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    )
+    cache = get_cache_backend(tenant_id=get_current_tenant_id())
     decided = action_approval.try_record_decision(
         db_session,
         approval_id=row.approval_id,
@@ -114,36 +131,38 @@ def decide_command_approval(
     if decided is None:
         db_session.refresh(row)
         if row.decision == decision and row.decided_via == decided_via:
+            # A retry also sends a wake that the first call missed.
+            _wake([row.approval_id], decision, cache)
             return _response(row, decided_via)
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "This request was already decided or is no longer waiting",
         )
+    if for_command and integration_id is not None:
+        try:
+            # Saved before the commit: the proxy checks the grant of a
+            # COMMAND_GRANT row, and a request that misses the grant in the
+            # cache committed its row before the scan below reads it.
+            approval_cache.grant_command_actions(
+                command_id, chat_session_id, integration_id, granted, cache
+            )
+        except CACHE_TRANSIENT_ERRORS as error:
+            # The request goes as approved once; later requests of the
+            # command ask again.
+            logger.warning(
+                "command_approval_grant_failed approval_id=%s error=%s",
+                row.approval_id,
+                error,
+            )
+            for_command = False
+            decided_via = decided.decided_via = ApprovalDecidedVia.USER
     # Commit before the scan below locks other rows of the command, so two
     # decisions of one command never wait on each other's rows.
     db_session.commit()
+    _wake([row.approval_id], decision, cache)
 
-    cache: CacheBackend | None = None
-    try:
-        cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        if for_command and integration_id is not None:
-            # Saved before the scan: a request that misses the grant in the
-            # cache committed its row before the scan reads it.
-            approval_cache.grant_command_actions(
-                command_id, integration_id, granted, cache
-            )
-    except CACHE_TRANSIENT_ERRORS as error:
-        # Later requests of the command ask again.
-        logger.warning(
-            "command_approval_grant_failed approval_id=%s error=%s",
-            row.approval_id,
-            error,
-        )
-        for_command = False
-
-    approved_ids = [row.approval_id]
-
-    if for_command and integration_id is not None and cache is not None:
+    covered_ids: list[UUID] = []
+    if for_command and integration_id is not None:
         for other in action_approval.list_pending_command_action_approvals(
             db_session,
             chat_session_id=chat_session_id,
@@ -156,6 +175,7 @@ def decide_command_approval(
                     other.integration_id == integration_id
                     and approval_cache.command_grants_cover(
                         command_id,
+                        chat_session_id,
                         integration_id,
                         approval_cache.command_grant_actions(other.actions),
                         cache,
@@ -170,21 +190,11 @@ def decide_command_approval(
                 decided_via=ApprovalDecidedVia.COMMAND_GRANT,
                 created_after=cutoff,
             ):
-                approved_ids.append(other.approval_id)
+                covered_ids.append(other.approval_id)
         # Commit the decisions before the proxy wakes and reads them.
         db_session.commit()
+        _wake(covered_ids, decision, cache)
 
-    try:
-        if cache is not None:
-            for approval_id in approved_ids:
-                approval_cache.send_wake(approval_id, decision, cache)
-    except CACHE_TRANSIENT_ERRORS as error:
-        # A missed wake leaves the proxy to its wait timeout.
-        logger.warning(
-            "command_approval_wake_failed approval_id=%s error=%s",
-            row.approval_id,
-            error,
-        )
     logger.info(
         "command_approval_decided approval_id=%s command_id=%s decision=%s "
         "decided_via=%s covered=%s",
@@ -192,6 +202,6 @@ def decide_command_approval(
         command_id,
         decision.value,
         decided_via.value,
-        len(approved_ids) - 1,
+        len(covered_ids),
     )
     return _response(decided, decided_via)

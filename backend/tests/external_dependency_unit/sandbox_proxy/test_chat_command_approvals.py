@@ -71,7 +71,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     CommandApprovalResolved,
 )
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.craft.db_helpers import (
     app_integration_id,
     make_external_app,
@@ -98,8 +98,9 @@ def chat(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
+    make_test_user: MakeTestUser,
 ) -> Generator[_Chat, None, None]:
-    user = create_test_user(db_session, "chat_command_approvals")
+    user = make_test_user("chat_command_approvals")
     app = make_external_app(db_session, auth_template={})
     integration_id = app_integration_id(db_session, app)
     # The default agent uses each integration the user runs.
@@ -121,6 +122,14 @@ def chat(
         begin(self, command_id)
 
     monkeypatch.setattr(CommandApprovals, "begin", recording_begin)
+    held: list[_HeldRequest] = []
+    init = _HeldRequest.__init__
+
+    def recording_init(self: _HeldRequest, *args: Any) -> None:
+        init(self, *args)
+        held.append(self)
+
+    monkeypatch.setattr(_HeldRequest, "__init__", recording_init)
     try:
         yield _Chat(
             user=user,
@@ -131,6 +140,17 @@ def chat(
         for approvals in started:
             if not approvals._stop.is_set():
                 approvals.end(cancelled=False)
+        cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+        # Every proxy wait that a test starts ends here; a repeated wake of a
+        # decided request changes nothing.
+        for request in held:
+            approval_cache.send_wake(
+                request.approval_id, ApprovalDecision.EXPIRED, cache
+            )
+            request.result()
+        for approvals in started:
+            if approvals._command_id is not None:
+                approval_cache.drop_command_grants(approvals._command_id, cache)
         db_session.rollback()
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session.id))
         db_session.commit()
@@ -551,7 +571,11 @@ def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
             row = other.get(ActionApproval, approval_id)
             assert row is not None
             covered = approval_cache.command_grants_cover(
-                command_id, chat.integration_id, ["issues.create"], cache
+                command_id,
+                chat.chat_session_id,
+                chat.integration_id,
+                ["issues.create"],
+                cache,
             )
             seen.append((covered, row.decision))
         return original(db, **kwargs)
@@ -582,7 +606,11 @@ def test_a_command_grant_for_a_decided_request_grants_nothing(
             _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_COMMAND)
         assert conflict.value.error_code is OnyxErrorCode.CONFLICT
         assert not approval_cache.command_grants_cover(
-            command_id, chat.integration_id, ["issues.create"], cache
+            command_id,
+            chat.chat_session_id,
+            chat.integration_id,
+            ["issues.create"],
+            cache,
         )
     finally:
         cache.delete_prefix(f"approval:command:{command_id}:")
@@ -624,7 +652,11 @@ def test_approving_a_request_that_the_policies_now_block_saves_a_rejection(
         row = db_session.get(ActionApproval, approval_id)
         assert row is not None and row.decision == ApprovalDecision.REJECTED
         assert not approval_cache.command_grants_cover(
-            command_id, chat.integration_id, ["issues.create"], cache
+            command_id,
+            chat.chat_session_id,
+            chat.integration_id,
+            ["issues.create"],
+            cache,
         )
     finally:
         cache.delete_prefix(f"approval:command:{command_id}:")
@@ -639,7 +671,11 @@ def test_approving_a_request_that_the_policies_now_block_saves_a_rejection(
     ],
 )
 def test_a_refused_decision_leaves_the_request_waiting(
-    db_session: Session, chat: _Chat, case: str, error_code: OnyxErrorCode
+    db_session: Session,
+    chat: _Chat,
+    make_test_user: MakeTestUser,
+    case: str,
+    error_code: OnyxErrorCode,
 ) -> None:
     """Only the chat's owner decides, only while the request waits, and a
     request that always asks cannot be approved for the command."""
@@ -650,7 +686,7 @@ def test_a_refused_decision_leaves_the_request_waiting(
     )
     decider = chat.user
     if case == "another_user":
-        decider = create_test_user(db_session, "chat_command_approvals_other")
+        decider = make_test_user("chat_command_approvals_other")
     if case == "expired":
         row = db_session.get(ActionApproval, approval_id)
         assert row is not None
@@ -674,7 +710,7 @@ def test_a_refused_decision_leaves_the_request_waiting(
         row = db_session.get(ActionApproval, approval_id)
         assert row is not None and row.decision is None
         assert not approval_cache.command_grants_cover(
-            command_id, chat.integration_id, [action_type], cache
+            command_id, chat.chat_session_id, chat.integration_id, [action_type], cache
         )
     finally:
         cache.delete_prefix(f"approval:command:{command_id}:")
@@ -683,8 +719,9 @@ def test_a_refused_decision_leaves_the_request_waiting(
 def test_a_command_grant_that_the_cache_cannot_save_approves_only_this_request(
     db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The proxy refuses a command grant that the cache does not hold, so the
-    command's other requests keep waiting for the user."""
+    """The proxy sends a COMMAND_GRANT row only while the cache holds the
+    grant, so without it the request is approved once and the command's
+    other requests keep waiting for the user."""
     command_id = uuid4()
     gate = _gate()
     ctx = _ctx(chat, command_id)
@@ -696,12 +733,73 @@ def test_a_command_grant_that_the_cache_cannot_save_approves_only_this_request(
 
     monkeypatch.setattr(command_approvals.approval_cache, "grant_command_actions", fail)
 
-    _decide(db_session, chat, first, ApprovalChoice.APPROVE_COMMAND)
+    assert (
+        _decide(db_session, chat, first, ApprovalChoice.APPROVE_COMMAND)
+        == ApprovalDecidedVia.USER
+    )
     db_session.expire_all()
     first_row = db_session.get(ActionApproval, first)
     second_row = db_session.get(ActionApproval, second)
-    assert first_row is not None and first_row.decision == ApprovalDecision.APPROVED
+    assert first_row is not None
+    assert (first_row.decision, first_row.decided_via) == (
+        ApprovalDecision.APPROVED,
+        ApprovalDecidedVia.USER,
+    )
     assert second_row is not None and second_row.decision is None
+
+
+def test_the_decided_request_wakes_before_the_scan_of_the_others(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed scan of the command's other requests still wakes the request
+    that the user decided."""
+    command_id = uuid4()
+    gate = _gate()
+    held = _HeldRequest(gate, _ctx(chat, command_id), _matched(chat.integration_id))
+
+    def fail(*_args: Any, **_kwargs: Any) -> list[ActionApproval]:
+        raise RuntimeError("scan failed")
+
+    monkeypatch.setattr(
+        command_approvals.action_approval, "list_pending_command_action_approvals", fail
+    )
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    try:
+        with pytest.raises(RuntimeError):
+            _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_COMMAND)
+        assert held.result() == ApprovalDecision.APPROVED
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
+
+
+def test_a_failed_wake_does_not_stop_the_other_wakes(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    command_id = uuid4()
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    matched = _matched(chat.integration_id)
+    first = _HeldRequest(gate, ctx, matched)
+    second = _HeldRequest(gate, ctx, matched)
+    third = _HeldRequest(gate, ctx, matched)
+    send_wake = command_approvals.approval_cache.send_wake
+    failed: list[UUID] = []
+
+    def flaky(approval_id: UUID, decision: ApprovalDecision, cache: Any) -> None:
+        if approval_id != first.approval_id and not failed:
+            failed.append(approval_id)
+            raise RedisError("down")
+        send_wake(approval_id, decision, cache)
+
+    monkeypatch.setattr(command_approvals.approval_cache, "send_wake", flaky)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    try:
+        _decide(db_session, chat, first.approval_id, ApprovalChoice.APPROVE_COMMAND)
+        woken = second if failed == [third.approval_id] else third
+        assert first.result() == ApprovalDecision.APPROVED
+        assert woken.result() == ApprovalDecision.APPROVED
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
 
 
 def test_command_grants_expire_on_the_postgres_cache(
@@ -710,7 +808,7 @@ def test_command_grants_expire_on_the_postgres_cache(
 ) -> None:
     """Every grant row has the grant TTL."""
     cache = PostgresCacheBackend(POSTGRES_DEFAULT_SCHEMA)
-    command_id = uuid4()
+    command_id, chat_session_id = uuid4(), uuid4()
 
     def rows() -> dict[str, CacheStore]:
         db_session.expire_all()
@@ -718,14 +816,14 @@ def test_command_grants_expire_on_the_postgres_cache(
 
     before = set(rows())
     approval_cache.grant_command_actions(
-        command_id, 7, ["issues.create", "issues.delete"], cache
+        command_id, chat_session_id, 7, ["issues.create", "issues.delete"], cache
     )
     try:
         added = [row for key, row in rows().items() if key not in before]
         assert added
         assert all(row.expires_at is not None for row in added)
         assert approval_cache.command_grants_cover(
-            command_id, 7, ["issues.create", "issues.delete"], cache
+            command_id, chat_session_id, 7, ["issues.create", "issues.delete"], cache
         )
     finally:
         cache.delete_prefix(f"approval:command:{command_id}:")

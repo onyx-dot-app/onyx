@@ -39,6 +39,7 @@ from onyx.microvm.models import (
 )
 from onyx.microvm.models import ExecEvent as DaemonExecEvent
 from onyx.microvm.registry import get_sandbox_placement
+from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.sandbox import harness_base, harness_factory
 from onyx.server.features.build.sandbox.exec_output import (
     ExecOutputBuffer,
@@ -446,6 +447,55 @@ def test_an_empty_write_polls_until_the_command_ends(
     assert ended.exit_code == 0 and _output(ended) == "bye"
     assert ended.session_id is None
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
+
+
+def test_the_app_grants_of_a_command_end_when_its_exit_is_seen(
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    """A grant covers the command while it runs. Once a call sees it exit, a
+    process that it left running gets no grant."""
+    ref = new_ref()
+    hold, other = _Hold(), uuid4()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250, hold=hold))
+    session = result.session_id
+    assert session is not None
+    command = hold.begun[0]
+    approval_cache.grant_command_actions(
+        command, ref.session_id, 7, ["issues.create"], tenant_cache
+    )
+    approval_cache.grant_command_actions(
+        other, ref.session_id, 7, ["issues.create"], tenant_cache
+    )
+    try:
+        _run(sandbox.write_stdin(ref, session))
+        assert approval_cache.command_grants_cover(
+            command, ref.session_id, 7, ["issues.create"], tenant_cache
+        )
+
+        execution_id = next(
+            e.execution_id
+            for e in node.agent.executions[str(ref.sandbox_id)].values()
+            if e.argv[-1:] == ["cat"]
+        )
+        sandbox_daemon(client_factory, sandbox._place(ref)).interact(
+            execution_id, data=b"", close_stdin=True
+        )
+        _, ended = _run(sandbox.write_stdin(ref, session, yield_time_ms=10_000))
+
+        assert ended.exit_code == 0
+        assert not approval_cache.command_grants_cover(
+            command, ref.session_id, 7, ["issues.create"], tenant_cache
+        )
+        assert approval_cache.command_grants_cover(
+            other, ref.session_id, 7, ["issues.create"], tenant_cache
+        )
+    finally:
+        approval_cache.drop_command_grants(command, tenant_cache)
+        approval_cache.drop_command_grants(other, tenant_cache)
 
 
 def test_a_held_command_waits_past_its_window_and_keeps_its_command_id(

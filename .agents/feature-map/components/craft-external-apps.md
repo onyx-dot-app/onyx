@@ -383,18 +383,24 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     The user decides through `POST /chat/approvals/{id}/decision`
     (`server/query_and_chat/command_approvals.py:decide_command_approval`):
     approve once (also `approve_session`, from clients with no command
-    scope), `approve_command` (`decided_via` COMMAND_GRANT, a cache set
-    of `integration:action` per command that the gate checks before it holds,
-    which also approves the command's other waiting rows that the command's
-    grants together cover), or reject. An approval of a request that the
-    current policies block (`chat/tool_approvals.py:action_now_blocked`) saves
-    a rejection by the policy (`decided_via` POLICY) and grants nothing.
-    The decision commits its own row, then
-    saves the grant, then scans the waiting rows: a request that misses the
-    grant committed its row before that check, and two decisions never lock
-    each other's rows. A grant covers the command until it exits, also after
-    the call stops waiting on it (the gate checks it before the foreground
-    mark), and never covers an action that always asks. The
+    scope), `approve_command` (`decided_via` COMMAND_GRANT, one cache key
+    per command, chat and `integration:action` that the gate checks before it
+    holds, which also approves the command's other waiting rows that the
+    command's grants together cover), or reject. An approval of a request that
+    the current policies block (`chat/tool_approvals.py:action_now_blocked`)
+    saves a rejection by the policy (`decided_via` POLICY) and grants nothing.
+    The decision records its row, saves the grant before the commit (a cache
+    error records `decided_via` USER: approved once), commits, wakes the
+    proxy, then scans the waiting rows: a request that misses the grant
+    committed its row before that check, and two decisions never lock each
+    other's rows. A grant covers the command until it exits, also after the
+    call stops waiting on it (the gate checks it before the foreground mark),
+    and never covers an action that always asks. The harness drops the
+    command's grants when a call sees the command end
+    (`server/features/build/sandbox/firecracker/harness_sandbox.py:_end_exec_session`,
+    `sandbox_proxy/approval_cache.py:drop_command_grants`), so a process that the command left
+    running gets none; the 4 h TTL (the VM command deadline) covers an end
+    that no call reads. The
     recheck before forwarding checks a COMMAND_GRANT row against the current
     policy, as a SESSION_GRANT row. Only a call whose `ToolContext.
     shows_command_approvals` is set holds: a root agent of a streamed turn

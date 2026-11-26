@@ -103,6 +103,7 @@ from onyx.microvm.registry import (
     is_node_draining,
     touch_sandbox_placement,
 )
+from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.sandbox.exec_output import (
     EXEC_DEFAULT_YIELD_MS,
     EXEC_MAX_YIELD_MS,
@@ -281,6 +282,17 @@ def command_proxy_user(chat_session_id: UUID, command_id: UUID) -> str:
     (`sandbox_proxy/addons/gate.py:parse_session_tag`). The host relay
     forwards it as the session hint, so it stays plain visible ASCII."""
     return f"{chat_session_id}.{command_id.hex}"
+
+
+def _end_exec_session(
+    cache: CacheBackend, sandbox_id: UUID, record: ExecSessionRecord
+) -> None:
+    """The command ended (or nobody can reach it again): drop its record and
+    the app grants of the command, which a process that it left running
+    must not use."""
+    remove_exec_session(cache, sandbox_id, record.exec_session_id)
+    if record.command_id is not None:
+        approval_cache.drop_command_grants(record.command_id, cache)
 
 
 class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
@@ -958,7 +970,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             placed.vm.generation,
         ):
             # Processes do not survive a VM restart.
-            remove_exec_session(tenant_cache, ref.sandbox_id, exec_session_id)
+            _end_exec_session(tenant_cache, ref.sandbox_id, record)
             raise ExecSessionEndedError(exec_session_id)
         daemon = sandbox_daemon(self._client_factory, placed)
         text, interrupt, _ = chars.partition(INTERRUPT_CHAR)
@@ -974,7 +986,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 daemon.cancel(record.execution_id, CancelSignal.SIGINT)
         except SandboxDaemonError as e:
             if e.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND:
-                remove_exec_session(tenant_cache, ref.sandbox_id, exec_session_id)
+                _end_exec_session(tenant_cache, ref.sandbox_id, record)
                 raise ExecSessionEndedError(exec_session_id) from e
             # An ended command: report its result below.
             if e.reason is not SandboxDaemonErrorReason.EXECUTION_ENDED:
@@ -1054,9 +1066,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 window_end = time.monotonic() + _HOLD_WINDOW_SECONDS
         except SandboxDaemonError as e:
             if e.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND:
-                remove_exec_session(
-                    tenant_cache, ref.sandbox_id, record.exec_session_id
-                )
+                _end_exec_session(tenant_cache, ref.sandbox_id, record)
                 buffer.session_id = None
                 raise ExecSessionEndedError(record.exec_session_id) from e
             stream_error = e
@@ -1096,7 +1106,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 ),
             )
         else:
-            remove_exec_session(tenant_cache, ref.sandbox_id, record.exec_session_id)
+            _end_exec_session(tenant_cache, ref.sandbox_id, record)
             buffer.session_id = None
             if text := buffer.finish():
                 yield ExecOutputDelta(text=text)
@@ -1131,7 +1141,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             return False
         try:
             daemon.cancel(record.execution_id)
-            remove_exec_session(tenant_cache, ref.sandbox_id, record.exec_session_id)
+            _end_exec_session(tenant_cache, ref.sandbox_id, record)
             buffer.session_id = None
         except Exception:
             logger.warning(
@@ -1552,7 +1562,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 except (HostAgentError, SandboxDaemonError):
                     # The command stops with the VM at the latest.
                     pass
-            remove_exec_session(tenant_cache, sandbox_id, record.exec_session_id)
+            _end_exec_session(tenant_cache, sandbox_id, record)
 
     def purge_sandbox(
         self,
