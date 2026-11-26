@@ -2,12 +2,11 @@
 
 import { useMemo } from "react";
 import { cn } from "@opal/utils";
-import { useHighlightedLines } from "@/lib/codeHighlight/hooks";
-import { shikiLanguageOfLinguist } from "@/lib/codeHighlight/linguistLanguages";
+import {
+  MAX_HIGHLIGHTED_CHARACTERS,
+  useHighlightedLines,
+} from "@/lib/codeHighlight/hooks";
 import { indentJson } from "@/lib/filePreview/indentJson";
-
-// Longer text shows without highlighting, which would take seconds.
-export const MAX_HIGHLIGHTED_CHARACTERS = 100_000;
 
 interface CodeFilePreviewProps {
   text: string;
@@ -30,7 +29,7 @@ export function CodeFilePreview({ text, language }: CodeFilePreviewProps) {
   const highlight = !plaintext && shown.length <= MAX_HIGHLIGHTED_CHARACTERS;
   const highlightedLines = useHighlightedLines(
     shown,
-    highlight ? shikiLanguageOfLinguist(language) : undefined
+    highlight ? language : undefined
   );
   const lineNumbers = useMemo(
     () =>

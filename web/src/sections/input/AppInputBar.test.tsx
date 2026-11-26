@@ -29,7 +29,7 @@ import type { PickerSections } from "@/lib/skills/picker";
 import { useChatSkills } from "@/lib/skills/hooks";
 import type { ChatSkill } from "@/lib/skills/types";
 import { draftKey } from "@/hooks/useDraft";
-import { trackUpload } from "@/lib/projects/uploadProgress";
+import { releaseUploads, trackUpload } from "@/lib/projects/uploadProgress";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
 import {
   MAX_MENTIONS_PER_MESSAGE,
@@ -551,6 +551,50 @@ describe("edit a sent message in the composer", () => {
     await setupUser().keyboard("{Escape}");
 
     expect(lastFiles()).toEqual([uploaded]);
+  });
+
+  describe("an abandoned edit forgets its held uploads", () => {
+    const uploading = {
+      ...projectFile("temp_abandoned"),
+      temp_id: "temp_abandoned",
+      status: UserFileStatus.UPLOADING,
+    };
+    const uploaded = {
+      ...projectFile("user-abandoned"),
+      temp_id: "temp_abandoned",
+      status: UserFileStatus.PROCESSING,
+    };
+
+    // A result still held comes back from `releaseUploads`; a dropped one does not.
+    function heldResult(): ProjectFile[] {
+      return releaseUploads([uploading]);
+    }
+
+    test("when the composer resets", () => {
+      const upload = trackUpload(["temp_abandoned"]);
+      const { inputBarRef } = startEdit([uploading]);
+      act(() => inputBarRef.current?.editMessage(edit));
+
+      act(() => inputBarRef.current?.reset());
+      act(() => upload.finish([uploaded]));
+
+      expect(heldResult()).toEqual([]);
+    });
+
+    test("when the chat changes", () => {
+      const upload = trackUpload(["temp_abandoned"]);
+      mockChatId = "chat-a";
+      const inputBarRef = createRef<AppInputBarHandle>();
+      mockProjectsContext.currentMessageFiles = [uploading];
+      const { rerender } = render(<Composer inputBarRef={inputBarRef} />);
+      act(() => inputBarRef.current?.editMessage(edit));
+
+      mockChatId = "chat-b";
+      rerender(<Composer inputBarRef={inputBarRef} />);
+      act(() => upload.finish([uploaded]));
+
+      expect(heldResult()).toEqual([]);
+    });
   });
 
   test("switching to another version of the edited message ends the edit", async () => {

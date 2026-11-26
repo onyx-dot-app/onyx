@@ -1,6 +1,6 @@
 /** The agent tools of every tool family, and their calls read from packets. */
 import {
-  isFailedCustomToolDelta,
+  readCustomToolCall,
   PacketType,
   type Packet,
 } from "@/app/app/services/streamingModels";
@@ -81,42 +81,27 @@ export function agentToolCalls(packets: readonly Packet[]): AgentToolCall[] {
   for (const packet of packets) {
     const { turn_index, tab_index } = packet.placement;
     const call = `${turn_index}-${tab_index ?? 0}`;
-    byCall.set(call, [...(byCall.get(call) ?? []), packet]);
+    const group = byCall.get(call);
+    if (group) group.push(packet);
+    else byCall.set(call, [packet]);
   }
   return [...byCall.values()].flatMap((tabPackets) => {
     const tool = agentTool(tabPackets);
     if (!tool) return [];
+    const { args, failed, isComplete } = readCustomToolCall(tabPackets);
+    const name = args
+      ? stringArg(args, tool.nameArg) ||
+        // The Claude family names the target `to`.
+        (tool.action === "send" ? stringArg(args, "to") : "")
+      : "";
     const call: AgentToolCall = {
       action: tool.action,
-      name: "",
-      agentName: "",
-      message: "",
-      failed: false,
-      isComplete: false,
+      name,
+      agentName: tool.slashesToDashes ? name.replaceAll("/", "-") : name,
+      message: args && tool.messageArg ? stringArg(args, tool.messageArg) : "",
+      failed,
+      isComplete,
     };
-    for (const { obj } of tabPackets) {
-      if (obj.type === PacketType.CUSTOM_TOOL_ARGS) {
-        call.name =
-          stringArg(obj.tool_args, tool.nameArg) ||
-          // The Claude family names the target `to`.
-          (tool.action === "send" ? stringArg(obj.tool_args, "to") : "");
-        call.agentName = tool.slashesToDashes
-          ? call.name.replaceAll("/", "-")
-          : call.name;
-        if (tool.messageArg)
-          call.message = stringArg(obj.tool_args, tool.messageArg);
-      } else if (
-        obj.type === PacketType.CUSTOM_TOOL_DELTA &&
-        isFailedCustomToolDelta(obj)
-      ) {
-        call.failed = true;
-      } else if (obj.type === PacketType.ERROR) {
-        call.failed = true;
-        call.isComplete = true;
-      } else if (obj.type === PacketType.SECTION_END) {
-        call.isComplete = true;
-      }
-    }
     return [call];
   });
 }

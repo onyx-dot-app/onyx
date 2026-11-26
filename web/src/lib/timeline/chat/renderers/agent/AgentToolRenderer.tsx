@@ -9,11 +9,6 @@ import { STEP_ICONS } from "@/lib/timeline/icons";
 import { openSubagent, useSpawnedSubagents } from "@/lib/chat/subagents";
 import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";
 
-export {
-  isAgentToolPacket,
-  isSpawnPacket,
-} from "@/lib/timeline/chat/renderers/agent/agentTools";
-
 /**
  * A subagent spawn, message or interrupt as its own step: the agent icon, a
  * title that names the agent, and the text sent to it as the body. A spawn

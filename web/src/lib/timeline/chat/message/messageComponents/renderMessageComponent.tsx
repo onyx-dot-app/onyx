@@ -22,11 +22,11 @@ import { PythonToolRenderer } from "@/lib/timeline/chat/renderers/code/PythonToo
 import { NestedCall } from "@/lib/timeline/chat/packetHelpers";
 import { ReasoningRenderer } from "@/lib/timeline/chat/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "@/lib/timeline/chat/message/messageComponents/renderers/CustomToolRenderer";
+import { AgentToolRenderer } from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
 import {
-  AgentToolRenderer,
   isAgentToolPacket,
   isSpawnPacket,
-} from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
+} from "@/lib/timeline/chat/renderers/agent/agentTools";
 import AgentGroupRenderer from "@/lib/timeline/chat/renderers/agent/AgentGroupRenderer";
 import {
   isSkillToolPacket,

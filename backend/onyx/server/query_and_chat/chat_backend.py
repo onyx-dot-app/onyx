@@ -712,8 +712,8 @@ def rename_chat_session(
             return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
 
     # Returns a saved name, including one the chat turn is still generating.
-    return RenameChatSessionResponse(
-        new_name=name_chat_session(
+    try:
+        new_name = name_chat_session(
             chat_session_id=chat_session_id,
             user=user,
             additional_headers=get_relevant_headers(
@@ -721,7 +721,18 @@ def rename_chat_session(
             ),
             regenerate=rename_req.regenerate,
         )
-    )
+    except OnyxError:
+        raise
+    except Exception as error:
+        if not rename_req.regenerate:
+            raise
+        # A failed regeneration keeps the old name and reports the model failure.
+        logger.warning("Failed to regenerate chat session name: %s", error)
+        raise OnyxError(
+            OnyxErrorCode.LLM_PROVIDER_ERROR,
+            "Could not generate a new chat name",
+        ) from error
+    return RenameChatSessionResponse(new_name=new_name)
 
 
 @router.patch("/chat-session/{session_id}")
