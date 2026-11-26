@@ -403,6 +403,53 @@ assert not result["passed"]
     )
 
 
+def test_stream_counts_are_added_when_the_turn_finishes() -> None:
+    # Keep Locust's gevent patching out of the FastAPI test process.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+from unittest.mock import MagicMock, patch
+from locust.env import Environment
+from onyx_client.chat_user import OnyxChatUser
+from onyx_client import workload_metrics
+
+OnyxChatUser.host = "http://localhost"
+user = OnyxChatUser(Environment())
+user.messages = ["Question"]
+user.message_order = [0]
+user.turn_index = 0
+workload_metrics.reset()
+mid_turn = []
+
+def lines():
+    for obj in (
+        {"type": "message_start", "final_documents": None},
+        {"type": "message_delta", "content": "Answer"},
+        {"type": "stop", "stop_reason": "finished"},
+    ):
+        yield json.dumps({"placement": {"turn_index": 0, "tab_index": 0}, "obj": obj})
+        mid_turn.append(workload_metrics.snapshot()[user.scenario_prefix]["answer_chars"])
+
+response = MagicMock(status_code=200)
+response.__enter__.return_value = response
+response.iter_lines.return_value = lines()
+with patch.object(user, "_next_payload", return_value={}), patch.object(
+    user.client, "post", return_value=response
+):
+    user.chat_turn()
+counts = workload_metrics.snapshot()[user.scenario_prefix]
+assert mid_turn == [0, 0, 0], mid_turn
+assert (counts["finished"], counts["answer_chars"]) == (1, 6), counts
+""",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+
+
 @pytest.mark.parametrize("context_limit", ["", "-maxctx50000"])
 def test_prompt_tokenization_runs_off_loop_once(context_limit: str) -> None:
     prompt_counts = []

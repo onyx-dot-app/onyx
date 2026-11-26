@@ -78,7 +78,7 @@ export function formatContextWindow(tokens: number): string {
 }
 
 const SLIDER_THUMB_CLASS =
-  "block size-3 rounded-full bg-background-neutral-00 shadow-[0_0_2px_1px_rgba(0,0,0,0.15)] focus:outline-none";
+  "block size-3 rounded-full bg-background-neutral-light-00 shadow-[0_0_2px_1px_rgba(0,0,0,0.15)] focus:outline-none";
 const SLIDER_TRACK_CLASS =
   "h-1.5 w-full overflow-hidden rounded bg-background-tint-02";
 const SLIDER_FILL_CLASS = "h-full bg-theme-primary-05";

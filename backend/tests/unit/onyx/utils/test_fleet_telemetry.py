@@ -128,6 +128,109 @@ def test_outage_keeps_the_batch_and_backs_off(clock: list[float]) -> None:
     assert sender.sent == 1 and sender.failures == 0 and not sender._pending
 
 
+def test_rate_limited_batch_waits_for_retry_after(clock: list[float]) -> None:
+    sender = make_sender()
+    assert sender.emit("heartbeat", {"dropped_events": 0})
+    limited = Response({}, status=429)
+    limited.headers["Retry-After"] = "30"
+    assert not sender.flush_once(Mock(return_value=limited))
+    transport = RecordingTransport()
+    clock[0] += 29
+    assert not sender.flush_once(transport) and not transport.events
+    clock[0] += 2
+    assert sender.flush_once(transport) and len(transport.events) == 1
+
+
+def test_events_over_the_ingress_budget_wait_without_using_retries(
+    clock: list[float],
+) -> None:
+    sender = make_sender()
+    for index in range(2):
+        assert sender.emit("heartbeat", {"dropped_events": index})
+    budget = Response(
+        {
+            "results": [
+                {"index": 0, "status": "accepted"},
+                {
+                    "index": 1,
+                    "status": "retry",
+                    "code": "customer_ingress_budget_exceeded",
+                },
+            ],
+            "accepted": 1,
+            "rejected": 0,
+        }
+    )
+    budget.headers["Retry-After"] = "20"
+    for attempt in range(fleet._MAX_RETRIES + 2):
+        throttled = Response(
+            {
+                "results": [
+                    {
+                        "index": 0,
+                        "status": "retry",
+                        "code": "customer_ingress_budget_exceeded",
+                    }
+                ],
+                "accepted": 0,
+                "rejected": 0,
+            }
+        )
+        throttled.headers["Retry-After"] = "20"
+        transport = Mock(return_value=budget if attempt == 0 else throttled)
+        assert not sender.flush_once(transport)
+        assert len(sender._pending) == 1 and sender.dropped == 0
+        # The sender waits at least Retry-After before it sends again.
+        clock[0] += 19
+        assert not sender.flush_once(transport) and transport.call_count == 1
+        clock[0] += 300
+    delivered = RecordingTransport()
+    assert sender.flush_once(delivered) and len(delivered.events) == 1
+    assert (sender.sent, sender.dropped) == (2, 0)
+
+
+@pytest.mark.parametrize(
+    "header, seconds",
+    [
+        (None, 0.0),
+        ("", 0.0),
+        ("   ", 0.0),
+        ("soon", 0.0),
+        ("-5", 0.0),
+        ("nan", 0.0),
+        ("inf", 0.0),
+        ("Wed, 21 Oct 2026 07:28:00 GMT", 0.0),
+        ("0", 0.0),
+        ("12", 12.0),
+        ("2.5", 2.5),
+    ],
+)
+def test_retry_after_reads_only_finite_positive_seconds(
+    header: str | None, seconds: float
+) -> None:
+    assert fleet._retry_after_seconds(header) == seconds
+
+
+def test_retry_after_wait_is_capped_at_300_seconds(clock: list[float]) -> None:
+    sender = make_sender()
+    sender._back_off(100000.0)
+    assert sender._blocked_until == clock[0] + 300
+
+
+def test_backoff_jitter_stays_inside_the_window(
+    clock: list[float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sender = make_sender()
+    # The first failure waits half of its 2-second window, plus up to the other half.
+    for draw, expected in ((0.0, 1.0), (1.0, 2.0)):
+        monkeypatch.setattr(
+            fleet.random, "uniform", lambda low, high, d=draw: low + d * (high - low)
+        )
+        sender.failures = 0
+        sender._back_off()
+        assert sender._blocked_until == clock[0] + expected
+
+
 def test_rejected_batch_is_dropped_and_not_sent_again() -> None:
     sender = make_sender()
     assert sender.emit("heartbeat", {"dropped_events": 0})

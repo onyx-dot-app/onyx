@@ -95,6 +95,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 	repeats := map[string][]string{}
 	retried := map[string][]string{}
 	announced := map[int]bool{}
+	policyCount := 0
 	count := 0
 	severities := map[Severity]int{}
 	for _, a := range opts.Failing {
@@ -120,9 +121,14 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 			}
 			continue
 		}
-		count += len(fresh)
+
 		for _, adv := range fresh {
-			severities[cmp.Or(adv.Severity, SeverityCritical)]++
+			if adv.ReleasePolicy {
+				policyCount++
+			} else {
+				count++
+				severities[cmp.Or(adv.Severity, SeverityCritical)]++
+			}
 			lines = append(lines, fmt.Sprintf("• %s in *%s*: %s (%s) %s%s", advisoryLink(adv), imageLabel(adv.Images),
 				a.Package, a.Ecosystem, versionLabel(a.Versions), issueLink(a)))
 		}
@@ -139,8 +145,15 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 		}
 	}
 
-	if count > 0 {
-		text := []string{fmt.Sprintf("*🚨 Audit failed on %s: %s* %s", opts.Branch, cveCount(count, severities), opts.Owner)}
+	if count+policyCount > 0 {
+		var counts []string
+		if count > 0 {
+			counts = append(counts, cveCount(count, severities))
+		}
+		if policyCount > 0 {
+			counts = append(counts, fmt.Sprintf("security release requirements: %d", policyCount))
+		}
+		text := []string{fmt.Sprintf("*🚨 Audit failed on %s: %s* %s", opts.Branch, strings.Join(counts, ", "), opts.Owner)}
 		if opts.AuditURL != "" {
 			text = append(text, fmt.Sprintf("*Audit:* <%s|failed run>", opts.AuditURL))
 		}
