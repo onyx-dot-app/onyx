@@ -20,6 +20,9 @@ ID, and two more keys:
   command. Plain keys,
   not a set, so the TTL applies on every cache backend. The harness drops
   them when it sees the command end (`drop_command_grants`).
+* `approval:command:{command_id}:ended` — set by `drop_command_grants` before
+  it drops the grants. A grant saved after the drop sees it and removes
+  itself, so a late save cannot restore a grant of an ended command.
 """
 
 import asyncio
@@ -221,6 +224,10 @@ def _command_grant_prefix(command_id: UUID) -> str:
     return f"approval:command:{command_id}:grant:"
 
 
+def _command_ended_key(command_id: UUID) -> str:
+    return f"approval:command:{command_id}:ended"
+
+
 def _command_grant_key(
     command_id: UUID, chat_session_id: UUID, integration_id: int, action_type: str
 ) -> str:
@@ -270,14 +277,17 @@ def grant_command_actions(
     action_types: Iterable[str],
     cache: CacheBackend,
 ) -> None:
-    for action_type in set(action_types):
-        cache.set(
-            _command_grant_key(
-                command_id, chat_session_id, integration_id, action_type
-            ),
-            b"1",
-            ex=COMMAND_GRANT_TTL_S,
-        )
+    keys = {
+        _command_grant_key(command_id, chat_session_id, integration_id, action_type)
+        for action_type in action_types
+    }
+    for key in keys:
+        cache.set(key, b"1", ex=COMMAND_GRANT_TTL_S)
+    # Write, then check: either the drop sees these grants or this sees its
+    # mark (`drop_command_grants`).
+    if cache.exists(_command_ended_key(command_id)):
+        for key in keys:
+            cache.delete(key)
 
 
 def command_grants_cover(
@@ -297,7 +307,9 @@ def command_grants_cover(
 
 
 def drop_command_grants(command_id: UUID, cache: CacheBackend) -> None:
-    """The command ended: a process that it left running gets no grant."""
+    """The command ended: a process that it left running gets no grant.
+    The mark comes first, so a grant saved during the drop removes itself."""
+    cache.set(_command_ended_key(command_id), b"1", ex=COMMAND_GRANT_TTL_S)
     cache.delete_prefix(_command_grant_prefix(command_id))
 
 

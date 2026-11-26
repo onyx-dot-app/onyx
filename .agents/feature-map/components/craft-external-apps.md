@@ -403,7 +403,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     (`server/features/build/sandbox/firecracker/harness_sandbox.py:_end_exec_session`,
     `sandbox_proxy/approval_cache.py:drop_command_grants`), so a process that the command left
     running gets none; the 4 h TTL (the VM command deadline) covers an end
-    that no call reads. The
+    that no call reads. The drop first sets an `ended` mark with the grant TTL,
+    and a grant save checks it after its write and removes the grant, so a
+    save that races the drop (a Stop during the decision) leaves no grant. The
     recheck before forwarding checks a COMMAND_GRANT row against the current
     policy: the request's Ask actions must be Ask actions of its own row, so
     the decided request needs no saved grant. Only a call whose `ToolContext.

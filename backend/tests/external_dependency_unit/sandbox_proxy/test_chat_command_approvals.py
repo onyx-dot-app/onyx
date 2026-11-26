@@ -631,6 +631,39 @@ def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
     assert seen == [(True, ApprovalDecision.APPROVED)]
 
 
+@pytest.mark.parametrize("drop_first", [True, False])
+def test_a_command_grant_does_not_outlive_the_end_of_the_command(
+    db_session: Session, chat: _Chat, drop_first: bool
+) -> None:
+    """The harness drops the grants of an ended command. A grant that the
+    route saves after the drop (a Stop during the decision) does not come
+    back, and a grant saved while the command runs covers it until the drop."""
+    command_id = uuid4()
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, command_id), _matched(chat.integration_id), {}
+    )
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+
+    def covered() -> bool:
+        return approval_cache.command_grants_cover(
+            command_id,
+            chat.chat_session_id,
+            chat.integration_id,
+            ["issues.create"],
+            cache,
+        )
+
+    try:
+        if drop_first:
+            approval_cache.drop_command_grants(command_id, cache)
+        _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_COMMAND)
+        assert covered() is not drop_first
+        approval_cache.drop_command_grants(command_id, cache)
+        assert not covered()
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
+
+
 def test_a_command_grant_for_a_decided_request_grants_nothing(
     db_session: Session, chat: _Chat
 ) -> None:
