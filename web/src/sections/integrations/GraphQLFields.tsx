@@ -40,18 +40,19 @@ export default function GraphQLFields({
   const t = useTranslations("admin.integrations.add.graphql");
   const tAdd = useTranslations("admin.integrations.add");
 
-  function setSchema(text: string) {
+  /** Applies the schema when it fits; false when it is over the limit. */
+  function setSchema(text: string): boolean {
     const over = specTextTooLarge(text);
     onTooLargeChange(over);
     if (!over) onChange({ ...draft, graphql_schema: text });
+    return !over;
   }
 
   async function introspect() {
     onLoadingChange(true);
     try {
       const view = await introspectGraphQL(draft.endpoint_url);
-      onChange({ ...draft, graphql_schema: view.graphql_schema });
-      toast.success(t("introspect.done"));
+      if (setSchema(view.graphql_schema)) toast.success(t("introspect.done"));
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("introspect.failed")

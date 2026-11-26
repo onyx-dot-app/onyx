@@ -662,6 +662,49 @@ test("blocks Save after a refused schema upload until the schema fits", async ()
   await waitFor(() => expect(save).toBeEnabled());
 });
 
+test("a schema loaded from the endpoint clears a refused upload", async () => {
+  const loaded = "type Query { b: Int }";
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "graphql",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: GRAPHQL_CONFIG,
+    }),
+    "POST /api/admin/integrations/graphql-introspect": {
+      ...GRAPHQL_CONFIG,
+      graphql_schema: loaded,
+    },
+  });
+  const big = new File(["x"], "schema.graphql");
+  Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 + 1 });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const input =
+    activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("No file input");
+  await u.upload(input, big);
+  expect(await view.findByText(copy.add.api.tooLarge)).toBeInTheDocument();
+
+  await u.click(
+    view.getByRole("button", { name: copy.add.graphql.introspect.submit })
+  );
+
+  await waitFor(() =>
+    expect(
+      view.getByRole("textbox", { name: copy.add.graphql.schema.title })
+    ).toHaveValue(loaded)
+  );
+  expect(view.queryByText(copy.add.api.tooLarge)).not.toBeInTheDocument();
+  expect(save).toBeEnabled();
+});
+
 // Two UTF-8 bytes per character: over 5 MB in bytes, under it in characters.
 const OVERSIZED_TEXT = "é".repeat(2.5 * 1024 * 1024 + 1);
 
