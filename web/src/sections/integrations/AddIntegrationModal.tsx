@@ -304,8 +304,10 @@ export default function AddIntegrationModal({
       detected = await detectApi(apiUrl, file);
     } catch (error) {
       if (controller.signal.aborted) return;
+      // 413: the spec or schema is over the size limit.
       setDetectError(
-        isNotThisKind(error)
+        isNotThisKind(error) ||
+          (error instanceof FetchError && error.status === 413)
           ? t("api.specError", { detail: error.message })
           : t("api.checkFailed")
       );

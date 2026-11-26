@@ -908,6 +908,28 @@ describe("Custom API", () => {
     expect(screen.queryByText(add.api.checkFailed)).not.toBeInTheDocument();
   });
 
+  test("a schema over the size limit shows the size error", async () => {
+    const detail = "The schema is larger than 5 MB. Upload a smaller SDL file.";
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": () => failure(400),
+      "POST /api/admin/integrations/graphql-introspect": () =>
+        new Response(JSON.stringify({ detail }), { status: 413 }),
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Billing",
+      add.api.url.title,
+      "https://billing.example.com/graphql"
+    );
+
+    expect(
+      await screen.findByText(add.api.specError.replace("{detail}", detail))
+    ).toBeInTheDocument();
+    expect(screen.queryByText(add.detected.rest)).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   test("waits for the spec file and shows a read error", async () => {
     let finishRead: (text: string) => void = () => undefined;
     const pending = Object.assign(
