@@ -103,6 +103,7 @@ async def test_search_dedupes_by_document_and_builds_urls(stub: _Stub) -> None:
         _result("ftp", "ftp://files.example/x"),
         _result("rel", "/relative/path"),
         _result("malformed", "http://[not-a-host"),
+        _result("badport", "https://example.com:bad/doc"),
     ]
 
     output = await search_module.search("anything")
@@ -114,6 +115,7 @@ async def test_search_dedupes_by_document_and_builds_urls(stub: _Stub) -> None:
         ("ftp", f"{_WEB_DOMAIN}/app/document?id=ftp"),
         ("rel", f"{_WEB_DOMAIN}/app/document?id=rel"),
         ("malformed", f"{_WEB_DOMAIN}/app/document?id=malformed"),
+        ("badport", f"{_WEB_DOMAIN}/app/document?id=badport"),
     ]
     assert stub.bodies[-1]["skip_federated_search"] is True
 

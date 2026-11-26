@@ -8,14 +8,16 @@ test.describe("Document view", () => {
     await loginAs(page, "admin");
     const title = `E2E document ${Date.now()}`;
     const text = `Body of ${title}`;
-    const documentId = await new OnyxApiClient(page.request).ingestDocument(
-      title,
-      text
-    );
+    const client = new OnyxApiClient(page.request);
+    const documentId = await client.ingestDocument(title, text);
 
-    const documentView = new DocumentViewPage(page);
-    await documentView.goto(documentId);
-    await documentView.expectDocument(title, text);
+    try {
+      const documentView = new DocumentViewPage(page);
+      await documentView.goto(documentId);
+      await documentView.expectDocument(title, text);
+    } finally {
+      await client.deleteIngestedDocument(documentId);
+    }
   });
 
   test("shows the not-found state for an unknown or missing id", async ({

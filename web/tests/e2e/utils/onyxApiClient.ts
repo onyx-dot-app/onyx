@@ -313,6 +313,13 @@ export class OnyxApiClient {
     return result.document_id;
   }
 
+  async deleteIngestedDocument(documentId: string): Promise<void> {
+    const response = await this.delete(
+      `/onyx-api/ingestion/${encodeURIComponent(documentId)}`
+    );
+    await this.handleResponseSoft(response, "Failed to delete document");
+  }
+
   /**
    * Creates a simple file connector with mock credentials.
    * This enables the Knowledge toggle in assistant creation.

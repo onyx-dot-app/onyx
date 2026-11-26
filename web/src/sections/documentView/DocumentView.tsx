@@ -10,6 +10,12 @@ import { useDocumentContent } from "@/lib/documentView/hooks";
 
 const NOT_FOUND_STATUS = 404;
 
+function isHttpUrl(link: string | null | undefined): link is string {
+  if (!link || !URL.canParse(link)) return false;
+  const { protocol } = new URL(link);
+  return protocol === "http:" || protocol === "https:";
+}
+
 export interface DocumentViewProps {
   documentId: string | null;
 }
@@ -48,12 +54,12 @@ export default function DocumentView({ documentId }: DocumentViewProps) {
   return (
     <SettingsLayouts.Root width="lg" loading={isLoading || !data}>
       <SettingsLayouts.Header title={data?.title ?? ""}>
-        {data?.link && (
+        {isHttpUrl(data?.link) && (
           <Button
             prominence="secondary"
             size="sm"
             rightIcon={SvgExternalLink}
-            href={data.link}
+            href={data?.link}
             target="_blank"
           >
             {t("openSource")}

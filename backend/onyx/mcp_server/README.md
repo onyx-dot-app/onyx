@@ -132,7 +132,8 @@ nothing is a successful, empty result.
 
 1. `search` and `fetch`
 The standard search/fetch pair that ChatGPT company knowledge and other hosts
-expect. `search(query)` runs the same Onyx search as `search_indexed_documents`
+expect. `search(query)` runs the same Onyx search as `search_indexed_documents`,
+without live federated results such as Slack, whose ids `fetch` cannot read,
 and returns `{"results": [{"id", "title", "url"}]}`, one entry per document in
 ranked order. `fetch(id)` returns `{"id", "title", "text", "url", "metadata"}`
 with the document's full indexed text, through `GET /api/document/content`.
@@ -249,7 +250,7 @@ Expected response:
 **MCP Server Configuration:**
 - `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
 - `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
-- `MCP_SERVER_CORS_ORIGINS`: Comma-separated browser origins allowed for CORS and by the Origin check, in addition to `WEB_DOMAIN` (optional; `*` and `http://localhost:*` patterns work)
+- `MCP_SERVER_CORS_ORIGINS`: Comma-separated browser origins (optional). The Origin check allows them in addition to `WEB_DOMAIN`, and accepts port patterns such as `http://localhost:*`. CORS allows only exact origins or `*`.
 - `MCP_SERVER_SEARCH_RETRIEVAL_ONLY`: Run every document search with no LLM calls (default: false)
 
 **API Server Connection:**

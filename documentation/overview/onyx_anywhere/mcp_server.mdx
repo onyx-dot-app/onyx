@@ -173,7 +173,9 @@ A search that finds nothing is a successful, empty result.
 These two tools are the standard search and fetch pair that hosts such as ChatGPT company knowledge expect.
 Use `search` to find documents and `fetch` to read one document in full.
 
-`search` runs the same Onyx search as `search_indexed_documents`. It takes one parameter.
+`search` runs the same Onyx search as `search_indexed_documents`,
+without live results from federated sources such as Slack. Use `search_indexed_documents` to include them.
+`search` takes one parameter.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
