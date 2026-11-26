@@ -208,6 +208,11 @@ loadtest = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "prometheus-client>=0.21",
+    # The mock's tokenizer, and the harness tests (`uv run --only-group loadtest`;
+    # httpx backs fastapi's TestClient).
+    "tiktoken==0.13.0",
+    "pytest==9.0.3",
+    "httpx==0.28.1",
 ]
 
 # Model server specific dependencies (ML packages)
