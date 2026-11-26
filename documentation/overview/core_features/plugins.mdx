@@ -426,6 +426,7 @@ If the command ends or you stop the answer before you decide, the card closes an
 Only a command that the answer waits on can ask. A command that runs in the background, a subagent,
 and a chat without a live answer, such as a chat through the API without streaming, cannot show a card. There,
 a request with the **Ask** policy fails, and the agent is told which tool of the app to call instead.
+A request that **Approve for this command** covers continues while its command runs.
 
 Tools with the **Allow** policy run without a card. By default, an OpenAPI `GET` operation runs without a card,
 and the OpenAPI plugins made before integrations were added keep running without a card.

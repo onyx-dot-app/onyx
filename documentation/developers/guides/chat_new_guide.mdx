@@ -286,7 +286,9 @@ read the status again every few seconds. Read the chat session again each time `
 On a deployment with chat VMs, the agent runs commands in the user's VM with the `exec_command` tool.
 A command can call a connected app. When the action has the **Ask** policy, Onyx holds the request,
 and the stream sends a `tool_approval_request` packet at the call of the command, while the command runs.
-`can_approve_for_chat` is `false`, and `arguments` has the `method`, the `path`, and the `body` of the request.
+`can_approve_for_chat` is `false`, and `arguments` has the `method` and the `path` of the request.
+It also has the `body` when the body is JSON or form data of 64 KB or less. For a different body, such as an upload,
+it has `body_bytes`, the size of the body, in place of `body`. A request with no body has neither field.
 The call does not return while a request of its command waits.
 
 - `approve_once` sends the request.
@@ -302,6 +304,7 @@ or when the user stops the answer, the command gets a `403` response,
 and the `tool_approval_resolved` packet has `cancelled`. Only a streamed answer can ask.
 A command that runs in the background with no call that waits on it, a command of a background agent,
 and a command of a send-message request with `stream` set to `false` cannot ask.
+A request that an `approve_command` decision of its running command covers still goes out.
 Their requests get a `403` response with the error `approval_needs_tool`. These requests are not in the saved answer.
 
 ### Approvals in saved answers

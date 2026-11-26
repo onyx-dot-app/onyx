@@ -387,13 +387,15 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     per command, chat and `integration:action` that the gate checks before it
     holds, which also approves the command's other waiting rows that the
     command's grants together cover), or reject. An approval of a request that
-    the current policies block (`chat/tool_approvals.py:action_now_blocked`)
+    the current policies block, or whose integration is gone or turned off,
     saves a rejection by the policy (`decided_via` POLICY) and grants nothing.
-    The decision records its row, saves the grant before the commit (a cache
-    error records `decided_via` USER: approved once), commits, wakes the
-    proxy, then scans the waiting rows: a request that misses the grant
-    committed its row before that check, and two decisions never lock each
-    other's rows. A grant covers the command until it exits, also after the
+    The decision records its row and commits, then saves the grant (best
+    effort: a cache error only makes later requests ask again), wakes the
+    proxy, and scans the waiting rows: a grant exists only for a committed
+    approval, a request that misses the grant committed its row before that
+    check, and two decisions never lock each other's rows. A repeated
+    decision runs the wake and the scan again. A failed grant drop is logged,
+    and the command's result still returns. A grant covers the command until it exits, also after the
     call stops waiting on it (the gate checks it before the foreground mark),
     and never covers an action that always asks. The harness drops the
     command's grants when a call sees the command end
@@ -402,7 +404,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     running gets none; the 4 h TTL (the VM command deadline) covers an end
     that no call reads. The
     recheck before forwarding checks a COMMAND_GRANT row against the current
-    policy, as a SESSION_GRANT row. Only a call whose `ToolContext.
+    policy: the request's Ask actions must be Ask actions of its own row, so
+    the decided request needs no saved grant. Only a call whose `ToolContext.
     shows_command_approvals` is set holds: a root agent of a streamed turn
     (`chat/agent.py:build_chat_agent`); a background agent or a
     `run_chat_turn` caller gets `approval_needs_tool`. When the last call of
