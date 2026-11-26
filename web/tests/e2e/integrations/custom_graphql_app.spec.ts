@@ -36,10 +36,11 @@ test.describe("Custom GraphQL app", () => {
 
     await integrations.goto();
     await integrations.openAdd("Custom API");
-    await integrations.fillGraphQLApi({
+    await integrations.fillDetectedApi({
       name,
-      endpointUrl: "https://tickets.example.com/graphql",
-      schema: SCHEMA,
+      url: "https://tickets.example.com/graphql",
+      spec: { fileName: "schema.graphql", text: SCHEMA },
+      detected: "GraphQL API, 1 query and 1 mutation",
     });
     createdId = await integrations.submit();
     await detail.expectLoaded(name);

@@ -113,19 +113,6 @@ export class AdminIntegrationsPage {
     await this.endpointsInput.fill(details.endpoints.join("\n"));
   }
 
-  /** Adds a custom GraphQL API: an endpoint URL and an uploaded schema. */
-  async fillGraphQLApi(details: {
-    name: string;
-    endpointUrl: string;
-    schema: string;
-  }): Promise<void> {
-    await this.nameInput.fill(details.name);
-    await this.apiUrlInput.fill(details.endpointUrl);
-    await this.uploadSpec("schema.graphql", details.schema);
-    await this.continueAdd();
-    await expect(this.addForm.getByText(/^GraphQL API, /)).toBeVisible();
-  }
-
   /** Fills step 1 of a custom API with a URL, a spec file or both, and
    * waits for the kind of API that Onyx found, for example
    * "REST API, 2 endpoints". */
