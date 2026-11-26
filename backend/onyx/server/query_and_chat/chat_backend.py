@@ -140,9 +140,10 @@ from onyx.db.chat_response import (
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.chat_subagents import (
-    latest_agent_response_id,
+    latest_agent_response,
     load_run_start_times,
     load_session_agent_metadata,
+    selected_agent_message_ids,
 )
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
@@ -1769,16 +1770,26 @@ def get_chat_subagent_history(
     with the live stream of its running response."""
     _authorized_agent(session_id, agent_id, user)
     with get_session_with_current_tenant() as db_session:
+        # One agent can answer on several branches after an edit; show only
+        # the selected one, as the agent list does.
+        selected, branch = get_selected_branch(db_session, session_id)
+        if selected is None:
+            return ChatSubagentHistory(messages=[], packets=[], stream=None)
+        latest = latest_agent_response(db_session, branch, str(agent_id))
+        response_id = latest.id if latest is not None else None
         # Read the stream before the messages: a run releases its stream
         # after its terminal save, so a missing stream means saved output.
-        response_id = latest_agent_response_id(db_session, agent_id)
         pointer = (
             read_agent_stream_pointer(get_cache_backend(), response_id)
             if response_id is not None
             else None
         )
         messages, packets = _session_messages_and_packets(
-            db_session, agent_id, user.id, root_session_id=session_id
+            db_session,
+            agent_id,
+            user.id,
+            message_ids=selected_agent_message_ids(db_session, branch, agent_id),
+            root_session_id=session_id,
         )
     return ChatSubagentHistory(
         messages=messages,
@@ -1805,7 +1816,13 @@ def stream_chat_subagent(
     as ``resume-stream`` does for the root turn."""
     _authorized_agent(session_id, agent_id, user)
     with get_session_with_current_tenant() as db_session:
-        response_id = latest_agent_response_id(db_session, agent_id)
+        selected, branch = get_selected_branch(db_session, session_id)
+        latest = (
+            latest_agent_response(db_session, branch, str(agent_id))
+            if selected is not None
+            else None
+        )
+        response_id = latest.id if latest is not None else None
     cache = get_cache_backend()
 
     def live() -> bool:

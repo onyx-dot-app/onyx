@@ -2168,6 +2168,28 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
             str(grandchild_id),
             str(child_id),
         )
+    # A transcript holds only the selected branch's replies of the agent.
+    latest_ids: list[int] = []
+    message_sets: list[set[int]] = []
+    for branch in branches:
+        selected = ChatBranch(
+            chat_session_id=conversation.id,
+            message_ids=visible_message_ids(db_session, branch),
+        )
+        latest = chat_subagents.latest_agent_response(
+            db_session, selected, str(grandchild_id)
+        )
+        assert latest is not None
+        latest_ids.append(latest.id)
+        message_sets.append(
+            chat_subagents.selected_agent_message_ids(
+                db_session, selected, grandchild_id
+            )
+        )
+    assert latest_ids[0] != latest_ids[1]
+    for index, other in ((0, 1), (1, 0)):
+        assert latest_ids[index] in message_sets[index]
+        assert latest_ids[other] not in message_sets[index]
 
 
 def test_any_agent_in_the_visible_tree_is_listed_and_addressable(

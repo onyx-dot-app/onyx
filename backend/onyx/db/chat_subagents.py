@@ -574,14 +574,19 @@ def agent_metadata(
     )
 
 
-def latest_agent_response_id(db_session: Session, agent_id: UUID) -> int | None:
-    """The agent's newest response."""
-    return db_session.scalar(
-        select(func.max(ChatMessage.id)).where(
-            ChatMessage.chat_session_id == agent_id,
-            ChatMessage.message_type == MessageType.ASSISTANT,
-        )
-    )
+def selected_agent_message_ids(
+    db_session: Session, branch: ChatBranch, agent_id: UUID
+) -> set[int]:
+    """The agent's branch-visible responses and the questions they answer."""
+    responses = selected_responses(branch)
+    rows = db_session.execute(
+        select(ChatMessage.id, ChatMessage.parent_message_id)
+        .join(responses, ChatMessage.id == responses.c.id)
+        .where(ChatMessage.chat_session_id == agent_id)
+    ).all()
+    ids = {row.id for row in rows}
+    ids.update(row.parent_message_id for row in rows if row.parent_message_id)
+    return ids
 
 
 def load_run_start_times(run_ids: Collection[int]) -> dict[int, datetime]:
