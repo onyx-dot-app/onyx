@@ -831,3 +831,50 @@ def test_a_chat_matches_the_linked_integrations_of_its_agent(
         IntegrationRequestEvaluator().evaluate(request, TENANT, user.id, uuid4())
         is None
     )
+
+
+def test_a_command_gets_only_the_sandbox_owners_credential(
+    db_session: Session,
+    created: list[int],
+    user: User,
+    make_test_user: MakeTestUser,
+) -> None:
+    """The proxy injects the personal key of the sandbox's owner, never the
+    key of another user. A sandbox cannot borrow the agent of another
+    user's chat by sending that chat's tag."""
+    host = _host()
+    app = _custom_app(
+        db_session,
+        created,
+        host,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Api-Key": "{api_key}"},
+    )
+    _run(db_session, [app])
+    other = make_test_user("integration_proxy_other")
+    no_key = make_test_user("integration_proxy_no_key")
+    for owner, key in ((user, "my-key"), (other, "other-key")):
+        add_connection(
+            db_session, app, owner.id, ConnectionSecret(fields={"api_key": key})
+        )
+    request = _request(f"https://{host}/items", method="GET")
+
+    for owner, key in ((user, "my-key"), (other, "other-key")):
+        assert _headers(request, owner, _evaluate(request, owner)) == {"X-Api-Key": key}
+    with pytest.raises(CredentialUnavailableError):
+        _headers(request, no_key, _evaluate(request, no_key))
+
+    # The other user's chat links the app, which this user turned off.
+    turn_off_integrations(db_session, user.id, [app])
+    agent = create_test_persona(db_session, other)
+    link_persona(db_session, agent.id, app.id)
+    others_chat = ChatSession(
+        id=uuid4(), user_id=other.id, persona_id=agent.id, description="other"
+    )
+    db_session.add(others_chat)
+    db_session.commit()
+    assert (
+        IntegrationRequestEvaluator().evaluate(request, TENANT, user.id, others_chat.id)
+        is None
+    )
