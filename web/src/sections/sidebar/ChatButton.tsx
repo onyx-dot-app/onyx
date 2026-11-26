@@ -59,8 +59,6 @@ import { useUnseenRuns, type ChatRunStatus } from "@/lib/chat/runStatus";
 import type { IconFunctionComponent } from "@opal/types";
 import UnseenMarker from "@/refresh-components/UnseenMarker";
 
-const TOOLTIP_DELAY_MS = 150;
-
 const RUN_STATUS_ICONS = {
   approval: { icon: SvgAlertTriangle, className: "stroke-status-warning-05" },
   question: { icon: SvgHelpCircle, className: "stroke-status-warning-05" },
@@ -529,28 +527,6 @@ const ChatButton = memo(
       </span>
     ) : null;
     const restingMarker = runStatusMarker ?? timeLabel;
-    const tooltip = renaming ? undefined : (
-      <Section gap={0.25} alignItems="start" width="fit" height="fit">
-        <Text as="p" font="secondary-action" color="inherit">
-          {displayName}
-        </Text>
-        {runStatusLabel && (
-          <Text as="p" font="secondary-body" color="inherit">
-            {runStatusLabel}
-          </Text>
-        )}
-        {hasUpdatedDate && (
-          <Text as="p" font="secondary-body" color="inherit">
-            {t("chatButton.updatedAt", {
-              date: format.dateTime(updatedDate, {
-                dateStyle: "medium",
-                timeStyle: "short",
-              }),
-            })}
-          </Text>
-        )}
-      </Section>
-    );
     const optionsButton = (
       <Dropdown.Trigger asChild>
         <Button
@@ -651,9 +627,6 @@ const ChatButton = memo(
             onClick={renaming ? undefined : handleClick}
             selected={active}
             loading={runStatus === "working" || regeneratingTitle}
-            tooltip={tooltip}
-            tooltipDelay={TOOLTIP_DELAY_MS}
-            tooltipSuppressed={menuOpen}
             rightChildren={jumpHint ?? rightMenu}
             rightChildrenAtRest={
               (jumpHint && jumpShortcut?.width) ||
