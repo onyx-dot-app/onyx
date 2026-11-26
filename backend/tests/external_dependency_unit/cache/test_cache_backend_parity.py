@@ -167,6 +167,20 @@ class TestListParity:
         assert result is None
 
 
+def test_delete_many_removes_only_the_named_keys(cache: CacheBackend) -> None:
+    prefix = f"delete-many:{uuid4()}"
+    first, second, kept = f"{prefix}:1", f"{prefix}:2", f"{prefix}:kept"
+    try:
+        cache.set(first, b"1")
+        cache.set(kept, b"1")
+        cache.delete_many([])
+        cache.delete_many([first, second])
+        assert not cache.exists(first)
+        assert cache.exists(kept)
+    finally:
+        cache.delete_many([first, second, kept])
+
+
 def test_conditional_expiry_preserves_current_owner(cache: CacheBackend) -> None:
     key = f"conditional-expiry:{uuid4()}"
     try:

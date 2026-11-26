@@ -128,6 +128,11 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def delete_many(self, keys: Collection[str]) -> None:
+        """Delete every key in one atomic step. Missing keys are ignored."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def delete_if_value(self, key: str, expected: bytes) -> bool:
         """Atomically delete an unexpired value only while it equals ``expected``."""
         raise NotImplementedError

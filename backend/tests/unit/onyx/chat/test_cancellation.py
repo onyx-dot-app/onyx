@@ -97,6 +97,10 @@ class _MemoryCacheBackend(CacheBackend):
         self._store.pop(key, None)
         self._ttls.pop(key, None)
 
+    def delete_many(self, keys: Collection[str]) -> None:
+        for key in keys:
+            self.delete(key)
+
     def delete_prefix(self, prefix: str) -> None:
         for key in list(self._store):
             if key.startswith(prefix):
