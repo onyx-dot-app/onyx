@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -156,21 +157,19 @@ test("the menu opened from the row takes focus on its trigger", async () => {
   expect(screen.getByRole("button", { name: "Chat options" })).toHaveFocus();
 });
 
-test("right-click after a hover closes the tooltip and focuses the options button", async () => {
-  render(<ChatButton chatSession={chatSession} />);
-  const user = setupUser();
-  await user.hover(screen.getByRole("link", { name: "Quarterly plan" }));
-  expect(await screen.findByRole("tooltip")).toBeInTheDocument();
-
-  fireEvent.contextMenu(screen.getByTestId("ChatButton"), {
-    clientX: 40,
-    clientY: 60,
-  });
-  await screen.findByRole("menuitem", { name: "Rename" });
-  await waitFor(() =>
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
-  );
-  expect(screen.getByRole("button", { name: "Chat options" })).toHaveFocus();
+test("hovering a row shows no tooltip", async () => {
+  jest.useFakeTimers();
+  try {
+    render(<ChatButton chatSession={chatSession} />);
+    const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
+    await user.hover(screen.getByRole("link", { name: "Quarterly plan" }));
+    act(() => {
+      jest.advanceTimersByTime(2000);
+    });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test("Regenerate title in a project also refreshes the projects", async () => {

@@ -1033,8 +1033,8 @@ up its own branding.
 
 **Run status on chat rows.** Each chat row (`sections/sidebar/ChatButton.tsx`)
 shows live status from the session store and unseen Done or Failed status
-from a separate store. After 150 ms the tooltip shows the title, status and
-last update time. With no status mark, the row shows the relative update time
+from a separate store. The row has no tooltip; the status mark carries the
+status as its label. With no status mark, the row shows the relative update time
 at its end until hover. Right-click, or the context-menu key, opens the options
 menu at the pointer. Double-click renames. The menu has Regenerate title (a
 rename with `name: null` and `regenerate: true`, which replaces a saved name) and Mark as unread or Mark as read. Working shimmers
