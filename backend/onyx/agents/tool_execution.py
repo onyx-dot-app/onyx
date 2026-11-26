@@ -109,7 +109,7 @@ class ToolBatch:
         self.futures: dict[str, Future[ToolOutcome]] = {}
 
     def _context(self, call: ToolCall) -> ToolCallContext:
-        return ToolCallContext(
+        return ToolCallContext.model_construct(
             step=self.step,
             call=call,
             options=self.options,

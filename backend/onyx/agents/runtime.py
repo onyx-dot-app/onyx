@@ -1804,8 +1804,9 @@ def _advance_loop(
                     if progress.step_index > 0
                     else None
                 )
+                # Built from recorded, validated objects: not validated again.
                 prepared = prepare(
-                    StepInput(
+                    StepInput.model_construct(
                         history=tuple(run._history.messages),
                         input_messages=tuple(run._state.input_messages),
                         messages=tuple(run._state.messages),
@@ -2353,7 +2354,7 @@ def _step_result(
     if options is None:
         raise ValueError("Saved step is missing generation options")
     step = run._state.steps[step_index]
-    return StepResult(
+    return StepResult.model_construct(
         step=AgentStep(index=step_index, limit=run._progress.step_limit),
         message=step.message,
         tool_results=tuple(
