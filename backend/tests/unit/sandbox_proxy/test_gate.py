@@ -2318,6 +2318,42 @@ async def test_a_command_grant_covers_the_same_action_only(
 
 
 @pytest.mark.asyncio
+async def test_a_command_grant_covers_the_command_after_it_leaves_the_foreground(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The call stops waiting on the command, which still runs: its grant
+    still sends the same action; another Ask action has no card to show."""
+    addon, cache = _command_gate(monkeypatch)
+    approval_cache.grant_command_actions(_COMMAND, 42, ["slack.messages.write"], cache)
+    approval_cache.clear_command_foreground(_COMMAND, cache)
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    inserted = _spy_approval_insert(monkeypatch)
+    _approved_command_row(monkeypatch)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert not spy.persisted and not spy.awaited
+    assert len(spy.dispatched) == 1
+    assert inserted[0]["decided_via"] == ApprovalDecidedVia.COMMAND_GRANT
+
+    other, other_cache = _command_gate(
+        monkeypatch,
+        match=make_matched_actions(action_type="slack.channels.write"),
+        foreground=False,
+    )
+    approval_cache.grant_command_actions(
+        _COMMAND, 42, ["slack.messages.write"], other_cache
+    )
+    other_spy = _spy_pipeline(other, monkeypatch, decision=ApprovalDecision.APPROVED)
+    other_flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+    await other.request(other_flow)
+    _assert_403(other_flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
+    assert not other_spy.persisted and not other_spy.dispatched
+
+
+@pytest.mark.asyncio
 async def test_a_command_grant_row_stores_the_size_of_a_large_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
