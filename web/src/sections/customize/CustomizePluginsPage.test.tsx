@@ -147,8 +147,9 @@ test("the Marketplaces section shows a loader while the marketplaces load", asyn
   });
   render(<CustomizePluginsPage />);
 
-  await screen.findByRole("button", { name: "Upload Plugin" });
-  expect(document.getElementById("marketplaces")).not.toBeNull();
+  await waitFor(() =>
+    expect(document.getElementById("marketplaces")).not.toBeNull()
+  );
 });
 
 test("the Marketplaces section lists marketplaces and the Add menu opens the add dialog", async () => {

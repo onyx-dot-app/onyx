@@ -95,6 +95,8 @@ test("a marketplace added from the empty state refreshes the plugin list", async
 
 test("an added marketplace scrolls to a Marketplaces section already linked", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins#marketplaces");
+  // jsdom has no scrollIntoView; the page's own section scrolls on mount.
+  Element.prototype.scrollIntoView = jest.fn();
   const section = document.createElement("div");
   section.id = "marketplaces";
   section.scrollIntoView = jest.fn();
@@ -105,4 +107,5 @@ test("an added marketplace scrolls to a Marketplaces section already linked", as
 
   expect(section.scrollIntoView).toHaveBeenCalled();
   section.remove();
+  delete (Element.prototype as Partial<Element>).scrollIntoView;
 });
