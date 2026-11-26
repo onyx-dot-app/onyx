@@ -51,6 +51,7 @@ const BACKSPACE = { key: "Backspace", code: "Backspace", keyCode: 8 } as const;
 const DELETE = { key: "Delete", code: "Delete", keyCode: 46 } as const;
 const COPY = { key: "c", code: "KeyC", keyCode: 67 } as const;
 const CUT = { key: "x", code: "KeyX", keyCode: 88 } as const;
+const ALT = 1;
 const CTRL = 2;
 const TAP_SLOP_PX = 8;
 
@@ -442,7 +443,9 @@ export function BrowserSurface({
       if (action === "down") event.currentTarget.blur();
       return;
     }
-    const shortcut = event.ctrlKey || event.metaKey;
+    // Windows reports AltGr as Ctrl+Alt, but AltGr types a character
+    const altGraph = event.getModifierState("AltGraph");
+    const shortcut = !altGraph && (event.ctrlKey || event.metaKey);
     // Paste arrives as text through onPaste
     if (shortcut && event.key.toLowerCase() === "v") return;
     if (event.shiftKey && event.key === "Insert") return;
@@ -460,7 +463,9 @@ export function BrowserSurface({
       key: event.key,
       code: event.code,
       keyCode: event.keyCode,
-      modifiers: browserModifiers(event),
+      modifiers: altGraph
+        ? browserModifiers(event) & ~(ALT | CTRL)
+        : browserModifiers(event),
     };
     if (action === "down" && text !== undefined) key.text = text;
     send(key);

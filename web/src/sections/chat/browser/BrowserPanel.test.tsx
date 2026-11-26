@@ -462,6 +462,31 @@ test("a shortcut sent to the page does not run in the app", () => {
   ).toBe(true);
 });
 
+test("an AltGr key types its character on the page", () => {
+  renderPanel();
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
+  });
+  const input = screen.getByRole("textbox", { name: "Browser page" });
+  // Windows reports AltGr+Q on a German layout as Ctrl+Alt+"@"
+  fireEvent.keyDown(input, {
+    key: "@",
+    code: "KeyQ",
+    ctrlKey: true,
+    altKey: true,
+    modifierAltGraph: true,
+  });
+  expect(socket().sent.at(-1)).toMatchObject({
+    type: "key",
+    action: "down",
+    key: "@",
+    text: "@",
+    modifiers: 0,
+  });
+});
+
 test("another selected tab hides the old page until its own frame comes", async () => {
   const clearRect = jest.fn();
   jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
