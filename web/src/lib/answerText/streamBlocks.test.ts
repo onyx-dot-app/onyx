@@ -71,6 +71,7 @@ describe("splitMarkdownBlocks", () => {
     "[ref]\n\n> [ref]: https://example.com\n\nend",
     "[ref]\n\n- item\n\n  [ref]: https://example.com\n\nend",
     "[multi line]\n\n[multi\nline]: https://example.com\n\nend",
+    "**a\n\u00a0\nb**",
   ])(
     "renders each block as the whole text renders it, at every streamed prefix: %j",
     (text) => {
