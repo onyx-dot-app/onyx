@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
+import grpc
+import grpc.aio
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -440,6 +442,9 @@ def test_each_accepted_report_keeps_its_node_live(
 
 class _NoMtlsFactory(HostAgentClientFactory):
     def client(self, address: str) -> HostAgentClient:  # noqa: ARG002
+        raise HostAgentConfigError("SANDBOX_FC_AGENT_CLIENT_CERT_PATH must be set")
+
+    def aio_channel(self, address: str) -> grpc.aio.Channel:  # noqa: ARG002
         raise HostAgentConfigError("SANDBOX_FC_AGENT_CLIENT_CERT_PATH must be set")
 
 

@@ -803,6 +803,7 @@ class HostAgentClientFactory(abc.ABC):
     def client(self, address: str) -> HostAgentClient:
         raise NotImplementedError
 
+    @abc.abstractmethod
     def aio_channel(self, address: str) -> grpc.aio.Channel:
         """A new asyncio channel to the agent, bound to the running event
         loop, with the settings of `client`. The caller closes it."""
