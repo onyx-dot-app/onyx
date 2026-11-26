@@ -68,6 +68,7 @@ export function FullImageModal({
           onKeyDown={onKeyDown}
           className={cn(
             "fixed inset-0 flex items-center justify-center p-4 z-modal",
+            count > 1 && "pb-10",
             "w-full max-w-(--breakpoint-lg) h-fit top-1/2 right-auto left-1/2 -translate-y-2/4 -translate-x-2/4",
             "focus:outline-hidden"
           )}
@@ -78,7 +79,12 @@ export function FullImageModal({
           <img
             src={current.url}
             alt={current.alt || t("fullImageModal.image.alt")}
-            className="max-w-full max-h-[calc(100dvh-2rem)] object-contain"
+            className={cn(
+              "max-w-full object-contain",
+              count > 1
+                ? "max-h-[calc(100dvh-3.5rem)]"
+                : "max-h-[calc(100dvh-2rem)]"
+            )}
           />
           {count > 1 && (
             <>
@@ -101,7 +107,7 @@ export function FullImageModal({
                 />
               </div>
               <div
-                className="absolute bottom-2 start-1/2 -translate-x-1/2"
+                className="absolute inset-x-0 bottom-2 text-center"
                 aria-live="polite"
                 aria-atomic="true"
               >
