@@ -6710,7 +6710,7 @@
             "placeholder": "모델 이름 입력"
           },
           "autoUpdate": {
-            "description": "새 모델이 출시되면 사용 가능한 모델을 업데이트합니다.",
+            "description": "새로 출시된 채팅 모델을 자동으로 추가하고 지원 종료된 모델을 제거합니다.",
             "title": "자동 업데이트"
           },
           "deselectAllButton": {
@@ -6720,8 +6720,8 @@
             "title": "사용 가능한 모델이 없습니다."
           },
           "field": {
-            "description": "앱에서 채팅에 사용할 수 있는 모델을 선택하세요.",
-            "title": "채팅 모델"
+            "description": "앱 전체에서 사용할 수 있는 모델을 선택하세요.",
+            "title": "모델"
           },
           "foldButton": {
             "label": "모델 접기"
@@ -6866,7 +6866,7 @@
           },
           "title": {
             "configure": "*{provider}* 구성",
-            "create": "{product} 설정"
+            "create": "{product} 구성"
           },
           "updateButton": {
             "label": "업데이트"
@@ -6999,10 +6999,6 @@
             "label": "기본값 없음",
             "description": "(이미지 생성 사용 안 함)"
           }
-        },
-        "imageModels": {
-          "title": "이미지 모델",
-          "description": "채팅에서 이미지 생성에 사용할 수 있는 모델을 선택하세요."
         }
       },
       "defaultChanges": {
@@ -14072,7 +14068,9 @@
         "defaultImage": "기본 이미지"
       },
       "modelTypes": {
+        "chat": "채팅",
         "decision": "판단",
+        "image": "이미지",
         "vision": "비전"
       }
     },

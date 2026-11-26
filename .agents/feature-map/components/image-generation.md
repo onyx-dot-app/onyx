@@ -21,9 +21,11 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   once, inline right after the step that made it, in stream order. With code mode on, a program can generate
   images too, and they show the same way.
 - **An admin** opens the AI Models page (`/admin/ai-models`).
-  A provider's edit modal lists its recommended catalog image models and any
-  connected ones, each a checkbox row like the chat models. A click stages
-  the change in the form (`image_model_changes`); **Update** saves the
+  A provider's modal lists its recommended catalog image models and any
+  connected ones in its Models list, after the chat models, each with an
+  Image Generation tag. A new provider's modal reads them from
+  `/admin/image-generation/catalog/{provider}`. A click stages
+  the change in the form (`image_model_changes`); the save stores the
   provider, then links or unlinks the staged models with the provider's
   credentials (`sections/modals/languageModels/svc.ts:submitProvider`). The
   first linked model becomes the default. The page's "Default Image Model" select picks the
@@ -67,6 +69,7 @@ It does not own:
 
 ```
 admin page -> /admin/image-generation/llm-providers   connected providers + image models
+            -> /admin/image-generation/catalog/{p}    catalog image models for a new provider
             -> /admin/image-generation/config/link    ImageGenerationConfig on the existing
                                                       LLMProvider (llm_provider_owned=false)
             -> /admin/image-generation/config         legacy: own LLMProvider copy (owned)
@@ -106,8 +109,8 @@ stored model of the provider for the unfiltered view. A linked config has the ID
 `IMAGE_GENERATION` model flow, so chat model lists skip them. The admin
 settings live on the AI Models page (`/admin/ai-models`):
 `web/src/lib/imageGeneration/components.tsx` holds the default image model
-select; `web/src/sections/modals/languageModels/shared.tsx:ImageModelsField`
-holds the "Image Models" rows in each provider's edit modal (`ModalWrapper`). Legacy own-key configs have no edit form; they stay hidden
+select; `web/src/sections/modals/languageModels/shared.tsx:ImageModelRows`
+holds the image rows of each provider modal's Models list (`ModelSelectionField`). Legacy own-key configs have no edit form; they stay hidden
 from the provider list and can only be chosen as the default.
 
 **Ownership.** `ImageGenerationConfig.llm_provider_owned` is true for legacy

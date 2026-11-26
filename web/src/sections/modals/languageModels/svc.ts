@@ -275,13 +275,16 @@ export async function submitProvider<T extends BaseLLMFormValues>({
     return;
   }
 
+  const savedProvider: LLMProviderView | null = await response
+    .json()
+    .catch(() => null);
+
   // ── Set as default ──────────────────────────────────────────────────
   if (shouldMarkAsDefault && testModelName) {
     try {
-      const newLlmProvider: LLMProviderView = await response.json();
       if (
-        newLlmProvider?.id != null &&
-        !newLlmProvider.model_configurations.some(
+        savedProvider?.id != null &&
+        !savedProvider.model_configurations.some(
           (model) =>
             model.name === testModelName && model.supports_chat === false
         )
@@ -290,7 +293,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            provider_id: newLlmProvider.id,
+            provider_id: savedProvider.id,
             model_name: testModelName,
           }),
         });
@@ -309,10 +312,12 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   }
 
   // ── Image models ────────────────────────────────────────────────────
-  if (existingLlmProvider && (imageModelChanges || imageDefaultChoice)) {
+  // A new provider's image models link to the id its save returned.
+  const savedProviderId = existingLlmProvider?.id ?? savedProvider?.id;
+  if (savedProviderId != null && (imageModelChanges || imageDefaultChoice)) {
     try {
       if (imageModelChanges) {
-        await saveImageModelChanges(existingLlmProvider.id, imageModelChanges);
+        await saveImageModelChanges(savedProviderId, imageModelChanges);
       }
       if (imageDefaultChoice) {
         await setDefaultImageGenerationConfig(imageDefaultChoice);

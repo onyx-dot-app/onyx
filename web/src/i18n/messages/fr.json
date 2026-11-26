@@ -6710,7 +6710,7 @@
             "placeholder": "Saisissez le nom du modèle"
           },
           "autoUpdate": {
-            "description": "Mettez à jour les modèles disponibles quand de nouveaux modèles sortent.",
+            "description": "Ajoutez automatiquement les nouveaux modèles de chat et retirez ceux qui ne sont plus proposés.",
             "title": "Mise à jour automatique"
           },
           "deselectAllButton": {
@@ -6720,8 +6720,8 @@
             "title": "Aucun modèle disponible."
           },
           "field": {
-            "description": "Sélectionnez les modèles autorisés pour discuter dans l'application.",
-            "title": "Modèles de chat"
+            "description": "Sélectionnez les modèles autorisés dans toute l'application.",
+            "title": "Modèles"
           },
           "foldButton": {
             "label": "Replier les modèles"
@@ -6866,7 +6866,7 @@
           },
           "title": {
             "configure": "Configurer *{provider}*",
-            "create": "Configurer {product}"
+            "create": "Configurez {product}"
           },
           "updateButton": {
             "label": "Mettre à jour"
@@ -6999,10 +6999,6 @@
             "label": "Aucun par défaut",
             "description": "(Désactiver la génération d'images)"
           }
-        },
-        "imageModels": {
-          "title": "Modèles d'image",
-          "description": "Sélectionnez les modèles autorisés à générer des images dans le chat."
         }
       },
       "defaultChanges": {
@@ -14072,7 +14068,9 @@
         "defaultImage": "Image par défaut"
       },
       "modelTypes": {
+        "chat": "Chat",
         "decision": "Décision",
+        "image": "Image",
         "vision": "Vision"
       }
     },

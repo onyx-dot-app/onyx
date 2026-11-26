@@ -6710,7 +6710,7 @@
             "placeholder": "Introduce el nombre del modelo"
           },
           "autoUpdate": {
-            "description": "Actualiza los modelos disponibles cuando se publiquen modelos nuevos.",
+            "description": "Añade automáticamente los modelos de chat nuevos y quita los retirados.",
             "title": "Actualización automática"
           },
           "deselectAllButton": {
@@ -6720,8 +6720,8 @@
             "title": "No hay modelos disponibles."
           },
           "field": {
-            "description": "Selecciona los modelos que se pueden usar para chatear en la aplicación.",
-            "title": "Modelos de chat"
+            "description": "Selecciona los modelos que se pueden usar en toda la aplicación.",
+            "title": "Modelos"
           },
           "foldButton": {
             "label": "Plegar los modelos"
@@ -6866,7 +6866,7 @@
           },
           "title": {
             "configure": "Configurar *{provider}*",
-            "create": "Configurar {product}"
+            "create": "Configura {product}"
           },
           "updateButton": {
             "label": "Actualizar"
@@ -6999,10 +6999,6 @@
             "label": "Sin predeterminado",
             "description": "(Desactivar la generación de imágenes)"
           }
-        },
-        "imageModels": {
-          "title": "Modelos de imagen",
-          "description": "Selecciona los modelos que pueden generar imágenes en el chat."
         }
       },
       "defaultChanges": {
@@ -14072,7 +14068,9 @@
         "defaultImage": "Imagen predeterminada"
       },
       "modelTypes": {
+        "chat": "Chat",
         "decision": "Decisión",
+        "image": "Imagen",
         "vision": "Visión"
       }
     },

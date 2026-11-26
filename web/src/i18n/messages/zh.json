@@ -6710,7 +6710,7 @@
             "placeholder": "输入模型名称"
           },
           "autoUpdate": {
-            "description": "有新模型发布时更新可用模型。",
+            "description": "自动添加新发布的聊天模型，并移除已停用的模型。",
             "title": "自动更新"
           },
           "deselectAllButton": {
@@ -6720,8 +6720,8 @@
             "title": "没有可用模型。"
           },
           "field": {
-            "description": "选择可在应用中用于聊天的模型。",
-            "title": "聊天模型"
+            "description": "选择可在整个应用中使用的模型。",
+            "title": "模型"
           },
           "foldButton": {
             "label": "收起模型"
@@ -6866,7 +6866,7 @@
           },
           "title": {
             "configure": "配置 *{provider}*",
-            "create": "设置 {product}"
+            "create": "配置 {product}"
           },
           "updateButton": {
             "label": "更新"
@@ -6999,10 +6999,6 @@
             "label": "无默认",
             "description": "（禁用图像生成）"
           }
-        },
-        "imageModels": {
-          "title": "图像模型",
-          "description": "选择可在聊天中生成图像的模型。"
         }
       },
       "defaultChanges": {
@@ -14072,7 +14068,9 @@
         "defaultImage": "默认图像"
       },
       "modelTypes": {
+        "chat": "聊天",
         "decision": "决策",
+        "image": "图像",
         "vision": "视觉"
       }
     },

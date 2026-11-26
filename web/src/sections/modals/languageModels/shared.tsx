@@ -3,10 +3,16 @@
 import { IconLoader } from "@opal/loaders";
 import {
   useImageGenerationConfigs,
-  useImageGenerationProviders,
+  useProviderImageModels,
 } from "@/lib/imageGeneration/hooks";
 import type { ImageGenerationProviderModel } from "@/lib/imageGeneration/types";
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig, FormikHelpers } from "formik";
@@ -44,6 +50,7 @@ import type { RichStr } from "@opal/types";
 import {
   ConfirmationModalLayout,
   Content,
+  ContentIndent,
   InputDivider,
   InputHorizontal,
   InputPadder,
@@ -78,6 +85,7 @@ import {
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import {
+  Badge,
   Card,
   EmptyMessageCard,
   useCreateModal,
@@ -85,8 +93,6 @@ import {
 } from "@opal/components";
 import { useModelTypeBadge } from "@/lib/badges/components";
 import { ContentAction } from "@opal/layouts";
-import type { ContentEditHandle } from "@opal/layouts";
-import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
@@ -94,6 +100,9 @@ import { useSettings } from "@/lib/settings/hooks";
 
 /** How long a save may run before the footer says it is taking a while. */
 const SLOW_SAVE_NOTICE_MS = 10_000;
+
+/** The provider type the open modal configures, e.g. "openai". */
+const ProviderNameContext = createContext("");
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -589,6 +598,30 @@ function buildModelDescription(
   return parts.length > 0 ? parts.join("  ·  ") : undefined;
 }
 
+interface CapabilityTagsProps {
+  badges: BadgeProps[];
+}
+
+/** A model row's capability tags, on their own line under its title. */
+function CapabilityTags({ badges }: CapabilityTagsProps) {
+  if (badges.length === 0) return null;
+  return (
+    <ContentIndent font="main-ui-action">
+      <OpalSection
+        flexDirection="row"
+        justifyContent="start"
+        height="auto"
+        gap={0.25}
+        wrap
+      >
+        {badges.map((badge) => (
+          <Badge key={String(badge.title)} {...badge} />
+        ))}
+      </OpalSection>
+    </ContentIndent>
+  );
+}
+
 interface ModelRowProps {
   model: ModelConfiguration;
   isDefaultModel: boolean;
@@ -619,7 +652,6 @@ function ModelRow({
   onSetDefaultModel,
 }: ModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const editHandle = useRef<ContentEditHandle>(null);
   // Keeps the hover-revealed actions visible while the settings popover,
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -627,7 +659,10 @@ function ModelRow({
   const description = buildModelDescription(model, displayName);
   const decisionBadge = useModelTypeBadge("decision");
   const visionBadge = useModelTypeBadge("vision");
+  const chatBadge = useModelTypeBadge("chat");
   const modelTypeBadges: BadgeProps[] = [
+    ...(model.supports_chat !== false ? [chatBadge] : []),
+    ...(model.supports_image_input ? [visionBadge] : []),
     ...(model.supports_decisions
       ? [
           {
@@ -640,7 +675,6 @@ function ModelRow({
           },
         ]
       : []),
-    ...(model.supports_image_input ? [visionBadge] : []),
   ];
   const isSelected = model.is_visible;
   const toggleVisibility = () => onToggleVisibility(!model.is_visible);
@@ -689,7 +723,12 @@ function ModelRow({
         }}
       >
         <Interactive.Container width="full" size="fit" rounding={3}>
-          <OpalSection alignItems="stretch" height="auto" padding={1.5}>
+          <OpalSection
+            alignItems="stretch"
+            height="auto"
+            padding={1.5}
+            gap={0.5}
+          >
             <ContentAction
               font="main-ui-action"
               color="interactive"
@@ -697,7 +736,6 @@ function ModelRow({
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
               description={description}
-              badge={modelTypeBadges}
               rightChildren={
                 <OpalSection
                   flexDirection="row"
@@ -712,16 +750,6 @@ function ModelRow({
                       height="auto"
                       gap={1}
                     >
-                      <Button
-                        icon={SvgEdit}
-                        prominence="internal"
-                        size="sm"
-                        tooltip={t("models.row.renameButton.tooltip")}
-                        onClick={(e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          editHandle.current?.startEditing();
-                        }}
-                      />
                       {model.supports_chat !== false && (
                         <ModelSettingsPopover
                           model={model}
@@ -758,10 +786,11 @@ function ModelRow({
                 </OpalSection>
               }
               editable
-              editHandle={editHandle}
+              editTooltip={t("models.row.renameButton.tooltip")}
               onTitleChange={(newTitle) => onRename(newTitle || null)}
               padding={0}
             />
+            <CapabilityTags badges={modelTypeBadges} />
           </OpalSection>
         </Interactive.Container>
       </Interactive.Stateful>
@@ -789,7 +818,7 @@ function ImageModelRow({
   onRename,
 }: ImageModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const editHandle = useRef<ContentEditHandle>(null);
+  const imageBadge = useModelTypeBadge("image");
   const toggle = () => onToggle(!checked);
   // A click that blurs and commits an inline rename reaches the row after the
   // edit input unmounts, so the input's presence is sampled at pointerdown.
@@ -826,7 +855,12 @@ function ImageModelRow({
         }}
       >
         <Interactive.Container width="full" size="fit" rounding={3}>
-          <OpalSection alignItems="stretch" height="auto" padding={1.5}>
+          <OpalSection
+            alignItems="stretch"
+            height="auto"
+            padding={1.5}
+            gap={0.5}
+          >
             <ContentAction
               font="main-ui-action"
               color="interactive"
@@ -841,21 +875,6 @@ function ImageModelRow({
                   height="auto"
                   gap={1}
                 >
-                  <Hoverable.Item
-                    group="image-model-row"
-                    variant="appear-on-hover"
-                  >
-                    <Button
-                      icon={SvgEdit}
-                      prominence="internal"
-                      size="sm"
-                      tooltip={t("models.row.renameButton.tooltip")}
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        editHandle.current?.startEditing();
-                      }}
-                    />
-                  </Hoverable.Item>
                   {isDefaultModel && (
                     <span className="px-1.5">
                       <Text
@@ -871,10 +890,11 @@ function ImageModelRow({
                 </OpalSection>
               }
               editable
-              editHandle={editHandle}
+              editTooltip={t("models.row.renameButton.tooltip")}
               onTitleChange={(newTitle) => onRename(newTitle || null)}
               padding={0}
             />
+            <CapabilityTags badges={[imageBadge]} />
           </OpalSection>
         </Interactive.Container>
       </Interactive.Stateful>
@@ -882,68 +902,72 @@ function ImageModelRow({
   );
 }
 
-interface ImageModelsFieldProps {
-  llmProviderId: number;
+/**
+ * The image models the Models list shows for the modal's provider: the
+ * recommended ones and any already connected. A new provider gets the
+ * catalog's.
+ */
+function useListedImageModels(): ImageGenerationProviderModel[] {
+  const { values } = useFormikContext<BaseLLMFormValues>();
+  const providerName = useContext(ProviderNameContext);
+  const models = useProviderImageModels(values.id, providerName) ?? [];
+  return models.filter(
+    (model) => model.is_recommended || model.image_provider_id !== null
+  );
 }
 
 /**
- * A provider's image models: the recommended ones and any already connected.
- * A click stages the change in the form (`image_model_changes`), which saves
- * it after the provider on Update; the first model connected becomes the
- * default image model.
+ * Stages image model changes in the form (`image_model_changes`), which
+ * saves them after the provider on Save; the first model connected becomes
+ * the default image model.
  */
-function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
-  const t = useTranslations("admin.languageModels.imageGeneration");
+function useImageModelStaging() {
   const { values, setValues } = useFormikContext<BaseLLMFormValues>();
-  const { providers } = useImageGenerationProviders();
   const { defaultConfig } = useImageGenerationConfigs();
-
-  const provider = providers?.find((p) => p.llm_provider_id === llmProviderId);
-  const models =
-    provider?.models.filter(
-      (model) => model.is_recommended || model.image_provider_id !== null
-    ) ?? [];
-  if (!provider || models.length === 0) return null;
-
   const changes = values.image_model_changes ?? {};
+
   const isChecked = (model: ImageGenerationProviderModel) =>
     changes[model.name]?.connect ?? model.image_provider_id !== null;
 
-  /** Stages a model's change; a change back to what is saved drops it, and
-   *  no staged change leaves the field out, so the form is pristine again. */
+  /** A change back to what is saved drops it, and no staged change leaves
+   *  the field out, so the form is pristine again. */
   function stage(
-    model: ImageGenerationProviderModel,
-    update: { connect?: boolean; customDisplayName?: string | null }
+    updates: {
+      model: ImageGenerationProviderModel;
+      connect?: boolean;
+      customDisplayName?: string | null;
+    }[]
   ) {
-    const { [model.name]: previous, ...rest } = changes;
-    const isConnected = model.image_provider_id !== null;
-    const connect = update.connect ?? previous?.connect ?? isConnected;
-    const rawName =
-      "customDisplayName" in update
-        ? update.customDisplayName
-        : previous?.customDisplayName;
-    // The saved name, as the listing shows it, is no change.
-    const customDisplayName =
-      rawName === undefined ||
-      (rawName ?? model.name) === (model.display_name || model.name)
-        ? undefined
-        : rawName;
-    const next =
-      connect === isConnected && customDisplayName === undefined
-        ? rest
-        : {
-            ...rest,
-            [model.name]: {
-              connect,
-              imageProviderId: model.image_provider_id,
-              makeDefault:
-                connect &&
-                !isConnected &&
-                defaultConfig === null &&
-                !Object.values(rest).some((change) => change.makeDefault),
-              ...(customDisplayName !== undefined && { customDisplayName }),
-            },
-          };
+    const next = { ...changes };
+    for (const update of updates) {
+      const { model } = update;
+      const { [model.name]: previous, ...rest } = next;
+      const isConnected = model.image_provider_id !== null;
+      const connect = update.connect ?? previous?.connect ?? isConnected;
+      const rawName =
+        "customDisplayName" in update
+          ? update.customDisplayName
+          : previous?.customDisplayName;
+      // The saved name, as the listing shows it, is no change.
+      const customDisplayName =
+        rawName === undefined ||
+        (rawName ?? model.name) === (model.display_name || model.name)
+          ? undefined
+          : rawName;
+      delete next[model.name];
+      if (connect !== isConnected || customDisplayName !== undefined) {
+        next[model.name] = {
+          connect,
+          imageProviderId: model.image_provider_id,
+          makeDefault:
+            connect &&
+            !isConnected &&
+            defaultConfig === null &&
+            !Object.values(rest).some((change) => change.makeDefault),
+          ...(customDisplayName !== undefined && { customDisplayName }),
+        };
+      }
+    }
     const { image_model_changes: _changes, ...others } = values;
     void setValues(
       Object.keys(next).length === 0
@@ -952,38 +976,36 @@ function ImageModelsField({ llmProviderId }: ImageModelsFieldProps) {
     );
   }
 
+  return { changes, defaultConfig, isChecked, stage };
+}
+
+interface ImageModelRowsProps {
+  models: ImageGenerationProviderModel[];
+}
+
+/** The image models' rows in the Models list, after the chat models. */
+function ImageModelRows({ models }: ImageModelRowsProps) {
+  const { changes, defaultConfig, isChecked, stage } = useImageModelStaging();
   return (
     <>
-      <InputDivider />
-      <Card color="background-tint-00" border="none" padding={2}>
-        <OpalSection gap={2}>
-          <InputHorizontal
-            title={t("imageModels.title")}
-            description={t("imageModels.description")}
-            center
-          />
-          <OpalSection gap={1} alignItems="stretch">
-            {models.map((model) => (
-              <ImageModelRow
-                key={model.name}
-                model={model}
-                checked={isChecked(model)}
-                title={
-                  changes[model.name]?.customDisplayName === undefined
-                    ? model.display_name || model.name
-                    : (changes[model.name]?.customDisplayName ?? model.name)
-                }
-                isDefaultModel={
-                  model.image_provider_id !== null &&
-                  defaultConfig?.image_provider_id === model.image_provider_id
-                }
-                onToggle={(connect) => stage(model, { connect })}
-                onRename={(value) => stage(model, { customDisplayName: value })}
-              />
-            ))}
-          </OpalSection>
-        </OpalSection>
-      </Card>
+      {models.map((model) => (
+        <ImageModelRow
+          key={model.name}
+          model={model}
+          checked={isChecked(model)}
+          title={
+            changes[model.name]?.customDisplayName === undefined
+              ? model.display_name || model.name
+              : (changes[model.name]?.customDisplayName ?? model.name)
+          }
+          isDefaultModel={
+            model.image_provider_id !== null &&
+            defaultConfig?.image_provider_id === model.image_provider_id
+          }
+          onToggle={(connect) => stage([{ model, connect }])}
+          onRename={(value) => stage([{ model, customDisplayName: value }])}
+        />
+      ))}
     </>
   );
 }
@@ -1093,10 +1115,20 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
-  const allSelected = models.length > 0 && models.every((m) => m.is_visible);
+  const imageModels = useListedImageModels();
+  const imageStaging = useImageModelStaging();
+  const hasAnyModel = models.length > 0 || imageModels.length > 0;
+  const allSelected =
+    hasAnyModel &&
+    models.every((m) => m.is_visible) &&
+    imageModels.every((m) => imageStaging.isChecked(m));
 
   function handleToggleSelectAll() {
     const nextVisible = !allSelected;
+    // Staging replaces the form values, so it runs before the field update.
+    imageStaging.stage(
+      imageModels.map((model) => ({ model, connect: nextVisible }))
+    );
     const updated = models.map((m) => ({
       ...m,
       is_visible: nextVisible,
@@ -1115,7 +1147,7 @@ export function ModelSelectionField({
           >
             <Section flexDirection="row" gap={0}>
               <Button
-                disabled={models.length === 0}
+                disabled={!hasAnyModel}
                 prominence="tertiary"
                 size="md"
                 onClick={handleToggleSelectAll}
@@ -1128,7 +1160,7 @@ export function ModelSelectionField({
             </Section>
           </InputHorizontal>
 
-          {models.length === 0 ? (
+          {!hasAnyModel ? (
             <EmptyMessageCard
               title={emptyMessage ?? t("models.empty.title")}
               padding={2}
@@ -1179,6 +1211,7 @@ export function ModelSelectionField({
                         }
                       />
                     ))}
+                    <ImageModelRows models={imageModels} />
                     {isFoldable && (
                       <Interactive.Stateless
                         prominence="tertiary"
@@ -1267,8 +1300,6 @@ export function ModelSelectionField({
           )}
         </Section>
       </Card>
-      {/* An existing provider's image models sit right under its chat models. */}
-      {providerId != null && <ImageModelsField llmProviderId={providerId} />}
     </>
   );
 }
@@ -1469,14 +1500,11 @@ function ModalWrapperInner({
     setFieldValue,
     values,
   } = useFormikContext<BaseLLMFormValues>();
-  const { providers: imageProviders } = useImageGenerationProviders();
+  const imageModels = useProviderImageModels(llmProvider?.id, providerName);
   // A save needs at least one chat or image model checked, after the
   // staged image changes.
   const hasChatModel = values.model_configurations.some((m) => m.is_visible);
-  const hasImageModel = (
-    imageProviders?.find((p) => p.llm_provider_id === llmProvider?.id)
-      ?.models ?? []
-  ).some(
+  const hasImageModel = (imageModels ?? []).some(
     (m) =>
       values.image_model_changes?.[m.name]?.connect ??
       m.image_provider_id !== null
@@ -1558,7 +1586,9 @@ function ModalWrapperInner({
             onClose={onClose}
           />
           <Modal.Body padding={2} gap={0}>
-            {children}
+            <ProviderNameContext.Provider value={providerName}>
+              {children}
+            </ProviderNameContext.Provider>
           </Modal.Body>
           <Modal.Footer>
             {saveIsSlow && (

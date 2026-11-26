@@ -110,27 +110,25 @@ export function LabelBadge({ label, tooltip }: LabelBadgeProps) {
 // Model type
 // ---------------------------------------------------------------------------
 
-/** What a language model can do beyond chat. */
-export type ModelType = "decision" | "vision";
+/** What a model can do. */
+export type ModelType = "chat" | "vision" | "decision" | "image";
 
-const MODEL_TYPE_BADGES: Record<
-  ModelType,
-  {
-    // The label's key under `common.badges.modelTypes`.
-    copyKey: "decision" | "vision";
-  }
-> = {
-  decision: { copyKey: "decision" },
-  vision: { copyKey: "vision" },
+/** Each capability has its own colour, so a row's tags read at a glance. */
+const MODEL_TYPE_BADGES: Record<ModelType, { color: StatusColor }> = {
+  chat: { color: "success" },
+  vision: { color: "pending" },
+  decision: { color: "warning" },
+  image: { color: "queued" },
 };
 
-/** A model type badge's props, for a `tag` or `badge` slot. */
+/** A model type badge's props, for a `tag` or `badge` slot. The label is
+ *  the type's key under `common.badges.modelTypes`. */
 export function useModelTypeBadge(modelType: ModelType): BadgeProps {
   const t = useTranslations("common.badges.modelTypes");
-  return useMemo(() => {
-    const { copyKey } = MODEL_TYPE_BADGES[modelType];
-    return { title: t(copyKey), color: "default", size: 4 };
-  }, [t, modelType]);
+  return useMemo(
+    () => ({ title: t(modelType), ...MODEL_TYPE_BADGES[modelType], size: 4 }),
+    [t, modelType]
+  );
 }
 
 export interface ModelTypeBadgeProps {

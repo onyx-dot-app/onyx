@@ -6710,7 +6710,7 @@
             "placeholder": "Enter model name"
           },
           "autoUpdate": {
-            "description": "Update the available models when new models are released.",
+            "description": "Add newly released chat models and remove retired ones automatically.",
             "title": "Auto Update"
           },
           "deselectAllButton": {
@@ -6720,8 +6720,8 @@
             "title": "No models available."
           },
           "field": {
-            "description": "Select models to allow for chatting in the app.",
-            "title": "Chat Models"
+            "description": "Select models to allow for usage throughout the app.",
+            "title": "Models"
           },
           "foldButton": {
             "label": "Fold Models"
@@ -6866,7 +6866,7 @@
           },
           "title": {
             "configure": "Configure *{provider}*",
-            "create": "Set up {product}"
+            "create": "Configure {product}"
           },
           "updateButton": {
             "label": "Update"
@@ -6999,10 +6999,6 @@
             "label": "No Default",
             "description": "(Disable Image Generation)"
           }
-        },
-        "imageModels": {
-          "title": "Image Models",
-          "description": "Select models to allow for generating images in chat."
         }
       },
       "defaultChanges": {
@@ -14072,7 +14068,9 @@
         "defaultImage": "Default Image"
       },
       "modelTypes": {
+        "chat": "Chat",
         "decision": "Decision",
+        "image": "Image",
         "vision": "Vision"
       }
     },

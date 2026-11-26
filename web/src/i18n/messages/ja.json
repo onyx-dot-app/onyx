@@ -6710,7 +6710,7 @@
             "placeholder": "モデル名を入力"
           },
           "autoUpdate": {
-            "description": "新しいモデルがリリースされたときに、利用可能なモデルを更新します。",
+            "description": "新しくリリースされたチャットモデルを自動で追加し、提供終了のモデルを削除します。",
             "title": "自動更新"
           },
           "deselectAllButton": {
@@ -6720,8 +6720,8 @@
             "title": "利用可能なモデルがありません。"
           },
           "field": {
-            "description": "アプリでのチャットに使用できるモデルを選択します。",
-            "title": "チャットモデル"
+            "description": "アプリ全体で使用できるモデルを選択します。",
+            "title": "モデル"
           },
           "foldButton": {
             "label": "モデルを折りたたむ"
@@ -6866,7 +6866,7 @@
           },
           "title": {
             "configure": "*{provider}* を設定",
-            "create": "{product} を設定"
+            "create": "{product} を構成"
           },
           "updateButton": {
             "label": "更新"
@@ -6999,10 +6999,6 @@
             "label": "デフォルトなし",
             "description": "（画像生成を無効にする）"
           }
-        },
-        "imageModels": {
-          "title": "画像モデル",
-          "description": "チャットで画像の生成に使用できるモデルを選択します。"
         }
       },
       "defaultChanges": {
@@ -14072,7 +14068,9 @@
         "defaultImage": "デフォルトの画像"
       },
       "modelTypes": {
+        "chat": "チャット",
         "decision": "判断",
+        "image": "画像",
         "vision": "画像対応"
       }
     },
