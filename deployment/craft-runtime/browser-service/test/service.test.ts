@@ -1,6 +1,7 @@
 import * as assert from "node:assert/strict";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { after, before, describe, test } from "node:test";
 import { encodeJson, FrameDecoder, MAX_FRAME_LENGTH } from "../src/framing.ts";
@@ -656,7 +657,10 @@ describe("browser service", () => {
     viewer.autoAck = true;
     try {
       await viewer.message("viewport");
-      await call(service.socketPath, chat, "navigate", { url: `${site.url}/long-name` });
+      const reply = await call(service.socketPath, chat, "navigate", { url: `${site.url}/long-name` });
+      assert.equal(reply.ok, false);
+      // The budget can refuse the save, so the reply does not promise one.
+      if (!reply.ok) assert.match(reply.error.message, /started a download instead of a page; a saved download appears in the chat.s downloads\/ folder/);
       const saved = await viewer.message("download");
       const name = saved.fileName as string;
       assert.ok(name.endsWith(".txt"), name);
@@ -683,6 +687,92 @@ describe("browser service", () => {
     const snap = await ok(service.socketPath, chat, "snapshot");
     assert.match(snap.text as string, /^Title: x{512}\n/);
     await ok(service.socketPath, chat, "open", { url: `${site.url}/second`, newTab: true });
+  });
+
+  test("a viewer navigation that fails sends the viewer an error", async () => {
+    const chat = newChat();
+    const viewer = await ViewerClient.connect(service.socketPath, chat);
+    viewer.autoAck = true;
+    try {
+      viewer.send({ type: "newTab", url: `${site.url}/second` });
+      await viewer.message("control", (m) => m.controller === "you");
+      await viewer.message("tabs", (m) => (m.tabs as Array<TabJson>)[0]?.title === "Second page");
+      viewer.send({ type: "navigate", url: "http://127.0.0.1:1/" });
+      const error = await viewer.message("error");
+      assert.match(error.message as string, /^Navigation to http:\/\/127\.0\.0\.1:1\/ failed: ERR_/);
+    } finally {
+      viewer.close();
+    }
+  });
+
+  test("an agent upload by selector closes the pending file chooser", async () => {
+    const chat = newChat();
+    const dir = NodePath.join(service.sessionsRoot, chat);
+    await NodeFSP.mkdir(dir, { recursive: true });
+    await NodeFSP.writeFile(NodePath.join(dir, "a.csv"), "a");
+    await NodeFSP.writeFile(NodePath.join(dir, "b.csv"), "b");
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/upload` });
+    const center = await boxOf(service.socketPath, chat, "#file");
+    const viewer = await ViewerClient.connect(service.socketPath, chat);
+    viewer.autoAck = true;
+    try {
+      viewer.send({ type: "takeControl" });
+      await viewer.message("control", (m) => m.controller === "you");
+      clickAt(viewer, center.x, center.y);
+      const chooser = await viewer.message("fileChooser");
+      viewer.send({ type: "releaseControl" });
+      await viewer.message("control", (m) => m.controller === "agent");
+      await ok(service.socketPath, chat, "act", { action: "upload", selector: "#file", paths: ["a.csv"] });
+      await viewer.message("fileChooserClosed", (m) => m.id === chooser.id);
+      const untargeted = await call(service.socketPath, chat, "act", { action: "upload", paths: ["b.csv"] });
+      assert.equal(untargeted.ok, false);
+      await ok(service.socketPath, chat, "waitFor", { text: "picked a.csv" });
+    } finally {
+      viewer.close();
+    }
+  });
+
+  test("a path through a symlink cannot leave the chat session dir", async () => {
+    const chat = newChat();
+    const dir = NodePath.join(service.sessionsRoot, chat);
+    const outside = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-outside-"));
+    try {
+      await NodeFSP.writeFile(NodePath.join(outside, "secret.txt"), "secret");
+      await NodeFSP.mkdir(dir, { recursive: true });
+      await NodeFSP.symlink(NodePath.join(outside, "secret.txt"), NodePath.join(dir, "link.txt"));
+      await NodeFSP.symlink(outside, NodePath.join(dir, "out"));
+      await NodeFSP.symlink(NodePath.join(outside, "new.png"), NodePath.join(dir, "dangling.png"));
+      await ok(service.socketPath, chat, "open", { url: `${site.url}/upload` });
+      for (const path of ["link.txt", "out/secret.txt"]) {
+        const reply = await call(service.socketPath, chat, "act", { action: "upload", selector: "#file", paths: [path] });
+        assert.equal(reply.ok ? "ok" : reply.error.code, "invalid_argument", path);
+      }
+      for (const path of ["out/shot.png", "out/sub/shot.png", "dangling.png"]) {
+        const reply = await call(service.socketPath, chat, "snapshot", { screenshotPath: path });
+        assert.equal(reply.ok ? "ok" : reply.error.code, "invalid_argument", path);
+      }
+      assert.deepEqual(await NodeFSP.readdir(outside), ["secret.txt"]);
+    } finally {
+      await NodeFSP.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("a download that passes the budget stops while it downloads", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/second` });
+    const viewer = await ViewerClient.connect(service.socketPath, chat);
+    viewer.autoAck = true;
+    try {
+      await viewer.message("viewport");
+      const stopped = site.bigDownloadsStopped;
+      await call(service.socketPath, chat, "navigate", { url: `${site.url}/big-download` });
+      await viewer.waitFor(() => site.bigDownloadsStopped > stopped, 30_000);
+      const saved = await NodeFSP.readdir(NodePath.join(service.sessionsRoot, chat, "downloads")).catch(() => []);
+      assert.deepEqual(saved, []);
+      assert.ok(!viewer.messages.some((m) => m.type === "download"));
+    } finally {
+      viewer.close();
+    }
   });
 
   test("bad requests get invalid_argument", async () => {

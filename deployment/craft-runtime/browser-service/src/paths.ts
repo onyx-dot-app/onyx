@@ -27,17 +27,38 @@ export const normalizeUrl = (raw: string): string => {
 
 export const chatDir = (root: string, chat: string) => NodePath.resolve(root, chat);
 
-/** Resolves a path relative to the chat session dir and rejects paths that leave it. */
-export const resolveInChat = (root: string, chat: string, relative: string): string => {
+const outside = (relative: string) =>
+  new OperationError("invalid_argument", `The path ${relative.slice(0, 200)} is outside the chat session directory.`);
+
+const isWithin = (base: string, path: string) => path === base || path.startsWith(base + NodePath.sep);
+
+const isMissing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
+
+/** The real path of the nearest existing ancestor; a dangling symlink counts as outside. */
+const nearestRealPath = async (path: string, relative: string): Promise<string> => {
+  for (let current = path; ; current = NodePath.dirname(current)) {
+    try {
+      return await NodeFSP.realpath(current);
+    } catch (error) {
+      if (!isMissing(error) || current === NodePath.dirname(current)) throw error;
+      if (await NodeFSP.lstat(current).then(() => true, () => false)) throw outside(relative);
+    }
+  }
+};
+
+/** Resolves a path relative to the chat session dir and rejects paths, symlinks included, that leave it. */
+export const resolveInChat = async (root: string, chat: string, relative: string): Promise<string> => {
   if (relative.length === 0 || relative.includes("\0"))
     throw new OperationError("invalid_argument", "The path is empty or not valid.");
   const base = chatDir(root, chat);
   const full = NodePath.resolve(base, relative);
-  if (!full.startsWith(base + NodePath.sep))
-    throw new OperationError(
-      "invalid_argument",
-      `The path ${relative.slice(0, 200)} is outside the chat session directory.`,
-    );
+  if (!full.startsWith(base + NodePath.sep)) throw outside(relative);
+  // Nothing can be a symlink inside a chat dir that does not exist yet.
+  const realBase = await NodeFSP.realpath(base).catch((error: unknown) => {
+    if (isMissing(error)) return null;
+    throw error;
+  });
+  if (realBase !== null && !isWithin(realBase, await nearestRealPath(full, relative))) throw outside(relative);
   return full;
 };
 

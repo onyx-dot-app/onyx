@@ -248,6 +248,7 @@ export class BrowserService {
   private readonly log: Log;
   private readonly chats = new Map<string, ChatState>();
   private readonly pageTabs = new WeakMap<Page, Tab>();
+  private browserSession: Promise<CDPSession> | null = null;
   private tabCounter = 0;
   private pointerSequence = 0;
 
@@ -444,11 +445,16 @@ export class BrowserService {
       await popup.close().catch(noop);
       return;
     }
-    const tab = await this.registerPage(opener.chat, popup, opener.agentUsed).catch((error: unknown) => {
-      this.log("popup_adopt_failed", { error: String(error) });
-      void popup.close().catch(noop);
-      return null;
-    });
+    opener.chat.opening += 1;
+    const tab = await this.registerPage(opener.chat, popup, opener.agentUsed)
+      .catch((error: unknown) => {
+        this.log("popup_adopt_failed", { error: String(error) });
+        void popup.close().catch(noop);
+        return null;
+      })
+      .finally(() => {
+        opener.chat.opening -= 1;
+      });
     if (tab) this.log("popup_adopted", { chat: tab.chat.id, tab: tab.id, opener: opener.id });
   }
 
@@ -477,6 +483,11 @@ export class BrowserService {
       if (frame.parentId) return;
       BrowserPage.invalidateRefs(page);
       this.closeFileChooser(tab);
+    });
+    // saveAs copies only a finished download, so stop one that passes the budget while it runs.
+    cdp.on("Page.downloadProgress", ({ guid, state, receivedBytes }) => {
+      if (state === "inProgress" && receivedBytes > DOWNLOAD_MAX_BYTES - chat.downloadBytes)
+        this.cancelDownload(guid);
     });
     await cdp.send("Page.enable").catch(noop);
     page.setDefaultTimeout(BrowserPage.DEFAULT_TIMEOUT_MS);
@@ -620,7 +631,7 @@ export class BrowserService {
         const tab = this.resolveTab(chat, params);
         const screenshotPath = optString(params, "screenshotPath");
         const file =
-          screenshotPath === undefined ? undefined : resolveInChat(this.sessionsRoot, chat.id, screenshotPath);
+          screenshotPath === undefined ? undefined : await resolveInChat(this.sessionsRoot, chat.id, screenshotPath);
         const text = await this.agentRead(tab, deadlineMs, async () => {
           const snapshot = await BrowserPage.snapshot(tab.page, tab.cdp);
           if (file !== undefined) {
@@ -709,7 +720,7 @@ export class BrowserService {
         );
       } catch (cause) {
         // A failed open returns no tab; the download case keeps it so the file saves.
-        if (!(cause instanceof OperationError && cause.message.includes("downloaded instead")))
+        if (!(cause instanceof OperationError && cause.message.includes("started a download")))
           this.closeTab(tab);
         throw cause;
       }
@@ -776,12 +787,24 @@ export class BrowserService {
     });
   }
 
+  /** Viewer navigations run unawaited; a failure reaches the viewer as an error message. */
+  private trackViewerNavigation(tab: Tab, viewer: Viewer, navigation: Promise<unknown>, url?: string) {
+    tab.control.trackUntilHandoff(
+      navigation.catch((cause: unknown) => {
+        // A newer navigation reports for itself.
+        if (tab.closing || /interrupted by another navigation|ERR_ABORTED/.test(String(cause))) return;
+        const error = this.navigationError(url ?? tab.page.url(), cause, VIEWER_NAVIGATION_OPTIONS.timeout);
+        this.send(viewer, { type: "error", message: error.message });
+      }),
+    );
+  }
+
   private navigationError(url: string, cause: unknown, timeout: number) {
     const message = cause instanceof Error ? cause.message : String(cause);
     if (message.includes("Download is starting"))
       return new OperationError(
         "failed",
-        `${url} is a file this browser cannot show, so it was downloaded instead. It is saved in the chat's downloads/ folder.`,
+        `${url} started a download instead of a page; a saved download appears in the chat's downloads/ folder.`,
       );
     const netError = /ERR_[A-Z\d_]+/.exec(message)?.[0];
     if (netError) return new OperationError("failed", `Navigation to ${url} failed: ${netError}`);
@@ -874,7 +897,7 @@ export class BrowserService {
       case "upload": {
         const paths = optStrings(params, "paths");
         if (paths === undefined) throw invalid("upload needs paths.");
-        const absolute = paths.map((path) => resolveInChat(this.sessionsRoot, tab.chat.id, path));
+        const absolute = await Promise.all(paths.map((path) => resolveInChat(this.sessionsRoot, tab.chat.id, path)));
         await this.uploadFiles(tab, { ...target, paths: absolute, timeoutMs });
         return `Uploaded ${absolute.length} file${absolute.length === 1 ? "" : "s"}.`;
       }
@@ -932,6 +955,18 @@ export class BrowserService {
   }
 
   // ---- downloads and file chooser ----
+
+  private cancelDownload(guid: string) {
+    const browser = this.context.browser();
+    if (!browser) return;
+    this.browserSession ??= browser.newBrowserCDPSession();
+    void this.browserSession
+      .then((session) => session.send("Browser.cancelDownload", { guid }))
+      .catch((error: unknown) => {
+        this.browserSession = null;
+        this.log("download_cancel_failed", { error: String(error) });
+      });
+  }
 
   private async saveDownload(tab: Tab, download: Download) {
     const chat = tab.chat;
@@ -1012,7 +1047,11 @@ export class BrowserService {
   }
 
   private async uploadFiles(tab: Tab, input: BrowserPage.UploadInput) {
-    if (await BrowserPage.setInputFiles(tab.page, input)) return;
+    // A picker left open by an earlier click must not take a later untargeted upload.
+    if (await BrowserPage.setInputFiles(tab.page, input)) {
+      this.closeFileChooser(tab);
+      return;
+    }
     const open = tab.fileChooser;
     if (!open)
       throw new OperationError(
@@ -1311,7 +1350,7 @@ export class BrowserService {
         await this.selectTab(viewer, tab);
         this.broadcastControl(tab);
         if (url !== undefined && url !== "about:blank")
-          tab.control.trackUntilHandoff(tab.page.goto(url, VIEWER_NAVIGATION_OPTIONS));
+          this.trackViewerNavigation(tab, viewer, tab.page.goto(url, VIEWER_NAVIGATION_OPTIONS), url);
         return;
       }
       case "closeTab": {
@@ -1368,8 +1407,8 @@ export class BrowserService {
           tab.control.controller !== viewer.id
         )
           throw new OperationError("failed", "That file picker is no longer open.");
-        const files = (paths as Array<string>).map((path) =>
-          resolveInChat(this.sessionsRoot, chat.id, path),
+        const files = await Promise.all(
+          (paths as Array<string>).map((path) => resolveInChat(this.sessionsRoot, chat.id, path)),
         );
         if (files.length > 0)
           await open.chooser.setFiles(open.chooser.isMultiple() ? files : files.slice(0, 1));
@@ -1491,12 +1530,14 @@ export class BrowserService {
         if (typeof message.url === "string") {
           const url = normalizeUrl(message.url);
           await this.leaveBusyPage(tab, session);
-          tab.control.trackUntilHandoff(tab.page.goto(url, VIEWER_NAVIGATION_OPTIONS));
+          this.trackViewerNavigation(tab, viewer, tab.page.goto(url, VIEWER_NAVIGATION_OPTIONS), url);
         }
         return;
       case "history":
         await this.leaveBusyPage(tab, session);
-        tab.control.trackUntilHandoff(
+        this.trackViewerNavigation(
+          tab,
+          viewer,
           num(message.delta) < 0
             ? tab.page.goBack(VIEWER_NAVIGATION_OPTIONS)
             : tab.page.goForward(VIEWER_NAVIGATION_OPTIONS),
@@ -1504,7 +1545,7 @@ export class BrowserService {
         return;
       case "reload":
         await this.leaveBusyPage(tab, session);
-        tab.control.trackUntilHandoff(tab.page.reload(VIEWER_NAVIGATION_OPTIONS));
+        this.trackViewerNavigation(tab, viewer, tab.page.reload(VIEWER_NAVIGATION_OPTIONS));
         return;
     }
   }
