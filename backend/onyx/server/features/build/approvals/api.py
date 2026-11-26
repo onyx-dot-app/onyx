@@ -293,28 +293,20 @@ def submit_decision(
 
     # Commit all covered decisions before publishing grants or waking requests.
     db_session.commit()
+    cache: CacheBackend | None = None
+    try:
+        cache = get_cache_backend(tenant_id=get_current_tenant_id())
+    except CACHE_TRANSIENT_ERRORS:
+        logger.warning("approval.cache_failed approval_id=%s", approval_id)
     if target is not None:
-        cache: CacheBackend | None = None
-        try:
-            cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        except CACHE_TRANSIENT_ERRORS:
-            logger.warning(
-                "approval.session_grant_cache_failed approval_id=%s", approval_id
-            )
         approval_cache.hydrate_session_grants(
             session_id=session_id,
             integration_id=target,
             rows=grant_source_rows,
             cache=cache,
         )
-    for decided_id in approved_ids:
-        try:
-            cache = get_cache_backend(tenant_id=get_current_tenant_id())
-            approval_cache.send_wake(decided_id, decision, cache)
-        except CACHE_TRANSIENT_ERRORS as error:
-            logger.warning(
-                "approval.wake_failed approval_id=%s error=%s", decided_id, error
-            )
+    if cache is not None:
+        approval_cache.send_wakes(approved_ids, decision, cache)
     logger.info(
         "approval.decision_recorded approval_id=%s session_id=%s decision=%s for_session=%s",
         approval_id,

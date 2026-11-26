@@ -242,12 +242,8 @@ class CommandApprovals:
                 db.commit()
         except Exception:
             logger.exception("command_approvals_end_failed command=%s", command_id)
-        for approval_id in ended:
-            try:
-                if cache is not None:
-                    approval_cache.send_wake(approval_id, decision, cache)
-            except Exception:
-                logger.warning("command_approval_wake_failed approval=%s", approval_id)
+        if cache is not None:
+            approval_cache.send_wakes(ended, decision, cache)
         return ended
 
     def _watch(self, command_id: UUID) -> None:

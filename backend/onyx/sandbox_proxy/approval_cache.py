@@ -199,6 +199,20 @@ def send_wake(
     cache.expire(_wake_key(approval_id), WAKE_TTL_S)
 
 
+def send_wakes(
+    approval_ids: Iterable[UUID], decision: ApprovalDecision, cache: CacheBackend
+) -> None:
+    """Wake each parked proxy. A failed wake leaves only that proxy to its
+    wait timeout."""
+    for approval_id in approval_ids:
+        try:
+            send_wake(approval_id, decision, cache)
+        except CACHE_TRANSIENT_ERRORS as error:
+            logger.warning(
+                "approval_wake_failed approval_id=%s error=%r", approval_id, error
+            )
+
+
 def _command_foreground_key(command_id: UUID) -> str:
     return f"approval:command:{command_id}:foreground"
 
