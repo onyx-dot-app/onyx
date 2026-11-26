@@ -1,5 +1,6 @@
 "use client";
 
+import type { MinimalOnyxDocument } from "@/lib/search/types";
 import {
   memo,
   type ReactNode,
@@ -85,6 +86,8 @@ interface ChatRightPanelProps {
   hasSources: boolean;
   // Loads the chat's file list again; rejects when the load fails
   reloadFiles: () => Promise<void>;
+  // Opens a document's preview, as the page does for the chat's citations
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }
 
 /**
@@ -108,6 +111,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   sources,
   hasSources,
   reloadFiles,
+  setPresentingDocument,
 }: ChatRightPanelProps) {
   const t = useTranslations("chat.rightPanel");
   // Each tab's shown file, with the name that the list gives its artifact,
@@ -543,6 +547,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                     key={shownAgent.agentId}
                     sessionId={sessionId}
                     agentId={shownAgent.agentId}
+                    setPresentingDocument={setPresentingDocument}
                   />
                 </div>
               )}
@@ -635,6 +640,7 @@ interface CurrentChatRightPanelProps {
   open: boolean;
   sources: ReactNode;
   hasSources: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }
 
 /**

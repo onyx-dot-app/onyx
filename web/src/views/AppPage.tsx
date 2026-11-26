@@ -786,6 +786,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         open={rightPanelOpen}
         sources={sourcesView}
         hasSources={sourcesHaveContent}
+        setPresentingDocument={setPresentingDocument}
       />
     ),
     [rightPanelOpen, sourcesView, sourcesHaveContent]

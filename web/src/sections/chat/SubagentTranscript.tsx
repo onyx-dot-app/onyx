@@ -9,6 +9,7 @@ import { Section } from "@opal/layouts";
 import { SvgSquare } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { formatDurationSeconds } from "@opal/time";
+import type { MinimalOnyxDocument } from "@/lib/search/types";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { useChatSubagents, useSubagentTranscript } from "@/lib/chat/hooks";
 import {
@@ -74,6 +75,8 @@ export function SubagentBar({ sessionId, agentId }: SubagentBarProps) {
 interface SubagentTranscriptProps {
   sessionId: string;
   agentId: string;
+  // Opens a cited file's preview, as the main chat does
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }
 
 /**
@@ -84,6 +87,7 @@ interface SubagentTranscriptProps {
 export function SubagentTranscript({
   sessionId,
   agentId,
+  setPresentingDocument,
 }: SubagentTranscriptProps) {
   const t = useTranslations("chat.rightPanel.agentTab");
   const { agents } = useChatSubagents(sessionId, false);
@@ -150,6 +154,7 @@ export function SubagentTranscript({
                           agent: persona,
                           docs: message.documents,
                           citations: message.citations,
+                          setPresentingDocument,
                         }}
                         nodeId={message.nodeId}
                         llmManager={null}
