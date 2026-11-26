@@ -23,7 +23,11 @@ from onyx.chat.citation_utils import (
     remap_received_citations,
 )
 from onyx.chat.models import PromptMetadata
-from onyx.chat.prompt_utils import prepare_prompt, with_language_section
+from onyx.chat.prompt_utils import (
+    SearchPassageCache,
+    prepare_prompt,
+    with_language_section,
+)
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
 )
@@ -140,6 +144,8 @@ class DeepResearchFeature(AgentFeature):
         )
         self.citation_mapping: CitationMapping = {}
         self._citation_lock = Lock()
+        # Each step's deduplicated search results, for later requests.
+        self.search_passage_cache: SearchPassageCache = {}
 
     def agent(
         self,
@@ -320,6 +326,7 @@ class DeepResearchFeature(AgentFeature):
             output_metadata=output_metadata,
             assemble_messages=partial(
                 prepare_prompt,
+                search_passage_cache=self.search_passage_cache,
                 system_prompt=SystemMessage(content=system_prompt),
                 skills_catalog_message=self.skills_catalog_message,
                 custom_agent_prompt=None,

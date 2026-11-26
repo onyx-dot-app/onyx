@@ -107,10 +107,11 @@ which builds `citationMap`.
 documents sidebar.
 
 **Two processors, two mappings.** The `ChatFeature` processor holds every number
-the model could cite and copies it into each step's `ChatMessageMetadata.sources`
-before the step runs. `chat/presentation.py:ResponsePresenter` builds a new
-`chat/renderer.py:MessageRenderer` for each step from that metadata, so the
-display mapping is fixed for the step. The renderer records only the
+the model could cite and puts the numbers that are new to the run into the
+next step's `ChatMessageMetadata.sources` before the step runs. `chat/presentation.py:ResponsePresenter` builds a new
+`chat/renderer.py:MessageRenderer` for each step from that metadata and the
+documents of the run's earlier steps ([[#step-documents-are-new-only]]), so
+the display mapping is fixed for the step. The renderer records only the
 `CitationInfo` it emitted. At save, `chat/presentation.py:project_response`
 rebuilds the full mapping and re-renders the snapshot to get the emitted set.
 The emitted set comes from the answer step only, or from the last rendered
@@ -262,6 +263,26 @@ of only markers stays empty.
     differ, because it cannot take back a space that it already streamed.
     `backend/tests/unit/onyx/chat/test_citation_processor_properties.py`
     checks this.
+15. `step-documents-are-new-only` **A step carries only the citations and
+    documents that are new to its run.** `chat/agent.py:ChatFeature` keeps the
+    gathered documents by document ID, the latest copy of each in the order
+    first gathered. Each step's `ChatMessageMetadata.sources` and `.documents`,
+    and so its saved `MessageRendering.citation_documents` and `.document_ids`,
+    hold only the numbers and documents that the run's earlier steps do not
+    carry, or a new copy of one. A reader of a step's citations or documents
+    folds the steps of its run so far, in order, with
+    `chat/models.py:RunDocuments.add_step`: `ResponsePresenter.consume`,
+    `_project_response_display`, `_collect_tool_history` and `replay_response`
+    in `chat/presentation.py`. `ResponsePresenter.replay` hands the replayed
+    runs' documents to the live stream that continues a suspended response.
+    `db/chat_subagents.py:read_agent_completions` reads the citations of every
+    step up to the output's. Readers that union every message's sources, such
+    as `ChatFeature` for history numbers, need no fold. Saved steps that hold the
+    whole lists give the same result.
+    `backend/tests/unit/onyx/chat/test_agent.py:test_each_step_carries_only_new_documents_and_shows_them_all`,
+    `test_steps_that_hold_whole_lists_show_each_document_once` and
+    `backend/tests/integration/tests/chat/test_chat_gathered_documents.py`
+    check this.
 
 ---
 

@@ -12,14 +12,18 @@ import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.events import AgentEvent
+from onyx.agents.events import AgentEvent, MessageStartEvent, MessageUpdateEvent
 from onyx.agents.models import (
     AgentCompletion,
     AgentState,
     AgentStep,
+    ExecutionStatus,
+    RunState,
     RunStatus,
     StepInput,
+    StepRecord,
     StepResult,
+    ToolExecutionRecord,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
@@ -32,6 +36,7 @@ from onyx.chat.models import (
     IncognitoState,
     PersonaPromptConfig,
     PromptMetadata,
+    ResponseReplayData,
 )
 from onyx.chat.presentation import (
     ResponsePresenter,
@@ -55,9 +60,11 @@ from onyx.llm.model_response import (
 )
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationOptions,
     GenerationRequest,
     Message,
     TextContent,
+    TextDeltaEvent,
     ToolCall,
     ToolChoiceOptions,
     ToolResult,
@@ -73,6 +80,8 @@ from onyx.prompts.chat_prompts import (
     SUBAGENT_INSTRUCTIONS,
 )
 from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseStart,
+    CitationInfo,
     CustomToolStart,
     OverallStop,
     Packet,
@@ -838,7 +847,7 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         assert OPEN_URL_REMINDER.strip() not in reminder
         assert feature.citation_mapping == {4: "reference"}
         assert feature.citation_processor.citation_to_doc == {4: document}
-        assert feature.gathered_documents == [document]
+        assert list(feature.gathered_documents.values()) == [document]
         assert not feature._tool_context().skip_search_query_expansion
         assert feature._tool_context().next_citation_num == 5
         projection = project_response(runs[-1].snapshot(), tool_ids={})
@@ -1446,3 +1455,295 @@ def test_child_notification_remaps_citations() -> None:
         assert feature.citation_mapping == {1: "existing", 2: "child", 3: "other-child"}
     finally:
         assert coordinator.close(10)
+
+
+def _document(document_id: str, blurb: str) -> SearchDoc:
+    return SearchDoc(
+        document_id=document_id,
+        chunk_ind=0,
+        semantic_identifier=document_id.title(),
+        link=f"https://example.com/{document_id}",
+        blurb=blurb,
+        source_type=DocumentSource.WEB,
+        boost=0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+
+
+class _DocumentsTool(EchoTool):
+    """Returns the documents that its call's value names."""
+
+    def __init__(self, results: Mapping[str, list[SearchDoc]]) -> None:
+        self.results = results
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        documents = self.results[str(invocation.arguments["value"])]
+        numbers = {"a": 1, "b": 2, "c": 3}
+        return ToolResult(
+            content="Found documents",
+            details=SearchDocsResponse(
+                search_docs=documents,
+                citation_mapping={
+                    numbers[doc.document_id]: doc.document_id for doc in documents
+                },
+            ),
+        )
+
+
+def test_each_step_carries_only_new_documents_and_shows_them_all() -> None:
+    a, b, c = _document("a", "A"), _document("b", "B"), _document("c", "C")
+    newer_b = _document("b", "Newer B")
+    results = {
+        "first": [a, b],
+        "second": [newer_b, c],
+        # Equal copies of documents that earlier steps carry.
+        "third": [a.model_copy(), c.model_copy()],
+    }
+    llm = ScriptedLLM(
+        [
+            *(
+                Delta(
+                    tool_calls=[
+                        ChatCompletionDeltaToolCall(
+                            id=value,
+                            index=0,
+                            function=ResponseFunctionCall(
+                                name="echo", arguments=json.dumps({"value": value})
+                            ),
+                        )
+                    ]
+                )
+                for value in results
+            ),
+            Delta(content="Answer [1] and [3]."),
+        ],
+        128000,
+    )
+    agent, feature = chat_agent(llm, [_DocumentsTool(results)])
+    runs: list[Run] = []
+    output: queue.Queue[Packet] = queue.Queue()
+    run_agent(
+        agent,
+        runs=runs,
+        messages=[UserMessage(content="Find documents")],
+        max_steps=5,
+        listener=ResponsePresenter(
+            Emitter(model_idx=0, publish=output.put_nowait)
+        ).consume,
+    )
+    snapshot = runs[0].snapshot()
+    step_documents = [
+        [(doc.document_id, doc.blurb) for doc in step.message.metadata.documents]
+        for step in snapshot.steps
+        if isinstance(step.message.metadata, ChatMessageMetadata)
+    ]
+    assert step_documents == [
+        [],
+        [("a", "A"), ("b", "B")],
+        [("b", "Newer B"), ("c", "C")],
+        [],
+    ]
+    # In the order first gathered, each in its latest copy, once.
+    expected = [("a", "A"), ("b", "Newer B"), ("c", "C")]
+
+    def final_documents(packets: list[Packet]) -> list[tuple[str, str]]:
+        starts = [
+            packet.obj
+            for packet in packets
+            if isinstance(packet.obj, AgentResponseStart)
+        ]
+        assert len(starts) == 1 and starts[0].final_documents is not None
+        return [(doc.document_id, doc.blurb) for doc in starts[0].final_documents]
+
+    live = list(output.queue)
+    projection = project_response(
+        snapshot, tool_ids={tool.name: tool.id for tool in feature.application_tools}
+    )
+    assert final_documents(live) == expected
+    assert projection.top_documents is not None
+    assert [
+        (doc.document_id, doc.blurb) for doc in projection.top_documents
+    ] == expected
+    assert projection.response is not None
+    replayed = replay_response(
+        projection.response,
+        {},
+        projection.presentation,
+        projection.all_search_docs,
+    )
+    assert final_documents(replayed) == expected
+    assert projection.answer is not None
+    assert "[[1]](https://example.com/a)" in projection.answer
+    assert "[[3]](https://example.com/c)" in projection.answer
+    cited = [
+        packet.obj.document_id
+        for packet in live
+        if isinstance(packet.obj, CitationInfo)
+    ]
+    assert cited == ["a", "c"]
+
+    # A stream that continues the saved response adds to its documents.
+    continued: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(model_idx=0, publish=continued.append))
+    presenter.replay(
+        projection.response,
+        ResponseReplayData(
+            tools={}, documents=projection.all_search_docs, approvals={}
+        ),
+        projection.presentation,
+    )
+    del continued[:]
+    later = _document("d", "D")
+    presenter.consume(
+        MessageStartEvent(
+            agent_id=snapshot.agent_id,
+            run_id=snapshot.run_id,
+            message_id=f"{snapshot.run_id}:4",
+            step_index=4,
+            metadata=ChatMessageMetadata(documents=[later]),
+        )
+    )
+    presenter.consume(
+        MessageUpdateEvent(
+            agent_id=snapshot.agent_id,
+            run_id=snapshot.run_id,
+            message_id=f"{snapshot.run_id}:4",
+            step_index=4,
+            generation_event=TextDeltaEvent(content_index=0, text="More."),
+        )
+    )
+    assert final_documents(continued) == [*expected, ("d", "D")]
+
+
+def _answer_documents(packets: list[Packet]) -> list[str]:
+    starts = [
+        packet.obj for packet in packets if isinstance(packet.obj, AgentResponseStart)
+    ]
+    assert len(starts) == 1 and starts[0].final_documents is not None
+    return [doc.document_id for doc in starts[0].final_documents]
+
+
+def _cited(packets: list[Packet]) -> dict[int, str]:
+    return {
+        packet.obj.citation_number: packet.obj.document_id
+        for packet in packets
+        if isinstance(packet.obj, CitationInfo)
+    }
+
+
+def test_steps_that_hold_whole_lists_show_each_document_once() -> None:
+    """Steps saved with the run's whole source and document lists, with a
+    repeated document, show and cite the same documents as new-only steps."""
+    a, b, c = _document("a", "A"), _document("b", "B"), _document("c", "C")
+    steps = [
+        StepRecord(
+            message=AssistantMessage(
+                id="run:0",
+                content=[ToolCall(id="search", name="echo", arguments={})],
+                metadata=ChatMessageMetadata(sources={1: a}, documents=[a, b, a]),
+            ),
+            generation_status=ExecutionStatus.COMPLETE,
+        ),
+        StepRecord(
+            message=AssistantMessage(
+                id="run:1",
+                content=[TextContent(text="See [1] and [3].")],
+                metadata=ChatMessageMetadata(
+                    sources={1: a, 3: c}, documents=[a, b, a, c]
+                ),
+            ),
+            generation_status=ExecutionStatus.COMPLETE,
+        ),
+    ]
+    projection = project_response(
+        RunState(
+            run_id="run",
+            agent_id="agent",
+            status=RunStatus.COMPLETE,
+            answer_step_index=1,
+            steps=steps,
+        ),
+        tool_ids={},
+    )
+    assert projection.top_documents is not None
+    assert [doc.document_id for doc in projection.top_documents] == ["a", "b", "c"]
+    assert projection.answer == (
+        "See [[1]](https://example.com/a) and [[3]](https://example.com/c)."
+    )
+    assert projection.response is not None
+    replayed = replay_response(
+        projection.response,
+        {},
+        projection.presentation,
+        {doc.document_id: doc for doc in (a, b, c)},
+    )
+    assert _answer_documents(replayed) == ["a", "b", "c"]
+    assert _cited(replayed) == {1: "a", 3: "c"}
+
+
+def test_resumed_run_adds_only_new_documents_after_whole_list_steps() -> None:
+    """A run that resumes after steps saved with whole lists adds only what
+    those steps lack, and still shows every document once."""
+    a, b, c = _document("a", "A"), _document("b", "B"), _document("c", "C")
+    earlier = AssistantMessage(
+        id="run:0",
+        content=[ToolCall(id="search", name="echo", arguments={"value": "x"})],
+        metadata=ChatMessageMetadata(sources={1: a, 2: b}, documents=[a, b, a]),
+    )
+    result = ToolResultMessage(
+        id="run:0:result:search", tool_call_id="search", tool_name="echo", content="x"
+    )
+    _, feature = chat_agent(ScriptedLLM([]), [EchoTool()])
+    feature.gathered_documents = {"a": a, "b": b, "c": c}
+    feature.citation_processor.update_citation_mapping({1: a, 2: b, 3: c})
+    prepared = feature._prepare_step(
+        StepInput(
+            history=(),
+            input_messages=(UserMessage(content="Find documents"),),
+            messages=(earlier, result),
+            step=AgentStep(index=1, limit=3),
+            previous=StepResult(
+                step=AgentStep(index=0, limit=3),
+                message=earlier,
+                tool_results=(result,),
+                options=GenerationOptions(),
+            ),
+        )
+    )
+    metadata = prepared.output_metadata
+    assert isinstance(metadata, ChatMessageMetadata)
+    assert {number: doc.document_id for number, doc in metadata.sources.items()} == {
+        3: "c"
+    }
+    assert [doc.document_id for doc in metadata.documents] == ["c"]
+    later = AssistantMessage(
+        id="run:1", content=[TextContent(text="See [2] and [3].")], metadata=metadata
+    )
+    projection = project_response(
+        RunState(
+            run_id="run",
+            agent_id="agent",
+            status=RunStatus.COMPLETE,
+            answer_step_index=1,
+            steps=[
+                StepRecord(
+                    message=earlier,
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={
+                        "search": ToolExecutionRecord(
+                            status=ExecutionStatus.COMPLETE, result=result
+                        )
+                    },
+                ),
+                StepRecord(message=later, generation_status=ExecutionStatus.COMPLETE),
+            ],
+        ),
+        tool_ids={},
+    )
+    assert projection.top_documents is not None
+    assert [doc.document_id for doc in projection.top_documents] == ["a", "b", "c"]
+    assert projection.answer == (
+        "See [[2]](https://example.com/b) and [[3]](https://example.com/c)."
+    )

@@ -1663,9 +1663,14 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             message for step in restored.steps for message in step.input_messages
         ] == received
         if not cancel_child:
-            metadata = later.snapshot().steps[-1].message.metadata
-            assert isinstance(metadata, ChatMessageMetadata)
-            assert metadata.sources[1].document_id == "child-source"
+            # Each step holds the citation numbers new to the run.
+            sources = {
+                number: document
+                for step in later.snapshot().steps
+                if isinstance(step.message.metadata, ChatMessageMetadata)
+                for number, document in step.message.metadata.sources.items()
+            }
+            assert sources[1].document_id == "child-source"
             # A child's cited documents can be attached to its root response.
             db_session.execute(
                 update(ChatMessage__SearchDoc)

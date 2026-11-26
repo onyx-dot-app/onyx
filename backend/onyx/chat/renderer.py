@@ -20,11 +20,12 @@ from onyx.chat.models import (
     CitationMode,
     MessageRendering,
     PresentationMode,
+    RunDocuments,
     ToolApprovalDenial,
 )
 from onyx.chat.response import tool_arguments_for_display
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.context.search.models import SearchDocsResponse
 from onyx.db.enums import QuestionAnsweredVia, QuestionOutcome
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import (
@@ -355,19 +356,19 @@ class MessageRenderer:
     def __init__(
         self,
         settings: MessageRendering,
-        documents: Mapping[str, SearchDoc],
+        documents: RunDocuments,
         layout: ResponseLayout,
         parent: Placement | None = None,
     ) -> None:
+        """`documents` are those of the message's run up to and including
+        the message's step."""
         self.settings = settings
         self.layout = layout
         self.parent = parent
         self.answer = ""
         self.reasoning = ""
         self.citations: list[packets.CitationInfo] = []
-        self.documents = [
-            documents[key] for key in settings.document_ids if key in documents
-        ]
+        self.documents = list(documents.shown.values())
         self._answer_placement: Placement | None = None
         self._reasoning_placement: Placement | None = None
         self._raw_text = ""
@@ -384,13 +385,7 @@ class MessageRenderer:
             else None
         )
         if self.citation_processor:
-            self.citation_processor.update_citation_mapping(
-                {
-                    number: documents[key]
-                    for number, key in settings.citation_documents.items()
-                    if key in documents
-                }
-            )
+            self.citation_processor.update_citation_mapping(documents.citations)
 
     @property
     def answer_started(self) -> bool:
