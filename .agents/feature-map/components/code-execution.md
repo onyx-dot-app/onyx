@@ -159,7 +159,7 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         ignored (non-strict definitions)
   RUN_TOOL_NAMES / WAIT_TOOL_NAMES /    every shape's names; the renderer, spill limits
   CODE_MODE_TOOL_NAMES                  and other name-keyed checks read these sets.
-                                        Calls under other names, such as execute_code,
+                                        Calls under other names, such as exec or repl,
                                         replay as generic tool cards
   code_mode_tool.py:with_code_mode      ChatAgent only: by Tool.code_mode_exposure, DIRECT
                                         tools stay direct; IMMEDIATE and DEFERRED ->
