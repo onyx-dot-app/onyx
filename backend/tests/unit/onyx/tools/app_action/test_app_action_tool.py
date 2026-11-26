@@ -240,6 +240,21 @@ def test_a_graphql_error_with_status_200_is_a_failure(
     assert json.loads(result.content) == body
 
 
+def test_a_rest_response_with_errors_is_not_a_graphql_failure() -> None:
+    """Only a call to the GraphQL endpoint reads ``errors`` as a failure."""
+    body = {"number": 1, "errors": [{"field": "labels", "code": "ignored"}]}
+    with patch(_SEND, return_value=_response(json.dumps(body).encode())):
+        result = _run(
+            _tool("github.issues.create"),
+            method="POST",
+            url="https://api.github.com/repos/o/r/issues",
+            body={"title": "Bug", "query": "mutation { createIssue { id } }"},
+        )
+
+    assert not result.is_error
+    assert json.loads(result.content) == body
+
+
 @pytest.mark.parametrize(
     ("method", "url"),
     [

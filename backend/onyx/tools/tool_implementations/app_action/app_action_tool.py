@@ -20,9 +20,10 @@ from onyx.external_apps.matching.engine import (
     recognize_actions,
     url_matches_patterns,
 )
-from onyx.external_apps.matching.graphql_parsing import parse_invocations
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.external_apps.matching.rules import graphql_endpoint_matches
 from onyx.external_apps.providers.actions import GraphQLOp, MatchRule
+from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.models import CallCredentials
@@ -259,14 +260,12 @@ class AppActionTool(Tool):
             return self._failed(problem)
 
         encoded_body = json.dumps(body).encode() if body is not None else None
+        request = ProxiedRequest(
+            method=method, path=parts.path, body=encoded_body, url=url
+        )
         matched = {
             action.action_type
-            for action in recognize_actions(
-                self._settings.app_type,
-                ProxiedRequest(
-                    method=method, path=parts.path, body=encoded_body, url=url
-                ),
-            )
+            for action in recognize_actions(self._settings.app_type, request)
         }
         if matched != {self._action_key}:
             return self._failed(self._wrong_action(matched))
@@ -321,7 +320,15 @@ class AppActionTool(Tool):
         return ToolResult(
             content=content,
             is_error=not response.ok
-            or (bool(parse_invocations(encoded_body)) and graphql_failed(tool_result)),
+            or (
+                any(
+                    isinstance(rule, GraphQLOp)
+                    and graphql_endpoint_matches(rule, request)
+                    for endpoint in get_endpoint_catalog(self._settings.app_type)
+                    for rule in endpoint.matches
+                )
+                and graphql_failed(tool_result)
+            ),
             details=CustomToolCallSummary(
                 tool_name=self._name,
                 integration_id=self._settings.integration_id,

@@ -7,7 +7,7 @@ the dispatch in ``rule_matches`` never changes (open/closed).
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Generic, TypeVar, get_args
 
-from onyx.external_apps.matching.request import MatchContext
+from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.providers.actions import (
     GraphQLOp,
     MatchRule,
@@ -40,15 +40,18 @@ class RestRouteMatcher(RuleMatcher[RestRoute]):
         return path_matches(rule.path, context.request.path)
 
 
+def graphql_endpoint_matches(rule: GraphQLOp, request: ProxiedRequest) -> bool:
+    """Whether ``request`` is a POST to the GraphQL endpoint of ``rule``. The
+    endpoint is the path alone: a query string does not change it."""
+    endpoint = request.path.partition("?")[0]
+    return request.method.upper() == "POST" and path_matches(rule.path, endpoint)
+
+
 class GraphQLOpMatcher(RuleMatcher[GraphQLOp]):
     rule_type = GraphQLOp
 
     def matches(self, rule: GraphQLOp, context: MatchContext) -> bool:
-        # The endpoint is the path alone: a query string does not change it.
-        endpoint = context.request.path.partition("?")[0]
-        if context.request.method.upper() != "POST" or not path_matches(
-            rule.path, endpoint
-        ):
+        if not graphql_endpoint_matches(rule, context.request):
             return False
         return any(
             operation_type == rule.operation_type and field == rule.field
