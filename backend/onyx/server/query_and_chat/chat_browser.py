@@ -3,7 +3,7 @@ pumped to the browser service in the user's sandbox VM), file uploads for
 its file chooser, downloads of the files that it saved, and "clear browser
 data". Only the chat's owner reaches
 them, and only while harness sandboxes run and the `browser_enabled` setting
-is on.
+is on ("clear browser data" also works while the setting is off).
 
 Live view protocol (the service's frames, `onyx.microvm.browser_protocol`):
 the route sends the service its view hello for the chat, then forwards each
@@ -109,10 +109,18 @@ def _sandbox_errors_as_onyx_errors() -> Iterator[None]:
         raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
 
 
-def _check_browser_chat(chat_session_id: UUID, user: User, db_session: Session) -> None:
+def _check_browser_chat(
+    chat_session_id: UUID,
+    user: User,
+    db_session: Session,
+    *,
+    require_setting: bool = True,
+) -> None:
     """Raises OnyxError when the browser is off or the chat is not the
-    user's."""
-    if not HARNESS_SANDBOX_ENABLED or not load_settings().browser_enabled:
+    user's. `require_setting=False` skips only the `browser_enabled` check."""
+    if not HARNESS_SANDBOX_ENABLED or (
+        require_setting and not load_settings().browser_enabled
+    ):
         raise OnyxError(OnyxErrorCode.FEATURE_DISABLED, "The browser is turned off.")
     if user.is_anonymous:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to use the browser.")
@@ -126,11 +134,15 @@ def _check_browser_chat(chat_session_id: UUID, user: User, db_session: Session) 
         )
 
 
-def _browser_ref(chat_session_id: UUID, user: User) -> HarnessSandboxRef:
+def _browser_ref(
+    chat_session_id: UUID, user: User, *, require_setting: bool = True
+) -> HarnessSandboxRef:
     """The user's sandbox, seen from a chat that the user owns (see
     _check_browser_chat). Creates the sandbox row if needed."""
     with get_session_with_current_tenant() as db_session:
-        _check_browser_chat(chat_session_id, user, db_session)
+        _check_browser_chat(
+            chat_session_id, user, db_session, require_setting=require_setting
+        )
         sandbox_id = get_or_create_sandbox(db_session, user.id).id
     return HarnessSandboxRef(
         tenant_id=get_current_tenant_id(),
@@ -359,8 +371,10 @@ def clear_chat_browser_data(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> None:
     """Stop the user's browser and delete its profile and the profile's
-    save: sign-ins, cookies and site storage of all the user's chats."""
-    ref = _browser_ref(chat_session_id, user)
+    save: sign-ins, cookies and site storage of all the user's chats. Works
+    while the `browser_enabled` setting is off, so saved sign-ins can always
+    be deleted."""
+    ref = _browser_ref(chat_session_id, user, require_setting=False)
     with _sandbox_errors_as_onyx_errors():
         get_harness_sandbox().clear_browser_data(ref)
 

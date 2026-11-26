@@ -11,6 +11,7 @@ import json
 import queue
 import threading
 from collections.abc import AsyncGenerator, Generator
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -154,7 +155,12 @@ def client(
     sandbox: FakeSandbox,  # noqa: ARG001
     session_users: "queue.Queue[User | None]",  # noqa: ARG001
 ) -> Generator[TestClient, None, None]:
-    def browser_ref(chat_session_id: UUID, user: User) -> HarnessSandboxRef:  # noqa: ARG001
+    def browser_ref(
+        chat_session_id: UUID,
+        user: User,  # noqa: ARG001
+        *,
+        require_setting: bool = True,  # noqa: ARG001
+    ) -> HarnessSandboxRef:
         if chat_session_id != ref.session_id:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found.")
         return ref
@@ -247,7 +253,12 @@ def test_turning_the_browser_off_closes_an_open_view(
     monkeypatch.setattr(chat_browser, "_VIEW_RENEW_SECONDS", 0.05)
     turned_off = threading.Event()
 
-    def browser_ref(chat_session_id: UUID, user: User) -> HarnessSandboxRef:  # noqa: ARG001
+    def browser_ref(
+        chat_session_id: UUID,  # noqa: ARG001
+        user: User,  # noqa: ARG001
+        *,
+        require_setting: bool = True,  # noqa: ARG001
+    ) -> HarnessSandboxRef:
         if turned_off.is_set():
             raise OnyxError(
                 OnyxErrorCode.FEATURE_DISABLED, "The browser is turned off."
@@ -456,6 +467,19 @@ def test_the_owner_check_and_the_setting_gate_the_browser(
     with pytest.raises(OnyxError) as refused:
         chat_browser._browser_ref(chat_session.id, owner)
     assert refused.value.error_code is OnyxErrorCode.FEATURE_DISABLED
+    # "Clear browser data" still deletes saved sign-ins, for the owner only.
+    cleared: list[HarnessSandboxRef] = []
+    monkeypatch.setattr(
+        chat_browser,
+        "get_harness_sandbox",
+        lambda: SimpleNamespace(clear_browser_data=cleared.append),
+    )
+    chat_browser.clear_chat_browser_data(chat_session.id, owner)
+    assert cleared == [ref]
+    for chat_id, user in ((chat_session.id, other), (incognito_chat.id, owner)):
+        with pytest.raises(OnyxError):
+            chat_browser.clear_chat_browser_data(chat_id, user)
+    assert cleared == [ref]
 
     settings.browser_enabled = True
     monkeypatch.setattr(chat_browser, "HARNESS_SANDBOX_ENABLED", False)
