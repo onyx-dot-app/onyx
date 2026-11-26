@@ -278,7 +278,7 @@ def test_new_chat_is_named_with_the_turns_model(naming_llm: MagicMock) -> None:
             return_value=[first_question],
         ),
         patch(
-            "onyx.chat.session_naming.save_chat_session_name_if_unnamed",
+            "onyx.chat.session_naming.save_generated_chat_session_name",
             return_value=True,
         ),
         patch("onyx.chat.session_naming.check_token_rate_limits"),
@@ -323,7 +323,7 @@ def test_naming_request_uses_the_users_chat_defaults() -> None:
         ),
         patch("onyx.chat.session_naming.fetch_user_preferences") as fetch_preferences,
         patch(
-            "onyx.chat.session_naming.save_chat_session_name_if_unnamed",
+            "onyx.chat.session_naming.save_generated_chat_session_name",
             return_value=True,
         ),
         patch("onyx.chat.session_naming.check_token_rate_limits"),
@@ -356,7 +356,7 @@ def test_naming_request_uses_the_users_chat_defaults() -> None:
 
 def _name_chat_session_with_saved_name(
     *, regenerate: bool, generate: MagicMock
-) -> tuple[str, MagicMock, MagicMock]:
+) -> tuple[str, MagicMock]:
     chat_session = MagicMock(description="Old title")
     user = MagicMock()
 
@@ -373,11 +373,7 @@ def _name_chat_session_with_saved_name(
         ),
         patch("onyx.chat.session_naming.fetch_user_preferences"),
         patch(
-            "onyx.chat.session_naming.replace_chat_session_name_if_unchanged",
-            return_value=True,
-        ) as replace,
-        patch(
-            "onyx.chat.session_naming.save_chat_session_name_if_unnamed",
+            "onyx.chat.session_naming.save_generated_chat_session_name",
             return_value=True,
         ) as save,
         patch("onyx.chat.session_naming.check_token_rate_limits"),
@@ -396,33 +392,27 @@ def _name_chat_session_with_saved_name(
             additional_headers=None,
             regenerate=regenerate,
         )
-    return name, replace, save
+    return name, save
 
 
 def test_naming_request_keeps_a_saved_name() -> None:
     generate = MagicMock(return_value="New title")
 
-    name, replace, save = _name_chat_session_with_saved_name(
-        regenerate=False, generate=generate
-    )
+    name, save = _name_chat_session_with_saved_name(regenerate=False, generate=generate)
 
     assert name == "Old title"
     generate.assert_not_called()
-    replace.assert_not_called()
     save.assert_not_called()
 
 
 def test_regenerating_replaces_a_saved_name() -> None:
     generate = MagicMock(return_value="New title")
 
-    name, replace, save = _name_chat_session_with_saved_name(
-        regenerate=True, generate=generate
-    )
+    name, save = _name_chat_session_with_saved_name(regenerate=True, generate=generate)
 
     assert name == "New title"
-    assert replace.call_args.kwargs["expected_name"] == "Old title"
-    assert replace.call_args.kwargs["name"] == "New title"
-    save.assert_not_called()
+    assert save.call_args.kwargs["expected_name"] == "Old title"
+    assert save.call_args.kwargs["name"] == "New title"
 
 
 def test_failed_regeneration_raises_and_keeps_the_saved_name() -> None:

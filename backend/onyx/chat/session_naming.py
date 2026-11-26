@@ -23,8 +23,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     create_chat_history_chain,
     get_chat_session_by_id,
-    replace_chat_session_name_if_unchanged,
-    save_chat_session_name_if_unnamed,
+    save_generated_chat_session_name,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType, record_mode_persists_content
@@ -198,10 +197,11 @@ def name_new_chat_session(
             additional_headers=additional_headers,
         )
         with get_session_with_current_tenant() as db_session:
-            saved = save_chat_session_name_if_unnamed(
+            saved = save_generated_chat_session_name(
                 db_session=db_session,
                 user_id=user.id,
                 chat_session_id=chat_session_id,
+                expected_name=None,
                 name=name,
             )
         return name if saved else None
@@ -253,21 +253,13 @@ def name_chat_session(
             raise_on_failure=regenerate and bool(previous_name),
         )
         with get_session_with_current_tenant() as db_session:
-            if previous_name and regenerate:
-                saved = replace_chat_session_name_if_unchanged(
-                    db_session=db_session,
-                    user_id=user.id,
-                    chat_session_id=chat_session_id,
-                    expected_name=previous_name,
-                    name=name,
-                )
-            else:
-                saved = save_chat_session_name_if_unnamed(
-                    db_session=db_session,
-                    user_id=user.id,
-                    chat_session_id=chat_session_id,
-                    name=name,
-                )
+            saved = save_generated_chat_session_name(
+                db_session=db_session,
+                user_id=user.id,
+                chat_session_id=chat_session_id,
+                expected_name=previous_name if regenerate else None,
+                name=name,
+            )
             if saved:
                 return name
             # Renamed while this name was generated: the rename stands.
