@@ -510,6 +510,9 @@
         "userFile": {
           "description": "채팅에서 업로드한 파일"
         },
+        "chatArtifact": {
+          "description": "채팅에서 게시된 파일"
+        },
         "googleSites": {
           "description": "Google 호스팅 페이지"
         },
@@ -12367,6 +12370,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "질문"
+        },
+        "artifactError": {
+          "message": "이 파일을 사용할 수 없습니다."
         }
       },
       "messageEditing": {
@@ -12817,6 +12823,9 @@
           "placeholder": "기타: 직접 답변 입력",
           "ariaLabel": "{header}에 대한 기타 답변"
         },
+        "multiSelect": {
+          "hint": "해당하는 항목을 모두 선택하세요."
+        },
         "submit": "보내기",
         "page": {
           "progress": "질문 {current}/{total}",
@@ -13072,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {#줄} other {#줄}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {단어 #개} other {단어 #개}}"
-      },
       "copyButton": {
         "tooltip": "내용 복사"
       },
@@ -13098,6 +13104,13 @@
       "renderError": {
         "title": "이 파일은 미리 볼 수 없습니다",
         "description": "여기에서 파일을 표시할 수 없습니다. 파일을 다운로드하여 여세요."
+      },
+      "unavailable": {
+        "title": "이 파일의 미리보기가 없습니다",
+        "description": "이 파일의 미리보기를 만들 수 없습니다. 파일을 다운로드하여 여세요."
+      },
+      "preparing": {
+        "status": "미리보기를 준비하는 중입니다. 시간이 다소 걸릴 수 있습니다."
       },
       "unsupported": {
         "title": "이 파일 형식의 미리보기는 현재 지원되지 않습니다",
@@ -13146,30 +13159,6 @@
         },
         "error": {
           "description": "PDF 파일을 불러올 수 없습니다."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "프레젠테이션 컨트롤"
-        },
-        "thumbnails": {
-          "toggle": "슬라이드 썸네일 표시 전환",
-          "resize": "슬라이드 썸네일 크기 조정"
-        },
-        "slides": {
-          "label": "슬라이드"
-        },
-        "previous": {
-          "label": "이전 슬라이드"
-        },
-        "next": {
-          "label": "다음 슬라이드"
-        },
-        "slide": {
-          "counter": "슬라이드 {current} / {total}"
-        },
-        "empty": {
-          "label": "이 프레젠테이션에 슬라이드가 없습니다"
         }
       }
     },

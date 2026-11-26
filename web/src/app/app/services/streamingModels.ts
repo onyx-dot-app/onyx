@@ -482,7 +482,7 @@ export interface ApplyPatchEnd extends BaseObj {
   error: string | null;
 }
 
-// A file that a publish_files call asks for, as the model wrote it
+// A file that a publishing call asks for, as the model wrote it
 export interface PublishFileArgument {
   path: string;
   title: string | null;
@@ -495,7 +495,7 @@ export interface PublishFilesStart extends BaseObj {
   description: string | null;
 }
 
-// A file that publish_files copied from the sandbox; it downloads from
+// A file that a publish copied from the sandbox; it downloads from
 // /api/chat/file/{file_id}
 export interface PublishedFile {
   file_id: string;
@@ -514,6 +514,10 @@ export interface PublishedFile {
   artifact_id: string | null;
   // The publish's number in its artifact, from 1. Null with artifact_id.
   version: number | null;
+  // The root chat that owns the artifact, which can be another chat than the
+  // one that published this version. Null or absent in details saved without
+  // it: such a file is the publishing chat's own.
+  chat_id?: string | null;
   // A JPEG of the first page of a PDF, PowerPoint or Word file that rendered
   // when it was published, from /api/chat/file/{thumbnail_file_id}
   thumbnail_file_id: string | null;
@@ -539,9 +543,9 @@ export interface CodeModeStart extends BaseObj {
   type: "code_mode_start";
   // Empty on later observations of a cell
   code: string;
-  // From the call arguments: null for execute_code, whose cell gets its id when it runs
+  // From the call arguments: null for a run call, whose cell gets its id when it runs
   cell_id?: number | null;
-  // 0 starts a cell (execute_code); 1 continues one (wait_code)
+  // 0 starts a cell (a run call); 1 continues one (a wait call)
   observation?: number;
 }
 
@@ -747,12 +751,17 @@ export interface ToolQuestion {
   question: string;
   /** In the model's order; a recommended option comes first. */
   options: ToolQuestionOption[];
+  /** The user can choose several options; otherwise at most one. */
+  multi_select: boolean;
 }
 
-/** The user's answer to one question: a listed option, a note, or both. */
+/**
+ * The user's answer to one question: its chosen options, in the question's
+ * order, a note, or both.
+ */
 export interface ToolQuestionAnswer {
   question_id: string;
-  option_label?: string | null;
+  option_labels: string[];
   user_note?: string | null;
 }
 

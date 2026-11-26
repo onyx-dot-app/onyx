@@ -1,13 +1,16 @@
+from collections import defaultdict
+from collections.abc import Iterable
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Select, and_, delete, or_, select
+from sqlalchemy import Select, and_, delete, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.document_access import apply_document_access_filter
 from onyx.db.models import Document, Document__Tag, Tag
+from onyx.db.tag_models import DocumentTagInput
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -34,132 +37,152 @@ def check_tag_validity(tag_key: str, tag_value: str) -> bool:
     return True
 
 
-def create_or_add_document_tag(
-    tag_key: str,
-    tag_value: str,
-    source: DocumentSource,
-    document_id: str,
-    db_session: Session,
-) -> Tag | None:
-    if not check_tag_validity(tag_key, tag_value):
-        return None
-
-    document = db_session.get(Document, document_id)
-    if not document:
-        raise ValueError("Invalid Document, cannot attach Tags")
-
-    # Use upsert to avoid race condition when multiple workers try to create the same tag
-    insert_stmt = pg_insert(Tag).values(
-        tag_key=tag_key,
-        tag_value=tag_value,
-        source=source,
-        is_list=False,
-    )
-    insert_stmt = insert_stmt.on_conflict_do_nothing(
-        constraint="_tag_key_value_source_list_uc"
-    )
-    db_session.execute(insert_stmt)
-
-    # Now fetch the tag (either just inserted or already existed)
-    tag_stmt = select(Tag).where(
-        Tag.tag_key == tag_key,
-        Tag.tag_value == tag_value,
-        Tag.source == source,
-        Tag.is_list.is_(False),
-    )
-    tag = db_session.execute(tag_stmt).scalar_one()
-
-    if tag not in document.tags:
-        document.tags.append(tag)
-
-    db_session.commit()
-    return tag
+# (tag_key, tag_value, source, is_list): the unique key of a Tag row.
+_TagKey = tuple[str, str, DocumentSource, bool]
 
 
-def create_or_add_document_tag_list(
-    tag_key: str,
-    tag_values: list[str],
-    source: DocumentSource,
-    document_id: str,
-    db_session: Session,
-) -> list[Tag]:
-    valid_tag_values = [
-        tag_value for tag_value in tag_values if check_tag_validity(tag_key, tag_value)
-    ]
-    if not valid_tag_values:
-        return []
-
-    document = db_session.get(Document, document_id)
-    if not document:
-        raise ValueError("Invalid Document, cannot attach Tags")
-
-    # Use upsert to avoid race condition when multiple workers try to create the same tags
-    for tag_value in valid_tag_values:
-        insert_stmt = pg_insert(Tag).values(
-            tag_key=tag_key,
-            tag_value=tag_value,
-            source=source,
-            is_list=True,
-        )
-        insert_stmt = insert_stmt.on_conflict_do_nothing(
-            constraint="_tag_key_value_source_list_uc"
-        )
-        db_session.execute(insert_stmt)
-
-    # Now fetch all tags (either just inserted or already existed)
-    all_tags_stmt = select(Tag).where(
-        Tag.tag_key == tag_key,
-        Tag.tag_value.in_(valid_tag_values),
-        Tag.source == source,
-        Tag.is_list.is_(True),
-    )
-    all_tags = list(db_session.execute(all_tags_stmt).scalars().all())
-
-    for tag in all_tags:
-        if tag not in document.tags:
-            document.tags.append(tag)
-
-    db_session.commit()
-    return all_tags
-
-
-def upsert_document_tags(
-    document_id: str,
-    source: DocumentSource,
-    metadata: dict[str, str | list[str]],
-    db_session: Session,
-) -> list[Tag]:
-    document = db_session.get(Document, document_id)
-    if not document:
-        raise ValueError("Invalid Document, cannot attach Tags")
-
-    old_tag_ids: set[int] = {tag.id for tag in document.tags}
-
-    new_tags: list[Tag] = []
-    new_tag_ids: set[int] = set()
-    for k, v in metadata.items():
-        if isinstance(v, list):
-            new_tags.extend(
-                create_or_add_document_tag_list(k, v, source, document_id, db_session)
+def _tag_keys_for_metadata(
+    source: DocumentSource, metadata: dict[str, str | list[str]]
+) -> set[_TagKey]:
+    tag_keys: set[_TagKey] = set()
+    for key, value in metadata.items():
+        if isinstance(value, list):
+            tag_keys.update(
+                (key, item, source, True)
+                for item in value
+                if check_tag_validity(key, item)
             )
-            new_tag_ids.update({tag.id for tag in new_tags})
-            continue
+        elif check_tag_validity(key, value):
+            tag_keys.add((key, value, source, False))
+    return tag_keys
 
-        new_tag = create_or_add_document_tag(k, v, source, document_id, db_session)
-        if new_tag:
-            new_tag_ids.add(new_tag.id)
-            new_tags.append(new_tag)
 
-    delete_tags = old_tag_ids - new_tag_ids
-    if delete_tags:
-        delete_stmt = delete(Document__Tag).where(
-            Document__Tag.document_id == document_id,
-            Document__Tag.tag_id.in_(delete_tags),
+def _fetch_tag_ids(
+    tag_keys: Iterable[_TagKey], db_session: Session
+) -> dict[_TagKey, int]:
+    keys_by_source: dict[DocumentSource, list[tuple[str, str, bool]]] = defaultdict(
+        list
+    )
+    for tag_key, tag_value, source, is_list in tag_keys:
+        keys_by_source[source].append((tag_key, tag_value, is_list))
+
+    tag_ids: dict[_TagKey, int] = {}
+    for source, keys in keys_by_source.items():
+        stmt = select(Tag.id, Tag.tag_key, Tag.tag_value, Tag.is_list).where(
+            Tag.source == source,
+            tuple_(Tag.tag_key, Tag.tag_value, Tag.is_list).in_(keys),
         )
-        db_session.execute(delete_stmt)
-        db_session.commit()
+        for tag_id, tag_key, tag_value, is_list in db_session.execute(stmt):
+            tag_ids[(tag_key, tag_value, source, is_list)] = tag_id
+    return tag_ids
 
-    return new_tags
+
+def upsert_document_tags_batch(
+    documents: list[DocumentTagInput],
+    db_session: Session,
+) -> None:
+    """Makes the tags of each document equal to its metadata. Commits the new
+    tags and links first, then the removal of stale links.
+
+    Each multi-row write is in key order, so two batches that share tags or
+    documents take their row locks in the same order."""
+    if not documents:
+        return
+
+    all_tag_keys: set[_TagKey] = set()
+    # A later entry for the same document wins.
+    doc_id_to_tag_keys: dict[str, set[_TagKey]] = {}
+    for document in documents:
+        tag_keys = _tag_keys_for_metadata(document.source, document.metadata)
+        all_tag_keys.update(tag_keys)
+        doc_id_to_tag_keys[document.document_id] = tag_keys
+
+    document_ids = sorted(doc_id_to_tag_keys)
+    found_document_ids = set(
+        db_session.scalars(select(Document.id).where(Document.id.in_(document_ids)))
+    )
+    if len(found_document_ids) != len(document_ids):
+        raise ValueError("Invalid Document, cannot attach Tags")
+
+    tag_ids = _fetch_tag_ids(all_tag_keys, db_session)
+    missing_tag_keys = sorted(all_tag_keys - tag_ids.keys())
+    if missing_tag_keys:
+        # ON CONFLICT waits for a concurrent worker that creates the same tag.
+        # No commit here: a tag with no document is open to the orphan cleanup.
+        db_session.execute(
+            pg_insert(Tag)
+            .values(
+                [
+                    {
+                        "tag_key": tag_key,
+                        "tag_value": tag_value,
+                        "source": source,
+                        "is_list": is_list,
+                    }
+                    for tag_key, tag_value, source, is_list in missing_tag_keys
+                ]
+            )
+            .on_conflict_do_nothing(constraint="_tag_key_value_source_list_uc")
+        )
+        tag_ids.update(_fetch_tag_ids(missing_tag_keys, db_session))
+        if len(tag_ids) != len(all_tag_keys):
+            raise RuntimeError("Bug: a tag is missing after its upsert")
+
+    wanted_links: set[tuple[str, int]] = {
+        (document_id, tag_ids[tag_key])
+        for document_id, tag_keys in doc_id_to_tag_keys.items()
+        for tag_key in tag_keys
+    }
+    current_links: set[tuple[str, int]] = {
+        (document_id, tag_id)
+        for document_id, tag_id in db_session.execute(
+            select(Document__Tag.document_id, Document__Tag.tag_id).where(
+                Document__Tag.document_id.in_(document_ids)
+            )
+        )
+    }
+
+    new_links = sorted(wanted_links - current_links)
+    if new_links:
+        db_session.execute(
+            pg_insert(Document__Tag)
+            .values(
+                [
+                    {"document_id": document_id, "tag_id": tag_id}
+                    for document_id, tag_id in new_links
+                ]
+            )
+            .on_conflict_do_nothing()
+        )
+
+    # The link insert holds a lock on each document row, and document deletion
+    # removes the links first, then the document. Release those locks before
+    # the wait for the stale links, or the two can deadlock.
+    db_session.commit()
+
+    stale_links = sorted(current_links - wanted_links)
+    if stale_links:
+        # A DELETE locks rows in scan order. The CTE locks them in key order,
+        # and the DELETE removes only the rows it locked.
+        locked = (
+            select(Document__Tag.document_id, Document__Tag.tag_id)
+            .where(
+                tuple_(Document__Tag.document_id, Document__Tag.tag_id).in_(stale_links)
+            )
+            .order_by(Document__Tag.document_id, Document__Tag.tag_id)
+            .with_for_update()
+            .cte("locked")
+        )
+        db_session.execute(
+            delete(Document__Tag)
+            .where(
+                Document__Tag.document_id == locked.c.document_id,
+                Document__Tag.tag_id == locked.c.tag_id,
+            )
+            .execution_options(synchronize_session=False)
+        )
+
+    db_session.commit()
 
 
 def find_tags(

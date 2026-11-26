@@ -33,7 +33,7 @@ interface FileRow {
   published: PublishedFile | null;
 }
 
-/** One publish_files call: the files it asked for, then what it published. */
+/** One publishing call: the files it asked for, then what it published. */
 export function PublishFilesToolRenderer({
   packets,
   onComplete,

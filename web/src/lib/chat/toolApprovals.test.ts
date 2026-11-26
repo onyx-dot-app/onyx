@@ -63,6 +63,7 @@ function question(questionRequestId: string, turnIndex = 1): Packet {
             { label: "All (Recommended)", description: "Every file." },
             { label: "Docs", description: "Only the docs." },
           ],
+          multi_select: false,
         },
       ],
     },
@@ -78,7 +79,11 @@ function answered(questionRequestId: string): Packet {
       outcome: "answered",
       answered_via: "card",
       answers: [
-        { question_id: "scope", option_label: "Docs", user_note: "and tests" },
+        {
+          question_id: "scope",
+          option_labels: ["Docs"],
+          user_note: "and tests",
+        },
       ],
       message: null,
     },
@@ -164,7 +169,11 @@ describe("toolQuestionStatus", () => {
     expect(toolQuestionStatus(ended!, local)).toEqual({
       kind: "answered",
       answers: [
-        { question_id: "scope", option_label: "Docs", user_note: "and tests" },
+        {
+          question_id: "scope",
+          option_labels: ["Docs"],
+          user_note: "and tests",
+        },
       ],
       message: null,
     });

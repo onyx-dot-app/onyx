@@ -7,6 +7,7 @@ from hypothesis import strategies as st
 from pydantic import JsonValue
 
 from onyx.llm.models import ToolResult
+from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool, FakeTool
 
@@ -98,7 +99,7 @@ def test_stubs_always_parse_and_keep_every_tool(
         FakeTool("plain", _unused),
     ]
 
-    stubs = build_tool_stubs(tools)
+    stubs = build_tool_stubs(OPENAI_CODE_MODE, tools)
 
     ast.parse(stubs.program_text(" ".join(stubs.functions)))
     assert len(stubs.functions) == len(tools)

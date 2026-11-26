@@ -96,7 +96,7 @@ After you decide, the chat shows the outcome and the agent's later requests.
 
 #### Questions from the agent
 
-The agent can ask you 1 to 3 questions when your answer changes its work. The
+The agent can ask you 1 to 4 questions when your answer changes its work. The
 chat shows a card that asks each question in turn, with its choices and an
 **Other** row. The response waits until you answer. It has no time limit.
 

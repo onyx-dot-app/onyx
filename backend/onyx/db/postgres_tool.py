@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from typing import Any
 from uuid import UUID
 
 from psycopg2.errors import QueryCanceled
@@ -45,7 +46,7 @@ from onyx.db.document_access import (
     apply_resolved_document_access_filter,
     resolve_document_access_pairs,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus, HierarchyNodeType
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, HierarchyNodeType
 from onyx.db.hierarchy import escape_like_pattern, hierarchy_node_own_document_id
 from onyx.db.models import (
     ChatMessage,
@@ -266,7 +267,7 @@ def _date_range_filter(
 
 def _document_scope_filter(scope: DocumentScope) -> ColumnElement[bool]:
     """The knowledge clause ANDed with the request filters, except source
-    types: those limit the pairs that grant access (`_document_source_types`)."""
+    types: those limit the pairs that grant access (`document_source_types`)."""
     clauses: list[ColumnElement[bool]] = []
     if scope.restricts_knowledge:
         clauses.append(_document_knowledge_filter(scope, _scope_subtree(scope)))
@@ -339,7 +340,7 @@ def _hierarchy_scope_filter(scope: DocumentScope) -> ColumnElement[bool]:
 # ============================== Document ==============================
 
 
-def _document_source_types(
+def document_source_types(
     source_type: list[DocumentSource] | None, scope: DocumentScope | None
 ) -> list[DocumentSource] | None:
     """The sources the request and the scope both allow; None allows all."""
@@ -367,6 +368,7 @@ def _apply_document_filters(
     parent_hierarchy_node_id: list[int] | None,
     scope: DocumentScope | None,
     ensure_connector_join: bool = False,
+    document_ids: list[str] | None = None,
 ) -> Select:
     """Apply the document ACL plus the allowlisted filters.
 
@@ -387,7 +389,7 @@ def _apply_document_filters(
     """
     with _timeouts_as_tool_errors():
         pairs = resolve_document_access_pairs(
-            db_session, user_id, _document_source_types(source_type, scope)
+            db_session, user_id, document_source_types(source_type, scope)
         )
     stmt = apply_resolved_document_access_filter(
         db_session,
@@ -422,6 +424,8 @@ def _apply_document_filters(
         )
     if scope is not None:
         stmt = stmt.where(_document_scope_filter(scope))
+    if document_ids is not None:
+        stmt = stmt.where(Document.id.in_(document_ids))
     return stmt
 
 
@@ -467,6 +471,15 @@ def _after_document_cursor(
     )
 
 
+def _document_order_by(
+    order: DocumentOrder,
+) -> tuple[ColumnElement[Any], ColumnElement[Any]]:
+    column = _order_column(order)
+    if order.is_descending:
+        return column.desc().nulls_last(), Document.id.desc()
+    return column.asc().nulls_last(), Document.id.asc()
+
+
 def query_documents_for_tool(
     db_session: Session,
     user_email: str | None,
@@ -484,6 +497,7 @@ def query_documents_for_tool(
     order: DocumentOrder = DocumentOrder.UPDATED_DESC,
     after: DocumentCursor | None = None,
     limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
+    document_ids: list[str] | None = None,
 ) -> DocumentPage:
     """One page of accessible documents matching the filters, with their
     connector source, in `order`. `after` continues from the previous page's
@@ -513,16 +527,17 @@ def query_documents_for_tool(
         parent_hierarchy_node_id=parent_hierarchy_node_id,
         scope=scope,
         ensure_connector_join=True,
+        document_ids=document_ids,
     )
     if after is not None:
         stmt = stmt.where(_after_document_cursor(after, order))
     page_size = _clamp_limit(limit)
-    if order.is_descending:
-        order_by = (column.desc().nulls_last(), Document.id.desc())
-    else:
-        order_by = (column.asc().nulls_last(), Document.id.asc())
     # One extra row tells whether another page exists.
-    stmt = stmt.group_by(Document.id).order_by(*order_by).limit(page_size + 1)
+    stmt = (
+        stmt.group_by(Document.id)
+        .order_by(*_document_order_by(order))
+        .limit(page_size + 1)
+    )
     result = list(_execute_with_timeout(db_session, stmt).tuples().all())
     rows = [(doc, source) for doc, source, _ in result[:page_size]]
     if len(result) <= page_size:
@@ -532,6 +547,120 @@ def query_documents_for_tool(
         rows=rows,
         next_cursor=DocumentCursor(sort_value=last_value, document_id=last_doc.id),
     )
+
+
+def query_document_keys_for_tool(
+    db_session: Session,
+    user_email: str | None,
+    external_group_ids: list[str],
+    *,
+    user_id: UUID | None,
+    prior_emails: list[str] | None,
+    source_type: list[DocumentSource] | None,
+    title_contains: list[str] | None,
+    updated_after: datetime | None,
+    updated_before: datetime | None,
+    owned_by: list[str] | None,
+    parent_hierarchy_node_id: list[int] | None,
+    scope: DocumentScope | None,
+    order: DocumentOrder,
+    after: DocumentCursor | None,
+    limit: int,
+) -> list[DocumentCursor]:
+    """The positions of the next `limit` accessible documents after `after`
+    in `order`, without loading the documents. A content filter checks them
+    in batches larger than a listing page."""
+    column = _order_column(order)
+    stmt = select(Document.id, column)
+    stmt = _apply_document_filters(
+        db_session,
+        stmt,
+        user_email,
+        external_group_ids,
+        user_id=user_id,
+        prior_emails=prior_emails,
+        source_type=source_type,
+        title_contains=title_contains,
+        updated_after=updated_after,
+        updated_before=updated_before,
+        owned_by=owned_by,
+        parent_hierarchy_node_id=parent_hierarchy_node_id,
+        scope=scope,
+    )
+    if after is not None:
+        stmt = stmt.where(_after_document_cursor(after, order))
+    stmt = stmt.group_by(Document.id).order_by(*_document_order_by(order)).limit(limit)
+    return [
+        DocumentCursor(sort_value=sort_value, document_id=document_id)
+        for document_id, sort_value in _execute_with_timeout(db_session, stmt).tuples()
+    ]
+
+
+def filter_document_ids_for_tool(
+    db_session: Session,
+    user_email: str | None,
+    external_group_ids: list[str],
+    document_ids: list[str],
+    *,
+    user_id: UUID | None,
+    prior_emails: list[str] | None,
+    source_type: list[DocumentSource] | None,
+    title_contains: list[str] | None,
+    updated_after: datetime | None,
+    updated_before: datetime | None,
+    owned_by: list[str] | None,
+    parent_hierarchy_node_id: list[int] | None,
+    scope: DocumentScope | None,
+) -> set[str]:
+    """The given documents that are accessible and match the filters."""
+    stmt = _apply_document_filters(
+        db_session,
+        select(Document.id).distinct(),
+        user_email,
+        external_group_ids,
+        user_id=user_id,
+        prior_emails=prior_emails,
+        source_type=source_type,
+        title_contains=title_contains,
+        updated_after=updated_after,
+        updated_before=updated_before,
+        owned_by=owned_by,
+        parent_hierarchy_node_id=parent_hierarchy_node_id,
+        scope=scope,
+        document_ids=document_ids,
+    )
+    return set(_execute_with_timeout(db_session, stmt).scalars())
+
+
+def hierarchy_node_own_document_ids(
+    db_session: Session, node_ids: list[int]
+) -> list[str]:
+    """The documents that the nodes themselves are, such as Confluence pages."""
+    own_document_id = hierarchy_node_own_document_id()
+    stmt = select(own_document_id).where(
+        HierarchyNode.id.in_(node_ids), own_document_id.is_not(None)
+    )
+    return [
+        document_id
+        for document_id in _execute_with_timeout(db_session, stmt).scalars()
+        if document_id is not None
+    ]
+
+
+def public_cc_pair_ids_for_sources(
+    db_session: Session, sources: list[DocumentSource]
+) -> list[int]:
+    """The live public cc-pairs of the sources."""
+    stmt = (
+        select(ConnectorCredentialPair.id)
+        .join(Connector, Connector.id == ConnectorCredentialPair.connector_id)
+        .where(
+            Connector.source.in_(sources),
+            ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+    )
+    return list(_execute_with_timeout(db_session, stmt).scalars())
 
 
 def _count_documents_stmt(

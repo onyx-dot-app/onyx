@@ -3,6 +3,7 @@
 import time
 from collections.abc import Generator, Sequence
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from itertools import count
 from typing import Any
 from uuid import uuid4
@@ -21,6 +22,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.chat import (
     create_new_chat_message,
+    delete_chat_artifact_files,
     delete_unpublished_chat_artifacts,
     get_or_create_root_message,
     save_chat_artifact,
@@ -35,6 +37,7 @@ from onyx.db.models import (
     FileRecord,
     User,
 )
+from onyx.file_processing.file_types import PRESENTATION_MIME_TYPE
 from onyx.file_store.file_store import (
     FILE_SIZE_MISSING_SENTINEL,
     FileStore,
@@ -43,7 +46,7 @@ from onyx.file_store.file_store import (
 from onyx.file_store.utils import save_chat_output_file
 from onyx.server.features.build.sandbox.models import session_workspace
 from onyx.server.query_and_chat import chat_backend
-from onyx.tools.tool_implementations.sandbox.models import PublishedFile
+from onyx.tools.tool_implementations.sandbox.models import ArtifactAtPath, PublishedFile
 from onyx.utils.threadpool_concurrency import (
     TimeoutThread,
     run_in_background,
@@ -56,24 +59,27 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 def owner(
     make_test_user: MakeTestUser, db_session: Session
 ) -> Generator[User, None, None]:
-    """A test user. Teardown deletes the files of its chats."""
+    """A test user. Teardown deletes the files of its chats: the published
+    files with their thumbnails and previews while their versions link
+    them, then the files that carry a chat's stamp."""
     user = make_test_user("chat-session-detail")
     yield user
     db_session.rollback()
     chat_ids = select(ChatSession.id).where(ChatSession.user_id == user.id)
+    delete_chat_artifact_files(
+        db_session.scalars(
+            select(ChatArtifactVersion.file_id)
+            .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+            .where(ChatArtifact.chat_session_id.in_(chat_ids))
+        ).all()
+    )
     file_ids = db_session.scalars(
-        select(FileRecord.file_id)
-        .where(
+        select(FileRecord.file_id).where(
             FileRecord.file_metadata[CHAT_SESSION_ID_FILE_METADATA_KEY].astext.in_(
                 select(cast(ChatSession.id, String)).where(
                     ChatSession.user_id == user.id
                 )
             )
-        )
-        .union(
-            select(ChatArtifactVersion.file_id)
-            .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
-            .where(ChatArtifact.chat_session_id.in_(chat_ids))
         )
     ).all()
     for file_id in file_ids:
@@ -185,7 +191,7 @@ def _publish(
     title: str | None = None,
     missing: bool = False,
 ) -> PublishedFile:
-    """A file that `publish_files` saved for the chat, as the next publish.
+    """A file that a publish saved for the chat, as the next publish.
     Subagents share the root chat's sandbox turn, so their files belong to the
     root chat too."""
     name = path.rsplit("/", 1)[-1]
@@ -193,10 +199,10 @@ def _publish(
         name.encode(),
         name=name,
         mime_type="text/markdown",
-        chat_session_id=chat.id,
-        path=path,
+        target=ArtifactAtPath(chat_session_id=chat.id, path=path),
         title=title,
         thumbnail=None,
+        preview_pdf=None,
     )
     published_at = _PUBLISHED_AT + timedelta(seconds=next(_PUBLISH_ORDER))
     if file.version == 1:
@@ -306,10 +312,10 @@ def test_concurrent_publishes_of_one_path_number_their_versions_without_gaps(
                     b"a",
                     name="a.md",
                     mime_type="text/markdown",
-                    chat_session_id=chat.id,
-                    path="/w/a.md",
+                    target=ArtifactAtPath(chat_session_id=chat.id, path="/w/a.md"),
                     title=None,
                     thumbnail=None,
+                    preview_pdf=None,
                 )
                 for _ in range(publish_count)
             )
@@ -417,10 +423,10 @@ def test_a_thumbnail_goes_when_its_file_fails_to_save(
             b"%PDF",
             name=name,
             mime_type="application/pdf",
-            chat_session_id=chat.id,
-            path=f"/w/{name}",
+            target=ArtifactAtPath(chat_session_id=chat.id, path=f"/w/{name}"),
             title=None,
             thumbnail=b"jpeg",
+            preview_pdf=None,
         )
 
     assert _thumbnail_ids(db_session, name) == []
@@ -433,26 +439,51 @@ def test_a_thumbnail_goes_when_its_file_fails_to_save(
 
 
 @pytest.mark.usefixtures("initialize_file_store")
-def test_a_file_publishes_without_a_thumbnail_that_fails_to_save(
-    monkeypatch: pytest.MonkeyPatch, db_session: Session, owner: User
+@pytest.mark.parametrize(
+    "failing", [FileOrigin.CHAT_ARTIFACT_THUMBNAIL, FileOrigin.CHAT_FILE_PREVIEW]
+)
+def test_a_file_publishes_without_a_thumbnail_or_preview_that_fails_to_save(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    owner: User,
+    failing: FileOrigin,
 ) -> None:
+    """The one that fails is left out; the other one is kept."""
     chat = _new_chat(db_session, owner)
-    name = f"{uuid4().hex}.pdf"
-    _failing_save(monkeypatch, FileOrigin.CHAT_ARTIFACT_THUMBNAIL)
+    name = f"{uuid4().hex}.pptx"
+    _failing_save(monkeypatch, failing)
 
     file = save_chat_artifact(
-        b"%PDF",
+        b"deck",
         name=name,
-        mime_type="application/pdf",
-        chat_session_id=chat.id,
-        path=f"/w/{name}",
+        mime_type=PRESENTATION_MIME_TYPE,
+        target=ArtifactAtPath(chat_session_id=chat.id, path=f"/w/{name}"),
         title=None,
         thumbnail=b"jpeg",
+        preview_pdf=BytesIO(b"%PDF-deck"),
     )
 
-    assert (file.version, file.thumbnail_file_id) == (1, None)
-    assert get_default_file_store().read_file(file.file_id).read() == b"%PDF"
-    assert _thumbnail_ids(db_session, name) == []
+    preview_file_id = db_session.scalar(
+        select(ChatArtifactVersion.preview_file_id).where(
+            ChatArtifactVersion.file_id == file.file_id
+        )
+    )
+    assert file.version == 1
+    assert (file.thumbnail_file_id is None, preview_file_id is None) == (
+        failing is FileOrigin.CHAT_ARTIFACT_THUMBNAIL,
+        failing is FileOrigin.CHAT_FILE_PREVIEW,
+    )
+    assert get_default_file_store().read_file(file.file_id).read() == b"deck"
+    db_session.expire_all()
+    assert (
+        db_session.scalars(
+            select(FileRecord.file_id).where(
+                FileRecord.file_origin == failing,
+                FileRecord.display_name.startswith(name),
+            )
+        ).all()
+        == []
+    )
 
 
 @pytest.mark.usefixtures("initialize_file_store")

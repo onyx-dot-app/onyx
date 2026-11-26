@@ -155,6 +155,7 @@ def test_later_prompts_replay_program_observations_with_their_images() -> None:
         heading=observation_heading(details),
         status=details.status,
         cell_id=details.cell_id,
+        wait_name="wait",
         cell_calls=details.calls,
         max_chars=4_000,
         end=None,

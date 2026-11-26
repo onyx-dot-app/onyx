@@ -207,7 +207,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
             {
               id: `spawn-${nonce}`,
               name: "spawn_agent",
-              arguments: { name: "mailer", instruction: task },
+              arguments: { task_name: "mailer", message: task },
             },
           ],
           conditions: { offers: ["spawn_agent"] },

@@ -90,8 +90,10 @@ from onyx.llm.models import (
 from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
-from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolCallInfo
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AGENT_START_TOOL_NAMES,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
@@ -1394,7 +1396,7 @@ def read_response_replay_data(
             call.id
             for step in response.steps
             for call in step.message.tool_calls
-            if call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+            if call.name in AGENT_START_TOOL_NAMES
         }
         if shown:
             run_ids.append(response.run_id)
@@ -1409,7 +1411,7 @@ def read_response_replay_data(
         )
     # Only agent tools start background agents.
     starts_agents = any(
-        call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+        call.name in AGENT_START_TOOL_NAMES
         for step in execution.response.steps
         for call in step.message.tool_calls
     )

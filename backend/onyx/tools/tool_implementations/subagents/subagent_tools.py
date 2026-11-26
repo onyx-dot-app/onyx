@@ -1,7 +1,6 @@
 """Direct controls for independent agents on the selected chat branch."""
 
 from collections.abc import Callable
-from typing import ClassVar
 
 from pydantic import BaseModel
 
@@ -11,11 +10,7 @@ from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.db.chat_inputs import MAX_PENDING_MESSAGE_BYTES
 from onyx.llm.models import ToolDefinition, ToolResult, UserMessage
-from onyx.tools.constants import (
-    SEND_MESSAGE_TOOL_NAME,
-    SPAWN_AGENT_TOOL_NAME,
-    WAIT_AGENTS_TOOL_NAME,
-)
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -26,14 +21,16 @@ from onyx.tools.models import (
     ToolCallException,
     ToolContext,
 )
+from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.subagents.models import (
     AgentSelectionArguments,
     AgentWaitDetails,
     ChatConfiguration,
     ListAgentsArguments,
-    SendMessageArguments,
-    SpawnAgentArguments,
-    WaitAgentsArguments,
+    WaitAgentArguments,
+)
+from onyx.tools.tool_implementations.subagents.shapes import (
+    AgentShape,
 )
 
 # An agent name is a path segment shown in agent lists and the UI.
@@ -71,7 +68,7 @@ def _find_agent(agents: list[AgentInfo], caller_id: str, target: str) -> AgentIn
 class _SubagentTool(Tool):
     id = None
     code_mode_exposure = CodeModeExposure.DIRECT
-    arguments: ClassVar[type[BaseModel]]
+    arguments: type[BaseModel]
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
@@ -80,31 +77,47 @@ class _SubagentTool(Tool):
 
 
 class SpawnAgentTool(_SubagentTool):
-    name = SPAWN_AGENT_TOOL_NAME
+    """Starts an agent; the tool family's agent shape (AGENT_SHAPES) names
+    it and takes its arguments."""
+
+    rank = ToolRank.SPAWN_AGENT
     display_name = "Start agent"
     description = (
         "Start an agent on a task in the background. It does not see this "
         "conversation, so give complete instructions. Its result arrives as a message."
     )
-    arguments = SpawnAgentArguments
 
-    def __init__(self, create_agent: Callable[[], Agent], *, max_steps: int) -> None:
+    def __init__(
+        self, create_agent: Callable[[], Agent], shape: AgentShape, *, max_steps: int
+    ) -> None:
         self.create_agent = create_agent
+        self.shape = shape
+        self.arguments = shape.spawn_arguments
         self.max_steps = max_steps
 
+    @property
+    def name(self) -> str:
+        return self.shape.spawn_name
+
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(SpawnAgentArguments, invocation.arguments)
+        request = parse_tool_arguments(
+            self.shape.spawn_arguments, invocation.arguments
+        ).request()
         # The instruction becomes the child's first message, so it has the
         # limit of a message sent to an agent.
         for field, value, limit in (
-            ("name", request.name, MAX_AGENT_NAME_BYTES),
-            ("instruction", request.instruction, MAX_PENDING_MESSAGE_BYTES),
+            (self.shape.spawn_name_argument, request.name, MAX_AGENT_NAME_BYTES),
+            (
+                self.shape.spawn_task_argument,
+                request.instruction,
+                MAX_PENDING_MESSAGE_BYTES,
+            ),
         ):
             if len(value.encode()) > limit:
                 raise ToolCallException(
                     f"Agent {field} exceeds {limit} bytes.",
                     f"The {field} can have at most {limit} bytes. Shorten it and "
-                    "call spawn_agent again.",
+                    f"call {self.name} again.",
                 )
         started = invocation.agents.spawn_agent(
             self.create_agent(),
@@ -120,6 +133,7 @@ class SpawnAgentTool(_SubagentTool):
 
 
 class ListAgentsTool(_SubagentTool):
+    rank = ToolRank.LIST_AGENTS
     name = "list_agents"
     display_name = "List agents"
     description = "List agents with their path and status."
@@ -169,19 +183,26 @@ class ListAgentsTool(_SubagentTool):
 
 
 class SendMessageTool(_SubagentTool):
+    """Sends a message to an agent; the tool family's agent shape
+    (AGENT_SHAPES) takes its arguments."""
+
+    rank = ToolRank.SEND_MESSAGE
     name = SEND_MESSAGE_TOOL_NAME
     display_name = "Send agent message"
     description = (
         "Send a message to an agent. A running agent reads it at its next step; an "
         "idle agent starts a new run with it."
     )
-    arguments = SendMessageArguments
 
-    def __init__(self, *, max_steps: int) -> None:
+    def __init__(self, shape: AgentShape, *, max_steps: int) -> None:
+        self.shape = shape
+        self.arguments = shape.send_arguments
         self.max_steps = max_steps
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(SendMessageArguments, invocation.arguments)
+        request = parse_tool_arguments(
+            self.shape.send_arguments, invocation.arguments
+        ).request()
         control = invocation.agents
         receipt = control.send_message(
             _find_agent(control.discover_agents(), control.agent_id, request.target).id,
@@ -198,6 +219,7 @@ class SendMessageTool(_SubagentTool):
 
 
 class InterruptAgentTool(_SubagentTool):
+    rank = ToolRank.INTERRUPT_AGENT
     name = "interrupt_agent"
     display_name = "Interrupt agent"
     description = "Stop an agent's current run. No result is reported."
@@ -220,25 +242,38 @@ class InterruptAgentTool(_SubagentTool):
         return ToolResult(content=f"Interruption requested for {agent.path}.")
 
 
-class WaitAgentsTool(_SubagentTool):
-    name = WAIT_AGENTS_TOOL_NAME
+class WaitAgentTool(_SubagentTool):
+    """Ends the root's response until its agents finish, in the shapes that
+    have it (AgentShape.wait_name)."""
+
+    rank = ToolRank.WAIT_AGENT
     display_name = "Wait for agents"
     description = (
         "Wait for agents that you started and end your response. When they finish, a "
         "new response starts with all of their results."
     )
-    arguments = WaitAgentsArguments
+    arguments = WaitAgentArguments
 
-    def __init__(self, *, has_open_cells: Callable[[], bool]) -> None:
-        self.has_open_cells = has_open_cells
+    def __init__(
+        self, shape: AgentShape, *, open_cell_wait_name: Callable[[], str | None]
+    ) -> None:
+        if shape.wait_name is None:
+            raise ValueError("The agent shape has no wait tool.")
+        self._name = shape.wait_name
+        # The code mode wait tool's name while a code cell is open, else None.
+        self.open_cell_wait_name = open_cell_wait_name
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(WaitAgentsArguments, invocation.arguments)
-        if self.has_open_cells():
+        request = parse_tool_arguments(WaitAgentArguments, invocation.arguments)
+        if (wait := self.open_cell_wait_name()) is not None:
             raise ToolCallException(
                 "A code cell is open.",
                 "A code cell is still open, and ending your response would stop "
-                "it. Wait for it with wait_code first.",
+                f"it. Wait for it with {wait} first.",
             )
         control = invocation.agents
         agents = control.discover_agents()

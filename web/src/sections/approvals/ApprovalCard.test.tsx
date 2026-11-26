@@ -143,6 +143,24 @@ describe("pending", () => {
     );
   });
 
+  it("shows the headline and payload without bidi controls", () => {
+    // U+202E reverses the text after it, so "fdp.sbeR" would read "Rebs.pdf"
+    const { container } = renderCard({
+      actions: [{ id: "delete", name: "Delete \u202Efdp.sbeR" }],
+      appName: undefined,
+      payload: {
+        "Delete\u202E": ["\u202Efdp.sbeR (1 version)"],
+        nested: { name: "\u202Ex" },
+      },
+    });
+
+    expect(
+      screen.getByRole("button", { name: /Delete fdp\.sbeR/ })
+    ).toBeVisible();
+    expect(screen.getByText("fdp.sbeR (1 version)")).toBeVisible();
+    expect(container.textContent).not.toContain("\u202E");
+  });
+
   it("disables the decisions while one is submitted", async () => {
     const user = setupUser();
     renderCard({ onDecide: () => new Promise<void>(() => {}) });

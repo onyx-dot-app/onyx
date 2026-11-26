@@ -13,6 +13,7 @@ from onyx.db.models import (
     ChatSession,
     QuestionRequest,
 )
+from onyx.tools.models import is_builtin_action
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 
@@ -32,7 +33,7 @@ def create_approval_request__no_commit(
     *,
     chat_session_id: UUID,
     chat_message_id: int,
-    integration_id: int,
+    integration_id: int | None,
     action_id: str,
     tool_call_id: str,
     tool_name: str,
@@ -80,7 +81,8 @@ def record_approval_decision__no_commit(
     """Decide a pending request. A session grant also approves the action's
     other pending requests in the chat, and turns the user's earlier approval
     of this request into a grant. A request that is no longer pending stays
-    as it is."""
+    as it is. A grant of a deleted integration's request approves no other
+    request."""
     decidable = ApprovalRequest.decision.is_(None)
     if decided_via == ApprovalDecidedVia.SESSION_GRANT:
         lock_session_grants__no_commit(db_session, approval.chat_session_id)
@@ -97,17 +99,20 @@ def record_approval_decision__no_commit(
         .values(decision=decision, decided_via=decided_via, decided_at=func.now())
         .returning(ApprovalRequest.id)
     )
+    builtin = is_builtin_action(approval.integration_id, approval.action_id)
     if (
         decided is None
         or decided_via != ApprovalDecidedVia.SESSION_GRANT
-        or approval.integration_id is None
+        or (approval.integration_id is None and not builtin)
     ):
         return
     db_session.execute(
         update(ApprovalRequest)
         .where(
             ApprovalRequest.chat_session_id == approval.chat_session_id,
-            ApprovalRequest.integration_id == approval.integration_id,
+            ApprovalRequest.integration_id.is_(None)
+            if builtin
+            else ApprovalRequest.integration_id == approval.integration_id,
             ApprovalRequest.action_id == approval.action_id,
             ApprovalRequest.decision.is_(None),
         )

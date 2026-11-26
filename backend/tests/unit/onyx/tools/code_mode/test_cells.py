@@ -27,7 +27,6 @@ from onyx.tools.tool_implementations.code_mode.cells import (
     CodeCells,
 )
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
-    DEFAULT_EXECUTE_YIELD_MS,
     CodeModeTool,
     WaitCodeTool,
 )
@@ -42,6 +41,10 @@ from onyx.tools.tool_implementations.code_mode.models import (
     SandboxResult,
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import BUSY_MESSAGE
+from onyx.tools.tool_implementations.code_mode.shapes import (
+    DEFAULT_EXECUTE_YIELD_MS,
+    OPENAI_CODE_MODE,
+)
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.unit.onyx.tools.code_mode.fakes import (
@@ -60,7 +63,7 @@ class Response:
     def __init__(
         self, history: Sequence[Message] = (), limits: SandboxLimits = LIMITS
     ) -> None:
-        self.cells = CodeCells()
+        self.cells = CodeCells(OPENAI_CODE_MODE)
         # `gate(value=...)` returns once the test opens the gate.
         self.gate = threading.Event()
 
@@ -193,8 +196,8 @@ def test_yield_returns_output_so_far_and_wait_returns_only_new_output() -> None:
     assert not first.is_error
     assert first.content.startswith("Execution running in cell 1 after 1.")
     assert first.content.endswith(
-        "Cell 1 continues. Call wait_code(cell_id=1) for more output, or "
-        "wait_code(cell_id=1, terminate=true) to stop it."
+        "Cell 1 continues. Call wait(cell_id=1) for more output, or "
+        "wait(cell_id=1, terminate=true) to stop it."
     )
 
     response.gate.set()
@@ -309,7 +312,7 @@ def test_one_active_wait_per_cell() -> None:
     until(lambda: response.cell(1)._observer is not None)
     busy = response.wait(1)
     assert busy.is_error
-    assert busy.content == "Cell 1 already has an active wait_code call."
+    assert busy.content == "Cell 1 already has an active wait call."
     assert _details(waiting.result(10)).status == "running"
     assert _details(response.wait(1, terminate=True)).status == "terminated"
 
@@ -464,7 +467,7 @@ def test_commits_follow_completion_order_and_saved_records_fold_to_the_same_stor
 def test_same_step_execute_and_wait_fold_to_the_live_store() -> None:
     response = Response()
     response.run("yield_control()\nawait tools.gate(value='x')\nstore('k', 'a')\n")
-    # One step calls execute_code and wait_code; both see the same history. The
+    # One step calls exec and wait; both see the same history. The
     # calls run one after the other so that A's commit lands before B's, but the
     # model's order saves B's result first.
     wait_invocation = response.invocation({"cell_id": 1, "yield_time_ms": 30_000})
@@ -590,7 +593,7 @@ def test_closing_record_lists_what_ran_after_the_last_observation() -> None:
 def test_a_closing_record_keeps_the_observation_budget_and_its_full_output() -> None:
     response = Response()
     invocation = response.invocation(
-        {"code": "yield_control()\nprint('z' * 1_500)\n", "max_output_chars": 300}
+        {"code": "yield_control()\nprint('z' * 1_500)\n", "max_output_tokens": 75}
     )
     outcome = response.execute.run(invocation, ToolContext())
     assert isinstance(outcome, ToolResult)

@@ -16,7 +16,7 @@ import re
 import threading
 import time
 from collections.abc import Sequence
-from enum import Enum
+from enum import Enum, StrEnum
 from functools import lru_cache
 from typing import Any
 
@@ -98,6 +98,15 @@ def model_supports_none_tool_choice(provider: str, model_names: Sequence[str]) -
     return provider not in PROVIDERS_WITHOUT_NONE_TOOL_CHOICE and not (
         model_requires_auto_tool_choice(model_names)
     )
+
+
+class ToolFamily(StrEnum):
+    """The tool shapes that a model gets: Claude models get the names and
+    arguments they are trained on, all other models the OpenAI ones. Each
+    shape names the same operations (LLMConfig.tool_family)."""
+
+    CLAUDE = "claude"
+    OPENAI = "openai"
 
 
 def is_claude_model(model_names: Sequence[str]) -> bool:

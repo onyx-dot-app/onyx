@@ -268,6 +268,7 @@ class Agent:
         after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult]
         | None = None,
         prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = None,
+        unknown_tool_hint: Callable[[str], str | None] | None = None,
         on_finish: ReleaseHook | None = None,
         on_suspend: ReleaseHook | None = None,
         on_drained: Callable[[], None] | None = None,
@@ -305,6 +306,9 @@ class Agent:
         # so the live events, the saved history and the model see the same
         # result. Results arrive one at a time, in the order calls complete.
         self.prepare_tool_result = prepare_tool_result
+        # The result of a call of a tool that the agent does not have, when
+        # it says what to call instead; None: the default result.
+        self.unknown_tool_hint = unknown_tool_hint
         self.on_finish = on_finish
         # Called when the run suspends, before its state is captured.
         self.on_suspend = on_suspend
@@ -592,6 +596,7 @@ class Run:
         self._prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = (
             None
         )
+        self.unknown_tool_hint: Callable[[str], str | None] | None = None
         # Serializes prepare_tool_result and recording, so each call of the
         # hook sees every result recorded before it.
         self._result_lock = threading.Lock()
@@ -1205,6 +1210,7 @@ class Run:
             )
             self.after_tool_call = agent.after_tool_call
             self._prepare_tool_result = agent.prepare_tool_result
+            self.unknown_tool_hint = agent.unknown_tool_hint
             self._on_finish = agent.on_finish
             self._on_suspend = agent.on_suspend
             self._on_drained = agent.on_drained
@@ -1706,6 +1712,7 @@ class Run:
         self.approval_required = frozenset()
         self.after_tool_call = None
         self._prepare_tool_result = None
+        self.unknown_tool_hint = None
         self._on_finish = None
         self._on_suspend = None
         self._on_drained = None

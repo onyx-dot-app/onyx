@@ -54,7 +54,11 @@ from onyx.tools.models import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import PublishFilesTool
+from onyx.tools.tool_implementations.sandbox.models import PublishFileArgument
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ArtifactTool,
+    LibraryCreateLibraryFileTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
@@ -316,7 +320,9 @@ def test_image_failure_renders_error_at_tool_placement(display_error: bool) -> N
 def test_a_publish_with_invalid_arguments_renders_an_empty_publish_card(
     arguments: dict[str, JsonValue],
 ) -> None:
-    call = ModelToolCall(id="publish", name=PublishFilesTool.NAME, arguments=arguments)
+    call = ModelToolCall(
+        id="publish", name=LibraryCreateLibraryFileTool.NAME, arguments=arguments
+    )
     result = ToolResultMessage(
         tool_call_id=call.id,
         tool_name=call.name,
@@ -331,6 +337,50 @@ def test_a_publish_with_invalid_arguments_renders_an_empty_publish_card(
         PublishFilesEnd(error="Invalid tool arguments: files: Field required"),
         SectionEnd(),
     ]
+
+
+@pytest.mark.parametrize("action", [{}, {"action": None}, {"action": "publish"}])
+def test_an_artifact_publish_shows_the_publish_card_live_and_replayed(
+    action: dict[str, JsonValue],
+) -> None:
+    """A missing or null action is a publish, as the tool reads it."""
+    call = ModelToolCall(
+        id="publish",
+        name=ArtifactTool.NAME,
+        arguments={**action, "file_path": "report.csv"},
+    )
+    result = ToolResultMessage(
+        tool_call_id=call.id, tool_name=call.name, content="published"
+    )
+    renderer = ToolRenderer(call, Placement(turn_index=0), tool_id=1)
+    live = renderer.start() + renderer.complete(result)
+    response = response_record(
+        RunState(
+            run_id="run",
+            status=RunStatus.COMPLETE,
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(id="run:0", content=[call]),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={
+                        call.id: ToolExecutionRecord(
+                            status=ExecutionStatus.COMPLETE, result=result
+                        )
+                    },
+                )
+            ],
+        )
+    )
+    replayed = replay_response(
+        response, {("run:0", call.id): ToolReplayData(tool_id=1)}, {}, {}
+    )
+
+    for packets in (live, replayed):
+        assert [
+            packet.obj
+            for packet in packets
+            if isinstance(packet.obj, PublishFilesStart)
+        ] == [PublishFilesStart(files=[PublishFileArgument(path="report.csv")])]
 
 
 def test_memory_failure_does_not_claim_access_was_denied() -> None:

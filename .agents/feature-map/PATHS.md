@@ -31,6 +31,7 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/subagents/` | core-chat-loop, tools-framework |
 | `backend/onyx/tools/tool_implementations/skills/` | skills, tools-framework |
 | `backend/onyx/chat/files.py` | context-assembly, projects |
+| `backend/onyx/chat/file_preview.py` | file-store-and-user-files, code-execution |
 | `backend/onyx/chat/README.md` | core-chat-loop, context-assembly |
 | `backend/onyx/chat/models.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/mention_models.py` | skills, streaming-protocol, chat-persistence |
@@ -118,6 +119,7 @@ covers new files that match it.
 | `backend/onyx/connectors/teams/` | teams |
 | `backend/onyx/indexing/` | indexing-pipeline |
 | `backend/onyx/indexing/adapters/user_file_indexing_adapter.py` | file-store-and-user-files, indexing-pipeline |
+| `backend/onyx/indexing/adapters/chat_artifact_indexing_adapter.py`, `backend/onyx/indexing/chat_artifact_index.py` | file-store-and-user-files, indexing-pipeline |
 | `backend/onyx/background/indexing/`, `backend/onyx/db/index_attempt*.py`, `backend/onyx/db/indexing_coordination.py` | indexing-pipeline |
 | `backend/onyx/background/celery/tasks/docfetching/`, `backend/onyx/background/celery/tasks/docprocessing/`, `backend/onyx/background/celery/tasks/docconversion/`, `backend/onyx/background/celery/tasks/tabular_rechunk/` | indexing-pipeline |
 | `backend/onyx/file_store/document_batch_storage.py`, `backend/onyx/db/targeted_reindex.py`, `backend/onyx/redis/redis_docprocessing.py` | indexing-pipeline |
@@ -130,7 +132,7 @@ covers new files that match it.
 | `backend/ee/onyx/db/cc_pair_data_access.py`, `backend/ee/onyx/db/connector_manage_access.py` | cc-pairs-and-creds, access-control |
 | `backend/onyx/db/document.py`, `backend/onyx/db/chunk.py`, `backend/onyx/db/tag.py` | indexing-pipeline, document-index |
 | `backend/onyx/file_processing/`, `backend/onyx/file_store/`, `backend/onyx/db/file_record.py`, `backend/onyx/db/file_content.py`, `backend/onyx/db/user_file.py` | file-store-and-user-files |
-| `backend/onyx/background/celery/tasks/user_file_processing/` | file-store-and-user-files |
+| `backend/onyx/background/celery/tasks/user_file_processing/`, `backend/onyx/background/celery/tasks/chat_artifact_indexing/` | file-store-and-user-files |
 | `backend/onyx/server/documents/` | cc-pairs-and-creds, indexing-pipeline |
 
 ## Backend: configuration surfaces
@@ -313,8 +315,8 @@ covers new files that match it.
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx`, `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-frontend |
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts`, `web/src/app/craft/services/outputInventorySnapshots.ts`, `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts`, `web/src/app/craft/services/filePreview.ts` | craft-frontend |
 | `web/tools/prepare-pdf-assets.cjs`, `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts`, `web/src/lib/spreadsheetPreview.ts` | craft-frontend |
-| `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
-| `web/src/lib/pptx/` | chat-frontend |
+| `web/src/lib/docx/` | craft-frontend |
+| `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
 | `web/src/app/app/scheduled-tasks/`, `web/src/sections/scheduledTasks/`, `web/src/lib/scheduledTasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |

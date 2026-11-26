@@ -79,13 +79,14 @@ process_user_file_impl                      user_file_processing/tasks.py
 link, unlink, share change -> needs_project_sync / needs_persona_sync
   project_sync_user_file_impl               rewrites project_ids, persona_ids and ACL on chunks
 DELETE /user/projects/file/{id} -> DELETING -> delete_user_file_impl
-  index delete -> blob + plaintext delete -> row delete
+  index delete -> preview + blob + plaintext delete -> row delete
 ```
 
 **Two ids.** `FileRecord.file_id` names a blob. `UserFile.id` is a UUID that
 the frontend, the model and the index use. `UserFile.file_id` holds the blob id
-by value, with no foreign key. `db/user_file.py:get_file_id_by_user_file_id`
-translates. `fetch_chat_file` accepts either id.
+by value, with no foreign key, and several user files can hold one blob id.
+`fetch_chat_file` accepts either id: it loads a user file by its id
+(`db/user_file.py:get_user_file_by_id`) and serves its blob.
 
 **One record for every backend.** `db/file_record.py:upsert_filerecord` writes
 the `FileRecord` row for every backend. The Postgres backend adds a
@@ -124,29 +125,119 @@ does them ([[indexing-pipeline]]).
 `file_store/utils.py:save_files`) and the Python tool save blobs with
 `FileOrigin.CHAT_IMAGE_GEN` and the session stamp, through
 `file_store/utils.py:save_chat_output_file`. The sandbox tool
-`publish_files` saves files from the user's VM with `FileOrigin.CHAT_ARTIFACT`
-(`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`)
+`library_create_library_file` saves files from the user's VM with `FileOrigin.CHAT_ARTIFACT`
+(`tools/tool_implementations/sandbox/sandbox_tools.py:LibraryCreateLibraryFileTool`)
 through `db/chat.py:save_chat_artifact`. Each file is a version of an
 artifact: `db/models.py:ChatArtifact` is one VM path in one root chat
 session, with the chat's owner (`user_id`, set from the chat when the
 artifact is created),
 and `ChatArtifactVersion` numbers its files from 1 and holds each
-file's title. The sandbox tools `artifacts_list` and `artifacts_download`
+file's title and `version_reason` (a replace's, update's or restore's note).
+A delete (`library_manage_library`, after the user approves) removes
+an artifact (`db/chat.py:delete_chat_artifact`). Cleanup has one owner per
+level: `delete_chat_artifact_files` cleans up one version by its file id (its
+thumbnail and preview PDF, then its file, whose delete removes the version
+row, in the transaction that holds the version's row lock and finds no link
+left, so a preview that a conversion links meanwhile goes too or never
+links), and whatever belongs
+to the whole artifact runs after the commit that removes the artifact row,
+in every path that removes one. Other chats' cards of a deleted artifact
+keep their saved name, and their download is not found. A restore or update
+(`library_manage_library`) copies a version's file, thumbnail and preview PDF into new records
+(`db/chat.py:append_copied_artifact_version`), since the file store has no
+copy. An artifact's name
+is `ChatArtifact.name` once a rename (`library_manage_library`) sets it, else the
+`FileRecord.display_name` of the version that the read selects, by default the
+newest available one; every read of the name
+uses that one expression (`db/chat.py:_newest_available_version`), and a
+later publish of the path keeps it. The download's Content-Disposition keeps
+the record's name. The sandbox tools `library_list` and `library_prepare_materialize`
 ([[code-execution]]) read these rows for the owner's chats that are not
-deleted, by the index on `(user_id, updated_at DESC)`. The save writes the file record, upserts the artifact (its row
+deleted; the default list order reads the index on `(user_id, updated_at
+DESC)`, and the other sorts read all of the owner's artifacts. The save writes the file record, upserts the artifact (its row
 lock serializes concurrent publishes of one path) and adds the next version in
-one commit. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
-thumbnail: `HarnessSandbox.render_first_page` draws a JPEG of its first page in
+one commit. A replace (`library_replace_library_file`, or the artifact
+tool's publish with a url and file_path) adds the version to an existing
+artifact by ID instead (`ArtifactById`), also from another chat of the owner:
+the artifact keeps its chat, path, name and type (the file's extension must
+match), and the version's file joins the replacing chat's message files. The
+artifact tool's publish with a url and path is an update instead: it shows
+the generic tool card and attaches no file to the message. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
+thumbnail: `HarnessSandbox.render_preview` draws a JPEG of its first page in
 the VM, and the save writes it first as a `FileOrigin.CHAT_ARTIFACT_THUMBNAIL`
 record that `ChatArtifactVersion.thumbnail_file_id` links (`ON DELETE SET
-NULL`: a version stays valid without it). A render or thumbnail save that
-fails leaves the link null; it never fails the publish. They get a
+NULL`: a version stays valid without it). A PowerPoint or Word file also gets
+the PDF of the same render, a `FileOrigin.CHAT_FILE_PREVIEW` record that
+`ChatArtifactVersion.preview_file_id` links the same way
+(`db/chat.py:save_chat_file_preview` owns its origin, type and name). A
+render that fails, raises or runs out of the publish budget, and a
+thumbnail or preview save that fails, leave the link null; they never fail
+the publish. A PDF over `RENDER_PREVIEW_MAX_PDF_BYTES` leaves only the
+preview out. They get a
 `FileRecord` but no `UserFile`. The chat shows them
-through `/chat/file/{file_id}`. A chat delete deletes a published file and its
+through `/chat/file/{file_id}`. `GET /chat/artifacts/{artifact_id}?version=N`
+(`server/query_and_chat/chat_backend.py:get_chat_artifact`) gives a version,
+by default the newest available, with its chat and how the user may open
+it (`access`): `owner` of the chat, `chat_reader` of it
+(`db/access.py:user_can_read_chat_session`, a public share), or, only for an
+explicit version, `file_only` for anyone who can download that version
+(`backend/onyx/access/access.py:user_can_access_chat_file`, such as a reader of another
+chat whose replace added it). Otherwise, and for a deleted chat, 404; the
+web opens an artifact link (`{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`)
+with it. A chat delete deletes a published file and its
 thumbnail through its artifact's versions, also when its response never saved; a saved response
 also lists it in `ChatMessage.files` ([[chat-persistence]]). The version rows
 cascade from the file record and the artifact, and the artifact from the chat
 session, so a chat delete must delete the files before the session.
+
+**Published file text and search.** Each artifact is one search document,
+`str(chat_artifact.id)`, with source `DocumentSource.CHAT_ARTIFACT`, the
+owner's current email as its only ACL entry, no projects, personas or document
+sets, and the link `tools/tool_implementations/sandbox/models.py:artifact_url` of its newest available
+version ([[internal-search]]). `ChatArtifact.index_status` (`PENDING`,
+`INDEXED`, `FAILED`, `REMOVED`) and `index_attempts` hold its state; a partial index on
+`PENDING` serves the beat. `save_chat_artifact` sets `PENDING` with no
+attempts, and the publish operation
+(`tools/tool_implementations/sandbox/artifact_operations.py:publish`)
+sends the indexing task after its commit
+(`indexing/chat_artifact_index.py:send_chat_artifact_index_tasks`). A failed
+publish makes the artifacts it keeps `PENDING` again, since the beat may have
+indexed the version it deleted. The task
+`background/celery/tasks/chat_artifact_indexing/tasks.py:process_single_chat_artifact`
+runs on the user file processing queue: it counts a pickup before the slow
+work (`db/chat.py:start_chat_artifact_indexing`; past
+`CHAT_ARTIFACT_INDEX_MAX_ATTEMPTS` the artifact is `FAILED`), builds one
+`TextSection` per page from the text cache, and writes through
+`run_indexing_pipeline` with
+`indexing/adapters/chat_artifact_indexing_adapter.py`. The adapter holds the
+artifact's row while it writes. It writes and marks the row `INDEXED` only if
+no publish (`updated_at`), newer pickup or model swap (`index_attempts`)
+changed it since the pickup. The beat `check-for-chat-artifact-indexing` sends the `PENDING`
+rest at low priority, at most the shared queue's room below
+`USER_FILE_PROCESSING_MAX_QUEUE_DEPTH` each tick, and
+`db/swap_index.py:_perform_index_swap` makes every artifact that is not
+`REMOVED` `PENDING` again. A row is `INDEXED` only while its document holds
+the newest available version. Rows that existed before the column started
+`PENDING`, so the beat indexes them too; the rows of deleted chats started
+`REMOVED`. An email change makes the owner's artifacts that are not `REMOVED`
+`PENDING` (`db/users.py:reconcile_user_email__no_commit`), so their
+ACL gets the new email. An artifact with nothing to index has no document
+and is never `INDEXED`: a chat delete makes the chat's artifacts `REMOVED`,
+outside the beat's partial index, and one with no available version ends `FAILED`
+after its pickups. The text cache is `ARTIFACT_TEXT_FILE_PREFIX` + `file_id`
+(`FileOrigin.PLAINTEXT_CACHE`), written by
+`file_store/utils.py:get_or_extract_artifact_text`, the one entry point for
+a version's text. It extracts with
+`file_processing/extract_file_text.py:extract_text_pages` (PDF pages,
+PowerPoint slides, spreadsheet sheets; any other file as one text; no image
+captions), ends each page with a form feed, and keeps at most 10 M characters
+of a file up to 50 MiB. A version's file never changes
+([[#file-id-write-once]]), so its cached text never goes stale. The sandbox
+tools `library_read` and `library_find` ([[code-execution]]) read it.
+`library_search` (and the `artifact` tool's list with a
+query) searches these documents with `attached_document_ids` set to the
+artifacts that its database query keeps, with no ACL, and reports
+`content_indexed` from `index_status` ([[code-execution]]).
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and
@@ -154,7 +245,38 @@ streams the blob. It sends `Content-Disposition: attachment` unless
 `file_store/serving.py` allows the type inline. It caches for a year with an
 ETag on the file id, because a file id never changes content
 ([[#file-id-write-once]]). With `?parsed=true`, a spreadsheet returns a JSON
-preview.
+preview. With `?preview=pdf`, a PowerPoint or Word file returns only the PDF
+that its preview row links, and the GET never writes:
+`ChatArtifactVersion.preview_file_id` or `UserFile.preview_file_id`
+(`chat/file_preview.py:resolve_chat_file_preview` finds the row; the route
+streams the link, or returns 409 `PREVIEW_NOT_READY` when the row has none).
+`POST /chat/file/{file_id}/preview` (`server/query_and_chat/chat_backend.py:make_chat_file_preview`,
+the same access check) returns the linked PDF, or converts the file and links
+the result (`chat/file_preview.py:convert_chat_file_preview_pdf`, which owns
+the flow; the route maps its errors), with `Cache-Control: private, no-store`
+and no ETag. The preview row is the file's artifact version, else the oldest
+of its user files that is not being deleted, whichever id the request used
+(`db/chat.py:get_chat_file_preview_row`, on `ix_user_file_file_id`: user
+files can share one file, so `user_file.file_id` is not unique), and the
+link updates that row by its key. The type is the record's MIME type when
+it converts, else the one that `guess_mime_type` gives the name. The
+conversion runs only in the sandbox of the file's owner
+(`ChatArtifact.user_id` or `UserFile.user_id`), whoever asks, so a reader
+cannot plant a preview and the PDF has the trust of the file; a publish
+converts in the publisher's sandbox, who is the owner. It runs
+`render_preview` from bytes, at most 20 MiB, without the first page, in a
+30 s budget from when the VM runs, and the flow saves the PDF and links it
+(`link_chat_file_preview`, only when the row has none, so a concurrent
+conversion returns and then deletes its own copy; a link that raises deletes
+it too). Both requests return 422 `PREVIEW_UNAVAILABLE` for another type or
+a file that no row owns (a Python tool output) or a user file that is being
+deleted. The POST also returns 422 for a larger file, a file that the
+converter rejects or does not convert within the budget, a PDF over
+`RENDER_PREVIEW_MAX_PDF_BYTES` or a deployment with no harness sandbox, and
+503 when the sandbox cannot start or be reached; other failures are 500.
+None of them is stored. The access check is the
+source file's; no branch of `user_can_access_chat_file` admits the preview's
+own id, so `/chat/file/{preview id}` is a 404.
 
 ---
 
@@ -196,7 +318,8 @@ preview.
    `str(UserFile.id)`, and inline context cites the same id. Citations survive
    when a project crosses the fit limit ([[projects]]).
 5. `delete-order` **Delete in order: index, blobs, row.**
-   `background/celery/tasks/user_file_processing/tasks.py:delete_user_file_impl` keeps the row when a blob delete fails, because the
+   `background/celery/tasks/user_file_processing/tasks.py:delete_user_file_impl` deletes the preview PDF, the blob and the
+   plaintext, and keeps the row when a blob delete fails, because the
    row is the only handle a retry has. Blob deletes use
    `error_on_missing=False`, so a retry after a partial delete is safe.
    `server/features/projects/api.py:delete_user_file` refuses while any project or agent link exists and
@@ -266,7 +389,28 @@ preview.
     instead, and the checkpoint row that saved them deletes them when it ends
     or is replaced; session hard delete removes every blob by that prefix
     ([[chat-persistence#checkpoints-for-approvals]]).
-13. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
+13. `artifact-cleanup-levels` **A published file has two cleanup levels.**
+    Per version, `db/chat.py:delete_chat_artifact_files` deletes the
+    thumbnail and the preview PDF, then the text cache, then the file. Per artifact, the search
+    document goes after the commit that removes the artifact row or deletes
+    its chat or owner
+    (`indexing/chat_artifact_index.py:delete_chat_artifacts_from_index`, a
+    plain delete: a write that committed within the second before it can
+    leave owner-only chunks). The chat delete functions return the artifact
+    ids, and their callers delete after the commit: the chat delete routes
+    (soft and hard), the chat retention task and the clean-up of a failed
+    publish. The user delete collects the ids, and each version's files
+    under its row lock (`lock_chat_artifact_version_files`), in
+    `db/users.py:delete_user_from_db__no_commit` before the cascade from
+    the user removes the rows, and deletes both in `finish_user_delete`
+    (the files with the user's other files), which the admin delete
+    (`db/users.py:delete_user_from_db`) and the auth delete
+    (`backend/onyx/auth/users.py:UserManager.delete`) run after their commit. The index delete is not
+    in the per-version cleanup, because a failed publish that drops one
+    version must keep a live artifact's document. A new path that removes
+    artifact rows, or hides their chat, must call it after its commit, or the
+    owner's ordinary search keeps finding the file.
+14. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
     serves two stores.** A deployment that upgrades from the bundled MinIO
     keeps it as a second, read-fallback store. `S3BackedFileStore` writes and
     deletes in both
@@ -311,7 +455,8 @@ preview.
 
 ## Dependencies
 
-- [[indexing-pipeline]]: `run_indexing_pipeline` for user files.
+- [[indexing-pipeline]]: `run_indexing_pipeline` for user files and
+  published files.
 - [[document-index]]: stores and filters the chunks.
 - [[llm-providers]]: tokenizers and the vision model for embedded images.
 - [[background-jobs]]: the user-file processing, sync and delete workers.
@@ -361,6 +506,10 @@ preview.
   `test_upload_files` modules) covers upload rejection.
 - `backend/tests/external_dependency_unit/file_store/` covers the backends,
   the MinIO compatibility store and generated-file access.
+- `backend/tests/external_dependency_unit/indexing/test_chat_artifact_indexing.py`
+  covers published file indexing and the text cache, and
+  `backend/tests/external_dependency_unit/opensearch/test_chat_artifact_search.py`
+  covers their search access and deletes.
 - `backend/tests/integration/tests/projects/` covers upload, link and delete.
 - By hand: as a second user, request another user's upload and generated image
   through `/chat/file/{file_id}`. Both must return 404 unless the session is

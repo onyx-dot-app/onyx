@@ -200,10 +200,14 @@ export interface ToolQuestion {
   options: ToolQuestionOption[];
 }
 
-/** The user's answer to one question: one of its options, a note, or both. */
+/**
+ * The user's answer to one question: its chosen options, in the question's
+ * order, a note, or both. This card chooses at most one option, which also
+ * answers a multi-select question.
+ */
 export interface ToolQuestionAnswer {
   question_id: string;
-  option_label?: string | null;
+  option_labels: string[];
   user_note?: string | null;
 }
 

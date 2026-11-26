@@ -51,8 +51,10 @@
   response holds the messages and, for each answer, the packets that rebuild
   it. A latest-page load and a shared chat's load also hold
   `published_files`: the latest version of each artifact (every publish of
-  one path) that the model or its subagents published in the chat, on every
-  branch. A send that names a
+  one path) that the chat owns, on every branch. The list follows the owning
+  chat: it holds the versions that other chats add to this chat's files, and
+  leaves out the versions that this chat adds to other chats' files. A send
+  that names a
   parent off the active branch fails with "not on the latest mainline".
 
 ---
@@ -119,12 +121,15 @@ GET /chat/get-chat-session/{id}
                                            latest version of each artifact
                                            (a LATERAL newest-version subquery,
                                            db/chat.py:_newest_available_version,
-                                           which artifacts_list shares), by first
+                                           which library_list shares), by first
                                            publish (ChatArtifact.created_at,
                                            then ID), with its artifact_id and
                                            version. The path comes from the
                                            artifact, the title from the
-                                           version. Versions whose object is
+                                           version, the name from the
+                                           subquery's effective name (a
+                                           rename's ChatArtifact.name, else
+                                           the file record's). Versions whose object is
                                            missing (file_size -1) are left out
   translate_assistant_message_to_packets   runtime rows: read_chat_execution,
                                            read_response_replay_data ->
@@ -197,7 +202,9 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 **Replay.** Neither path re-runs anything. A runtime response replays through
 `chat/presentation.py:replay_response`, which uses the same message and tool
 renderers as the live stream and reads typed results, not the tool catalog.
-It excludes background child output from the `spawn_agent` card. The parent
+It excludes background child output from the cards of the tools that start
+background agents (`tools/tool_implementations/subagents/shapes.py:AGENT_START_TOOL_NAMES`: the spawn tool
+of either family and `send_message`). The parent
 receives that output as a message before its next model call.
 `ChatInput` is the inbox: pending human and agent messages, and unread child
 results. Each message is in exactly
@@ -244,9 +251,13 @@ finished results wake a recipient only while its queue is not paused and its
 latest run did not fail; an agent's queue pauses when its latest run was
 stopped (`db/chat_inputs.py:wakes_for_results`).
 
-The root's `wait_agents` call ends its turn when it is the step's only call and a named
-agent, or any agent, still runs.
-Its saved `tool_call` result (`AgentWaitDetails`) is the only record of the wait. It holds
+The root's `wait_agent` call ends its turn when it is the step's only call and a named
+agent, or any agent, still runs. A shape without a wait tool (`AgentShape.wait_name` is
+None, the Claude shape) holds no results: each finished result wakes the idle root at once.
+An agent reads each result as an `<agent_notification>` user message whose JSON holds the
+agent's path, status, answer, error when it failed, and `still_running`: the paths of the
+agents that it started and that still run (`chat/run_store.py:agent_result_message`, from the
+unread results of unfinished runs), so a root of any shape knows what it still waits for. A wait call's saved `tool_call` result (`AgentWaitDetails`) is the only record of the wait. It holds
 the root's unread results from those agents' runs that belong to its root response or an
 earlier one. `wakes_for_results` applies one rule to an idle root: a finished result that no
 wait holds wakes it at once; held results wake it together once none of their wait's runs is
@@ -272,7 +283,7 @@ message, for human and agent messages. The source check uses `IS TRUE`, so a
 row with a NULL required field fails it.
 Accepted result inputs reference their source response; reconstructed history
 retains that provenance across compaction. Reserving a child response that its
-caller marks as result-delivering (a `spawn_agent` child, or any run started from
+caller marks as result-delivering (a child of a spawn tool, `SPAWN_TOOL_NAMES`, or any run started from
 the inbox) adds an `agent_result` row for the child's spawner
 (`db/chat_response.py:reserve_child_response__no_commit`). A child reservation
 is a running response; `chat/run_store.py:ChatRunStore` commits it with its owner
@@ -414,21 +425,31 @@ directory until the VM stops.
 Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
-its child sessions: first the files and thumbnails of the root session's
-`chat_artifact` versions, through `delete_chat_artifact_files` (this covers a
+its child sessions: first the files, thumbnails and preview PDFs of the root
+session's `chat_artifact` versions, through `delete_chat_artifact_files` (this covers a
 response that ended without its save, such as an interrupted parked one),
 then message files (`save_chat_turn` also adds each
-`publish_files` call's `PublishedFiles` to the response's `ChatMessage.files`
-in its one save), then the checkpoint blobs by file ID prefix under the root
+publishing call's `PublishedFiles` to the response's `ChatMessage.files`
+in its one save), except a file that is still a `chat_artifact_version` file
+or thumbnail: this chat's versions are gone by then, so it belongs to another
+chat's artifact that a replace from this chat versioned, and that chat's
+delete deletes it (one query per message batch). Deleting the owning chat
+deletes such a version, and the other chat's card then gets not-found. Then
+the checkpoint blobs by file ID prefix under the root
 session ID, then messages (tool calls,
 response items and checkpoints cascade), then `SearchDoc` rows no message links
-to. `delete_chat_artifact_files` deletes each thumbnail before its file (a
-published file's delete cascades to its version, which links the thumbnail),
-and keeps the file when the thumbnail delete fails, so the next hard delete
-retries both. It raises after a failure, which stops the hard delete before
+to. `delete_chat_artifact_files` deletes each thumbnail and preview PDF before
+its file (a published file's delete cascades to its version, which links
+them). It deletes the file in the transaction that holds the version's row
+lock (`lock_chat_artifact_version_files`) and finds no link left, so a
+`link_chat_file_preview` that runs meanwhile waits and then links nothing.
+It keeps the file when one of those deletes fails, so the next hard
+delete retries them all. It raises after a failure, which stops the hard delete before
 the message files. The failed-publish clean-up
-(`delete_unpublished_chat_artifacts`) uses it too, and keeps the artifact of
-a kept file. The EE task
+(`delete_unpublished_chat_artifacts`) and the model's delete of one artifact
+(`delete_chat_artifact`, which holds the artifact's row lock throughout, so a
+publish during it waits and then makes a new artifact) use it too, and keep the
+artifact of a kept file. The EE task
 `ee/onyx/background/celery/tasks/ttl_management/tasks.py:perform_ttl_management_task`
 hard-deletes in batches the sessions whose last activity, child sessions
 included, is older than the window (`db/chat.py:get_chat_sessions_older_than`).
@@ -559,7 +580,7 @@ Community downgrade clears it ([[billing]]).
    Runtime replay skips a call and its child steps when the stored result type
    is unknown. Legacy replay skips a call when its catalog row is missing.
    Both keep the separately saved assistant answer. Code mode has no tool row: `persistence.tool_ids`
-   maps `execute_code` and `wait_code` to None, and their calls save with a
+   maps the run and wait tools to None, and their calls save with a
    NULL `tool_id`.
 10. `shared-read-hides-deleted` **A shared read never returns a deleted
     session.** `db/chat.py:get_chat_session_by_id` adds `deleted IS FALSE`

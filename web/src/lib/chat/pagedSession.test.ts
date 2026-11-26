@@ -1,4 +1,7 @@
-import type { PublishedFile } from "@/app/app/services/streamingModels";
+import {
+  PacketType,
+  type PublishedFile,
+} from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   type BackendChatSession,
@@ -10,7 +13,7 @@ import {
   reloadChatPublishedFiles,
   reloadLatestChatPage,
 } from "@/lib/chat/pagedSession";
-import { startChatLoad } from "@/lib/chat/publishedFiles";
+import { chatPublishedFiles, startChatLoad } from "@/lib/chat/publishedFiles";
 import { fetchSettledChatSession } from "@/lib/chat/sessionReadiness";
 
 jest.mock("@/lib/chat/sessionReadiness", () => ({
@@ -32,6 +35,7 @@ function published(fileId: string, version: number): PublishedFile {
     artifact_id: "artifact",
     version,
     thumbnail_file_id: null,
+    chat_id: null,
   };
 }
 
@@ -80,7 +84,7 @@ test("a Files reload that ends after a newer chat load keeps the newer list", as
     .applyLoadedSession(
       SESSION_ID,
       page([published("v2", 2)]),
-      startChatLoad(),
+      startChatLoad(undefined),
       {}
     );
   stale.resolve(page([published("v1", 1)]));
@@ -102,6 +106,44 @@ test("a chat load that ends after a newer Files reload keeps the newer list", as
   await load;
 
   expect(listedIds()).toEqual(["v2"]);
+});
+
+test("a Files reload whose page leaves out a live publish's message drops the file that its list leaves out", async () => {
+  // A live answer published the file; a delete then removed it.
+  const answer: Message = {
+    nodeId: 5,
+    messageId: 50,
+    type: "assistant",
+    message: "",
+    files: [],
+    toolCall: null,
+    packets: [
+      {
+        placement: { turn_index: 0, tab_index: 0 },
+        obj: {
+          type: PacketType.PUBLISH_FILES_END,
+          files: [published("deleted", 1)],
+          error: null,
+        },
+      },
+    ],
+    parentNodeId: null,
+  };
+  useChatSessionStore
+    .getState()
+    .updateSessionMessageTree(SESSION_ID, new Map([[5, answer]]));
+  jest.mocked(fetchSettledChatSession).mockResolvedValue(page([]));
+
+  await reloadChatPublishedFiles(SESSION_ID);
+
+  const session = useChatSessionStore.getState().sessions.get(SESSION_ID)!;
+  expect(
+    chatPublishedFiles(
+      session.loadedPublishedFiles,
+      session.messageTree,
+      SESSION_ID
+    )
+  ).toEqual([]);
 });
 
 const oldest: Message = {

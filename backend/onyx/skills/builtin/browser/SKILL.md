@@ -12,7 +12,7 @@ Most normal web tasks (navigate, read, click, fill, extract, screenshot) are cov
 
 > **Onyx chat:** for basic reads of static pages, prefer your web search and URL tools. They are faster and cheaper. Use `agent-browser` only when the page needs JavaScript rendering, interaction (clicks, forms, login), multi-step navigation, or visual inspection.
 >
-> Run `agent-browser` with your command tool. Each chat has its own browser session, so do not pass `--session`. The browser is headless (the user does not see it); use `snapshot` to read the page and `screenshot` to inspect it visually. Write screenshots and downloads to your working directory, and give them to the user with `publish_files`.
+> Run `agent-browser` with your command tool. Each chat has its own browser session, so do not pass `--session`. The browser is headless (the user does not see it); use `snapshot` to read the page and `screenshot` to inspect it visually. Write screenshots and downloads to your working directory, and give them to the user by publishing them as files.
 >
 > This is a locked-down, display-less pod, so some workflows in this guide do **not** apply: ignore `--headed` / "show the browser window" (there is no display), `--provider cloud-browser`, `agent-browser plugin add`, and `agent-browser doctor --fix` (it would reinstall Chrome). Interactive 2FA that needs a visible window is not possible — drive auth through `snapshot`/`fill`/`click` instead.
 

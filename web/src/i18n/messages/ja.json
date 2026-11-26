@@ -510,6 +510,9 @@
         "userFile": {
           "description": "チャットでアップロードしたファイル"
         },
+        "chatArtifact": {
+          "description": "チャットで公開されたファイル"
+        },
         "googleSites": {
           "description": "Google ホストのページ"
         },
@@ -12367,6 +12370,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "質問"
+        },
+        "artifactError": {
+          "message": "このファイルは利用できません。"
         }
       },
       "messageEditing": {
@@ -12817,6 +12823,9 @@
           "placeholder": "その他: 独自の回答を入力",
           "ariaLabel": "{header} へのその他の回答"
         },
+        "multiSelect": {
+          "hint": "当てはまるものをすべて選択してください。"
+        },
         "submit": "送信",
         "page": {
           "progress": "質問 {current} / {total}",
@@ -13072,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# 行} other {# 行}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# 語} other {# 語}}"
-      },
       "copyButton": {
         "tooltip": "内容をコピー"
       },
@@ -13098,6 +13104,13 @@
       "renderError": {
         "title": "このファイルはプレビューできません",
         "description": "ここではファイルを表示できません。ファイルをダウンロードして開いてください。"
+      },
+      "unavailable": {
+        "title": "このファイルのプレビューはありません",
+        "description": "このファイルのプレビューを作成できません。ファイルをダウンロードして開いてください。"
+      },
+      "preparing": {
+        "status": "プレビューを準備しています。しばらく時間がかかる場合があります。"
       },
       "unsupported": {
         "title": "このファイル形式のプレビューは現在サポートされていません",
@@ -13146,30 +13159,6 @@
         },
         "error": {
           "description": "PDF ファイルを読み込めませんでした。"
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "プレゼンテーションの操作"
-        },
-        "thumbnails": {
-          "toggle": "スライドのサムネイルを表示・非表示",
-          "resize": "スライドのサムネイルの幅を変更"
-        },
-        "slides": {
-          "label": "スライド"
-        },
-        "previous": {
-          "label": "前のスライド"
-        },
-        "next": {
-          "label": "次のスライド"
-        },
-        "slide": {
-          "counter": "スライド {current} / {total}"
-        },
-        "empty": {
-          "label": "このプレゼンテーションにはスライドがありません"
         }
       }
     },

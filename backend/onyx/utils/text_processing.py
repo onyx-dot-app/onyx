@@ -71,6 +71,11 @@ _INITIAL_FILTER = re.compile(
     flags=re.UNICODE,
 )
 
+# Control characters below space, except tab and newline.
+_CONTROL_CHAR_DELETIONS: dict[int, None] = {
+    code: None for code in range(ord(" ")) if chr(code) not in "\n\t"
+}
+
 # Regex to match invalid Unicode characters that cause UTF-8 encoding errors:
 # - \x00-\x08: Control characters (except tab \x09)
 # - \x0b-\x0c: Vertical tab and form feed
@@ -312,9 +317,7 @@ def clean_text(text: str) -> str:
     cleaned = _INITIAL_FILTER.sub("", text)
 
     # Remove any control characters except for newline and tab
-    cleaned = "".join(ch for ch in cleaned if ch >= " " or ch in "\n\t")
-
-    return cleaned
+    return cleaned.translate(_CONTROL_CHAR_DELETIONS)
 
 
 def is_valid_email(text: str) -> bool:

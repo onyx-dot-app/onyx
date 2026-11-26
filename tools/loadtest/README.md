@@ -236,6 +236,7 @@ for explicit stress tests. Register every selected model name before a run.
 | `mock-profile-search-v1-codebatched` | The same plan; in code mode, one program runs all search rounds. See [Compare code mode](#compare-code-mode) |
 | `mock-profile-research-v1-agents2` | Existing two-agent research sequence with 900-word reports and 15-second nominal response duration |
 | `mock-profile-held-v1` | A deliberately held response: 600 words over 121 seconds |
+| `mock-profile-code-v1` | Code mode turns replayed from recorded benchmark chats. See [Code mode profiles](#code-mode-profiles-from-recorded-chats) |
 
 The search profile uses selected observations from successful Luna-medium ERAG
 turns on October 22, 2026. Main and SDK had about 19% repeated-search turns. Median answers contained
@@ -284,17 +285,18 @@ program. The program runs in a sandbox on the API server. The tool result is the
 printed output of the program. Set `CODE_MODE_ENABLED=true` on the API server to
 turn on code mode.
 
-The mock detects code mode from the offered tools. When a request offers
-`execute_code` with an `internal_search` function, and no direct `internal_search`
-tool, the search profile writes programs instead of direct search calls. The programs use the same seeded queries
+The mock detects code mode from the offered tools. When a request offers the run
+tool `execute_code` with an `internal_search`
+function, and no direct `internal_search` tool, the search profile writes
+programs instead of direct search calls. The programs use the same seeded queries
 as direct mode. Each program prints one `[document] title` line for each result.
 The mock reads the document numbers from these lines, so the answer cites the
 same way as in direct mode. The answer phase does not change.
 
 | Model | Programs in a turn | Chat model calls in a turn |
 |---|---|---|
-| `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode, plus one for each `wait_code` |
-| `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, one for each `wait_code`, then the answer |
+| `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode, plus one for each `wait` |
+| `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, one for each `wait`, then the answer |
 
 Search helper calls, such as query expansion and document selection, are not
 counted here. They match direct mode in the per-round arm. In direct mode only
@@ -303,8 +305,9 @@ search in its first step, so each search runs it. The mock's `/metrics` counts
 these calls in its `helper` phase.
 
 When a program runs longer than its yield time, the result says that the cell is
-running. The mock then calls `wait_code` for that cell until the program ends.
-Each `wait_code` call is one more model call, so check `onyx_loadtest_code_waits`
+running. The mock then calls `wait` (`poll` in the Claude shape) for that cell
+until the program ends.
+Each `wait` call is one more model call, so check `onyx_loadtest_code_waits`
 and report it with each arm. The `-codebatched` suffix applies only to the search
 profile and has no effect in direct mode.
 
@@ -341,7 +344,7 @@ Make sure that each arm ran the intended path. Scrape the Locust `/metrics`
 output before the run ends, because the endpoint stops with Locust, and save it
 with the arm. `onyx_loadtest_code_programs` must be zero for the direct arm and
 nonzero for the code mode arms, and `onyx_loadtest_code_waits` gives each arm's
-`wait_code` calls.
+`wait` calls.
 
 Reset the statistics after the warmup, in the same run. Wait until all users have
 started and `ONYX_START_STAGGER_SECONDS` has passed, plus any cache warmup, then
@@ -352,13 +355,154 @@ turns finish when the time limit ends, because Locust does not report a turn
 that it stops. Assess each arm's CSV with `capacity_report.py`, as
 [Interpret user capacity](#interpret-user-capacity) describes.
 
-Without `wait_code` calls, the per-round arm keeps the number and order of model
+Without `wait` calls, the per-round arm keeps the number and order of model
 calls of direct mode. Its difference from direct mode then shows the combined
 cost of the code mode path: the sandbox, the `execute_code` schema and
 arguments, and the printed program output that replaces the JSON search results.
 The batched arm also makes fewer model calls and runs the searches in parallel.
 `search_calls` counts searches in both modes, so the arms report comparable
 search counts.
+
+## Code mode profiles from recorded chats
+
+The search profile's programs print one line per result, and most of its turns
+search once. Recorded code mode chats run more programs, print much more, and
+have a long tail of turns with dozens of programs. The code profile replays
+the shape of those recorded turns.
+
+### Where the distributions come from
+
+`mock_llm/code_calibration.json` comes from EnterpriseRAG-Bench chats recorded
+on 2026-11-25 with code mode on (stack-eval `v3-guidance`, 500 questions for
+each model). `mock_llm/derive_code_calibration.py` reads the saved code mode
+results of the chats' tool calls and the benchmark's answer rows; its
+docstring has the export query, which exports no program code or document
+text. The file holds each recorded turn as its ordered programs, with each
+program's printed characters (as the model read them, after the output limit),
+`internal_search` calls (each counted once), and failure (`failed` or
+`timed_out`). It holds no
+questions, programs, or document content. Questions that ended with an error
+are left out.
+
+| Pool | Source models | Programs per turn (mean, p50, p95, max) | Turns with 20 or more programs | Program output chars (mean, p50, p95) | Searches per program | Failed programs | Model seconds per call |
+|---|---|---|---:|---|---:|---:|---:|
+| `openai` | gpt-6-luna, deepseek-v4.1-flash | 5.14, 2, 23, 62 | 5.5% | 14,999, 11,256, 40,054 | 1.24 | 5.2% | 3.26 |
+| `claude` | claude-sonnet-5-5 | 3.89, 3, 8, 13 | 0% | 5,475, 3,948, 17,283 | 0.88 | 24.0% | 2.95 |
+
+- **Turns.** A plan replays one recorded turn of the pool, chosen by its
+  question hash and `MOCK_WORKLOAD_SEED`. So program count, output sizes,
+  searches, and failures keep their recorded combinations, and the tail
+  appears at its recorded share.
+- **Long tail.** 55 recorded turns had 20 or more programs (20–62, mean 32.6).
+  620 programs printed 36,000 characters or more (mean 39,900): 11.8% of the
+  `openai` pool's programs. A long-tail plan takes a program count from those
+  turns, each program's output from those near-cap programs, and its searches
+  from the tail turns' programs (mean 1.62).
+- **Searches.** Each search sends one query, the recorded median. The first
+  query is the question; later queries add a fixed suffix, and a turn with more
+  than nine searches repeats queries, as recorded turns did.
+- **Model time.** A model call that returns a program takes the pool's median
+  of (turn latency − program run time) / (programs + 1). Answers keep the
+  search profile's sizes and timing.
+- **Failures.** A recorded failed program becomes a program that raises
+  `RuntimeError('mock_planned_failure')`. In the Claude pool these were mostly
+  programs that used a variable of an earlier cell. The load client counts
+  them in `code_planned_failures` and does not fail the turn.
+
+A few recorded outputs (above 40,500 characters) came from programs that raised
+their output limit. The mock's programs keep the default limit, so their output
+stops at 40,000 characters.
+
+### What a program prints
+
+A program with searches runs them (in parallel when there are several) and
+prints each result's `[document] title` line and its content, indented. It cuts
+the text at the planned size. If retrieval returns less text, the output is
+smaller: check `code_output_chars`. A program without searches prints filler
+text of the planned size. Small or synthetic corpora can return too little
+content for near-cap outputs.
+
+### Models
+
+| Model | Tool shape | Plan |
+|---|---|---|
+| `mock-profile-code-v1` | `execute_code`, `wait` | Recorded `openai` turns |
+| `mock-profile-code-v1-claude` | `execute_code`, `poll` | Recorded `claude` turns |
+| `mock-profile-code-v1-tail<pct>` | as above | `<pct>` percent of questions run a long-tail plan instead |
+
+Onyx gives a model the Claude tool shapes when any of its names contains
+`claude`, so the `-claude` name gets `poll` and the Claude arguments from the server, and
+also Claude prompt caching marks. The mock writes the same programs in either
+shape; it reads the shape from the offered tools. `-tail100` makes every turn
+a long-tail turn; `-tail10` raises the tail share above the recorded 5.5%.
+Recorded Claude turns had no long tail, so a `-claude-tail<pct>` plan uses
+the tail of the `openai` pool.
+
+A code profile needs code mode on the API server. Without an offered run tool
+with `internal_search`, the mock returns HTTP 400. Register each model name
+that you use. A long-tail turn prints about 1.3 million characters in total,
+so register the model with the input limit of the model that you are
+simulating; a smaller limit adds history compression to the turn. Each
+program marks its plan position, so a compacted turn continues its plan. A
+much smaller limit, where compaction keeps none of the turn's programs,
+restarts the plan.
+
+## Run recipes
+
+Use the same deployment, corpus, question file, seeds, workers, pacing and
+resources for each compared arm. Register the named models first. Each recipe
+selects its classes explicitly.
+
+| Recipe | Classes and settings |
+|---|---|
+| Regression check | `ChatWithSearchUser` with the default `mock-profile-search-v1` |
+| Realistic code mode | `ChatWithSearchUser` with `ONYX_SEARCH_MODEL=mock-profile-code-v1` |
+| Claude tool shapes | The same, with `ONYX_SEARCH_MODEL=mock-profile-code-v1-claude` |
+| Long single turns | `LongTurnUser` (default `mock-profile-code-v1-tail100`), alone or beside the realistic recipe |
+| Long-lived chats | `LongConversationUser` with `ONYX_LONGCONV_USERS`, `ONYX_LONGCONV_TURNS` and `ONYX_LONGCONV_MODEL=mock-profile-code-v1`, beside the realistic recipe |
+| Deep research | `DeepResearchUser` with `mock-profile-research-v1-agents2` |
+
+Realistic code mode, with five long-lived chats among 50 users:
+
+```bash
+ONYX_SEARCH_MODEL=mock-profile-code-v1 \
+ONYX_LONGCONV_USERS=5 ONYX_LONGCONV_TURNS=60 \
+ONYX_LONGCONV_MODEL=mock-profile-code-v1 \
+  uv run --group loadtest locust --autostart --autoquit 10 -u 50 -r 5 -t 30m \
+  --stop-timeout 600 --host "$LOCUST_HOST" --csv code-realistic \
+  ChatWithSearchUser LongConversationUser
+```
+
+Long single turns, as a stress test of its own:
+
+```bash
+uv run --group loadtest locust --autostart --autoquit 10 -u 10 -r 1 -t 30m \
+  --stop-timeout 900 --host "$LOCUST_HOST" --csv long-turns LongTurnUser
+```
+
+- A realistic recorded turn takes about 20 seconds at the median and minutes
+  in the tail. Long-tail turns take minutes each. Set `--stop-timeout` above
+  the longest expected turn, or Locust drops the turns that are running.
+- `DeepResearchUser` needs the research tool on the default agent, and its
+  model needs an input limit of at least 50,000 tokens. Deep research does not
+  use code mode.
+
+### Compare arms
+
+1. Generate a manifest for the model, seed and question file of the run
+   (`workload_manifest.py`). It lists the planned programs, searches, output
+   characters and failed programs.
+2. Start each arm in the same way. After all users started, the start stagger
+   passed and caches warmed, reset the statistics
+   (`curl -s http://localhost:8089/stats/reset`). Save a scrape of the Locust
+   `/metrics` at the reset and at the end.
+3. Check equal workload from the two scrapes' interval deltas. Per finished
+   turn, `code_programs`, `search_calls`, `code_output_chars` and
+   `code_planned_failures` must match between arms within noise. A lower
+   `code_output_chars` on one arm means that its retrieval returned less text.
+   `code_failures` must be zero.
+4. Assess each arm's CSV with `capacity_report.py`. Compare peak RSS, restarts
+   and OOM kills from the dashboard over the same interval.
 
 ## Reproduce the input mix
 
@@ -394,10 +538,13 @@ planned token/chunk histograms, and completed responses by transport. These coun
 reset when the mock restarts. They measure model calls, not whole application turns.
 Locust `/metrics` adds `onyx_loadtest_active`, `started`, `finished`, `answer_chars`,
 `packets`, `search_calls`, `reasoning_packets`, and `citations`, labelled by scenario.
-Code mode adds `code_programs` (`execute_code` calls), `code_waits` (`wait_code`
-calls), `nested_search_calls` (searches that programs made, also in `search_calls`;
-a search that several observations report counts once), and `code_failures`.
-Finished counts include failed setup and interrupted turns; success rates come from Locust request statistics.
+Code mode adds `code_programs` (run calls), `code_waits` (wait calls),
+`nested_search_calls` (searches that programs made, also in `search_calls`;
+a search that several observations report counts once), `code_failures`,
+`code_planned_failures` (failures that the mock planned), and
+`code_output_chars` (characters that programs printed, as streamed).
+The stream counts of a turn are added when it finishes, so every count is of
+finished turns. Finished counts include failed setup and interrupted turns; success rates come from Locust request statistics.
 Counts reset at test start and survive a Locust statistics reset. Compare interval
 deltas when excluding warmup. Missing workers retain their last cumulative counts
 but contribute no active turns; counts can lag worker reports. Scrape the mock separately from the API pods; tokenizer
@@ -475,7 +622,8 @@ exercises the configured path; it does not establish that a failure occurs in pr
 
 | Scenario | Behavior | Main controls |
 |---|---|---|
-| `LongConversationUser` | Reuses a session and chains message IDs so history grows | `ONYX_SESSION_TURNS`, default 20 |
+| `LongConversationUser` | Reuses a session and chains message IDs so history grows | `ONYX_LONGCONV_TURNS`, default 20; `ONYX_LONGCONV_USERS` pins a number of users |
+| `LongTurnUser` | Long-tail code mode turns: 20 or more programs with near-cap output | `ONYX_LONGTURN_MODEL`, default `mock-profile-code-v1-tail100` |
 | `DisconnectUser` | Closes the client stream at a chosen milestone | `ONYX_DISCONNECT_AFTER`, default `first_answer_token` |
 | `CompressionUser` | Sends large messages in a long session to exercise context compression | Default 60 turns and 8,000-character messages; configure a small model input limit |
 | `FileAttachmentUser` | Uploads a file and attaches it to turns | `ONYX_FILE_KB`, default 512; `ONYX_SESSION_TURNS` for session reuse |
@@ -553,7 +701,11 @@ Do not select a production configuration from probe success alone.
 | `ONYX_HEALTH_INTERVAL` | 1.0 | Seconds between health probes |
 | `ONYX_HEALTH_SLA_MS` | 10000 | Fail a probe slower than this; independent of Kubernetes probe settings |
 | `ONYX_LONGCONV_MODEL` | unset | Model for LongConversationUser; falls back to `ONYX_LLM_MODEL`, then the deployment default |
-| `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (LongConversationUser 20, CompressionUser 60) |
+| `ONYX_LONGCONV_USERS` | 0 | Pins this many LongConversationUser users, independent of `-u` weights; 0 weights them. In distributed runs, set it on the master too |
+| `ONYX_LONGCONV_TURNS` | `ONYX_SESSION_TURNS`, else 20 | Turns of one LongConversationUser session |
+| `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (CompressionUser 60) |
+| `ONYX_LONGTURN_MODEL` | `mock-profile-code-v1-tail100` | Model for LongTurnUser |
+| `ONYX_LONGTURN_WAIT_SECONDS` / `ONYX_LONGTURN_STREAM_READ_TIMEOUT` | 15 / 600 | LongTurnUser think time / max inter-chunk wait |
 | `ONYX_MSG_CHARS` | 0 | Per-message size in chars (CompressionUser defaults to 8000; 0 = short questions) |
 | `ONYX_MESSAGES_FILE` | unset | Text question file or ERAG-style JSONL; replaces the fallback questions |
 | `ONYX_DISCONNECT_AFTER` | `first_answer_token` | Milestone after which DisconnectUser drops the stream |
@@ -583,6 +735,9 @@ the milestone packet arrives; Locust aggregates percentiles per name:
 - `*:total_turn` — chat-stream wall time; setup failures also record a failed turn with elapsed setup time
 - `*:send (headers)` — raw HTTP request (headers-only timing)
 - `*:create-session` — multi-turn session creation (LongConversationUser)
+- `*:turn <range>` — in multi-turn sessions, `total_turn` again by the turn's
+  position in its session (`1`, `2-5`, `6-10`, `11-20`, `21-40`, `41-80`,
+  `81+`), so latency growth over a session shows
 - `disconnect:disconnected` — turns ended by a deliberate mid-stream
   disconnect (DisconnectUser); kept separate from success/failure
 
@@ -609,6 +764,19 @@ Import `dashboards/chat-loadtest-correlation.json` into Grafana. Set its namespa
 and workload variables to the target deployment. Compare latency and failures
 with CPU and memory over the same interval. Correlation helps identify candidates
 for investigation; it does not establish the cause of a slowdown.
+
+The dashboard also shows each pod's RSS, a table of peak RSS, restarts and
+OOM kills over the selected range, and the workload per finished turn. The
+RSS panels need cAdvisor metrics. The restart and OOM columns need
+kube-state-metrics. To see memory that a run retains, compare each pod's RSS
+before the run with its RSS after the load stops and turns finish.
+
+Python garbage collection is not visible to Locust or Prometheus. To see it,
+profile an API server process during a plateau with py-spy, for example
+`py-spy record --native --idle --pid <pid> --duration 60 -o api.svg`. Time in
+`gc_collect_main` frames is collection time. `py-spy dump --pid <pid>` shows
+what each thread does at one moment. py-spy needs the `SYS_PTRACE`
+capability in the container, or an ephemeral debug container that targets it.
 
 ## Docker
 
@@ -644,11 +812,20 @@ Keep `onyx.*` imports out of the Locust runtime. Gevent changes networking behav
 and can conflict with backend dependencies. The stream parser is a local copy of
 the application protocol and must stay consistent with that protocol.
 
+`mock_llm/derive_code_calibration.py` rewrites `mock_llm/code_calibration.json`
+from a new benchmark run. Update the table in
+[Code mode profiles](#code-mode-profiles-from-recorded-chats) from the file's
+`summary` blocks when you do.
+
 Run the contract tests from `tools/loadtest`:
 
 ```bash
-uv run --group loadtest pytest tests/ -q
+uv run --only-group loadtest pytest tests/ -q
 ```
+
+The `Load Test Harness Tests` workflow runs them nightly and on pull requests
+that change `tools/loadtest/`. The nightly run catches drift from backend
+changes, such as a changed prompt or stream packet.
 
 This README uses Google's guidance on [document scope and organization](https://developers.google.com/tech-writing/one/documents)
 and [clear sentences](https://developers.google.com/tech-writing/one/clear-sentences).

@@ -176,7 +176,10 @@ def mcp_action_specs(tools: Sequence[MCPLibTool]) -> list[IntegrationActionSpec]
     specs: dict[str, IntegrationActionSpec] = {}
     for tool in tools:
         if tool.name and tool.name not in specs:
-            specs[tool.name] = mcp_tool_action_spec(tool)
+            try:
+                specs[tool.name] = mcp_tool_action_spec(tool)
+            except ValueError as e:
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     return list(specs.values())
 
 

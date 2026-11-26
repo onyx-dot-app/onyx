@@ -510,6 +510,9 @@
         "userFile": {
           "description": "Arquivos enviados no chat"
         },
+        "chatArtifact": {
+          "description": "Arquivos publicados no chat"
+        },
         "googleSites": {
           "description": "Páginas hospedadas pelo Google"
         },
@@ -12367,6 +12370,9 @@
       "memoizedLink": {
         "questionFallback": {
           "label": "Pergunta"
+        },
+        "artifactError": {
+          "message": "Este arquivo não está disponível."
         }
       },
       "messageEditing": {
@@ -12817,6 +12823,9 @@
           "placeholder": "Outra: digite sua própria resposta",
           "ariaLabel": "Outra resposta para {header}"
         },
+        "multiSelect": {
+          "hint": "Escolha todas as opções que se aplicam."
+        },
         "submit": "Enviar",
         "page": {
           "progress": "Pergunta {current} de {total}",
@@ -13072,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# linha} other {# linhas}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# palavra} other {# palavras}}"
-      },
       "copyButton": {
         "tooltip": "Copiar conteúdo"
       },
@@ -13098,6 +13104,13 @@
       "renderError": {
         "title": "Não é possível visualizar este arquivo",
         "description": "Não foi possível exibir o arquivo aqui. Baixe o arquivo para abri-lo."
+      },
+      "unavailable": {
+        "title": "Nenhuma prévia para este arquivo",
+        "description": "Não é possível criar uma prévia deste arquivo. Baixe o arquivo para abri-lo."
+      },
+      "preparing": {
+        "status": "Preparando a prévia. Isso pode levar algum tempo."
       },
       "unsupported": {
         "title": "A prévia deste tipo de arquivo não é compatível no momento",
@@ -13146,30 +13159,6 @@
         },
         "error": {
           "description": "Não foi possível carregar o arquivo PDF."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Controles da apresentação"
-        },
-        "thumbnails": {
-          "toggle": "Mostrar ou ocultar miniaturas dos slides",
-          "resize": "Redimensionar miniaturas dos slides"
-        },
-        "slides": {
-          "label": "Slides"
-        },
-        "previous": {
-          "label": "Slide anterior"
-        },
-        "next": {
-          "label": "Próximo slide"
-        },
-        "slide": {
-          "counter": "Slide {current} de {total}"
-        },
-        "empty": {
-          "label": "Esta apresentação não tem slides"
         }
       }
     },

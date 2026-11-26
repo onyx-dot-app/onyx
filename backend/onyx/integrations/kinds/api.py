@@ -196,21 +196,21 @@ class ApiKindHandler(IntegrationKindHandler):
             )
         return app
 
-    def _method_specs(self, config: ApiConfig) -> list[MethodSpec]:
-        if config.openapi_spec is None:
-            return []
-        try:
-            return openapi_to_method_specs(config.openapi_spec)
-        except ValueError as e:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-
     def discover_actions(
         self, integration: Integration, db_session: Session
     ) -> list[IntegrationActionSpec]:
         """Makes no network call."""
         config = self.load_config(integration, db_session)
         if config.shape is ApiShape.OPENAPI:
-            return [openapi_action_spec(spec) for spec in self._method_specs(config)]
+            if config.openapi_spec is None:
+                return []
+            try:
+                return [
+                    openapi_action_spec(spec)
+                    for spec in openapi_to_method_specs(config.openapi_spec)
+                ]
+            except ValueError as e:
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
         if config.shape is ApiShape.CUSTOM:
             return [
                 IntegrationActionSpec(

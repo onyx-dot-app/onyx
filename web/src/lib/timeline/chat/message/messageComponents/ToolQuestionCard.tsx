@@ -5,7 +5,13 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Button, InputTypeIn, SelectCard, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { SvgCheckSquare, SvgClock, SvgLoader, SvgX } from "@opal/icons";
+import {
+  SvgCheckSquare,
+  SvgClock,
+  SvgLoader,
+  SvgSquare,
+  SvgX,
+} from "@opal/icons";
 import CometEdge from "@/refresh-components/CometEdge";
 import type {
   ToolQuestion,
@@ -31,18 +37,21 @@ interface ToolQuestionCardProps {
 }
 
 interface Choice {
-  optionLabel: string | null;
+  optionLabels: readonly string[];
   note: string;
 }
 
-const NO_CHOICE: Choice = { optionLabel: null, note: "" };
+const NO_CHOICE: Choice = { optionLabels: [], note: "" };
 
-/** The card's answer to one question: an option, a note, or both. */
+/** The card's answer to one question: its chosen options, a note, or both. */
 function answerOf(question: ToolQuestion, choice: Choice): ToolQuestionAnswer {
   const note = choice.note.trim();
   return {
     question_id: question.id,
-    option_label: choice.optionLabel,
+    // A saved question can repeat a label; each label counts once.
+    option_labels: [
+      ...new Set(question.options.map((option) => option.label)),
+    ].filter((label) => choice.optionLabels.includes(label)),
     user_note: note || null,
   };
 }
@@ -50,7 +59,9 @@ function answerOf(question: ToolQuestion, choice: Choice): ToolQuestionAnswer {
 /**
  * The agent's questions to the user. While they wait, the card shows one
  * question per page; each offers its options, in the model's order, and an
- * "Other" answer, one of which answers it. Back and Next move between the pages and keep the choices;
+ * "Other" answer. A single-select question takes one option or the "Other"
+ * answer; a multi-select question takes any of its options and the "Other"
+ * answer together. Back and Next move between the pages and keep the choices;
  * the last page submits once every question has an answer. Once they end, a
  * record shows the answers.
  * A message that the user types in the chat also answers them; it shows as
@@ -81,8 +92,8 @@ function ToolQuestionCard({ question }: ToolQuestionCardProps) {
   const total = request.questions.length;
   const isLastPage = page === total - 1;
   const unanswered = request.questions.flatMap((item, index) => {
-    const { optionLabel, note } = choiceOf(item);
-    return optionLabel !== null || note.trim() !== "" ? [] : [index + 1];
+    const { optionLabels, note } = choiceOf(item);
+    return optionLabels.length > 0 || note.trim() !== "" ? [] : [index + 1];
   });
   const complete = unanswered.length === 0;
 
@@ -207,9 +218,23 @@ function ToolQuestionCard({ question }: ToolQuestionCardProps) {
                     <QuestionOptions
                       key={item.id}
                       question={item}
-                      selected={choice.optionLabel}
+                      selected={choice.optionLabels}
                       onSelect={(optionLabel) =>
-                        setChoice(item, { optionLabel, note: "" })
+                        setChoice(
+                          item,
+                          !item.multi_select
+                            ? { optionLabels: [optionLabel], note: "" }
+                            : {
+                                ...choice,
+                                optionLabels: choice.optionLabels.includes(
+                                  optionLabel
+                                )
+                                  ? choice.optionLabels.filter(
+                                      (label) => label !== optionLabel
+                                    )
+                                  : [...choice.optionLabels, optionLabel],
+                              }
+                        )
                       }
                     />
                     <InputTypeIn
@@ -221,7 +246,9 @@ function ToolQuestionCard({ question }: ToolQuestionCardProps) {
                       })}
                       onChange={(event) =>
                         setChoice(item, {
-                          optionLabel: null,
+                          optionLabels: item.multi_select
+                            ? choice.optionLabels
+                            : [],
                           note: event.target.value,
                         })
                       }
@@ -266,18 +293,30 @@ function ToolQuestionCard({ question }: ToolQuestionCardProps) {
                       {tCommon("backButton.label")}
                     </Button>
                   )}
-                  {/* Next turns into Submit on the last page. */}
-                  <Button
-                    prominence="primary"
-                    size="sm"
-                    disabled={isLastPage && (!complete || submitting)}
-                    aria-describedby={footerHint ? hintId : undefined}
-                    onClick={() =>
-                      isLastPage ? void submit() : turnTo(page + 1)
-                    }
-                  >
-                    {isLastPage ? t("submit") : t("page.next")}
-                  </Button>
+                  {/* Submit replaces Next on the last page. Two keyed
+                      buttons, not one relabeled button: a relabeled Button
+                      ignores clicks while its label animates. */}
+                  {isLastPage ? (
+                    <Button
+                      key="submit"
+                      prominence="primary"
+                      size="sm"
+                      disabled={!complete || submitting}
+                      aria-describedby={footerHint ? hintId : undefined}
+                      onClick={() => void submit()}
+                    >
+                      {t("submit")}
+                    </Button>
+                  ) : (
+                    <Button
+                      key="next"
+                      prominence="primary"
+                      size="sm"
+                      onClick={() => turnTo(page + 1)}
+                    >
+                      {t("page.next")}
+                    </Button>
+                  )}
                 </Section>
               </Section>
             </Section>
@@ -296,26 +335,34 @@ const OPTION_KEYS = new Set([
   "Home",
   "End",
 ]);
+// The keys that toggle a checkbox option.
+const TOGGLE_KEYS = new Set([" ", "Enter"]);
 
 interface QuestionOptionsProps {
   question: ToolQuestion;
-  selected: string | null;
+  selected: readonly string[];
   onSelect: (optionLabel: string) => void;
 }
 
 /**
- * One question's options as a radio group: one tab stop, on the chosen
- * option or else the first; arrow keys, Home and End move the choice, and
- * Space or Enter chooses the focused option.
+ * One question's options. A single-select question is a radio group: one
+ * tab stop, on the chosen option or else the first; arrow keys, Home and
+ * End move the choice, and Space or Enter chooses the focused option. A
+ * multi-select question is a group of checkboxes, each a tab stop that
+ * Space or Enter toggles, described by a hint above them.
  */
 function QuestionOptions({
   question,
   selected,
   onSelect,
 }: QuestionOptionsProps) {
+  const t = useTranslations("chat.messages.toolQuestion");
+  const hintId = useId();
   const refs = useRef<(HTMLDivElement | null)[]>([]);
-  const { options } = question;
-  const current = options.findIndex((option) => option.label === selected);
+  const { options, multi_select: multiSelect } = question;
+  const current = options.findIndex((option) =>
+    selected.includes(option.label)
+  );
   function move(index: number, key: string) {
     const last = options.length - 1;
     const next =
@@ -336,32 +383,55 @@ function QuestionOptions({
     refs.current[next]?.focus();
   }
   return (
-    <div role="radiogroup" aria-label={question.question}>
+    <div
+      role={multiSelect ? "group" : "radiogroup"}
+      aria-label={question.question}
+      aria-describedby={multiSelect ? hintId : undefined}
+    >
       <Section gap={2} alignItems="stretch" height="auto">
+        {multiSelect && (
+          <Text id={hintId} as="p" font="secondary-body" color="text-03">
+            {t("multiSelect.hint")}
+          </Text>
+        )}
         {options.map((option, index) => {
-          const isSelected = index === current;
+          const isSelected = selected.includes(option.label);
           return (
             <SelectCard
-              key={option.label}
+              // A saved question can repeat a label.
+              key={`${index}-${option.label}`}
               ref={(element: HTMLElement | null) => {
                 refs.current[index] =
                   element instanceof HTMLDivElement ? element : null;
               }}
-              role="radio"
+              role={multiSelect ? "checkbox" : "radio"}
               aria-checked={isSelected}
-              tabIndex={index === Math.max(current, 0) ? 0 : -1}
+              tabIndex={multiSelect || index === Math.max(current, 0) ? 0 : -1}
               state={isSelected ? "selected" : "empty"}
               padding={2}
               rounding={2}
               onClick={() => onSelect(option.label)}
               onKeyDown={(event) => {
-                if (!OPTION_KEYS.has(event.key)) return;
+                // A held key toggles a checkbox once.
+                if (multiSelect && event.repeat && TOGGLE_KEYS.has(event.key)) {
+                  event.preventDefault();
+                  return;
+                }
+                if (multiSelect || !OPTION_KEYS.has(event.key)) return;
                 event.preventDefault();
                 move(index, event.key);
               }}
             >
               <Content
                 font="main-ui-body"
+                // A mark, not color alone, shows a multi-select choice.
+                icon={
+                  multiSelect
+                    ? isSelected
+                      ? SvgCheckSquare
+                      : SvgSquare
+                    : undefined
+                }
                 title={option.label}
                 description={option.description || undefined}
               />
@@ -384,6 +454,7 @@ interface QuestionRecordProps {
  */
 function QuestionRecord({ questions, status }: QuestionRecordProps) {
   const t = useTranslations("chat.messages.toolQuestion");
+  const format = useFormatter();
   const answers =
     status.kind === "answered" && status.answers ? status.answers : null;
   const title =
@@ -393,7 +464,9 @@ function QuestionRecord({ questions, status }: QuestionRecordProps) {
   const lines = questions.map((item) => {
     const answer = answers?.find((entry) => entry.question_id === item.id);
     if (!answers) return { id: item.id, text: item.question };
-    const option = answer?.option_label ?? null;
+    const option = answer?.option_labels.length
+      ? format.list(answer.option_labels)
+      : null;
     const note = answer?.user_note ?? null;
     return {
       id: item.id,

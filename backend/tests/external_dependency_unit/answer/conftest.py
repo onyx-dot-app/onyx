@@ -62,6 +62,8 @@ def mock_file_store() -> Iterator[None]:
 
     mock_store = MagicMock()
     mock_store.save_file.side_effect = _mock_save_file
+    # It keeps nothing, so a cached-text read misses and extracts.
+    mock_store.read_file.side_effect = FileNotFoundError("the mock store is empty")
     mock_store.initialize.return_value = None
 
     with patch(

@@ -1,0 +1,56 @@
+{
+  "mixed-16-s7-c100000|first|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 768,
+    "index_digest": "50cc6ecd89c5849c6391c7302aa616a90e5aa09998b39c7c37bffdf2309802bc",
+    "index_documents": 16,
+    "postgres_digest": "9ad2297a78428f01604558672fccaa31c44968f0847fa7482c554248f4fd3a4f"
+  },
+  "mixed-16-s7-c16000000|first|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 105011,
+    "index_digest": "13adf08fc8c81254d062a52fe8778bb899cb8ce2059f3fd4e28769f79e9cf9ef",
+    "index_documents": 16,
+    "postgres_digest": "79d72caea7f2b8b5ca6652ce99251ea9cbe12df8d27b40841fca765bef27846e"
+  },
+  "mixed-16-s7-c4000000|first|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 27479,
+    "index_digest": "c8a251a3afb3c0d75e58fc1734a20bb8bd6cdd678e3845ecc6de708c67acbf3a",
+    "index_documents": 16,
+    "postgres_digest": "d9793e4212e07ff40a1e6b6bddf00e43e1d528aed98a7cefc06a12ccfec6c203"
+  },
+  "mixed-32-s7-c1000000|first|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 16000,
+    "index_digest": "b8b303c574b3bf6320799b405a9310be51d7de515b46e5217567fbd275d34fb5",
+    "index_documents": 32,
+    "postgres_digest": "ae1e89e891cff0fbea053ba185abfd78860824a514a64169cd3aca16eb530c95"
+  },
+  "mixed-400-s7|first|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 3234,
+    "index_digest": "fcefbbf51dcf2a0719634b06121683f8bfae652856af8ede2f0ba394f59c1c8b",
+    "index_documents": 400,
+    "postgres_digest": "ee58de96f502fe69b7af32d4f94a854c4cb0f3f3403fc50910c78ea15995e663"
+  },
+  "mixed-400-s7|unchanged|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 3234,
+    "index_digest": "fcefbbf51dcf2a0719634b06121683f8bfae652856af8ede2f0ba394f59c1c8b",
+    "index_documents": 400,
+    "postgres_digest": "ee58de96f502fe69b7af32d4f94a854c4cb0f3f3403fc50910c78ea15995e663"
+  },
+  "mixed-400-s7|updated|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 3118,
+    "index_digest": "536e5eb96ec3098925a7c4e036b1a9514fbe9d9316f6f5a26570d84793c7bb9b",
+    "index_documents": 400,
+    "postgres_digest": "3b86003e0e48b26f96a5f64b131f3e5179fa2e8260abd1cbfff0a9f8d77c6fd2"
+  },
+  "small-96-s7-p2|first|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 145,
+    "index_digest": "cb9b70f554dfe8a1f71faeade950806763532cd3c787b79b557c6f88be0933db",
+    "index_documents": 94,
+    "postgres_digest": "e110ac52192f53798149dd6869e4174f6f3821e563cf9486846f0d04de73ca1f"
+  },
+  "small-96-s7-p2|unchanged|ibm-granite/granite-embedding-97m-multilingual-r2|dim384|multipass=False|large=False": {
+    "index_chunks": 145,
+    "index_digest": "cb9b70f554dfe8a1f71faeade950806763532cd3c787b79b557c6f88be0933db",
+    "index_documents": 94,
+    "postgres_digest": "e110ac52192f53798149dd6869e4174f6f3821e563cf9486846f0d04de73ca1f"
+  }
+}

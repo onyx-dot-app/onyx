@@ -80,6 +80,7 @@ const REPORT: PublishedFile = {
   artifact_id: "artifact-report",
   version: 1,
   thumbnail_file_id: null,
+  chat_id: null,
 };
 const CHART: PublishedFile = {
   ...REPORT,
@@ -144,7 +145,9 @@ function Chat({
     <AppWorkspaceElementsContext.Provider value={elements}>
       <div ref={workspace} data-workspace-width={workspaceWidth}>
         <div ref={setPanelToggleSlot} />
-        <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>
+        <PublishedFilesPanelContext.Provider
+          value={{ ...CHAT_FILES_PANEL, chatId: "session" }}
+        >
           <div ref={page} data-testid="page">
             {replies.map((files, index) => (
               <PublishedFileCards key={index} files={files} />
@@ -224,7 +227,7 @@ function applyLoad(listed: PublishedFile[], replies: PublishedFile[][]) {
   act(() =>
     useChatSessionStore
       .getState()
-      .applyLoadedSession("session", load, startChatLoad(), {})
+      .applyLoadedSession("session", load, startChatLoad(undefined), {})
   );
 }
 
@@ -332,7 +335,7 @@ test("an older version's card opens that version in the artifact's tab, which sa
   expect(await preview("Draft report")).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v1",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   // The name shows apart from the sentence, so a U+202E or right-to-left
@@ -348,12 +351,35 @@ test("an older version's card opens that version in the artifact's tab, which sa
   expect(await preview("Final report")).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(panel().fileTabs).toHaveLength(1);
   expect(screen.getByRole("tab", { name: "Final report" })).toBeVisible();
   expect(screen.queryByRole("tab", { name: /v\d of/ })).toBeNull();
+});
+
+test("a file tab takes the name that a reload lists after a rename, also on an older version", async () => {
+  const first = { ...reportVersion(1), title: null };
+  const second = { ...reportVersion(2), title: null };
+  renderChat([[first], [second]]);
+  applyLoad([second], [[first], [second]]);
+  update({ type: "openFile", file: second, pinned: false });
+  expect(screen.getByRole("tab", { name: "report.md" })).toBeVisible();
+
+  await act(async () => {
+    applyLoad([{ ...second, name: "summary.md" }], [[first], [second]]);
+  });
+  expect(screen.getByRole("tab", { name: "summary.md" })).toBeVisible();
+  expect(
+    screen.getByRole("region", { name: "Preview of summary.md" })
+  ).toBeInTheDocument();
+
+  update({ type: "openFile", file: first, pinned: true });
+  expect(
+    screen.getByRole("tab", { name: "summary.md (v1 of 2)" })
+  ).toBeVisible();
+  expect(screen.queryByRole("tab", { name: /report\.md/ })).toBeNull();
 });
 
 test("an open tab follows the newest version after a reload and a live publish; a pinned tab keeps its version", async () => {
@@ -367,7 +393,7 @@ test("an open tab follows the newest version after a reload and a live publish; 
   await preview("Q3 report");
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v1",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
 
@@ -377,7 +403,7 @@ test("an open tab follows the newest version after a reload and a live publish; 
   });
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(
@@ -390,7 +416,7 @@ test("an open tab follows the newest version after a reload and a live publish; 
   });
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v3",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(screen.getByRole("tab", { name: "Q3 report" })).toBeVisible();
@@ -408,7 +434,7 @@ test("an open tab follows the newest version after a reload and a live publish; 
   ).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v1",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
 });
@@ -752,7 +778,7 @@ test("a tab of a version newer than the listed one shows that version, without a
   await preview("Q3 report");
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
 });
@@ -1016,6 +1042,7 @@ test("a card opens its own file, also one that the Files list does not hold", as
     artifact_id: null,
     version: null,
     thumbnail_file_id: null,
+    chat_id: null,
   };
   renderChat([[pathless]]);
   applyLoad([], [[pathless]]);
@@ -1033,7 +1060,7 @@ test("a card opens its own file, also one that the Files list does not hold", as
   expect(await preview("Pathless")).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-pathless",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(screen.getByRole("tab", { name: "Pathless" })).toHaveAttribute(
@@ -1072,7 +1099,7 @@ test("an open tab that moves to a new version marks that version seen", async ()
   });
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(panel().seenFileIds).toContain("file-v2");

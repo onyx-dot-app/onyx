@@ -75,7 +75,7 @@ function entry(
 }
 
 const cardAnswers: ToolQuestionAnswer[] = [
-  { question_id: "env", option_label: "Staging" },
+  { question_id: "env", option_labels: ["Staging"] },
 ];
 
 function answered(
@@ -197,7 +197,7 @@ describe("question status", () => {
       cardAnswers
     );
     expect(draftAnswers(request, { env: { note: " Both " } })).toEqual([
-      { question_id: "env", user_note: "Both" },
+      { question_id: "env", option_labels: [], user_note: "Both" },
     ]);
     // A question ID that names an inherited property has no choice yet.
     const named: ToolQuestionRequest = {
@@ -227,7 +227,7 @@ describe("question status", () => {
         request,
         answered("q", {
           answers: [
-            { question_id: "env", option_label: "Staging", user_note: "first" },
+            { question_id: "env", option_labels: ["Staging"], user_note: "first" },
           ],
         })
       )
@@ -327,7 +327,7 @@ describe("question card", () => {
     handler("@click")();
     expect(submitted).toEqual([request]);
     expect(draftAnswers(request, draft)).toEqual([
-      { question_id: "env", user_note: "Both" },
+      { question_id: "env", option_labels: [], user_note: "Both" },
     ]);
 
     handler("@change", 0)();
@@ -436,9 +436,9 @@ describe("question card", () => {
     click(-1);
     expect(submitted).toEqual([request]);
     expect(draftAnswers(request, draft)).toEqual([
-      { question_id: "env", option_label: "Production" },
-      { question_id: "region", option_label: "EU" },
-      { question_id: "notify", user_note: "Ops" },
+      { question_id: "env", option_labels: ["Production"] },
+      { question_id: "region", option_labels: ["EU"] },
+      { question_id: "notify", option_labels: [], user_note: "Ops" },
     ]);
   });
 

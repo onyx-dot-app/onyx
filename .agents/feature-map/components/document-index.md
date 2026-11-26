@@ -145,6 +145,7 @@ check_and_perform_index_swap               db/swap_index.py, run by check_for_in
   REINDEX / ACTIVE_ONLY: swap when _port_swap_ready
 _perform_index_swap: PRESENT -> PAST, FUTURE -> PRESENT, one commit, and in it
   _clear_what_future_missed: hashes PRESENT wrote after FUTURE's last poll -> NULL
+  flag_chat_artifacts_for_reindex: every published file not REMOVED PENDING, attempts 0
 check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
   PENDING -> SOAKING -> DELETING -> RECLAIMED (row kept), or BLOCKED
 ```
@@ -236,7 +237,12 @@ it deletes the old one.
    one commit. Two commits leave a moment with no PRESENT row, and
    `get_current_search_settings` raises. The clear pass of
    [[#swap-clears-what-future-missed]] runs in that same transaction, after the
-   two status updates.
+   two status updates. So does `db/chat.py:flag_chat_artifacts_for_reindex__no_commit`:
+   the port does not copy published files, so every artifact that is not
+   `REMOVED` becomes `PENDING` and the published-file beat writes it into the
+   new PRESENT. Until then its content hits are missing: ordinary search does
+   not find it, and `library_search` finds it by name only
+   ([[file-store-and-user-files]] "Published file text and search").
 10. `swap-clears-what-future-missed` **The swap clears what FUTURE may lack
    instead of waiting for it.** During a port-flow reindex PRESENT keeps
    indexing and stamping `content_hash`, so a document edited after its port

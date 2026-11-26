@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 from enum import Enum
 from typing import Annotated, Any, Callable, Literal, Self
 from uuid import UUID
@@ -13,7 +14,11 @@ from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
-from onyx.integrations.models import ActionSettings, ApprovalMode
+from onyx.integrations.models import (
+    BUILTIN_ACTION_PREFIX,
+    ActionSettings,
+    ApprovalMode,
+)
 from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.tools.tool_implementations.sandbox.models import (
     PublishedFile,
@@ -22,6 +27,17 @@ from onyx.tools.tool_implementations.sandbox.models import (
 )
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
+
+
+class ToolArguments[R](BaseModel):
+    """The arguments of one tool call as the model sends them. `request`
+    converts them into the request that the tool serves. It does not fail:
+    the fields hold all validation. Arguments beyond the fields are ignored."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    @abc.abstractmethod
+    def request(self) -> R: ...
 
 
 class CustomToolErrorInfo(BaseModel):
@@ -337,15 +353,44 @@ class DynamicSchemaInfo(BaseModel):
     user_email: str | None = None
 
 
+def is_builtin_action(integration_id: int | None, action_id: str) -> bool:
+    """Whether an approval scope or request is a built-in Onyx action's. A
+    request of a deleted integration also has no integration, but an
+    integration's action key."""
+    return integration_id is None and action_id.startswith(BUILTIN_ACTION_PREFIX)
+
+
 class ToolApprovalScope(BaseModel):
     """The gated action of a tool whose calls wait for the user's approval."""
 
     model_config = ConfigDict(frozen=True)
 
-    integration_id: int
-    # The action key: the MCP tool name or the OpenAPI operationId. With the
-    # integration, it keys the action policy and session grants.
+    # None for a built-in Onyx action, which no action policy covers; its
+    # action key starts with BUILTIN_ACTION_PREFIX.
+    integration_id: int | None
+    # The action key: the MCP tool name, the OpenAPI operationId, or
+    # `onyx:<operation>` for a built-in action. With the integration, it keys
+    # the action policy and session grants.
     action_id: str
+
+    @model_validator(mode="after")
+    def builtin_action_has_builtin_key(self) -> Self:
+        if self.integration_id is None and not self.action_id.startswith(
+            BUILTIN_ACTION_PREFIX
+        ):
+            raise ValueError(
+                f"An action with no integration needs a {BUILTIN_ACTION_PREFIX} key"
+            )
+        return self
+
+
+class ToolApprovalDetails(BaseModel):
+    """What the approval card of one call shows."""
+
+    # The card's headline.
+    display_name: str
+    # None shows the call's arguments.
+    payload: dict[str, JsonValue] | None = None
 
 
 class ChatFile(BaseModel):
@@ -408,6 +453,10 @@ class ToolContext(BaseModel):
     # In a sandbox chat: copies the files of a search's shown results into
     # the VM, and the result names them by their paths.
     sandbox_search_files: SearchFileOffer | None = None
+    # The name that the model calls a tool by, by its tool name: in code mode,
+    # its program function's (ChatAgent.called_name). Results that tell the
+    # model to call another tool name it so.
+    called_name: Callable[[str], str] = Field(default=str, exclude=True)
 
 
 class ToolCallInfo(BaseModel):
@@ -431,7 +480,7 @@ class ToolCallInfo(BaseModel):
     generated_files: list[PythonExecutionFile] | None = None
     # File-store ids of blobs custom tools saved during the call.
     generated_file_ids: list[str] | None = None
-    # Files that publish_files copied from the sandbox during the call.
+    # Files that the call published from the sandbox.
     published_files: list[PublishedFile] | None = None
 
     @property
@@ -548,13 +597,13 @@ class SearchResults(BaseModel):
 class CodeModeExposure(str, Enum):
     """How code mode offers a tool to the model."""
 
-    # Its own tool beside `execute_code`, never a function inside programs. Tools
+    # Its own tool beside the code mode run tool, never a function inside programs. Tools
     # that wait for child runs must use this: a program cannot wait for them.
     DIRECT = "direct"
-    # A function whose stub the `execute_code` description lists.
+    # A function whose stub the run tool description lists.
     IMMEDIATE = "immediate"
     # A function that programs can call but the description does not list; the
-    # model finds it with `tool_search`.
+    # model finds it with the program search function.
     DEFERRED = "deferred"
 
 
@@ -568,7 +617,7 @@ class CodeModeFunctionName(BaseModel):
     # A group of tools, such as the MCP server of an MCP tool.
     namespace: str | None = None
     # What the namespace's tools are for, from the group's owner, such as an
-    # MCP integration's description. The `execute_code` description lists
+    # MCP integration's description. The run tool description lists
     # the first line beside each deferred namespace.
     namespace_description: str | None = None
 

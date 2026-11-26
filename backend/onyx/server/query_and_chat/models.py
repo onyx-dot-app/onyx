@@ -587,3 +587,17 @@ class ChatSearchResponse(BaseModel):
     groups: list[ChatSessionGroup]
     has_more: bool
     next_page: int | None = None
+
+
+# How a user may open an artifact link (GET /chat/artifacts/{artifact_id}):
+# owner, the owning chat; chat_reader, the chat's shared view; file_only, the
+# version alone, which a chat that the user can read holds.
+ChatArtifactAccess = Literal["owner", "chat_reader", "file_only"]
+
+
+class ChatArtifactFile(PublishedFileView):
+    """A version of a published file, with the chat that owns it and how
+    the user may open it (GET /chat/artifacts/{artifact_id})."""
+
+    chat_id: UUID
+    access: ChatArtifactAccess

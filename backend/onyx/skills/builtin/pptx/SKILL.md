@@ -6,7 +6,7 @@ license: Proprietary. LICENSE.txt has complete terms
 
 # PPTX Skill
 
-> **Path convention**: Run all commands from your working directory, the chat session folder. The skill files are read-only at `/var/lib/onyx/skills/pptx/`. Never `cd` into the skill directory. Run skill scripts with their interpreter and the absolute path, for example `python /var/lib/onyx/skills/pptx/scripts/lint.py deck.pptx` or `node /var/lib/onyx/skills/pptx/scripts/icon.js`. Write all generated files (unpacked dirs, output presentations, thumbnails, PDFs, images) to the working directory. Give the finished deck to the user with `publish_files`.
+> **Path convention**: Run all commands from your working directory, the chat session folder. The skill files are read-only at `/var/lib/onyx/skills/pptx/`. Never `cd` into the skill directory. Run skill scripts with their interpreter and the absolute path, for example `python /var/lib/onyx/skills/pptx/scripts/lint.py deck.pptx` or `node /var/lib/onyx/skills/pptx/scripts/icon.js`. Write all generated files (unpacked dirs, output presentations, thumbnails, PDFs, images) to the working directory. Give the finished deck to the user by publishing it as a file.
 
 ## Quick Reference
 

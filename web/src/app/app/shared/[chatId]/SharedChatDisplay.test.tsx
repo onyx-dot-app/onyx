@@ -57,6 +57,7 @@ const REPORT: PublishedFile = {
   artifact_id: "artifact-report",
   version: 1,
   thumbnail_file_id: null,
+  chat_id: null,
 };
 
 function message(
@@ -225,7 +226,7 @@ test("a shared chat's card of an older version opens that version, labelled", as
   ).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-1",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(

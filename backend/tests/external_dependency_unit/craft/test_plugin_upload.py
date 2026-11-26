@@ -35,6 +35,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.integrations.models import PluginNeedState
 from onyx.integrations.service import list_member_integrations
+from onyx.llm.model_capabilities import ToolFamily
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import (
     SkillBulkActionRequest,
@@ -48,6 +49,7 @@ from onyx.skills.push import (
     build_user_skills_payload,
 )
 from onyx.tools.tool_implementations.skills.skill_tools import (
+    SKILL_READ_SHAPES,
     SkillsListTool,
     skills_catalog_message,
 )
@@ -473,7 +475,12 @@ def test_chat_names_the_integrations_a_loaded_plugin_cannot_use(
     )
 
     message = skills_catalog_message(
-        [SkillsListTool(author, with_sandbox=False)], 200_000
+        [
+            SkillsListTool(
+                author, SKILL_READ_SHAPES[ToolFamily.OPENAI], with_sandbox=False
+            )
+        ],
+        200_000,
     )
 
     assert message is not None

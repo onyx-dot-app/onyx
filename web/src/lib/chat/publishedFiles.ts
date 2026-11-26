@@ -13,7 +13,7 @@ const PUBLISH_END_PACKETS: ReadonlySet<string> = new Set([
   PacketType.PUBLISH_FILES_END,
 ]);
 
-/** The files that one response's publish_files calls published, in order. */
+/** The files that one response's publishing calls published, in order. */
 function readPublishedFiles(packets: Packet[]): PublishedFile[] {
   return readOnce(publishedFileReads, packets, PUBLISH_END_PACKETS, (packets) =>
     packets.flatMap((packet) =>
@@ -25,49 +25,68 @@ function readPublishedFiles(packets: Packet[]): PublishedFile[] {
 /**
  * What the chat's loads gave of its published files: the server's list, null
  * until a load has one, the sequence of the load that gave the list, and the
- * IDs of the files in the packets that the loads replayed.
+ * IDs of the packet files that the list covers: the files in the packets
+ * that the loads replayed, and the files that the chat's packets held when a
+ * load with a list started.
  */
 export interface LoadedPublishedFiles {
   listed: readonly PublishedFile[] | null;
   listedBy: number;
-  replayedFileIds: ReadonlySet<string>;
+  coveredFileIds: ReadonlySet<string>;
 }
 
 export const NO_LOADED_PUBLISHED_FILES: LoadedPublishedFiles = {
   listed: null,
   listedBy: 0,
-  replayedFileIds: new Set(),
+  coveredFileIds: new Set(),
 };
+
+/**
+ * A load of a chat page: its sequence, higher for a load that starts later
+ * (0: the page that the server rendered), and the IDs of the files that the
+ * chat's packets held as its fetch started.
+ */
+export interface ChatLoad {
+  sequence: number;
+  heldFileIds: ReadonlySet<string>;
+}
 
 let chatLoadsStarted = 0;
 
-/**
- * The sequence of a load of a chat page, taken as its fetch starts: a load
- * that starts later has a higher one. A page that the server rendered is
- * sequence 0.
- */
-export function startChatLoad(): number {
+/** Starts a load of the chat whose message tree is `messageTree`. */
+export function startChatLoad(
+  messageTree: MessageTreeState | undefined
+): ChatLoad {
   chatLoadsStarted += 1;
-  return chatLoadsStarted;
+  return {
+    sequence: chatLoadsStarted,
+    heldFileIds: new Set(
+      [...(messageTree?.values() ?? [])].flatMap((message) =>
+        readPublishedFiles(message.packets).map((file) => file.file_id)
+      )
+    ),
+  };
 }
 
 /**
- * Adds a load of the chat, of sequence `loadSequence`. A load with a list
- * replaces the list unless a load that started later gave it.
+ * Adds a load of the chat. A load with a list replaces the list unless a
+ * load that started later gave it, and covers the files that the chat held
+ * as it started: a file that its list leaves out was deleted or replaced.
  */
 export function addLoadedPublishedFiles(
   loaded: LoadedPublishedFiles,
-  load: Pick<BackendChatSession, "published_files" | "packets">,
-  loadSequence: number
+  page: Pick<BackendChatSession, "published_files" | "packets">,
+  load: ChatLoad
 ): LoadedPublishedFiles {
-  const replaces =
-    load.published_files != null && loadSequence >= loaded.listedBy;
+  const listed = page.published_files != null;
+  const replaces = listed && load.sequence >= loaded.listedBy;
   return {
-    listed: replaces ? (load.published_files ?? null) : loaded.listed,
-    listedBy: replaces ? loadSequence : loaded.listedBy,
-    replayedFileIds: new Set([
-      ...loaded.replayedFileIds,
-      ...load.packets.flatMap((packets) =>
+    listed: replaces ? (page.published_files ?? null) : loaded.listed,
+    listedBy: replaces ? load.sequence : loaded.listedBy,
+    coveredFileIds: new Set([
+      ...loaded.coveredFileIds,
+      ...(listed ? load.heldFileIds : []),
+      ...page.packets.flatMap((packets) =>
         readPublishedFiles(packets).map((file) => file.file_id)
       ),
     ]),
@@ -82,6 +101,17 @@ export function artifactKey(
   file: Pick<PublishedFile, "artifact_id" | "file_id">
 ): string {
   return file.artifact_id ?? file.file_id;
+}
+
+/**
+ * Whether the Files list of the chat `chatId` holds `file`: a file of the
+ * chat, or one saved without a chat.
+ */
+export function belongsToChat(
+  file: Pick<PublishedFile, "chat_id">,
+  chatId: string | null
+): boolean {
+  return file.chat_id == null || file.chat_id === chatId;
 }
 
 /**
@@ -104,19 +134,24 @@ export function newestVersion(
 }
 
 /**
- * The chat's published files, on every branch: the newest version of each
- * artifact, newest artifact first. They are the server's list, then the
- * files that packets published after the loads, such as live publishes. A
- * replayed file that the list leaves out stays out: an older version, a file
- * whose object is missing or a file saved without an artifact. Without a
- * list, the packets give the files.
+ * The published files of the chat `chatId`, on every branch: the newest
+ * version of each artifact, newest artifact first. They are the server's
+ * list, then the files that packets published after the loads, such as live
+ * publishes. A covered file that the list leaves out stays out: an older
+ * version, a deleted file, a file whose object is missing or a file saved
+ * without an artifact. Without a list, the packets give the files. A version that the
+ * chat added to another chat's artifact stays out, as the list leaves it
+ * out; its reply card shows it.
  */
 export function chatPublishedFiles(
   loaded: LoadedPublishedFiles,
-  messageTree: MessageTreeState
+  messageTree: MessageTreeState,
+  chatId: string
 ): PublishedFile[] {
   const packetFiles = [...messageTree.values()].flatMap((message) =>
-    readPublishedFiles(message.packets)
+    readPublishedFiles(message.packets).filter((file) =>
+      belongsToChat(file, chatId)
+    )
   );
   const files =
     loaded.listed === null
@@ -124,7 +159,7 @@ export function chatPublishedFiles(
       : [
           ...loaded.listed,
           ...packetFiles.filter(
-            (file) => !loaded.replayedFileIds.has(file.file_id)
+            (file) => !loaded.coveredFileIds.has(file.file_id)
           ),
         ];
   // An artifact keeps the place of its first file
@@ -176,4 +211,48 @@ export function filesSharingALabel(
       .filter((file) => (counts.get(publishedFileLabel(file)) ?? 0) > 1)
       .map((file) => file.file_id)
   );
+}
+
+/**
+ * How the user may open an artifact link: `owner` in the owning chat,
+ * `chat_reader` in that chat's shared view, `file_only` as the file alone
+ * (a version that a chat the user can read holds).
+ */
+export type ChatArtifactAccess = "owner" | "chat_reader" | "file_only";
+
+/** A version of a published file, with the chat that owns it. */
+export interface ChatArtifactFile extends PublishedFile {
+  chat_id: string;
+  access: ChatArtifactAccess;
+}
+
+/** An artifact link's artifact and version (null: the newest). */
+export interface ArtifactLink {
+  artifactId: string;
+  version: number | null;
+}
+
+// The path of an artifact link, `/app/artifacts/<artifact_id>[/v<N>]`, which
+// the artifact tools give the model (backend `artifact_url`).
+const ARTIFACT_LINK_PATH =
+  /^\/app\/artifacts\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/v(\d+))?\/?$/i;
+
+/**
+ * The artifact that `href` links to, on any origin, or null for any other
+ * link. The backend's WEB_DOMAIN can differ from the page's origin, and the
+ * metadata request checks access either way.
+ */
+export function parseArtifactLink(href: string): ArtifactLink | null {
+  let pathname: string;
+  try {
+    pathname = new URL(href, "http://localhost").pathname;
+  } catch {
+    return null;
+  }
+  const match = ARTIFACT_LINK_PATH.exec(pathname);
+  if (!match?.[1]) return null;
+  return {
+    artifactId: match[1],
+    version: match[2] === undefined ? null : Number(match[2]),
+  };
 }

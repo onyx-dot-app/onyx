@@ -1219,6 +1219,48 @@ describe("with stubbed server checks", () => {
     }
   );
 
+  test.each([
+    ["library_manage_library", false, 1],
+    ["artifact", false, 1],
+    ["run_search", false, 0],
+    ["library_manage_library", true, 1],
+  ])(
+    "after a finished %s call (history reload: %s), settlement loads the published files %i time(s)",
+    async (toolName, refreshHistory, loads) => {
+      const store = useChatSessionStore.getState();
+      const controller = store.sessions.get("session")!.abortController;
+      const answer: Message = {
+        ...message(-2, "assistant", "Done"),
+        messageId: 42,
+        packets: [
+          {
+            placement: { turn_index: 1, tab_index: 0 },
+            obj: {
+              type: "custom_tool_delta",
+              tool_name: toolName,
+              response_type: "text",
+              data: "{}",
+            },
+          },
+          { placement: { turn_index: 2, tab_index: 0 }, obj: { type: "stop" } },
+        ],
+      };
+      store.updateSessionData("session", {
+        sendAcknowledged: Promise.resolve(stream(7, [42])),
+      });
+      store.updateSessionMessageTree("session", new Map([[-2, answer]]));
+
+      await settleChatSession({
+        sessionId: "session",
+        controller,
+        errorMessage,
+        refreshHistory,
+      });
+
+      expect(fetchSettledChatSession).toHaveBeenCalledTimes(loads);
+    }
+  );
+
   test("an old reader finishing cannot release another request", async () => {
     const reader = Promise.withResolvers<void>();
     const store = useChatSessionStore.getState();
@@ -1269,6 +1311,7 @@ describe("with stubbed server checks", () => {
       artifact_id: "artifact-notes",
       version: 1,
       thumbnail_file_id: null,
+      chat_id: null,
     };
     jest.mocked(fetchSettledChatSession).mockResolvedValue({
       ...savedSession([], null),

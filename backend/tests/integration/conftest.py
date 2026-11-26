@@ -60,6 +60,7 @@ from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
     get_session_with_current_tenant,
 )
+from onyx.llm.model_capabilities import ToolFamily  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
     fetch_versioned_implementation,
 )
@@ -84,6 +85,7 @@ from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
     LLMProviderManager,
 )
 from tests.integration.common_utils.managers.mock_llm import (  # noqa: E402
+    CLAUDE_MOCK_LLM_MODEL_NAME,
     MockLLMManager,
     MockLLMScript,
 )
@@ -549,6 +551,38 @@ def mock_llm(
         handle.verify()
     finally:
         handle.close()
+
+
+@pytest.fixture
+def claude_mock_llm(
+    mock_llm: MockLLMScript, admin_user: DATestUser
+) -> Generator[DATestLLMProvider, None, None]:
+    """A provider of a Claude-named model on the test's mock LLM script, beside
+    the default. Chats that pick it get the Claude tool family."""
+    provider = MockLLMManager.create(
+        mock_llm.api_base,
+        admin_user,
+        model_name=CLAUDE_MOCK_LLM_MODEL_NAME,
+        make_default=False,
+    )
+    yield provider
+    LLMProviderManager.delete(provider, user_performing_action=admin_user)
+
+
+@pytest.fixture
+def mock_llm_of_family(
+    request: pytest.FixtureRequest,
+) -> Callable[[ToolFamily], DATestLLMProvider | None]:
+    """The mock LLM provider whose model gets a tool family: `claude_mock_llm`
+    for ToolFamily.CLAUDE, or None for the default mock model, which gets
+    ToolFamily.OPENAI."""
+
+    def provider(family: ToolFamily) -> DATestLLMProvider | None:
+        if family is ToolFamily.OPENAI:
+            return None
+        return request.getfixturevalue("claude_mock_llm")
+
+    return provider
 
 
 @pytest.fixture

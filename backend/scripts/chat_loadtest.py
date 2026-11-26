@@ -95,10 +95,6 @@ class ChatLoadTester:
                 "message": message,
                 "parent_message_id": parent_message_id,
                 "prompt_id": None,
-                "retrieval_options": {
-                    "run_search": "always",
-                    "real_time": True,
-                },
                 "file_descriptors": [],
                 "search_doc_ids": [],
             },
@@ -106,7 +102,7 @@ class ChatLoadTester:
             response.raise_for_status()
 
             async for chunk in self.process_stream(response):
-                if "tool_name" in chunk and "run_search" in chunk:
+                if "tool_name" in chunk and "internal_search" in chunk:
                     if first_doc_time is None:
                         first_doc_time = time.time() - start_time
 
