@@ -702,15 +702,17 @@ def test_history_retains_expired_requests_and_checks_owner(
     assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
 
 
-@pytest.mark.parametrize("kind", ["api", "mcp"])
+@pytest.mark.parametrize(("kind", "asks_each_time"), [("api", True), ("mcp", False)])
 def test_unknown_external_action_can_only_be_approved_once(
     kind: str,
+    asks_each_time: bool,
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """An MCP tool named like the request tool asks each time too."""
+    """A request to an API app that matches no action asks each time. An MCP
+    tool with the same name is a usual action."""
     _stub_send_wake_noop(monkeypatch)
     user = make_user(db_session, email_prefix="unknown_action")
     session = build_session_with_user(user=user)
@@ -731,7 +733,16 @@ def test_unknown_external_action_can_only_be_approved_once(
     )
     db_session.commit()
     view = list_session_approvals(session.id, user, db_session).items[0]
-    assert not view.can_approve_for_session
+    assert view.can_approve_for_session is not asks_each_time
+    if not asks_each_time:
+        result = submit_decision(
+            row.approval_id,
+            DecisionBody(decision=ApprovalChoice.APPROVE_SESSION),
+            user,
+            db_session,
+        )
+        assert result.decision == ApprovalDecision.APPROVED
+        return
     with pytest.raises(OnyxError) as exc:
         submit_decision(
             row.approval_id,
@@ -760,9 +771,8 @@ def test_old_grant_of_unknown_action_does_not_approve_pending_calls(
     _stub_send_wake_noop(monkeypatch)
     user = make_user(db_session, email_prefix="old_grant")
     session = build_session_with_user(user=user)
-    integration_id = make_mcp_integration(db_session, tools=("unspecified", "send"))[
-        0
-    ].id
+    app = make_external_app(db_session, skill=make_skill(db_session), auth_template={})
+    integration_id = app_integration_id(db_session, app)
 
     def insert(action: str) -> ActionApproval:
         return insert_action_approval(
