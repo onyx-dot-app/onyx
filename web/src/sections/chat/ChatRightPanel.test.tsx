@@ -1480,6 +1480,18 @@ describe("the chat's browser", () => {
     expect(FakeSocket.instances).toHaveLength(1);
   });
 
+  test("each Browser asked for before the connection opens its own page", async () => {
+    renderChat([[REPORT]]);
+    update({ type: "showTab", tabId: "files" });
+    for (let i = 0; i < 2; i++) {
+      fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Browser" }));
+    }
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    expect(socket().sent).toEqual([{ type: "newTab" }, { type: "newTab" }]);
+  });
+
   test("a new page asked for before the connection goes only to its own chat's browser", async () => {
     renderChat([[REPORT]]);
     update({ type: "showTab", tabId: "files" });

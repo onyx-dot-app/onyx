@@ -13682,6 +13682,7 @@
         "chooseOne": "Choose file",
         "chooseMany": "Choose files",
         "inputLabel": "Files for the page",
+        "sendError": "Could not answer the page. Try again.",
         "error": "Could not upload the files. Try again."
       }
     }

@@ -162,8 +162,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     [dispatch]
   );
   const onDownload = useCallback(
-    ({ fileName }: BrowserDownload) => {
-      if (sessionId === null) return;
+    ({ fileName }: BrowserDownload, downloadSessionId: string) => {
       toast.info(tb("download.saved", { fileName }), {
         action: {
           icon: SvgDownload,
@@ -171,12 +170,12 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           // An attachment link starts the download without leaving the page
           onClick: () =>
             downloadFile(fileName, {
-              url: browserDownloadUrl(sessionId, fileName),
+              url: browserDownloadUrl(downloadSessionId, fileName),
             }),
         },
       });
     },
-    [tb, sessionId]
+    [tb]
   );
   const browser = useBrowserStream({
     sessionId: browserSessionId,
@@ -433,8 +432,11 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   };
   // "Open browser" before the stream is live opens its page once it is. A
   // live browser whose last page closes closes in the panel.
-  // The chat whose browser gets the pending page; closing the browser drops it
-  const newTabPendingRef = useRef<string | null>(null);
+  // The pages asked for, and the chat whose browser gets them; closing the
+  // browser drops them
+  const newTabPendingRef = useRef<{ sessionId: string; count: number } | null>(
+    null
+  );
   const hadPagesRef = useRef(false);
   const pageCount = pages.length;
   useEffect(() => {
@@ -444,8 +446,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     }
     const pending = newTabPendingRef.current;
     newTabPendingRef.current = null;
-    if (pending !== null && pending === browserSessionId)
-      sendToBrowser({ type: "newTab" });
+    if (pending !== null && pending.sessionId === browserSessionId)
+      for (let i = 0; i < pending.count; i++) sendToBrowser({ type: "newTab" });
     const hadPages = hadPagesRef.current;
     hadPagesRef.current = pageCount > 0;
     if (hadPages && pageCount === 0) {
@@ -456,8 +458,16 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // As T3 Code's "+" menu: each opening adds a new page and shows it
   const openBrowserPage = () => {
     insideChangeRef.current = true;
-    if (!(browserLive && sendToBrowser({ type: "newTab" })))
-      newTabPendingRef.current = sessionId;
+    if (
+      sessionId !== null &&
+      !(browserLive && sendToBrowser({ type: "newTab" }))
+    ) {
+      const pending = newTabPendingRef.current;
+      newTabPendingRef.current = {
+        sessionId,
+        count: pending?.sessionId === sessionId ? pending.count + 1 : 1,
+      };
+    }
     dispatch({ type: "openBrowser" });
   };
   const closeTab = (tabId: string) => {

@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@tests/setup/test-utils";
+import { toast } from "@opal/layouts";
 import { uploadBrowserFiles } from "@/lib/chat/browser/api";
 import { useBrowserStream } from "@/lib/chat/browser/hooks";
 import { BrowserPanel } from "@/sections/chat/browser/BrowserPanel";
@@ -376,6 +377,89 @@ test("a long paste goes to the page in chunks, in order", () => {
     { type: "text", text: "b".repeat(10_000) },
     { type: "text", text: "c" },
   ]);
+});
+
+test("each tab keeps its URL draft until its navigate is sent", () => {
+  renderPanel();
+  const tabs = [TAB, { ...TAB, id: "t2", url: "https://second.example/" }];
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs, selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
+  });
+  const address = () => screen.getByRole("textbox", { name: "Address" });
+  fireEvent.change(address(), { target: { value: "one.example" } });
+  act(() => socket().receive({ type: "tabs", tabs, selected: "t2" }));
+  fireEvent.change(address(), { target: { value: "two.example" } });
+  act(() => socket().receive({ type: "tabs", tabs, selected: "t1" }));
+  expect(address()).toHaveValue("one.example");
+  // A navigate that is not sent keeps the draft
+  socket().readyState = 0;
+  fireEvent.keyDown(address(), { key: "Enter" });
+  expect(address()).toHaveValue("one.example");
+  socket().readyState = 1;
+  fireEvent.keyDown(address(), { key: "Enter" });
+  expect(socket().sent.at(-1)).toEqual({
+    type: "navigate",
+    url: "one.example",
+  });
+  expect(address()).toHaveValue("https://example.com/");
+  act(() => socket().receive({ type: "tabs", tabs, selected: "t2" }));
+  expect(address()).toHaveValue("two.example");
+});
+
+test("a file chooser answer that is not sent keeps the prompt", () => {
+  const toastError = jest.spyOn(toast, "error");
+  renderPanel();
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
+    socket().receive({ type: "fileChooser", id: "f1", multiple: false });
+  });
+  socket().readyState = 0;
+  act(() => screen.getByRole("button", { name: "Cancel" }).click());
+  expect(screen.getByText("The page asks for a file.")).toBeInTheDocument();
+  expect(toastError).toHaveBeenCalledWith(
+    "Could not answer the page. Try again."
+  );
+});
+
+test("a page dialog takes focus and gives it back to the page", () => {
+  renderPanel();
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
+  });
+  act(() =>
+    socket().receive({
+      type: "tabs",
+      tabs: [{ ...TAB, dialog: { type: "confirm", message: "Sure?" } }],
+      selected: "t1",
+    })
+  );
+  expect(screen.getByRole("button", { name: "Accept" })).toHaveFocus();
+  act(() => socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" }));
+  expect(screen.getByRole("textbox", { name: "Browser page" })).toHaveFocus();
+});
+
+test("a shortcut sent to the page does not run in the app", () => {
+  renderPanel();
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
+  });
+  const input = screen.getByRole("textbox", { name: "Browser page" });
+  expect(
+    fireEvent.keyDown(input, { key: "r", code: "KeyR", ctrlKey: true })
+  ).toBe(false);
+  expect(socket().sent.at(-1)).toMatchObject({ type: "key", key: "r" });
+  // Paste stays native, so the clipboard's text arrives through onPaste
+  expect(
+    fireEvent.keyDown(input, { key: "v", code: "KeyV", ctrlKey: true })
+  ).toBe(true);
 });
 
 test("another selected tab hides the old page until its own frame comes", async () => {

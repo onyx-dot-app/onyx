@@ -13682,6 +13682,7 @@
         "chooseOne": "Elegir archivo",
         "chooseMany": "Elegir archivos",
         "inputLabel": "Archivos para la página",
+        "sendError": "No se pudo responder a la página. Inténtalo de nuevo.",
         "error": "No se pudieron subir los archivos. Inténtalo de nuevo."
       }
     }

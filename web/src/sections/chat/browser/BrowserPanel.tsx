@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -66,15 +66,36 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
   // Only the controller answers the page's file chooser
   const fileChooser = controlling ? state.fileChooser : null;
 
-  // The URL bar shows the tab's URL until the user edits it; an edit stays
-  // with its tab
-  const [edit, setEdit] = useState<{ tab: string; url: string } | null>(null);
+  // The URL bar shows the tab's URL until the user edits it; each tab keeps
+  // its own draft until its navigate is sent
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, string>>(
+    () => new Map()
+  );
   const editedUrl =
-    edit !== null && edit.tab === selectedTabId ? edit.url : null;
+    selectedTabId !== null ? (drafts.get(selectedTabId) ?? null) : null;
+  const setDraft = (tab: string, url: string | null) =>
+    setDrafts((current) => {
+      const next = new Map(current);
+      if (url === null) next.delete(tab);
+      else next.set(tab, url);
+      return next;
+    });
   const navigate = () => {
+    if (selectedTabId === null) return;
     const url = browserUrlFromInput(editedUrl ?? "");
-    setEdit(null);
-    if (url) send({ type: "navigate", url });
+    if (url && !send({ type: "navigate", url })) return;
+    setDraft(selectedTabId, null);
+  };
+  const surfaceInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const focusPage = () => {
+    // Only a page the user still controls takes the focus back
+    const input = surfaceInputRef.current;
+    if (input && !input.disabled) input.focus({ preventScroll: true });
+  };
+  const answerFileChooser = (id: string, paths: string[]): boolean => {
+    if (stream.answerFileChooser(id, paths)) return true;
+    toast.error(t("fileChooser.sendError"));
+    return false;
   };
 
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -139,7 +160,7 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
         searchValue={editedUrl ?? selectedTab?.url ?? ""}
         onSearchChange={
           controlling && selectedTab
-            ? (value) => setEdit({ tab: selectedTab.id, url: value })
+            ? (value) => setDraft(selectedTab.id, value)
             : undefined
         }
         onSubmit={navigate}
@@ -187,6 +208,8 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
           hasFrame={stream.hasFrame && selectedTab !== null}
           agentPointer={agentPointer}
           send={send}
+          inputRef={surfaceInputRef}
+          dropInputRef={stream.dropInputRef}
         />
         {!live || selectedTab === null || isBlankBrowserPage(selectedTab) ? (
           <BrowserStatus
@@ -211,6 +234,7 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
                   key={`${selectedTab.id}:${selectedTab.dialog.message}`}
                   dialog={selectedTab.dialog}
                   controlling={controlling}
+                  onClosed={focusPage}
                   onAnswer={(accept, promptText) => {
                     const answer: BrowserViewerMessage = {
                       type: "dialog",
@@ -227,9 +251,7 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
                   key={fileChooser.id}
                   sessionId={sessionId}
                   multiple={fileChooser.multiple}
-                  onAnswer={(paths) =>
-                    stream.answerFileChooser(fileChooser.id, paths)
-                  }
+                  onAnswer={(paths) => answerFileChooser(fileChooser.id, paths)}
                 />
               )}
             </Section>
@@ -384,15 +406,38 @@ interface DialogPromptProps {
   dialog: NonNullable<BrowserTab["dialog"]>;
   controlling: boolean;
   onAnswer: (accept: boolean, promptText?: string) => void;
+  // Runs when the dialog goes, to give the focus back to the page
+  onClosed: () => void;
 }
 
 /** The page's alert, confirm or prompt dialog. */
-function DialogPrompt({ dialog, controlling, onAnswer }: DialogPromptProps) {
+function DialogPrompt({
+  dialog,
+  controlling,
+  onAnswer,
+  onClosed,
+}: DialogPromptProps) {
   const t = useTranslations("chat.browser");
   const [promptText, setPromptText] = useState("");
   const isPrompt = dialog.type === "prompt";
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  // The controller answers at once: focus goes to the answer field, else
+  // to Accept
+  useEffect(() => {
+    if (!controlling) return;
+    cardRef.current
+      ?.querySelector<HTMLElement>("input, [data-dialog-accept]")
+      ?.focus();
+  }, [controlling]);
+  const closed = useEffectEvent(onClosed);
+  useEffect(() => () => closed(), []);
   return (
-    <Card padding={2} role="dialog" aria-label={t("dialog.label")}>
+    <Card
+      ref={cardRef}
+      padding={2}
+      role="dialog"
+      aria-label={t("dialog.label")}
+    >
       <Section alignItems="stretch" gap={2} height="auto">
         <Text
           as="p"
@@ -422,6 +467,7 @@ function DialogPrompt({ dialog, controlling, onAnswer }: DialogPromptProps) {
               </Button>
               <Button
                 size="sm"
+                data-dialog-accept
                 onClick={() =>
                   onAnswer(true, isPrompt ? promptText : undefined)
                 }
@@ -443,7 +489,8 @@ function DialogPrompt({ dialog, controlling, onAnswer }: DialogPromptProps) {
 interface FileChooserPromptProps {
   sessionId: string;
   multiple: boolean;
-  onAnswer: (paths: string[]) => void;
+  // False when the answer was not sent
+  onAnswer: (paths: string[]) => boolean;
 }
 
 /** The page asks for files: upload the picked ones into the chat's VM. */
@@ -470,7 +517,7 @@ function FileChooserPrompt({
         sessionId,
         multiple ? files : files.slice(0, 1)
       );
-      if (shownRef.current) onAnswer(paths);
+      if (shownRef.current && !onAnswer(paths)) setUploading(false);
     } catch (error) {
       console.error("Failed to upload files for the page", {
         sessionId,

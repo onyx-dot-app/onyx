@@ -160,7 +160,8 @@ interface UseBrowserStreamOptions {
   // Connects while true and the canvas is mounted; the api_server keeps the
   // VM awake for a viewer
   active: boolean;
-  onDownload: (download: BrowserDownload) => void;
+  // `sessionId` is the chat whose browser downloaded the file
+  onDownload: (download: BrowserDownload, sessionId: string) => void;
   onError: (message: string) => void;
 }
 
@@ -173,7 +174,11 @@ export interface BrowserStream {
   send: (message: BrowserViewerMessage) => boolean;
   // Connects again after the connection stopped
   retry: () => void;
-  answerFileChooser: (id: string, paths: string[]) => void;
+  // False when the answer was not sent; the prompt then stays
+  answerFileChooser: (id: string, paths: string[]) => boolean;
+  // The surface's drop of its queued mouse moves and wheels, which belong
+  // to the page that was selected when they were queued
+  dropInputRef: RefObject<(() => void) | null>;
 }
 
 /**
@@ -201,6 +206,7 @@ export function useBrowserStream({
   const [generation, setGeneration] = useState(0);
   const clientRef = useRef<BrowserStreamClient | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const dropInputRef = useRef<(() => void) | null>(null);
 
   const download = useEffectEvent(onDownload);
   const error = useEffectEvent(onError);
@@ -215,17 +221,19 @@ export function useBrowserStream({
       url: browserStreamUrl(sessionId, window.location),
       events: {
         onState: (socketState) => {
+          painter.clear();
           setHasFrame(false);
           dispatch({ type: "socket", state: socketState });
         },
         onFrame: (jpeg) => painter.paint(jpeg),
         onMessage: (message) => {
-          if (message.type === "download") download(message);
+          if (message.type === "download") download(message, sessionId);
           else if (message.type === "error") error(message.message);
           else if (message.type === "tabs") {
             // The old page's frame stays hidden, and takes no clicks, until
             // the new page's first frame
             if (selected !== undefined && message.selected !== selected) {
+              dropInputRef.current?.();
               painter.clear();
               setHasFrame(false);
             }
@@ -245,16 +253,16 @@ export function useBrowserStream({
     };
   }, [active, sessionId, generation]);
 
-  const send = useCallback(
-    (message: BrowserViewerMessage) =>
-      clientRef.current?.send(message) ?? false,
-    []
-  );
+  const send = useCallback((message: BrowserViewerMessage) => {
+    if (message.type === "selectTab") dropInputRef.current?.();
+    return clientRef.current?.send(message) ?? false;
+  }, []);
   const retry = useCallback(() => setGeneration((value) => value + 1), []);
   const answerFileChooser = useCallback(
     (id: string, paths: string[]) => {
+      if (!send({ type: "fileChooser", id, paths })) return false;
       dispatch({ type: "answeredFileChooser" });
-      send({ type: "fileChooser", id, paths });
+      return true;
     },
     [send]
   );
@@ -265,5 +273,6 @@ export function useBrowserStream({
     send,
     retry,
     answerFileChooser,
+    dropInputRef,
   };
 }

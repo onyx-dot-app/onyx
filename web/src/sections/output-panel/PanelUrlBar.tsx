@@ -78,7 +78,8 @@ export function PanelUrlBar({
               <InputTypeIn
                 variant="internal"
                 type={onSubmit ? "url" : "search"}
-                dir={onSubmit ? "ltr" : undefined}
+                // A URL reads left to right; other text keeps the input's "auto"
+                dir={onSubmit ? "ltr" : "auto"}
                 value={searchValue ?? ""}
                 onChange={(event) => onSearchChange(event.target.value)}
                 onKeyDown={

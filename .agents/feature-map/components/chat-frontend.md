@@ -256,7 +256,9 @@
   (`sections/chat/browser/`, ported from T3 Code) serves all page tabs; only
   the viewer that controls the tab can send input or navigate, and the
   service adds a missing URL scheme. Close code 4403 shows the browser as
-  off, 4404 and 4503 as unavailable with a retry; other drops reconnect. The
+  off, 4404 and 4503 as unavailable with a retry; other drops reconnect. A
+  page's download goes to the sandbox's `downloads/`, not to Files: its toast
+  downloads it from `/api/chat/sessions/{id}/browser/downloads/{name}`. The
   admin switch is "Browser" on the chat preferences page
   (`browser_enabled`).
 - **A chat has a right panel, with a toggle at the far end of its header**
