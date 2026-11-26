@@ -213,6 +213,7 @@ export default function CustomizePluginsPage() {
   const onMarketplaceAdded = useMarketplaceAdded();
   const marketplaceList = useMarketplaces();
   const showMarketplaces =
+    marketplaceList.isLoading ||
     (marketplaceList.marketplaces?.length ?? 0) > 0 ||
     marketplaceList.error !== undefined;
   const locale = useLocale();
@@ -295,13 +296,15 @@ export default function CustomizePluginsPage() {
             description={marketplaceCopy("page.description")}
             padding={0}
             rightChildren={
-              <Button
-                prominence="secondary"
-                icon={SvgPlus}
-                onClick={() => setAddingMarketplace(true)}
-              >
-                {marketplaceCopy("add.menuItem")}
-              </Button>
+              marketplaceList.isLoading ? undefined : (
+                <Button
+                  prominence="secondary"
+                  icon={SvgPlus}
+                  onClick={() => setAddingMarketplace(true)}
+                >
+                  {marketplaceCopy("add.menuItem")}
+                </Button>
+              )
             }
           />
           <MarketplacesTable list={marketplaceList} />

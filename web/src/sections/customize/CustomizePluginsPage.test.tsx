@@ -139,6 +139,18 @@ test("the empty state offers add marketplace only once the marketplaces load", a
   ).not.toBeInTheDocument();
 });
 
+test("the Marketplaces section shows a loader while the marketplaces load", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [] },
+    "/api/marketplaces": () => new Promise<never>(() => undefined),
+  });
+  render(<CustomizePluginsPage />);
+
+  await screen.findByRole("button", { name: "Upload Plugin" });
+  expect(document.getElementById("marketplaces")).not.toBeNull();
+});
+
 test("the Marketplaces section lists marketplaces and Add marketplace opens the add dialog", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
