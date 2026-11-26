@@ -33,7 +33,7 @@ Group or user restriction needs EE.
   in the list and on the Overview tab) is the company setting; a global action
   manager changes it through `PUT /admin/integrations/{id}/installation-policy`.
   Not available keeps the integration private: its owner and its shares use it.
-  There is no admin Plugins page: a plugin holds skills only. Group Access on
+  A plugin holds skills only. Group Access on
   the Overview tab (`sections/integrations/IntegrationGroupAccess.tsx`, reusing
   `SkillGroupAccess`) sets a group install setting through
   `PUT /admin/integrations/{id}/group-settings`; only a global action manager
