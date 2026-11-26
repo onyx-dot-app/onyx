@@ -428,6 +428,9 @@ describe("browser page tabs", () => {
     ).toBe("docs.example.org");
     expect(browserPageTitle({ title: "", url: "about:blank" })).toBeNull();
     expect(browserPageTitle({ title: "", url: "" })).toBeNull();
+    expect(browserPageTitle({ title: "invoice\u202Efdp.exe", url: "" })).toBe(
+      "invoicefdp.exe"
+    );
   });
 
   test("a page is blank until it loads its first URL", () => {
