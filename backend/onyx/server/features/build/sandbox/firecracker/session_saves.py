@@ -111,8 +111,8 @@ SAVE_EXCLUDED_ROOTS: frozenset[str] = frozenset(
 # One session's save (capture and upload, 15 min each at most) ends within
 # this time. A stop renews its sandbox lock for each session.
 SESSION_SAVE_MAX_SECONDS = 35 * 60.0
-_ARCHIVE_FILE_TYPE = "application/zstd"
-_ARCHIVE_DISPLAY_NAME = "craft-session-save.tar.zst"
+ARCHIVE_FILE_TYPE = "application/zstd"
+ARCHIVE_DISPLAY_NAME = "craft-session-save.tar.zst"
 
 _IDLE_STOP_LOCKED_RETRIES = 5
 _IDLE_STOP_LOCKED_PAUSE_SECONDS = 0.2
@@ -194,9 +194,9 @@ class FileStoreArchiveStore(SessionArchiveStore):
 
     def presign_upload(self, *, size: int, sha256: str) -> tuple[str, PresignedRequest]:
         upload = self._store.presign_upload(
-            display_name=_ARCHIVE_DISPLAY_NAME,
+            display_name=ARCHIVE_DISPLAY_NAME,
             file_origin=FileOrigin.SANDBOX_SNAPSHOT,
-            file_type=_ARCHIVE_FILE_TYPE,
+            file_type=ARCHIVE_FILE_TYPE,
             size=size,
             sha256=sha256,
         )
@@ -494,6 +494,60 @@ def restore_session(
     )
 
 
+def save_instance_sessions(
+    tenant_id: str,
+    tenant_cache: CacheBackend,
+    daemon: SandboxDaemonClient,
+    transfer: SessionTransfer,
+    store: ArchiveStorage,
+    sandbox_id: UUID,
+    sessions: list[UUID],
+    *,
+    cancelled: Callable[[], bool],
+    renew_lease: Callable[[], None],
+) -> bool:
+    """Save every session of a stop, one at a time. False, and the sandbox
+    keeps running, when a save of a session already runs, a call cancels
+    the stop, or a save fails. `renew_lease` raises when the stop lost its
+    lock: no later commit."""
+    with tenant_scope(tenant_id):
+        for session_id in sessions:
+            renew_lease()
+            try:
+                with session_save_lock(tenant_cache, session_id) as held:
+                    if not held:
+                        # A turn-end save runs: the next stop tries again.
+                        return False
+                    save_session(
+                        tenant_cache,
+                        daemon,
+                        transfer,
+                        store,
+                        sandbox_id,
+                        session_id,
+                        cancelled,
+                    )
+            except SessionPurgedError:
+                continue
+            except SessionSaveCancelledError:
+                logger.info(
+                    "sandbox_fc_stop_save_cancelled sandbox=%s session=%s",
+                    sandbox_id,
+                    session_id,
+                )
+                return False
+            except Exception:
+                # A stop needs every session saved.
+                logger.warning(
+                    "sandbox_fc_session_save_failed sandbox=%s session=%s",
+                    sandbox_id,
+                    session_id,
+                    exc_info=True,
+                )
+                return False
+    return True
+
+
 class SessionSaveCheckpointer(SandboxCheckpointer):
     """Saves every session set up on the VM. Keeps the VM (False) when the
     sandbox is busy before or after the saves, or when a save fails."""
@@ -552,42 +606,18 @@ class SessionSaveCheckpointer(SandboxCheckpointer):
         sessions = sessions_on_instance(
             tenant_cache, sandbox_id, (vm.attempt, vm.generation)
         )
-        with tenant_scope(tenant_id):
-            for session_id in sessions:
-                # Raises when the stop lost the lock: no later commit.
-                renew_lease()
-                try:
-                    with session_save_lock(tenant_cache, session_id) as held:
-                        if not held:
-                            # A turn-end save runs: the next report tries again.
-                            return False
-                        save_session(
-                            tenant_cache,
-                            daemon,
-                            transfer,
-                            self._store,
-                            sandbox_id,
-                            session_id,
-                            cancelled,
-                        )
-                except SessionPurgedError:
-                    continue
-                except SessionSaveCancelledError:
-                    logger.info(
-                        "sandbox_fc_stop_save_cancelled sandbox=%s session=%s",
-                        sandbox_id,
-                        session_id,
-                    )
-                    return False
-                except Exception:
-                    # A stop needs every session saved.
-                    logger.warning(
-                        "sandbox_fc_session_save_failed sandbox=%s session=%s",
-                        sandbox_id,
-                        session_id,
-                        exc_info=True,
-                    )
-                    return False
+        if not save_instance_sessions(
+            tenant_id,
+            tenant_cache,
+            daemon,
+            transfer,
+            self._store,
+            sandbox_id,
+            sessions,
+            cancelled=cancelled,
+            renew_lease=renew_lease,
+        ):
+            return False
         # A call, turn, approval or command that began during the saves.
         return not cancelled() and not self._activity.is_busy(
             tenant_id=tenant_id, sandbox_id=sandbox_id

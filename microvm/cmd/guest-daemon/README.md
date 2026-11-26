@@ -90,7 +90,9 @@ Gaps against a VM:
 - With no writable cgroup v2 (an unprivileged runc container), the daemon uses process groups: a
   command that calls `setsid` escapes Cancel and deadlines. The container limits and the idle stop
   contain it. Under gVisor a writable cgroupfs can exist: set `--cgroup-root` there.
-- The daemon does not add the proxy CA to Chrome's NSS database (`--ca-bundle` is empty).
+- The daemon does not install the proxy CA (`--ca-bundle` is empty). `firewall-init` adds it to the
+  system bundle, and the image entrypoint adds `SANDBOX_PROXY_CA_BUNDLE_SRC` (default
+  `/sandbox-ca/ca.crt`) to Chrome's NSS database when that file is readable.
 
 Check: `deployment/craft-runtime/check-container.sh <image>` (Go tests in `internal/guestd/containertest`, build tag `container`).
 

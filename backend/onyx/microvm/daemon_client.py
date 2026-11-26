@@ -1,10 +1,11 @@
 """Typed client for the guest daemon (`craft.sandboxd.v1.Sandboxd`), through the
-host agent pass-through.
+host agent pass-through (a VM) or over a pinned TLS channel (a container).
 
 The API is `microvm/proto/sandboxd/v1/sandboxd.proto`. Every call carries
 `x-sandbox-id` (the agent routes on it). Every call except Health, Init
-included, also carries the VM's key in `x-sandboxd-key`. The agent installs
-the key at Create; this client never calls SetKey.
+included, also carries the sandbox's key in `x-sandboxd-key`. The agent
+installs the key at Create, a container daemon reads it at start
+(`--key-file`); this client never calls SetKey.
 
 Errors: a daemon error is a `SandboxDaemonError` (domain
 `sandboxd.craft.onyx.app`). An error of the pass-through itself (the VM is not
@@ -37,6 +38,7 @@ from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2, sandboxd_pb2_grpc
 from onyx.microvm.models import (
     CancelResult,
     CancelSignal,
+    DaemonCaptureSummary,
     DaemonHealth,
     DaemonInitResult,
     ExecCommand,
@@ -661,6 +663,69 @@ class SandboxDaemonClient:
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e
         return WrittenFile(info=_file_entry(r.info), sha256=r.sha256)
+
+    def capture_session(
+        self, *, session_id: str, roots: list[str]
+    ) -> Generator[bytes, None, DaemonCaptureSummary]:
+        """Yield the tar + zstd archive of the session's `roots` (default
+        excludes); the generator returns the summary, with the SHA-256 of the
+        bytes. Closing the generator early cancels the stream."""
+        call: _ResponseStream[sandboxd_pb2.CaptureSessionResponse] = (
+            self._stub.CaptureSession(
+                sandboxd_pb2.CaptureSessionRequest(session_id=session_id, roots=roots),
+                metadata=self._authed(),
+                timeout=_TRANSFER_TIMEOUT_SECONDS,
+            )
+        )
+        try:
+            for msg in call:
+                part = msg.WhichOneof("part")
+                if part == "data":
+                    yield msg.data
+                elif part == "summary":
+                    return DaemonCaptureSummary(
+                        size_bytes=msg.summary.stored_bytes,
+                        sha256=msg.summary.sha256,
+                        roots=list(msg.summary.roots),
+                    )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        finally:
+            call.cancel()
+        raise _protocol_error("CaptureSession ended without a summary")
+
+    def restore_session(
+        self,
+        *,
+        session_id: str,
+        data: IO[bytes],
+        size_bytes: int,
+        sha256: str,
+        roots: list[str],
+    ) -> list[str]:
+        """Replace the session's capture roots with an archive from
+        capture_session, streamed from the seekable file `data`. The daemon
+        checks size and SHA-256 before it changes a file. Returns the roots
+        it replaced."""
+        size, chunks = _write_content(data)
+        if size != size_bytes:
+            raise ValueError(f"archive is {size} bytes, not {size_bytes}")
+        header = sandboxd_pb2.RestoreSessionHeader(
+            session_id=session_id, size_bytes=size_bytes, sha256=sha256, roots=roots
+        )
+
+        def requests() -> Iterator[sandboxd_pb2.RestoreSessionRequest]:
+            yield sandboxd_pb2.RestoreSessionRequest(header=header)
+            for chunk in chunks:
+                yield sandboxd_pb2.RestoreSessionRequest(data=chunk)
+
+        try:
+            r: sandboxd_pb2.RestoreSessionResponse = self._stub.RestoreSession(
+                requests(), metadata=self._authed(), timeout=_TRANSFER_TIMEOUT_SECONDS
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+        return list(r.roots)
 
     def install_skill(self, *, name: str, version: str, tar: bytes) -> bool:
         """Put one skill in the VM skills folder from a plain tar whose

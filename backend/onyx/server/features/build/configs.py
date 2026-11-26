@@ -245,6 +245,54 @@ SANDBOX_DOCKER_VOLUME_PREFIX = os.environ.get(
 # headroom to over-commit each sandbox to 10Gi.
 SANDBOX_DOCKER_MEMORY_LIMIT = os.environ.get("SANDBOX_DOCKER_MEMORY_LIMIT", "2g")
 SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0"))
+# Processes and threads of one harness sandbox container (Chrome and
+# LibreOffice start many threads).
+SANDBOX_DOCKER_PIDS_LIMIT = int(os.environ.get("SANDBOX_DOCKER_PIDS_LIMIT", "2048"))
+# Optional OCI runtime of harness sandbox containers, for example "runsc"
+# (gVisor). Empty: Docker's default runtime.
+SANDBOX_DOCKER_RUNTIME = os.environ.get("SANDBOX_DOCKER_RUNTIME", "").strip()
+
+# ==============================================================================
+# Container harness sandbox (one container per user sandbox, without KVM)
+# ==============================================================================
+
+# The harness gets container sandboxes (pods with SANDBOX_BACKEND=kubernetes,
+# Docker containers with SANDBOX_BACKEND=docker).
+SANDBOX_CONTAINER_HARNESS = (
+    os.environ.get("SANDBOX_CONTAINER_HARNESS", "false").lower() == "true"
+)
+# The craft-runtime `container` image: the harness userspace plus the guest
+# daemon.
+SANDBOX_HARNESS_IMAGE = (
+    os.environ.get("SANDBOX_HARNESS_IMAGE", "").strip()
+    or "onyxdotapp/craft-runtime:latest-container"
+)
+# The PodTemplate in SANDBOX_NAMESPACE that harness pods start from.
+SANDBOX_HARNESS_POD_TEMPLATE = (
+    os.environ.get("SANDBOX_HARNESS_POD_TEMPLATE", "").strip() or "harness-sandbox-pod"
+)
+# The guest daemon's TCP port in the sandbox container.
+SANDBOX_HARNESS_DAEMON_PORT = int(os.environ.get("SANDBOX_HARNESS_DAEMON_PORT", "8052"))
+# A start (pod or container create, readiness, daemon Init) ends by this time.
+SANDBOX_HARNESS_START_TIMEOUT_SECONDS = float(
+    os.environ.get("SANDBOX_HARNESS_START_TIMEOUT_SECONDS", "120")
+)
+# An idle stop saves and deletes a container sandbox after this long without
+# activity. The same default as the Firecracker idle stop.
+SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS = int(
+    os.environ.get("SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS", "900")
+)
+# Harness pod sizes. The defaults match the Craft sandbox PodTemplate.
+SANDBOX_POD_CPU_REQUEST = os.environ.get("SANDBOX_POD_CPU_REQUEST", "1000m")
+SANDBOX_POD_CPU_LIMIT = os.environ.get("SANDBOX_POD_CPU_LIMIT", "2000m")
+SANDBOX_POD_MEMORY_REQUEST = os.environ.get("SANDBOX_POD_MEMORY_REQUEST", "2Gi")
+SANDBOX_POD_MEMORY_LIMIT = os.environ.get("SANDBOX_POD_MEMORY_LIMIT", "10Gi")
+SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST = os.environ.get(
+    "SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST", "5Gi"
+)
+SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT = os.environ.get(
+    "SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT", "20Gi"
+)
 
 # ==============================================================================
 # SSE / opencode-serve

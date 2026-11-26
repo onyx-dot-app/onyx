@@ -12,7 +12,12 @@ from celery import Task, shared_task
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock, CacheLockLostError
-from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
+from onyx.configs.constants import (
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.sandbox import (
@@ -23,12 +28,16 @@ from onyx.db.sandbox import (
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import (
     ENABLE_CRAFT,
+    SANDBOX_CONTAINER_HARNESS,
     SANDBOX_IDLE_TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_expired_harness_sessions,
+)
+from onyx.server.features.build.sandbox.harness_factory import (
+    get_container_harness_sandbox,
 )
 from onyx.server.features.build.session.resource_cleanup import (
     delete_unknown_tenant_resources,
@@ -51,6 +60,8 @@ RUNNING_SANDBOX_BATCH_SIZE = 100
 RUNNING_SANDBOX_CURSOR_KEY = "sandbox_cleanup_running_cursor"
 # Saves purged per retention run; the hourly chain end takes the rest.
 HARNESS_RETENTION_PURGE_BATCH_SIZE = 100
+# An idle stop that waits longer than this in the queue is dropped.
+HARNESS_IDLE_STOP_EXPIRES_SECONDS = 5 * 60
 
 
 def _check_cleanup_lease(lock: CacheLock, deadline: float) -> None:
@@ -121,6 +132,54 @@ def push_skills_to_users_task(
 
     with get_session_with_current_tenant() as db_session:
         push_skills_and_commit({UUID(user_id) for user_id in user_ids}, db_session)
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.SWEEP_HARNESS_CONTAINERS,
+    soft_time_limit=TIMEOUT_SECONDS,
+    bind=True,
+    ignore_result=True,
+)
+def sweep_harness_containers_task(
+    self: Task,
+    *,
+    tenant_id: str | None = None,  # noqa: ARG001
+) -> None:
+    """Delete harness sandbox containers that no record names, and send an
+    idle stop for each idle one. Cluster-wide: one runtime listing covers
+    every tenant."""
+    if not SANDBOX_CONTAINER_HARNESS:
+        return
+    sandbox = get_container_harness_sandbox()
+    for key in sandbox.sweep(time.monotonic() + TIMEOUT_SECONDS):
+        self.app.send_task(
+            OnyxCeleryTask.STOP_IDLE_HARNESS_CONTAINER,
+            kwargs={"tenant_id": key.tenant_id, "sandbox_id": str(key.sandbox_id)},
+            queue=OnyxCeleryQueues.SANDBOX,
+            priority=OnyxCeleryPriority.LOW,
+            # The next sweep sends it again.
+            expires=HARNESS_IDLE_STOP_EXPIRES_SECONDS,
+        )
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.STOP_IDLE_HARNESS_CONTAINER,
+    soft_time_limit=TIMEOUT_SECONDS,
+    bind=True,
+    ignore_result=True,
+)
+def stop_idle_harness_container_task(
+    self: Task,  # noqa: ARG001
+    *,
+    tenant_id: str,
+    sandbox_id: str,
+) -> None:
+    """Save the sessions of one idle harness sandbox container, then delete
+    it, while it stays idle."""
+    if not SANDBOX_CONTAINER_HARNESS:
+        return
+    outcome = get_container_harness_sandbox().stop_if_idle(tenant_id, UUID(sandbox_id))
+    task_logger.info("Harness sandbox %s idle stop: %s", sandbox_id, outcome.value)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]

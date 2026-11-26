@@ -523,6 +523,18 @@ class ZipSummary(BaseModel):
     skipped: int
 
 
+class DaemonCaptureSummary(BaseModel):
+    """The end of a guest daemon CaptureSession stream."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # Archive bytes and their hex SHA-256.
+    size_bytes: int
+    sha256: str
+    # Capture roots that are in the archive (what a restore replaces).
+    roots: list[str]
+
+
 # Host agent session saves and managed drive.
 
 

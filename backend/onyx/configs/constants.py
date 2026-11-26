@@ -873,6 +873,8 @@ class OnyxCeleryTask:
     RECONCILE_SANDBOX_RUNTIMES = "reconcile_sandbox_runtimes"
     PURGE_EXPIRED_HARNESS_SESSIONS = "purge_expired_harness_sessions"
     PUSH_SKILLS_TO_USERS = "push_skills_to_users"
+    SWEEP_HARNESS_CONTAINERS = "sweep_harness_containers"
+    STOP_IDLE_HARNESS_CONTAINER = "stop_idle_harness_container"
     SYNC_MARKETPLACE = "sync_marketplace"
 
     # Scheduled tasks (Craft)
