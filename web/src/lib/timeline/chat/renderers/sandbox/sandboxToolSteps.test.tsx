@@ -1350,3 +1350,33 @@ test("an empty new file's panel says it is empty", async () => {
     view.unmount();
   }
 });
+
+test("files the preview did not read show in the changed-files list", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch:
+          "*** Begin Patch\n*** Add File: a.txt\n+one\n  *** Add File: b.txt\n+two\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [
+          { path: "a.txt", change: "add", move_path: null },
+          { path: "b.txt", change: "add", move_path: null },
+        ],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(view.container).toHaveTextContent("A b.txt");
+  } finally {
+    view.unmount();
+  }
+});
