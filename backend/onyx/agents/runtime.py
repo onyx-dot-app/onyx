@@ -122,7 +122,10 @@ from onyx.llm.models import (
 )
 from onyx.llm.token_budget import TokenBudget, resolve_token_budget
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import start_thread_with_context
+from onyx.utils.threadpool_concurrency import (
+    call_later,
+    start_thread_with_context,
+)
 
 if TYPE_CHECKING:
     from onyx.agents.agent_coordination import (
@@ -679,6 +682,12 @@ class Run:
         self.cancellation_signal.cancel(reason)
         self._wake_execution()
 
+    def _deadline_reached(self) -> None:
+        # Cancel callbacks can block, so they must not run on the shared timer thread.
+        threading.Thread(
+            target=self.cancel, args=("deadline",), name="agent-deadline", daemon=True
+        ).start()
+
     def suspend(self) -> None:
         """Request suspension at the next safe execution boundary."""
         with self._execution_condition:
@@ -1234,10 +1243,9 @@ class Run:
                 if remaining <= 0:
                     self.cancel("deadline")
                 else:
-                    timer = threading.Timer(remaining, self.cancel, ("deadline",))
-                    timer.daemon = True
-                    self._cancellation_link.callback(timer.cancel)
-                    timer.start()
+                    self._cancellation_link.callback(
+                        call_later(remaining, self._deadline_reached)
+                    )
             self._start_execution(background=background)
         except BaseException:
             self._cancellation_link.close()
