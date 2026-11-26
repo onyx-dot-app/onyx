@@ -91,6 +91,7 @@
   "GET /admin/hooks/specs": "admin",
   "GET /admin/hooks/{hook_id}": "admin",
   "GET /admin/hooks/{hook_id}/execution-logs": "admin",
+  "GET /admin/image-generation/catalog/{provider}": "manage:llms",
   "GET /admin/image-generation/config": "manage:llms",
   "GET /admin/image-generation/config/{image_provider_id}/credentials": "manage:llms",
   "GET /admin/image-generation/llm-providers": "manage:llms",

@@ -368,6 +368,26 @@ def list_llm_provider_image_models(
     return result
 
 
+@admin_router.get("/catalog/{provider}")
+def list_catalog_image_models(
+    provider: str,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+) -> list[ImageGenerationProviderModel]:
+    """The catalog's image models for a provider type (e.g. "openai"), for a
+    provider that is not saved yet. None of them is connected."""
+    return [
+        ImageGenerationProviderModel(
+            name=name,
+            display_name=None,
+            is_recommended=is_recommended_image_model(provider, name),
+            image_provider_id=None,
+        )
+        for name in sorted(
+            set(iter_image_generation_models(provider, recommended_only=False))
+        )
+    ]
+
+
 @admin_router.post("/config/link")
 def link_config(
     config_link: ImageGenerationConfigLink,
