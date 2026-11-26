@@ -149,9 +149,12 @@ VM takes the policies of the agent of that chat
 (`integrations/policy.py:resolve_chat_action_policies`), and the evaluator
 matches it against that agent's integrations, linked ones that the user
 turned off included. The chat's saved tool options narrow both as they narrow
-the chat tools (`integrations/policy.py:apply_tool_options`): an integration
-or action that the chat turned off is Blocked, and a Required integration
-stays. A chat Ask gets `approval_needs_tool`. Its detail names
+the chat tools (`integrations/policy.py:apply_tool_options`). The evaluator
+does not match an integration that the chat turned off, unless it is
+Required: the proxy injects no credential and applies no policy, so a
+request to a public API still goes out without the app's credentials. An
+action that the chat turned off on an integration that still matches is
+Blocked. A chat Ask gets `approval_needs_tool`. Its detail names
 the chat tools to call instead, and the connect tool for a user with no
 sign-in, or says that the app has no tool for the request, as for a custom app (`sandbox_proxy/addons/gate.py:_app_tool_hint`). `AllMatchedActions` sorts actions
 strictest first, and `governing_action` decides the verdict.
