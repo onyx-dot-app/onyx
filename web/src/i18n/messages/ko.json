@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "업로드된 첨부 파일"
-        }
+        },
+        "next": "다음 이미지",
+        "position": "{current} / {total}",
+        "previous": "이전 이미지"
       },
       "inMessageImage": {
         "downloadButton": {

@@ -58,6 +58,7 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import { useTranslations } from "next-intl";
+import { GALLERY_ROOT_ATTR } from "@/app/app/components/files/images/gallery";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -558,7 +559,10 @@ const AgentMessage = React.memo(function AgentMessage({
   let nextAnswerRef = 0;
 
   return (
-    <div className="group/agent-message w-full">
+    <div
+      className="group/agent-message w-full"
+      {...{ [GALLERY_ROOT_ATTR]: "" }}
+    >
       {/* One cursor for the whole turn, across its sections. It stays until
           the answer has finished, and hides while the turn waits for the user
           to approve a tool call or answer a question. */}

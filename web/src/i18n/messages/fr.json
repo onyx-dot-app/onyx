@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "Pièce jointe téléversée"
-        }
+        },
+        "next": "Image suivante",
+        "position": "{current} / {total}",
+        "previous": "Image précédente"
       },
       "inMessageImage": {
         "downloadButton": {

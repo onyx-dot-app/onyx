@@ -40,6 +40,12 @@ import { Text } from "@opal/components";
 import type { TextColor, TextFont } from "@opal/components";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
+import {
+  GALLERY_ALT_ATTR,
+  GALLERY_IMAGE_ATTR,
+  collectGallery,
+  type GalleryState,
+} from "@/app/app/components/files/images/gallery";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -163,7 +169,8 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
   const tFiles = useTranslations("chat.files");
   const triggerRef = useRef<HTMLSpanElement>(null);
   const [failed, setFailed] = useState(false);
-  const [fullImageShowing, setFullImageShowing] = useState(false);
+  const [gallery, setGallery] = useState<GalleryState | null>(null);
+  const openGallery = () => setGallery(collectGallery(triggerRef.current));
 
   if (typeof src !== "string" || src === "" || failed) {
     return (
@@ -196,18 +203,21 @@ function MarkdownImageContent({ src, alt, title }: MarkdownImageProps) {
         role="button"
         tabIndex={0}
         aria-label={alt || tFiles("inMessageImage.viewFullImage.label")}
-        onClick={() => setFullImageShowing(true)}
-        onKeyDown={clickOnKeyDown(() => setFullImageShowing(true))}
+        {...{ [GALLERY_IMAGE_ATTR]: src, [GALLERY_ALT_ATTR]: alt ?? "" }}
+        onClick={openGallery}
+        onKeyDown={clickOnKeyDown(openGallery)}
         className="block w-fit max-w-full cursor-zoom-in"
       >
         {image}
       </span>
-      {fullImageShowing && (
+      {gallery && (
         <FullImageModal
-          src={src}
-          alt={alt}
+          images={gallery.images}
+          initialIndex={gallery.index}
           open
-          onOpenChange={setFullImageShowing}
+          onOpenChange={(open) => {
+            if (!open) setGallery(null);
+          }}
           onCloseAutoFocus={(event) => {
             if (!triggerRef.current) return;
             event.preventDefault();
