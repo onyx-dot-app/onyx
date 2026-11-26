@@ -95,7 +95,7 @@ def upgrade() -> None:
             continue
         base_url = match.group(1)
         document = json.dumps(_spec(name, description, base_url))
-        tool_id = bind.execute(
+        tool_id = bind.execute(  # migration-determinism: allow (backfills existing apps; none on the template)
             sa.text(_INSERT_TOOL),
             {
                 "name": name,
@@ -104,7 +104,7 @@ def upgrade() -> None:
                 "user_id": owner_user_id,
             },
         ).scalar_one()
-        api_app_id = bind.execute(
+        api_app_id = bind.execute(  # migration-determinism: allow (backfills existing apps; none on the template)
             sa.text(_INSERT_API_APP), {"base_url": base_url, "document": document}
         ).scalar_one()
         bind.execute(
