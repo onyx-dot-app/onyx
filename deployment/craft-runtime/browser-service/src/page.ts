@@ -536,13 +536,20 @@ const clickTarget = async (
     locator === null
       ? page.mouse.click(point.x, point.y, options)
       : locator.click({ ...options, timeout: timeout() });
+  await untilDialog(page, clicked);
+};
+
+/** A dialog blocks the action until it is answered, so return true as soon as one opens. */
+const untilDialog = async (page: Page, action: Promise<void>): Promise<boolean> => {
   let onDialog = noop;
   const dialogOpened = new Promise<"dialog">((resolve) => {
     onDialog = () => resolve("dialog");
     page.once("dialog", onDialog);
   });
   try {
-    if ((await Promise.race([clicked, dialogOpened])) === "dialog") void clicked.catch(noop);
+    if ((await Promise.race([action, dialogOpened])) !== "dialog") return false;
+    void action.catch(noop);
+    return true;
   } finally {
     page.off("dialog", onDialog);
   }
@@ -639,8 +646,8 @@ const typeKeys = async (page: Page, text: string, deadline: number) => {
           `Typing stopped after ${typed} of ${text.length} characters, which the field now holds. Type the rest in another call or raise timeoutMs.`,
         );
       }
-      if (index % 2 === 1) await page.keyboard.insertText(piece);
-      else await page.keyboard.type(piece);
+      const typing = index % 2 === 1 ? page.keyboard.insertText(piece) : page.keyboard.type(piece);
+      if (await untilDialog(page, typing)) return;
       typed += piece.length;
     }
   }
@@ -672,8 +679,8 @@ export const type = async (page: Page, input: TypeInput) => {
     );
   }
   if (input.clear) {
-    await page.keyboard.press("ControlOrMeta+A");
-    await page.keyboard.press("Delete");
+    if (await untilDialog(page, page.keyboard.press("ControlOrMeta+A"))) return;
+    if (await untilDialog(page, page.keyboard.press("Delete"))) return;
   }
   await typeKeys(page, input.text, deadline);
 };
@@ -745,7 +752,7 @@ export const setInputFiles = async (page: Page, input: UploadInput) => {
 };
 
 export const press = async (page: Page, input: PressInput) => {
-  await page.keyboard.press([...(input.modifiers ?? []), input.key].join("+"));
+  await untilDialog(page, page.keyboard.press([...(input.modifiers ?? []), input.key].join("+")));
 };
 
 export const scroll = async (page: Page, input: ScrollInput) => {
