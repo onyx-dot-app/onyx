@@ -11,17 +11,8 @@ on the start packet of a `browser_open` call, so that name must stay.
 
 import json
 from collections.abc import Sequence
-from typing import Literal, Self
 
-from pydantic import (
-    AliasGenerator,
-    BaseModel,
-    ConfigDict,
-    Field,
-    JsonValue,
-    model_validator,
-)
-from pydantic.alias_generators import to_camel
+from pydantic import BaseModel, JsonValue
 
 from onyx.agents.tools import ToolExecutionMode, ToolInvocation
 from onyx.llm.models import ToolResult
@@ -34,9 +25,6 @@ from onyx.prompts.browser_tools import (
     BROWSER_SNAPSHOT_DESCRIPTION,
     BROWSER_STATUS_DESCRIPTION,
     BROWSER_WAIT_FOR_DESCRIPTION,
-    TAB_ARGUMENT,
-    TIMEOUT_ARGUMENT,
-    URL_ARGUMENT,
 )
 from onyx.server.features.build.sandbox.harness_base import (
     HarnessSandboxError,
@@ -49,6 +37,17 @@ from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.sandbox.errors import (
     sandbox_errors_as_tool_errors,
 )
+from onyx.tools.tool_implementations.sandbox.models import (
+    BrowserActArguments,
+    BrowserArguments,
+    BrowserDialogArguments,
+    BrowserEvaluateArguments,
+    BrowserNavigateArguments,
+    BrowserOpenArguments,
+    BrowserSnapshotArguments,
+    BrowserStatusArguments,
+    BrowserWaitForArguments,
+)
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.utils import truncate_output
@@ -60,167 +59,11 @@ BROWSER_MAX_TIMEOUT_MS = 60_000
 _CALL_MARGIN_SECONDS = 15.0
 # Largest result text that the model gets.
 BROWSER_RESULT_MAX_CHARS = 80_000
-# Input limits, in characters (and list items).
-_MAX_URL_CHARS = 8192
-_MAX_TEXT_CHARS = 64_000
-_MAX_SELECTOR_CHARS = 2048
-_MAX_LIST_ITEMS = 100
-_MAX_UPLOAD_PATHS = 20
 
 _INTERRUPTED_BROWSER_MESSAGE = (
     "The call was interrupted before it returned and was not run again. "
     "Check the page with browser_status or browser_snapshot before you retry."
 )
-
-BrowserAction = Literal[
-    "click", "type", "hover", "select", "drag", "press", "scroll", "upload"
-]
-Modifier = Literal["Alt", "Control", "Meta", "Shift"]
-
-
-class _BrowserArguments(BaseModel):
-    """The model names the arguments in snake_case, and the service takes
-    them in camelCase (the serialization alias)."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        alias_generator=AliasGenerator(serialization_alias=to_camel),
-    )
-
-
-class _TabArguments(_BrowserArguments):
-    tab: str | None = Field(
-        default=None, max_length=_MAX_SELECTOR_CHARS, description=TAB_ARGUMENT
-    )
-
-
-class BrowserStatusArguments(_BrowserArguments):
-    pass
-
-
-class BrowserOpenArguments(_BrowserArguments):
-    url: str | None = Field(
-        default=None,
-        max_length=_MAX_URL_CHARS,
-        description=f"Page to open. {URL_ARGUMENT} Omit for a blank tab.",
-    )
-    new_tab: bool = Field(
-        default=False,
-        description="Open a new tab instead of reusing your current tab, for "
-        "example when a human controls it.",
-    )
-
-
-class BrowserNavigateArguments(_TabArguments):
-    url: str | None = Field(
-        default=None, max_length=_MAX_URL_CHARS, description=URL_ARGUMENT
-    )
-    history: Literal["back", "forward", "reload"] | None = Field(
-        default=None, description="Go back, forward, or reload."
-    )
-    timeout_ms: int | None = Field(default=None, description=TIMEOUT_ARGUMENT)
-
-    @model_validator(mode="after")
-    def _one_target(self) -> Self:
-        if (self.url is None) == (self.history is None):
-            raise ValueError("pass exactly one of url and history")
-        return self
-
-
-class BrowserSnapshotArguments(_TabArguments):
-    screenshot_path: str | None = Field(
-        default=None,
-        max_length=_MAX_SELECTOR_CHARS,
-        description="Also write a PNG screenshot to this path in the working "
-        "directory.",
-    )
-
-
-class BrowserActArguments(_TabArguments):
-    action: BrowserAction
-    ref: str | None = Field(
-        default=None,
-        max_length=_MAX_SELECTOR_CHARS,
-        description="Element ref from browser_snapshot.",
-    )
-    selector: str | None = Field(
-        default=None, max_length=_MAX_SELECTOR_CHARS, description="CSS selector."
-    )
-    x: float | None = None
-    y: float | None = None
-    button: Literal["left", "right", "middle"] | None = Field(
-        default=None, description="Default left. Right opens the menu."
-    )
-    click_count: int | None = Field(
-        default=None, description="1 click, 2 double, 3 triple. Default 1."
-    )
-    text: str | None = Field(default=None, max_length=_MAX_TEXT_CHARS)
-    clear: bool | None = Field(
-        default=None, description="Clear the input first. Default false."
-    )
-    values: list[str] | None = Field(default=None, max_length=_MAX_LIST_ITEMS)
-    target_ref: str | None = Field(
-        default=None,
-        max_length=_MAX_SELECTOR_CHARS,
-        description="drag: the element ref to drop onto.",
-    )
-    key: str | None = Field(default=None, max_length=_MAX_SELECTOR_CHARS)
-    modifiers: list[Modifier] | None = None
-    delta_x: float | None = None
-    delta_y: float | None = None
-    paths: list[str] | None = Field(
-        default=None,
-        max_length=_MAX_UPLOAD_PATHS,
-        description="upload: files in the working directory.",
-    )
-    timeout_ms: int | None = Field(default=None, description=TIMEOUT_ARGUMENT)
-
-    @model_validator(mode="after")
-    def _paired_coordinates(self) -> Self:
-        if (self.x is None) != (self.y is None):
-            raise ValueError("x and y go together")
-        return self
-
-
-class BrowserWaitForArguments(_TabArguments):
-    ref: str | None = Field(
-        default=None,
-        max_length=_MAX_SELECTOR_CHARS,
-        description="Element ref from browser_snapshot.",
-    )
-    selector: str | None = Field(
-        default=None, max_length=_MAX_SELECTOR_CHARS, description="CSS selector."
-    )
-    text: str | None = Field(
-        default=None, max_length=_MAX_TEXT_CHARS, description="Case counts."
-    )
-    url_includes: str | None = Field(default=None, max_length=_MAX_URL_CHARS)
-    timeout_ms: int | None = Field(default=None, description=TIMEOUT_ARGUMENT)
-
-    @model_validator(mode="after")
-    def _some_condition(self) -> Self:
-        if (
-            self.ref is None
-            and self.selector is None
-            and self.text is None
-            and self.url_includes is None
-        ):
-            raise ValueError("pass at least one wait condition")
-        return self
-
-
-class BrowserEvaluateArguments(_TabArguments):
-    expression: str = Field(
-        min_length=1,
-        max_length=_MAX_TEXT_CHARS,
-        description="JavaScript expression; a promise is awaited.",
-    )
-    timeout_ms: int | None = Field(default=None, description=TIMEOUT_ARGUMENT)
-
-
-class BrowserDialogArguments(_TabArguments):
-    accept: bool
-    prompt_text: str | None = Field(default=None, max_length=_MAX_TEXT_CHARS)
 
 
 def _timeout_ms(requested: int | None) -> int:
@@ -237,7 +80,7 @@ def _session_path(ref: HarnessSandboxRef, path: str) -> str:
     return relative
 
 
-class _BrowserTool[ArgumentsT: _BrowserArguments](SandboxTool):
+class _BrowserTool[ArgumentsT: BrowserArguments](SandboxTool):
     """What the browser tools share: one service call per tool call, taken
     in turns, since the calls of one step act on the same tabs. A read runs
     again after a lost server (RUNS_AGAIN); a call that changes a tab does
