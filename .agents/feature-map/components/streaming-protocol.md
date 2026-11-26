@@ -178,7 +178,10 @@ request of its command that the egress proxy holds
 (`CommandApprovalRequest`, `CommandApprovalResolved`;
 [[craft-external-apps#chat-command-approvals]]): `can_approve_for_command`,
 `app_name` and `expires_at` (the proxy's wait deadline,
-`action_approval.wait_deadline`) are set, and these packets are live only.
+`action_approval.wait_deadline`) are set. These packets go through the stream
+buffer, so a client that reconnects to a live stream gets them again from its
+cursor. Saved-session replay does not rebuild them, because they have no
+`approval_request` row.
 `tool_approval_resolved` carries an `outcome`
 (`chat/renderer.py:approval_outcome`): `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an

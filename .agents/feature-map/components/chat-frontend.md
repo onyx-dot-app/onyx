@@ -120,7 +120,9 @@
   [[craft-external-apps#chat-command-approvals]]) offers "Approve for this
   command" (`ApprovalCard` `sessionScope="command"`, which sends
   `approve_command`) in place of the chat choice and shows its `expires_at`
-  deadline; it waits only while its call runs and never replays. The card then becomes a record of the
+  deadline; it waits only while its call runs. A reconnect to the live stream
+  buffer can send the card and its outcome again; a saved session does not
+  rebuild it. The card then becomes a record of the
   outcome, or of "No longer waiting" when the server returns 409 or 404. The
   record is a closed timeline step (`RunStep`) titled with the outcome; it
   opens onto the request details. The record shows in the region
