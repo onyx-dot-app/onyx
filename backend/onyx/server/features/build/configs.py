@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 from enum import Enum
 
@@ -14,10 +15,18 @@ def _env_number[N: (int, float)](
     if not raw:
         return default
     try:
-        return kind(raw)
+        value = kind(raw)
     except ValueError:
-        _logger.error("Ignoring %s=%r: not a number. Using %s.", name, raw, default)
+        value = None
+    if value is None or not math.isfinite(value) or value < 0:
+        _logger.error(
+            "Ignoring %s=%r: not a finite number of 0 or more. Using %s.",
+            name,
+            raw,
+            default,
+        )
         return default
+    return value
 
 
 # In-sandbox paths shared by every backend implementation. Kept in sync with
