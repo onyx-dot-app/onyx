@@ -1,5 +1,5 @@
 """Code mode through the real server: the model calls tools from an
-`exec` program, which runs in the sandbox and is saved with the chat."""
+`execute_code` program, which runs in the sandbox and is saved with the chat."""
 
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -46,14 +46,14 @@ def _program(call_id: str, code: str) -> Reply:
         tool_calls=[
             ToolCall(
                 id=call_id,
-                name="exec",
+                name="execute_code",
                 # Keeps a slow search inside the first observation.
                 arguments={"code": code, "yield_time_ms": 120_000},
             )
         ],
         # The search is a function of programs, not a tool of its own.
         conditions=RequestConditions(
-            offers=["exec"], does_not_offer=["internal_search"]
+            offers=["execute_code"], does_not_offer=["internal_search"]
         ),
     )
 
@@ -108,7 +108,7 @@ def test_program_runs_nested_search_and_keeps_its_store_across_messages(
     program, search = first.tool_call_debug
     assert (program.tool_call_id, program.tool_name) == (
         _SEARCH_PROGRAM_ID,
-        "exec",
+        "execute_code",
     )
     assert search.tool_call_id.startswith(f"{_SEARCH_PROGRAM_ID}:")
     assert (search.tool_name, search.tool_args) == (
@@ -118,7 +118,7 @@ def test_program_runs_nested_search_and_keeps_its_store_across_messages(
     # The nested search streams as a search step of its own.
     assert [tool.tool_name for tool in first.used_tools] == [ToolName.INTERNAL_SEARCH]
     program_request, answer_request = mock_llm.requests_in("chat")
-    assert "tools.internal_search (a function in `exec` programs)" in str(
+    assert "tools.internal_search (a function in `execute_code` programs)" in str(
         program_request.body["messages"]
     )
     assert "searched" in (answer_request.tool_result(_SEARCH_PROGRAM_ID) or "")
@@ -181,13 +181,13 @@ def _replayed_code_cells(packets: list[dict]) -> int:
     )
 
 
-def test_a_claude_model_runs_programs_with_repl_and_poll(
+def test_a_claude_model_runs_programs_with_execute_code_and_poll(
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     mock_llm_of_family: Callable[[ToolFamily], DATestLLMProvider | None],
 ) -> None:
-    """A Claude model gets the shape it is trained on: `repl` and `poll`, and
-    `search_tools` and `describe_tool` in programs. A chat that switches to it
+    """A Claude model gets its shape: `execute_code` with `timeout`, `poll`,
+    and `search_tools` and `describe_tool` in programs. A chat that switches to it
     keeps the cells and calls of the other shape."""
     nonce = uuid4().hex
     claude = mock_llm_of_family(ToolFamily.CLAUDE)
@@ -222,32 +222,32 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
             Reply(
                 tool_calls=[
                     ToolCall(
-                        id="exec-program",
-                        name="exec",
+                        id="openai-program",
+                        name="execute_code",
                         arguments={"code": "yield_control()\nawait asyncio.sleep(60)"},
                     )
                 ],
                 conditions=RequestConditions(
-                    offers=["exec", "wait"], does_not_offer=["repl", "poll"]
+                    offers=["execute_code", "wait"], does_not_offer=["poll"]
                 ),
             ),
             Reply(
                 text="Left it running.",
-                conditions=RequestConditions(has_results_for=["exec-program"]),
+                conditions=RequestConditions(has_results_for=["openai-program"]),
             ),
             Reply(
                 tool_calls=[
                     ToolCall(id="poll-old", name="poll", arguments={"cell_id": 1})
                 ],
                 conditions=RequestConditions(
-                    offers=["repl", "poll"], does_not_offer=["exec", "wait"]
+                    offers=["execute_code", "poll"], does_not_offer=["wait"]
                 ),
             ),
             Reply(
                 tool_calls=[
                     ToolCall(
-                        id="repl-program",
-                        name="repl",
+                        id="claude-program",
+                        name="execute_code",
                         arguments={"code": _CLAUDE_PROGRAM},
                     )
                 ],
@@ -261,7 +261,7 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
                         arguments={"cell_id": 2, "timeout": 30_000},
                     )
                 ],
-                conditions=RequestConditions(has_results_for=["repl-program"]),
+                conditions=RequestConditions(has_results_for=["claude-program"]),
             ),
             # A program that runs past its 1-second timeout returns, and poll
             # stops it. It ends well before the 30-second default, so it still
@@ -269,8 +269,8 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
             Reply(
                 tool_calls=[
                     ToolCall(
-                        id="repl-slow",
-                        name="repl",
+                        id="claude-slow",
+                        name="execute_code",
                         arguments={
                             "code": 'await asyncio.sleep(8)\nprint("late")',
                             "timeout": 1_000,
@@ -287,7 +287,7 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
                         arguments={"cell_id": 3, "terminate": True},
                     )
                 ],
-                conditions=RequestConditions(has_results_for=["repl-slow"]),
+                conditions=RequestConditions(has_results_for=["claude-slow"]),
             ),
             Reply(
                 text="Done.",
@@ -323,7 +323,7 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
             tool["function"]["name"]: tool["function"]
             for tool in requests[2].body["tools"]
         }
-        assert set(definitions["repl"]["parameters"]["properties"]) == {
+        assert set(definitions["execute_code"]["parameters"]["properties"]) == {
             "code",
             "timeout",
         }
@@ -332,23 +332,24 @@ def test_a_claude_model_runs_programs_with_repl_and_poll(
             "timeout",
             "terminate",
         }
-        assert "await search_tools(query)" in definitions["repl"]["description"]
-        assert "await describe_tool(name)" in definitions["repl"]["description"]
+        assert "await search_tools(query)" in definitions["execute_code"]["description"]
+        assert "await describe_tool(name)" in definitions["execute_code"]["description"]
         # The question tool has the name Claude models are trained on.
         assert "ask_user_question" in definitions
         assert "request_user_input" not in definitions
         # A poll observes the cell that the other shape started.
-        assert "Cell 1 stopped when the response ended. Start a new repl call." in (
-            requests[3].tool_result("poll-old") or ""
+        assert (
+            "Cell 1 stopped when the response ended. Start a new execute_code call."
+            in (requests[3].tool_result("poll-old") or "")
         )
-        started = requests[4].tool_result("repl-program") or ""
+        started = requests[4].tool_result("claude-program") or ""
         assert "found 1 True" in started
         assert "unknown: No tool function is named 'no_such_function'" in started
         assert "Execution running in cell 2" in started
         assert "Call poll(cell_id=2)" in started
         assert "after the yield" in (requests[5].tool_result("poll-new") or "")
         assert "Execution running in cell 3" in (
-            requests[6].tool_result("repl-slow") or ""
+            requests[6].tool_result("claude-slow") or ""
         )
         stopped = requests[7].tool_result("poll-stop") or ""
         assert "Execution terminated in cell 3" in stopped

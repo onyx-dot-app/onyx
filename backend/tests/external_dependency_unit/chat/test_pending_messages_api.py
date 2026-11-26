@@ -676,7 +676,9 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
             program = "print('started')\nyield_control()\nstore('gate', 1)\n"
             return AssistantMessage(
                 content=[
-                    ModelToolCall(id="start", name="exec", arguments={"code": program})
+                    ModelToolCall(
+                        id="start", name="execute_code", arguments={"code": program}
+                    )
                 ]
             )
         if code_mode and len(requests) == 2:
