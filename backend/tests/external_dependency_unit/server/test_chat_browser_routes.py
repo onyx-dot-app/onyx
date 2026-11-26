@@ -22,6 +22,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from onyx.auth.users import auth_backend, current_user_from_websocket_cookie
 from onyx.db.chat import create_chat_session
+from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -438,6 +439,17 @@ def test_the_owner_check_and_the_setting_gate_the_browser(
     with pytest.raises(OnyxError) as refused:
         chat_browser._browser_ref(chat_session.id, other)
     assert refused.value.error_code is OnyxErrorCode.NOT_FOUND
+
+    incognito_chat = create_chat_session(
+        db_session,
+        description=None,
+        user_id=owner.id,
+        persona_id=None,
+        incognito_record_mode=IncognitoRecordMode.USAGE_ONLY,
+    )
+    with pytest.raises(OnyxError) as refused:
+        chat_browser._browser_ref(incognito_chat.id, owner)
+    assert refused.value.error_code is OnyxErrorCode.FEATURE_DISABLED
 
     settings.browser_enabled = False
     with pytest.raises(OnyxError) as refused:
