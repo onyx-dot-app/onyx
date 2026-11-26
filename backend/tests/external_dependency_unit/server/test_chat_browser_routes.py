@@ -10,7 +10,7 @@ import io
 import json
 import queue
 import threading
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator, Iterator
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -97,17 +97,18 @@ class FakeSandbox:
     def renew_browser_view(self, ref: HarnessSandboxRef) -> None:  # noqa: ARG002
         self.renewed.set()
 
-    def read_file(
+    def stream_file(
         self,
         ref: HarnessSandboxRef,  # noqa: ARG002
         path: str,
         *,
         max_bytes: int,
-    ) -> bytes:
+    ) -> Iterator[bytes]:
         self.reads.append((path, max_bytes))
         if path not in self.files:
             raise SandboxFileNotFoundError(path)
-        return self.files[path]
+        data = self.files[path]
+        return iter([data[:2], data[2:]])
 
 
 @pytest.fixture
@@ -352,7 +353,13 @@ def test_a_download_returns_the_file_as_an_attachment(
         ref.session_id, "report (1).pdf", viewer
     )
 
-    assert response.body == b"%PDF"
+    async def body() -> bytes:
+        chunks = [chunk async for chunk in response.body_iterator]
+        if not all(isinstance(chunk, bytes) for chunk in chunks):
+            raise TypeError("the download streams bytes")
+        return b"".join(chunk for chunk in chunks if isinstance(chunk, bytes))
+
+    assert asyncio.run(body()) == b"%PDF"
     assert response.headers["content-disposition"].startswith("attachment;")
     assert "report%20%281%29.pdf" in response.headers["content-disposition"]
     assert sandbox.reads == [

@@ -27,11 +27,11 @@ from uuid import UUID, uuid4
 from fastapi import (
     APIRouter,
     Depends,
-    Response,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketState
 
@@ -384,7 +384,7 @@ def download_chat_browser_file(
     chat_session_id: UUID,
     name: str,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> Response:
+) -> StreamingResponse:
     """A file that the browser downloaded for the chat, as an attachment.
     `name` is its name in the chat's downloads directory."""
     ref = _existing_browser_ref(chat_session_id, user)
@@ -396,7 +396,7 @@ def download_chat_browser_file(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Not a valid file name.")
     with _sandbox_errors_as_onyx_errors():
         try:
-            data = get_harness_sandbox().read_file(
+            chunks = get_harness_sandbox().stream_file(
                 ref,
                 f"{BROWSER_DOWNLOADS_DIR}/{name}",
                 max_bytes=BROWSER_DOWNLOAD_MAX_BYTES,
@@ -405,8 +405,8 @@ def download_chat_browser_file(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Download not found.") from e
         except SandboxFileTooLargeError as e:
             raise OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, str(e)) from e
-    return Response(
-        content=data,
+    return StreamingResponse(
+        chunks,
         media_type="application/octet-stream",
         headers={"Content-Disposition": build_content_disposition("attachment", name)},
     )
