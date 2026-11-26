@@ -11,12 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser/browsertest"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
-
-// browserPort is the guest daemon's browser service relay port.
-const browserPort = 3011
 
 func TestRuntimeImageKVM(t *testing.T) {
 	if os.Getenv("KVM_RUNTIME_IMAGE") != "1" {
@@ -83,7 +81,7 @@ func checkBrowserOutlivesCommands(ctx context.Context, t *testing.T, c pb.Sandbo
 	if err != nil || !stopped.GetStopped() {
 		t.Fatalf("browser stop: %v %v", stopped, err)
 	}
-	conn, err := dialVsock(ctx, v.vsock(), browserPort)
+	conn, err := dialVsock(ctx, v.vsock(), browser.RelayPort)
 	if err == nil {
 		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 		_, err = conn.Read(make([]byte, 1))
@@ -98,7 +96,7 @@ func checkBrowserOutlivesCommands(ctx context.Context, t *testing.T, c pb.Sandbo
 // through the relay port and wants {"ok":true,"result":{"tabs":[...]}}.
 func checkBrowserServiceStatus(ctx context.Context, t *testing.T, v *vm) {
 	t.Helper()
-	conn, err := dialVsock(ctx, v.vsock(), browserPort)
+	conn, err := dialVsock(ctx, v.vsock(), browser.RelayPort)
 	if err != nil {
 		t.Fatalf("dial the browser relay: %v", err)
 	}

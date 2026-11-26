@@ -35,6 +35,10 @@ const (
 // Config.ServiceScript stays empty: no service.
 const DefaultServiceScript = "/opt/onyx/browser-service/main.ts"
 
+// RelayPort is the guest vsock port that the daemon relays to the service
+// socket.
+const RelayPort = 3011
+
 // socketName is the service socket in Config.SocketDir.
 const socketName = "service.sock"
 

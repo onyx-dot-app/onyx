@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 )
 
 func TestParseCommandUser(t *testing.T) {
@@ -66,13 +67,13 @@ func TestBaseEnv(t *testing.T) {
 }
 
 func TestCheckPorts(t *testing.T) {
-	if err := checkPorts(browserRelayPort, "", "chrome"); err == nil {
+	if err := checkPorts(browser.RelayPort, "", "chrome"); err == nil {
 		t.Fatal("API port on the browser relay port: no error")
 	}
 	for _, c := range []struct {
 		port        uint
 		listen, bin string
-	}{{52, "", "chrome"}, {browserRelayPort, "", ""}, {browserRelayPort, "unix:/tmp/s", "chrome"}} {
+	}{{52, "", "chrome"}, {browser.RelayPort, "", ""}, {browser.RelayPort, "unix:/tmp/s", "chrome"}} {
 		if err := checkPorts(c.port, c.listen, c.bin); err != nil {
 			t.Errorf("%+v: %v", c, err)
 		}
