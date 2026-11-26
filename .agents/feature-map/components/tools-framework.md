@@ -136,11 +136,11 @@ tools. `ChatAgent` sorts its offered tools with it once, when it is built
 (new, restored and child agents). The code mode description lists its
 functions and deferred namespaces in this order
 (`tools/tool_implementations/code_mode/stubs.py:build_tool_stubs`), and
-`chat/prompt_utils.py:build_system_prompt` orders the tool guidance sections
-by the rank of their tools, and the sandbox section's tools, in the token
-estimate too. The search guidance, which covers every search tool and has no
-heading, opens the tools section before every tool's own section. A new tool
-class must set `rank`;
+`chat/prompt_utils.py:build_system_prompt` builds the `# Tools` guidance, in
+the token estimate too. The search guidance, which covers every search tool and has
+no heading, opens the tools section, followed by URL reading after a web search,
+the sandbox tools' lines and the code mode section.
+A new tool class must set `rank`;
 `backend/tests/unit/onyx/tools/test_tool_ranks.py` fails for a tool class
 without one.
 
@@ -198,7 +198,7 @@ models, or all others) names some operations and takes their arguments in the
 shape its models are trained on. One `Tool` class serves each operation; its
 owning module maps each family to a shape (a name and an arguments model whose
 pure `request()` gives the operation's typed input):
-`tools/tool_implementations/code_mode/shapes.py:CODE_MODE_SHAPES` (`repl`/`poll` or `exec`/`wait`),
+`tools/tool_implementations/code_mode/shapes.py:CODE_MODE_SHAPES` (`execute_code` with `poll` or `wait`),
 `tools/tool_implementations/sandbox/shapes.py:SHELL_SHAPES` (`bash(command, timeout, description,
 run_in_background)` or `exec_command(cmd, workdir, yield_time_ms,
 max_output_tokens)`, and `write_stdin` with `timeout` or `yield_time_ms` and
@@ -443,7 +443,7 @@ are plain `AgentTool` objects with no `Tool` row, and
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed arguments
    show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):
-   `run_python`, the code mode run tool (`exec` or `repl`) and `generate_image` stream argument deltas, the file tools
+   `run_python`, the code mode run tool (`execute_code`) and `generate_image` stream argument deltas, the file tools
    (`write`, `edit`, `apply_patch`) report `file_tool_progress`. Every stream
    is throttled
    ([[streaming-protocol]]). Code mode calls render with
