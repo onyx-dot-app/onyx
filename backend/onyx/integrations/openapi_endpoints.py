@@ -339,24 +339,6 @@ def _dump_like(document: str, spec: dict[str, Any]) -> str:
     return json.dumps(spec, indent=2)
 
 
-def _check_line_round_trip(
-    spec: dict[str, Any], method: str, path: str, operation: dict[str, Any]
-) -> None:
-    """Add sends the imported lines back, so each line must read back as the
-    same path and query names."""
-    query = _query_names(spec, _path_item(spec, path), operation)
-    _, parsed_path, parsed_query, _ = _parse_line(
-        _endpoint_line(spec, method, path, operation)
-    )
-    if parsed_path != path or parsed_query != query:
-        bad = [name for name in query if not _QUERY_NAME.fullmatch(name)]
-        raise ValueError(
-            f"'{bad[0]}' cannot be written in an endpoint line."
-            if bad
-            else f"'{path}' cannot be written in an endpoint line."
-        )
-
-
 def drop_uncallable_operations(
     document: str, spec: dict[str, Any]
 ) -> tuple[str, list[str]]:
@@ -372,8 +354,6 @@ def drop_uncallable_operations(
                 spec, path, path_item, method, operation
             )
             method_spec.validate_spec()
-            if str(method).upper() in _LINE_METHODS:
-                _check_line_round_trip(spec, str(method).upper(), path, operation)
             check_unique_name(method_spec, seen_names)
         except (ValueError, TypeError, KeyError, AttributeError) as e:
             skipped.append(f"{str(method).upper()} {path}: {e}")

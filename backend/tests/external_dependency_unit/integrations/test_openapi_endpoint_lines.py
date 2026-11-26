@@ -2,6 +2,7 @@
 edits of an imported spec that keep what the spec said about the other
 operations."""
 
+import copy
 import json
 from collections.abc import Generator
 from typing import Any
@@ -296,6 +297,43 @@ def test_a_line_edit_keeps_the_rest_of_an_imported_yaml_spec(
     assert actions["getTicket"].admin_policy is EffectivePolicy.ASK
     assert actions["getTicket"].display_name == "Show one ticket"
     assert actions[patch_key].admin_policy is None
+
+
+def test_an_operation_whose_line_cannot_be_written_imports_and_creates(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    """A query name with a space does not parse back from its line. Add sends
+    the imported line back unchanged, so the operation stays."""
+    search = {
+        "operationId": "searchTickets",
+        "summary": "Search",
+        "parameters": [
+            {"name": "filter mode", "in": "query", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}},
+    }
+    spec = copy.deepcopy(IMPORTED)
+    spec["paths"]["/search"] = {"get": search}
+    imported = admin_api.import_openapi_spec(
+        OpenApiEndpointsRequest(openapi_document=json.dumps(spec)), admin
+    )
+    assert imported.skipped == []
+    assert "GET /search?filter mode Search" in imported.endpoints
+
+    integration_id = _create(
+        db_session,
+        admin,
+        created,
+        OpenApiConfigInput(
+            openapi_document=imported.openapi_document,
+            base_url=BASE_URL,
+            endpoints=imported.endpoints,
+        ),
+    )
+
+    view = _view(db_session, admin, integration_id)
+    assert _operations(view.openapi_document)["searchTickets"] == search
+    assert "searchTickets" in _action_keys(db_session, admin, integration_id)
 
 
 def test_unchanged_lines_keep_the_document_text(

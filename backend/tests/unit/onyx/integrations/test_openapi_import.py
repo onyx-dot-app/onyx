@@ -541,47 +541,6 @@ def test_imported_lines_with_any_query_name_save_again() -> None:
     assert endpoint_lines(json.loads(saved)) == lines
 
 
-def test_import_skips_an_operation_whose_line_cannot_save() -> None:
-    """A query name with a space cannot be written in a line, so the import
-    skips that operation and the lines it returns save again."""
-    spec = {
-        "openapi": "3.0.0",
-        "info": {"title": "Orders", "version": "1"},
-        "servers": [{"url": "https://orders.example.com"}],
-        "paths": {
-            "/orders": {"get": {"operationId": "list_orders", "summary": "List"}},
-            "/search": {
-                "get": {
-                    "operationId": "search_orders",
-                    "summary": "Search",
-                    "parameters": [
-                        {
-                            "name": "filter mode",
-                            "in": "query",
-                            "schema": {"type": "string"},
-                        }
-                    ],
-                }
-            },
-        },
-    }
-
-    view = import_openapi_document(
-        OpenApiEndpointsRequest(openapi_document=json.dumps(spec))
-    )
-
-    assert view.endpoints == ["GET /orders List"]
-    assert len(view.skipped) == 1
-    assert view.skipped[0].startswith("GET /search: 'filter mode'")
-    apply_endpoint_lines(
-        view.openapi_document,
-        title="Orders",
-        description=None,
-        base_url=view.base_url,
-        lines=view.endpoints,
-    )
-
-
 def test_lines_save_over_a_spec_with_an_operation_id_that_is_not_text() -> None:
     spec = _callable_spec()
     spec["paths"]["/pets/{petId}"]["delete"]["operationId"] = ["deletePet"]
