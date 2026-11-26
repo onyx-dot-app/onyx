@@ -14,9 +14,10 @@ import {
 import type {
   DefaultModel,
   LLMProviderView,
+  ModelCapability,
   ModelConfiguration,
-  ModelKind,
 } from "@/lib/languageModels/types";
+import { useSettings } from "@/lib/settings/hooks";
 import { useImageGenerationConfigs } from "@/lib/imageGeneration/hooks";
 import type { ImageGenerationConfigView } from "@/lib/imageGeneration/types";
 
@@ -32,9 +33,17 @@ export interface CurrentDefault {
   imageProviderId?: string;
 }
 
-/** The chosen replacement per affected default: a model configuration id,
- *  or null when no model can take it over and it is cleared. */
-export type DefaultChoices = Partial<Record<DefaultRole, number | null>>;
+/** A replacement picked in a role's select: a model configuration id, or
+ *  null for the role's "no model" choice (Chat Default, No Default). */
+export interface DefaultChoice {
+  id: number | null;
+  /** Search Decision only: picked from the decision-models section. */
+  fromDecision: boolean;
+}
+
+/** The chosen replacement per affected default. A role with a "no model"
+ *  choice that is not picked keeps that choice. */
+export type DefaultChoices = Partial<Record<DefaultRole, DefaultChoice>>;
 
 const ROLE_ORDER: DefaultRole[] = [
   "chat",
@@ -191,19 +200,26 @@ export function buildDefaultChanges(
   const defaultChanges: Record<string, DefaultModel | null> = {};
   let imageDefault: string | null | undefined;
   for (const current of affected) {
-    const choice = choices[current.role] ?? null;
+    const choice = choices[current.role];
+    const id = choice?.id ?? null;
     if (current.role === "image_generation") {
       imageDefault =
-        choice === null
+        id === null
           ? null
-          : (imageConfigs.find((c) => c.model_configuration_id === choice)
+          : (imageConfigs.find((c) => c.model_configuration_id === id)
               ?.image_provider_id ?? null);
       continue;
     }
+    // A decision model picked for Search Decision holds the decision role,
+    // as the Search Decision setting saves it.
+    if (current.role === "search_selection" && choice?.fromDecision) {
+      defaultChanges.decision =
+        id === null ? null : choiceToDefault(candidates("decision"), id);
+      defaultChanges.search_selection = null;
+      continue;
+    }
     defaultChanges[current.role] =
-      choice === null
-        ? null
-        : choiceToDefault(candidates(current.role), choice);
+      id === null ? null : choiceToDefault(candidates(current.role), id);
   }
   return { defaultChanges, imageDefault };
 }
@@ -215,7 +231,10 @@ export function choicesComplete(
   choices: DefaultChoices
 ): boolean {
   return affected.every(
-    (d) => candidates(d.role).length === 0 || choices[d.role] != null
+    (d) =>
+      NULLABLE_ROLES.has(d.role) ||
+      candidates(d.role).length === 0 ||
+      choices[d.role]?.id != null
   );
 }
 
@@ -225,7 +244,7 @@ export function choicesComplete(
  */
 function useRoleCopy(): Record<
   DefaultRole,
-  { title: string; description?: string; lost: string }
+  { title: string; description?: string; lost?: string }
 > {
   const t = useTranslations("admin.languageModels.defaultChanges");
   const languageModels = useTranslations("admin.languageModels");
@@ -242,22 +261,18 @@ function useRoleCopy(): Record<
     image_generation: {
       title: languageModels("imageGeneration.defaultModel.title"),
       description: languageModels("imageGeneration.defaultModel.description"),
-      lost: t("flows.image.lost"),
     },
     image_processing: {
-      title: indexSettings("imageProcessing.title"),
-      description: indexSettings("imageProcessing.description"),
-      lost: t("cleared"),
+      title: indexSettings("captioningModel.title"),
+      description: indexSettings("captioningModel.description"),
     },
     chat_naming: {
       title: chatPreferences("chatNaming.title"),
       description: chatPreferences("chatNaming.description"),
-      lost: t("cleared"),
     },
     search_selection: {
       title: chatPreferences("searchDecisionModel.title"),
       description: chatPreferences("searchDecisionModel.description"),
-      lost: t("cleared"),
     },
     decision: {
       title: decisionModels("decisionModel.title"),
@@ -271,14 +286,130 @@ function useRoleCopy(): Record<
   };
 }
 
-const IMAGE_KINDS: readonly ModelKind[] = ["image"];
-const CHAT_KINDS: readonly ModelKind[] = ["chat"];
+/** Roles whose setting offers a "no model" choice (Chat Default, No Default),
+ *  so their select always shows. */
+const NULLABLE_ROLES: ReadonlySet<DefaultRole> = new Set([
+  "chat_naming",
+  "search_selection",
+  "image_generation",
+  "image_processing",
+]);
+
+const CHAT: readonly ModelCapability[] = ["chat"];
+const VISION: readonly ModelCapability[] = ["vision"];
+const DECISION: readonly ModelCapability[] = ["decision"];
+const IMAGE: readonly ModelCapability[] = ["image"];
+
+interface RoleSelectProps {
+  role: DefaultRole;
+  providers: LLMProviderView[];
+  /** Decision models, for Search Decision's decision section. */
+  decisionProviders: LLMProviderView[];
+  choice: DefaultChoice | undefined;
+  onChange: (choice: DefaultChoice) => void;
+}
+
+/** A role's select, with the same props as the setting that picks it. */
+function RoleSelect({
+  role,
+  providers,
+  decisionProviders,
+  choice,
+  onChange,
+}: RoleSelectProps) {
+  const chatPreferences = useTranslations("admin.chatPreferences");
+  const decisionModels = useTranslations("admin.decisionModels");
+  const imageGeneration = useTranslations(
+    "admin.languageModels.imageGeneration"
+  );
+  const settings = useSettings();
+  const grouped = !settings.hide_provider_grouping;
+  const value = choice?.id ?? null;
+  const pick = (id: number | null) => onChange({ id, fromDecision: false });
+
+  switch (role) {
+    case "chat_naming":
+    case "search_selection":
+      return (
+        <SimpleModelSelector
+          nullable
+          capabilities={CHAT}
+          // Unset, a task runs on the chat's own model.
+          globalDefault={{
+            label: chatPreferences("taskModels.chatDefault.label"),
+          }}
+          decisionSection={
+            role === "search_selection"
+              ? {
+                  title: chatPreferences("searchDecisionModel.decisionSection"),
+                  providers: decisionProviders,
+                  selected: choice?.fromDecision ?? false,
+                  onChange: (id) => onChange({ id, fromDecision: true }),
+                }
+              : undefined
+          }
+          providers={providers}
+          value={value}
+          grouped={grouped}
+          onChange={pick}
+        />
+      );
+    case "image_generation":
+      return (
+        <SimpleModelSelector
+          nullable
+          capabilities={IMAGE}
+          globalDefault={{
+            label: imageGeneration("defaultModel.noDefault.label"),
+            description: imageGeneration("defaultModel.noDefault.description"),
+          }}
+          placeholder={imageGeneration("defaultModel.placeholder")}
+          providers={providers}
+          value={value}
+          onChange={pick}
+        />
+      );
+    case "image_processing":
+      return (
+        <SimpleModelSelector
+          nullable
+          capabilities={VISION}
+          providers={providers}
+          value={value}
+          grouped={grouped}
+          onChange={pick}
+        />
+      );
+    case "decision":
+      return (
+        <SimpleModelSelector
+          capabilities={DECISION}
+          placeholder={decisionModels("decisionModel.notConfigured")}
+          providers={providers}
+          value={value}
+          grouped={grouped}
+          onChange={pick}
+        />
+      );
+    case "chat":
+    case "craft":
+      return (
+        <SimpleModelSelector
+          capabilities={CHAT}
+          providers={providers}
+          value={value}
+          grouped={grouped}
+          onChange={pick}
+        />
+      );
+  }
+}
 
 interface DefaultChoiceRowsProps {
   affected: CurrentDefault[];
   candidates: (role: DefaultRole) => LLMProviderView[];
   choices: DefaultChoices;
-  onChange: (role: DefaultRole, modelConfigurationId: number) => void;
+  onChange: (role: DefaultRole, choice: DefaultChoice) => void;
 }
 
 /**
@@ -291,7 +422,6 @@ export function DefaultChoiceRows({
   choices,
   onChange,
 }: DefaultChoiceRowsProps) {
-  const t = useTranslations("admin.languageModels.defaultChanges");
   const copy = useRoleCopy();
   return (
     <Section alignItems="stretch" gap={4} height="fit">
@@ -306,16 +436,14 @@ export function DefaultChoiceRows({
             withLabel
             fillInput
           >
-            {options.length > 0 ? (
-              <SimpleModelSelector
+            {/* A role with a "no model" choice always has a select. */}
+            {NULLABLE_ROLES.has(current.role) || options.length > 0 ? (
+              <RoleSelect
+                role={current.role}
                 providers={options}
-                value={choices[current.role] ?? null}
-                onChange={(id) => onChange(current.role, id)}
-                modelKinds={
-                  current.role === "image_generation" ? IMAGE_KINDS : CHAT_KINDS
-                }
-                includeDecisionOnly={current.role === "decision"}
-                placeholder={t("placeholder")}
+                decisionProviders={candidates("decision")}
+                choice={choices[current.role]}
+                onChange={(choice) => onChange(current.role, choice)}
               />
             ) : (
               <Text as="p" font="secondary-body" color="status-warning-05">

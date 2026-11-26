@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { DropdownLoader } from "@opal/loaders";
@@ -52,7 +52,6 @@ interface TaskModelSettingProps {
 function TaskModelSetting({ task }: TaskModelSettingProps) {
   const t = useTranslations("admin.chatPreferences");
   const settings = useSettings();
-  const [isPending, setIsPending] = useState(false);
   const { llmProviders, defaultChatNaming, modelPaging, refetch, error } =
     useAdminLanguageModels();
   const copy = TASK_COPY[task];
@@ -68,8 +67,6 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
   }, [current, llmProviders]);
 
   async function handleChange(model: DefaultModel | null) {
-    if (isPending) return;
-    setIsPending(true);
     try {
       if (model) {
         await SAVE_TASK_MODEL[task](model.provider_id, model.model_name);
@@ -83,8 +80,6 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
           ? error.message
           : t(copy.updateFailed)
       );
-    } finally {
-      setIsPending(false);
     }
   }
 
@@ -118,15 +113,12 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
             : []
         }
         value={modelConfigId}
-        disabled={isPending || !!error}
+        disabled={!!error}
         isError={error ? true : undefined}
         grouped={!settings.hide_provider_grouping}
         modelPaging={modelPaging}
         onChange={(modelConfigurationId) => {
-          if (modelConfigurationId === null) {
-            void handleChange(null);
-            return;
-          }
+          if (modelConfigurationId === null) return handleChange(null);
           if (!llmProviders) return;
           const provider = findProviderOwningModelConfig(
             llmProviders,
@@ -139,7 +131,7 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
             toast.error(t("toasts.providerResolveFailed"));
             return;
           }
-          void handleChange({
+          return handleChange({
             provider_id: provider.id,
             model_name: model.name,
           });
@@ -188,7 +180,6 @@ function modelConfigurationId(
 export function SearchDecisionModelSetting() {
   const t = useTranslations("admin.chatPreferences");
   const settings = useSettings();
-  const [isPending, setIsPending] = useState(false);
   const { llmProviders, defaultSearchSelection, modelPaging, refetch, error } =
     useAdminLanguageModels();
   const decision = useDecisionModel();
@@ -214,7 +205,6 @@ export function SearchDecisionModelSetting() {
     modelId: number | null,
     fromDecisionSection: boolean
   ) {
-    if (isPending) return;
     const provider =
       modelId === null
         ? null
@@ -235,7 +225,6 @@ export function SearchDecisionModelSetting() {
       provider && model
         ? { provider_id: provider.id, model_name: model.name }
         : null;
-    setIsPending(true);
     try {
       // Exactly one default stays set: it picks the search path.
       if (selection && fromDecisionSection) {
@@ -261,8 +250,6 @@ export function SearchDecisionModelSetting() {
       );
       // An earlier write may have succeeded; show what is stored.
       await Promise.allSettled([refetch(), decision.refetch()]);
-    } finally {
-      setIsPending(false);
     }
   }
 
@@ -294,14 +281,14 @@ export function SearchDecisionModelSetting() {
           title: t("searchDecisionModel.decisionSection"),
           providers: decision.providers ?? [],
           selected: decisionValue !== null,
-          onChange: (modelId) => void handleChange(modelId, true),
+          onChange: (modelId) => handleChange(modelId, true),
         }}
         value={value}
-        disabled={isPending || !!loadError}
+        disabled={!!loadError}
         isError={loadError ? true : undefined}
         grouped={!settings.hide_provider_grouping}
         modelPaging={modelPaging}
-        onChange={(modelId) => void handleChange(modelId, false)}
+        onChange={(modelId) => handleChange(modelId, false)}
       />
     );
   }

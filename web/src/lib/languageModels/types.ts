@@ -421,16 +421,15 @@ export interface LLMOptionGroup {
   Icon: FunctionComponent<IconProps>;
 }
 
-/** A kind of model a list can offer: one that can chat, or one connected
- *  for image generation. */
-export type ModelKind = "chat" | "image";
+/**
+ * What a model can do, for a list that offers only some models: chat, chat
+ * with image input (vision), decisions, or image generation.
+ */
+export type ModelCapability = "chat" | "vision" | "decision" | "image";
 
 export interface FilterModelConfigurationsOptions {
-  includeDecisionOnly?: boolean;
-  /** The kinds of model to keep. Defaults to chat models. */
-  modelKinds?: readonly ModelKind[];
-  /** Keep only models that accept image input. */
-  imageInput?: boolean;
+  /** Keep models with any of these capabilities. Defaults to chat models. */
+  capabilities?: readonly ModelCapability[];
   /** A configuration id kept regardless: the current value stays listed. */
   keep?: number | null;
 }

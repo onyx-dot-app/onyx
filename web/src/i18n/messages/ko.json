@@ -6441,7 +6441,7 @@
       },
       "defaultModel": {
         "description": "새 세션에 기본으로 사용됩니다.",
-        "title": "기본 채팅 모델"
+        "title": "채팅 모델"
       },
       "deleteModal": {
         "defaultProviderWarning": "기본 제공자는 삭제할 수 없습니다. 이 제공자를 삭제하기 전에 다른 제공자를 기본으로 선택하세요.",
@@ -6984,7 +6984,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "기본 이미지 모델",
+          "title": "이미지 모델",
           "description": "이미지 생성 작업이 사용하는 모델입니다.",
           "emptyDescription": "이미지를 생성하려면 제공자 설정에서 이미지 모델을 켜세요.",
           "placeholder": "모델 선택",
@@ -7000,15 +7000,11 @@
         "title": "새 기본값 선택",
         "description": "이 변경으로 기본값인 모델이 빠집니다. 각각을 대신할 모델을 선택하세요.",
         "deleteDescription": "이 제공자에 기본값인 모델이 있습니다. 각각을 대신할 모델을 선택하세요.",
-        "placeholder": "모델 선택",
         "confirm": "계속",
         "cleared": "대신할 모델이 없습니다. 기본값이 해제됩니다.",
         "flows": {
           "chat": {
             "lost": "선택된 다른 채팅 모델이 없습니다. 채팅이 꺼집니다."
-          },
-          "image": {
-            "lost": "연결된 다른 이미지 모델이 없습니다. 이미지 생성이 꺼집니다."
           },
           "decision": {
             "lost": "선택된 다른 결정 모델이 없습니다. 결정 기능이 꺼집니다."

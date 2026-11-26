@@ -118,6 +118,7 @@ import {
 } from "@/lib/searchSettings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
+import type { ModelCapability } from "@/lib/languageModels/types";
 import {
   filterModelConfigurations,
   findLlmOptionById,
@@ -128,6 +129,9 @@ import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgre
 import CCPairIdsBackfillCard from "@/views/admin/IndexSettingsPage/CCPairIdsBackfillCard";
 import EmbeddingRateLimitCard from "@/views/admin/IndexSettingsPage/EmbeddingRateLimitCard";
 import { parseErrorDetail } from "@/lib/fetcher";
+
+/** The captioning model reads images, so it needs image input. */
+const VISION_CAPABILITIES: readonly ModelCapability[] = ["vision"];
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
@@ -2426,10 +2430,11 @@ export default function IndexSettingsPage() {
                               >
                                 <SimpleModelSelector
                                   nullable
+                                  capabilities={VISION_CAPABILITIES}
                                   providers={filterModelConfigurations(
                                     llmProviders ?? [],
                                     {
-                                      imageInput: true,
+                                      capabilities: VISION_CAPABILITIES,
                                       keep: values.image_processing_model_configuration_id,
                                     }
                                   )}

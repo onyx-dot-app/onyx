@@ -6441,7 +6441,7 @@
       },
       "defaultModel": {
         "description": "Usado por padrão em novas sessões.",
-        "title": "Modelo de chat padrão"
+        "title": "Modelo de chat"
       },
       "deleteModal": {
         "defaultProviderWarning": "Não é possível excluir o provedor padrão. Selecione outro provedor como padrão antes de excluir este.",
@@ -6984,7 +6984,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "Modelo de imagem padrão",
+          "title": "Modelo de imagem",
           "description": "O modelo que a ação Geração de imagens usa.",
           "emptyDescription": "Ative um modelo de imagem nas configurações de um provedor para gerar imagens.",
           "placeholder": "Selecione um modelo",
@@ -7000,15 +7000,11 @@
         "title": "Escolha novos padrões",
         "description": "Esta alteração remove modelos que são padrão. Escolha um modelo para substituir cada um.",
         "deleteDescription": "Este provedor tem modelos padrão. Escolha um modelo para substituir cada um.",
-        "placeholder": "Escolha um modelo",
         "confirm": "Continuar",
         "cleared": "Nenhum outro modelo pode substituí-lo. O padrão é removido.",
         "flows": {
           "chat": {
             "lost": "Nenhum outro modelo de chat está selecionado. O chat é desativado."
-          },
-          "image": {
-            "lost": "Nenhum outro modelo de imagem está conectado. A geração de imagens é desativada."
           },
           "decision": {
             "lost": "Nenhum outro modelo de decisão está selecionado. As decisões são desativadas."

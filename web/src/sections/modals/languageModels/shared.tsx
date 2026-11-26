@@ -1410,8 +1410,8 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
                         affected={pending.affected}
                         candidates={candidates}
                         choices={choices}
-                        onChange={(role, id) =>
-                          setChoices((prev) => ({ ...prev, [role]: id }))
+                        onChange={(role, choice) =>
+                          setChoices((prev) => ({ ...prev, [role]: choice }))
                         }
                       />
                     )}

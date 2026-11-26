@@ -6441,7 +6441,7 @@
       },
       "defaultModel": {
         "description": "Utilisé par défaut pour les nouvelles sessions.",
-        "title": "Modèle de chat par défaut"
+        "title": "Modèle de chat"
       },
       "deleteModal": {
         "defaultProviderWarning": "Impossible de supprimer le fournisseur par défaut. Sélectionnez un autre fournisseur par défaut avant de supprimer celui-ci.",
@@ -6984,7 +6984,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "Modèle d'image par défaut",
+          "title": "Modèle d'image",
           "description": "Le modèle qu'utilise l'action Génération d'images.",
           "emptyDescription": "Activez un modèle d'image dans les paramètres d'un fournisseur pour générer des images.",
           "placeholder": "Sélectionnez un modèle",
@@ -7000,15 +7000,11 @@
         "title": "Choisir de nouveaux modèles par défaut",
         "description": "Cette modification retire des modèles utilisés par défaut. Choisissez un modèle pour remplacer chacun.",
         "deleteDescription": "Ce fournisseur porte des modèles par défaut. Choisissez un modèle pour remplacer chacun.",
-        "placeholder": "Choisissez un modèle",
         "confirm": "Continuer",
         "cleared": "Aucun autre modèle ne peut le remplacer. Le modèle par défaut est retiré.",
         "flows": {
           "chat": {
             "lost": "Aucun autre modèle de chat n'est sélectionné. Le chat est désactivé."
-          },
-          "image": {
-            "lost": "Aucun autre modèle d'image n'est connecté. La génération d'images est désactivée."
           },
           "decision": {
             "lost": "Aucun autre modèle de décision n'est sélectionné. Les décisions sont désactivées."

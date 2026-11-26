@@ -6441,7 +6441,7 @@
       },
       "defaultModel": {
         "description": "Used for new sessions by default.",
-        "title": "Default Chat Model"
+        "title": "Chat Model"
       },
       "deleteModal": {
         "defaultProviderWarning": "Cannot delete the default provider. Select another provider as the default prior to deleting this one.",
@@ -6984,7 +6984,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "Default Image Model",
+          "title": "Image Model",
           "description": "The model that the Image Generation action uses.",
           "emptyDescription": "Turn on an image model in a provider's settings to generate images.",
           "placeholder": "Select a model",
@@ -7000,15 +7000,11 @@
         "title": "Choose New Defaults",
         "description": "This change removes models that hold defaults. Choose a model to take over each one.",
         "deleteDescription": "This provider holds defaults. Choose a model to take over each one.",
-        "placeholder": "Choose a model",
         "confirm": "Continue",
         "cleared": "No other model can take this over. The default is cleared.",
         "flows": {
           "chat": {
             "lost": "No other chat model is selected. Chat turns off."
-          },
-          "image": {
-            "lost": "No other image model is connected. Image generation turns off."
           },
           "decision": {
             "lost": "No other decision model is selected. Decisions turn off."

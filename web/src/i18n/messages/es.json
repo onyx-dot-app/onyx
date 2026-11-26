@@ -6441,7 +6441,7 @@
       },
       "defaultModel": {
         "description": "Se usa de forma predeterminada en las sesiones nuevas.",
-        "title": "Modelo de chat predeterminado"
+        "title": "Modelo de chat"
       },
       "deleteModal": {
         "defaultProviderWarning": "No se puede eliminar el proveedor predeterminado. Selecciona otro proveedor como predeterminado antes de eliminar este.",
@@ -6984,7 +6984,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "Modelo de imagen predeterminado",
+          "title": "Modelo de imagen",
           "description": "El modelo que usa la acción Generación de imágenes.",
           "emptyDescription": "Activa un modelo de imagen en la configuración de un proveedor para generar imágenes.",
           "placeholder": "Selecciona un modelo",
@@ -7000,15 +7000,11 @@
         "title": "Elige nuevos valores predeterminados",
         "description": "Este cambio quita modelos que son predeterminados. Elige un modelo que sustituya a cada uno.",
         "deleteDescription": "Este proveedor tiene modelos predeterminados. Elige un modelo que sustituya a cada uno.",
-        "placeholder": "Elige un modelo",
         "confirm": "Continuar",
         "cleared": "Ningún otro modelo puede sustituirlo. Se quita el valor predeterminado.",
         "flows": {
           "chat": {
             "lost": "No hay otro modelo de chat seleccionado. El chat se desactiva."
-          },
-          "image": {
-            "lost": "No hay otro modelo de imagen conectado. La generación de imágenes se desactiva."
           },
           "decision": {
             "lost": "No hay otro modelo de decisión seleccionado. Las decisiones se desactivan."

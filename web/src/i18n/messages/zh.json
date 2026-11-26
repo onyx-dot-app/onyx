@@ -6441,7 +6441,7 @@
       },
       "defaultModel": {
         "description": "默认用于新会话。",
-        "title": "默认聊天模型"
+        "title": "聊天模型"
       },
       "deleteModal": {
         "defaultProviderWarning": "无法删除默认提供商。请先将其他提供商设为默认，再删除此提供商。",
@@ -6984,7 +6984,7 @@
       },
       "imageGeneration": {
         "defaultModel": {
-          "title": "默认图像模型",
+          "title": "图像模型",
           "description": "图像生成操作使用的模型。",
           "emptyDescription": "在提供商设置中开启一个图像模型即可生成图像。",
           "placeholder": "选择模型",
@@ -7000,15 +7000,11 @@
         "title": "选择新的默认模型",
         "description": "此更改会移除用作默认的模型。请为每项选择一个替代模型。",
         "deleteDescription": "此提供商包含默认模型。请为每项选择一个替代模型。",
-        "placeholder": "选择模型",
         "confirm": "继续",
         "cleared": "没有其他模型可以替代。该默认项将被清除。",
         "flows": {
           "chat": {
             "lost": "没有选中其他聊天模型。聊天将关闭。"
-          },
-          "image": {
-            "lost": "没有连接其他图像模型。图像生成将关闭。"
           },
           "decision": {
             "lost": "没有选中其他决策模型。决策功能将关闭。"

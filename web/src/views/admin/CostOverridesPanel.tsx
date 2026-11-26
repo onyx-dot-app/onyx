@@ -45,7 +45,10 @@ import {
   updateCostOverride,
   useCostOverrides,
 } from "@/lib/languageModels/costOverrides";
-import type { CostOverride } from "@/lib/languageModels/types";
+import type { CostOverride, ModelCapability } from "@/lib/languageModels/types";
+
+/** Costs apply to every model that runs requests: chat and decision models. */
+const CHAT_AND_DECISION: readonly ModelCapability[] = ["chat", "decision"];
 
 /**
  * The provider's own name, else its brand name, as the provider cards show it.
@@ -115,7 +118,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
   );
   const providers = filterModelConfigurations(llmProviders ?? [], {
     keep: existing?.model_configuration_id ?? null,
-    includeDecisionOnly: true,
+    capabilities: CHAT_AND_DECISION,
   }).map((provider) => ({
     ...provider,
     model_configurations: provider.model_configurations.filter(
@@ -208,7 +211,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
                     />
                   ) : (
                     <SimpleModelSelector
-                      includeDecisionOnly
+                      capabilities={CHAT_AND_DECISION}
                       nullable={!isEdit}
                       providers={providers}
                       value={values.modelConfigId}

@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { InputHorizontal, toast } from "@opal/layouts";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
+import type { ModelCapability } from "@/lib/languageModels/types";
 import { useAdminLanguageModelsWithImageModels } from "@/lib/languageModels/hooks";
 import { useImageGenerationConfigs } from "@/lib/imageGeneration/hooks";
 import {
@@ -10,10 +11,9 @@ import {
   unsetDefaultImageGenerationConfig,
 } from "@/lib/imageGeneration/svc";
 
-const IMAGE_MODEL_KINDS = ["image"] as const;
-
+const IMAGE_CAPABILITIES: readonly ModelCapability[] = ["image"];
 /**
- * The Default Image Model row: the connected image models, by
+ * The Image Model row: the connected image models, by
  * provider, and "No Default", which turns image generation off.
  */
 export function DefaultImageModelSetting() {
@@ -57,12 +57,10 @@ export function DefaultImageModelSetting() {
     >
       <SimpleModelSelector
         nullable
-        modelKinds={IMAGE_MODEL_KINDS}
+        capabilities={IMAGE_CAPABILITIES}
         providers={llmProviders ?? []}
         value={defaultConfig?.model_configuration_id ?? null}
-        onChange={(modelConfigurationId) =>
-          void handleChange(modelConfigurationId)
-        }
+        onChange={(modelConfigurationId) => handleChange(modelConfigurationId)}
         globalDefault={{
           label: t("defaultModel.noDefault.label"),
           description: t("defaultModel.noDefault.description"),

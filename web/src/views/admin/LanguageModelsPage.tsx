@@ -244,8 +244,8 @@ function ExistingProviderCard({
                   affected={affectedDefaults}
                   candidates={defaultCandidates}
                   choices={defaultChoices}
-                  onChange={(role, id) =>
-                    setDefaultChoices((prev) => ({ ...prev, [role]: id }))
+                  onChange={(role, choice) =>
+                    setDefaultChoices((prev) => ({ ...prev, [role]: choice }))
                   }
                 />
               </>
@@ -761,7 +761,7 @@ export default function LanguageModelsPage() {
                           modelConfigurationId
                         );
                         if (provider && opt) {
-                          void handleDefaultModelChange(
+                          return handleDefaultModelChange(
                             `${provider.id}:${opt.modelName}`
                           );
                         }

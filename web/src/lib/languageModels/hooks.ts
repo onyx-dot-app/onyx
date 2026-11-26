@@ -524,7 +524,7 @@ export function useAdminLanguageModels({
 }
 
 /** Every provider with every model, image models included, for a setting
- *  that picks an image model (`modelKinds={["image"]}`). */
+ *  that picks an image model (`capabilities={["image"]}`). */
 export function useAdminLanguageModelsWithImageModels() {
   const { data, error, mutate } = useSWR<
     LLMProviderResponse<RawLLMProviderView>

@@ -18,12 +18,12 @@ choose which models users can see, set the default model, and control model sett
 
 The page has these sections:
 
-- **Default Chat Model**: the model Onyx uses for new chat sessions unless a user or agent picks another one.
+- **Chat Model**: the model Onyx uses for new chat sessions unless a user or agent picks another one.
 - **Chat Naming Model**: the model that generates chat session titles. A fast, low-cost model works well.
   Choose **Chat Default** to name each chat with the model that the user chats with.
 - **Search Decision Model**: the model that picks the retrieved documents for an answer.
   See [Search Settings](/admins/managing_features/chat#search-settings).
-- **Default Image Model**: the model the Image Generation action uses.
+- **Image Model**: the model the Image Generation action uses.
   See [Image Generation](/admins/actions/image_generation).
 - **Available Providers**: the providers you have connected.
   If you clear the model that holds a default, or delete its provider,
@@ -115,7 +115,7 @@ Every provider dialog has a **Models** section. Use it to control what users see
 - **Auto Update** (OpenAI, Anthropic, Vertex AI) adds and selects new chat models when the vendor releases them,
   and removes chat models the vendor retires. It does not change image models.
   A retired model that an agent uses is hidden instead.
-  It does not change your selection of the other models or the **Default Chat Model**.
+  It does not change your selection of the other models or the **Chat Model**.
 - Tags beside a model's name show the defaults it holds, for example **Default Chat** or **Default Image**.
   Set the defaults at the top of the **AI Models** page.
 - Tags under each model show what it can do: **Chat**, **Vision** (accepts images), **Decision** (runs
