@@ -43,6 +43,7 @@ import {
   IMAGE_GENERATION_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
   PYTHON_TOOL_ID,
+  BROWSER_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
 } from "@/lib/tools/constants";
@@ -524,6 +525,9 @@ export default function AgentEditorPage({
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
   );
+  const browserTool = availableTools?.find(
+    (t) => t.in_code_tool_id === BROWSER_TOOL_ID
+  );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
     ? undefined
@@ -601,6 +605,12 @@ export default function AgentEditorPage({
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
       ) ??
         false),
+    browser:
+      !!browserTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === BROWSER_TOOL_ID
+      ) ??
+        true),
     integrations: (existingAgent?.integrations ?? []).map(draftFromLink),
 
     // Sharing
@@ -695,6 +705,9 @@ export default function AgentEditorPage({
       }
       if (values.code_interpreter && codeInterpreterTool) {
         toolIds.push(codeInterpreterTool.id);
+      }
+      if (values.browser && browserTool) {
+        toolIds.push(browserTool.id);
       }
 
       // Build submission data
@@ -1420,6 +1433,20 @@ export default function AgentEditorPage({
                               <InputSwitchField name="code_interpreter" />
                             </InputHorizontal>
                           </Card>
+
+                          {browserTool && (
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="browser"
+                                title={t("editor.actions.browser.title")}
+                                description={t(
+                                  "editor.actions.browser.description"
+                                )}
+                              >
+                                <InputSwitchField name="browser" />
+                              </InputHorizontal>
+                            </Card>
+                          )}
 
                           <Divider
                             paddingPerpendicular={1}

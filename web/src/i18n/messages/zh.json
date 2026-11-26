@@ -10864,6 +10864,10 @@
           "description": "生成并运行代码。",
           "title": "代码解释器"
         },
+        "browser": {
+          "description": "浏览网站并在页面上执行操作。",
+          "title": "浏览器"
+        },
         "description": "此智能体可使用的工具和能力。",
         "imageGeneration": {
           "description": "使用 AI 驱动的工具生成和处理图像。",

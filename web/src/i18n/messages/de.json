@@ -10864,6 +10864,10 @@
           "description": "Generieren und führen Sie Code aus.",
           "title": "Code-Interpreter"
         },
+        "browser": {
+          "description": "Websites durchsuchen und auf Seiten handeln.",
+          "title": "Browser"
+        },
         "description": "Tools und Fähigkeiten, die dieser Agent nutzen kann.",
         "imageGeneration": {
           "description": "Erstellen und bearbeiten Sie Bilder mit KI-gestützten Tools.",

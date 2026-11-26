@@ -43,18 +43,15 @@ def upgrade() -> None:
             BROWSER_TOOL,
         )
 
-    # The default agent kept the browser before it became a tool.
+    # Every agent had the browser before it became a tool.
     conn.execute(
         sa.text("""
             INSERT INTO persona__tool (persona_id, tool_id)
-            SELECT :persona_id, id FROM tool WHERE in_code_tool_id = :in_code_tool_id
-            AND EXISTS (SELECT 1 FROM persona WHERE id = :persona_id)
+            SELECT persona.id, tool.id FROM persona, tool
+            WHERE tool.in_code_tool_id = :in_code_tool_id AND NOT persona.deleted
             ON CONFLICT DO NOTHING
             """),
-        {
-            "persona_id": DEFAULT_PERSONA_ID,
-            "in_code_tool_id": BROWSER_TOOL["in_code_tool_id"],
-        },
+        {"in_code_tool_id": BROWSER_TOOL["in_code_tool_id"]},
     )
 
 

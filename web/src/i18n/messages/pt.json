@@ -10864,6 +10864,10 @@
           "description": "Gere e execute código.",
           "title": "Interpretador de código"
         },
+        "browser": {
+          "description": "Navegue em sites e aja nas páginas.",
+          "title": "Navegador"
+        },
         "description": "Ferramentas e capacidades disponíveis para este agente usar.",
         "imageGeneration": {
           "description": "Gere e manipule imagens usando ferramentas com tecnologia de IA.",

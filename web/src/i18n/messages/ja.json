@@ -10864,6 +10864,10 @@
           "description": "コードを生成して実行します。",
           "title": "コードインタープリター"
         },
+        "browser": {
+          "description": "ウェブサイトを閲覧し、ページを操作します。",
+          "title": "ブラウザ"
+        },
         "description": "このエージェントが使用できるツールと機能です。",
         "imageGeneration": {
           "description": "AI搭載ツールで画像を生成・加工します。",
