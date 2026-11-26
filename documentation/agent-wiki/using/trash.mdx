@@ -1,0 +1,42 @@
+---
+title: "Trash"
+description: "Recover deleted pages and folders"
+icon: "trash"
+---
+
+Deleting in Agent Wiki is reversible. A deleted page or folder moves to **Trash**,
+where it stays recoverable for **30 days** before being removed automatically.
+
+Open **Trash** from the left sidebar to see everything deleted, with two actions per item:
+
+- **Restore** — moves it back to its original location.
+- **Delete permanently** — removes it immediately, before the 30 days are up.
+
+## Why this matters more than usual
+
+Trash is what makes the rest of the product safe to automate. Because deletion is reversible:
+
+- Agents connected over [MCP](/agent-wiki/automate/mcp) are allowed to delete pages at all — `delete_doc` is a trash
+  move, not a destructive one.
+- [Auto Organize](/agent-wiki/automate/auto_organize) can act on approved cleanups without needing to be perfect,
+  since a wrong removal is one click from undone.
+
+Folder deletion is a deliberate exception: agents can delete pages, not folders. The blast radius is larger,
+so that stays a human action.
+
+## What happens to a deleted page
+
+A trashed page is dropped from search and from the live wiki, and its permissions, comments,
+and update policy follow it to the trash location rather than being discarded. Restoring puts all of it back together.
+
+Links and identity are handled too. Every page carries a stable id behind its path,
+so a restored page is the same page — not a lookalike at the same location.
+
+## Good to know
+
+- **30 days is a floor, not a promise of visibility.** An item removed after the window is gone from Trash; recovering
+  it then means restoring from a backup.
+- **A page recreated at a deleted page's path is a new page.** It gets a fresh identity rather than inheriting the
+  deleted one's history, so restoring the original later doesn't merge the two.
+- **History survives regardless.** The wiki is git-backed, so even a permanently deleted page's past commits remain in
+  the repository's history.
