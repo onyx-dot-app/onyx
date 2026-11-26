@@ -53,7 +53,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.skills.models import ChatSkill
-from onyx.tools.constants import EXEC_TOOL_NAME, WAIT_TOOL_NAME
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, WAIT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import CapabilityEntry, ToolContext
 from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
@@ -395,7 +395,7 @@ def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint
     )
 
 
-_CODE_MODE_ECHO = "tools.echo (a function in `exec` programs)"
+_CODE_MODE_ECHO = "tools.echo (a function in `execute_code` programs)"
 _AGENT_TOOLS = [
     "spawn_agent",
     "list_agents",
@@ -409,7 +409,11 @@ _AGENT_TOOLS = [
     ("saved_code_mode", "offered", "preferred"),
     [
         # Code mode names the preferred tool as a function of its programs.
-        (True, [EXEC_TOOL_NAME, WAIT_TOOL_NAME, *_AGENT_TOOLS], _CODE_MODE_ECHO),
+        (
+            True,
+            [EXECUTE_CODE_TOOL_NAME, WAIT_TOOL_NAME, *_AGENT_TOOLS],
+            _CODE_MODE_ECHO,
+        ),
         # The echo tool ranks as an integration, after the agent tools.
         (False, [*_AGENT_TOOLS, EchoTool().name], EchoTool().name),
     ],
@@ -624,7 +628,7 @@ def test_code_mode_offers_the_skill_tools_as_program_functions(
     run_agent(agent, max_steps=3, messages=[UserMessage(content="Go")])
 
     names, _, request = _offered(llm)
-    assert names == ["exec", "wait"]
+    assert names == ["execute_code", "wait"]
     # The catalog names the functions that programs call
     assert "- triage: Sort." in request
     assert "`tools.skills_read`" in request

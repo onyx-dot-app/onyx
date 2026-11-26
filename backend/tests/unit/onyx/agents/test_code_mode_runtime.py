@@ -40,7 +40,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.tools.constants import EXEC_TOOL_NAME
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode.cells import (
     CodeCells,
@@ -62,10 +62,12 @@ from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool
 
-WRITE = ToolCall(id="write", name=EXEC_TOOL_NAME, arguments={"code": "store('n', 1)"})
+WRITE = ToolCall(
+    id="write", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": "store('n', 1)"}
+)
 READ = ToolCall(
     id="read",
-    name=EXEC_TOOL_NAME,
+    name=EXECUTE_CODE_TOOL_NAME,
     arguments={"code": "await tools.echo(value='x')\nprint(load('n') + 1)"},
 )
 
@@ -152,7 +154,7 @@ def test_a_program_reads_an_earlier_program_of_the_same_step(restored: bool) -> 
     [
         (
             called,
-            f"`{called}` is available only inside `exec` programs. Call "
+            f"`{called}` is available only inside `execute_code` programs. Call "
             "it there: `await tools.echo(value=...)`.",
         )
         for called in ("echo", "tools.echo", "tools_echo")
@@ -258,12 +260,14 @@ EARLIER_TURN: list[Message] = [
     UserMessage(id="question", content="Remember a value"),
     AssistantMessage(
         id="store-call",
-        content=[ToolCall(id="store", name=EXEC_TOOL_NAME, arguments={"code": "..."})],
+        content=[
+            ToolCall(id="store", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": "..."})
+        ],
     ),
     ToolResultMessage(
         id="store-result",
         tool_call_id="store",
-        tool_name=EXEC_TOOL_NAME,
+        tool_name=EXECUTE_CODE_TOOL_NAME,
         content="Stored: k.",
         details=CodeModeExecutionResult(
             cell_id=1,
@@ -288,7 +292,7 @@ def _load_in_new_turn(
                 content=[
                     ToolCall(
                         id="load",
-                        name=EXEC_TOOL_NAME,
+                        name=EXECUTE_CODE_TOOL_NAME,
                         arguments={"code": "load('k')"},
                     )
                 ]
@@ -360,7 +364,7 @@ def test_a_running_cell_ends_by_its_own_time_limit_before_the_run_suspends() -> 
             content=[
                 ToolCall(
                     id="loop",
-                    name=EXEC_TOOL_NAME,
+                    name=EXECUTE_CODE_TOOL_NAME,
                     arguments={"code": "yield_control()\nawait asyncio.sleep(60)\n"},
                 ),
                 ToolCall(id="delegate", name="delegate", arguments={}),
@@ -421,7 +425,7 @@ def test_before_tool_call_denies_direct_and_program_calls_alike() -> None:
     )
     program = ToolCall(
         id="program",
-        name=EXEC_TOOL_NAME,
+        name=EXECUTE_CODE_TOOL_NAME,
         arguments={
             "code": "print(await tools.echo(value='x'))\n"
             "try:\n"
@@ -477,7 +481,7 @@ def test_a_raising_before_tool_call_fails_direct_and_program_calls_alike(
     call = (
         ToolCall(
             id="call",
-            name=EXEC_TOOL_NAME,
+            name=EXECUTE_CODE_TOOL_NAME,
             arguments={
                 "code": "try:\n"
                 "    await tools.secret(value='y')\n"
@@ -531,7 +535,7 @@ def test_a_raising_before_tool_call_fails_the_run_when_no_one_watches_the_cell()
     # cell after that.
     call = ToolCall(
         id="call",
-        name=EXEC_TOOL_NAME,
+        name=EXECUTE_CODE_TOOL_NAME,
         arguments={"code": "yield_control()\nawait tools.secret(value='y')\n"},
     )
 
