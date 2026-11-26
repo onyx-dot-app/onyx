@@ -168,6 +168,9 @@ export function useSubagentTranscript(
       let stopped = false;
       // Until the stream sends its stop, or no longer serves this stream
       while (!stopped && !controller.signal.aborted) {
+        // The stream sends a cursor after each batch of packets. A batch
+        // lands with its cursor, so a drop before it cannot repeat packets
+        let batch: Packet[] = [];
         try {
           for await (const item of followSubagentStream(
             sessionId,
@@ -178,13 +181,18 @@ export function useSubagentTranscript(
           )) {
             if (!isPacket(item)) {
               cursor = item.next_cursor;
+              if (batch.length > 0) {
+                pending.push(...batch);
+                if (batch.some((packet) => packet.obj.type === "stop"))
+                  stopped = true;
+                batch = [];
+                if (frame === null) frame = requestAnimationFrame(flush);
+              }
               continue;
             }
             const type = item.obj.type;
             if (type === "chat_heartbeat" || type === "replay_end") continue;
-            if (type === "stop") stopped = true;
-            pending.push(item);
-            if (frame === null) frame = requestAnimationFrame(flush);
+            batch.push(item);
           }
         } catch (failure) {
           if (controller.signal.aborted) return;

@@ -99,6 +99,7 @@ test("a running response shows its live stream, then its saved output once the s
           text("Live answer"),
           { placement: { turn_index: 0 }, obj: { type: "chat_heartbeat" } },
           STOP,
+          { stream_id: 7, next_cursor: 2, replay_complete: true },
         ]);
       }
       return json(
@@ -155,6 +156,7 @@ test("a dropped stream resumes from its last cursor", async () => {
               { stream_id: 7, next_cursor: 1, replay_complete: true },
               text("Part two"),
               STOP,
+              { stream_id: 7, next_cursor: 3, replay_complete: true },
             ];
       return stream(lines);
     }
@@ -215,8 +217,15 @@ test("the streamed packets replace the running response's saved ones while it st
   jest.spyOn(global, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     if (url.includes("/agents/agent-1/stream")) {
-      // One line, then the stream stays open
-      return stream([text("Live answer")], true);
+      // One batch, then the stream stays open
+      return stream(
+        [
+          { stream_id: 7, next_cursor: 0, replay_complete: true },
+          text("Live answer"),
+          { stream_id: 7, next_cursor: 1, replay_complete: true },
+        ],
+        true
+      );
     }
     return json({
       messages: [INSTRUCTION, RESPONSE],
@@ -234,4 +243,49 @@ test("the streamed packets replace the running response's saved ones while it st
       result.current.messages.find((item) => item.messageId === 11)?.packets
     ).toEqual([text("Live answer")])
   );
+});
+
+test("packets that a drop cut off from their cursor land once, when the stream resends them", async () => {
+  const streamCalls: string[] = [];
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.includes("/agents/agent-1/stream")) {
+      streamCalls.push(url);
+      // The first connection drops after a packet, before its cursor
+      const lines =
+        streamCalls.length === 1
+          ? [
+              { stream_id: 7, next_cursor: 0, replay_complete: true },
+              text("Part one"),
+            ]
+          : [
+              { stream_id: 7, next_cursor: 0, replay_complete: true },
+              text("Part one"),
+              text("Part two"),
+              { stream_id: 7, next_cursor: 2, replay_complete: true },
+              STOP,
+              { stream_id: 7, next_cursor: 3, replay_complete: true },
+            ];
+      return stream(lines);
+    }
+    return json({
+      messages: [INSTRUCTION, RESPONSE],
+      packets: [[]],
+      stream: { stream_id: 7, response_ids: [11] },
+    });
+  });
+
+  const { result } = renderHook(() =>
+    useSubagentTranscript("chat-1", "agent-1", 7)
+  );
+
+  await waitFor(
+    () =>
+      expect(
+        result.current.messages.find((item) => item.messageId === 11)?.packets
+      ).toEqual([text("Part one"), text("Part two"), STOP]),
+    { timeout: 3000 }
+  );
+  expect(streamCalls).toHaveLength(2);
+  expect(streamCalls[1]).toContain("cursor=0");
 });
