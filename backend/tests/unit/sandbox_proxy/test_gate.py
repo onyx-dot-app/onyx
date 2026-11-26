@@ -2192,7 +2192,12 @@ def _command_gate(
     return addon, cache
 
 
-def _approved_command_row(monkeypatch: pytest.MonkeyPatch) -> None:
+def _approved_command_row(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    decided_via: ApprovalDecidedVia = ApprovalDecidedVia.USER,
+    actions: list[dict[str, Any]] | None = None,
+) -> None:
     """The row that the recheck reads after an approval."""
     monkeypatch.setattr(
         gate.action_approval,
@@ -2202,7 +2207,8 @@ def _approved_command_row(monkeypatch: pytest.MonkeyPatch) -> None:
             chat_session_id=UUID(_TAG_UUID),
             command_id=_COMMAND,
             decision=ApprovalDecision.APPROVED,
-            decided_via=ApprovalDecidedVia.USER,
+            decided_via=decided_via,
+            actions=actions,
         ),
     )
 
@@ -2474,19 +2480,8 @@ async def test_a_command_grant_does_not_cover_an_action_that_asks_since(
     addon, cache = _command_gate(monkeypatch, match=_MATCH_MULTI_ASK)
     monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
     approval_cache.grant_command_actions(_COMMAND, UUID(_TAG_UUID), 42, [upload], cache)
+    # The recheck reads the row that the grant saved.
     inserted = _spy_approval_insert(monkeypatch)
-    monkeypatch.setattr(
-        gate.action_approval,
-        "get_action_approval",
-        lambda _db, _id: MagicMock(
-            session_id=None,
-            chat_session_id=UUID(_TAG_UUID),
-            command_id=_COMMAND,
-            decision=ApprovalDecision.APPROVED,
-            decided_via=ApprovalDecidedVia.COMMAND_GRANT,
-            actions=inserted[0]["actions"],
-        ),
-    )
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
@@ -2504,17 +2499,10 @@ async def test_a_command_approval_sends_its_request_without_a_saved_grant(
     """The user approved the card for the command but the cache lost the
     grant: the approved request still goes out."""
     addon, _ = _command_gate(monkeypatch)
-    monkeypatch.setattr(
-        gate.action_approval,
-        "get_action_approval",
-        lambda _db, _id: MagicMock(
-            session_id=None,
-            chat_session_id=UUID(_TAG_UUID),
-            command_id=_COMMAND,
-            decision=ApprovalDecision.APPROVED,
-            decided_via=ApprovalDecidedVia.COMMAND_GRANT,
-            actions=[a.model_dump(mode="json") for a in _MATCH.actions],
-        ),
+    _approved_command_row(
+        monkeypatch,
+        decided_via=ApprovalDecidedVia.COMMAND_GRANT,
+        actions=[a.model_dump(mode="json") for a in _MATCH.actions],
     )
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
@@ -2663,6 +2651,24 @@ def test_a_command_card_shows_the_size_of_a_body_that_is_not_json() -> None:
     assert payload == {"method": "POST", "path": "/upload", "body_bytes": 300}
 
 
+class _RecordingMatcher(_StubMatcher):
+    """Records the session tag of each evaluation and matches nothing."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tags: list[UUID | None] = []
+
+    def evaluate(
+        self,
+        request: http.Request,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        session_tag: UUID | None = None,
+    ) -> AllMatchedActions | McpProtocolRequest | None:
+        self.tags.append(session_tag)
+        return None
+
+
 def test_a_chat_recheck_matches_the_agents_integrations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2670,49 +2676,27 @@ def test_a_chat_recheck_matches_the_agents_integrations(
     the first match does, so a linked integration that the user turned off
     still matches."""
     addon, _cache = _command_gate(monkeypatch)
-    tags: list[UUID | None] = []
+    recording = _RecordingMatcher()
 
-    class _Recording(_StubMatcher):
-        def evaluate(
-            self,
-            request: http.Request,  # noqa: ARG002
-            tenant_id: str,  # noqa: ARG002
-            user_id: UUID,  # noqa: ARG002
-            session_tag: UUID | None = None,
-        ) -> AllMatchedActions | McpProtocolRequest | None:
-            tags.append(session_tag)
-            return None
-
-    addon._request_evaluator = _Recording()
+    addon._request_evaluator = recording
     ctx = _ctx(session_id=UUID(_TAG_UUID)).model_copy(
         update={"chat_command_id": _COMMAND}
     )
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
     assert addon._recheck_approval(flow, ctx, _MATCH, uuid4()) is None
-    assert tags == [UUID(_TAG_UUID)]
+    assert recording.tags == [UUID(_TAG_UUID)]
 
 
 def test_a_chat_command_first_match_uses_the_chats_session() -> None:
     """The first match reads the chat session out of a `<chat>.<command>`
     tag, so it sees the integrations of the chat's agent."""
-    tags: list[UUID | None] = []
-
-    class _Recording(_StubMatcher):
-        def evaluate(
-            self,
-            request: http.Request,  # noqa: ARG002
-            tenant_id: str,  # noqa: ARG002
-            user_id: UUID,  # noqa: ARG002
-            session_tag: UUID | None = None,
-        ) -> AllMatchedActions | McpProtocolRequest | None:
-            tags.append(session_tag)
-            return None
+    recording = _RecordingMatcher()
 
     addon = _build(
-        resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=_Recording()
+        resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=recording
     )
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
     assert addon._evaluate(flow, make_resolved_sandbox(), _COMMAND_TAG) is None
-    assert tags == [UUID(_TAG_UUID)]
+    assert recording.tags == [UUID(_TAG_UUID)]
