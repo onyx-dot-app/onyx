@@ -1007,6 +1007,10 @@ export function publishedFilesOf(
 
 const NO_SUBAGENTS: ChatSubagent[] = [];
 
+/** The most agents the agents endpoint returns: the backend's
+ * `MAX_DISCOVERED_AGENTS` (onyx/chat/models.py). */
+export const MAX_LISTED_SUBAGENTS = 128;
+
 /**
  * The chat's background agents, by the newest response that started them,
  * and `stopAgent`, which stops one agent and the agents below it. They load
@@ -1328,6 +1332,11 @@ interface SpawnedSubagents {
    * still counts as starting, so a running group does not flash done.
    */
   available: boolean;
+  /**
+   * The list is not cut off at the endpoint's cap, so an agent it lacks has
+   * not started yet. In a full list, an older agent can be missing.
+   */
+  complete: boolean;
 }
 
 /**
@@ -1347,6 +1356,7 @@ export function useSpawnedSubagents(
         : undefined
     ),
     available: sessionId !== null,
+    complete: agents.length < MAX_LISTED_SUBAGENTS,
   };
 }
 

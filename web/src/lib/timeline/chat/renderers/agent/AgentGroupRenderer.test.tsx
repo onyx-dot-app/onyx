@@ -13,6 +13,7 @@ import {
   type TransformedStep,
 } from "@/lib/timeline/chat/transformers";
 import AgentGroupRenderer from "@/lib/timeline/chat/renderers/agent/AgentGroupRenderer";
+import { MAX_LISTED_SUBAGENTS } from "@/lib/chat/hooks";
 import { SubagentTabsContext } from "@/lib/chat/subagents";
 import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";
 import { AgentToolRenderer } from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
@@ -317,6 +318,22 @@ test("a chat outside the session store shows finished spawns as done, not workin
     ...spawn(0, "alpha", "Find sources"),
     ...spawn(1, "beta", "Check facts"),
   ]);
+
+  expect(await screen.findByText("Done")).toBeVisible();
+  expect(screen.queryByText(/working/)).toBeNull();
+});
+
+test("a full agents list that omits a finished spawn does not read as working", async () => {
+  // The endpoint returns the newest agents only; alpha is older than all
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    const body = String(input).endsWith("/agents")
+      ? Array.from({ length: MAX_LISTED_SUBAGENTS }, (_, index) =>
+          agent(`f-${index}`, `/root/fill-${index}`, "complete", null)
+        )
+      : STATUS;
+    return new Response(JSON.stringify(body), { status: 200 });
+  });
+  renderCard(spawn(0, "alpha", "Find sources"));
 
   expect(await screen.findByText("Done")).toBeVisible();
   expect(screen.queryByText(/working/)).toBeNull();
