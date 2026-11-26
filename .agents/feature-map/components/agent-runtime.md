@@ -24,14 +24,15 @@ document does not repeat it.
 
 **Who calls it.**
 - [[core-chat-loop]]: `chat/execution.py:create_chat_agent` builds a
-  `ChatFeature` or a `DeepResearchFeature` for each response, and the response
-  thread starts it with `background=False` ([[#context-captured-at-start]]).
-- **Child agents.** The deep research step starts
+  `ChatFeature` or a `DeepResearchFeature` for each response and, with its
+  `agent()`, the `Agent` that runs it. The response thread starts that agent
+  with `background=False` ([[#context-captured-at-start]]).
+- **Child agents.** The deep research step starts the agent of a
   `deep_research/research_agent.py:ResearchFeature` through
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
-- **Independent children.** ChatFeature and its children expose controls from
+- **Independent children.** Chat agents and their children expose controls from
   `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito chats have no child agents: they omit these controls,
   and deep research. Children survive
   the root response. A subagent must incorporate the results of children it spawns before
