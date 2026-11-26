@@ -16741,7 +16741,6 @@
       "share": {
         "label": "Partager"
       },
-      "updatedAt": "Mis à jour {date}",
       "updatedNow": {
         "label": "à l'instant"
       }
