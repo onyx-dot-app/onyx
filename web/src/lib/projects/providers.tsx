@@ -162,6 +162,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const currentMessageFilesRef = useRef<ProjectFile[]>([]);
   const pollIntervalRef = useRef<number | null>(null);
   const isPollingRef = useRef<boolean>(false);
+  // Cancelled uploads still being unlinked and deleted. The status poll does
+  // not refresh while one runs: its list could still hold the file, and the
+  // cleanup refreshes when it ends.
+  const pendingCleanupsRef = useRef(0);
   const [lastFailedFiles, setLastFailedFiles] = useState<ProjectFile[]>([]);
   const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
     new Set()
@@ -428,8 +432,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           );
           const isCancelled = (f: ProjectFile) =>
             Boolean(f.temp_id && cancelledTempIds.has(f.temp_id));
+          const cancelledFiles = (uploaded.user_files || []).filter(
+            isCancelled
+          );
+          if (cancelledFiles.length > 0) pendingCleanupsRef.current++;
           cleanup = Promise.all(
-            (uploaded.user_files || []).filter(isCancelled).map((f) =>
+            cancelledFiles.map((f) =>
               (async () => {
                 // The delete keeps a file that a project links, so a project
                 // upload is unlinked first.
@@ -444,7 +452,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
                 console.error("Failed to delete a cancelled upload:", error)
               )
             )
-          );
+          ).finally(() => {
+            if (cancelledFiles.length > 0) pendingCleanupsRef.current--;
+          });
           if (cancelledTempIds.size > 0) {
             removeOptimisticFilesByTempIds(cancelledTempIds, projectId);
           }
@@ -817,7 +827,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         });
 
         // If all tracked uploads finished (completed or failed), do a single refresh
-        if (remaining.size === 0) {
+        if (remaining.size === 0 && pendingCleanupsRef.current === 0) {
           if (currentProjectId) {
             await refreshCurrentProjectDetails();
           }
