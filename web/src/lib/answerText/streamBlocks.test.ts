@@ -18,6 +18,8 @@ describe("endsInOpenCodeFence", () => {
     ["````\n```\n````", false],
     ["- item\n\n  ```\n  code", true],
     ["```a``` is inline", false],
+    ["  ```python\nx = 1", true],
+    ["   ~~~\ncode\n less indented", true],
     ["- item\n\n  ```python\n  x\n\nMore text", false],
     ["> ```\n> x\nplain", false],
     ["> ```\n> x\n>\n> more code", true],
