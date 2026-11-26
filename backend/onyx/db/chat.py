@@ -3041,29 +3041,34 @@ def get_selected_branch(
             branch.c.depth < MAX_CONVERSATION_MESSAGES,
         )
     )
-    message_ids = list(
-        session.scalars(select(branch.c.id).order_by(branch.c.depth.desc()))
-    )
     # Follow only IDs; queue checks do not need response content or tool results.
-    selected = (
-        session.scalar(
-            select(ChatMessage)
-            .where(
-                ChatMessage.id == message_ids[0],
+    # The join gives the deepest message, when it is a response, in the same
+    # statement as the IDs. It names one ID, so it is one index lookup and not
+    # a lookup for each message of the branch.
+    newest_first = (branch.c.depth.desc(), branch.c.id.desc())
+    deepest_id = select(branch.c.id).order_by(*newest_first).limit(1).scalar_subquery()
+    rows = session.execute(
+        select(branch.c.id, ChatMessage)
+        .outerjoin(
+            ChatMessage,
+            and_(
+                ChatMessage.id == branch.c.id,
+                ChatMessage.id == deepest_id,
                 ChatMessage.message_type == MessageType.ASSISTANT,
-            )
-            .options(
-                load_only(
-                    ChatMessage.id,
-                    ChatMessage.chat_session_id,
-                    ChatMessage.parent_message_id,
-                    ChatMessage.response_status,
-                )
+            ),
+        )
+        .options(
+            load_only(
+                ChatMessage.id,
+                ChatMessage.chat_session_id,
+                ChatMessage.parent_message_id,
+                ChatMessage.response_status,
             )
         )
-        if message_ids
-        else None
-    )
+        .order_by(*newest_first)
+    ).all()
+    message_ids: list[int] = [row[0] for row in rows]
+    selected: ChatMessage | None = rows[0][1] if rows else None
     return selected, ChatBranch(
         chat_session_id=chat_session_id, message_ids=message_ids
     )
