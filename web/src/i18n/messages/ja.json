@@ -13059,9 +13059,6 @@
       "lineCount": {
         "label": "{count, plural, one {# 行} other {# 行}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# 語} other {# 語}}"
-      },
       "copyButton": {
         "tooltip": "内容をコピー"
       },
@@ -13085,6 +13082,13 @@
       "renderError": {
         "title": "このファイルはプレビューできません",
         "description": "ここではファイルを表示できません。ファイルをダウンロードして開いてください。"
+      },
+      "unavailable": {
+        "title": "このファイルのプレビューはありません",
+        "description": "このファイルのプレビューを作成できません。ファイルをダウンロードして開いてください。"
+      },
+      "preparing": {
+        "status": "プレビューを準備しています。しばらく時間がかかる場合があります。"
       },
       "unsupported": {
         "title": "このファイル形式のプレビューは現在サポートされていません",
@@ -13133,30 +13137,6 @@
         },
         "error": {
           "description": "PDF ファイルを読み込めませんでした。"
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "プレゼンテーションの操作"
-        },
-        "thumbnails": {
-          "toggle": "スライドのサムネイルを表示・非表示",
-          "resize": "スライドのサムネイルの幅を変更"
-        },
-        "slides": {
-          "label": "スライド"
-        },
-        "previous": {
-          "label": "前のスライド"
-        },
-        "next": {
-          "label": "次のスライド"
-        },
-        "slide": {
-          "counter": "スライド {current} / {total}"
-        },
-        "empty": {
-          "label": "このプレゼンテーションにはスライドがありません"
         }
       }
     },

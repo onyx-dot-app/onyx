@@ -152,14 +152,51 @@ class SandboxProvisionContentionError(Exception):
 # Harness sandboxes (harness_base.HarnessSandbox).
 
 
-class HarnessSandboxRef(BaseModel):
-    """The sandbox of one user, seen from one chat session."""
+class HarnessSandboxKey(BaseModel):
+    """The sandbox of one user."""
 
     model_config = ConfigDict(frozen=True)
 
     tenant_id: str
     sandbox_id: UUID
+
+
+class HarnessSandboxRef(HarnessSandboxKey):
+    """The sandbox of one user, seen from one chat session."""
+
     session_id: UUID
+
+
+class RenderSessionFile(BaseModel):
+    """A file to render, at a path that `read_file` accepts. Publish renders
+    its files in place, so it copies no file back into the VM."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: HarnessSandboxRef
+    path: str
+
+
+class RenderFileBytes(BaseModel):
+    """File content to render, which the render writes into its own scratch
+    directory, so it needs no chat session. `suffix` gives the type."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sandbox: HarnessSandboxKey
+    suffix: str
+    data: bytes
+
+
+class RenderedPreview(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # A JPEG of the first page, when the caller asked for it and poppler
+    # drew it.
+    first_page: bytes | None
+    # The whole file as a PDF, for an Office source, unless it is larger than
+    # RENDER_PREVIEW_MAX_PDF_BYTES.
+    pdf: bytes | None
 
 
 SandboxFileType = Literal["file", "directory", "other"]

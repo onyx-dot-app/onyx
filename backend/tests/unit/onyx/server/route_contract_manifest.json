@@ -599,6 +599,7 @@
   "POST /chat/create-chat-message-feedback": "current_chat_accessible_user",
   "POST /chat/create-chat-session": "write:chat +anonymous",
   "POST /chat/end-incognito-session/{session_id}": "basic",
+  "POST /chat/file/{file_id:path}/preview": "basic",
   "POST /chat/question-requests/{question_request_id}/answers": "write:chat",
   "POST /chat/seed-chat-session-from-slack": "basic",
   "POST /chat/send-chat-message": "current_chat_accessible_user, write:chat +anonymous",

@@ -190,7 +190,13 @@ It has the same `artifact_id` and the next `version`, from 1.
 A replace adds the next version and keeps the file's `artifact_id`, `chat_id`, and `path`.
 A message saved before files had versions has `artifact_id` and `version` set to null.
 `thumbnail_file_id` is a JPEG of the first page of a PDF, PowerPoint, or Word file.
-It is null for other files and for a file that did not render.
+It is null for other files and for a file that did not render. To show a PowerPoint or Word file as a PDF,
+call [`GET /chat/file/{file_id}?preview=pdf`](/developers/api_reference/chat/fetch_chat_file).
+It returns the stored PDF. If the response is 409 with error code `PREVIEW_NOT_READY`,
+call `POST /chat/file/{file_id}/preview`. It returns the stored PDF, or converts the file, stores the PDF,
+and returns it. The conversion can take some seconds. Both calls return 404 for a file that you cannot read.
+A 422 with error code `PREVIEW_UNAVAILABLE` means that the file has no PDF preview.
+A 503 from the `POST` means that you can try again.
 
 ## Tool Approvals
 
