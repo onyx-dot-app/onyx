@@ -44,8 +44,10 @@ class GraphQLOpMatcher(RuleMatcher[GraphQLOp]):
     rule_type = GraphQLOp
 
     def matches(self, rule: GraphQLOp, context: MatchContext) -> bool:
+        # The endpoint is the path alone: a query string does not change it.
+        endpoint = context.request.path.partition("?")[0]
         if context.request.method.upper() != "POST" or not path_matches(
-            rule.path, context.request.path
+            rule.path, endpoint
         ):
             return False
         return any(

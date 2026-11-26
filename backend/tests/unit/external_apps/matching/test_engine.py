@@ -117,3 +117,15 @@ def test_a_graphql_body_matches_only_a_post_to_the_graphql_endpoint(
         ),
     )
     assert [action.action_type for action in matched] == [WHOLE_DOMAIN_ACTION_TYPE]
+
+
+def test_a_query_string_keeps_the_graphql_endpoint() -> None:
+    matched = recognize_actions(
+        ExternalAppType.LINEAR,
+        ProxiedRequest(
+            method="POST",
+            path="/graphql?tenant=acme",
+            body=json.dumps({"query": "{ viewer { id } }"}).encode(),
+        ),
+    )
+    assert [action.action_type for action in matched] == ["linear.viewer.read"]
