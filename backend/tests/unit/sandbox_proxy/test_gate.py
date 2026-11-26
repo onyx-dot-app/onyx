@@ -2800,3 +2800,39 @@ def test_a_chat_command_first_match_uses_the_chats_session() -> None:
 
     assert addon._evaluate(flow, make_resolved_sandbox(), _COMMAND_TAG) is None
     assert recording.tags == [UUID(_TAG_UUID)]
+
+
+@pytest.mark.asyncio
+async def test_an_approval_saved_after_the_drain_starts_is_ended(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A save that ends after the drain's snapshot ends its row and wakes the
+    wait, so the request gets a result before the proxy closes."""
+    cache = MagicMock(spec=CacheBackend)
+    addon = _build(
+        resolver=StubResolver(),
+        matcher=_StubMatcher(),
+        cache_factory=lambda _tenant_id: cache,
+    )
+    approval_id = uuid4()
+    monkeypatch.setattr(addon, "_persist_approval_row", lambda *_: approval_id)
+    claimed: list[UUID] = []
+
+    def _claim(aid: UUID, _tenant_id: str) -> ApprovalDecision:
+        claimed.append(aid)
+        return ApprovalDecision.EXPIRED
+
+    monkeypatch.setattr(addon, "_claim_expired_or_read_winner", _claim)
+    wakes: list[tuple[UUID, ApprovalDecision]] = []
+    monkeypatch.setattr(
+        gate.approval_cache,
+        "send_wake",
+        lambda aid, decision, _cache: wakes.append((aid, decision)),
+    )
+
+    await addon.drain_inflight()
+    saved = await addon._save_parked_approval(_ctx(), _MATCH, {})
+
+    assert saved == approval_id
+    assert claimed == [approval_id]
+    assert wakes == [(approval_id, ApprovalDecision.EXPIRED)]

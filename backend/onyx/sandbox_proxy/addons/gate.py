@@ -212,6 +212,8 @@ class GateAddon:
         # Invariant: `_save_parked_approval` is the only writer; the `finally`
         # after it in `request` is the only remover.
         self._parked = ParkedApprovals()
+        # Set when the SIGTERM drain starts; a save that ends later is not parked.
+        self._draining = False
         # client connection id -> session tag, captured from the CONNECT's
         # Proxy-Authorization (only place it's visible for MITM'd HTTPS).
         self._conn_session_tags: dict[str, str] = {}
@@ -1002,6 +1004,11 @@ class GateAddon:
             with contextlib.suppress(Exception):
                 await self._end_cancelled_row(await persisted, ctx.tenant_id)
             raise
+        if self._draining:
+            # The drain's snapshot missed this row: end it and wake its wait.
+            await asyncio.to_thread(
+                self._terminalize_after_unhandled_error, approval_id, ctx.tenant_id
+            )
         self._parked.add(ctx.tenant_id, approval_id)
         return approval_id
 
@@ -1245,6 +1252,7 @@ class GateAddon:
         2. `asyncio.wait` on tracked `request()` tasks so they return to
            mitmproxy before the caller tears down connections.
         """
+        self._draining = True
         for tenant_id, approval_ids in self._parked.snapshot():
             cache = self._cache_factory(tenant_id)
             for approval_id in approval_ids:
