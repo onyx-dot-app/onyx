@@ -20,7 +20,6 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import process_message
-from onyx.chat.agent import ChatAgent
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import dispatch_pending_chat_messages
 from onyx.chat.run_store import INPUT_POLL_SECONDS, ChatRunStore
@@ -102,7 +101,7 @@ def _gated(integration_id: int, sent: list[str]) -> FakeMCPTool:
     return tool
 
 
-def _agent(tool: FakeMCPTool, checkpoint: ExecutionCheckpoint | None) -> ChatAgent:
+def _agent(tool: FakeMCPTool, checkpoint: ExecutionCheckpoint | None) -> Agent:
     return chat_agent(
         FakeModelClient(_reply),
         agent_id=checkpoint.run_state.agent_id if checkpoint else None,

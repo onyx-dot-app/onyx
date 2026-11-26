@@ -6,14 +6,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.models import AgentState
 from onyx.agents.runtime import Run
 from onyx.chat.models import ChatMessageMetadata
 from onyx.chat.presentation import project_response
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
 from onyx.deep_research.models import ResearchAgentCallResult
-from onyx.deep_research.research_agent import ResearchAgent
+from onyx.deep_research.research_agent import ResearchFeature
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
@@ -107,8 +108,7 @@ def test_timed_out_child_preserves_successful_sibling(
             content=[TextContent(text="Final report" if results else "Plan")]
         )
 
-    feature = DeepResearchAgent(
-        [],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(reply),
         len,
@@ -120,7 +120,7 @@ def test_timed_out_child_preserves_successful_sibling(
     )
     runs: list[Run] = []
     result = run_agent(
-        feature,
+        feature.agent(AgentState()),
         messages=[UserMessage(content="Research")],
         max_steps=4,
         coordinator=AgentCoordinator(),
@@ -139,7 +139,7 @@ def test_timed_out_child_preserves_successful_sibling(
 @pytest.mark.parametrize("parent", [False, True])
 def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
     requests: list[GenerationRequest] = []
-    feature: DeepResearchAgent | ResearchAgent
+    feature: DeepResearchFeature | ResearchFeature
 
     class SearchStub(EchoTool):
         @property
@@ -175,8 +175,7 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
 
     llm = FakeModelClient(reply)
     feature = (
-        DeepResearchAgent(
-            [],
+        DeepResearchFeature(
             [],
             llm,
             len,
@@ -187,10 +186,12 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
             skip_clarification=True,
         )
         if parent
-        else ResearchAgent([SearchStub()], llm, len, None, "", ReasoningEffort.LOW)
+        else ResearchFeature([SearchStub()], llm, len, None, "", ReasoningEffort.LOW)
     )
     result = run_agent(
-        feature, messages=[UserMessage(content="Research")], max_steps=10
+        feature.agent(AgentState()),
+        messages=[UserMessage(content="Research")],
+        max_steps=10,
     )
     assert result.output.text == "Report"
     assert len(requests) == 2
@@ -254,8 +255,7 @@ def test_deep_research_reuses_sources_from_chat_history(source_kind: str) -> Non
             )
         return AssistantMessage(content=[TextContent(text="Evidence [7]")])
 
-    feature = DeepResearchAgent(
-        history,
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(reply),
         len,
@@ -267,7 +267,7 @@ def test_deep_research_reuses_sources_from_chat_history(source_kind: str) -> Non
     )
     runs: list[Run] = []
     run_agent(
-        feature,
+        feature.agent(AgentState(messages=history)),
         messages=[UserMessage(content="Explain the evidence")],
         max_steps=4,
         runs=runs,
@@ -282,8 +282,7 @@ def test_request_context_is_trailing_uncacheable_and_restorable() -> None:
     from onyx.agents.models import AgentStep, StepInput
 
     question = UserMessage(content="Research the launch")
-    feature = DeepResearchAgent(
-        [question],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(lambda _request, _signal: AssistantMessage(content=[])),
         len,
@@ -293,6 +292,7 @@ def test_request_context_is_trailing_uncacheable_and_restorable() -> None:
         None,
         additional_context="Use the October launch plan",
     )
+    agent = feature.agent(AgentState(messages=[question]))
     state = feature.capture_state()
     assert state.request_context == "Use the October launch plan"
     feature.restore_state(state.model_dump(mode="json"))
@@ -311,7 +311,7 @@ def test_request_context_is_trailing_uncacheable_and_restorable() -> None:
     assert context.text.startswith("<system-reminder>")
     assert not context.cacheable
     assert request.messages[-2].cacheable
-    assert [message.text for message in feature.state.messages] == [question.text]
+    assert [message.text for message in agent.state.messages] == [question.text]
 
 
 def test_project_images_use_stable_preamble_and_file_references(
@@ -333,8 +333,7 @@ def test_project_images_use_stable_preamble_and_file_references(
         content_text=None,
         token_count=100,
     )
-    feature = DeepResearchAgent(
-        [],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(lambda _request, _signal: AssistantMessage(content=[])),
         len,
@@ -395,8 +394,7 @@ def test_research_cycles_keep_system_and_tool_phase_stable(
         "onyx.deep_research.agent.model_is_reasoning_model",
         lambda *_args: reasoning,
     )
-    feature = DeepResearchAgent(
-        [],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(lambda _request, _signal: AssistantMessage(content=[])),
         len,
@@ -487,7 +485,7 @@ def test_research_tools_show_their_summaries_and_the_prompt_their_guidance(
         open_url,
     ]
     run_agent(
-        ResearchAgent(tools, llm, len, None, "", ReasoningEffort.LOW),
+        ResearchFeature(tools, llm, len, None, "", ReasoningEffort.LOW).agent(),
         max_steps=3,
         messages=[UserMessage(content="Find facts")],
     )

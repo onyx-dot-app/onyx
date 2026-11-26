@@ -9,10 +9,12 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from uuid import UUID
 
 import pytest
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -24,10 +26,11 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    RunHooks,
     RunStatus,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, AgentFeature
 from onyx.agents.tools import (
     HumanToolAnswer,
     InputDecision,
@@ -37,7 +40,7 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolOutcome,
 )
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import ChatResponseCheckpoint
 from onyx.file_store.file_store import get_default_file_store
@@ -90,6 +93,19 @@ def _ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
     )
 
 
+class _AskingFeature(AgentFeature):
+    """Chat whose `send` calls wait for approval (`_ask_for_send`)."""
+
+    def __init__(self, chat: ChatFeature) -> None:
+        self.chat = chat
+
+    def bind(self) -> RunHooks:
+        return self.chat.bind().model_copy(update={"before_tool_call": _ask_for_send})
+
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
+        self.chat.restore_state(state)
+
+
 def _steps(scenario: str) -> tuple[ToolCall, ...]:
     """One call per step: the scenario's first cell, if any, a program that
     waits for approval, then a read of the first cell."""
@@ -119,7 +135,7 @@ def _program_agent(
     scenario: str,
     state: AgentState | None = None,
     gate: threading.Event | None = None,
-) -> ChatAgent:
+) -> Agent:
     """The model runs the scenario's steps, then answers with the last result.
     A `wait` call returns once `gate` opens, or stops when its cell stops."""
     steps = _steps(scenario)
@@ -153,7 +169,8 @@ def _program_agent(
         tools=[FakeTool("send", send), FakeTool("wait", wait)],
         code_mode=True,
     )
-    agent.before_tool_call = _ask_for_send
+    assert isinstance(agent.feature, ChatFeature)
+    agent.feature = _AskingFeature(agent.feature)
     return agent
 
 

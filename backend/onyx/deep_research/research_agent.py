@@ -6,12 +6,12 @@ from pydantic import JsonValue
 
 from onyx.agents.models import (
     AgentState,
-    CompactionCheckpoint,
     PreparedStep,
+    RunHooks,
     StepInput,
     StepResult,
 )
-from onyx.agents.runtime import Agent, RestorableFeature
+from onyx.agents.runtime import Agent, AgentFeature
 from onyx.agents.tools import AgentTool
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
@@ -35,7 +35,6 @@ from onyx.deep_research.tool_definitions import (
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
     GenerationOptions,
-    Message,
     ReasoningEffort,
     SystemMessage,
     ToolChoiceOptions,
@@ -80,8 +79,9 @@ RESEARCH_STEP_OUTPUT_TOKENS = 1000
 RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 
 
-class ResearchAgent(Agent, RestorableFeature):
-    """Investigate one question and return a report with source references."""
+class ResearchFeature(AgentFeature):
+    """Investigate one question and return a report with source references:
+    an AgentFeature. `agent` builds the agent that runs it."""
 
     def __init__(
         self,
@@ -92,12 +92,10 @@ class ResearchAgent(Agent, RestorableFeature):
         language_section: str,
         reasoning_effort: ReasoningEffort,
         *,
-        messages: list[Message] | None = None,
-        checkpoint: CompactionCheckpoint | None = None,
         sources: CitationMapping | None = None,
-        previous_run_id: str | None = None,
-        agent_id: str | None = None,
     ) -> None:
+        self.llm = llm
+        self.user_identity = user_identity
         allowed_tools = {
             SearchTool.NAME,
             WebSearchTool.NAME,
@@ -123,31 +121,43 @@ class ResearchAgent(Agent, RestorableFeature):
         self.citation_mapping = {
             number: document.document_id for number, document in (sources or {}).items()
         }
-        report_tool = AgentTool(
-            definition=GENERATE_REPORT_TOOL_DESCRIPTION,
-            execute=lambda _invocation: ToolResult(
-                content="Ready to produce the research report."
-            ),
-        )
-        super().__init__(
-            llm,
-            tools=[
-                tool.bind(self._tool_context, summary_only=True)
-                for tool in self.application_tools
-            ]
-            + [report_tool],
+
+    def agent(
+        self,
+        state: AgentState | None = None,
+        *,
+        agent_id: str | None = None,
+        previous_run_id: str | None = None,
+    ) -> Agent:
+        """The agent that runs this feature with the same model."""
+        return Agent(
+            self.llm,
+            feature=self,
+            state=state,
             agent_id=agent_id,
             previous_run_id=previous_run_id,
-            state=AgentState(
-                messages=messages or [],
-                checkpoint=checkpoint,
+            generation_context=GenerationContext(
+                flow=LLMFlow.RESEARCH_AGENT, user_identity=self.user_identity
             ),
-            restoration=self,
+        )
+
+    def bind(self) -> RunHooks:
+        return RunHooks(
+            tools=(
+                *(
+                    tool.bind(self._tool_context, summary_only=True)
+                    for tool in self.application_tools
+                ),
+                AgentTool(
+                    definition=GENERATE_REPORT_TOOL_DESCRIPTION,
+                    execute=lambda _invocation: ToolResult(
+                        content="Ready to produce the research report."
+                    ),
+                ),
+            ),
             prepare_step=self._prepare_step,
             after_step=self._after_step,
-            generation_context=GenerationContext(
-                flow=LLMFlow.RESEARCH_AGENT, user_identity=user_identity
-            ),
+            capture_state=self.capture_state,
         )
 
     def capture_state(self) -> ResearchFeatureState:

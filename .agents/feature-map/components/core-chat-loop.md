@@ -125,7 +125,7 @@ Neighbours own the rest:
 request thread                  control thread (one per turn)        response thread (one per model)
 _stream_chat_turn               ChatTurnExecution.run                ChatTurnExecution._run_response
   prepare_chat_turn (DB, files)   starts one response thread           create_chat_agent: construct_tools,
-  -> ChatTurnSetup                  per model                            ChatAgent or DeepResearchAgent
+  -> ChatTurnSetup                  per model                            ChatFeature or DeepResearchFeature
   start_chat_turn                 wake >= every 250 ms: Stop;          load_chat_branch (session check)
     clear_stop, buffer open,        admission every 5 s; owner         ChatRunStore (content kept) or
     admission.publish, ID lines     leases every 10 s (content kept)     persistence view; register saved agents
@@ -136,7 +136,7 @@ _stream_chat_turn               ChatTurnExecution.run                ChatTurnExe
 
 **Layers.** `chat/process_message.py` validates the request, loads history and
 files, saves the user message and reserves the response rows. It never calls an
-LLM. `chat/execution.py` launches and controls the turn. `chat/agent.py:ChatAgent`
+LLM. `chat/execution.py` launches and controls the turn. `chat/agent.py:ChatFeature`
 is the chat feature on the shared runtime: it picks the tools and tool choice
 for each step, builds the prompt, and folds tool results into its citation and
 search state. `agents/runtime.py` runs the model and tool steps
@@ -195,9 +195,9 @@ registers each saved child agent and the root, then runs
 suspended root resumes later on a runtime thread, so the control loop waits for
 a terminal, idle run, not for the response thread. Child agents and
 parallel tools use more threads ([[agent-runtime]]). Deep research
-(`deep_research/agent.py:DeepResearchAgent`) replaces `ChatAgent` for a
+(`deep_research/agent.py:DeepResearchFeature`) replaces `ChatFeature` for a
 single-model deep research request. The research step starts a child agent
-(`deep_research/research_agent.py:ResearchAgent`) through the runtime's child API.
+(`deep_research/research_agent.py:ResearchFeature`) through the runtime's child API.
 
 **Delivery.** All responses share one `chat/stream_buffer.py:ChatDelivery`. One
 event-dispatch thread renders runtime events into packets
@@ -305,7 +305,7 @@ termination grace period is much shorter, so it ends running turns first
    checkpoint ownership before that root save. It writes child-run rows and
    checkpoints directly through `db/chat_response.py` and `db/chat_checkpoint.py`,
    and reserves one response row for each child agent before it starts. The
-   runtime, `ChatAgent` and the LLM adapter do not write chat rows. The memory
+   runtime, `ChatFeature` and the LLM adapter do not write chat rows. The memory
    tool writes memories as its own side effect and refuses in any incognito mode
    (`tools/tool_implementations/memory/memory_tool.py`).
 2. `turn-setup-detached-rows` **`ChatTurnSetup` carries no ORM rows.**
@@ -328,13 +328,13 @@ termination grace period is much shorter, so it ends running turns first
    Runtime state owns model and tool progress. `ResponsePresenter` and
    `chat/renderer.py:MessageRenderer` only read events and saved steps to make
    packets. Feature state that a later step needs lives on the agent, such as
-   `ChatAgent.search_context` and its citation mapping, and is captured in
+   `ChatFeature.search_context` and its citation mapping, and is captured in
    `ChatFeatureState` for restoration. `ChatFeatureState.code_mode` keeps the
    mode, so a restored run keeps code mode on or off; the tool names and
    arguments come from the active model's tool family
    (`LLMConfig.tool_family`). All tools in one step read the same
-   `ChatAgent._tool_context`; citation and search state advance only in
-   `ChatAgent._after_step`, after every call in the step finishes.
+   `ChatFeature._tool_context`; citation and search state advance only in
+   `ChatFeature._after_step`, after every call in the step finishes.
 6. `persist-once-per-model` **One final outcome per model.** A new way to end a
    response must resolve `ChatResponsePersistence.outcome` through `save`,
    `save_failure`, `report_save_failure`, `report_worker_failure` or
@@ -425,7 +425,7 @@ termination grace period is much shorter, so it ends running turns first
     `stop_chat_session` does not allow anonymous users, so their Stop fails
     authentication (see Known issues).
 16. `stopping-tools` **The step cap disables tool execution.**
-    `chat/agent.py:ChatAgent._prepare_step` uses `NONE` at the step cap.
+    `chat/agent.py:ChatFeature._prepare_step` uses `NONE` at the step cap.
     The request keeps the tool definitions of earlier steps
     ([[llm-providers#none-tool-choice-keeps-tools]]). The runtime
     (`agents/runtime.py:_complete_step`) denies a call on that step, and the run
@@ -508,15 +508,15 @@ termination grace period is much shorter, so it ends running turns first
   `db/chat_response.py:save_chat_response_to_db`. Read it in
   `gather_stream_full` (non-streaming API) if API callers need it. If the value
   is agent state that a later step reads, also add it to `ChatFeatureState` and
-  to `ChatAgent.capture_state` and `restore_state`. Decide what each incognito
+  to `ChatFeature.capture_state` and `restore_state`. Decide what each incognito
   mode stores ([[chat-persistence#incognito-decision-per-field]]).
 - `in-process-caller` **A new in-process caller.** Copy the Slack bot: it calls
   `chat/process_message.py:run_chat_turn`, which drains
   `handle_stream_message_objects` into a `ChatFullResponse` with
   `gather_stream_full`. List the callers with
   `git grep -n "run_chat_turn(\|handle_stream_message_objects(" backend`. Do not
-  start a `ChatAgent` directly: admission, delivery and saving live in
-  `start_chat_turn`.
+  start the `Agent` that `ChatFeature.agent()` builds directly: admission,
+  delivery and saving live in `start_chat_turn`.
 - `investigate-stuck-turn` **Investigate a turn that does not end, a stop that
   does nothing, or a send refused as busy.** In `backend/log/api_server_debug.log`,
   find "Chat turn control failed", "Chat response polling failed", "Chat response

@@ -1,5 +1,5 @@
 """Large tool results in a chat with a sandbox (`spill_large_result`, the chat
-agent's prepare_tool_result hook). A result goes to a file in the user's VM,
+feature's `RunHooks.prepare_tool_result` hook). A result goes to a file in the user's VM,
 and the model, the live events and the saved history get a bounded view with
 the file's path:
 

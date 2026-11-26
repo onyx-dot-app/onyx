@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.models import (
     AgentInfo,
+    AgentState,
     ExecutionStatus,
     RunStatus,
     StepRecord,
@@ -33,7 +34,7 @@ from onyx.db.chat_response import (
 from onyx.db.chat_subagents import load_agent_history, load_chat_branch
 from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.deep_research.models import ResearchConfiguration
-from onyx.deep_research.research_agent import ResearchAgent
+from onyx.deep_research.research_agent import ResearchFeature
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -260,21 +261,21 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         branch = load_chat_branch(response_id)
         identity = LLMUserIdentity()
 
-        def restore_research(history: SavedAgentContext, _depth: int) -> ResearchAgent:
+        def restore_research(history: SavedAgentContext, _depth: int) -> Agent:
             configuration = history.configuration
             assert isinstance(configuration, ResearchConfiguration)
-            return ResearchAgent(
+            return ResearchFeature(
                 tools=[],
                 llm=research_llm,
                 token_counter=len,
                 user_identity=identity,
                 language_section=configuration.language_section,
                 reasoning_effort=configuration.reasoning_effort,
-                messages=history.messages,
-                checkpoint=history.checkpoint,
                 sources=history.sources,
-                previous_run_id=history.previous_run_id,
+            ).agent(
+                AgentState(messages=history.messages, checkpoint=history.checkpoint),
                 agent_id=history.agent_id,
+                previous_run_id=history.previous_run_id,
             )
 
         run_store = ChatRunStore(

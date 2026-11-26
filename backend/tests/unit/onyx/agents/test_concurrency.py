@@ -17,7 +17,7 @@ from onyx.agents.events import (
     MessageUpdateEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.models import RunStatus, ToolCallContext
+from onyx.agents.models import RunHooks, RunStatus, ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation, ToolProgress
 from onyx.context.search.models import SearchDocsResponse
@@ -294,7 +294,7 @@ def test_terminal_snapshot_rejects_late_tool_result() -> None:
             ),
         ],
     )
-    agent.before_tool_call = before_call
+    agent.feature = RunHooks(before_tool_call=before_call)
     run = agent.start(max_steps=1)
     try:
         with pytest.raises(RunFailed):

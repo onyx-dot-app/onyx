@@ -1,4 +1,4 @@
-"""Exercise ChatAgent through model streaming, tools, and packet rendering."""
+"""Exercise ChatFeature through model streaming, tools, and packet rendering."""
 
 import json
 import queue
@@ -15,15 +15,16 @@ from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
 from onyx.agents.models import (
     AgentCompletion,
+    AgentState,
     AgentStep,
     RunStatus,
     StepInput,
     StepResult,
 )
-from onyx.agents.runtime import Run, RunFailed
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
 from onyx.agents.tools import ToolInvocation
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatMessageMetadata,
@@ -98,9 +99,9 @@ from tests.unit.onyx.agents.fakes import (
 
 def chat_agent(
     llm: LLM, tools: list[Tool], *, code_mode: bool = False, is_subagent: bool = False
-) -> ChatAgent:
+) -> tuple[Agent, ChatFeature]:
     """Build a chat agent whose children share its configuration."""
-    return ChatAgent(
+    feature = ChatFeature(
         messages=[],
         tools=tools,
         code_mode=code_mode,
@@ -120,8 +121,9 @@ def chat_agent(
         is_subagent=is_subagent,
         create_subagent=lambda: chat_agent(
             llm, tools, code_mode=code_mode, is_subagent=True
-        ),
+        )[0],
     )
+    return feature.agent(AgentState()), feature
 
 
 @pytest.mark.parametrize("multiple_operations", [False, True])
@@ -189,7 +191,7 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
     history: list[Message] = [
         UserMessage(content="Hello", metadata=PromptMetadata(token_count=1))
     ]
-    agent = ChatAgent(
+    feature = ChatFeature(
         messages=[],
         tools=[
             EchoTool(),
@@ -211,10 +213,11 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
         llm=llm,
         preferred_tool=CapabilityEntry(tool_id=1),
     )
+    agent = feature.agent(AgentState())
     project = partial(
         project_response,
-        tool_ids={tool.name: tool.id for tool in agent.application_tools},
-        initial_citations=agent.initial_citations,
+        tool_ids={tool.name: tool.id for tool in feature.application_tools},
+        initial_citations=feature.initial_citations,
     )
     run_agent(
         agent,
@@ -230,7 +233,7 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
     assert len(llm.requests) == 2
     assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.AUTO
     assert [tool["function"]["name"] for tool in llm.requests[0]["tools"]] == [
-        tool.name for tool in agent.application_tools
+        tool.name for tool in feature.application_tools
     ]
     for request in llm.requests:
         assert "The user selected these operations for this request: " in str(
@@ -302,7 +305,7 @@ def test_last_step_call_is_denied_and_the_extra_step_answers() -> None:
     llm = ScriptedLLM(
         [_late_call("late-call", "Let me search for that."), Delta(content="Answer")]
     )
-    agent = chat_agent(llm, [EchoTool()])
+    agent, feature = chat_agent(llm, [EchoTool()])
     result = run_agent(
         agent,
         runs=runs,
@@ -314,7 +317,7 @@ def test_last_step_call_is_denied_and_the_extra_step_answers() -> None:
     )
     denied, extra = llm.requests
     assert [tool["function"]["name"] for tool in denied["tools"]] == [
-        tool.name for tool in agent.application_tools
+        tool.name for tool in feature.application_tools
     ]
     assert extra["tools"] == denied["tools"]
     assert denied["tool_choice"] == extra["tool_choice"] == ToolChoiceOptions.NONE
@@ -354,7 +357,7 @@ def test_extra_step_without_an_answer_fails_the_turn() -> None:
     llm = ScriptedLLM([_late_call("late-call"), _late_call("again", " ")])
     with pytest.raises(RunFailed):
         run_agent(
-            chat_agent(llm, [EchoTool()]),
+            chat_agent(llm, [EchoTool()])[0],
             messages=[UserMessage(content="Hello")],
             max_steps=1,
         )
@@ -363,18 +366,18 @@ def test_extra_step_without_an_answer_fails_the_turn() -> None:
 
 def test_after_step_runs_on_the_denied_step(monkeypatch: pytest.MonkeyPatch) -> None:
     observed: list[tuple[int, list[str]]] = []
-    after_step = ChatAgent._after_step
+    after_step = ChatFeature._after_step
 
-    def observe(agent: ChatAgent, result: StepResult) -> bool:
+    def observe(feature: ChatFeature, result: StepResult) -> bool:
         observed.append(
             (result.step.index, [message.text for message in result.tool_results])
         )
-        return after_step(agent, result)
+        return after_step(feature, result)
 
-    monkeypatch.setattr(ChatAgent, "_after_step", observe)
+    monkeypatch.setattr(ChatFeature, "_after_step", observe)
     llm = ScriptedLLM([_late_call("late-call"), Delta(content="Answer")])
     run_agent(
-        chat_agent(llm, [EchoTool()]),
+        chat_agent(llm, [EchoTool()])[0],
         messages=[UserMessage(content="Hello")],
         max_steps=1,
     )
@@ -423,7 +426,7 @@ def test_last_step_text_tool_call_follows_the_sent_tool_choice(
 
     monkeypatch.setattr(EchoTool, "_run", never_run)
     llm = ScriptedLLM([Delta(content=_XML_CALL), Delta(content="Answer")])
-    agent = chat_agent(llm, [EchoTool()])
+    agent, _ = chat_agent(llm, [EchoTool()])
     result = run_agent(agent, messages=[UserMessage(content="Hello")], max_steps=1)
 
     assert llm.requests[0]["tool_choice"] == sent_choice
@@ -457,7 +460,7 @@ def test_last_step_xml_without_a_tool_call_is_the_answer(
     text = '<function_calls><invoke name="unknown"></invoke></function_calls>'
     llm = ScriptedLLM([Delta(content=text)])
     result = run_agent(
-        chat_agent(llm, [EchoTool()]),
+        chat_agent(llm, [EchoTool()])[0],
         messages=[UserMessage(content="Hello")],
         max_steps=1,
     )
@@ -543,7 +546,7 @@ def test_search_stages_files_only_when_python_needs_them(
             Delta(content="Evidence [1]"),
         ]
     )
-    agent = ChatAgent(
+    feature = ChatFeature(
         messages=[],
         tools=[EchoTool(), _PythonTool()] if python_enabled else [EchoTool()],
         custom_agent_prompt=None,
@@ -561,6 +564,7 @@ def test_search_stages_files_only_when_python_needs_them(
         llm=llm,
         chat_files=[staged] if already_available else [],
     )
+    agent = feature.agent(AgentState())
     run_agent(agent, messages=[UserMessage(content="Find evidence twice")], max_steps=3)
     # The search tool names staged files only when the chat stages them.
     assert [context.python_stages_search_files for context in contexts] == [
@@ -571,7 +575,9 @@ def test_search_stages_files_only_when_python_needs_them(
         if python_enabled and not already_available
         else {}
     )
-    assert agent.chat_files == ([staged] if python_enabled or already_available else [])
+    assert feature.chat_files == (
+        [staged] if python_enabled or already_available else []
+    )
     results = [
         item for item in agent.state.messages if isinstance(item, ToolResultMessage)
     ]
@@ -613,7 +619,7 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
             Delta(content="No matching documents."),
         ]
     )
-    agent = ChatAgent(
+    agent = ChatFeature(
         messages=[],
         tools=[EchoTool()],
         custom_agent_prompt=None,
@@ -629,7 +635,7 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
         persona=None,
         user_memory_context=None,
         llm=llm,
-    )
+    ).agent(AgentState())
     runs: list[Run] = []
     run_agent(
         agent,
@@ -693,7 +699,7 @@ def test_cancelled_source_file_staging_drains_before_completion(
         ]
     )
     # Files of found documents are staged only for the Python tool.
-    agent = ChatAgent(
+    feature = ChatFeature(
         [],
         [EchoTool(), _PythonTool()],
         None,
@@ -710,10 +716,11 @@ def test_cancelled_source_file_staging_drains_before_completion(
         None,
         llm,
     )
+    agent = feature.agent(AgentState())
     project = partial(
         project_response,
-        tool_ids={tool.name: tool.id for tool in agent.application_tools},
-        initial_citations=agent.initial_citations,
+        tool_ids={tool.name: tool.id for tool in feature.application_tools},
+        initial_citations=feature.initial_citations,
     )
     signal = CancellationSignal()
 
@@ -794,7 +801,7 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
     llm = ScriptedLLM(
         [Delta(content="Evidence [4]"), Delta(content="More evidence [4]")], 128000
     )
-    feature = ChatAgent(
+    feature = ChatFeature(
         messages=history,
         tools=[],
         custom_agent_prompt=None,
@@ -811,10 +818,11 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         user_memory_context=None,
         llm=llm,
     )
+    agent = feature.agent(AgentState(messages=history))
     for _ in range(2):
         output: queue.Queue[Packet] = queue.Queue()
         run_agent(
-            feature,
+            agent,
             runs=runs,
             messages=[UserMessage(content="Explain the evidence")],
             max_steps=1,
@@ -897,7 +905,7 @@ def test_context_file_citations_keep_history_numbers_across_turns(
         )
 
     for ordered_files in (files, list(reversed(files))):
-        feature = ChatAgent(
+        feature = ChatFeature(
             messages=history,
             tools=[],
             custom_agent_prompt=None,
@@ -920,9 +928,10 @@ def test_context_file_citations_keep_history_numbers_across_turns(
                 feature.capture_state().model_dump_json()
             )
         )
+        agent = feature.agent(AgentState(messages=history))
         runs: list[Run] = []
         run_agent(
-            feature,
+            agent,
             max_steps=1,
             messages=[UserMessage(content="Compare the sources")],
             runs=runs,
@@ -958,7 +967,7 @@ def test_context_file_citations_keep_history_numbers_across_turns(
             for number, doc in projection.citation_to_doc.items()
         } == {1: "reference", 2: "file-a", 3: "file-b"}
         history = IncognitoState.model_validate_json(
-            IncognitoState(messages=feature.state.messages).model_dump_json()
+            IncognitoState(messages=agent.state.messages).model_dump_json()
         ).messages
 
 
@@ -975,7 +984,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         uncapped_token_count=4,
         file_metadata=[],
     )
-    agent = ChatAgent(
+    feature = ChatFeature(
         messages=[],
         tools=[EchoTool()],
         custom_agent_prompt="Custom instructions",
@@ -991,7 +1000,8 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         llm=ScriptedLLM([]),
         reminders_enabled=False,
     )
-    prepared = agent._prepare_step(
+    agent = feature.agent(AgentState())
+    prepared = feature._prepare_step(
         StepInput(
             history=[],
             input_messages=[UserMessage(content="Current question")],
@@ -1008,7 +1018,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         history, tools=[tool.definition for tool in agent.tools]
     )
     files.file_texts[0] = "Changed attachment"
-    agent.custom_agent_prompt = "Changed instructions"
+    feature.custom_agent_prompt = "Changed instructions"
     second = prepared.generation_request(
         [history[-1]], tools=[tool.definition for tool in agent.tools]
     )
@@ -1048,7 +1058,7 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
     )
     requests = []
     for name in ("Alice", "Bob"):
-        agent = ChatAgent(
+        feature = ChatFeature(
             messages=[],
             tools=[],
             custom_agent_prompt=None,
@@ -1072,7 +1082,7 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
             reminders_enabled=False,
         )
         current = UserMessage(content="Question")
-        prepared = agent._prepare_step(
+        prepared = feature._prepare_step(
             StepInput(
                 history=[],
                 input_messages=[current],
@@ -1130,8 +1140,8 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
             content=[TextContent(text="Answered without the preferred tool.")]
         )
 
-    make_agent = partial(
-        ChatAgent,
+    make_feature = partial(
+        ChatFeature,
         tools=[EchoTool(), OtherTool()],
         custom_agent_prompt="Stable instructions",
         base_system_prompt="",
@@ -1148,12 +1158,15 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
         llm=FakeModelClient(reply),
         reminders_enabled=False,
     )
-    original = make_agent(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
+    original = make_feature(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
     saved = TypeAdapter(dict[str, JsonValue]).validate_json(
         original.capture_state().model_dump_json()
     )
-    restored = make_agent(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
-    restored.restore_state(saved)
+    restored_feature = make_feature(
+        messages=[], preferred_tool=CapabilityEntry(tool_id=1)
+    )
+    restored_feature.restore_state(saved)
+    restored = restored_feature.agent(AgentState())
     outcome = run_agent(
         restored, messages=[UserMessage(content="Question")], max_steps=2
     )
@@ -1184,7 +1197,8 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     assert not any(
         "The user selected" in message.text for message in restored.state.messages
     )
-    followup = make_agent(messages=restored.state.messages)
+    history = restored.state.messages
+    followup = make_feature(messages=history).agent(AgentState(messages=history))
     run_agent(followup, messages=[UserMessage(content="Next question")], max_steps=2)
     assert not any(
         "The user selected" in message.text for message in requests[-1].messages
@@ -1200,16 +1214,22 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
         requests.append(request)
         return AssistantMessage(content=[TextContent(text="Answer")])
 
-    agent = chat_agent(FakeModelClient(reply), [EchoTool()], code_mode=code_mode)
+    agent, feature = chat_agent(
+        FakeModelClient(reply), [EchoTool()], code_mode=code_mode
+    )
     spawn = next(
-        tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
+        tool for tool in feature.application_tools if isinstance(tool, SpawnAgentTool)
     )
     child = spawn.create_agent()
-    assert isinstance(child, ChatAgent)
-    assert child.search_context is not agent.search_context
-    assert child.code_mode == code_mode
+    child_feature = child.feature
+    assert isinstance(child_feature, ChatFeature)
+    assert child_feature.search_context is not feature.search_context
+    assert child_feature.code_mode == code_mode
     if code_mode:
-        assert child.code_cells is not None and child.code_cells is not agent.code_cells
+        assert (
+            child_feature.code_cells is not None
+            and child_feature.code_cells is not feature.code_cells
+        )
     for runner in (agent, child):
         run_agent(runner, messages=[UserMessage(content="Task")], max_steps=1)
     expected = {
@@ -1242,7 +1262,7 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
 def test_the_root_instructions_name_how_its_shape_waits(family: ToolFamily) -> None:
     """One root block for both families; only the wait line is the shape's:
     the wait tool, or ending the response."""
-    agent = chat_agent(
+    _, feature = chat_agent(
         FakeModelClient(
             lambda _request, _signal: AssistantMessage(
                 content=[TextContent(text="Answer")]
@@ -1251,13 +1271,15 @@ def test_the_root_instructions_name_how_its_shape_waits(family: ToolFamily) -> N
         ),
         [EchoTool()],
     )
-    assert agent.agent_instructions == ROOT_AGENT_INSTRUCTIONS.format(
+    assert feature.agent_instructions == ROOT_AGENT_INSTRUCTIONS.format(
         wait_line=AGENT_SHAPES[family].wait_line
     )
-    assert agent.agent_instructions is not None
-    assert "agent notification" in agent.agent_instructions
-    assert ("`wait_agent`" in agent.agent_instructions) == (family is ToolFamily.OPENAI)
-    assert ("End your response to wait" in agent.agent_instructions) == (
+    assert feature.agent_instructions is not None
+    assert "agent notification" in feature.agent_instructions
+    assert ("`wait_agent`" in feature.agent_instructions) == (
+        family is ToolFamily.OPENAI
+    )
+    assert ("End your response to wait" in feature.agent_instructions) == (
         family is ToolFamily.CLAUDE
     )
 
@@ -1308,7 +1330,7 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
         assert len(names) == len(set(names))
         return AssistantMessage(content=[TextContent(text="Ready")])
 
-    agent = chat_agent(FakeModelClient(reply), [configured])
+    agent, feature = chat_agent(FakeModelClient(reply), [configured])
     assert (
         run_agent(
             agent, messages=[UserMessage(content="List agents")], max_steps=2
@@ -1316,7 +1338,7 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
         == "Ready"
     )
     spawn = next(
-        tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
+        tool for tool in feature.application_tools if isinstance(tool, SpawnAgentTool)
     )
     child = spawn.create_agent()
     assert (
@@ -1377,13 +1399,14 @@ def test_child_notification_remaps_citations() -> None:
             assert notification.metadata is None
         return AssistantMessage(content=[TextContent(text="Answer [2, 3]")])
 
-    agent = ChatAgent(
-        messages=[
-            AssistantMessage(
-                content=[TextContent(text="Earlier answer [1]")],
-                metadata=ChatMessageMetadata(sources={1: existing}),
-            )
-        ],
+    history: list[Message] = [
+        AssistantMessage(
+            content=[TextContent(text="Earlier answer [1]")],
+            metadata=ChatMessageMetadata(sources={1: existing}),
+        )
+    ]
+    feature = ChatFeature(
+        messages=history,
         tools=[],
         custom_agent_prompt=None,
         base_system_prompt="",
@@ -1399,6 +1422,7 @@ def test_child_notification_remaps_citations() -> None:
         user_memory_context=None,
         llm=FakeModelClient(reply),
     )
+    agent = feature.agent(AgentState(messages=history))
     coordinator = AgentCoordinator(
         ownership=FakeRunOwnership(
             receive_inputs=lambda _run: [
@@ -1419,6 +1443,6 @@ def test_child_notification_remaps_citations() -> None:
             2: child_document,
             3: other_child_document,
         }
-        assert agent.citation_mapping == {1: "existing", 2: "child", 3: "other-child"}
+        assert feature.citation_mapping == {1: "existing", 2: "child", 3: "other-child"}
     finally:
         assert coordinator.close(10)

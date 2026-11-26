@@ -11,6 +11,7 @@ from onyx.agents.models import (
     CompactionCheckpoint,
     ExecutionStatus,
     RunFailureKind,
+    RunHooks,
     RunState,
     RunStatus,
     ToolCallContext,
@@ -111,7 +112,7 @@ def _agent(
         agent_id="agent",
         state=state,
         tools=[tool.bind(ToolContext)],
-        before_tool_call=_approve_read if gate else None,
+        feature=RunHooks(before_tool_call=_approve_read if gate else None),
     )
 
 
@@ -185,7 +186,7 @@ def test_a_direct_call_of_a_program_function_says_where_it_runs(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool.bind(ToolContext)],
-        unknown_tool_hint=tool.inner_call_hint,
+        feature=RunHooks(unknown_tool_hint=tool.inner_call_hint),
     )
     run = agent.start(max_steps=2, messages=[UserMessage(content="Echo")])
     assert run.result(timeout=10).output.text == expected
@@ -390,8 +391,7 @@ def test_a_running_cell_ends_by_its_own_time_limit_before_the_run_suspends() -> 
                 result_from_children=lambda *_: ToolResult(content="delegated"),
             ),
         ],
-        on_finish=cells.finish,
-        on_suspend=cells.suspend,
+        feature=RunHooks(on_finish=cells.finish, on_suspend=cells.suspend),
     )
     coordinator = AgentCoordinator()
     run = parent.start(max_steps=2, coordinator=coordinator)
@@ -455,7 +455,7 @@ def test_before_tool_call_denies_direct_and_program_calls_alike() -> None:
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id="agent",
         tools=[code_mode.bind(ToolContext), secret_tool.bind(ToolContext)],
-        before_tool_call=deny_secret,
+        feature=RunHooks(before_tool_call=deny_secret),
     ).start(max_steps=3, messages=[UserMessage(content="Read the secret")])
     output = run.result(timeout=10).output.text
     assert run.wait_for_idle(5)
@@ -511,7 +511,7 @@ def test_a_raising_before_tool_call_fails_direct_and_program_calls_alike(
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id="agent",
         tools=[code_mode.bind(ToolContext), secret_tool.bind(ToolContext)],
-        before_tool_call=policy,
+        feature=RunHooks(before_tool_call=policy),
     ).start(max_steps=3, messages=[UserMessage(content="Read the secret")])
     with pytest.raises(RunFailed) as failed:
         run.result(timeout=10)
@@ -558,9 +558,9 @@ def test_a_raising_before_tool_call_fails_the_run_when_no_one_watches_the_cell()
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id="agent",
         tools=[code_mode.bind(ToolContext)],
-        before_tool_call=policy,
-        on_finish=cells.finish,
-        on_suspend=cells.suspend,
+        feature=RunHooks(
+            before_tool_call=policy, on_finish=cells.finish, on_suspend=cells.suspend
+        ),
     ).start(max_steps=3, messages=[UserMessage(content="Read the secret")])
     with pytest.raises(RunFailed) as failed:
         run.result(timeout=10)

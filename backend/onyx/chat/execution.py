@@ -20,10 +20,10 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
 )
-from onyx.agents.runtime import Run
+from onyx.agents.runtime import Agent, Run
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
-from onyx.chat.agent import ChatAgent, build_chat_agent, chat_subagent_factory
+from onyx.chat.agent import ChatFeature, build_chat_agent, chat_subagent_factory
 from onyx.chat.chat_processing_checker import (
     PROCESSING_REFRESH_INTERVAL_S,
     ChatTurnAdmission,
@@ -64,7 +64,7 @@ from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -622,7 +622,7 @@ class ChatTurnExecution:
                 and self.setup.new_msg_req.accepts_follow_ups
                 and len(self.setup.responses) == 1
             )
-            chat_agent = create_chat_agent(
+            chat_agent, feature = create_chat_agent(
                 self.setup,
                 self.user,
                 index,
@@ -630,20 +630,20 @@ class ChatTurnExecution:
                 self._auto_filters,
                 with_subagents=with_subagents,
             )
-            tool_ids = {tool.name: tool.id for tool in chat_agent.application_tools}
+            tool_ids = {tool.name: tool.id for tool in feature.application_tools}
             persistence.tool_ids = dict(tool_ids)
             # Restored and child agents build their own tools from these.
-            if isinstance(chat_agent, DeepResearchAgent):
+            if isinstance(feature, DeepResearchFeature):
                 # Deep research offers its tools unchanged.
-                configured_tools = chat_agent.application_tools
+                configured_tools = feature.application_tools
                 if self.setup.research_tool_id is None:
                     raise ValueError("Deep research tool configuration is missing")
                 persistence.tool_ids[RESEARCH_AGENT_TOOL_NAME] = (
                     self.setup.research_tool_id
                 )
             else:
-                configured_tools = chat_agent.configured_tools
-                persistence.initial_citations = dict(chat_agent.initial_citations)
+                configured_tools = feature.configured_tools
+                persistence.initial_citations = dict(feature.initial_citations)
             presenter = ResponsePresenter(emitter, tool_ids=tool_ids)
             store: ChatRunStore | None = None
             if record_mode_persists_content(self.setup.incognito_record_mode):
@@ -654,7 +654,7 @@ class ChatTurnExecution:
                     llm=persistence.llm,
                     tools=configured_tools,
                     coordinator=persistence.coordinator,
-                    follow_up_steps=chat_agent.max_steps,
+                    follow_up_steps=feature.max_steps,
                     root_response=persistence,
                     on_child_released=self._dispatch_after_release,
                     on_root_drained=chat_agent.on_drained,
@@ -681,7 +681,7 @@ class ChatTurnExecution:
                 run = chat_agent.start(
                     background=False,
                     messages=self.setup.input_messages,
-                    max_steps=chat_agent.max_steps,
+                    max_steps=feature.max_steps,
                     cancellation=cancellation,
                     deadline_at=self._deadline_at,
                     coordinator=coordinator,
@@ -932,7 +932,7 @@ def host_agent_work(
     ):
         try:
             response = setup.responses[0]
-            chat_agent = create_chat_agent(
+            chat_agent, feature = create_chat_agent(
                 setup,
                 user,
                 0,
@@ -940,16 +940,16 @@ def host_agent_work(
                 load_settings().auto_detect_search_filters is not False,
                 with_subagents=True,
             )
-            if not isinstance(chat_agent, ChatAgent):
+            if not isinstance(feature, ChatFeature):
                 raise ValueError("Agent work requires a chat agent")
             store, _ = bind_run_store(
                 setup,
                 user,
                 response_id=response.message_id,
                 llm=response.llm,
-                tools=chat_agent.configured_tools,
+                tools=feature.configured_tools,
                 coordinator=AgentCoordinator(),
-                follow_up_steps=chat_agent.max_steps,
+                follow_up_steps=feature.max_steps,
                 root_response=None,
                 on_child_released=dispatch_pending_messages,
                 on_root_drained=chat_agent.on_drained,
@@ -983,7 +983,8 @@ def create_chat_agent(
     auto_detect_search_filters: bool,
     *,
     with_subagents: bool,
-) -> ChatAgent | DeepResearchAgent:
+) -> tuple[Agent, ChatFeature | DeepResearchFeature]:
+    """The root agent of one response, and its feature."""
     llm = setup.responses[response_index].llm
     with cancellation_scope(cancellation):
         cancellation.check()
@@ -1060,9 +1061,7 @@ def create_chat_agent(
         agent_id = str(setup.chat_session_id)
 
         if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
-            return DeepResearchAgent(
-                agent_id=agent_id,
-                messages=list(setup.messages),
+            feature = DeepResearchFeature(
                 allowed_tools=tools,
                 additional_context=setup.additional_context,
                 context_files=ExtractedContextFiles(
@@ -1086,8 +1085,16 @@ def create_chat_agent(
                 all_injected_file_metadata=setup.all_injected_file_metadata,
                 skip_clarification=SKIP_DEEP_RESEARCH_CLARIFICATION
                 or setup.skip_clarification,
-                checkpoint=setup.checkpoint,
-                previous_run_id=setup.previous_run_id,
+            )
+            return (
+                feature.agent(
+                    AgentState(
+                        messages=list(setup.messages), checkpoint=setup.checkpoint
+                    ),
+                    agent_id=agent_id,
+                    previous_run_id=setup.previous_run_id,
+                ),
+                feature,
             )
         # The chat agent and its subagents get the sandbox tools when the turn
         # offers them. They share one sandbox turn, which the root's runs end.

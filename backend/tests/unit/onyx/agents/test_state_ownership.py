@@ -16,6 +16,7 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
+    RunHooks,
     StepInput,
     StepResult,
     ToolCallContext,
@@ -115,8 +116,12 @@ def test_lazy_attachments_share_resources_but_not_message_data(
             ]
         ),
     )
-    agent.prepare_step = lambda _input: PreparedStep(
-        assemble_messages=lambda messages: prepare_model_messages(messages, llm.config)
+    agent.feature = RunHooks(
+        prepare_step=lambda _input: PreparedStep(
+            assemble_messages=lambda messages: prepare_model_messages(
+                messages, llm.config
+            )
+        )
     )
     copies = [agent.state, agent.state]
     for context in copies:
@@ -183,7 +188,7 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
                 )
             )
         ],
-        after_tool_call=finalize,
+        feature=RunHooks(after_tool_call=finalize),
     )
     run = agent.start(max_steps=2)
     result = run.result()
@@ -274,7 +279,7 @@ def test_after_step_cannot_rewrite_accepted_output() -> None:
         FakeModelClient(_model),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[_tool()],
-        after_step=complete,
+        feature=RunHooks(after_step=complete),
     ).start(max_steps=1)
     run.result()
     assert run.wait_for_idle(2)
@@ -375,7 +380,7 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="original task")]),
         tools=[tool],
-        prepare_step=prepare,
+        feature=RunHooks(prepare_step=prepare),
     )
     events: list[AgentEvent] = []
     run = agent.start(max_steps=1, on_event=events.append)
@@ -405,7 +410,7 @@ def test_live_and_completed_history_match_and_are_isolated() -> None:
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content="earlier")]),
-        after_step=after_step,
+        feature=RunHooks(after_step=after_step),
     )
     run = agent.start(messages=[UserMessage(content="question")], max_steps=1)
     try:
@@ -512,7 +517,9 @@ def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
             lambda *_: AssistantMessage(content=[TextContent(text="answer")])
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=lambda _: PreparedStep(output_metadata=ExtraData()),
+        feature=RunHooks(
+            prepare_step=lambda _: PreparedStep(output_metadata=ExtraData())
+        ),
     )
     run = agent.start(max_steps=1, on_event=on_event)
     result = run.result(timeout=5)

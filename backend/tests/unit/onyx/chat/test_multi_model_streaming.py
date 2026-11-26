@@ -26,7 +26,7 @@ from onyx.agents.events import AgentEvent
 from onyx.agents.models import RunFailureKind, RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, InputMode, PendingToolInput
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import EmptyLLMResponseError, chat_error
 from onyx.chat.execution import (
@@ -446,8 +446,9 @@ def _wait_for_stop() -> None:
         assert stopped.wait(timeout=5)
 
 
-def _chat_agent(agent: Agent, max_steps: int = 1) -> ChatAgent:
-    chat_agent = ChatAgent(
+def _chat_agent(agent: Agent, max_steps: int = 1) -> tuple[Agent, ChatFeature]:
+    """`agent` with a chat feature that turn execution reads but the run does not use."""
+    feature = ChatFeature(
         messages=[],
         tools=[],
         custom_agent_prompt=None,
@@ -464,20 +465,8 @@ def _chat_agent(agent: Agent, max_steps: int = 1) -> ChatAgent:
         user_memory_context=None,
         llm=agent.llm,
     )
-    Agent.__init__(
-        chat_agent,
-        agent.llm,
-        tools=agent.tools,
-        system_prompt=agent.system_prompt,
-        options=agent.options,
-        generation_context=agent.generation_context,
-        prepare_step=agent.prepare_step,
-        after_step=agent.after_step,
-        before_tool_call=agent.before_tool_call,
-        after_tool_call=agent.after_tool_call,
-    )
-    chat_agent.max_steps = max_steps
-    return chat_agent
+    feature.max_steps = max_steps
+    return agent, feature
 
 
 def _start_chat_turn(
@@ -529,7 +518,7 @@ class TestRunModels:
         _search_selection_model.return_value = fast_llm
 
         with (
-            patch("onyx.chat.agent.ChatAgent") as answer,
+            patch("onyx.chat.agent.ChatFeature") as answer,
             patch("onyx.chat.execution.construct_tools", return_value={}) as tools,
             patch(
                 "onyx.chat.execution.get_llm_token_counter", return_value=lambda _: 0
@@ -1456,7 +1445,7 @@ def mock_model_execution(
         _cancellation: CancellationSignal,
         auto_filters: bool,
         **_kwargs: object,
-    ) -> ChatAgent:
+    ) -> tuple[Agent, ChatFeature]:
         with lock:
             response_future, emitter = captured[index]
 
@@ -2024,7 +2013,7 @@ def test_full_response_waits_for_execution_after_delivery_ends() -> None:
         assert release.wait(5)
         return AssistantMessage(content=[TextContent(text="Finished answer")])
 
-    chat_agent = _chat_agent(
+    prepared = _chat_agent(
         Agent(
             FakeModelClient(reply),
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
@@ -2032,7 +2021,7 @@ def test_full_response_waits_for_execution_after_delivery_ends() -> None:
     )
 
     with (
-        patch("onyx.chat.execution.create_chat_agent", return_value=chat_agent),
+        patch("onyx.chat.execution.create_chat_agent", return_value=prepared),
         patch("onyx.chat.history_store.save_chat_response_to_db") as persist,
         ThreadPoolExecutor(max_workers=1) as executor,
     ):
@@ -2419,7 +2408,7 @@ def test_stop_retains_turn_while_preparation_drains(
         _cancellation: CancellationSignal,
         _auto_filters: bool,
         **_kwargs: object,
-    ) -> ChatAgent:
+    ) -> tuple[Agent, ChatFeature]:
         entered.set()
         assert release.wait(5)
         return prepared
@@ -2478,7 +2467,7 @@ def test_model_failure_does_not_cancel_comparison_response() -> None:
         _cancellation: CancellationSignal,
         _auto_filters: bool,
         **_kwargs: object,
-    ) -> ChatAgent:
+    ) -> tuple[Agent, ChatFeature]:
         return prepared[index]
 
     setup = _make_setup(2)
@@ -2656,7 +2645,7 @@ def test_response_workers_track_generations_and_share_one_event_consumer(
         _cancellation: CancellationSignal,
         _auto_filters: bool,
         **_kwargs: object,
-    ) -> ChatAgent:
+    ) -> tuple[Agent, ChatFeature]:
         with lock:
             preparation_threads[index] = threading.get_ident()
 
@@ -3090,7 +3079,7 @@ def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain(
         )
     )
 
-    def prepare(*_args: object, **_kwargs: object) -> ChatAgent:
+    def prepare(*_args: object, **_kwargs: object) -> tuple[Agent, ChatFeature]:
         entered.set()
         assert release.wait(5)
         return prepared
@@ -3222,7 +3211,7 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
         assert release.wait(5)
         return AssistantMessage(content=[TextContent(text="Late output")])
 
-    agent = _chat_agent(
+    prepared = _chat_agent(
         Agent(
             FakeModelClient(generate),
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
@@ -3231,7 +3220,7 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
     turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
     with (
         patch.object(turn.setup.admission, "release") as release_admission,
-        patch("onyx.chat.execution.create_chat_agent", return_value=agent),
+        patch("onyx.chat.execution.create_chat_agent", return_value=prepared),
         patch("onyx.chat.history_store.save_chat_response_to_db"),
         patch(
             "onyx.chat.execution.is_stop_requested",
@@ -3447,7 +3436,7 @@ def test_execution_deadline_cancels_work_but_waits_for_preparation_to_drain(
         )
     )
 
-    def prepare(*_args: object, **_kwargs: object) -> ChatAgent:
+    def prepare(*_args: object, **_kwargs: object) -> tuple[Agent, ChatFeature]:
         entered.set()
         assert release.wait(5)
         return prepared
@@ -3500,7 +3489,7 @@ def test_preparation_that_outlives_the_deadline_ends_the_turn_as_timed_out(
         cancellation: CancellationSignal,
         _auto_filters: bool,
         **_kwargs: object,
-    ) -> ChatAgent:
+    ) -> tuple[Agent, ChatFeature]:
         # Preparation that never starts a run, e.g. a slow tool server.
         stopped = threading.Event()
         with cancellation.on_cancel(stopped.set):
@@ -3625,7 +3614,7 @@ def test_completed_model_does_not_hide_a_second_models_stop(
         cancellation: CancellationSignal,
         _auto_filters: bool,
         **_kwargs: object,
-    ) -> ChatAgent:
+    ) -> tuple[Agent, ChatFeature]:
         if index == 0:
             return _chat_agent(
                 Agent(
@@ -3715,8 +3704,9 @@ def test_an_agent_host_runs_its_agents_inside_a_trace() -> None:
     with (
         patch(
             "onyx.chat.execution.create_chat_agent",
-            return_value=MagicMock(
-                spec=ChatAgent, configured_tools=[], max_steps=3, on_drained=None
+            return_value=(
+                MagicMock(spec=Agent, on_drained=None),
+                MagicMock(spec=ChatFeature, configured_tools=[], max_steps=3),
             ),
         ),
         patch("onyx.chat.execution.bind_run_store", return_value=(store, None)),

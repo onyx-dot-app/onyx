@@ -24,14 +24,15 @@ document does not repeat it.
 
 **Who calls it.**
 - [[core-chat-loop]]: `chat/execution.py:create_chat_agent` builds a
-  `ChatAgent` or a `DeepResearchAgent` for each response, and the response
-  thread starts it with `background=False` ([[#context-captured-at-start]]).
-- **Child agents.** The deep research step starts
-  `deep_research/research_agent.py:ResearchAgent` through
+  `ChatFeature` or a `DeepResearchFeature` for each response and, with its
+  `agent()`, the `Agent` that runs it. The response thread starts that agent
+  with `background=False` ([[#context-captured-at-start]]).
+- **Child agents.** The deep research step starts the agent of a
+  `deep_research/research_agent.py:ResearchFeature` through
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
-- **Independent children.** ChatAgent and its children expose controls from
+- **Independent children.** Chat agents and their children expose controls from
   `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito chats have no child agents: they omit these controls,
   and deep research. Children survive
   the root response. A subagent must incorporate the results of children it spawns before
@@ -92,10 +93,12 @@ prompt holds and the compaction prompt text.
 ## Architecture
 
 ```
-Agent (history, checkpoint, tools, prepare_step / after_step,
+Agent (history, checkpoint, tools, feature, on_drained)
+  feature.bind() -> RunHooks (the feature's tools; prepare_step / after_step,
        before_tool_call / prepare_tool_result / after_tool_call /
-       on_finish / on_suspend / on_drained hooks)
-  start() -> Run (one request, step budget, own cancellation signal)
+       on_finish / on_suspend hooks; capture_state)
+  start() -> Run (one request, step budget, own cancellation signal,
+                  one RunConfig: model, tools, phases, RunHooks, on_drained)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
           ToolBatch waits on ChildRunWait, PendingToolInput and NestedInputWait
@@ -110,10 +113,10 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
   (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
-  passes `ChatAgent.max_steps`: `MAX_LLM_CYCLES`, or `CODE_MODE_MAX_LLM_CYCLES`
-  when code mode applies (`ChatAgent.code_cells` is set).
-- `Agent.on_finish` runs once at the end of every run, without the execution
-  lock, with the run's recorded tool results.
+  passes `ChatFeature.max_steps`: `MAX_LLM_CYCLES`, or `CODE_MODE_MAX_LLM_CYCLES`
+  when code mode applies (`ChatFeature.code_cells` is set).
+- `RunHooks.on_finish`, when a feature supplies it, runs once at the end of
+  the run, without the execution lock, with the run's recorded tool results.
   `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
   `agents/models.py:ToolResultAmendment` list, and `Run._apply_amendments`
   sets those results and publishes `ToolResultAmendedEvent` for each,
@@ -134,13 +137,13 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   run suspends (`RunProgress.open_inputs`); `ToolBatch._continue_open_inputs`
   gives their answers to `AgentTool.continue_open_input`, one call's
   requests together.
-  `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
+  `RunHooks.on_suspend` runs before each suspension; `Run._suspend` applies its
   amendments before it captures state. A suspend hook that fails sets no
   results and the run still suspends. A suspend hook that stops for
   cancellation finishes the run as cancelled. Chat uses both hooks to close
   code mode cells ([[code-execution#code-mode-interrupted-run]]).
-  `Agent.on_drained` runs after each finish or suspension once the run's work
-  drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
+  `Agent.on_drained`, when a caller supplies it, runs after each finish or
+  suspension once the run's work drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
   threads, work that a tool added through `ToolInvocation.run_work` (a code
   mode cell's driver, and its tool call threads through `track_detached`), and its foreground
   children's work (`Run.track_child_work`), not background children. A suspension calls it only when no foreground child
@@ -149,7 +152,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   A run that hands off in that state calls no hook; the restoring owner's
   run end does. It cannot change results. Errors, `AgentCancelled`
   included, are logged and the run still becomes idle and reusable. Only the
-  root `chat/agent.py:ChatAgent` installs it, to end per-run tool state
+  root `chat/agent.py:ChatFeature` installs it, to end per-run tool state
   (`create_chat_agent` passes it to the root only), such as the sandbox turn
   ([[code-execution]]); subagents share the root's tools and install none.
   `chat/presentation.py:ResponsePresenter` renders each amendment with
@@ -193,7 +196,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 | `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. It also owns the inbox: received inputs, unread results, withdrawn results and submitted messages. A `FULL_HISTORY` incognito run also has it; a `USAGE_ONLY` incognito run has no run ownership. |
 | `AgentDirectory` | `chat/run_store.py:ChatRunStore`, limited to the selected branch of a chat that keeps content, including a `FULL_HISTORY` incognito chat. It lists the branch's agent tree and accepts messages for any agent in it; lookup, restore, and run reads go through each agent's spawner. A `USAGE_ONLY` incognito run has no directory. |
 | Event listener | `chat/presentation.py:ResponsePresenter`. |
-| `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
+| `AgentFeature` | `ChatFeature`, `DeepResearchFeature` and `ResearchFeature`. Each builds its agent with `agent()`; `bind()` gives each run its `RunHooks`, and the run calls `RunHooks.capture_state` at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`, and `Agent.resume` calls `restore_state` before the run starts. |
 | `AgentTool` | `tools/interface.py:Tool.bind`. |
 
 **Live paths.** Deep research suspends the parent on `ChildRunWait`. The parent continues in the same
@@ -260,7 +263,7 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    order and phases can differ. Saved execution permissions are separate from
    advertised definitions; restoration must not enable a tool merely because it
    was advertised, and it drops permitted names that the agent lacks.
-   `chat/agent.py:ChatAgent.restore_state` also raises when
+   `chat/agent.py:ChatFeature.restore_state` also raises when
    the saved prompt, files, memory or settings differ.
 4. `context-captured-at-start` **A run copies the caller's context when it
    starts.** `backend/onyx/agents/runtime.py:Run._start` calls `copy_context()`,
@@ -358,16 +361,17 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
   latency, peak memory, garbage collection time and what stays alive.
 - `new-feature` **Build a new feature on the runtime.** Start from
   [[#run-by-hand]], then settle these:
-  - For a child inside chat, see `deep_research/agent.py:DeepResearchAgent` and
-    the `ResearchAgent` it starts.
+  - For a child inside chat, see `deep_research/agent.py:DeepResearchFeature` and
+    the `ResearchFeature` it starts.
     Return `ChildRunWait` and set `result_from_children`. The chat adapters then
     save and own the child for one run. Incognito chats have no children. To
     rerun it, add a `restoration_config` and a branch in
     `chat/restoration.py:restore_subagent`. `ChatRunStore` authorizes and
     loads saved history; this factory rebuilds Chat and Research children with
     the current request's authorized resources. For suspended execution, add
-    a `RestorableFeature` and a branch in `restore_chat_agent`, which rebuilds
-    Chat, Research and DeepResearch agents.
+    an `AgentFeature` whose `RunHooks.capture_state` saves its state, and a
+    branch in `restore_chat_agent`, which rebuilds Chat, Research and
+    DeepResearch agents.
   - Outside chat, only tests implement `RunStore`, `RunOwnership` and
     `AgentDirectory` without chat storage
     (`backend/tests/unit/onyx/agents/fakes.py`). Children and durable completion

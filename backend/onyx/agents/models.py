@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Literal
@@ -14,6 +14,7 @@ from pydantic import (
 
 from onyx.agents.execution_records import messages_for_model
 from onyx.agents.tools import (
+    AgentTool,
     ChildRunWait,
     HumanToolAnswer,
     NestedInputRequest,
@@ -21,6 +22,7 @@ from onyx.agents.tools import (
     PendingToolInput,
 )
 from onyx.llm.cancellation import CancelReason
+from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -281,7 +283,7 @@ class ToolCallContext(BaseModel):
 
 class ToolResultContext(BaseModel):
     """A result that the run has not recorded yet; see
-    `Agent.prepare_tool_result`. The fields reference the run's objects, not
+    `RunHooks.prepare_tool_result`. The fields reference the run's objects, not
     copies, because results can be large: read them, and return a new result
     to replace `result`."""
 
@@ -469,3 +471,70 @@ class ExecutionCheckpoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
     agent_state: AgentState
     run_state: RunState
+
+
+# Called with the run's recorded tool results; returns final results of its calls,
+# or raises ReleaseFailed to fail the run after it applies them.
+ReleaseHook = Callable[[list[ToolResultMessage]], list[ToolResultAmendment]]
+
+
+class RunHooks(BaseModel):
+    """What a feature gives one run: its tools and the hooks that decide its
+    steps. An absent hook (None) differs from one that changes nothing: the
+    run then uses its default behavior. `bind` returns the hooks themselves,
+    so an agent without feature state passes `feature=RunHooks(...)`."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    # The feature's tools for this run, bound to its live state; the agent's
+    # own tools come first.
+    tools: tuple[AgentTool, ...] = ()
+    prepare_step: Callable[[StepInput], PreparedStep] | None = None
+    after_step: Callable[[StepResult], bool] | None = None
+    before_tool_call: (
+        Callable[[ToolCallContext], ToolResult | PendingToolInput | None] | None
+    ) = None
+    after_tool_call: Callable[[ToolCallContext, ToolResult], ToolResult] | None = None
+    # Replaces a completed result before the run records and streams it, so
+    # the live events, the saved history and the model see the same result.
+    # Results arrive one at a time, in the order calls complete.
+    prepare_tool_result: Callable[[ToolResultContext], ToolResult] | None = None
+    # The result of a call of a tool that the agent does not have, when it
+    # says what to call instead; None: the default result.
+    unknown_tool_hint: Callable[[str], str | None] | None = None
+    on_finish: ReleaseHook | None = None
+    # Called when the run suspends, before its state is captured.
+    on_suspend: ReleaseHook | None = None
+    # The feature state to save when the run suspends, for immediate
+    # serialization; nested values may be borrowed.
+    capture_state: Callable[[], BaseModel] | None = None
+
+    def bind(self) -> "RunHooks":
+        return self
+
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:  # noqa: ARG002
+        raise ValueError("These hooks save no feature state")
+
+
+class RunConfig(BaseModel):
+    """What one execution of a run uses: set when its agent starts it, and
+    released when its work drains or it hands off."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    llm: LLM
+    # The step without a prepare_step hook: the agent's instructions and options.
+    defaults: PreparedStep
+    tools: tuple[AgentTool, ...]
+    tool_phases: Mapping[str, frozenset[str]]
+    # Calls that wait for the user's approval before they run; see
+    # AgentTool.approval_required.
+    approval_required: frozenset[str]
+    # The agent's context, with the run's own cancellation signal.
+    generation_context: GenerationContext
+    hooks: RunHooks
+    # Called after each finish or suspension, once the run's work (its tool
+    # threads and the work of its foreground children) has drained, on the
+    # thread that ended that work, so it must be short. Errors, including
+    # AgentCancelled, are logged and do not stop the run's cleanup.
+    on_drained: Callable[[], None] | None

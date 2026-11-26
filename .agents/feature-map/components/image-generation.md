@@ -137,7 +137,7 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    only that the fields are present. It does not call the provider. A wrong key
    shows the tool and fails at run time.
 3. `image-ends-tool-phase` **Image generation does not end the tool phase.**
-   `chat/agent.py:ChatAgent._prepare_step` keeps tools available after successful
+   `chat/agent.py:ChatFeature._prepare_step` keeps tools available after successful
    or failed image calls. The final cycle disables tool calls
    ([[core-chat-loop#stopping-tools]]). When reminders
    are on, a result with generated images adds `IMAGE_GEN_REMINDER` without

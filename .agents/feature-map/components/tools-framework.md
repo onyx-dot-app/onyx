@@ -27,14 +27,14 @@ The interface is `tools/interface.py:Tool`, which returns
   [[code-execution]], [[mcp-and-custom-tools]], [[chat-preferences]]
   (`MemoryTool`) and [[file-store-and-user-files]] (`read_file`).
 - **[[core-chat-loop]]** calls `construct_tools` once per model response and
-  gives the tools to `chat/agent.py:ChatAgent` or
-  `deep_research/agent.py:DeepResearchAgent`. `ChatAgent` binds them with its
-  own `ToolContext`.
-- **The sub-agents** run on the same runtime. `DeepResearchAgent` binds
+  gives the tools to `chat/agent.py:ChatFeature` or
+  `deep_research/agent.py:DeepResearchFeature`. `ChatFeature.bind` binds them
+  with its own `ToolContext` for each run.
+- **The sub-agents** run on the same runtime. `DeepResearchFeature` binds
   `skills_list` and the family's skill read tool in its research phase, and gets the skills
   catalog ([[skills]]). It passes the tools to each
-  `deep_research/research_agent.py:ResearchAgent` child, which binds them with
-  its own `ToolContext`.
+  `deep_research/research_agent.py:ResearchFeature` child, which binds them with
+  its own `ToolContext` for each run.
 - **[[citations]]** gets a block of citation numbers per search-like call.
 
 ---
@@ -69,11 +69,11 @@ chat/process_message.py:prepare_chat_turn    capture_persona_tool_configuration
                                              (db/tools.py) -> PersonaToolConfiguration
 chat/execution.py:create_chat_agent          per model response
   construct_tools                            -> {Tool row id: [Tool instances]}
-  ChatAgent / ResearchAgent                  Tool.bind(_tool_context) -> AgentTool
+  ChatFeature.bind / ResearchFeature.bind    per run: Tool.bind(_tool_context) -> AgentTool
 agents/runtime.py                            a model step returns tool calls
   agents/tool_execution.py:ToolBatch         merge -> run in parallel -> finalize
     Tool.run -> _invoke_tool -> Tool._run    trace, convert errors, check cancel
-  ChatAgent._finalize_tool, ChatAgent._after_step
+  ChatFeature._finalize_tool, ChatFeature._after_step
 chat/presentation.py:ResponsePresenter       tool events -> chat/renderer.py:ToolRenderer
 ```
 
@@ -132,7 +132,7 @@ tool families use one ranking: code mode run and wait, `internal_search`, the
 sandbox tools (shell, shell input, file edits, published files), the other
 built-in tools, skills (list, read, and `load_skill`, which runs in the VM but is a
 skill operation), agent tools, the question tool, then MCP and OpenAPI
-tools. `ChatAgent` sorts its offered tools with it once, when it is built
+tools. `ChatFeature` sorts its offered tools with it once, when it is built
 (new, restored and child agents). The code mode description lists its
 functions and deferred namespaces in this order
 (`tools/tool_implementations/code_mode/stubs.py:build_tool_stubs`), and
@@ -157,8 +157,8 @@ can raise `AgentCancelled`; do not catch it. An update sent after `_run`
 returns is dropped, and a result that arrives after the run closes is
 discarded.
 Per-request data, such as chat files, memory and the next citation number,
-comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
-`ResearchAgent._tool_context` build it when the call starts.
+comes in `tools/models.py:ToolContext`. `ChatFeature._tool_context` and
+`ResearchFeature._tool_context` build it when the call starts.
 
 Code mode reads these `Tool` members: `code_mode_exposure` (abstract: `DIRECT`,
 `IMMEDIATE` or `DEFERRED`; a tool with `result_from_children` must be
@@ -170,10 +170,10 @@ on restore, the runtime saves it as the result of a call that a lost
 execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of code mode programs; `chat/prompt_utils.py:callable_tools` reads it.
-A call of a tool that the agent does not offer gets the agent's
-`unknown_tool_hint` as its result, when the hook gives one
-(`agents/tool_execution.py`). A chat agent's hook
-(`chat/agent.py:ChatAgent._unknown_tool_hint`) says how to call a code mode
+A call of a tool that the agent does not offer gets the run's
+`RunHooks.unknown_tool_hint` result, when the hook gives one
+(`agents/tool_execution.py`). Chat's hook
+(`chat/agent.py:ChatFeature._unknown_tool_hint`) says how to call a code mode
 function from a program (`CodeModeTool.inner_call_hint`), and names the
 offered tool for a name of another tool family's shapes.
 
@@ -223,12 +223,12 @@ card's `command_argument` and `workdir_argument`, and the spawn errors'
 `spawn_name_argument` and `spawn_task_argument`. A sandbox turn carries its
 `ShellShape` (`SandboxTurn.shell`). The agent shape tells whether the root has
 a wait tool (no `wait_name` in the Claude shape, whose root reads each result
-as its agent finishes; [[chat-persistence]]); `ChatAgent` picks the root's
+as its agent finishes; [[chat-persistence]]); `ChatFeature` picks the root's
 instructions from it. A call of another family's name for a tool that the agent offers gets a
 result that names the agent's own (`unknown_tool_hint`). A description
 that names another tool is a template that `Tool.describe(called_name)`
 fills: with the tool's name, or in code mode with its program function
-(`ToolStubs.called_names`); `ChatAgent.called_name` gives the prompt the
+(`ToolStubs.called_names`); `ChatFeature.called_name` gives the prompt the
 same names.
 
 **Chat skill tools.** `chat/execution.py:create_chat_agent` adds `skills_list`
@@ -289,7 +289,7 @@ The skill, subagent, memory, file reader, knowledge graph, internal search, web
 search, open URL, Python, image generation, and the code mode run
 and wait tools use it.
 
-**Default subagent controls.** `ChatAgent` adds the tools in
+**Default subagent controls.** `ChatFeature` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
 `chat/agent.py:build_chat_agent` gives one when `with_subagents` is set: the turn's caller
 delivers follow-up responses, the request sets `accepts_follow_ups`, as the web chat does, and
@@ -341,7 +341,7 @@ path any visible agent holds, finished agents included (`agents/agent_coordinati
 
 **Question tool.** `tools/tool_implementations/question/question_tool.py:QuestionTool`
 asks the user 1-4 multiple-choice questions and waits for the answers. Only the
-root `ChatAgent` gets it (`question_tool`, a factory that the agent calls with
+root `ChatFeature` gets it (`question_tool`, a factory that the agent calls with
 the shape), after code mode wraps the configured tools, so it stays direct and
 subagents never get it. Each tool family has one shape
 (`tools/tool_implementations/question/shapes.py:QUESTION_SHAPES`, keyed by the
@@ -370,7 +370,7 @@ with every chosen label in the question's order,
 or the text that the user typed, after the query hook and with nothing added
 (`chat/tool_questions.py:question_answer`).
 
-**Subagents.** `DeepResearchAgent` spawns a `ResearchAgent` child and returns
+**Subagents.** `DeepResearchFeature` spawns a `ResearchFeature` child and returns
 `ChildRunWait`. The runtime calls `result_from_children` when the child ends.
 Research control functions, such as `generate_report`,
 are plain `AgentTool` objects with no `Tool` row, and
@@ -411,7 +411,7 @@ are plain `AgentTool` objects with no `Tool` row, and
 4. `two-response-channels` **Keep the two `ToolResult` channels apart.**
    `llm/models.py:ToolResult.content` is the only text the model sees.
    `details` is a typed object that application code reads by type:
-   `chat/agent.py:ChatAgent._update_tool_context` gathers documents and files
+   `chat/agent.py:ChatFeature._update_tool_context` gathers documents and files
    from it, `ToolRenderer` draws it, and chat saves it. Put what the model needs
    in `content`. Some saved model text is itself a contract, such as the
    `run_python` result JSON ([[code-execution#run-python-result-json]]). A
@@ -485,25 +485,25 @@ are plain `AgentTool` objects with no `Tool` row, and
    details of any other type, so the nested call saves and replays without
    them. A subclass that keeps its parent's `type` literal saves as
    the parent and drops its own fields with no error.
-   `chat/agent.py:ChatAgent._finalize_tool` replaces each `SearchDocsResponse`
+   `chat/agent.py:ChatFeature._finalize_tool` replaces each `SearchDocsResponse`
    with `chat/models.py:ChatSearchResult` in this way, and its `staged_files`
    are not saved. Only the unwired checkpoint handoff path reads the registry
    ([[agent-runtime]]), so a missing registration fails only that path and its
    tests. Saved rows and checkpoints keep the `type` value, so never rename it.
 9. `parallel-by-default` **Calls in one step run in parallel and share one
    `ToolContext`.** `agents/tool_execution.py:ToolBatch` starts every call of a
-   step together. `ChatAgent._tool_context` advances only after the step, so
+   step together. `ChatFeature._tool_context` advances only after the step, so
    sibling calls read the same context; citation-producing tools offset their
    numbers by `CITATIONS_PER_TOOL_CALL * invocation.call_index`
    ([[citations#number-block-per-tool-call]]). Calls start in call order. Each
    pass of `ToolBatch.execute` finalizes the calls that have completed, in call
    order, so end events follow completion order only across passes, and tab
    placement follows call order. Each finished
-   call is finalized at once: `after_tool_call` (`ChatAgent._finalize_tool`)
+   call is finalized at once: `after_tool_call` (`ChatFeature._finalize_tool`)
    runs one call at a time on the run's thread. `Run.finish_tool` then writes
    the finalized result into the run record that chat saves, and publishes
    `ToolEndEvent`. Before `Run.record_tool_results` records and streams a
-   result, `Agent.prepare_tool_result` can replace it, one result at a time in
+   result, `RunHooks.prepare_tool_result` can replace it, one result at a time in
    completion order; chat's sandbox spill uses it, and then adds the file copy
    status line to the root agent's sandbox and code mode results
    ([[code-execution]]). After a
@@ -642,7 +642,7 @@ are plain `AgentTool` objects with no `Tool` row, and
   7. Add its ID to `web/src/lib/tools/constants.ts` and
      `mobile/src/chat/tools.ts`.
   8. Deep research uses only the tools whose names are in the allowed set of
-     `deep_research/research_agent.py:ResearchAgent.__init__`, which includes
+     `deep_research/research_agent.py:ResearchFeature.__init__`, which includes
      the skill tools (`SKILL_TOOL_NAMES`). Add a search tool there if deep research must use it.
      Nothing reports a tool that is left out.
 - `gate-a-tool` **Gate a tool.** Pick the narrowest gate that matches who decides:

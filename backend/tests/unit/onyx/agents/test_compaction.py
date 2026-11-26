@@ -29,6 +29,7 @@ from onyx.agents.models import (
     InputMessageMetadata,
     InputSource,
     PreparedStep,
+    RunHooks,
     RunState,
     RunStatus,
     StepInput,
@@ -216,7 +217,7 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                 generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
                 state=AgentState(messages=[UserMessage(content=TASK)]),
                 tools=[tool],
-                prepare_step=prepare,
+                feature=RunHooks(prepare_step=prepare),
             )
             run = agent.start(background=False, max_steps=3)
             assert run.result().output.text == "Evidence supports the conclusion [1]."
@@ -362,7 +363,9 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
                 AssistantMessage(content=[TextContent(text=findings)]),
             ]
         ),
-        prepare_step=lambda _: PreparedStep(assemble_messages=assemble),
+        feature=RunHooks(
+            prepare_step=lambda _: PreparedStep(assemble_messages=assemble)
+        ),
     )
     run = agent.start(messages=[UserMessage(content="Continue. " * 160)], max_steps=1)
     run.result()
@@ -496,7 +499,7 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=[UserMessage(content=TASK)]),
         tools=tools,
-        prepare_step=prepare,
+        feature=RunHooks(prepare_step=prepare),
     )
     run = agent.start(max_steps=6)
     run.result()
@@ -565,11 +568,13 @@ def test_amending_a_summarized_result_drops_the_summary() -> None:
                 ),
             )
         ],
-        on_finish=lambda _results: [
-            ToolResultAmendment(
-                call_id="call-1", result=ToolResult(content="Amended evidence.")
-            )
-        ],
+        feature=RunHooks(
+            on_finish=lambda _results: [
+                ToolResultAmendment(
+                    call_id="call-1", result=ToolResult(content="Amended evidence.")
+                )
+            ]
+        ),
     )
     run = agent.start(max_steps=6)
     run.result()
@@ -623,7 +628,7 @@ def test_provider_context_rejection_preserves_execution_settings(
             flow=LLMFlow.RESEARCH_AGENT,
             content_mode=TraceContentMode.METADATA_ONLY,
         ),
-        prepare_step=prepare,
+        feature=RunHooks(prepare_step=prepare),
     )
     events: list[AgentEvent] = []
     run = agent.start(
@@ -685,7 +690,7 @@ def test_step_timeout_override_does_not_change_later_steps() -> None:
             flow=LLMFlow.CHAT_RESPONSE, stall_timeout_s=23
         ),
         tools=[tool],
-        prepare_step=prepare,
+        feature=RunHooks(prepare_step=prepare),
     )
     run = agent.start(background=False, max_steps=2)
     run.result()
@@ -893,7 +898,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
         model,
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         state=AgentState(messages=history),
-        prepare_step=prepare,
+        feature=RunHooks(prepare_step=prepare),
     )
     agent.start(background=False, max_steps=1).result()
     request = model.generations[0]
@@ -1325,8 +1330,10 @@ def test_compaction_identity_survives_suspension_and_resume(
             ],
             checkpoint=checkpoint,
         ),
-        before_tool_call=lambda _: PendingToolInput(
-            request_id="approval", prompt="Read evidence?", mode=InputMode.EXECUTE
+        feature=RunHooks(
+            before_tool_call=lambda _: PendingToolInput(
+                request_id="approval", prompt="Read evidence?", mode=InputMode.EXECUTE
+            )
         ),
     )
     run = agent.start(

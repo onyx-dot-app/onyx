@@ -28,6 +28,7 @@ from onyx.agents.models import (
     PreparedStep,
     RunFailure,
     RunFailureKind,
+    RunHooks,
     RunState,
     RunStatus,
     StepInput,
@@ -230,7 +231,7 @@ def test_child_messages_preserve_old_records_and_reject_stale_tool_capabilities(
     child = Agent(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=prepare,
+        feature=RunHooks(prepare_step=prepare),
     )
 
     def coordinate(invocation: ToolInvocation) -> ChildRunWait:
@@ -1302,7 +1303,7 @@ def test_coordinator_shutdown_cancels_background_child_after_parent_failure() ->
 
     coordinator = AgentCoordinator()
     parent = parent_agent(delegate)
-    parent.after_step = fail_parent
+    parent.feature = RunHooks(after_step=fail_parent)
     run = parent.start(max_steps=2, coordinator=coordinator)
     with pytest.raises(RunFailed):
         run.result(3)

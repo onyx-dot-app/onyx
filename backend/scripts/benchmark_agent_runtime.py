@@ -1,6 +1,6 @@
 """Measure the CPU, latency and memory of long chats on the agent runtime.
 
-Runs real chat agents (`ChatAgent`) on the real runtime, event delivery and
+Runs real chat agents (`ChatFeature`) on the real runtime, event delivery and
 response presenter, with the real LiteLLM wrapper up to the provider stream.
 A scripted provider stream gives thinking and one search call per step, then
 an answer. The search tool returns search passages in the real result format,
@@ -38,9 +38,10 @@ from typing import override
 import psutil
 from pydantic import JsonValue
 
+from onyx.agents.models import AgentState
 from onyx.agents.runtime import Run
 from onyx.agents.tools import ToolInvocation
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import SearchPassage, SearchPassages
 from onyx.chat.presentation import ResponsePresenter
@@ -275,7 +276,7 @@ def run_chat(
     of the workload is never measured."""
     started = time.perf_counter()
     search = BenchSearchTool(tool_latency_s, result_chars)
-    agent = ChatAgent(
+    agent = ChatFeature(
         messages=[],
         tools=[search],
         custom_agent_prompt=None,
@@ -291,7 +292,7 @@ def run_chat(
         persona=None,
         user_memory_context=None,
         llm=BenchLLM(steps, random.Random(1000 + index), llm_latency_s),
-    )
+    ).agent(AgentState())
     delivery = ChatDelivery(None)
     presenter = ResponsePresenter(Emitter(delivery.publish))
     reader = threading.Thread(
