@@ -233,6 +233,19 @@ def openapi_operations(
     ]
 
 
+def inline_path_parameters(openapi_spec: dict[str, Any]) -> dict[str, Any]:
+    """``openapi_spec`` with each path item cut to its operations, and the
+    path item's parameters copied into each operation. Releases before the
+    api_app table read only this shape from ``tool.openapi_schema``."""
+    paths: dict[str, dict[str, Any]] = {}
+    for path, path_item, method_name, method in openapi_operations(openapi_spec):
+        operation = dict(method)
+        if parameters := operation_parameters(openapi_spec, path_item, method):
+            operation["parameters"] = parameters
+        paths.setdefault(path, {})[method_name] = operation
+    return {**openapi_spec, "paths": paths}
+
+
 def check_unique_name(method_spec: MethodSpec, seen_names: dict[str, str]) -> None:
     """Raise if another operation has the sanitized name of ``method_spec``;
     else record it in ``seen_names``."""

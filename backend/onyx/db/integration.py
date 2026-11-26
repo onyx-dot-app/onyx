@@ -34,7 +34,10 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    inline_path_parameters,
+    openapi_to_url,
+)
 
 
 def get_integration_by_id(
@@ -564,13 +567,14 @@ def write_openapi_document__no_commit(
     db_session: Session,
 ) -> None:
     """The one writer of an OpenAPI app's document. ``api_app`` stores the
-    text as given; for one release the tool row also gets the parsed object,
-    so a version rollback still finds it. Creates the ``api_app`` row on the
+    text as given; for one release the tool row also gets the parsed object
+    in the shape the previous release reads, so a version rollback still
+    finds it. Creates the ``api_app`` row on the
     first write."""
     tool = get_openapi_tool_for_integration(integration.id, db_session)
     if tool is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The OpenAPI schema is missing.")
-    tool.openapi_schema = spec
+    tool.openapi_schema = inline_path_parameters(spec)
     app = (
         db_session.get(ApiApp, integration.api_app_id)
         if integration.api_app_id is not None

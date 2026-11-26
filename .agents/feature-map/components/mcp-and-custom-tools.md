@@ -340,7 +340,10 @@ admin value is not Ask.
   an `api_app` row (`integration.api_app_id`) with the spec as JSON text and
   its server URL. For one release each create and spec change writes both
   the `tool` row and the `api_app` row
-  (`db/integration.py:write_openapi_document__no_commit`). The readers read
+  (`db/integration.py:write_openapi_document__no_commit`). The `tool` copy
+  has path-level parameters copied into each operation
+  (`tools/tool_implementations/custom/openapi_parsing.py:inline_path_parameters`), the shape the previous
+  release reads. The readers read
   `api_app` only. Migration `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
   sets the install setting AVAILABLE; else the integration is private and
   starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
