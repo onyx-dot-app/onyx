@@ -77,4 +77,23 @@ describe("Table selection", () => {
     fireEvent.click(screen.getByText("Row a"));
     expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["a"]));
   });
+
+  it("keeps the selection when single-select clicks an ineligible row", () => {
+    const onSelectionChange = jest.fn();
+    render(
+      <Table
+        items={ROWS}
+        columns={[
+          { kind: "qualifier", canSelect: (row) => row.id !== "b" },
+          ...COLUMNS,
+        ]}
+        getRowId={(row) => row.id}
+        selectionBehavior="single-select"
+        values={new Set(["a"])}
+        onSelectionChange={onSelectionChange}
+      />
+    );
+    fireEvent.click(screen.getByText("Row b"));
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
 });

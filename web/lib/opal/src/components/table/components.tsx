@@ -568,7 +568,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                       }
                       if (onRowClick) {
                         onRowClick(row.original);
-                      } else if (isSelectable) {
+                      } else if (isSelectable && row.getCanSelect()) {
                         if (!isMultiSelect) {
                           // single-select: clear all, then select this row
                           table.toggleAllRowsSelected(false);
