@@ -14,6 +14,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from onyx.agents.events import AgentEndEvent, AgentEvent, ToolStartEvent
+from onyx.agents.models import RunStatus
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheBackend
 from onyx.chat.emitter import Emitter
@@ -111,7 +112,13 @@ class BackgroundRunStream:
                     claimed=True,
                     root_session_id=self._root_session_id,
                 )
-            self._presenter.replay(execution.response, replay, execution.presentation)
+            # The claim already marked the response running, but this stream
+            # continues it as the suspended run it was: its unfinished calls
+            # stay open for their live progress and results.
+            response = execution.response.model_copy(
+                update={"status": RunStatus.SUSPENDED}
+            )
+            self._presenter.replay(response, replay, execution.presentation)
         except Exception:
             logger.exception(
                 "Saved output of agent response %d could not open its stream",
