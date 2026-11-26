@@ -2,7 +2,7 @@
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunStatus
@@ -198,6 +198,34 @@ def test_reserve_takes_the_parent_from_the_session(
             and "FROM chat_message" in s
             and "chat_input" not in s
         ]
+    finally:
+        _delete_chat(db_session, chat_id)
+
+
+def test_reserve_resumes_only_a_paused_queue(
+    db_session: Session, executed_sql: list[str]
+) -> None:
+    chat, _, question, _ = _chat_with_response(db_session, None, RunStatus.COMPLETE)
+    chat_id, question_id = chat.id, question.id
+    try:
+        executed_sql.clear()
+        reserve_chat_response_ids(db_session, chat_id, question_id, ["model"])
+        # The lock, and no write of an unpaused queue.
+        assert len([s for s in executed_sql if "FOR NO KEY UPDATE" in s]) == 1
+        assert not [s for s in executed_sql if s.startswith("UPDATE chat_session")]
+
+        db_session.execute(
+            text("UPDATE chat_session SET queue_paused_at = now() WHERE id = :id"),
+            {"id": chat_id},
+        )
+        db_session.commit()
+        reserve_chat_response_ids(db_session, chat_id, question_id, ["model"])
+        assert (
+            db_session.scalar(
+                select(ChatSession.queue_paused_at).where(ChatSession.id == chat_id)
+            )
+            is None
+        )
     finally:
         _delete_chat(db_session, chat_id)
 

@@ -2130,20 +2130,22 @@ def reserve_chat_response_ids(
         raise ValueError("At least one response model is required")
     configure_response_transaction__no_commit(db_session)
     # Queue submission and response reservation share the session-first lock order.
-    db_session.execute(
-        select(ChatSession.id)
+    queue_paused_at = db_session.scalar(
+        select(ChatSession.queue_paused_at)
         .where(ChatSession.id == chat_session_id)
         .with_for_update(key_share=True)
     )
-    # A new turn resumes a queue that Stop paused.
-    db_session.execute(
-        update(ChatSession)
-        .where(
-            ChatSession.id == chat_session_id,
-            ChatSession.queue_paused_at.is_not(None),
+    # A new turn resumes a queue that Stop paused. The row lock keeps the
+    # value read above current, so an unpaused queue needs no write.
+    if queue_paused_at is not None:
+        db_session.execute(
+            update(ChatSession)
+            .where(
+                ChatSession.id == chat_session_id,
+                ChatSession.queue_paused_at.is_not(None),
+            )
+            .values(queue_paused_at=None)
         )
-        .values(queue_paused_at=None)
-    )
     reserved: list[ChatMessage] = []
     for display_name in model_display_names:
         msg = ChatMessage(
