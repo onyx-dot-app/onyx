@@ -1,7 +1,7 @@
 """paste as tile by default
 
 Revision ID: d04326aae2f9
-Revises: ce6d912380d7
+Revises: a4253e609025
 Create Date: 2026-11-25 11:46:05.220900
 
 Turns on paste_as_tile for every user. The old default was false, and a saved
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "d04326aae2f9"
-down_revision = "ce6d912380d7"
+down_revision = "a4253e609025"
 branch_labels = None
 depends_on = None
 
