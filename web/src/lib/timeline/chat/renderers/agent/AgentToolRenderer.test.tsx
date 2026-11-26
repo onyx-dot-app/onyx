@@ -136,6 +136,8 @@ test("a running spawn names the subagent and shows its prompt", () => {
   );
   expect(screen.queryByText("task_name:")).not.toBeInTheDocument();
   expect(onComplete).not.toHaveBeenCalled();
+  // A spawn that never ended has no success title to show.
+  expect(screen.getByTestId("done")).toBeEmptyDOMElement();
 });
 
 test.each([

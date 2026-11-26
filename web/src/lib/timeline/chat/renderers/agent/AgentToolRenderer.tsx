@@ -47,7 +47,8 @@ export function AgentToolRenderer({
     {
       icon: STEP_ICONS.agent,
       status: title("running"),
-      doneStatus: title(call?.failed ? "failed" : "done"),
+      // A call that never ended keeps its running title.
+      doneStatus: isComplete ? title(call?.failed ? "failed" : "done") : null,
       headerAccessory: agent && (
         <Button
           icon={SvgChevronRight}
