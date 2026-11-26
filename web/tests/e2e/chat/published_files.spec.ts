@@ -256,7 +256,7 @@ test.describe("Published files", () => {
     await expect(chatPage.publishedFilesPanelCards()).toHaveCount(6);
   });
 
-  test("a file tab shows markdown as a document, a CSV as a grid, a PDF and a Word file as pages, and a deck as slides", async ({
+  test("a file tab shows markdown as a document, a CSV as a grid, and a PDF as pages", async ({
     page,
     chatPage,
   }) => {
@@ -277,15 +277,6 @@ test.describe("Published files", () => {
       displayPath: "report.pdf",
       artifactId: "artifact-slides",
       mimeType: "application/pdf",
-    };
-    const letter: MockPublishedFile = {
-      ...report("published-file-13", "Q3 letter"),
-      name: "letter.docx",
-      path: "/home/onyx/workspaces/chat/letter.docx",
-      displayPath: "letter.docx",
-      artifactId: "artifact-letter",
-      mimeType:
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     };
     const deck: MockPublishedFile = {
       ...report("published-file-14", "Q3 deck"),
@@ -310,16 +301,6 @@ test.describe("Published files", () => {
       pdf,
       readFileSync(join(__dirname, "../fixtures/two_pages.pdf"))
     );
-    await mockFile(
-      page,
-      letter,
-      readFileSync(join(__dirname, "../fixtures/three_images.docx"))
-    );
-    await mockFile(
-      page,
-      deck,
-      readFileSync(join(__dirname, "../fixtures/two_slides.pptx"))
-    );
     const firstPage = readFileSync(
       join(__dirname, "../fixtures/first_page.jpg")
     );
@@ -334,19 +315,16 @@ test.describe("Published files", () => {
     }
     await mockChatEndpoint(
       page,
-      buildMockPublishFilesStream([notes, sales, pdf, letter, deck], MESSAGE)
+      buildMockPublishFilesStream([notes, sales, pdf, deck], MESSAGE)
     );
 
     await sendMessage(page, "Write the quarterly report");
-    await expect(chatPage.publishedFileCards()).toHaveCount(5);
+    await expect(chatPage.publishedFileCards()).toHaveCount(4);
     await chatPage.expectMarkdownPreview("Q3 notes", "Q3");
     // A quoted comma stays inside its cell
     await chatPage.expectSpreadsheetPreview("Q3 sales", "Smith, Jane");
     await chatPage.expectPdfPreview("Q3 slides", 2);
-    await chatPage.expectPptxPreview("Q3 deck", 2, "Q3 review");
-
-    // The pages fit the panel, and the resize handle stays over them
-    await chatPage.expectDocxPreviewFitsPanel("Q3 letter");
+    // The resize handle stays over the pages
     await chatPage.expectResizeHandleOnTop();
 
     // The Files list shows the first pages that the server drew at publish

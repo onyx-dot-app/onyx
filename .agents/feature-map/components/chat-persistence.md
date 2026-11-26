@@ -425,8 +425,8 @@ directory until the VM stops.
 Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
-its child sessions: first the files and thumbnails of the root session's
-`chat_artifact` versions, through `delete_chat_artifact_files` (this covers a
+its child sessions: first the files, thumbnails and preview PDFs of the root
+session's `chat_artifact` versions, through `delete_chat_artifact_files` (this covers a
 response that ended without its save, such as an interrupted parked one),
 then message files (`save_chat_turn` also adds each
 publishing call's `PublishedFiles` to the response's `ChatMessage.files`
@@ -438,10 +438,13 @@ deletes such a version, and the other chat's card then gets not-found. Then
 the checkpoint blobs by file ID prefix under the root
 session ID, then messages (tool calls,
 response items and checkpoints cascade), then `SearchDoc` rows no message links
-to. `delete_chat_artifact_files` deletes each thumbnail before its file (a
-published file's delete cascades to its version, which links the thumbnail),
-and keeps the file when the thumbnail delete fails, so the next hard delete
-retries both. It raises after a failure, which stops the hard delete before
+to. `delete_chat_artifact_files` deletes each thumbnail and preview PDF before
+its file (a published file's delete cascades to its version, which links
+them). It deletes the file in the transaction that holds the version's row
+lock (`lock_chat_artifact_version_files`) and finds no link left, so a
+`link_chat_file_preview` that runs meanwhile waits and then links nothing.
+It keeps the file when one of those deletes fails, so the next hard
+delete retries them all. It raises after a failure, which stops the hard delete before
 the message files. The failed-publish clean-up
 (`delete_unpublished_chat_artifacts`) and the model's delete of one artifact
 (`delete_chat_artifact`, which holds the artifact's row lock throughout, so a

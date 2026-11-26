@@ -461,7 +461,12 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def delete_file(self, file_id: str, error_on_missing: bool = True) -> None:
+    def delete_file(
+        self,
+        file_id: str,
+        error_on_missing: bool = True,
+        db_session: Session | None = None,
+    ) -> None:
         """
         Delete a file by its ID.
 
@@ -469,6 +474,8 @@ class FileStore(ABC):
         - file_id: ID of file to delete
         - error_on_missing: If False, silently return when the file record
           does not exist instead of raising.
+        - db_session: The session whose transaction deletes the record; the
+          delete commits it. A new session when None.
         """
 
     @abstractmethod

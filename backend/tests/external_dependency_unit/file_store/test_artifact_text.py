@@ -49,6 +49,7 @@ def test_the_text_is_extracted_once_and_deleted_with_its_version(
         target=ArtifactAtPath(chat_session_id=chat.id, path="/workspace/birds.pdf"),
         title=None,
         thumbnail=None,
+        preview_pdf=None,
     )
 
     first = get_or_extract_artifact_text(file.file_id, file.name, file.size)
@@ -62,7 +63,7 @@ def test_the_text_is_extracted_once_and_deleted_with_its_version(
     assert "herons" in cached.pages[0] and "egrets" in cached.pages[1]
     assert get_or_extract_artifact_text(file.file_id, file.name, 60 << 20) is None
 
-    delete_chat_artifact_files([(file.file_id, None)])
+    delete_chat_artifact_files([file.file_id])
 
     assert not get_default_file_store().has_file(
         f"{ARTIFACT_TEXT_FILE_PREFIX}{file.file_id}",
@@ -85,6 +86,7 @@ def test_an_io_error_during_extraction_raises_and_caches_no_text(
         target=ArtifactAtPath(chat_session_id=chat.id, path="/workspace/notes.md"),
         title=None,
         thumbnail=None,
+        preview_pdf=None,
     )
     try:
         with (
@@ -101,4 +103,4 @@ def test_an_io_error_during_extraction_raises_and_caches_no_text(
         assert retried is not None
         assert "herons" in retried.pages[0]
     finally:
-        delete_chat_artifact_files([(file.file_id, None)])
+        delete_chat_artifact_files([file.file_id])
