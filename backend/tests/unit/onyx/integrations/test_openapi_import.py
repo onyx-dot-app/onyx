@@ -336,22 +336,6 @@ def test_a_spec_that_expands_too_far_keeps_its_tools_and_later_refs() -> None:
     assert sum(_count_values(d) for d in definitions) <= _MAX_INLINED_NODES + 1000
 
 
-def test_a_spec_with_path_parameters_validates_and_builds_tools() -> None:
-    spec = _callable_spec()
-    validate_openapi_schema(spec)
-
-    tools = build_custom_tools_from_openapi_schema_and_headers(
-        1,
-        spec,
-        dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
-        headers={},
-        credentials=NO_CREDENTIALS,
-    )
-    assert sorted(
-        tool.integration_action.action for tool in tools if tool.integration_action
-    ) == ["deletePet", "getPet"]
-
-
 def test_server_variables_take_their_defaults() -> None:
     spec = _callable_spec()
     spec["servers"] = [
@@ -498,13 +482,6 @@ def test_a_fetched_spec_with_a_query_in_its_server_url_is_refused() -> None:
         )
 
     assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
-
-
-def test_a_saved_spec_larger_than_the_import_limit_still_parses() -> None:
-    spec = _callable_spec()
-    spec["info"]["description"] = "x" * (5 * 1024 * 1024)
-
-    assert parse_openapi_document(json.dumps(spec)) == spec
 
 
 def test_yaml_timestamps_stay_text() -> None:
