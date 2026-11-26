@@ -67,7 +67,7 @@ Neighbours own the rest:
 ```
 chat/process_message.py:prepare_chat_turn    capture_persona_tool_configuration
                                              (db/tools.py) -> PersonaToolConfiguration
-chat/execution.py:create_chat_agent          per model response
+chat/execution.py:construct_chat_tools       per model response
   construct_tools                            -> {Tool row id: [Tool instances]}
   ChatFeature.bind / ResearchFeature.bind    per run: Tool.bind(_tool_context) -> AgentTool
 agents/runtime.py                            a model step returns tool calls
@@ -84,7 +84,7 @@ and its `persona__integration` rows into `IntegrationLinkConfiguration` models
 `Tool` rows of the agent are not copied. `construct_tools` opens its own short
 DB session, so no session stays open for a turn that can last minutes.
 
-**Construction per model.** `chat/execution.py:create_chat_agent` calls
+**Construction per model.** `chat/execution.py:construct_chat_tools` calls
 `construct_tools` for each model response, so a multi-model turn has separate
 tool instances. `construct_tools` returns a flat list. For built-in tools,
 `tools/tool_constructor.py:_construct_tools_impl` walks the captured tools in
@@ -234,7 +234,7 @@ fills: with the tool's name, or in code mode with its program function
 (`ToolStubs.called_names`); `ChatFeature.called_name` gives the prompt the
 same names.
 
-**Chat skill tools.** `chat/execution.py:create_chat_agent` adds `skills_list`
+**Chat skill tools.** `chat/execution.py:construct_chat_tools` adds `skills_list`
 and the family's skill read tool, `skills_read` or `skill`
 (`tools/tool_implementations/skills/skill_tools.py`), to the
 chat agent's configured tools when the turn's user has a chat skill
@@ -264,7 +264,7 @@ prints or returns goes into its `code_mode_delta` packets; the web timeline
 does not show program output ([[chat-frontend]]). Deep Research does not use
 code mode and calls them directly.
 
-**Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
+**Chat sandbox tools.** `chat/execution.py:construct_chat_tools` also adds
 `exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and
 `write` when the turn's model is Claude) ([[code-execution]]) when
 `ChatTurnSetup.sandbox_tools` is set. `chat/process_message.py:prepare_chat_turn`

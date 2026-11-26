@@ -75,7 +75,12 @@ from onyx.prompts.chat_prompts import (
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile, ToolContext, ToolPreference
+from onyx.tools.models import (
+    ChatFile,
+    CodeModeExposure,
+    ToolContext,
+    ToolPreference,
+)
 from onyx.tools.ordering import tool_order
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     CodeModeTool,
@@ -141,6 +146,16 @@ def _offered_preference(
     if preference is None or not any(tool.matches(preference) for tool in tools):
         return None
     return preference
+
+
+def chat_max_steps(tools: list[Tool], code_mode: bool) -> int:
+    """The step limit of a chat agent with `tools`. Programs batch tool
+    calls, so code mode gets its own cap when a tool runs inside programs."""
+    if code_mode and any(
+        tool.code_mode_exposure is not CodeModeExposure.DIRECT for tool in tools
+    ):
+        return CODE_MODE_MAX_LLM_CYCLES
+    return MAX_LLM_CYCLES
 
 
 class ChatFeature(AgentFeature):
@@ -213,10 +228,7 @@ class ChatFeature(AgentFeature):
         self.skills_catalog_message = skills_catalog_message(
             self.configured_tools, llm.config.max_input_tokens, self.called_name
         )
-        # Programs batch tool calls, so code mode gets its own cap when it applies.
-        self.max_steps = (
-            CODE_MODE_MAX_LLM_CYCLES if self.code_cells is not None else MAX_LLM_CYCLES
-        )
+        self.max_steps = chat_max_steps(self.configured_tools, code_mode)
         self.include_citations = include_citations
         self.reasoning_effort = reasoning_effort
         self.memory = user_memory_context

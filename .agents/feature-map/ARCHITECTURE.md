@@ -177,7 +177,7 @@ chat/execution.py:start_chat_turn
     to the processing fence (Stop can target the turn from here)
   publish the ID lines, start the chat-control thread, return ChatDelivery.reader
 ChatTurnExecution.run: one chat-response thread per model
-  create_chat_agent -> construct_tools               [[tools-framework]]
+  construct_chat_tools -> construct_tools            [[tools-framework]]
   ChatRunStore: response ownership lease and record  [[agent-runtime]]
     (sessions that keep content only)
   open the trace, the agent of ChatFeature           [[agent-runtime]]

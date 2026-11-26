@@ -39,7 +39,8 @@ class SandboxTurn:
     the sandbox busy. After the first call, each release of the root run (it
     finishes or suspends, and its work and the work of its foreground
     children drain) ends the turn: `end` is the root agent's on_drained hook
-    (`chat/execution.py:create_chat_agent`). Subagent runs never end it, since
+    (`chat/execution.py:create_chat_agent` for a new root, `bind_run_store`
+    for a restored root). Subagent runs never end it, since
     the root can be mid-call when they release; a background subagent that
     outlives the root leaves its renewed mark to expire.
 

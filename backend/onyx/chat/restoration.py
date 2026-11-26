@@ -109,6 +109,7 @@ def restore_chat_agent(
     user_identity: LLMUserIdentity | None,
     subagent_factory: Callable[[int], Callable[[], Agent]],
     on_root_drained: Callable[[], None] | None = None,
+    on_root_restored: Callable[[ChatFeature | DeepResearchFeature], None] | None = None,
     question_tool: Callable[[int, QuestionShape], QuestionTool] | None = None,
 ) -> Agent:
     """Build feature code and resources; Agent.resume restores saved execution state.
@@ -119,6 +120,8 @@ def restore_chat_agent(
     agent at `MAX_CHILD_DEPTH` cannot start agents. A root chat agent gets
     `on_root_drained` as its on_drained hook, and the question tool
     (`question_tool(response_id, shape)`) when its saved step declared one.
+    `on_root_restored` receives the feature of a restored root before its
+    agent is built.
 
     The agent gets the tool shapes of `llm`, the model that continues the
     run, as its restored children and sandbox tools do. A saved call of
@@ -131,9 +134,10 @@ def restore_chat_agent(
         raise ValueError("Checkpoint has no supported chat feature state")
     state = _FEATURE_STATE.validate_python(snapshot.progress.feature_state)
     context = checkpoint.agent_state
+    is_root = snapshot.parent_run_id is None
     if isinstance(state, ChatFeatureState):
-        return ChatFeature(
-            is_subagent=snapshot.parent_run_id is not None,
+        chat = ChatFeature(
+            is_subagent=not is_root,
             messages=context.messages,
             tools=tools,
             code_mode=state.code_mode,
@@ -161,12 +165,15 @@ def restore_chat_agent(
                 tool.name in QUESTION_TOOL_NAMES for tool in snapshot.progress.tools
             )
             else None,
-        ).agent(
+        )
+        if is_root and on_root_restored is not None:
+            on_root_restored(chat)
+        return chat.agent(
             context,
             agent_id=snapshot.agent_id,
             previous_run_id=snapshot.previous_run_id,
             user_identity=user_identity,
-            on_drained=on_root_drained if snapshot.parent_run_id is None else None,
+            on_drained=on_root_drained if is_root else None,
         )
     if isinstance(state, ResearchFeatureState):
         return ResearchFeature(
@@ -181,7 +188,7 @@ def restore_chat_agent(
             agent_id=snapshot.agent_id,
             previous_run_id=snapshot.previous_run_id,
         )
-    return DeepResearchFeature(
+    deep_research = DeepResearchFeature(
         allowed_tools=tools,
         additional_context=state.request_context,
         context_files=state.context_files.restore() if state.context_files else None,
@@ -192,7 +199,10 @@ def restore_chat_agent(
         reasoning_effort=state.reasoning_effort,
         all_injected_file_metadata=state.file_metadata,
         skip_clarification=state.skip_clarification,
-    ).agent(
+    )
+    if is_root and on_root_restored is not None:
+        on_root_restored(deep_research)
+    return deep_research.agent(
         context,
         agent_id=snapshot.agent_id,
         previous_run_id=snapshot.previous_run_id,

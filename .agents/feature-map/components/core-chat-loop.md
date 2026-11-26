@@ -124,7 +124,7 @@ Neighbours own the rest:
 ```
 request thread                  control thread (one per turn)        response thread (one per model)
 _stream_chat_turn               ChatTurnExecution.run                ChatTurnExecution._run_response
-  prepare_chat_turn (DB, files)   starts one response thread           create_chat_agent: construct_tools,
+  prepare_chat_turn (DB, files)   starts one response thread           construct_chat_tools, then (new root)
   -> ChatTurnSetup                  per model                            ChatFeature or DeepResearchFeature
   start_chat_turn                 wake >= every 250 ms: Stop;          load_chat_branch (session check)
     clear_stop, buffer open,        admission every 5 s; owner         ChatRunStore (content kept) or
