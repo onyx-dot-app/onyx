@@ -15,6 +15,16 @@ function splitLines(text: string): string[] {
   return lines;
 }
 
+/**
+ * The keys that the diff compares. As in git, a last line without a newline
+ * differs from the same line with one, so it gets a mark when only one text
+ * ends with a newline.
+ */
+function lineKeys(lines: string[], marked: boolean): string[] {
+  if (!marked || lines.length === 0) return lines;
+  return [...lines.slice(0, -1), `${lines[lines.length - 1]}\0no-newline`];
+}
+
 type DiffOp = "keep" | "remove" | "add";
 
 /** Past this many edits in the middle of a diff, it falls back to a replace. */
@@ -90,11 +100,17 @@ function backtrack(
 export function computeDiff(oldText: string, newText: string): DiffLine[] {
   const oldLines = splitLines(oldText);
   const newLines = splitLines(newText);
+  const newlineDiffers =
+    oldText !== "" &&
+    newText !== "" &&
+    oldText.endsWith("\n") !== newText.endsWith("\n");
+  const oldKeys = lineKeys(oldLines, newlineDiffers && !oldText.endsWith("\n"));
+  const newKeys = lineKeys(newLines, newlineDiffers && !newText.endsWith("\n"));
   let head = 0;
   while (
     head < oldLines.length &&
     head < newLines.length &&
-    oldLines[head] === newLines[head]
+    oldKeys[head] === newKeys[head]
   ) {
     head++;
   }
@@ -102,14 +118,16 @@ export function computeDiff(oldText: string, newText: string): DiffLine[] {
   while (
     tail < oldLines.length - head &&
     tail < newLines.length - head &&
-    oldLines[oldLines.length - 1 - tail] ===
-      newLines[newLines.length - 1 - tail]
+    oldKeys[oldLines.length - 1 - tail] === newKeys[newLines.length - 1 - tail]
   ) {
     tail++;
   }
   const oldMid = oldLines.slice(head, oldLines.length - tail);
   const newMid = newLines.slice(head, newLines.length - tail);
-  const ops: DiffOp[] = editScript(oldMid, newMid) ?? [
+  const ops: DiffOp[] = editScript(
+    oldKeys.slice(head, oldLines.length - tail),
+    newKeys.slice(head, newLines.length - tail)
+  ) ?? [
     ...oldMid.map((): DiffOp => "remove"),
     ...newMid.map((): DiffOp => "add"),
   ];

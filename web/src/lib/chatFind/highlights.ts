@@ -19,6 +19,8 @@ export const CHAT_FIND_UNFOLD_EVENT = "chatfindunfold";
 const IGNORE_SELECTOR = [
   `[${CHAT_FIND_IGNORE_ATTRIBUTE}]`,
   "svg",
+  // The searched text splits at an image.
+  "img",
   ".katex",
   ".opal-code-panel-header",
   ".opal-code-panel-copy",

@@ -61,3 +61,19 @@ test("a match after a CRLF covers the matched text in the node", () => {
   const ranges = collectChatFindRanges(root, "foo").get("row-1") ?? [];
   expect(ranges.map((range) => range.toString())).toEqual(["foo"]);
 });
+
+test("a match never spans an inline image", () => {
+  const content = "foo![alt](https://example.com/a.png)bar\n\nfoobar";
+  const root = renderAnswer(content);
+  const ranges = collectChatFindRanges(root, "foobar").get("answer:2") ?? [];
+  const counted = answerFindSegments(content).reduce(
+    (count, segment) => count + findOccurrences(segment, "foobar").length,
+    0
+  );
+  expect(counted).toBe(1);
+  expect(ranges).toHaveLength(1);
+  const [range] = ranges;
+  const paragraphs = root.querySelectorAll("p");
+  expect(paragraphs).toHaveLength(2);
+  expect(paragraphs[1]?.contains(range?.startContainer ?? null)).toBe(true);
+});
