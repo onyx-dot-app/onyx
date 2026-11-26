@@ -66,7 +66,7 @@ def test_only_a_streamed_root_agent_shows_command_approvals(
 ) -> None:
     setup = MagicMock()
     setup.new_msg_req.stream = stream
-    with patch("onyx.chat.agent.ChatAgent") as chat_agent:
+    with patch("onyx.chat.agent.ChatFeature") as chat_feature:
         build_chat_agent(
             MagicMock(),
             None,
@@ -79,4 +79,4 @@ def test_only_a_streamed_root_agent_shows_command_approvals(
             is_subagent=is_subagent,
         )
 
-    assert chat_agent.call_args.kwargs["shows_command_approvals"] is shows
+    assert chat_feature.call_args.kwargs["shows_command_approvals"] is shows
