@@ -3,6 +3,7 @@ module github.com/onyx-dot-app/onyx/tools/ods
 go 1.27.4
 
 require (
+	deps.dev/util/semver v0.0.0-20260529052642-cf1e78d92744
 	github.com/charlievieth/fastwalk v1.0.14
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/google/go-containerregistry v0.21.6
@@ -29,7 +30,6 @@ require (
 	deps.dev/util/maven v0.0.0-20260528042559-b92437de09fd // indirect
 	deps.dev/util/pypi v0.0.0-20260422013440-90c27f84dd6f // indirect
 	deps.dev/util/resolve v0.0.0-20260422013440-90c27f84dd6f // indirect
-	deps.dev/util/semver v0.0.0-20260529052642-cf1e78d92744 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/CycloneDX/cyclonedx-go v0.11.0 // indirect
 	github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5 // indirect

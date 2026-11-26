@@ -3,10 +3,17 @@ from datetime import datetime, timezone
 import pytest
 
 from onyx.db.postgres_tool import POSTGRES_TOOL_MAX_LIMIT
-from onyx.db.postgres_tool_models import DocumentCursor, DocumentOrder, GroupCount
+from onyx.db.postgres_tool_models import (
+    DocumentCursor,
+    DocumentOrder,
+    DocumentScope,
+    GroupCount,
+)
 from onyx.tools.models import ToolCallException
+from onyx.tools.tool_implementations.postgres.models import PostgresQueryArgs
 from onyx.tools.tool_implementations.postgres.postgres_tool import (
     _decode_cursor,
+    _document_query_key,
     _encode_cursor,
     _format_group_counts,
 )
@@ -62,3 +69,12 @@ def test_cursor_is_bound_to_its_query() -> None:
     for broken in ("", "%%%", token[:-4], "WzFd"):
         with pytest.raises(ToolCallException):
             _decode_cursor(broken, "query-a", DocumentOrder.UPDATED_DESC)
+
+
+def test_metadata_cursor_keys_did_not_change() -> None:
+    # The key that the tool gave this query before documents took
+    # content_contains, so cursors issued then still work.
+    args = PostgresQueryArgs(table="document", title_contains=["pricing"])
+    assert _document_query_key(args, DocumentScope()) == "2c1d6e5f5e15aa27"
+    with_content = args.model_copy(update={"content_contains": ["pricing"]})
+    assert _document_query_key(with_content, DocumentScope()) != "2c1d6e5f5e15aa27"

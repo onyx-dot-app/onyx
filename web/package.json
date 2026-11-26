@@ -35,7 +35,6 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@floating-ui/react-dom": "^2.1.6",
-    "@jvmr/pptx-to-html": "1.1.2",
     "@onyx-ai/opal": "file:./lib/opal",
     "@onyx-ai/shared": "file:./lib/shared",
     "@radix-ui/react-accordion": "^1.2.2",

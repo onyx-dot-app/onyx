@@ -335,7 +335,7 @@ test("an older version's card opens that version in the artifact's tab, which sa
   expect(await preview("Draft report")).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v1",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   // The name shows apart from the sentence, so a U+202E or right-to-left
@@ -351,7 +351,7 @@ test("an older version's card opens that version in the artifact's tab, which sa
   expect(await preview("Final report")).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(panel().fileTabs).toHaveLength(1);
@@ -393,7 +393,7 @@ test("an open tab follows the newest version after a reload and a live publish; 
   await preview("Q3 report");
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v1",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
 
@@ -403,7 +403,7 @@ test("an open tab follows the newest version after a reload and a live publish; 
   });
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(
@@ -416,7 +416,7 @@ test("an open tab follows the newest version after a reload and a live publish; 
   });
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v3",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(screen.getByRole("tab", { name: "Q3 report" })).toBeVisible();
@@ -434,7 +434,7 @@ test("an open tab follows the newest version after a reload and a live publish; 
   ).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v1",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
 });
@@ -778,7 +778,7 @@ test("a tab of a version newer than the listed one shows that version, without a
   await preview("Q3 report");
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
 });
@@ -1060,7 +1060,7 @@ test("a card opens its own file, also one that the Files list does not hold", as
   expect(await preview("Pathless")).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-pathless",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(screen.getByRole("tab", { name: "Pathless" })).toHaveAttribute(
@@ -1099,7 +1099,7 @@ test("an open tab that moves to a new version marks that version seen", async ()
   });
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-v2",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(panel().seenFileIds).toContain("file-v2");

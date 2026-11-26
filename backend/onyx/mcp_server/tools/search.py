@@ -506,16 +506,32 @@ async def query_metadata(
     base, and over the user's own Onyx chat history. Use it for questions that
     top-k search cannot answer completely: "how many Jira tickets changed last
     week", "list every doc with 'pricing' in the title", "the 10 oldest
-    Confluence pages", "documents by owner". It sees metadata only (titles,
-    dates, owners, sources, folders); use `search_indexed_documents` for what
-    documents say.
+    Confluence pages", "documents by owner", "every doc that mentions
+    'SOC 2'". It filters on metadata (titles, dates, owners, sources,
+    folders) and, with `content_contains`, on the words in a document's text;
+    use `search_indexed_documents` for what documents say.
 
     Tables and their filters:
     - `document`: `source_type`, `title_contains`, `updated_after`,
-      `updated_before`, `owned_by`, `parent_hierarchy_node_id`. Listings take
-      `order_by` and return `next_cursor` when more match: pass it back as
-      `cursor` with the same filters for the next page. `group_by`: `source`
-      or `owner` (with `count`).
+      `updated_before`, `owned_by`, `parent_hierarchy_node_id`,
+      `content_contains`. Listings take `order_by` and return `next_cursor`
+      when more match: pass it back as `cursor` with the same filters and
+      `order_by` for the next page. `group_by`: `source` or `owner` (with `count`).
+      `content_contains` matches whole words or phrases in the text, the start
+      of the title, the metadata values in the indexed text, and any AI-generated
+      summaries, matched together as one string; with the default settings, case and word form do not
+      matter. It searches Salesforce only under public connectors. Each
+      indexed section of a document is matched on its own, so a phrase that
+      crosses two sections can be missed. Each value takes at most 200
+      characters, and a value that the index analyzer reduces to no words
+      (with the default settings, "the and") is an error. It is slow: use it
+      only for an exhaustive list or count by content, and add date, source or
+      folder filters when you can. Lists with it sort by date only; counts take
+      no `order_by`. It does not work with `group_by`. A broad count can return "At
+      least N", and a count can be higher than the rows a listing
+      returns; a slow page can hold fewer rows, or none, and still return
+      `next_cursor`, so keep paging while it is set. Deployments without the
+      document index refuse it.
     - `hierarchy_node` (folders, spaces, channels): `source_type`,
       `name_contains`, `parent_id`, `node_type`.
     - `chat_session`: `description_contains`, `created_after`,

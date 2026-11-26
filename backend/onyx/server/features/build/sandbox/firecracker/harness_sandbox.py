@@ -15,8 +15,8 @@ import random
 import secrets
 import tarfile
 import time
-from collections.abc import Callable, Generator, Iterable, Sequence
-from contextlib import nullcontext
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
+from contextlib import contextmanager, nullcontext
 from typing import IO
 from uuid import UUID, uuid4
 
@@ -141,15 +141,17 @@ from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
     INTERRUPT_CHAR,
     ONYX_VM_FILES_ROOT,
-    RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES,
-    RENDER_FIRST_PAGE_ROOT,
-    RENDER_FIRST_PAGE_SIZE_PX,
-    RENDER_FIRST_PAGE_SUFFIXES,
+    RENDER_PREVIEW_MAX_OUTPUT_BYTES,
+    RENDER_PREVIEW_MAX_PDF_BYTES,
+    RENDER_PREVIEW_ROOT,
+    RENDER_PREVIEW_SIZE_PX,
+    RENDER_PREVIEW_SUFFIXES,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
     HarnessSandbox,
     HarnessSandboxError,
+    RenderBudgetSpentError,
     SandboxFileNotFoundError,
     SandboxFileTooLargeError,
     SandboxPathError,
@@ -164,7 +166,11 @@ from onyx.server.features.build.sandbox.models import (
     ExecEvent,
     ExecOutputDelta,
     FileSet,
+    HarnessSandboxKey,
     HarnessSandboxRef,
+    RenderedPreview,
+    RenderFileBytes,
+    RenderSessionFile,
     SandboxFileType,
     SandboxPathFault,
     SandboxPathInfo,
@@ -296,19 +302,19 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         )
         return installed
 
-    def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
+    def _place(self, sandbox: HarnessSandboxKey) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not
         initialized: a new boot, a VM adopted from a reservation, or a VM that
         placement replaced after a crash."""
         shared_cache = get_shared_cache_backend()
-        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        tenant_cache = get_cache_backend(tenant_id=sandbox.tenant_id)
         # A stop that saves this sandbox now gives way to this call.
-        note_wanted(tenant_cache, ref.sandbox_id)
+        note_wanted(tenant_cache, sandbox.sandbox_id)
         # The sandbox's attempt record (last_attempt) fences VMs: a placed VM
         # serves any attempt, and a new VM starts past the last one.
         request = VmRequest(
-            tenant_id=ref.tenant_id,
-            sandbox_id=ref.sandbox_id,
+            tenant_id=sandbox.tenant_id,
+            sandbox_id=sandbox.sandbox_id,
             attempt=1,
             template=self._template,
         )
@@ -321,7 +327,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             if last_error is not None:
                 logger.info(
                     "sandbox_fc_wake_retry sandbox=%s pause=%.2f error=%s",
-                    ref.sandbox_id,
+                    sandbox.sandbox_id,
                     pause,
                     last_error,
                 )
@@ -329,8 +335,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 delay = min(delay * 2, 2.0)
             # A stop deletes the placement record, and an agent never creates
             # a stopped attempt again: start past the last one.
-            if get_sandbox_placement(tenant_cache, ref.sandbox_id) is None:
-                floor = last_attempt(tenant_cache, ref.sandbox_id) + 1
+            if get_sandbox_placement(tenant_cache, sandbox.sandbox_id) is None:
+                floor = last_attempt(tenant_cache, sandbox.sandbox_id) + 1
                 if request.attempt < floor:
                     request = request.model_copy(update={"attempt": floor})
             try:
@@ -338,8 +344,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     shared_cache, tenant_cache, self._client_factory, request
                 )
                 if not self._initialized(placed):
-                    self._initialize(tenant_cache, ref, placed)
-                record_attempt(tenant_cache, ref.sandbox_id, placed.vm.attempt)
+                    self._initialize(tenant_cache, sandbox, placed)
+                record_attempt(tenant_cache, sandbox.sandbox_id, placed.vm.attempt)
                 return placed
             except (
                 OnyxError,
@@ -363,7 +369,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         return health.initialized and health.generation == placed.vm.generation
 
     def _initialize(
-        self, tenant_cache: CacheBackend, ref: HarnessSandboxRef, placed: PlacedVm
+        self, tenant_cache: CacheBackend, sandbox: HarnessSandboxKey, placed: PlacedVm
     ) -> None:
         """Init under a lock per VM instance; a waiter checks Health again."""
         vm = placed.vm
@@ -383,7 +389,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 tenant_cache,
                 self._client_factory,
                 placed,
-                tenant_id=ref.tenant_id,
+                tenant_id=sandbox.tenant_id,
                 # No secrets: the egress proxy injects them.
                 env=dict(EXEC_DEFAULT_ENV),
                 session_ids=[],
@@ -911,25 +917,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 f"{ONYX_VM_FILES_ROOT}; copy the file into the working "
                 "directory first"
             ) from e
-        # Dropping the chunk iterator unread cancels the stream.
-        try:
-            info, chunks = daemon.read_file(
-                session_id=session_id, path=target, length=max_bytes + 1
-            )
-        except SandboxDaemonError as e:
-            if e.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND:
-                raise SandboxFileNotFoundError(path) from e
-            if e.reason is SandboxDaemonErrorReason.INVALID_ARGUMENT:
-                # Not a regular file, a link out of its root, or a denied
-                # path; the daemon's message names the path.
-                raise HarnessSandboxError(e.message) from e
-            raise
-        data = b"" if info.size > max_bytes else b"".join(chunks)
-        if info.size > max_bytes or len(data) > max_bytes:
-            raise SandboxFileTooLargeError(
-                f"{path!r} is larger than the limit of {max_bytes} bytes"
-            )
-        return data
+        return _read(daemon, session_id, target, max_bytes=max_bytes, path=path)
 
     def write_file(
         self,
@@ -1045,35 +1033,64 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
 
     # Renders
 
-    def render_first_page(
-        self, ref: HarnessSandboxRef, path: str, *, until: float
-    ) -> bytes | None:
-        suffix = posixpath.splitext(path)[1].lower()
-        if suffix not in RENDER_FIRST_PAGE_SUFFIXES:
+    def render_preview(
+        self,
+        source: RenderSessionFile | RenderFileBytes,
+        *,
+        first_page: bool,
+        budget_seconds: float,
+    ) -> RenderedPreview | None:
+        if isinstance(source, RenderSessionFile):
+            sandbox: HarnessSandboxKey = source.ref
+            name = source.path
+        else:
+            sandbox = source.sandbox
+            name = f"source{source.suffix}"
+        suffix = posixpath.splitext(name)[1].lower()
+        if suffix not in RENDER_PREVIEW_SUFFIXES:
             return None
-        cancellation = current_cancellation()
+        scratch = f"{RENDER_PREVIEW_ROOT}/{secrets.token_hex(16)}"
+        log_context = f"sandbox={sandbox.sandbox_id} path={name!r}"
+        daemon: SandboxDaemonClient | None = None
         try:
-            daemon, session_id, target = self._file_target(ref, path)
-        except Exception:
-            # A failure after a Stop is the Stop.
-            check_cancelled()
-            logger.warning(
-                "sandbox_fc_render_failed sandbox=%s path=%r",
-                ref.sandbox_id,
-                path,
-                exc_info=True,
-            )
-            return None
-        source = (
-            posixpath.join(session_workspace(ref.session_id), target)
-            if session_id
-            else target
-        )
-        scratch = f"{RENDER_FIRST_PAGE_ROOT}/{secrets.token_hex(16)}"
-        steps: list[tuple[list[str], dict[str, str]]] = [(["mkdir", "-p", scratch], {})]
-        if suffix != ".pdf":
-            steps.append(
-                (
+            if isinstance(source, RenderSessionFile):
+                daemon, session_id, target = self._file_target(source.ref, source.path)
+                until = time.monotonic() + budget_seconds
+                rendered = (
+                    posixpath.join(session_workspace(source.ref.session_id), target)
+                    if session_id
+                    else target
+                )
+                if not _run_render_step(
+                    daemon,
+                    ["mkdir", "-p", scratch],
+                    {},
+                    session_id=session_id,
+                    until=until,
+                    log_context=log_context,
+                ):
+                    return None
+            else:
+                daemon = sandbox_daemon(self._client_factory, self._place(sandbox))
+                session_id = ""
+                until = time.monotonic() + budget_seconds
+                rendered = f"{scratch}/{name}"
+                # Creates the scratch directory.
+                with _render_transfer(until, "the source write") as remaining:
+                    _write(
+                        daemon,
+                        "",
+                        rendered,
+                        source.data,
+                        0o644,
+                        remaining,
+                        overwrite=True,
+                    )
+            converted: str | None = None
+            pdf: bytes | None = None
+            if suffix != ".pdf":
+                if not _run_render_step(
+                    daemon,
                     [
                         "soffice",
                         # A profile of its own, so renders run side by side.
@@ -1083,16 +1100,40 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                         "pdf",
                         "--outdir",
                         scratch,
-                        source,
+                        rendered,
                     ],
                     {"SAL_USE_VCLPLUGIN": "svp"},
-                )
-            )
-            # LibreOffice names the PDF after the source, without its suffix.
-            stem = posixpath.splitext(posixpath.basename(source))[0]
-            source = f"{scratch}/{stem}.pdf"
-        steps.append(
-            (
+                    session_id=session_id,
+                    until=until,
+                    log_context=log_context,
+                ):
+                    return None
+                # LibreOffice names the PDF after the source, without its
+                # suffix.
+                stem = posixpath.splitext(posixpath.basename(rendered))[0]
+                converted = f"{scratch}/{stem}.pdf"
+                try:
+                    with _render_transfer(until, "the PDF read") as remaining:
+                        pdf = _read(
+                            daemon,
+                            "",
+                            converted,
+                            max_bytes=RENDER_PREVIEW_MAX_PDF_BYTES,
+                            path=converted,
+                            timeout_seconds=remaining,
+                        )
+                except SandboxFileNotFoundError:
+                    # LibreOffice exits 0 when it cannot load the source.
+                    logger.warning(
+                        "sandbox_fc_render_rejected %s: LibreOffice made no PDF",
+                        log_context,
+                    )
+                    return None
+                except SandboxFileTooLargeError:
+                    logger.warning("sandbox_fc_render_pdf_too_large %s", log_context)
+            page: bytes | None = None
+            if first_page and _run_render_step(
+                daemon,
                 [
                     "pdftoppm",
                     "-jpeg",
@@ -1101,116 +1142,49 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     "-l",
                     "1",
                     "-scale-to",
-                    str(RENDER_FIRST_PAGE_SIZE_PX),
+                    str(RENDER_PREVIEW_SIZE_PX),
                     "-singlefile",
-                    source,
+                    converted or rendered,
                     f"{scratch}/page",
                 ],
                 {},
-            )
-        )
-        # The execution ID of the step that runs, once it started.
-        running: list[str] = []
-
-        def kill() -> None:
-            if running:
-                daemon.cancel(running[0])
-
-        try:
-            for argv, env in steps:
-                check_cancelled()
-                remaining = until - time.monotonic()
-                if remaining <= 0:
-                    logger.warning(
-                        "sandbox_fc_render_failed sandbox=%s path=%r step=%s: "
-                        "the render budget is spent",
-                        ref.sandbox_id,
-                        path,
-                        argv[0],
-                    )
-                    return None
-                running.clear()
-                result: ExecResult | None = None
-                output = b""
+                session_id=session_id,
+                until=until,
+                log_context=log_context,
+            ):
                 try:
-                    with (
-                        nullcontext()
-                        if cancellation is None
-                        else cancellation.on_cancel(kill)
-                    ):
-                        for event in daemon.run(
-                            ExecCommand(
-                                argv=argv,
-                                env=env,
-                                deadline_seconds=remaining,
-                                session_id=session_id,
-                            )
-                        ):
-                            if isinstance(event, ExecStarted):
-                                running.append(event.execution_id)
-                                # A cancel before the start found nothing to
-                                # kill: the step's clean-up below kills it.
-                                if cancellation is not None and cancellation.cancelled:
-                                    break
-                            elif isinstance(event, ExecOutput):
-                                output = (output + event.data)[
-                                    -_RENDER_LOG_OUTPUT_BYTES:
-                                ]
-                            elif isinstance(event, ExecResult):
-                                result = event
-                finally:
-                    # A step without a result may still run: kill it, so it
-                    # writes nothing in the scratch directory after its delete.
-                    if result is None:
-                        try:
-                            kill()
-                        except Exception:
-                            logger.warning(
-                                "sandbox_fc_render_kill_failed sandbox=%s execution=%s",
-                                ref.sandbox_id,
-                                running,
-                                exc_info=True,
-                            )
-                check_cancelled()
-                if (
-                    result is None
-                    or result.completion is not ExecCompletion.EXITED
-                    or result.exit_code != 0
-                ):
+                    with _render_transfer(until, "the first page read") as remaining:
+                        page = _read(
+                            daemon,
+                            "",
+                            f"{scratch}/page.jpg",
+                            max_bytes=RENDER_PREVIEW_MAX_OUTPUT_BYTES,
+                            path=f"{scratch}/page.jpg",
+                            timeout_seconds=remaining,
+                        )
+                except (SandboxFileNotFoundError, SandboxFileTooLargeError):
                     logger.warning(
-                        "sandbox_fc_render_failed sandbox=%s path=%r step=%s: %s",
-                        ref.sandbox_id,
-                        path,
-                        argv[0],
-                        "the command ended without a result"
-                        if result is None
-                        else f"{result.completion.value} with exit code "
-                        f"{result.exit_code}: "
-                        f"{output.decode(errors='replace').strip()}",
+                        "sandbox_fc_render_no_first_page %s", log_context, exc_info=True
                     )
-                    return None
-            return self.read_file(
-                ref, f"{scratch}/page.jpg", max_bytes=RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES
-            )
+            # A PDF source has no output but its first page.
+            if converted is None and page is None:
+                return None
+            return RenderedPreview(first_page=page, pdf=pdf)
         except Exception:
+            # A failure after a Stop is the Stop.
             check_cancelled()
-            logger.warning(
-                "sandbox_fc_render_failed sandbox=%s path=%r",
-                ref.sandbox_id,
-                path,
-                exc_info=True,
-            )
-            return None
+            raise
         finally:
-            try:
-                daemon.delete_file(session_id="", path=scratch, recursive=True)
-            except Exception:
-                logger.warning(
-                    "sandbox_fc_render_cleanup_failed sandbox=%s dir=%s",
-                    ref.sandbox_id,
-                    scratch,
-                    exc_info=True,
-                )
+            if daemon is not None:
+                try:
+                    daemon.delete_file(session_id="", path=scratch, recursive=True)
+                except Exception:
+                    logger.warning(
+                        "sandbox_fc_render_cleanup_failed %s dir=%s",
+                        log_context,
+                        scratch,
+                        exc_info=True,
+                    )
 
     # Purge (delete hooks). Each step runs even when an earlier one failed;
     # the call raises at the end if any step failed.
@@ -1414,6 +1388,103 @@ def _raise_first(errors: list[Exception], what: str) -> None:
         raise errors[0]
 
 
+@contextmanager
+def _render_transfer(until: float, what: str) -> Iterator[float]:
+    """The seconds left of a render's budget, which ends at `until`
+    (time.monotonic()), for one file transfer, `what`. Raises
+    RenderBudgetSpentError when none is left, or when the transfer runs past
+    them (a gRPC DEADLINE_EXCEEDED); other errors pass through."""
+    remaining = until - time.monotonic()
+    if remaining <= 0:
+        raise RenderBudgetSpentError(f"the render budget ran out before {what}")
+    try:
+        yield remaining
+    except (HostAgentError, SandboxDaemonError) as e:
+        if e.code is grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise RenderBudgetSpentError(f"{what} ran past the render budget") from e
+        raise
+
+
+def _run_render_step(
+    daemon: SandboxDaemonClient,
+    argv: list[str],
+    env: dict[str, str],
+    *,
+    session_id: str,
+    until: float,
+    log_context: str,
+) -> bool:
+    """Run one render step by `until` (time.monotonic()). True when it exits
+    0; False, logged, when the program fails. Raises RenderBudgetSpentError
+    when no time is left or the step runs past it. A cancel of the current
+    signal, or a stream that breaks, kills the step."""
+    check_cancelled()
+    remaining = until - time.monotonic()
+    if remaining <= 0:
+        raise RenderBudgetSpentError(f"the render budget ran out before {argv[0]}")
+    cancellation = current_cancellation()
+    # The execution ID of the step, once it started.
+    running: list[str] = []
+
+    def kill() -> None:
+        if running:
+            daemon.cancel(running[0])
+
+    result: ExecResult | None = None
+    output = b""
+    try:
+        with nullcontext() if cancellation is None else cancellation.on_cancel(kill):
+            for event in daemon.run(
+                ExecCommand(
+                    argv=argv,
+                    env=env,
+                    deadline_seconds=remaining,
+                    session_id=session_id,
+                )
+            ):
+                if isinstance(event, ExecStarted):
+                    running.append(event.execution_id)
+                    # A cancel before the start found nothing to kill: the
+                    # clean-up below kills it.
+                    if cancellation is not None and cancellation.cancelled:
+                        break
+                elif isinstance(event, ExecOutput):
+                    output = (output + event.data)[-_RENDER_LOG_OUTPUT_BYTES:]
+                elif isinstance(event, ExecResult):
+                    result = event
+    finally:
+        # A step without a result may still run: kill it, so it writes
+        # nothing in the scratch directory after its delete.
+        if result is None:
+            try:
+                kill()
+            except Exception:
+                logger.warning(
+                    "sandbox_fc_render_kill_failed %s execution=%s",
+                    log_context,
+                    running,
+                    exc_info=True,
+                )
+    check_cancelled()
+    if result is None:
+        # The run stream raises when it ends without a result, so only a
+        # Stop, which raised above, leaves none.
+        raise RuntimeError(f"Bug: {argv[0]} ended without a result")
+    if result.completion is ExecCompletion.DEADLINE_EXCEEDED:
+        raise RenderBudgetSpentError(f"{argv[0]} ran past the render budget")
+    if result.completion is ExecCompletion.EXITED and result.exit_code == 0:
+        return True
+    logger.warning(
+        "sandbox_fc_render_rejected %s step=%s: %s with exit code %s: %s",
+        log_context,
+        argv[0],
+        result.completion.value,
+        result.exit_code,
+        output.decode(errors="replace").strip(),
+    )
+    return False
+
+
 def _write(
     daemon: SandboxDaemonClient,
     session_id: str,
@@ -1435,6 +1506,41 @@ def _write(
         overwrite=overwrite,
         timeout_seconds=timeout_seconds,
     )
+
+
+def _read(
+    daemon: SandboxDaemonClient,
+    session_id: str,
+    target: str,
+    *,
+    max_bytes: int,
+    path: str,
+    timeout_seconds: float | None = None,
+) -> bytes:
+    """The read of read_file and the render. `path` names the file in
+    errors. `timeout_seconds` replaces the transfer timeout."""
+    # Dropping the chunk iterator unread cancels the stream.
+    try:
+        info, chunks = daemon.read_file(
+            session_id=session_id,
+            path=target,
+            length=max_bytes + 1,
+            timeout_seconds=timeout_seconds,
+        )
+    except SandboxDaemonError as e:
+        if e.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND:
+            raise SandboxFileNotFoundError(path) from e
+        if e.reason is SandboxDaemonErrorReason.INVALID_ARGUMENT:
+            # Not a regular file, a link out of its root, or a denied
+            # path; the daemon's message names the path.
+            raise HarnessSandboxError(e.message) from e
+        raise
+    data = b"" if info.size > max_bytes else b"".join(chunks)
+    if info.size > max_bytes or len(data) > max_bytes:
+        raise SandboxFileTooLargeError(
+            f"{path!r} is larger than the limit of {max_bytes} bytes"
+        )
+    return data
 
 
 def _delete(daemon: SandboxDaemonClient, session_id: str, target: str) -> bool:
