@@ -38,6 +38,7 @@ from onyx.deep_research.models import (
     ResearchMessageMetadata,
     ResearchPhase,
     ResearchTask,
+    new_sources,
 )
 from onyx.deep_research.research_agent import ResearchFeature
 from onyx.deep_research.tool_definitions import (
@@ -310,7 +311,12 @@ class DeepResearchFeature(AgentFeature):
                 state.received_inputs, self.citation_mapping
             )
             self.citation_mapping.update(received.new_citations)
-            sources = dict(self.citation_mapping)
+            # The final report reads its step's sources alone.
+            sources = (
+                dict(self.citation_mapping)
+                if phase == ResearchPhase.REPORT
+                else new_sources(self.citation_mapping, state.messages)
+            )
         output_metadata = ResearchMessageMetadata(
             phase=phase,
             sources=sources,

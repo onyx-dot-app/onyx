@@ -727,6 +727,7 @@ def prepare_prompt(
     reminder_message: Message | None,
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int],
+    search_passage_cache: SearchPassageCache,
     user_info_prompt: Message | None = None,
     skills_catalog_message: Message | None = None,
     request_context_message: Message | None = None,
@@ -735,16 +736,13 @@ def prepare_prompt(
     llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
     context_file_citations: Mapping[str, int] | None = None,
-    search_passage_cache: SearchPassageCache | None = None,
 ) -> list[Message]:
     """Assemble prompt messages without changing the input messages. Pass the
     agent's `search_passage_cache` so that each step's search results are
     deduplicated once."""
     # Each message is a shallow copy; nested payloads stay shared and read-only.
     history = [message.model_copy() for message in messages]
-    _deduplicate_search_passages(
-        history, search_passage_cache if search_passage_cache is not None else {}
-    )
+    _deduplicate_search_passages(history, search_passage_cache)
     for message in history:
         metadata = prompt_metadata(message).model_copy()
         message.metadata = metadata

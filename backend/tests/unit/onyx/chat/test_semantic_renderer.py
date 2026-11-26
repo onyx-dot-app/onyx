@@ -438,12 +438,12 @@ def test_report_sources_include_only_observed_citations(
     )
     message = AssistantMessage(content=[TextContent(text=text)])
     live = MessageRenderer(
-        settings, RunDocuments().add_step(settings, documents), ResponseLayout()
+        settings, RunDocuments().add_steps([(settings, documents)]), ResponseLayout()
     )
     output = live.consume(TextDeltaEvent(content_index=0, text=text))
     output.extend(live.complete(message))
     saved = MessageRenderer(
-        settings, RunDocuments().add_step(settings, documents), ResponseLayout()
+        settings, RunDocuments().add_steps([(settings, documents)]), ResponseLayout()
     ).complete(message)
     for packets in (output, saved):
         assert [
@@ -601,7 +601,7 @@ def test_leading_citation_keeps_metadata(live: bool) -> None:
         citation_mode=CitationMode.HYPERLINK, citation_documents={1: "doc"}
     )
     renderer = MessageRenderer(
-        settings, RunDocuments().add_step(settings, {"doc": doc}), ResponseLayout()
+        settings, RunDocuments().add_steps([(settings, {"doc": doc})]), ResponseLayout()
     )
     packets = (
         renderer.consume(TextDeltaEvent(content_index=0, text="[1] Answer"))

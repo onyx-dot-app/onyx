@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
@@ -281,7 +281,7 @@ class MessageRendering(BaseModel):
 
 class RunDocuments(BaseModel):
     """The documents and citations that a run's messages show after some of
-    its steps. Each step's MessageRendering adds to them: `add_step` folds a
+    its steps. Each step's MessageRendering adds to them: `add_steps` folds a
     run's steps in order."""
 
     model_config = ConfigDict(frozen=True)
@@ -290,30 +290,26 @@ class RunDocuments(BaseModel):
     # Citation numbers, each with the document of the step that added it.
     cited: dict[int, SearchDoc] = Field(default_factory=dict)
 
-    def add_step(
-        self, setting: MessageRendering, documents: Mapping[str, SearchDoc]
+    def add_steps(
+        self, steps: Iterable[tuple[MessageRendering, Mapping[str, SearchDoc]]]
     ) -> "RunDocuments":
-        """The documents after one more step; `documents` resolves the
-        step's document IDs."""
+        """The documents after more steps, in order; each step's mapping
+        resolves its document IDs."""
+        shown = dict(self.shown)
+        cited = dict(self.cited)
+        for setting, documents in steps:
+            shown.update(
+                (key, documents[key])
+                for key in setting.document_ids
+                if key in documents
+            )
+            cited.update(
+                (number, documents[key])
+                for number, key in setting.citation_documents.items()
+                if key in documents
+            )
         # The values are already validated documents.
-        return RunDocuments.model_construct(
-            shown={
-                **self.shown,
-                **{
-                    key: documents[key]
-                    for key in setting.document_ids
-                    if key in documents
-                },
-            },
-            cited={
-                **self.cited,
-                **{
-                    number: documents[key]
-                    for number, key in setting.citation_documents.items()
-                    if key in documents
-                },
-            },
-        )
+        return RunDocuments.model_construct(shown=shown, cited=cited)
 
     @property
     def citations(self) -> dict[int, SearchDoc]:
@@ -621,7 +617,8 @@ class ChatMessageMetadata(BaseModel):
 
     # The citation numbers and gathered documents that are new since the
     # run's earlier steps, or new copies; together the run's steps hold them
-    # all (see RunDocuments).
+    # all (see RunDocuments). Every chat step, the answer too, holds only
+    # these; a research report step holds its full map (new_sources).
     sources: dict[int, SearchDoc] = Field(default_factory=dict)
     documents: list[SearchDoc] = Field(default_factory=list)
     include_citations: bool = True

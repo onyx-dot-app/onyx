@@ -31,6 +31,7 @@ from onyx.deep_research.models import (
     ResearchFeatureState,
     ResearchMessageMetadata,
     ResearchPhase,
+    new_sources,
 )
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_DESCRIPTION,
@@ -288,7 +289,10 @@ class ResearchFeature(AgentFeature):
         output_metadata = ResearchMessageMetadata(
             phase=ResearchPhase.REPORT if is_final_step else ResearchPhase.RESEARCH,
             is_intermediate=True,
-            sources=dict(self.citation_processor.citation_to_doc),
+            # The parent reads the report step's sources alone.
+            sources=dict(self.citation_processor.citation_to_doc)
+            if is_final_step
+            else new_sources(self.citation_processor.citation_to_doc, state.messages),
         )
         return PreparedStep(
             input_messages=received.messages,

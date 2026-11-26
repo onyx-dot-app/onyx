@@ -32,8 +32,10 @@ from onyx.chat.models import (
     CitationMode,
     PersonaPromptConfig,
     PromptMetadata,
+    RunDocuments,
     StagedChatFiles,
 )
+from onyx.chat.presentation import message_documents, message_presentation
 from onyx.chat.prompt_utils import (
     SearchPassageCache,
     build_chat_prompt,
@@ -52,7 +54,7 @@ from onyx.configs.chat_configs import (
     MAX_LLM_CYCLES,
 )
 from onyx.context.models import UserMemoryContext
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import new_or_changed
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_request import estimate_text_tokens
@@ -594,16 +596,16 @@ class ChatFeature(AgentFeature):
             if isinstance(message, ToolResultMessage)
         ]
         # Each step carries only the sources and documents that the run's
-        # earlier steps do not; together the steps hold them all (see
-        # RunDocuments).
-        attached_sources: dict[int, SearchDoc] = {}
-        attached_documents: dict[str, SearchDoc] = {}
-        for message in state.messages:
-            if isinstance(message.metadata, ChatMessageMetadata):
-                attached_sources.update(message.metadata.sources)
-                attached_documents.update(
-                    (doc.document_id, doc) for doc in message.metadata.documents
-                )
+        # earlier steps lack, or a new copy of one; readers fold the steps
+        # back with RunDocuments.
+        attached = RunDocuments().add_steps(
+            (
+                message_presentation(message.metadata),
+                message_documents(message.metadata),
+            )
+            for message in state.messages
+            if isinstance(message.metadata, ChatMessageMetadata)
+        )
         allowed_tool_names: frozenset[str] | None = None
         tool_choice = ToolChoiceOptions.AUTO
         available_tool_names = {
@@ -637,18 +639,12 @@ class ChatFeature(AgentFeature):
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),
             output_metadata=ChatMessageMetadata(
-                sources={
-                    number: doc
-                    for number, doc in self.citation_processor.citation_to_doc.items()
-                    if (earlier := attached_sources.get(number)) is not doc
-                    and earlier != doc
-                },
-                documents=[
-                    doc
-                    for document_id, doc in self.gathered_documents.items()
-                    if (earlier := attached_documents.get(document_id)) is not doc
-                    and earlier != doc
-                ],
+                sources=new_or_changed(
+                    self.citation_processor.citation_to_doc, attached.cited
+                ),
+                documents=list(
+                    new_or_changed(self.gathered_documents, attached.shown).values()
+                ),
                 include_citations=self.include_citations,
                 elapsed_seconds=time.monotonic() - self.started,
             ),

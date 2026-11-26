@@ -271,14 +271,19 @@ of only markers stays empty.
     hold only the numbers and documents that the run's earlier steps do not
     carry, or a new copy of one. A reader of a step's citations or documents
     folds the steps of its run so far, in order, with
-    `chat/models.py:RunDocuments.add_step`: `ResponsePresenter.consume`,
-    `_project_response_display`, `_collect_tool_history` and `replay_response`
-    in `chat/presentation.py`. `ResponsePresenter.replay` hands the replayed
+    `chat/models.py:RunDocuments.add_steps`: `ResponsePresenter.consume`,
+    `_project_response_display` and `replay_response` in
+    `chat/presentation.py`, and `ChatFeature._prepare_step` for what earlier steps
+    carry. `ResponsePresenter.replay` hands the replayed
     runs' documents to the live stream that continues a suspended response.
     `db/chat_subagents.py:read_agent_completions` reads the citations of every
     step up to the output's. Readers that union every message's sources, such
-    as `ChatFeature` for history numbers, need no fold. Saved steps that hold the
-    whole lists give the same result.
+    as `ChatFeature` for history numbers and `_collect_tool_history`, need no
+    fold. Saved steps that hold the
+    whole lists give the same result. Research steps hold only new
+    `ResearchMessageMetadata.sources` too (`deep_research/models.py:new_sources`),
+    except the report step: the parent and the final answer read its full
+    map alone.
     `backend/tests/unit/onyx/chat/test_agent.py:test_each_step_carries_only_new_documents_and_shows_them_all`,
     `test_steps_that_hold_whole_lists_show_each_document_once` and
     `backend/tests/integration/tests/chat/test_chat_gathered_documents.py`

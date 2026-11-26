@@ -55,6 +55,7 @@ def test_search_passages_are_deduplicated_only_within_the_same_step() -> None:
             reminder_message=None,
             context_files=None,
             token_counter=len,
+            search_passage_cache={},
         )
 
     prepared = prepare()

@@ -123,15 +123,9 @@ def _collect_tool_history(
     documents: dict[str, SearchDoc] = {}
     citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
     citations.update_citation_mapping(initial_citations or {})
-    run_documents = RunDocuments()
     for step_index, step in enumerate(snapshot.steps):
         message = step.message
-        step_documents = message_documents(message.metadata)
-        run_documents = run_documents.add_step(
-            message_presentation(message.metadata), step_documents
-        )
-        documents.update(step_documents)
-        documents.update(run_documents.shown)
+        documents.update(message_documents(message.metadata))
         if isinstance(message.metadata, (ChatMessageMetadata, ResearchMessageMetadata)):
             citations.update_citation_mapping(
                 message.metadata.sources, update_duplicate_keys=True
@@ -360,8 +354,8 @@ def _project_response_display(
             presentation[message_id] = setting
             if node is not snapshot:
                 continue
-            run_documents = run_documents.add_step(
-                setting, message_documents(message.metadata)
+            run_documents = run_documents.add_steps(
+                [(setting, message_documents(message.metadata))]
             )
             if setting.mode not in (
                 PresentationMode.ANSWER,
@@ -477,8 +471,8 @@ class ResponsePresenter:
             if parent is not None:
                 parent.has_child_output = True
             setting = message_presentation(event.metadata)
-            documents = self.run_documents.get(event.run_id, RunDocuments()).add_step(
-                setting, message_documents(event.metadata)
+            documents = self.run_documents.get(event.run_id, RunDocuments()).add_steps(
+                [(setting, message_documents(event.metadata))]
             )
             self.run_documents[event.run_id] = documents
             self.renderers[event.run_id] = MessageRenderer(
@@ -602,7 +596,7 @@ def replay_response(
         message = step.message
         message_id = _message_identity(message)
         setting = settings.get(message_id) or MessageRendering()
-        documents_so_far = documents_so_far.add_step(setting, documents)
+        documents_so_far = documents_so_far.add_steps([(setting, documents)])
         if run_documents is not None:
             run_documents[response.run_id] = documents_so_far
         renderer = MessageRenderer(setting, documents_so_far, layout, parent)
