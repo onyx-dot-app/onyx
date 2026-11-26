@@ -30,11 +30,11 @@ from onyx.db.models import ActionApproval, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     MatchedAction,
     actions_requiring_approval,
 )
 from onyx.external_apps.presentation.decode import decode_payload
+from onyx.integrations.policy import always_asks
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.action_policies.models import ApprovalChoice, DecisionBody
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
@@ -71,10 +71,8 @@ class ApprovalView(BaseModel):
             self.actions
         ):
             return False
-        return not (
-            self.integration_kind is IntegrationKind.API
-            and any(a.action_type == WHOLE_DOMAIN_ACTION_TYPE for a in self.actions)
-        )
+        # Same rule as the gate's session grant check.
+        return not any(always_asks(a.action_type) for a in self.actions)
 
     @computed_field
     @property

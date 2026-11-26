@@ -51,6 +51,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_skill,
     make_user,
 )
+from tests.external_dependency_unit.integration_helpers import make_mcp_integration
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -701,23 +702,32 @@ def test_history_retains_expired_requests_and_checks_owner(
     assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
 
 
+@pytest.mark.parametrize("kind", ["api", "mcp"])
 def test_unknown_external_action_can_only_be_approved_once(
+    kind: str,
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
+    """An MCP tool named like the request tool asks each time too."""
     _stub_send_wake_noop(monkeypatch)
     user = make_user(db_session, email_prefix="unknown_action")
     session = build_session_with_user(user=user)
-    app = make_external_app(db_session, skill=make_skill(db_session), auth_template={})
+    if kind == "api":
+        app = make_external_app(
+            db_session, skill=make_skill(db_session), auth_template={}
+        )
+        integration_id = app_integration_id(db_session, app)
+    else:
+        integration_id = make_mcp_integration(db_session, tools=("unspecified",))[0].id
     row = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=[action_entry("unspecified")],
         app_name="Custom",
         payload={},
-        integration_id=app_integration_id(db_session, app),
+        integration_id=integration_id,
     )
     db_session.commit()
     view = list_session_approvals(session.id, user, db_session).items[0]
