@@ -298,6 +298,12 @@ async def chat_browser_live_view(
     except OnyxError as e:
         await _close_refused(websocket, e)
         return
+    except Exception:
+        logger.warning(
+            "chat_browser_view_check_failed chat=%s", chat_session_id, exc_info=True
+        )
+        await _close(websocket, CLOSE_RECONNECT, "The access check did not complete.")
+        return
     sandbox = get_harness_sandbox()
     lease = asyncio.create_task(
         _hold_browser_view(sandbox, ref, lambda: read_websocket_cookie_user(websocket))

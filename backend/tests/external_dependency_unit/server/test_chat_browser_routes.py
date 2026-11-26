@@ -328,6 +328,25 @@ def test_a_check_that_cannot_complete_asks_the_viewer_to_reconnect(
     assert sandbox.stream.closed.wait(10)
 
 
+def test_a_first_check_that_cannot_complete_asks_the_viewer_to_reconnect(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, sandbox: FakeSandbox
+) -> None:
+    def browser_ref(
+        chat_session_id: UUID,  # noqa: ARG001
+        user: User,  # noqa: ARG001
+        *,
+        require_setting: bool = True,  # noqa: ARG001
+    ) -> HarnessSandboxRef:
+        raise RuntimeError("database down")
+
+    monkeypatch.setattr(chat_browser, "_browser_ref", browser_ref)
+    with client.websocket_connect(_url(uuid4())) as ws:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+    assert closed.value.code == chat_browser.CLOSE_RECONNECT
+    assert sandbox.opened == []
+
+
 def test_a_cancelled_pump_cancels_and_awaits_its_pumps() -> None:
     """The route's task can be cancelled (the server shuts down) while the
     pump waits; no pump task outlives it."""
