@@ -15,6 +15,8 @@ REQUEST_BODY = "requestBody"
 # The operation keys of an OpenAPI path item. Its other keys, such as
 # `parameters` and `summary`, apply to the whole path.
 OPENAPI_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
+# The HTTP methods that an API tool sends.
+TOOL_HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 
 
 class _OpenApiYamlLoader(yaml.SafeLoader):
@@ -167,7 +169,7 @@ class MethodSpec(BaseModel):
         # Ensure the method is valid
         if not self.method:
             raise ValueError("HTTP method is not specified.")
-        if self.method.upper() not in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
+        if self.method.upper() not in TOOL_HTTP_METHODS:
             raise ValueError(f"HTTP method '{self.method}' is not supported.")
 
 

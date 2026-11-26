@@ -40,6 +40,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.ordering import ToolRank
 from onyx.tools.tool_implementations.custom.graphql_tool import graphql_failed
+from onyx.tools.tool_implementations.custom.openapi_parsing import TOOL_HTTP_METHODS
 from onyx.tools.tool_implementations.http_request import (
     TOOL_REQUEST_FAILURE_MESSAGES,
     ToolRequestError,
@@ -55,7 +56,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 APP_ACTION_MAX_RESPONSE_BYTES = 1024 * 1024
-_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 # The request headers that the model can set. Each other header, and each
 # header that the credential sets, comes from the server only.
 _MODEL_HEADERS = frozenset(
@@ -188,7 +188,7 @@ class AppActionTool(Tool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "method": {"type": "string", "enum": list(_METHODS)},
+                    "method": {"type": "string", "enum": list(TOOL_HTTP_METHODS)},
                     "url": {
                         "type": "string",
                         "description": "The full URL, with the query string.",
@@ -239,8 +239,10 @@ class AppActionTool(Tool):
         method = arguments.get("method")
         url = arguments.get("url")
         body = arguments.get("body")
-        if not isinstance(method, str) or method.upper() not in _METHODS:
-            return self._failed(f"'method' must be one of {', '.join(_METHODS)}.")
+        if not isinstance(method, str) or method.upper() not in TOOL_HTTP_METHODS:
+            return self._failed(
+                f"'method' must be one of {', '.join(TOOL_HTTP_METHODS)}."
+            )
         if not isinstance(url, str):
             return self._failed("'url' must be a string.")
         method = method.upper()

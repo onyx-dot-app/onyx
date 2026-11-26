@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     OPENAPI_METHODS,
+    TOOL_HTTP_METHODS,
     check_unique_name,
     openapi_operations,
     openapi_to_method_spec,
@@ -21,7 +22,6 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     resolve_ref,
 )
 
-_LINE_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _PATH_PARAM = re.compile(r"\{([^{}]*)\}")
 _PARAM_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-]*")
 _QUERY_NAME = re.compile(r"[^\s&?=#]+")
@@ -86,7 +86,7 @@ def _operations(spec: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
     return {
         (str(method).upper(), path): operation
         for path, _, method, operation in openapi_operations(spec)
-        if str(method).upper() in _LINE_METHODS
+        if str(method).upper() in TOOL_HTTP_METHODS
     }
 
 
@@ -125,8 +125,8 @@ def endpoint_lines(spec: dict[str, Any]) -> list[str]:
 def _parse_line(text: str) -> tuple[str, str, list[str], str]:
     parts = text.split(maxsplit=2)
     method = parts[0].upper() if parts else ""
-    if method not in _LINE_METHODS:
-        raise ValueError(f"Start the line with one of {', '.join(_LINE_METHODS)}.")
+    if method not in TOOL_HTTP_METHODS:
+        raise ValueError(f"Start the line with one of {', '.join(TOOL_HTTP_METHODS)}.")
     if len(parts) < 2 or not parts[1].startswith("/"):
         raise ValueError("Put a path that starts with / after the method.")
     if len(parts) < 3:
