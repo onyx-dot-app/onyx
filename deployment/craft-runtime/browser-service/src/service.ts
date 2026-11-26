@@ -376,10 +376,11 @@ export class BrowserService {
     const method = typeof hello.method === "string" ? hello.method : "";
     const started = Date.now();
     let reply: unknown;
+    let chat: string | null = null;
     try {
-      const chat = hello.chat;
-      if (typeof chat !== "string" || !CHAT_ID_PATTERN.test(chat))
+      if (typeof hello.chat !== "string" || !CHAT_ID_PATTERN.test(hello.chat))
         throw invalid("chat must be a lowercase UUID.");
+      chat = hello.chat;
       const params = hello.params === undefined ? {} : asRecord(hello.params);
       if (params === null) throw invalid("params must be an object.");
       const timeoutMs = timeoutOf(params);
@@ -398,7 +399,7 @@ export class BrowserService {
     } catch (cause) {
       const error = toOperationError(cause);
       reply = { ok: false, error: { code: error.code, message: error.message } };
-      this.log("call", { method, ms: Date.now() - started, ok: false, code: error.code, message: error.message });
+      this.log("call", { method, chat, ms: Date.now() - started, ok: false, code: error.code, message: error.message });
     }
     if (!socket.destroyed) socket.end(encodeJson(reply));
   }
@@ -1342,12 +1343,12 @@ export class BrowserService {
             .catch(noop),
       });
     });
-    await this.startScreencast(viewer, cast);
+    await this.startScreencast(cast);
     // An idle page does not repaint for a new screencast, so the viewer starts from a still.
     if (!cast.started) void this.pushStill(viewer, cast);
   }
 
-  private startScreencast(viewer: Viewer, cast: Cast) {
+  private startScreencast(cast: Cast) {
     cast.params = cast.params.then(async () => {
       if (cast.stopped || cast.tab.capturing > 0) return;
       await cast.session.send("Page.stopScreencast").catch(noop);
@@ -1374,7 +1375,7 @@ export class BrowserService {
 
   private resumeCast(viewer: Viewer) {
     const cast = viewer.cast;
-    return cast ? this.startScreencast(viewer, cast) : Promise.resolve();
+    return cast ? this.startScreencast(cast) : Promise.resolve();
   }
 
   private async stopCast(viewer: Viewer) {
