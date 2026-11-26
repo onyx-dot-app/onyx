@@ -114,7 +114,10 @@ from onyx.llm.models import ToolDefinition, ToolResult, ToolResultMessage
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.sandbox_tools import SEARCH_FILE_GUIDANCE
-from onyx.prompts.tool_prompts import CODE_MODE_SEARCH_USAGE
+from onyx.prompts.tool_prompts import (
+    CODE_MODE_SEARCH_USAGE,
+    INTERNAL_SEARCH_DESCRIPTION,
+)
 from onyx.secondary_llm_flows.decision_rerank_expansion import (
     MAX_DECISION_QUESTIONS,
     rank_sections_listwise,
@@ -348,7 +351,8 @@ class SearchTool(Tool):
 
     NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
-    DESCRIPTION = "Search connected applications for information."
+    SUMMARY = "Search connected applications for information."
+    DESCRIPTION = INTERNAL_SEARCH_DESCRIPTION
 
     def __init__(
         self,
@@ -790,6 +794,10 @@ class SearchTool(Tool):
     @property
     def description(self) -> str:
         return self.DESCRIPTION
+
+    @property
+    def summary(self) -> str:
+        return self.SUMMARY
 
     @property
     def display_name(self) -> str:

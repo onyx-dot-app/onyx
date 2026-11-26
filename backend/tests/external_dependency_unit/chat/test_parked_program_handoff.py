@@ -51,7 +51,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.tools.constants import EXEC_TOOL_NAME, WAIT_TOOL_NAME
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, WAIT_TOOL_NAME
 from onyx.tools.models import ToolContext
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.chat.test_run_store import (
@@ -94,11 +94,15 @@ def _steps(scenario: str) -> tuple[ToolCall, ...]:
     """One call per step: the scenario's first cell, if any, a program that
     waits for approval, then a read of the first cell."""
     first = FIRST_CELLS[scenario]
-    program = ToolCall(id="program", name=EXEC_TOOL_NAME, arguments={"code": PROGRAM})
+    program = ToolCall(
+        id="program", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": PROGRAM}
+    )
     if first is None:
         return (program,)
     return (
-        ToolCall(id="background", name=EXEC_TOOL_NAME, arguments={"code": first}),
+        ToolCall(
+            id="background", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": first}
+        ),
         program,
         ToolCall(
             id="read",

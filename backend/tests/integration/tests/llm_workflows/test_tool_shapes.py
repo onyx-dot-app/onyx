@@ -292,8 +292,8 @@ def test_each_family_calls_agents_skills_and_pages_by_its_own_shape(
     # Skills and pages: each family's names and arguments, as the model
     # calls them; in code mode, functions of the family's programs.
     if CODE_MODE_ENABLED:
-        openai_program = openai_tools["exec"]["description"]
-        claude_program = claude_tools["repl"]["description"]
+        openai_program = openai_tools["execute_code"]["description"]
+        claude_program = claude_tools["execute_code"]["description"]
         assert "async def skills_read(" in openai_program
         assert "async def open_url(" in openai_program
         assert "async def skill(" in claude_program

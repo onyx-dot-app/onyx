@@ -27,18 +27,18 @@ from onyx_client.workload_metrics import turn_range
 from workload_manifest import main as manifest_main
 
 from .fixtures import (
-    EXEC_TOOL,
+    CLAUDE_RUN_TOOL,
     INTERNAL_SEARCH_TOOL,
     POLL_TOOL,
-    REPL_TOOL,
+    RUN_TOOL,
     WAIT_TOOL,
 )
 
 OPENAI_MODEL = "mock-profile-code-v1-ttft0-itl0"
 CLAUDE_MODEL = "mock-profile-code-v1-claude-ttft0-itl0"
 SHAPES = [
-    (OPENAI_MODEL, [EXEC_TOOL, WAIT_TOOL], "exec", "wait"),
-    (CLAUDE_MODEL, [REPL_TOOL, POLL_TOOL], "repl", "poll"),
+    (OPENAI_MODEL, [RUN_TOOL, WAIT_TOOL], "execute_code", "wait"),
+    (CLAUDE_MODEL, [CLAUDE_RUN_TOOL, POLL_TOOL], "execute_code", "poll"),
 ]
 RUN_SHAPES = [(model, tools, run) for model, tools, run, _ in SHAPES]
 QUESTIONS = [f"Question {index}" for index in range(4000)]
@@ -229,7 +229,7 @@ def test_each_family_runs_the_planned_programs_in_its_shape(
 
 def test_history_compaction_keeps_the_turn_plan_position() -> None:
     question = question_with(lambda programs: len(programs) >= 3)
-    tools = [EXEC_TOOL, WAIT_TOOL]
+    tools = [RUN_TOOL, WAIT_TOOL]
     calls, _ = run_turn(OPENAI_MODEL, tools, question)
     compacted, answer = run_turn(OPENAI_MODEL, tools, question, compact=True)
     assert answer
@@ -262,7 +262,7 @@ def test_tool_steps_take_the_observed_model_duration() -> None:
     question = question_with(lambda programs: len(programs) >= 1)
     plan = next_plan(
         "mock-profile-code-v1",
-        [EXEC_TOOL, WAIT_TOOL],
+        [RUN_TOOL, WAIT_TOOL],
         [{"role": "user", "content": question}],
     )
     assert plan.calls
@@ -414,7 +414,7 @@ def test_tool_results_in_content_parts_are_read() -> None:
     wait and citation decisions as plain strings."""
     question = question_with(lambda programs: len(programs) >= 2, code_pool="claude")
     messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
-    tools = [REPL_TOOL, POLL_TOOL]
+    tools = [CLAUDE_RUN_TOOL, POLL_TOOL]
     [first] = [c.model_dump() for c in next_plan(CLAUDE_MODEL, tools, messages).calls]
     messages.append({"role": "assistant", "content": None, "tool_calls": [first]})
     running = "Execution running in cell 4 after 30.0s with 1 tool call so far."
