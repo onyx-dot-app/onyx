@@ -37,9 +37,8 @@ from onyx.microvm.registry import (
     is_node_draining,
     set_node_draining,
 )
-from onyx.server.features.build.sandbox import harness_factory
+from onyx.server.features.build.sandbox import daemon_harness, harness_factory
 from onyx.server.features.build.sandbox.firecracker import (
-    harness_sandbox,
     harness_state,
     session_saves,
 )
@@ -456,14 +455,14 @@ def test_a_session_is_not_recorded_on_a_vm_that_stopped_during_its_setup(
 ) -> None:
     sandbox = make_sandbox()
     sandbox.ensure_running(ref)
-    real_restore = harness_sandbox.restore_session
+    real_restore = daemon_harness.restore_session
 
     def stopped_meanwhile(*args: object, **kwargs: object) -> None:  # noqa: ARG001
         # An idle stop saved and stopped the VM during the restore.
         node.agent.vms[str(ref.sandbox_id)].state = hostagent_pb2.VM_STATE_EXITED
         registry.clear_sandbox_placement(tenant_cache, ref.sandbox_id)
 
-    monkeypatch.setattr(harness_sandbox, "restore_session", stopped_meanwhile)
+    monkeypatch.setattr(daemon_harness, "restore_session", stopped_meanwhile)
     with pytest.raises(HarnessSandboxError, match="stopped while this session"):
         sandbox.read_file(ref, "a.txt", max_bytes=10)
     assert (
@@ -472,7 +471,7 @@ def test_a_session_is_not_recorded_on_a_vm_that_stopped_during_its_setup(
     )
 
     # The next call wakes a new VM and sets the session up there.
-    monkeypatch.setattr(harness_sandbox, "restore_session", real_restore)
+    monkeypatch.setattr(daemon_harness, "restore_session", real_restore)
     sandbox.write_file(ref, "a.txt", b"x")
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placement is not None

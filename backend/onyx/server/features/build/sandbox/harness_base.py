@@ -497,3 +497,32 @@ class HarnessSandbox(abc.ABC):
     def is_busy(self, *, tenant_id: str, sandbox_id: UUID) -> bool:
         """True while a command runs, a turn is in progress, a copy runs, or
         an approval waits. Never starts the sandbox."""
+
+    # Purge (delete hooks). Each step runs even when an earlier one failed;
+    # the call raises at the end if any step failed.
+
+    @abc.abstractmethod
+    def purge_session(
+        self,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        session_id: UUID,
+        retention: bool = False,
+    ) -> None:
+        """Delete a chat session's save, its working directory on the running
+        sandbox, its tool results (the purge rule at TOOL_RESULTS_ROOT) and
+        its exec records. `retention`: a retention purge, whose session mark
+        goes again after the purge (`harness_state.mark_purged`)."""
+
+    @abc.abstractmethod
+    def purge_sandbox(
+        self,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        session_ids: list[UUID] | None = None,
+    ) -> None:
+        """Stop the sandbox and delete every save and record of it.
+        `session_ids` adds sessions that the saved-session index may not
+        name."""

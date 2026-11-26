@@ -409,8 +409,19 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   `provisioning_attempt_number` counts Craft's pods; harness calls do not
   read it: the harness's own attempt record (`harness_state.last_attempt`)
   fences VMs.
+- `.../sandbox/daemon_harness.py:DaemonHarnessSandbox` holds the logic that
+  every guest daemon (sandboxd) backend shares: exec records, stdin, Stop,
+  file calls, `stat_files`, skills, renders, session setup, turn-end saves
+  and the purges (`purge_session` / `purge_sandbox`, on the
+  `HarnessSandbox` interface; `.../firecracker/purge.py` calls them through
+  `get_harness_sandbox`). A backend gives the hooks: the running instance
+  (daemon client and `(attempt, generation)`), the instance if it runs, a
+  `SessionTransfer` for saves and restores
+  (`.../firecracker/session_saves.py`), the session-setup fence, the stop
+  for a purge, `_forget_sandbox` (clears the backend's own records of a
+  purged sandbox), and `touch`.
 - `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
-  implements it on the microvm code: wake on the first call (capacity
+  implements the hooks on the microvm code: wake on the first call (capacity
   retry for 10 s), Init only when `Health.initialized` is false or the
   Health generation is not the VM's generation (under a cache lock per VM
   instance, so concurrent wakes run one Init). Exec
@@ -432,7 +443,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   `get_sandbox_manager` (pod or Docker).
 - Session saves (`.../firecracker/session_saves.py`): the idle evictor
   (node reports, `get_eviction_policy`, 15 min) saves each session on the
-  VM first, in the background: CaptureSession of the session's top-level
+  VM first, in the background, through `AgentSessionTransfer` (the
+  `SessionTransfer` of Firecracker): CaptureSession of the session's top-level
   directories and files (without dependencies, caches and the chat file
   and search result file copies in `attachments/`; files go under
   `.onyx-top-level` in the archive, which older daemons restore as a
