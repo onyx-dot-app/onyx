@@ -9,9 +9,6 @@ export const SIGNUP_PATH = "/auth/signup";
 
 export const AUTH_ERROR_PATH = "/auth/error";
 
-/** The page an emailed sign-in link opens. The backend builds the same path. */
-export const MAGIC_LINK_PATH = "/auth/magic-link";
-
 /** Playground: the person chose to start a new team on /auth/error. */
 export const START_NEW_TEAM_PARAM = "start_new_team";
 
