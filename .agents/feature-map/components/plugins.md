@@ -192,7 +192,9 @@ web, the system browser in the desktop app. When the browser blocks the tab,
 it loads the provider in the same tab. Each redirect URI
 (`/craft/v1/apps/oauth/callback` for presets, `/oauth-config/callback` for
 manual clients, `/mcp/oauth/callback` for MCP) renders
-`sections/oauth/IntegrationOAuthCallback.tsx`. It posts `{code, state}` to
+`sections/oauth/IntegrationOAuthCallback.tsx`. The preset URI is a
+`next.config.js` rewrite to `/mcp/oauth/callback`, so it works with Craft off.
+It posts `{code, state}` to
 `POST /integrations/oauth/callback`, reports to the waiting tab, and goes to
 `return_path` (a path of this app) or `/app/customize/integrations`.
 

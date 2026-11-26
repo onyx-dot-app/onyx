@@ -76,6 +76,12 @@ const nextConfig = {
   },
   async rewrites() {
     return [
+      // Preset sign-ins return here with Craft off too, so serve the
+      // callback outside the gated /craft layout. Proxy still sees this path.
+      {
+        source: "/craft/v1/apps/oauth/callback",
+        destination: "/mcp/oauth/callback",
+      },
       {
         source:
           "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
