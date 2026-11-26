@@ -10,6 +10,10 @@ from collections.abc import Iterable
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.document_index.interfaces import (
+    ContentMatchCount,
+    ContentMatchDateField,
+    ContentMatchKey,
+    ContentMatchRequest,
     DocumentIndex,
     DocumentInsertionRecord,
     DocumentSectionRequest,
@@ -119,4 +123,28 @@ class DisabledDocumentIndex(DocumentIndex):
         num_to_retrieve: int = 10,  # noqa: ARG002
         dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
+    def match_documents_by_content(
+        self,
+        request: ContentMatchRequest,  # noqa: ARG002
+        date_field: ContentMatchDateField,  # noqa: ARG002
+        descending: bool,  # noqa: ARG002
+        after: ContentMatchKey | None,  # noqa: ARG002
+        limit: int,  # noqa: ARG002
+    ) -> list[ContentMatchKey]:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
+    def count_documents_by_content(
+        self,
+        request: ContentMatchRequest,  # noqa: ARG002
+        max_count: int,  # noqa: ARG002
+        deadline: float | None = None,  # noqa: ARG002
+    ) -> ContentMatchCount:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
+    def count_phrase_terms(
+        self,
+        phrase: str,  # noqa: ARG002
+    ) -> int:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)

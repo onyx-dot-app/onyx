@@ -41,6 +41,19 @@ class ChatMessage(BaseModel):
     tool_call_id: str | None = None
 
 
+def content_text(content: str | list[Any] | None) -> str | None:
+    """Text of message content: a plain string, or the first text part of a
+    list of content parts (multimodal content, or parts that carry cache
+    markers)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                return str(part.get("text", ""))
+    return None
+
+
 class ToolFunctionDefinition(BaseModel):
     model_config = ConfigDict(extra="allow")
 

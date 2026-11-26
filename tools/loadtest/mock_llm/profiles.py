@@ -7,7 +7,15 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-ProfileKind = Literal["chat", "search", "research", "held"]
+from mock_llm.code_workload import (
+    CodePool,
+    Program,
+    code_calibration,
+    observed_programs,
+    tail_programs,
+)
+
+ProfileKind = Literal["chat", "search", "research", "held", "code"]
 
 
 @dataclass(frozen=True)
@@ -20,6 +28,10 @@ class TurnProfile:
     reasoning_words: int
     first_output_s: float
     final_duration_s: float
+    # Duration of a model call that returns tool calls.
+    tool_step_s: float = 1.5
+    # Code profile only: the programs that the turn runs, in order.
+    programs: tuple[Program, ...] = ()
 
 
 def stable_number(seed: int, text: str) -> int:
@@ -28,11 +40,11 @@ def stable_number(seed: int, text: str) -> int:
 
 def profile_kind(model: str) -> ProfileKind | None:
     match = re.search(
-        r"(?:^|/)mock-profile-(chat|search|research|held)-v1(?:-|$)", model
+        r"(?:^|/)mock-profile-(chat|search|research|held|code)-v1(?:-|$)", model
     )
     if match is None:
         if "mock-profile-" in model:
-            raise ValueError("Use mock-profile-{chat,search,research,held}-v1")
+            raise ValueError("Use mock-profile-{chat,search,research,held,code}-v1")
         return None
     kind = match.group(1)
     if kind == "chat":
@@ -41,11 +53,24 @@ def profile_kind(model: str) -> ProfileKind | None:
         return "search"
     if kind == "research":
         return "research"
+    if kind == "code":
+        return "code"
     return "held"
 
 
-def turn_profile(kind: ProfileKind, question: str, seed: int = 0) -> TurnProfile:
-    """Correlate longer answers with extra searches; never hash retrieved text."""
+def turn_profile(
+    kind: ProfileKind,
+    question: str,
+    seed: int = 0,
+    *,
+    code_pool: CodePool = "openai",
+    tail_percent: int = 0,
+) -> TurnProfile:
+    """Correlate longer answers with extra searches; never hash retrieved text.
+
+    A code turn answers like a search turn. Its programs replay one observed
+    turn of `code_pool`, or, for `tail_percent` percent of questions, a
+    long-tail turn (mock_llm/code_workload.py)."""
     bucket = stable_number(seed, question) % 100
     if bucket < 60:
         size, words, duration = "short", 75, 3.0
@@ -62,6 +87,24 @@ def turn_profile(kind: ProfileKind, question: str, seed: int = 0) -> TurnProfile
         return TurnProfile(kind, "held", 600, 0, 1, 0, 1.0, 121.0)
     if kind == "research":
         return TurnProfile(kind, "research", 900, 1, queries, 100, 2.0, 15.0)
+    if kind == "code":
+        pool = code_calibration()[0]["pools"][code_pool]
+        key = f"{seed}:{question}"
+        long_tail = stable_number(seed, "tail:" + question) % 100 < tail_percent
+        return TurnProfile(
+            kind,
+            "longtail" if long_tail else size,
+            words,
+            0,
+            pool["queries_per_search"],
+            reasoning,
+            1.4,
+            duration,
+            tool_step_s=pool["model_seconds_per_call"],
+            programs=tail_programs(key)
+            if long_tail
+            else observed_programs(key, code_pool),
+        )
     return TurnProfile(
         kind,
         size,

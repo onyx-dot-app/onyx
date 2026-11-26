@@ -64,8 +64,8 @@ Neighbours own the rest:
   apps pages.
 - [[craft-scheduled-tasks]]: the task pages and run status.
 - [[craft-admin]]: the Craft admin pages.
-- [[chat-frontend]]: the rate-limit banner, drafts, and the DOCX and CSV
-  helpers that Craft shares.
+- [[chat-frontend]]: the rate-limit banner, drafts, and the CSV helpers that
+  Craft shares. Craft owns its DOCX renderer.
 
 ---
 
@@ -320,8 +320,8 @@ uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
   `classifySubagentEvent`.
 - [[craft-webapp-proxy]]: Browser tab URLs and static HTML capabilities.
 - [[rate-and-usage-limits]]: the 429 that stops the queue.
-- [[chat-frontend]]: the rate-limit banner, `useDraft`, and the DOCX and CSV
-  helpers in `web/src/lib/`.
+- [[chat-frontend]]: the rate-limit banner, `useDraft`, and the CSV helpers
+  in `web/src/lib/csv.ts`.
 
 ---
 

@@ -1,8 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
 import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
-import { FilePreviewModalPage } from "@tests/e2e/pages/FilePreviewModalPage";
 import { CHECKERED_PNG } from "@tests/e2e/fixtures/images";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
@@ -360,55 +357,6 @@ test.describe("Chat File Uploads", () => {
       await expectElementScreenshot(modal, {
         name: "chat-code-preview-modal",
       });
-    });
-  });
-
-  test.describe("Docx Preview Modal", () => {
-    // Exercises the full pipeline: a real .docx is uploaded and stored, then
-    // previewed by fetching the *actually stored* bytes from /api/chat/file —
-    // deliberately NOT mocked, unlike file_preview_modal.spec.ts which serves a
-    // pristine binary. Guards against upload-time storage that strips the .docx
-    // binary (e.g. converting to text), which leaves docx-preview unable to
-    // parse it and surfaces the fallback error.
-    test("uploaded docx is previewable", async ({ page }) => {
-      await chat.goto();
-      await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
-
-      const fileName = "sample_text.docx";
-      const docxBuffer = fs.readFileSync(
-        path.join(__dirname, "../fixtures/sample_text.docx")
-      );
-
-      await uploadFilesToChat(page, [
-        {
-          name: fileName,
-          mimeType:
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          buffer: docxBuffer,
-        },
-      ]);
-
-      await sendMessage(page, "Preview this document");
-
-      const userMessage = page.locator("#onyx-human-message").first();
-      const fileDisplay = userMessage.locator("#onyx-file");
-      await expect(fileDisplay).toBeVisible();
-
-      const expandButton = fileDisplay.locator(
-        'button[aria-label="Expand document"]'
-      );
-      await expect(expandButton).toBeVisible();
-      await expandButton.click();
-
-      const modal = page.getByRole("dialog");
-      await expect(modal).toBeVisible({ timeout: 5000 });
-      await expect(modal.getByText(fileName)).toBeVisible();
-
-      // The original .docx binary must round-trip through storage so
-      // docx-preview can render it — never the error card.
-      await new FilePreviewModalPage(page).expectDocxPages(
-        "PINEAPPLE-QUASAR-42"
-      );
     });
   });
 });

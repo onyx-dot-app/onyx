@@ -5,6 +5,7 @@ from scenarios.disconnect import DisconnectUser
 from scenarios.file_attachment import FileAttachmentUser
 from scenarios.health_probe import HealthProbeUser
 from scenarios.long_conversation import LongConversationUser
+from scenarios.long_turn import LongTurnUser
 from scenarios.multi_tool import MultiToolUser
 from scenarios.thread_hog import ThreadHogUser
 
@@ -16,6 +17,7 @@ __all__ = [
     "FileAttachmentUser",
     "HealthProbeUser",
     "LongConversationUser",
+    "LongTurnUser",
     "MultiToolUser",
     "ThreadHogUser",
 ]

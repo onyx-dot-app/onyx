@@ -14,16 +14,15 @@ import { useTranslations } from "next-intl";
 import { Button, CopyButton, OnyxLoader, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgCode, SvgEye } from "@opal/icons";
+import type { RichStr } from "@opal/types";
 import type { ChatFilePreviewState } from "@/lib/filePreview/hooks";
-import { svgDataUrl } from "@/lib/filePreview/format";
+import { resolveFilePreviewFormat, svgDataUrl } from "@/lib/filePreview/format";
 import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 import { DownloadButton } from "@/sections/file-preview/DownloadButton";
 import { PreviewUnavailable } from "@/sections/file-preview/PreviewUnavailable";
 import { CodeFilePreview } from "@/sections/file-preview/CodeFilePreview";
 import { MarkdownFilePreview } from "@/sections/file-preview/MarkdownFilePreview";
 import { SpreadsheetPreview } from "@/sections/file-preview/SpreadsheetPreview";
-import { DocxPreview } from "@/sections/file-preview/DocxPreview";
-import { PptxPreview } from "@/sections/file-preview/PptxPreview";
 import { ImagePreview } from "@/sections/file-preview/ImagePreview";
 
 // An HTML preview is a static page: its inline styles and its data or blob
@@ -45,19 +44,35 @@ const LOADER_DELAY_MS = 300;
 
 const MAX_RENDERED_MARKDOWN_CHARACTERS = 200_000;
 
-function Loading() {
+interface LoadingProps {
+  // A line under the loader, read out by screen readers
+  status?: string | RichStr;
+}
+
+function Loading({ status }: LoadingProps) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     const timer = window.setTimeout(() => setVisible(true), LOADER_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, []);
-  return <Section>{visible && <OnyxLoader size={32} />}</Section>;
+  return (
+    <Section gap={1}>
+      {visible && <OnyxLoader size={32} />}
+      <div aria-live="polite">
+        {visible && status && (
+          <Text as="p" font="secondary-body" color="text-03">
+            {status}
+          </Text>
+        )}
+      </div>
+    </Section>
+  );
 }
 
 // PDF.js loads only when a PDF opens
 const PdfViewer = dynamic(() => import("@/sections/file-preview/PdfViewer"), {
   ssr: false,
-  loading: Loading,
+  loading: () => <Loading />,
 });
 
 /**
@@ -95,7 +110,18 @@ export const FilePreviewBody = memo(function FilePreviewBody({
   let content: ReactNode;
   let footer: ReactNode = null;
   if (isLoading || (!data && !error)) {
-    content = <Loading />;
+    // The server converts a Word or PowerPoint file on its first preview,
+    // which can take much longer than a download
+    content = (
+      <Loading
+        status={
+          resolveFilePreviewFormat(fileName, "application/octet-stream")
+            .kind === "office"
+            ? t("preparing.status")
+            : undefined
+        }
+      />
+    );
   } else if (!data) {
     content = (
       <PreviewUnavailable
@@ -104,6 +130,15 @@ export const FilePreviewBody = memo(function FilePreviewBody({
         title={t("error.title")}
         description={t("error.description")}
         onRetry={retry}
+      />
+    );
+  } else if (data.kind === "unavailable") {
+    content = (
+      <PreviewUnavailable
+        fileName={data.name}
+        fileUrl={preview.url}
+        title={t("unavailable.title")}
+        description={t("unavailable.description")}
       />
     );
   } else if (renderFailed) {
@@ -226,19 +261,6 @@ export const FilePreviewBody = memo(function FilePreviewBody({
         break;
       case "pdf":
         content = <PdfViewer blob={data.blob} onError={failRender} />;
-        footer = <FloatingFooter right={download} />;
-        break;
-      case "docx":
-        content = (
-          <DocxPreview
-            bytes={data.bytes}
-            actions={(text) => (text === null ? download : textActions(text))}
-            onError={failRender}
-          />
-        );
-        break;
-      case "pptx":
-        content = <PptxPreview bytes={data.bytes} onError={failRender} />;
         footer = <FloatingFooter right={download} />;
         break;
       case "image":

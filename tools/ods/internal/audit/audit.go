@@ -108,8 +108,8 @@ type Finding struct {
 	// Manifest is the repo-relative lockfile/manifest the finding came from,
 	// used for SARIF locations. May be empty.
 	Manifest string `json:"manifest,omitempty"`
-	// image is the scanned image an alert sync read the finding from.
-	image string
+	// Image identifies the source when one report covers multiple images.
+	Image string `json:"image,omitempty"`
 }
 
 // Options configures an audit run.

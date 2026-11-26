@@ -342,14 +342,15 @@
   so the pointer hovers nothing in it. A file tab and
   the preview modal show a file the same way: markdown as a document, a CSV
   or workbook as a grid with a sheet bar, a PDF one page at a time with page
-  thumbnails and zoom, a PowerPoint deck one slide at a time with a slide
-  list, a Word file as pages scaled to fit the width, an image fit to the
+  thumbnails and zoom (each thumbnail in its page's shape), a PowerPoint deck
+  or a Word file in the same PDF view, from the PDF that the server converts
+  it to, an image fit to the
   panel, HTML as its page in a sandboxed frame, SVG as an image, and code,
   data and text as highlighted source with line numbers (plain text wraps
-  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF and
-  slide views share Craft's toolbar and resizable thumbnail column
+  instead). Markdown, CSV, HTML and SVG have a "Show source" button that becomes "Show preview" (an eye) on the source. The PDF view
+  shares Craft's toolbar and resizable thumbnail column
   (`sections/file-preview/PreviewControls.tsx`). The column is one tab stop,
-  the current page or slide, and the arrow keys move it, with focus. A
+  the current page, and the arrow keys move it, with focus. A
   preview under 480 px wide, as on a phone, starts with the column hidden:
   `lib/filePreview/hooks.ts:useThumbnailColumn` measures the row that holds
   the column and the page when it mounts, before the first paint, then
@@ -357,11 +358,14 @@
   the counts, copy, download and source toggle over the content's bottom. In
   the panel, the visible file's actions move to the URL bar's row through
   `PreviewActionsSlotContext` (`sections/file-preview/FloatingFooter.tsx`);
-  the counts and an image's actual-size toggle stay at the bottom. A loader shows only when a load takes over 300 ms. A file over its
-  format's limit (5 MB of text, 20 MB for Word or PowerPoint, 100 MB for a
-  PDF), a legacy `.ppt` and other types show one card with a download
-  instead. So does a failed load, with a retry, and a PDF, deck, Word file or
-  image that does not render, such as a HEIC image.
+  the counts and an image's actual-size toggle stay at the bottom. A loader shows only when a load takes over 300 ms;
+  for a Word or PowerPoint file it also says, in a live region, that the
+  preview is being prepared, because the first conversion can take a while.
+  A file over its format's limit (5 MB of text, 100 MB for a PDF), a legacy
+  `.ppt` and other types show one card with a download instead. So does a
+  failed load, with a retry, a Word or PowerPoint file that the server cannot
+  convert (its own "No preview for this file" copy), and a PDF or image that
+  does not render, such as a HEIC image.
   Closing the panel
   keeps its tabs, so reopening it, or coming back to the chat, restores them.
   A closed panel cannot be focused, and closing it returns focus to the
@@ -601,8 +605,16 @@ reports that it failed. Its loader,
 `/api/chat/file/{id}` once with the default cache mode. The response's name
 and type pick the format (`lib/filePreview/format.ts:resolveFilePreviewFormat`).
 A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
-the workbook, and an image or an unsupported file reads no body: the image
-loads from the file URL in an `<img>`. SVG loads as text, because the server
+the workbook. A Word or PowerPoint file reads its stored PDF (`?preview=pdf`);
+on a 409 with error code `PREVIEW_NOT_READY` it asks the server to convert the
+file in the owner's sandbox (POST `/{id}/preview`), and the PDF view shows the
+result. The download stays the original file. Both responses read at most the
+browser's PDF limit. A 422 with error code `PREVIEW_UNAVAILABLE` from either
+call (no sandbox, a file over the server's limit, a failed conversion) shows
+the download card without a retry; other failures keep the retry. A name in one
+of these formats skips the request for the original. `lib/chat/svc.ts:fetchChatFile`
+owns the method and URL of each form (`ChatFileVariant`). An image or an unsupported
+file reads no body: the image loads from the file URL in an `<img>`. SVG loads as text, because the server
 serves it as `application/octet-stream`, and renders from a `data:` URL. HTML
 renders through `srcdoc` with an empty `sandbox`: an opaque origin with no
 scripts, so it cannot reach Onyx's page, cookies or API, and the sandbox
@@ -616,15 +628,7 @@ loosening this policy; the page's CSP applies too. Other bodies
 are read up to the format's limit while they stream, because the server sends
 no length. Text over 100,000 characters shows without highlighting, and
 markdown over 200,000 shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
-the build's `/pdfjs/` assets, with `isEvalSupported` off. A Word file renders
-through `lib/docx/renderDocx.ts`, which sanitizes it, into a shadow root. A
-PowerPoint deck parses in the browser with `@jvmr/pptx-to-html` through
-`lib/pptx/renderPptx.ts`, which sanitizes each slide: no script, no style
-element, and no image or CSS `url()` from outside the deck: a style property
-with any `url()` that is not an embedded image goes. Each slide
-renders into its own shadow root, scaled from the deck's slide size. The
-parser uses namespaced selectors that jsdom lacks, so Jest tests give its
-output.
+the build's `/pdfjs/` assets, with `isEvalSupported` off.
 Markdown shows raw HTML as text. Craft's previewers read sandbox paths, not
 chat files. Published files belong to the chat, not to a branch.
 `lib/chat/publishedFiles.ts:chatPublishedFiles` owns the Files list: the
