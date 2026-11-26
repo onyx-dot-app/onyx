@@ -199,6 +199,12 @@ def graphql_request(
     return {"query": query, "variables": variables}
 
 
+def graphql_failed(tool_result: CustomToolUserFileSnapshot | JsonValue) -> bool:
+    """A GraphQL server reports a failed field with status 200 and an
+    ``errors`` list. The result keeps any partial ``data``."""
+    return isinstance(tool_result, dict) and bool(tool_result.get("errors"))
+
+
 class GraphQLTool(ApiTool):
     """One root field of a GraphQL app. It sends and reads like a REST
     operation; only the request differs."""
@@ -247,6 +253,4 @@ class GraphQLTool(ApiTool):
         return "POST", self._base_url, body
 
     def _failed(self, tool_result: CustomToolUserFileSnapshot | JsonValue) -> bool:
-        """A GraphQL server reports a failed field with status 200 and an
-        ``errors`` list. The result keeps any partial ``data``."""
-        return isinstance(tool_result, dict) and bool(tool_result.get("errors"))
+        return graphql_failed(tool_result)

@@ -207,6 +207,26 @@ def test_rejects_a_graphql_document_with_a_second_action() -> None:
     assert mixed.is_error and unknown.is_error
 
 
+def test_a_graphql_error_with_status_200_is_a_failure() -> None:
+    tool = _tool(
+        "linear.issues.create",
+        ExternalAppType.LINEAR,
+        (r"https://api\.linear\.app/.*",),
+        ("linear.issues.read", "linear.issues.create", "unspecified"),
+    )
+    body = {"data": {"issueCreate": None}, "errors": [{"message": "Access denied"}]}
+    with patch(_SEND, return_value=_response(json.dumps(body).encode())):
+        result = _run(
+            tool,
+            method="POST",
+            url="https://api.linear.app/graphql",
+            body={"query": "mutation { issueCreate(input: {}) { success } }"},
+        )
+
+    assert result.is_error
+    assert json.loads(result.content) == body
+
+
 @pytest.mark.parametrize(
     ("method", "url"),
     [

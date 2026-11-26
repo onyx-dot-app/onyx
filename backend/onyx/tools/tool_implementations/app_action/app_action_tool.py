@@ -20,6 +20,7 @@ from onyx.external_apps.matching.engine import (
     recognize_actions,
     url_matches_patterns,
 )
+from onyx.external_apps.matching.graphql_parsing import parse_invocations
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.actions import GraphQLOp, MatchRule
 from onyx.integrations.connection_models import ConnectionState
@@ -37,6 +38,7 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.ordering import ToolRank
+from onyx.tools.tool_implementations.custom.graphql_tool import graphql_failed
 from onyx.tools.tool_implementations.http_request import (
     TOOL_REQUEST_FAILURE_MESSAGES,
     ToolRequestError,
@@ -256,15 +258,13 @@ class AppActionTool(Tool):
         if problem := _path_problem(parts.path):
             return self._failed(problem)
 
+        encoded_body = json.dumps(body).encode() if body is not None else None
         matched = {
             action.action_type
             for action in recognize_actions(
                 self._settings.app_type,
                 ProxiedRequest(
-                    method=method,
-                    path=parts.path,
-                    body=json.dumps(body).encode() if body is not None else None,
-                    url=url,
+                    method=method, path=parts.path, body=encoded_body, url=url
                 ),
             )
         }
@@ -320,7 +320,8 @@ class AppActionTool(Tool):
             content = f"HTTP {response.status_code}\n{content}"
         return ToolResult(
             content=content,
-            is_error=not response.ok,
+            is_error=not response.ok
+            or (bool(parse_invocations(encoded_body)) and graphql_failed(tool_result)),
             details=CustomToolCallSummary(
                 tool_name=self._name,
                 integration_id=self._settings.integration_id,
