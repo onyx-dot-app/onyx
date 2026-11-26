@@ -92,6 +92,17 @@ jobs:
           docker run --rm --network none --shm-size=256m \
             --security-opt seccomp=unconfined \
             onyxdotapp/craft-runtime:ci /opt/onyx/check-runtime
+      - name: Test browser service against the runtime Chrome
+        run: |
+          docker run --rm --shm-size=256m --security-opt seccomp=unconfined \
+            -v "$PWD/deployment/craft-runtime/browser-service:/src:ro" \
+            onyxdotapp/craft-runtime:ci bash -euc '
+              cp -r /src /tmp/browser-service
+              cd /tmp/browser-service
+              npm ci --ignore-scripts
+              npx tsc --noEmit
+              ONYX_TEST_CHROME=/opt/chrome/chrome npm test
+            '
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
         with:
           go-version-file: microvm/go.mod
