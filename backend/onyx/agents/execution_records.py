@@ -1,6 +1,7 @@
 """Model-history replay and stable input message identities."""
 
 from collections import Counter
+from collections.abc import Sequence
 
 from onyx.llm.models import (
     AssistantMessage,
@@ -21,7 +22,9 @@ def run_input_message_id(run_id: str, index: int) -> str:
     return f"run:{run_id}:input:{index}"
 
 
-def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> set[str]:
+def completed_tool_call_ids(
+    messages: Sequence[Message], assistant_index: int
+) -> set[str]:
     result_ids: set[str] = set()
     for index in range(assistant_index + 1, len(messages)):
         following = messages[index]
@@ -31,16 +34,15 @@ def completed_tool_call_ids(messages: list[Message], assistant_index: int) -> se
     return result_ids
 
 
-def messages_for_model(
-    messages: list[Message], *, copy_messages: bool = True
-) -> list[Message]:
+def messages_for_model(messages: Sequence[Message]) -> list[Message]:
     """Exclude incomplete tool exchanges and non-replayable thinking from model history.
 
     History truncation can drop an assistant tool call while leaving its
     result behind. Providers such as Ollama reject these orphaned results
     with an "unexpected tool call id" error, so omit them from model context.
 
-    Set copy_messages=False only when the caller owns the detached input messages.
+    The result shares the input's messages; an assistant message is a shallow
+    copy with its own content list. Callers must not change either.
     """
     result: list[Message] = []
     accepted: set[str] = set()
@@ -57,7 +59,7 @@ def messages_for_model(
                 logger.warning(
                     "Omitting ambiguous duplicate tool calls from model context"
                 )
-            copy = message.model_copy(deep=copy_messages)
+            copy = message.model_copy()
             content = []
             for part in copy.content:
                 if isinstance(part, ToolCall) and part.id not in accepted:
@@ -112,9 +114,7 @@ def messages_for_model(
                 )
         elif isinstance(message, ToolResultMessage):
             if message.tool_call_id in accepted:
-                result.append(
-                    message.model_copy(deep=True) if copy_messages else message
-                )
+                result.append(message)
                 accepted.remove(message.tool_call_id)
             else:
                 logger.debug(
@@ -123,5 +123,5 @@ def messages_for_model(
                 )
         else:
             accepted.clear()
-            result.append(message.model_copy(deep=True) if copy_messages else message)
+            result.append(message)
     return result

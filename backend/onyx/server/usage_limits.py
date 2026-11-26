@@ -1,4 +1,19 @@
-"""Usage limits enforcement for cloud deployments."""
+"""Usage limits enforcement for cloud deployments.
+
+A ``LimitPolicy`` is everything one plan allows: for each usage type, an
+``Allowance`` that says how much, over what window, whose usage counts, where
+the usage is read from, and which field of cloud's override record can replace
+the amount for one tenant. Every one of those can differ between policies.
+Cloud has two policies, trial and paid; the plan is picked per tenant.
+
+``check_usage_and_raise`` is the one enforcement path; the entry points call it
+or ``check_llm_cost_limit_for_provider``.
+
+An override is an absolute value that replaces the policy's amount, never an
+amount added to it. A value of ``NO_LIMIT`` (-1) means unlimited, 0 means
+nothing is allowed (the trial API-call default), and an unset override means
+"use the policy". A usage type a policy does not list is unlimited under it.
+"""
 
 from collections.abc import Callable
 
@@ -13,6 +28,15 @@ from onyx.configs.app_configs import (
 from onyx.db.usage import UsageLimitExceededError, UsageType, check_usage_limit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.models import (
+    Allowance,
+    LimitMeasure,
+    LimitPolicy,
+    LimitPolicyName,
+    LimitScope,
+    LimitWindow,
+    WindowAnchor,
+)
 from onyx.server.tenant_usage_limits import (
     TenantUsageLimitKeys,
     TenantUsageLimitOverrides,
@@ -28,10 +52,14 @@ from shared_configs.configs import (
     USAGE_LIMIT_LLM_COST_CENTS_TRIAL,
     USAGE_LIMIT_NON_STREAMING_CALLS_PAID,
     USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL,
+    USAGE_LIMIT_WINDOW_SECONDS,
     USAGE_LIMITS_ENABLED,
 )
 
 logger = setup_logger()
+
+# Special value meaning "no limit" (unlimited)
+NO_LIMIT = -1
 
 # Collect all Onyx-managed default API keys for comparison
 _ONYX_MANAGED_API_KEYS: set[str] = set()
@@ -43,6 +71,102 @@ for key in [
 ]:
     if key:
         _ONYX_MANAGED_API_KEYS.add(key)
+
+
+# Cloud's window today: the tenant_usage grid.
+CALENDAR_WEEK = LimitWindow(
+    anchor=WindowAnchor.CALENDAR, length_seconds=USAGE_LIMIT_WINDOW_SECONDS
+)
+
+
+def _weekly_tenant_counter(
+    limit: int, override_field: TenantUsageLimitKeys
+) -> Allowance:
+    return Allowance(
+        limit=limit,
+        scope=LimitScope.TENANT,
+        measure=LimitMeasure.COUNTER,
+        window=CALENDAR_WEEK,
+        override_field=override_field,
+    )
+
+
+# One line per limited usage type. Adding a limit to a plan is one line here;
+# removing it is deleting the line.
+CLOUD_TRIAL = LimitPolicy(
+    name=LimitPolicyName.CLOUD_TRIAL,
+    allowances={
+        UsageType.LLM_COST: _weekly_tenant_counter(
+            USAGE_LIMIT_LLM_COST_CENTS_TRIAL, TenantUsageLimitKeys.LLM_COST_CENTS_TRIAL
+        ),
+        UsageType.CHUNKS_INDEXED: _weekly_tenant_counter(
+            USAGE_LIMIT_CHUNKS_INDEXED_TRIAL, TenantUsageLimitKeys.CHUNKS_INDEXED_TRIAL
+        ),
+        UsageType.API_CALLS: _weekly_tenant_counter(
+            USAGE_LIMIT_API_CALLS_TRIAL, TenantUsageLimitKeys.API_CALLS_TRIAL
+        ),
+        UsageType.NON_STREAMING_API_CALLS: _weekly_tenant_counter(
+            USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL,
+            TenantUsageLimitKeys.NON_STREAMING_CALLS_TRIAL,
+        ),
+    },
+)
+
+CLOUD_PAID = LimitPolicy(
+    name=LimitPolicyName.CLOUD_PAID,
+    allowances={
+        UsageType.LLM_COST: _weekly_tenant_counter(
+            USAGE_LIMIT_LLM_COST_CENTS_PAID, TenantUsageLimitKeys.LLM_COST_CENTS_PAID
+        ),
+        UsageType.CHUNKS_INDEXED: _weekly_tenant_counter(
+            USAGE_LIMIT_CHUNKS_INDEXED_PAID, TenantUsageLimitKeys.CHUNKS_INDEXED_PAID
+        ),
+        UsageType.API_CALLS: _weekly_tenant_counter(
+            USAGE_LIMIT_API_CALLS_PAID, TenantUsageLimitKeys.API_CALLS_PAID
+        ),
+        UsageType.NON_STREAMING_API_CALLS: _weekly_tenant_counter(
+            USAGE_LIMIT_NON_STREAMING_CALLS_PAID,
+            TenantUsageLimitKeys.NON_STREAMING_CALLS_PAID,
+        ),
+    },
+)
+
+
+# TEMPORARY GUARD, replaced in the next PR of this stack (ENG-4479).
+# An allowance declares its window, but check_usage_limit and increment_usage in
+# onyx.db.usage do not read it yet: they always use the current CALENDAR_WEEK row.
+# A counter on any other window would be counted in the wrong row with no error,
+# so it is refused here until the counter takes its window_start from the
+# allowance on both the check and the increment side.
+def _counter_window_supported(allowance: Allowance) -> bool:
+    """The tenant_usage counter reads and writes only its own grid, so a
+    counter allowance must use exactly that window."""
+    return (
+        allowance.measure != LimitMeasure.COUNTER or allowance.window == CALENDAR_WEEK
+    )
+
+
+def _require_supported_windows(*policies: LimitPolicy) -> None:
+    for policy in policies:
+        for usage_type, allowance in policy.allowances.items():
+            if not _counter_window_supported(allowance):
+                raise ValueError(
+                    f"{policy.name.value}: {usage_type.value} uses a window the "
+                    "tenant_usage counter cannot read or write"
+                )
+
+
+_require_supported_windows(CLOUD_TRIAL, CLOUD_PAID)
+
+
+def policy_for_plan(is_trial: bool) -> LimitPolicy:
+    """The policy a cloud tenant is held to, by its billing status."""
+    return CLOUD_TRIAL if is_trial else CLOUD_PAID
+
+
+"""
+Enforcement
+"""
 
 
 def is_onyx_managed_api_key(api_key: str | None) -> bool:
@@ -87,7 +211,7 @@ def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
     Returns:
         - Positive int: Use this specific limit
         - -1 (NO_LIMIT): No limit (unlimited)
-        - None: No override specified, use default env var value
+        - None: No override specified, use the policy's amount
     """
     try:
         # Try to get EE version that has tenant overrides
@@ -108,59 +232,23 @@ def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
     return None
 
 
-# Special value meaning "no limit" (unlimited)
-NO_LIMIT = -1
-_FIELD_AND_DEFAULT = {
-    UsageType.LLM_COST: {
-        True: (
-            TenantUsageLimitKeys.LLM_COST_CENTS_TRIAL,
-            USAGE_LIMIT_LLM_COST_CENTS_TRIAL,
-        ),
-        False: (
-            TenantUsageLimitKeys.LLM_COST_CENTS_PAID,
-            USAGE_LIMIT_LLM_COST_CENTS_PAID,
-        ),
-    },
-    UsageType.CHUNKS_INDEXED: {
-        True: (
-            TenantUsageLimitKeys.CHUNKS_INDEXED_TRIAL,
-            USAGE_LIMIT_CHUNKS_INDEXED_TRIAL,
-        ),
-        False: (
-            TenantUsageLimitKeys.CHUNKS_INDEXED_PAID,
-            USAGE_LIMIT_CHUNKS_INDEXED_PAID,
-        ),
-    },
-    UsageType.API_CALLS: {
-        True: (TenantUsageLimitKeys.API_CALLS_TRIAL, USAGE_LIMIT_API_CALLS_TRIAL),
-        False: (TenantUsageLimitKeys.API_CALLS_PAID, USAGE_LIMIT_API_CALLS_PAID),
-    },
-    UsageType.NON_STREAMING_API_CALLS: {
-        True: (
-            TenantUsageLimitKeys.NON_STREAMING_CALLS_TRIAL,
-            USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL,
-        ),
-        False: (
-            TenantUsageLimitKeys.NON_STREAMING_CALLS_PAID,
-            USAGE_LIMIT_NON_STREAMING_CALLS_PAID,
-        ),
-    },
-}
-
-
 def get_limit_for_usage_type(
     usage_type: UsageType, is_trial: bool, tenant_id: str | None
 ) -> int:
     """
-    Get the appropriate limit based on usage type, trial status, and tenant overrides.
+    The allowed value for one limit: the tenant's override if it has one, else
+    the amount from the policy its plan selects.
 
     Returns:
         - Positive int: The usage limit
         - NO_LIMIT (-1): No limit (unlimited) for this tenant
     """
-
-    field_name, default_value = _FIELD_AND_DEFAULT[usage_type][is_trial]
-    if tenant_id:
+    policy = policy_for_plan(is_trial)
+    allowance = policy.allowances.get(usage_type)
+    if allowance is None:
+        return NO_LIMIT
+    if tenant_id and allowance.override_field is not None:
+        field_name = allowance.override_field.value
         override = _get_tenant_override(tenant_id, field_name)
         if override is not None:
             logger.debug(
@@ -168,9 +256,9 @@ def get_limit_for_usage_type(
             )
             return override
     logger.debug(
-        "Using default value for %s.%s: %s", usage_type, is_trial, default_value
+        "Using %s value for %s: %s", policy.name.value, usage_type, allowance.limit
     )
-    return default_value
+    return allowance.limit
 
 
 def check_llm_cost_limit_for_provider(
@@ -207,6 +295,65 @@ def check_llm_cost_limit_for_provider(
     )
 
 
+def _measure_and_check(
+    db_session: Session,
+    usage_type: UsageType,
+    allowance: Allowance,
+    limit: int,
+    pending_amount: float | int,
+) -> None:
+    """Read the usage the allowance points at and raise
+    ``UsageLimitExceededError`` when usage plus ``pending_amount`` is over
+    ``limit``."""
+    # Temporary, see _counter_window_supported.
+    if not _counter_window_supported(allowance):
+        raise RuntimeError(
+            f"Bug: {usage_type.value} uses a window the tenant_usage counter cannot read"
+        )
+    if allowance.measure == LimitMeasure.COUNTER:
+        check_usage_limit(
+            db_session=db_session,
+            usage_type=usage_type,
+            limit=limit,
+            pending_amount=pending_amount,
+        )
+        return
+    raise NotImplementedError(f"No measurement for {allowance.measure}")
+
+
+def _refusal_detail(
+    usage_type: UsageType, is_trial: bool, e: UsageLimitExceededError
+) -> str:
+    user_type = "trial" if is_trial else "paid"
+    if usage_type == UsageType.LLM_COST:
+        return (
+            f"LLM usage limit exceeded for {user_type} account. "
+            f"Current cost: ${e.current / 100:.2f}, "
+            f"Limit: ${e.limit / 100:.2f} per week. "
+            "Please use your own LLM API key, upgrade your plan,"
+            " or wait for the next billing period (1 week)."
+        )
+    if usage_type == UsageType.CHUNKS_INDEXED:
+        return (
+            f"Document indexing limit exceeded for {user_type} account. "
+            f"Indexed: {int(e.current)} chunks, Limit: {int(e.limit)} per week. "
+            "Please upgrade your plan or wait for the next billing period."
+        )
+    if usage_type == UsageType.API_CALLS:
+        if is_trial and e.limit == 0:
+            return "API access is not available on trial accounts. Please upgrade to a paid plan to use the API and chat widget."
+        return (
+            f"API call limit exceeded for {user_type} account. "
+            f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
+            "Please upgrade your plan or wait for the next billing period."
+        )
+    return (
+        f"Non-streaming API call limit exceeded for {user_type} account. "
+        f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
+        "Please upgrade your plan or wait for the next billing period."
+    )
+
+
 def check_usage_and_raise(
     db_session: Session,
     usage_type: UsageType,
@@ -214,7 +361,9 @@ def check_usage_and_raise(
     pending_amount: float | int = 0,
 ) -> None:
     """
-    Check if usage limit would be exceeded and raise HTTPException if so.
+    The one enforcement path. Resolves the limit's allowed value, reads its
+    usage the way its policy's allowance says, and raises a 429 when usage plus
+    ``pending_amount`` is over the line.
 
     Args:
         db_session: Database session for the tenant
@@ -229,6 +378,9 @@ def check_usage_and_raise(
         return
 
     is_trial = is_tenant_on_trial_fn(tenant_id)
+    allowance = policy_for_plan(is_trial).allowances.get(usage_type)
+    if allowance is None:
+        return
     limit = get_limit_for_usage_type(usage_type, is_trial, tenant_id)
     logger.debug("Checking usage limit for %s.%s: %s", usage_type, is_trial, limit)
 
@@ -237,42 +389,8 @@ def check_usage_and_raise(
         return
 
     try:
-        check_usage_limit(
-            db_session=db_session,
-            usage_type=usage_type,
-            limit=limit,
-            pending_amount=pending_amount,
-        )
+        _measure_and_check(db_session, usage_type, allowance, limit, pending_amount)
     except UsageLimitExceededError as e:
-        user_type = "trial" if is_trial else "paid"
-        if usage_type == UsageType.LLM_COST:
-            detail = (
-                f"LLM usage limit exceeded for {user_type} account. "
-                f"Current cost: ${e.current / 100:.2f}, "
-                f"Limit: ${e.limit / 100:.2f} per week. "
-                "Please use your own LLM API key, upgrade your plan,"
-                " or wait for the next billing period (1 week)."
-            )
-        elif usage_type == UsageType.CHUNKS_INDEXED:
-            detail = (
-                f"Document indexing limit exceeded for {user_type} account. "
-                f"Indexed: {int(e.current)} chunks, Limit: {int(e.limit)} per week. "
-                "Please upgrade your plan or wait for the next billing period."
-            )
-        elif usage_type == UsageType.API_CALLS:
-            if is_trial and e.limit == 0:
-                detail = "API access is not available on trial accounts. Please upgrade to a paid plan to use the API and chat widget."
-            else:
-                detail = (
-                    f"API call limit exceeded for {user_type} account. "
-                    f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
-                    "Please upgrade your plan or wait for the next billing period."
-                )
-        else:
-            detail = (
-                f"Non-streaming API call limit exceeded for {user_type} account. "
-                f"Calls: {int(e.current)}, Limit: {int(e.limit)} per week. "
-                "Please upgrade your plan or wait for the next billing period."
-            )
-
-        raise OnyxError(OnyxErrorCode.RATE_LIMITED, detail)
+        raise OnyxError(
+            OnyxErrorCode.RATE_LIMITED, _refusal_detail(usage_type, is_trial, e)
+        )

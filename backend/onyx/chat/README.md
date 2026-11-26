@@ -217,7 +217,7 @@ Storage jobs also use independent threads, so a slow save cannot block Stop chec
 Thread startup copies tenant and tracing context. There is no process-wide response admission limit or fixed worker pool.
 
 The shared agent SDK executes each response. `ResponsePresenter` translates accepted run events into chat packets.
-Each response worker constructs its tools and feature agent through `create_chat_agent` in `execution.py`.
+Each response worker constructs its tools through `construct_chat_tools` in `execution.py`. A new response builds its feature agent through `create_chat_agent`. The run store restores the root agent of a resumed response.
 Each `Emitter` adds response identity and model routing. `ChatDelivery` sends packets to the current reader and resumable stream buffer.
 A failed model reports its own error while other comparison responses continue.
 

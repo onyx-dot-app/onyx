@@ -51,7 +51,11 @@ from onyx.agents.tools import HumanToolAnswer, InputMode, PendingToolInput
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.agent_stream import BackgroundRunStream, is_background_run
-from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
+from onyx.chat.checkpoint import (
+    CheckpointVersionError,
+    deserialize_checkpoint,
+    serialize_checkpoint,
+)
 from onyx.chat.mention_models import AcceptedPicks, PickedMentions
 from onyx.chat.models import (
     ChatBranch,
@@ -163,6 +167,10 @@ STOP_TTL_SECONDS = 600
 RESUME_FAILED_MESSAGE = (
     "This response could not continue after your answer. Send the message again."
 )
+RESUME_UPDATED_MESSAGE = (
+    "This response could not continue because Onyx was updated while it "
+    "waited. Send the message again."
+)
 INPUT_POLL_SECONDS = 1.0
 MAX_RUNNING_AGENTS = 10
 # A step reads at most this many finished results; a run reads the rest in its
@@ -252,20 +260,26 @@ def interrupt_ownerless_responses(
     }
 
 
+def resume_failure(error: BaseException) -> RunFailure:
+    """The failure of a suspended response that `error` stops from
+    continuing. Saved data that the running code cannot read gets the
+    message that Onyx was updated."""
+    return RunFailure(
+        kind=RunFailureKind.EXECUTION,
+        message=RESUME_UPDATED_MESSAGE
+        if isinstance(error, CheckpointVersionError)
+        else RESUME_FAILED_MESSAGE,
+    )
+
+
 def fail_suspended_response(
-    cache: CacheBackend, tenant_id: str, response_id: int
+    cache: CacheBackend, tenant_id: str, response_id: int, failure: RunFailure
 ) -> None:
     """End a suspended response that cannot continue after its approvals, for
-    example because its model or saved state is gone: save it as failed, end
-    its requests, and delete its checkpoint and its parked programs' dumps."""
-    _end_ownerless_response(
-        cache,
-        tenant_id,
-        response_id,
-        failure=RunFailure(
-            kind=RunFailureKind.EXECUTION, message=RESUME_FAILED_MESSAGE
-        ),
-    )
+    example because its model or saved state is gone: save it as failed with
+    `failure` (`resume_failure`), end its requests, and delete its checkpoint
+    and its parked programs' dumps."""
+    _end_ownerless_response(cache, tenant_id, response_id, failure=failure)
 
 
 def _stop_key(response_id: int) -> str:
@@ -887,9 +901,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     )
                 except RETRYABLE_START_ERRORS:
                     raise
-                except Exception:
+                except Exception as error:
                     logger.exception("Could not resume a parked agent run")
-                    fail_suspended_response(self.cache, self.tenant_id, run.response_id)
+                    fail_suspended_response(
+                        self.cache,
+                        self.tenant_id,
+                        run.response_id,
+                        resume_failure(error),
+                    )
                 finally:
                     lock.release()
             if selected and interrupt_ownerless_responses(

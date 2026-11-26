@@ -707,6 +707,64 @@ def test_abandoned_background_child_is_delivered_as_failure(
     assert stored.response_failure.kind == RunFailureKind.EXECUTION
 
 
+def test_agent_completion_cites_the_sources_of_every_step(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """Each step's metadata holds only the sources new to its run, so the
+    completion's output collects the sources of all the run's steps."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Sources [2] and [3].", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None
+    snapshot = response_snapshot(child)
+    snapshot.steps = _steps(
+        child.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="lookup", name="lookup", arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="lookup", tool_name="lookup", content="Found"
+            ),
+            AssistantMessage(content=[TextContent(text="Sources [2] and [3].")]),
+        ],
+    )
+    snapshot.answer_step_index = 1
+    snapshot.steps[0].message.metadata = ChatMessageMetadata(
+        sources={2: _source_doc("first-source")}
+    )
+    snapshot.steps[1].message.metadata = ChatMessageMetadata(
+        sources={3: _source_doc("second-source")}
+    )
+    projected = project_response(snapshot, tool_ids={})
+    save_chat_turn(
+        message_text=projected.answer or "",
+        reasoning_tokens=projected.reasoning,
+        tool_calls=projected.tool_calls,
+        citation_to_doc=projected.citation_to_doc,
+        all_search_docs=projected.all_search_docs,
+        db_session=db_session,
+        assistant_message=child_row,
+        response_record=projected.response,
+        presentation=projected.presentation,
+    )
+    db_session.expire_all()
+
+    [completion] = read_agent_completions(db_session, [child_row.id])
+
+    assert completion.output is not None
+    assert completion.output.text == "Sources [2] and [3]."
+    cited = message_citation_sources(completion.output)
+    assert {number: doc.document_id for number, doc in cited.items()} == {
+        2: "first-source",
+        3: "second-source",
+    }
+
+
 def test_agent_completion_preserves_cited_output_and_durable_input_receipt(
     db_session: Session, conversation: ChatSession
 ) -> None:

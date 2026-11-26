@@ -148,6 +148,20 @@ Initial execution and resumption use the same thread-launch path. `Run` owns sta
 terminal output, and cleanup. The coordinator resolves child results by run ID; a `Run` represents local execution.
 The coordinator calls its `RunStore` to save output after the result becomes available.
 
+## Features and hooks
+
+An agent's application state and step decisions live in its feature, an `AgentFeature` (`Agent(feature=...)`).
+`bind()` returns the `RunHooks` of each run when it starts: its tools and its hooks.
+`RunHooks` is the only place hooks are declared. A hook that is `None` is absent, which differs from one that changes nothing:
+without `prepare_step` the run uses its defaults, and without `before_tool_call` it can merge calls.
+A feature decides at `bind()` which hooks a run has, for example `prepare_tool_result` only with a sandbox turn.
+`RunHooks.bind()` returns itself, so an agent without feature state passes `feature=RunHooks(...)`.
+The run holds one `RunConfig` for its execution: the model, the default step, the tools and phases, the hooks and `on_drained`.
+It releases the configuration when a finished run's work drains or when the run hands off.
+A suspended run keeps it, because `Run.resume()` continues with it.
+A feature never holds its Agent or a Run, and an agent holds no callable bound to itself.
+A finished agent, its runs and its feature are therefore freed by reference counting, without a garbage collection pass.
+
 ## Preparing and completing steps
 
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
@@ -159,10 +173,14 @@ Preserve each input's identity, provenance, and order. The runtime records accep
 Each input needs `InputMessageMetadata`; the runtime rejects untagged input, because compaction keeps the latest untagged user message as the task.
 `InputMessageMetadata.content_metadata` reaches preparation only; accepted history keeps the source and source run.
 Acceptance belongs to `RunOwnership.accept_inputs`; if it declines, the runtime prepares the step again.
-The input is detached from runtime state. `previous` references the matching messages within that input.
+The input holds the run's recorded messages, not copies. A frozen model holds them in tuples.
+A hook that replaces a field or changes a sequence gets an error, and the run fails.
+The messages are not frozen: read them and their nested data, and do not change them.
+`previous` references the matching messages within that input.
 Without this callback, the agent uses its configured instructions, tools, and model options.
 A custom callback supplies the step's instructions and generation options; the runtime does not merge those defaults into it.
 Pass executable tools to `Agent(tools=...)`. Construction snapshots their definitions and fixes their order.
+A feature's tools (`RunHooks.tools`) follow them; they are bound to the feature's live state for each run. `Agent.start` checks the names of the combined tools and the phases.
 `Agent.tools` returns detached inspection copies; changing those copies cannot change the configured tools.
 `PreparedStep.allowed_tool_names` restricts execution without changing the advertised definitions.
 `None` allows every tool in the active phase; an empty set disables tool execution.
@@ -175,6 +193,7 @@ The LLM adapter handles provider exceptions that require narrower advertised def
 Saved steps retain both advertised declarations and execution permissions. Restoration validates the declarations before using those permissions.
 
 `after_step(StepResult)` processes each completed step, including the last allowed step.
+`StepResult` holds the recorded step under the same rules as `StepInput`.
 Return `True` to continue or `False` to finish. Without this callback, the agent continues after tool calls
 unless all results request termination. It stops after a final answer.
 A continuation request at the step limit produces `LIMIT`; it does not prepare or execute another step.
@@ -193,7 +212,8 @@ Callbacks must use bounded I/O and check cancellation during long operations.
 Cancellation waits for a synchronous callback or model read to return before execution can finish.
 `PreparedStep.assemble_messages` must be pure and repeatable: compaction can call it again with shorter history.
 It borrows a read-only `Sequence[Message]`. Do not modify its messages or nested data; return replacements for changes.
-The sequence is a tuple, but nested objects are not immutable. The SDK detaches the returned messages before model execution.
+The sequence is a tuple, but nested objects are not immutable. The model request shares the returned messages, the tool definitions and the options,
+except a shallow copy of each assistant message with its replayable content; the model adapter does not change them.
 Capture instructions and other step decisions during preparation. Assemble them around the history supplied by the runtime.
 Do not fetch settings, advance feature state, or capture the original history inside the assembler.
 
@@ -222,14 +242,14 @@ A hook that fails otherwise or stops for cancellation is logged; the run keeps i
 An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
 `on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
 Chat code mode uses these hooks to close its cells and save what they did, also for a call that Stop interrupted.
-`on_drained()` runs after each finish or suspension, once the run's work has drained:
+`on_drained()`, an `Agent` argument rather than a feature hook, runs after each finish or suspension, once the run's work has drained:
 its tool threads, including calls that ignored a Stop, and the work of its foreground children.
 Background children do not hold it back.
 A suspension calls the hook only when no foreground child waits or works; otherwise the run's later end calls it.
 A run that hands off in that state calls no hook: an early call could end state that a child still uses. The owner that restores the run calls the hook at the run's end.
 It runs on the thread that ended that work, so it must be short. It returns nothing and cannot change results.
 Errors, including `AgentCancelled`, are logged; the run still becomes idle and reusable.
-Chat's root agent gets it from `create_chat_agent` to end per-run tool state; subagents share the root's tools and install no `on_drained` hook.
+Chat's root agent gets it from `create_chat_agent`, or from `bind_run_store` when it is restored, to end per-run tool state; subagents share the root's tools and install no `on_drained` hook.
 The sandbox tools end their sandbox turn there, which starts the session save.
 
 Optional tool callbacks cover interception and enrichment:
@@ -241,7 +261,11 @@ Optional tool callbacks cover interception and enrichment:
 | `prepare_tool_result` | Replace a completed result before the run records and streams it. Failure fails the run. An amendment's preparation runs under the run's cancellation signal; when it fails or stops, the amendment applies as the release hook made it. |
 | `unknown_tool_hint` | Give the result of a call of a tool that the agent does not offer; `None` keeps the default result. Chat agents say how to call a code mode function from a program, and name the tool that they offer for another tool family's name. |
 
-Callbacks receive copies, except `prepare_tool_result`. Its `ToolResultContext`, like `ToolInvocation.recorded_results`, references the run's objects, since results can be large: the hook must not change them and returns a new result instead.
+Tool callbacks receive the run's objects, not copies, since history and results can be large. `ToolCallContext` is frozen.
+It holds the recorded call and the step's options. Its history is the step's model-view tuple, which the step's tools also get.
+`after_tool_call` gets a new `ToolResult` whose content and details are the recorded ones. `ToolResultContext`, like
+`ToolInvocation.recorded_results`, references the recorded results. Hooks must not change these objects: they return a
+new result instead, for example with `model_copy(update=...)`.
 `Run.record_tool_results` calls it for every result, one at a time in the order the calls complete, with the results of the step that the run recorded before.
 Its result is what the live `tool_update` event, the saved history and the model get. `ToolResult.full_value` reaches the hook; the recorded `ToolResultMessage` has no such field (both share `ToolResultFields`).
 The amendments of the finish and suspend hooks go through it too, with `amended=True`.
@@ -295,12 +319,14 @@ An `AgentTool` pairs a `ToolDefinition` with a synchronous `execute` function. E
 The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
-- `call_id`, `call_index`, `messages` — the call's identity and logical working history.
+- `call_id`, `call_index`, `messages` — the call's identity and logical working history: one tuple that all calls
+  of the step share, of the run's messages, tool results with their details. Read only.
 - `recorded_results` — every recorded tool result before the call, with details and without
   compaction: earlier steps, then this step's completed results in call order. Read only.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
+  The run publishes the object as is: do not change it after the call, and send a new one for each update.
 - `agents` — the subagent coordinator (next section).
 - `run_work` — the run's work. A tool that starts work which outlives the call, such as a code mode
   program's driver, adds it with `run_work.track_operation(future)`, which holds the tool phase and
@@ -481,10 +507,10 @@ Observers must not wait for their own run to become idle.
 Delivery is best-effort. Chat shares one dispatcher across a turn. Each event enters its queue once.
 Foreground child events reach both child and ancestor listeners. Background runs have separate delivery.
 Each run tracks its accepted events until delivery finishes. Listener failures affect that subscription channel, not execution or storage.
-Text, thinking-text, and tool-argument deltas are shared between listeners when they contain no mutable attachments.
-Other events are copied before publication returns and remain isolated between listeners.
-Request settings, thinking blocks, and custom event subclasses use this snapshot path.
-Producers may change their local data after publishing it.
+Published events are immutable. Every listener gets the published object, with no copy.
+A producer must not change an event or its payload after it publishes it: a tool sends a new `ToolProgress` value for each update.
+Events can hold the run's recorded objects, such as the message of `message_end` and the tool call of tool events.
+Listeners only read events and must not change them.
 
 The event queue is unbounded. Slow listeners or replay writes can increase retained memory.
 Pending-event tracking includes queued events, active delivery, and buffered output awaiting its flush.
@@ -527,7 +553,7 @@ Changing this list does not add or remove recorded messages. Its message objects
 Use `run.snapshot()` to inspect an isolated copy while execution continues.
 `AgentStep` supplies the current index and limit to callbacks; `StepRecord` stores what happened during that step.
 
-Message content and execution status change under the run lock. Event listeners cannot change recorded data.
+Message content and execution status change under the run lock. Events hold recorded objects: listeners must not change them.
 Child records are collected when the parent finishes; a parent snapshot is not a live view of every child.
 Chat saves the same step structure in a detached `ResponseRecord`.
 It removes transient metadata and stores search documents through database relations.
@@ -591,9 +617,9 @@ Feature state is a JSON object. Chat's feature discriminator selects the schema 
 `run.result()` raises `RunReleased` after release; input must target a resumed execution.
 The storage adapter uses `save` and `expected_revision` to save matching state before ownership is released.
 If saving fails, the local execution remains owned and can accept input or retry the save.
-Features with private state supply `RestorableFeature` from `runtime.py`.
+A feature with private state saves it with `RunHooks.capture_state`, after the `on_suspend` amendments.
 `capture_state()` returns a Pydantic model. Its nested values may borrow feature state until the runtime immediately serializes it.
-`restore_state()` borrows that JSON data as a read-only mapping, including its nested values.
+`Agent.resume` calls the feature's `restore_state()` before the run starts. It borrows that JSON data as a read-only mapping, including its nested values.
 Validate it with the feature's model before retaining or changing the data.
 The fields survive a direct `ExecutionCheckpoint` JSON round trip without a feature-type registry in the SDK.
 
@@ -728,7 +754,7 @@ A chat request follows this path:
 1. The API checks the request and selects streaming or complete output.
 2. `prepare_chat_turn` loads authorized history, selects models, and creates response records.
 3. `ChatTurnExecution` starts a response worker for each selected model.
-4. Each worker creates a `ChatAgent` or `DeepResearchAgent` and calls `start(background=False)`.
+4. Each worker builds the agent of a `ChatFeature` or `DeepResearchFeature` and calls `start(background=False)`.
 5. `Run` advances model and tool steps. The model step calls `LLM.stream`.
 6. The LLM adapter calls the configured provider and returns typed generation updates.
 
@@ -738,10 +764,9 @@ A suspended run can release its response worker without finishing the response.
 `Agent` supplies configuration and history. `Run` owns each execution's state and controls.
 The response worker executes the run directly; these objects do not each create a thread.
 
-`ChatAgent`, `ResearchAgent`, and `DeepResearchAgent` extend `Agent`.
-Their constructors register feature callbacks; callers use `start()`, `resume()`, and `state` directly.
-Restorable features also register their state capture and restoration capability.
-`application_tools` contains application tool objects; inherited `tools` contains bound SDK tools.
+`ChatFeature`, `ResearchFeature`, and `DeepResearchFeature` are features. Each `agent()` method builds the `Agent` that runs the feature with its model;
+callers use the agent's `start()`, `resume()`, and `state`.
+`application_tools` contains a feature's application tool objects; the agent's `tools` contains the bound SDK tools of a run that starts now.
 `chat/prompt_utils.py` builds instructions and assembles history, reminders, and file context.
 Its `build_chat_prompt` function selects chat instructions and reminders before assembly.
 `chat/prompt_formatting.py` resolves attachments, reminder tags, and cache markers for model input.

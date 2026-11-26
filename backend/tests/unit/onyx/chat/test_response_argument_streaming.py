@@ -22,7 +22,7 @@ from onyx.agents.events import (
 from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
 from onyx.chat import renderer as renderer_module
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import MessageRendering, ResponseRecord
+from onyx.chat.models import MessageRendering, ResponseRecord, RunDocuments
 from onyx.chat.presentation import ResponsePresenter, replay_response
 from onyx.chat.renderer import (
     ARGUMENT_REPORT_INTERVAL_SECONDS,
@@ -123,7 +123,7 @@ class Live:
     def __init__(self, settings: MessageRendering | None = None) -> None:
         self.accumulator = MessageAccumulator()
         self.renderer = MessageRenderer(
-            settings or MessageRendering(), {}, ResponseLayout()
+            settings or MessageRendering(), RunDocuments(), ResponseLayout()
         )
         self.accepted = AssistantMessage(id="response:0")
         self.packets: list[Packet] = []

@@ -17,7 +17,7 @@ from onyx.agents.models import RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.models import ChatFullResponse, ResponseCheckpoint
 from onyx.chat.process_message import run_chat_turn
-from onyx.chat.run_store import RESUME_FAILED_MESSAGE, ownerless_response_ids
+from onyx.chat.run_store import RESUME_UPDATED_MESSAGE, ownerless_response_ids
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
 from onyx.db.api_key import insert_api_key, remove_api_key
 from onyx.db.chat import delete_chat_session
@@ -904,9 +904,10 @@ def test_a_response_that_cannot_continue_fails_once_and_frees_the_chat(
     streaming_api: str,
     incompatibility: str,
 ) -> None:
-    """A continuation that fails before its run starts ends the response as
-    failed, with its saved state; nothing tries it again, and the chat
-    accepts messages."""
+    """A continuation whose saved data does not match the running code fails
+    before its run starts: the response ends with the update message, its
+    saved state is deleted, nothing tries it again, and the chat accepts
+    messages."""
     hello = _hello(connected_mcp_server, CALL_ID, "team")
     mock_llm.conversation(
         "chat",
@@ -946,7 +947,7 @@ def test_a_response_that_cannot_continue_fails_once_and_frees_the_chat(
         assert response.response_status == RunStatus.ERROR
         assert (
             response.response_failure is not None
-            and response.response_failure.message == RESUME_FAILED_MESSAGE
+            and response.response_failure.message == RESUME_UPDATED_MESSAGE
         )
         assert db_session.get(ChatResponseCheckpoint, response_id) is None
     status = _status(admin_user, chat_session_id)

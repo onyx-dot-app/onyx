@@ -6,12 +6,12 @@ from pydantic import JsonValue
 
 from onyx.agents.models import (
     AgentState,
-    CompactionCheckpoint,
     PreparedStep,
+    RunHooks,
     StepInput,
     StepResult,
 )
-from onyx.agents.runtime import Agent, RestorableFeature
+from onyx.agents.runtime import Agent, AgentFeature
 from onyx.agents.tools import AgentTool
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
@@ -19,7 +19,11 @@ from onyx.chat.citation_utils import (
     remap_received_citations,
 )
 from onyx.chat.models import CitationMode, PromptMetadata
-from onyx.chat.prompt_utils import prepare_prompt, with_language_section
+from onyx.chat.prompt_utils import (
+    SearchPassageCache,
+    prepare_prompt,
+    with_language_section,
+)
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import (
@@ -27,6 +31,7 @@ from onyx.deep_research.models import (
     ResearchFeatureState,
     ResearchMessageMetadata,
     ResearchPhase,
+    new_sources,
 )
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_DESCRIPTION,
@@ -35,7 +40,6 @@ from onyx.deep_research.tool_definitions import (
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
     GenerationOptions,
-    Message,
     ReasoningEffort,
     SystemMessage,
     ToolChoiceOptions,
@@ -80,8 +84,9 @@ RESEARCH_STEP_OUTPUT_TOKENS = 1000
 RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 
 
-class ResearchAgent(Agent, RestorableFeature):
-    """Investigate one question and return a report with source references."""
+class ResearchFeature(AgentFeature):
+    """Investigate one question and return a report with source references:
+    an AgentFeature. `agent` builds the agent that runs it."""
 
     def __init__(
         self,
@@ -92,12 +97,10 @@ class ResearchAgent(Agent, RestorableFeature):
         language_section: str,
         reasoning_effort: ReasoningEffort,
         *,
-        messages: list[Message] | None = None,
-        checkpoint: CompactionCheckpoint | None = None,
         sources: CitationMapping | None = None,
-        previous_run_id: str | None = None,
-        agent_id: str | None = None,
     ) -> None:
+        self.llm = llm
+        self.user_identity = user_identity
         allowed_tools = {
             SearchTool.NAME,
             WebSearchTool.NAME,
@@ -115,6 +118,8 @@ class ResearchAgent(Agent, RestorableFeature):
         self.reasoning_effort = reasoning_effort
         # Preserve citation markers in intermediate reports so the parent can
         # renumber them when it combines reports from multiple research agents.
+        # Each step's deduplicated search results, for later requests.
+        self.search_passage_cache: SearchPassageCache = {}
         self.citation_processor = DynamicCitationProcessor(
             citation_mode=CitationMode.KEEP_MARKERS
         )
@@ -123,31 +128,43 @@ class ResearchAgent(Agent, RestorableFeature):
         self.citation_mapping = {
             number: document.document_id for number, document in (sources or {}).items()
         }
-        report_tool = AgentTool(
-            definition=GENERATE_REPORT_TOOL_DESCRIPTION,
-            execute=lambda _invocation: ToolResult(
-                content="Ready to produce the research report."
-            ),
-        )
-        super().__init__(
-            llm,
-            tools=[
-                tool.bind(self._tool_context, summary_only=True)
-                for tool in self.application_tools
-            ]
-            + [report_tool],
+
+    def agent(
+        self,
+        state: AgentState | None = None,
+        *,
+        agent_id: str | None = None,
+        previous_run_id: str | None = None,
+    ) -> Agent:
+        """The agent that runs this feature with the same model."""
+        return Agent(
+            self.llm,
+            feature=self,
+            state=state,
             agent_id=agent_id,
             previous_run_id=previous_run_id,
-            state=AgentState(
-                messages=messages or [],
-                checkpoint=checkpoint,
+            generation_context=GenerationContext(
+                flow=LLMFlow.RESEARCH_AGENT, user_identity=self.user_identity
             ),
-            restoration=self,
+        )
+
+    def bind(self) -> RunHooks:
+        return RunHooks(
+            tools=(
+                *(
+                    tool.bind(self._tool_context, summary_only=True)
+                    for tool in self.application_tools
+                ),
+                AgentTool(
+                    definition=GENERATE_REPORT_TOOL_DESCRIPTION,
+                    execute=lambda _invocation: ToolResult(
+                        content="Ready to produce the research report."
+                    ),
+                ),
+            ),
             prepare_step=self._prepare_step,
             after_step=self._after_step,
-            generation_context=GenerationContext(
-                flow=LLMFlow.RESEARCH_AGENT, user_identity=user_identity
-            ),
+            capture_state=self.capture_state,
         )
 
     def capture_state(self) -> ResearchFeatureState:
@@ -164,11 +181,6 @@ class ResearchAgent(Agent, RestorableFeature):
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
         saved = ResearchFeatureState.model_validate(state)
-        if (
-            saved.configuration.language_section != self.language_section
-            or saved.configuration.reasoning_effort != self.reasoning_effort
-        ):
-            raise ValueError("Research restoration configuration does not match")
         self.started = time.monotonic() - saved.elapsed_seconds
         self.search_context = saved.search_context
         self.citation_processor.citation_to_doc = saved.citation_sources
@@ -272,7 +284,10 @@ class ResearchAgent(Agent, RestorableFeature):
         output_metadata = ResearchMessageMetadata(
             phase=ResearchPhase.REPORT if is_final_step else ResearchPhase.RESEARCH,
             is_intermediate=True,
-            sources=dict(self.citation_processor.citation_to_doc),
+            # The parent reads the report step's sources alone.
+            sources=dict(self.citation_processor.citation_to_doc)
+            if is_final_step
+            else new_sources(self.citation_processor.citation_to_doc, state.messages),
         )
         return PreparedStep(
             input_messages=received.messages,
@@ -282,6 +297,7 @@ class ResearchAgent(Agent, RestorableFeature):
             output_metadata=output_metadata,
             assemble_messages=partial(
                 prepare_prompt,
+                search_passage_cache=self.search_passage_cache,
                 system_prompt=SystemMessage(content=system_prompt),
                 skills_catalog_message=self.skills_catalog_message,
                 custom_agent_prompt=None,

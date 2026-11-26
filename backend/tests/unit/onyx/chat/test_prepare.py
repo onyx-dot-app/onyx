@@ -1208,6 +1208,7 @@ def test_project_instructions_supplement_agent_prompt(
         reminder_message=None,
         context_files=setup.extracted_context_files,
         token_counter=len,
+        search_passage_cache={},
     )
     text = "\n".join(message.text for message in history)
     assert text.count("Answer tersely.") == 1
