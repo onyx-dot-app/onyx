@@ -42,7 +42,7 @@ type BulkAction = "share" | "enable" | "disable" | "delete";
 
 interface SkillBulkActionsOptions {
   items: readonly CustomSkill[];
-  enablement: SkillEnablement;
+  enablement: Pick<SkillEnablement, "isPending" | "enabledOf">;
   noun: BulkSkillNoun;
 }
 
@@ -96,6 +96,9 @@ export function useSkillBulkActions({
   // A row toggle still in flight must settle before a bulk action may race it.
   const locked =
     busy || selectedItems.some((item) => enablement.isPending(item.id));
+  // Delete races only a toggle of the skills it deletes, not of the selection.
+  const deleteLocked =
+    busy || deleteTargets.some((item) => enablement.isPending(item.id));
 
   async function run(action: BulkAction, sharing?: SkillShareUpdatePayload) {
     // Delete acts on exactly the skills its confirm listed.
@@ -105,7 +108,8 @@ export function useSkillBulkActions({
         : action === "share"
           ? selectedItems
           : toggleableItems;
-    if (locked || targets.length === 0) return;
+    if ((action === "delete" ? deleteLocked : locked) || targets.length === 0)
+      return;
     setBusy(true);
     setFailures([]);
     try {
@@ -249,7 +253,7 @@ export function useSkillBulkActions({
           submit={
             <Button
               variant="danger"
-              disabled={busy}
+              disabled={deleteLocked}
               onClick={() => void run("delete")}
             >
               {bulkCopy("delete")}
