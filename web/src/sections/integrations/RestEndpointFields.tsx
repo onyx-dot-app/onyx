@@ -10,6 +10,7 @@ import {
   InputTypeIn,
   Text,
 } from "@opal/components";
+import { SvgX } from "@opal/icons";
 import { InputErrorText, InputVertical, Section, toast } from "@opal/layouts";
 import { importOpenApiSpec } from "@/lib/integrations/svc";
 import type {
@@ -67,6 +68,7 @@ export default function RestEndpointFields({
   const [specUrl, setSpecUrl] = useState("");
   // Save drops the actions of these operations, so show them before Save.
   const [skipped, setSkipped] = useState<string[]>([]);
+  const [rejected, setRejected] = useState(false);
 
   async function runImport(
     body: { openapi_document: string } | { spec_url: string }
@@ -104,21 +106,42 @@ export default function RestEndpointFields({
         error={importError ?? undefined}
       >
         <Section gap={2} alignItems="stretch" height="auto">
-          <InputSingleUpload
-            accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
-            placeholder={t("import.upload")}
-            variant={disabled ? "disabled" : "primary"}
-            maxSizeKb={SPEC_MAX_SIZE_KB}
-            onFileSizeExceeded={() => onImportErrorChange(tAdd("api.tooLarge"))}
-            // Called before setValue, which may start an import.
-            onReadingChange={onImportingChange}
-            setValue={(text) => {
-              const over = specTextTooLarge(text);
-              onImportErrorChange(over ? tAdd("api.tooLarge") : null);
-              if (!over && text.trim())
-                void runImport({ openapi_document: text });
-            }}
-          />
+          <Section flexDirection="row" gap={1} height="auto">
+            <InputSingleUpload
+              accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
+              placeholder={t("import.upload")}
+              variant={disabled ? "disabled" : "primary"}
+              maxSizeKb={SPEC_MAX_SIZE_KB}
+              onFileSizeExceeded={() => {
+                setRejected(true);
+                onImportErrorChange(tAdd("api.tooLarge"));
+              }}
+              // Called before setValue, which may start an import.
+              onReadingChange={onImportingChange}
+              setValue={(text) => {
+                setRejected(false);
+                const over = specTextTooLarge(text);
+                onImportErrorChange(over ? tAdd("api.tooLarge") : null);
+                if (!over && text.trim())
+                  void runImport({ openapi_document: text });
+              }}
+            />
+            {/* A refused file is never attached, so the control has no clear
+                button; this one keeps the current spec. */}
+            {rejected && importError !== null && (
+              <Button
+                type="button"
+                size="sm"
+                prominence="tertiary"
+                icon={SvgX}
+                aria-label={tAdd("api.upload.remove")}
+                onClick={() => {
+                  setRejected(false);
+                  onImportErrorChange(null);
+                }}
+              />
+            )}
+          </Section>
           <Section flexDirection="row" gap={2} height="auto">
             <InputTypeIn
               aria-label={t("import.url")}

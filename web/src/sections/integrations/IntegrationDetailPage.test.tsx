@@ -520,6 +520,38 @@ test("a refused REST upload blocks Save until a spec imports", async () => {
   expect(save).toBeEnabled();
 });
 
+test("a refused REST upload can be discarded to keep the current spec", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+  });
+  const big = new File(["x"], "openapi.json");
+  Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 + 1 });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const input =
+    activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("No file input");
+  await u.upload(input, big);
+  expect(await view.findByText(copy.add.api.tooLarge)).toBeInTheDocument();
+  expect(save).toBeDisabled();
+
+  await u.click(view.getByRole("button", { name: copy.add.api.upload.remove }));
+
+  expect(view.queryByText(copy.add.api.tooLarge)).not.toBeInTheDocument();
+  expect(save).toBeEnabled();
+});
+
 test("a failed spec import blocks Save until the import is discarded", async () => {
   mockFetch({
     [URL_DETAIL]: makeDetail({
