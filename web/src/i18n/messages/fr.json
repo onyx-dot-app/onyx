@@ -10513,6 +10513,7 @@
       },
       "filters": {
         "label": "Type d’intégration",
+        "selected": "Type d’intégration : {type}",
         "all": "Tous les types",
         "mcp": "Serveurs MCP",
         "api": "Applications"

@@ -28,7 +28,7 @@ export default function IntegrationKindFilter({
           icon={SvgFilter}
           interaction={value === "all" ? "rest" : "hover"}
           aria-label={
-            value === "all" ? t("label") : `${t("label")}: ${t(value)}`
+            value === "all" ? t("label") : t("selected", { type: t(value) })
           }
           tooltip={t("label")}
         >

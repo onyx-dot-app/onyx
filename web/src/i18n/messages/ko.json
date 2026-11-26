@@ -10513,6 +10513,7 @@
       },
       "filters": {
         "label": "연동 유형",
+        "selected": "연동 유형: {type}",
         "all": "모든 유형",
         "mcp": "MCP 서버",
         "api": "앱"

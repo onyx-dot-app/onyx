@@ -10513,6 +10513,7 @@
       },
       "filters": {
         "label": "連携の種類",
+        "selected": "連携の種類: {type}",
         "all": "すべての種類",
         "mcp": "MCP サーバー",
         "api": "アプリ"

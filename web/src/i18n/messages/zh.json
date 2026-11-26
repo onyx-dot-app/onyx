@@ -10513,6 +10513,7 @@
       },
       "filters": {
         "label": "集成类型",
+        "selected": "集成类型：{type}",
         "all": "所有类型",
         "mcp": "MCP 服务器",
         "api": "应用"
