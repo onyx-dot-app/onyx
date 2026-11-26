@@ -14417,7 +14417,8 @@
       },
       "deadline": "请在 {time} 前批准",
       "header": {
-        "required": "已请求批准：{headline}"
+        "required": "已请求批准：{headline}",
+        "requiredBy": "已请求批准：{headline}。请在 {time} 前批准"
       },
       "headline": {
         "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",

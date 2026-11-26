@@ -14417,7 +14417,8 @@
       },
       "deadline": "Bis {time} genehmigen",
       "header": {
-        "required": "Freigabe angefordert: {headline}"
+        "required": "Freigabe angefordert: {headline}",
+        "requiredBy": "Freigabe angefordert: {headline}. Bis {time} genehmigen"
       },
       "headline": {
         "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",

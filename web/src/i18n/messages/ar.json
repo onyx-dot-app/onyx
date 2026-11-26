@@ -14417,7 +14417,8 @@
       },
       "deadline": "الموافقة قبل {time}",
       "header": {
-        "required": "تم طلب الموافقة: {headline}"
+        "required": "تم طلب الموافقة: {headline}",
+        "requiredBy": "تم طلب الموافقة: {headline}. الموافقة قبل {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",

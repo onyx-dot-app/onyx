@@ -14417,7 +14417,8 @@
       },
       "deadline": "Aprovar até {time}",
       "header": {
-        "required": "Aprovação solicitada: {headline}"
+        "required": "Aprovação solicitada: {headline}",
+        "requiredBy": "Aprovação solicitada: {headline}. Aprovar até {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# ação} other {# ações}} em {app}",

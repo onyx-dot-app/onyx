@@ -14417,7 +14417,8 @@
       },
       "deadline": "{time}までに承認",
       "header": {
-        "required": "承認リクエスト: {headline}"
+        "required": "承認リクエスト: {headline}",
+        "requiredBy": "承認リクエスト: {headline}。{time}までに承認"
       },
       "headline": {
         "multiAction": "{app} での {count, plural, one {# 件のアクション} other {# 件のアクション}}",

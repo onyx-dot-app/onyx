@@ -14417,7 +14417,8 @@
       },
       "deadline": "Approuver avant {time}",
       "header": {
-        "required": "Approbation demandée : {headline}"
+        "required": "Approbation demandée : {headline}",
+        "requiredBy": "Approbation demandée : {headline}. Approuver avant {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",

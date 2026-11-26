@@ -14417,7 +14417,8 @@
       },
       "deadline": "{time}까지 승인",
       "header": {
-        "required": "승인 요청됨: {headline}"
+        "required": "승인 요청됨: {headline}",
+        "requiredBy": "승인 요청됨: {headline}. {time}까지 승인"
       },
       "headline": {
         "multiAction": "{app}의 {count, plural, one {작업 #개} other {작업 #개}}",

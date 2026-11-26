@@ -1,3 +1,4 @@
+import { NextIntlClientProvider } from "next-intl";
 import { render, screen, setupUser, within } from "@tests/setup/test-utils";
 import ApprovalCard, {
   type ApprovalCardProps,
@@ -56,6 +57,37 @@ describe("pending", () => {
     expect(
       value.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it("takes the header label with its deadline from one message", () => {
+    // A translator may reorder the headline and deadline.
+    const reordered = {
+      ...messages,
+      common: {
+        ...messages.common,
+        approvalCard: {
+          ...copy,
+          header: { ...copy.header, requiredBy: "By {time}: {headline}" },
+        },
+      },
+    };
+    render(
+      <NextIntlClientProvider locale="en" messages={reordered}>
+        <ApprovalCard
+          actions={[{ id: "send", name: "Send message" }]}
+          payload={{}}
+          expiresAt="2099-01-01T00:00:00Z"
+          status="pending"
+          onDecide={async () => {}}
+        />
+      </NextIntlClientProvider>
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /^By \d{1,2}:\d{2}\s?[AP]M: Send message$/,
+      })
+    ).toBeInTheDocument();
   });
 
   it("reports each decision", async () => {
