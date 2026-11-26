@@ -536,6 +536,10 @@ class ChatSubagent(BaseModel):
     stream_id: int | None = None
     # The tool that its running response last called
     activity_tool: str | None = None
+    # The model of its current or latest run
+    model: str | None = None
+    # How long its latest run worked, once saved
+    duration_seconds: float | None = None
 
 
 class ChatSubagentHistory(BaseModel):

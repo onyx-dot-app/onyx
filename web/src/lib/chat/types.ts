@@ -118,6 +118,10 @@ export interface ChatSubagent {
   stream_id: number | null;
   /** The tool that its running response last called. */
   activity_tool: string | null;
+  /** The model of its current or latest run. */
+  model: string | null;
+  /** How long its latest run worked, once saved. */
+  duration_seconds: number | null;
 }
 
 /** The chat's background agents, as `useChatSubagents` gives them. */

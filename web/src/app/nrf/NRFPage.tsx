@@ -40,7 +40,7 @@ import {
 import ChatUI from "@/sections/chat/ChatUI";
 import ChatActivity from "@/sections/chat/ChatActivity";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
-import { SubagentTabsContext } from "@/lib/chat/subagents";
+import { SubagentLinksContext } from "@/lib/chat/subagents";
 import { messageRowId } from "@/lib/chat/rowIds";
 import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
 import ChatScrollContainer, {
@@ -499,7 +499,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   return (
     <AppWorkspaceElementsContext.Provider value={workspaceElements}>
       {/* Its right side shows only Sources, so it opens no subagent */}
-      <SubagentTabsContext.Provider value={false}>
+      <SubagentLinksContext.Provider value={false}>
         <div
           className={cn(
             "relative w-full h-full flex flex-col overflow-hidden",
@@ -790,7 +790,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             )}
           <div ref={setActivitySlot} />
         </div>
-      </SubagentTabsContext.Provider>
+      </SubagentLinksContext.Provider>
     </AppWorkspaceElementsContext.Provider>
   );
 }

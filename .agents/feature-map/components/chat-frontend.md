@@ -958,33 +958,53 @@ overlaid `Hoverable.Item`s, so the Stop stays in the tab order; a touch screen
 shows the Stop): `useChatSubagents().stopAgent` posts
 `/api/chat/chat-session/{id}/stop-subagents` with `{ "agent_id": ... }`, then
 reloads the status and the list. A finished row shows its outcome and no time.
-A row opens the agent in the right panel (`lib/chat/subagents.ts:openSubagent`).
+A row opens the agent in the main view (`lib/chat/subagents.ts:useSubagentNavigation`).
 
-**Subagent tabs.** `lib/chat/rightPanel.ts` keeps `agentTabs` after the file
-tabs (`agent:{id}`, action `openAgent`); they follow the same tab rules and
-count as Files-side tabs, so the panel stays open on them.
-`sections/chat/SubagentTranscript.tsx` renders the agent's conversation
-read-only, as the shared view does (`HumanMessage`, `AgentMessage`), from
+**Subagent view.** As T3 Code's, a subagent opens in the main view in place
+of the chat. `useSubagentNavigation().open` pushes the URL with
+`?subagent={id}` (`SEARCH_PARAM_NAMES.SUBAGENT_ID`) and keeps the other
+parameters; `openParent` removes it. `views/AppPage.tsx` reads the parameter
+while a chat is open: it renders `SubagentView` in the ChatUI slot (no
+`ChatScrollContainer`, no `ChatFind`) and `SubagentBar` in place of
+`MultiModelSelector` and `AppInputBar`. The sidebar, header and right panel
+stay the parent chat's; subagents never open in the output panel.
+`sections/chat/SubagentView.tsx:SubagentView` starts with T3 Code's "Subagent
+of · {chat title}" divider, a pill that opens the parent, then renders the
+agent's conversation read-only, as the shared view does (`HumanMessage`,
+`AgentMessage`), in the chat column's width, with its own scroller that keeps
+to the end unless the user scrolled up. It reads
 `GET .../agents/{agent_id}/history`. `useSubagentTranscript` follows the live
 stream that the history names (`.../agents/{agent_id}/stream`, one batch of
 packets per frame); its packets replace the running response's saved ones.
 A stream that drops before its stop packet resumes from its last cursor. The
 history reloads when the stream ends or the agents list names another
-`stream_id`, or none. The tab lists the agent's messages by ID, not by the
+`stream_id`, or none. The view lists the agent's messages by ID, not by the
 latest-child chain: a reply never links to the next instruction its parent
 sends. The history reads approvals under the root chat and adds the stop packet
-that a child's saved reply lacks. `SubagentBar` shows the agent's path, run
-time and Stop over the tab. `SubagentPathContext` gives the path of the agent
-whose conversation renders, so its spawns resolve to `{path}/{name}`, with
-each `/` of a Claude-family description turned into `-` as the server names
-it; a refused spawn links to no agent. `SubagentTabsContext` is false on the
-extension page, which has no subagent tabs: its rows and spawns open nothing.
-In the timeline, a spawn step whose agent the list holds has an open button
-(`lib/timeline/chat/renderers/agent/AgentToolRenderer.tsx`), and consecutive spawns of one turn
-form one step (`lib/timeline/chat/transformers.ts:groupSpawnSteps`) that
-`lib/timeline/chat/renderers/agent/AgentGroupRenderer.tsx` draws as T3 Code's subagent card: the
-count, how many work (blue), the group's run time, and a row per agent with its
-current activity (`activity_tool`) or task, which opens it.
+that a child's saved reply lacks. `SubagentBar` copies T3 Code's read-only
+composer bar: the agent's `model`, its state (`Starting`, `Running 12s`,
+`Waiting 12s`, `Completed in 1m 53s` from `duration_seconds`, else the label),
+an sr-only `role="status"` announcement without the ticking time, "Runs on its
+own", Stop while it is live, and **Open parent**. An agent that the list does
+not hold shows the empty text and only **Open parent**.
+`SubagentPathContext` gives the path of the agent whose conversation renders,
+so its spawns resolve to `{path}/{name}`, with each `/` of a Claude-family
+description turned into `-` as the server names it; a refused spawn links to
+no agent. `SubagentLinksContext` is false on the extension page, which shows
+no subagent view: its rows and cards open nothing.
+In the timeline, each spawn is T3 Code's subagent card
+(`lib/timeline/chat/renderers/agent/SubagentCard.tsx`): an avatar with a
+state dot (blue working, green done, red failed or at its limit, grey
+stopped), the name over the current activity (`activity_tool`) or task, the
+state while not completed, the run time or saved duration, and a chevron.
+A single spawn renders as the card alone, with no step header
+(`lib/timeline/chat/renderers/agent/AgentToolRenderer.tsx`, `timelineLayout: "content"`); send and interrupt
+steps keep their header. Consecutive spawns of one turn form one step
+(`lib/timeline/chat/transformers.ts:groupSpawnSteps`) that
+`lib/timeline/chat/renderers/agent/AgentGroupRenderer.tsx` draws as T3 Code's
+subagent group: the count, a summary such as "2 working · 1 done · 1 failed"
+(blue while any works, red when any failed), the group's run time, and a
+card per agent.
 The card portals into the page column's
 `activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
 at the chat region's top end, so the header keeps its width and buttons. With
@@ -1003,7 +1023,11 @@ panel. Agents come from
 which reads `load_session_agent_metadata` for the selected branch and keeps
 the `spawn_agent` children (`ChatConfiguration`; Deep Research workers are
 foreground): `id`, `path`, `status`, `stopped_by_user`, and the latest run's
-`started_at` (its response's `time_sent`), with no transcript. The list loads again when the status changes
+`started_at` (its response's `time_sent`), with no transcript. One more query
+(`db/chat_subagents.py:agent_run_summaries`) gives each latest run's `model`
+(`model_display_name`, copied from the spawning response when the run is
+reserved) and `duration_seconds` (`processing_duration_seconds`, saved with
+a finished child's reply). The list loads again when the status changes
 `has_active_subagents` or `latest_response_id`, and polls while agents are
 active. The status it reads also polls while a reply streams, so agents that
 the reply starts show. An idle chat that sees a running or unknown

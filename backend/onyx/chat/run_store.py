@@ -1069,6 +1069,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                         db_session=session,
                         assistant_message=response,
                         request_params=display.request_params,
+                        pre_answer_processing_time=display.pre_answer_processing_time,
                         response_record=record,
                         presentation=display.presentation,
                     )

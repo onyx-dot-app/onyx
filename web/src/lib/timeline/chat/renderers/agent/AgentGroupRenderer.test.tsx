@@ -1,4 +1,4 @@
-import { act, render, screen } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor } from "@tests/setup/test-utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   type CustomToolPacket,
@@ -14,7 +14,7 @@ import {
 } from "@/lib/timeline/chat/transformers";
 import AgentGroupRenderer from "@/lib/timeline/chat/renderers/agent/AgentGroupRenderer";
 import { MAX_LISTED_SUBAGENTS } from "@/lib/chat/hooks";
-import { SubagentTabsContext } from "@/lib/chat/subagents";
+import { SubagentLinksContext } from "@/lib/chat/subagents";
 import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";
 import { AgentToolRenderer } from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
 
@@ -157,10 +157,17 @@ function agent(
     latest_run_id: 1,
     stream_id: status === "running" ? 7 : null,
     activity_tool: activity,
+    model: null,
+    duration_seconds: status === "complete" ? 42 : null,
   };
 }
 
+function shownSubagent(): string | null {
+  return new URLSearchParams(window.location.search).get("subagent");
+}
+
 beforeEach(() => {
+  window.history.replaceState(null, "", "/app?chatId=s");
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: "s" });
   useChatSessionStore.getState().createSession("s");
   jest.spyOn(global, "fetch").mockImplementation(async (input) => {
@@ -197,7 +204,7 @@ test("consecutive spawns of a turn form one step, which the group card renders",
   expect(findRenderer({ packets: alpha })).toBe(AgentToolRenderer);
 });
 
-test("the card counts the subagents and who works, and a row opens its agent", async () => {
+test("the group counts the subagents by state, and a card opens its agent in the main view", async () => {
   render(
     <AgentGroupRenderer
       packets={[
@@ -228,26 +235,24 @@ test("the card counts the subagents and who works, and a row opens its agent", a
   );
 
   expect(screen.getByTestId("status")).toHaveTextContent("2 subagents");
-  expect(await screen.findByText("1 working")).toBeVisible();
+  expect(await screen.findByText("1 working · 1 done")).toBeVisible();
   expect(screen.getByText("Using web_search")).toBeVisible();
-  // A finished agent shows its task
+  expect(screen.getByText("Running")).toBeVisible();
+  // A finished agent shows its task and its time, without its state
   expect(screen.getByText("Check facts")).toBeVisible();
+  expect(screen.getByText("42s")).toBeVisible();
+  expect(screen.queryByText("Completed")).toBeNull();
 
   act(() => screen.getByRole("button", { name: "Open alpha" }).click());
-  const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
-  expect(panel?.activeId).toBe("agent:a-1");
-  expect(panel?.agentTabs).toEqual([{ agentId: "a-1", name: "alpha" }]);
+  expect(shownSubagent()).toBe("a-1");
 });
 
 test("refused spawns count as failed and link to no earlier agent of their name", async () => {
   // beta already exists; both spawns were refused before any agent started
   renderCard([...refusedSpawn(0, "beta"), ...refusedSpawn(1, "delta")]);
   expect(await screen.findByText("2 failed")).toBeVisible();
-  expect(screen.queryByText("Done")).toBeNull();
-  expect(screen.getByRole("button", { name: "Open beta" })).toHaveAttribute(
-    "aria-disabled",
-    "true"
-  );
+  expect(screen.queryByText(/done/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Open beta" })).toBeNull();
 });
 
 test("a Claude spawn whose description has a slash opens the agent the server named", async () => {
@@ -263,12 +268,10 @@ test("a Claude spawn whose description has a slash opens the agent the server na
   renderCard([...claudeSpawn(0, "auth/session"), ...claudeSpawn(1, "ui")]);
   const row = await screen.findByRole("button", { name: "Open auth/session" });
   act(() => row.click());
-  expect(
-    useChatSessionStore.getState().sessions.get("s")?.rightPanel.activeId
-  ).toBe("agent:c-1");
+  expect(shownSubagent()).toBe("c-1");
 });
 
-test("on a page without subagent tabs, a finished group does not read as working and opens nothing", async () => {
+test("on a page without subagent links, a finished group does not read as working and opens nothing", async () => {
   jest.spyOn(global, "fetch").mockImplementation(async (input) => {
     const body = String(input).endsWith("/agents")
       ? [
@@ -279,7 +282,7 @@ test("on a page without subagent tabs, a finished group does not read as working
     return new Response(JSON.stringify(body), { status: 200 });
   });
   render(
-    <SubagentTabsContext.Provider value={false}>
+    <SubagentLinksContext.Provider value={false}>
       <AgentGroupRenderer
         packets={[
           ...spawn(0, "alpha", "Find sources"),
@@ -303,15 +306,15 @@ test("on a page without subagent tabs, a finished group does not read as working
           </div>
         )}
       </AgentGroupRenderer>
-    </SubagentTabsContext.Provider>
+    </SubagentLinksContext.Provider>
   );
 
-  expect(await screen.findByText("Done")).toBeVisible();
+  expect(await screen.findByText("2 done")).toBeVisible();
   expect(screen.queryByText(/working/)).toBeNull();
   expect(screen.queryByRole("button", { name: "Open alpha" })).toBeNull();
 });
 
-test("a chat outside the session store shows finished spawns as done, not working", async () => {
+test("a chat outside the session store does not show finished spawns as working", async () => {
   // A shared chat has no current session, so no agents list
   useChatSessionStore.setState({ currentSessionId: null });
   renderCard([
@@ -319,8 +322,9 @@ test("a chat outside the session store shows finished spawns as done, not workin
     ...spawn(1, "beta", "Check facts"),
   ]);
 
-  expect(await screen.findByText("Done")).toBeVisible();
-  expect(screen.queryByText(/working/)).toBeNull();
+  expect(await screen.findByText("Check facts")).toBeVisible();
+  expect(screen.queryByText(/working|Starting/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Open alpha" })).toBeNull();
 });
 
 test("a full agents list that omits a finished spawn does not read as working", async () => {
@@ -335,6 +339,9 @@ test("a full agents list that omits a finished spawn does not read as working", 
   });
   renderCard(spawn(0, "alpha", "Find sources"));
 
-  expect(await screen.findByText("Done")).toBeVisible();
-  expect(screen.queryByText(/working/)).toBeNull();
+  // Until the full list loads, the spawn still starts
+  await waitFor(() =>
+    expect(screen.queryByText(/working|Starting/)).toBeNull()
+  );
+  expect(screen.getByText("Find sources")).toBeVisible();
 });

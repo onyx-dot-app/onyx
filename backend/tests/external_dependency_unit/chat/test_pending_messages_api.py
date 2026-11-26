@@ -2809,6 +2809,7 @@ def test_a_background_agent_streams_live_and_its_history_and_activity_show(
     client: TestClient,
     chat: ChatSession,
     owner: User,
+    db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A running background agent's output streams from its own buffer, its
@@ -2908,6 +2909,19 @@ def test_a_background_agent_streams_live_and_its_history_and_activity_show(
     (agent,) = client.get(f"/chat/chat-session/{chat.id}/agents").json()
     assert agent["status"] == "complete"
     assert agent["stream_id"] is None
+    # A child runs on its spawner's model, and its saved run gives its time
+    db_session.expire_all()
+    root_models = set(
+        db_session.scalars(
+            select(ChatMessage.model_display_name).where(
+                ChatMessage.chat_session_id == chat.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+        )
+    )
+    assert agent["model"] is not None
+    assert root_models == {agent["model"]}
+    assert agent["duration_seconds"] is not None
     finished = client.get(f"/chat/chat-session/{chat.id}/agents/{agent['id']}/history")
     assert finished.json()["stream"] is None
     # The saved reply ends, as a root's replay does
@@ -2919,7 +2933,7 @@ def test_a_background_agent_streams_live_and_its_history_and_activity_show(
         "Worker result" in message["message"] for message in finished.json()["messages"]
     )
 
-    # A worker that dies leaves its pointer behind; the ended run's tab does
+    # A worker that dies leaves its pointer behind; the ended run's view does
     # not follow it.
     get_cache_backend().set(
         _pointer_key(int(agent["latest_run_id"])),

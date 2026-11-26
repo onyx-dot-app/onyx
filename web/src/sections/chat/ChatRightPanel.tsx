@@ -1,6 +1,5 @@
 "use client";
 
-import type { MinimalOnyxDocument } from "@/lib/search/types";
 import {
   memo,
   type ReactNode,
@@ -16,7 +15,7 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { SvgBranch, SvgFiles, SvgSearchMenu, SvgSidebar } from "@opal/icons";
+import { SvgFiles, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
@@ -36,7 +35,6 @@ import {
   RIGHT_PANEL_FILES_TAB,
   RIGHT_PANEL_SOURCES_TAB,
   openCardFileAction,
-  rightPanelAgentTab,
   rightPanelFileTab,
   type ChatRightPanelAction,
   type ChatRightPanelState,
@@ -64,10 +62,6 @@ import {
 import { PanelUrlBar } from "@/sections/output-panel/PanelUrlBar";
 import { ChatSidePanel } from "@/sections/chat/ChatSidePanel";
 import {
-  SubagentBar,
-  SubagentTranscript,
-} from "@/sections/chat/SubagentTranscript";
-import {
   PublishedFilePreview,
   PublishedFilesGrid,
 } from "@/sections/chat/PublishedFileViews";
@@ -86,8 +80,6 @@ interface ChatRightPanelProps {
   hasSources: boolean;
   // Loads the chat's file list again; rejects when the load fails
   reloadFiles: () => Promise<void>;
-  // Opens a document's preview, as the page does for the chat's citations
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }
 
 /**
@@ -111,7 +103,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   sources,
   hasSources,
   reloadFiles,
-  setPresentingDocument,
 }: ChatRightPanelProps) {
   const t = useTranslations("chat.rightPanel");
   // Each tab's shown file, with the name that the list gives its artifact,
@@ -138,17 +129,11 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     [state.fileTabs, files]
   );
   const fileByTab = new Map(fileTabs.map((tab) => [tab.id, tab.file]));
-  const agentByTab = new Map(
-    state.agentTabs.map((tab) => [rightPanelAgentTab(tab.agentId), tab])
-  );
   const shown =
-    state.activeId === RIGHT_PANEL_SOURCES_TAB ||
-    fileByTab.has(state.activeId) ||
-    agentByTab.has(state.activeId)
+    state.activeId === RIGHT_PANEL_SOURCES_TAB || fileByTab.has(state.activeId)
       ? state.activeId
       : RIGHT_PANEL_FILES_TAB;
   const shownFile = fileByTab.get(shown);
-  const shownAgent = agentByTab.get(shown);
   const shownPinned = fileTabs.some((tab) => tab.id === shown && tab.pinned);
   // Files and Sources lead the strip when they have content or are shown
   const fixedTabs: PanelTabItem[] = [
@@ -211,15 +196,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
         ),
       };
     }),
-    ...state.agentTabs.map(
-      (tab): PanelTabItem => ({
-        id: rightPanelAgentTab(tab.agentId),
-        label: tab.name,
-        icon: SvgBranch,
-        closable: true,
-        movable: false,
-      })
-    ),
   ];
   const retainedTabs = new Set(
     retainedFileViewers(
@@ -348,10 +324,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     [dispatch]
   );
   const escape = () => {
-    if (shownAgent) {
-      dispatch({ type: "closeTab", tabId: shown });
-      return;
-    }
     if (!shownFile) {
       dispatch({ type: "closePanel" });
       return;
@@ -459,7 +431,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           aria-label={
             shown === RIGHT_PANEL_SOURCES_TAB
               ? t("sourcesTab.label")
-              : (shownAgent?.name ?? t("filesTab.label"))
+              : t("filesTab.label")
           }
           className="relative h-full w-full bg-background-neutral-00 border-s"
         >
@@ -485,37 +457,30 @@ export const ChatRightPanel = memo(function ChatRightPanel({
               />
             }
             toolbar={
-              shownAgent
-                ? sessionId !== null && (
-                    <SubagentBar
-                      sessionId={sessionId}
-                      agentId={shownAgent.agentId}
-                    />
-                  )
-                : // As Craft's: reload before the search or the file's path
-                  shown !== RIGHT_PANEL_SOURCES_TAB && (
-                    <PanelUrlBar
-                      displayUrl={
-                        shownFile ? publishedFilePath(shownFile) : undefined
-                      }
-                      searchValue={state.search}
-                      onSearchChange={
-                        shownFile
-                          ? undefined
-                          : (search) => dispatch({ type: "setSearch", search })
-                      }
-                      placeholder={t("filesTab.search.placeholder")}
-                      refresh={{
-                        label: t("reloadButton.label"),
-                        onRefresh: () => void reload(),
-                        isRefreshing: false,
-                        isUserRefreshing: reloading,
-                      }}
-                    >
-                      {/* The shown file's preview puts its actions here */}
-                      {shownFile && <div ref={setActionsSlot} />}
-                    </PanelUrlBar>
-                  )
+              // As Craft's: reload before the search or the file's path
+              shown !== RIGHT_PANEL_SOURCES_TAB && (
+                <PanelUrlBar
+                  displayUrl={
+                    shownFile ? publishedFilePath(shownFile) : undefined
+                  }
+                  searchValue={state.search}
+                  onSearchChange={
+                    shownFile
+                      ? undefined
+                      : (search) => dispatch({ type: "setSearch", search })
+                  }
+                  placeholder={t("filesTab.search.placeholder")}
+                  refresh={{
+                    label: t("reloadButton.label"),
+                    onRefresh: () => void reload(),
+                    isRefreshing: false,
+                    isUserRefreshing: reloading,
+                  }}
+                >
+                  {/* The shown file's preview puts its actions here */}
+                  {shownFile && <div ref={setActionsSlot} />}
+                </PanelUrlBar>
+              )
             }
           >
             <div ref={bodyRef} className="absolute inset-0">
@@ -533,21 +498,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                     }
                     unseenFileIds={unseenFileIds}
                     onOpen={openFile}
-                  />
-                </div>
-              )}
-              {shownAgent && sessionId !== null && (
-                <div
-                  id={panelContentDomId(shown)}
-                  role="tabpanel"
-                  aria-labelledby={panelTabDomId(shown)}
-                  className="absolute inset-0"
-                >
-                  <SubagentTranscript
-                    key={shownAgent.agentId}
-                    sessionId={sessionId}
-                    agentId={shownAgent.agentId}
-                    setPresentingDocument={setPresentingDocument}
                   />
                 </div>
               )}
@@ -640,7 +590,6 @@ interface CurrentChatRightPanelProps {
   open: boolean;
   sources: ReactNode;
   hasSources: boolean;
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }
 
 /**

@@ -203,7 +203,6 @@ export default function SharedChatDisplay({
           sources={null}
           hasSources={false}
           reloadFiles={reloadFiles}
-          setPresentingDocument={presentDocument}
         />
       </RootLayout.RightPanel>
 

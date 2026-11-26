@@ -31,7 +31,10 @@ import {
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import { CHAT_FILES_PANEL } from "@/sections/chat/ChatRightPanel";
 import { useChatSubagents, usePublishedFiles } from "@/lib/chat/hooks";
-import { openSubagent, SubagentTabsContext } from "@/lib/chat/subagents";
+import {
+  SubagentLinksContext,
+  useSubagentNavigation,
+} from "@/lib/chat/subagents";
 import {
   readWaitingToolRequests,
   useToolRequestUi,
@@ -94,12 +97,13 @@ interface AgentRowProps {
 /**
  * One agent, as T3 Code's lineage rows: a live agent shows how long its run
  * has worked, which hover or focus swaps for its Stop; a finished agent shows
- * its outcome. The row opens the agent's transcript in the right panel,
- * on a page that shows subagent tabs.
+ * its outcome. The row opens the agent in the main view, on a page that
+ * shows subagents there.
  */
 function AgentRow({ agent, onStop }: AgentRowProps) {
   const t = useTranslations("chat.activity.agents");
-  const opens = useContext(SubagentTabsContext);
+  const opens = useContext(SubagentLinksContext);
+  const { open } = useSubagentNavigation();
   const finished = finishedState(agent);
   const name = agent.path.replace(/^\/root\//, "");
   const parsed = agent.started_at ? Date.parse(agent.started_at) : NaN;
@@ -109,7 +113,7 @@ function AgentRow({ agent, onStop }: AgentRowProps) {
   const row = (
     <LineItemButton
       presentational={!opens}
-      onClick={opens ? () => openSubagent(agent) : undefined}
+      onClick={opens ? () => open(agent) : undefined}
       icon={finished === null ? LiveAgentIcon : FINISHED_ICONS[finished]}
       title={name}
       titleMaxLines={1}

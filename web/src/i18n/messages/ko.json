@@ -12809,14 +12809,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "하위 에이전트 {name} 시작 중",
-            "done": "하위 에이전트 {name} 시작함",
-            "failed": "하위 에이전트 {name}을(를) 시작할 수 없음",
-            "runningUnnamed": "하위 에이전트 시작 중",
-            "doneUnnamed": "하위 에이전트 시작함",
-            "failedUnnamed": "하위 에이전트를 시작할 수 없음"
-          },
           "send": {
             "running": "{name}에게 메시지 보내는 중",
             "done": "{name}에게 메시지 보냄",
@@ -12832,16 +12824,17 @@
             "runningUnnamed": "하위 에이전트 중단 중",
             "doneUnnamed": "하위 에이전트 중단함",
             "failedUnnamed": "하위 에이전트를 중단할 수 없음"
-          },
-          "open": "에이전트 열기"
+          }
         },
         "agentGroup": {
           "title": "{count, plural, other {서브에이전트 #개}}",
-          "working": "{count, number}개 작업 중",
-          "done": "완료",
-          "failed": "{count, plural, other {#개 실패}}",
+          "summary": {
+            "working": "{count, number}개 작업 중",
+            "done": "{count, number}개 완료",
+            "failed": "{count, number}개 실패",
+            "stopped": "{count, number}개 중지"
+          },
           "activity": "{tool} 사용 중",
-          "running": "실행 중",
           "open": "{name} 열기"
         }
       },
@@ -13577,10 +13570,6 @@
       },
       "resizeHandle": {
         "label": "패널 크기 조정"
-      },
-      "agentTab": {
-        "failed": "이 에이전트의 대화를 불러올 수 없습니다.",
-        "empty": "이 에이전트에는 아직 메시지가 없습니다."
       }
     },
     "export": {
@@ -13641,6 +13630,35 @@
       "next": "다음 일치 항목",
       "placeholder": "세션에서 찾기",
       "previous": "이전 일치 항목"
+    },
+    "subagents": {
+      "status": {
+        "starting": "시작 중",
+        "running": "실행 중",
+        "waiting": "대기 중",
+        "completed": "완료됨",
+        "stopped": "중지됨",
+        "failed": "실패",
+        "limit": "단계 한도 도달"
+      },
+      "timedStatus": {
+        "running": "실행 중 {elapsed}",
+        "waiting": "대기 중 {elapsed}",
+        "completed": "{elapsed} 만에 완료"
+      },
+      "view": {
+        "parent": "서브에이전트",
+        "parentOf": "서브에이전트 · 상위: {title}",
+        "openParentChat": "상위 채팅 열기",
+        "empty": "이 에이전트에는 아직 메시지가 없습니다.",
+        "failed": "이 에이전트의 대화를 불러올 수 없습니다."
+      },
+      "bar": {
+        "runsOnItsOwn": "단독으로 실행",
+        "openParent": "상위 열기",
+        "announcement": "{model} 서브에이전트: {status}",
+        "announcementUnnamed": "서브에이전트: {status}"
+      }
     }
   },
   "common": {

@@ -12809,14 +12809,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "Spawning subagent {name}",
-            "done": "Spawned subagent {name}",
-            "failed": "Could not spawn subagent {name}",
-            "runningUnnamed": "Spawning subagent",
-            "doneUnnamed": "Spawned subagent",
-            "failedUnnamed": "Could not spawn subagent"
-          },
           "send": {
             "running": "Sending message to {name}",
             "done": "Sent message to {name}",
@@ -12832,16 +12824,17 @@
             "runningUnnamed": "Interrupting subagent",
             "doneUnnamed": "Interrupted subagent",
             "failedUnnamed": "Could not interrupt subagent"
-          },
-          "open": "Open agent"
+          }
         },
         "agentGroup": {
           "title": "{count, plural, one {# subagent} other {# subagents}}",
-          "working": "{count, number} working",
-          "done": "Done",
-          "failed": "{count, plural, one {# failed} other {# failed}}",
+          "summary": {
+            "working": "{count, number} working",
+            "done": "{count, number} done",
+            "failed": "{count, number} failed",
+            "stopped": "{count, number} stopped"
+          },
           "activity": "Using {tool}",
-          "running": "Running",
           "open": "Open {name}"
         }
       },
@@ -13577,10 +13570,6 @@
       },
       "resizeHandle": {
         "label": "Resize panel"
-      },
-      "agentTab": {
-        "failed": "Could not load this agent's conversation.",
-        "empty": "This agent has no messages yet."
       }
     },
     "export": {
@@ -13641,6 +13630,35 @@
       "next": "Next match",
       "placeholder": "Find in session",
       "previous": "Previous match"
+    },
+    "subagents": {
+      "status": {
+        "starting": "Starting",
+        "running": "Running",
+        "waiting": "Waiting",
+        "completed": "Completed",
+        "stopped": "Stopped",
+        "failed": "Failed",
+        "limit": "Hit step limit"
+      },
+      "timedStatus": {
+        "running": "Running {elapsed}",
+        "waiting": "Waiting {elapsed}",
+        "completed": "Completed in {elapsed}"
+      },
+      "view": {
+        "parent": "Subagent of",
+        "parentOf": "Subagent of · {title}",
+        "openParentChat": "Open parent chat",
+        "empty": "This agent has no messages yet.",
+        "failed": "Could not load this agent's conversation."
+      },
+      "bar": {
+        "runsOnItsOwn": "Runs on its own",
+        "openParent": "Open parent",
+        "announcement": "{model} subagent: {status}",
+        "announcementUnnamed": "Subagent: {status}"
+      }
     }
   },
   "common": {

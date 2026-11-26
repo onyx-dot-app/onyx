@@ -12809,14 +12809,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "正在启动子代理 {name}",
-            "done": "已启动子代理 {name}",
-            "failed": "无法启动子代理 {name}",
-            "runningUnnamed": "正在启动子代理",
-            "doneUnnamed": "已启动子代理",
-            "failedUnnamed": "无法启动子代理"
-          },
           "send": {
             "running": "正在向 {name} 发送消息",
             "done": "已向 {name} 发送消息",
@@ -12832,16 +12824,17 @@
             "runningUnnamed": "正在中断子代理",
             "doneUnnamed": "已中断子代理",
             "failedUnnamed": "无法中断子代理"
-          },
-          "open": "打开智能体"
+          }
         },
         "agentGroup": {
           "title": "{count, plural, other {# 个子智能体}}",
-          "working": "{count, number} 个工作中",
-          "done": "完成",
-          "failed": "{count, plural, other {# 个失败}}",
+          "summary": {
+            "working": "{count, number} 个工作中",
+            "done": "{count, number} 个已完成",
+            "failed": "{count, number} 个失败",
+            "stopped": "{count, number} 个已停止"
+          },
           "activity": "正在使用 {tool}",
-          "running": "运行中",
           "open": "打开 {name}"
         }
       },
@@ -13577,10 +13570,6 @@
       },
       "resizeHandle": {
         "label": "调整面板大小"
-      },
-      "agentTab": {
-        "failed": "无法加载此智能体的对话。",
-        "empty": "此智能体还没有消息。"
       }
     },
     "export": {
@@ -13641,6 +13630,35 @@
       "next": "下一个匹配项",
       "placeholder": "在会话中查找",
       "previous": "上一个匹配项"
+    },
+    "subagents": {
+      "status": {
+        "starting": "正在启动",
+        "running": "运行中",
+        "waiting": "等待中",
+        "completed": "已完成",
+        "stopped": "已停止",
+        "failed": "失败",
+        "limit": "已达步骤上限"
+      },
+      "timedStatus": {
+        "running": "运行中 {elapsed}",
+        "waiting": "等待中 {elapsed}",
+        "completed": "用时 {elapsed} 完成"
+      },
+      "view": {
+        "parent": "子智能体",
+        "parentOf": "子智能体 · 上级：{title}",
+        "openParentChat": "打开上级聊天",
+        "empty": "此智能体还没有消息。",
+        "failed": "无法加载此智能体的对话。"
+      },
+      "bar": {
+        "runsOnItsOwn": "独立运行",
+        "openParent": "打开上级",
+        "announcement": "{model} 子智能体：{status}",
+        "announcementUnnamed": "子智能体：{status}"
+      }
     }
   },
   "common": {

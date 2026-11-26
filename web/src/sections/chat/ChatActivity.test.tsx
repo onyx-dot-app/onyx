@@ -9,7 +9,7 @@ import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import type { ChatSessionStatus, ChatSubagent } from "@/lib/chat/types";
 import { RIGHT_PANEL_FILES_TAB } from "@/lib/chat/rightPanel";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
-import { SubagentTabsContext } from "@/lib/chat/subagents";
+import { SubagentLinksContext } from "@/lib/chat/subagents";
 
 const STATUS: ChatSessionStatus = {
   is_processing: false,
@@ -30,7 +30,13 @@ function agent(path: string, status: ChatSubagent["status"]): ChatSubagent {
     stream_id: null,
     latest_run_id: null,
     activity_tool: null,
+    model: null,
+    duration_seconds: null,
   };
+}
+
+function shownSubagent(): string | null {
+  return new URLSearchParams(window.location.search).get("subagent");
 }
 
 function serve(agents: ChatSubagent[], status = STATUS) {
@@ -90,6 +96,7 @@ function showReply(packets: Packet[]) {
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/app?chatId=s");
   useToolRequestUi.setState({
     localStatuses: new Map(),
     localAnswers: new Map(),
@@ -375,12 +382,10 @@ test("each live agent has its own Stop, which stops only that agent", async () =
   expect(stops[0]?.[1]?.body).toBe(JSON.stringify({ agent_id: "/root/poet" }));
   expect(screen.getByRole("button", { name: "Stop critic" })).toBeVisible();
   // Stop does not open the agent
-  expect(
-    useChatSessionStore.getState().sessions.get("s")?.rightPanel.agentTabs
-  ).toEqual([]);
+  expect(shownSubagent()).toBeNull();
 });
 
-test("an agent row opens the agent's transcript in the right panel", async () => {
+test("an agent row opens the agent in the main view", async () => {
   serve([agent("/root/poet", "running")], {
     ...STATUS,
     has_active_subagents: true,
@@ -390,18 +395,20 @@ test("an agent row opens the agent's transcript in the right panel", async () =>
   act(() => trigger.click());
   act(() => screen.getByText("poet").click());
 
-  const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
-  expect(panel?.mode).not.toBe("closed");
-  expect(panel?.activeId).toBe("agent:/root/poet");
+  expect(shownSubagent()).toBe("/root/poet");
+  // The output panel opens no tab for it
+  expect(
+    useChatSessionStore.getState().sessions.get("s")?.rightPanel.mode
+  ).toBe("closed");
 });
 
-test("a page without subagent tabs, as the extension's, opens no agent from its row", async () => {
+test("a page without subagent links, as the extension's, opens no agent from its row", async () => {
   serve([agent("/root/poet", "running")], {
     ...STATUS,
     has_active_subagents: true,
   });
   render(
-    <SubagentTabsContext.Provider value={false}>
+    <SubagentLinksContext.Provider value={false}>
       <AppWorkspaceElementsContext.Provider
         value={{
           workspace: { current: null },
@@ -412,14 +419,13 @@ test("a page without subagent tabs, as the extension's, opens no agent from its 
       >
         <ChatActivity sessionId="s" />
       </AppWorkspaceElementsContext.Provider>
-    </SubagentTabsContext.Provider>
+    </SubagentLinksContext.Provider>
   );
   const trigger = await screen.findByRole("button", { name: "Activity" });
   act(() => trigger.click());
   act(() => screen.getByText("poet").click());
 
-  const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
-  expect(panel?.mode).toBe("closed");
+  expect(shownSubagent()).toBeNull();
   // Its Stop still works
   expect(screen.getByRole("button", { name: "Stop poet" })).toBeInTheDocument();
 });

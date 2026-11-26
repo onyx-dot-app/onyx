@@ -12809,14 +12809,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "Iniciando o subagente {name}",
-            "done": "Subagente {name} iniciado",
-            "failed": "Não foi possível iniciar o subagente {name}",
-            "runningUnnamed": "Iniciando o subagente",
-            "doneUnnamed": "Subagente iniciado",
-            "failedUnnamed": "Não foi possível iniciar o subagente"
-          },
           "send": {
             "running": "Enviando mensagem para {name}",
             "done": "Mensagem enviada para {name}",
@@ -12832,16 +12824,17 @@
             "runningUnnamed": "Interrompendo o subagente",
             "doneUnnamed": "Subagente interrompido",
             "failedUnnamed": "Não foi possível interromper o subagente"
-          },
-          "open": "Abrir agente"
+          }
         },
         "agentGroup": {
           "title": "{count, plural, one {# subagente} other {# subagentes}}",
-          "working": "{count, number} trabalhando",
-          "done": "Concluído",
-          "failed": "{count, plural, one {# falhou} other {# falharam}}",
+          "summary": {
+            "working": "{count, number} trabalhando",
+            "done": "{count, number} concluídos",
+            "failed": "{count, number} falharam",
+            "stopped": "{count, number} parados"
+          },
           "activity": "Usando {tool}",
-          "running": "Em execução",
           "open": "Abrir {name}"
         }
       },
@@ -13577,10 +13570,6 @@
       },
       "resizeHandle": {
         "label": "Redimensionar painel"
-      },
-      "agentTab": {
-        "failed": "Não foi possível carregar a conversa deste agente.",
-        "empty": "Este agente ainda não tem mensagens."
       }
     },
     "export": {
@@ -13641,6 +13630,35 @@
       "next": "Próximo resultado",
       "placeholder": "Localizar na sessão",
       "previous": "Resultado anterior"
+    },
+    "subagents": {
+      "status": {
+        "starting": "Iniciando",
+        "running": "Em execução",
+        "waiting": "Aguardando",
+        "completed": "Concluído",
+        "stopped": "Parado",
+        "failed": "Falhou",
+        "limit": "Limite de etapas atingido"
+      },
+      "timedStatus": {
+        "running": "Em execução {elapsed}",
+        "waiting": "Aguardando {elapsed}",
+        "completed": "Concluído em {elapsed}"
+      },
+      "view": {
+        "parent": "Subagente de",
+        "parentOf": "Subagente de · {title}",
+        "openParentChat": "Abrir chat principal",
+        "empty": "Este agente ainda não tem mensagens.",
+        "failed": "Não foi possível carregar a conversa deste agente."
+      },
+      "bar": {
+        "runsOnItsOwn": "Executa por conta própria",
+        "openParent": "Abrir principal",
+        "announcement": "Subagente {model}: {status}",
+        "announcementUnnamed": "Subagente: {status}"
+      }
     }
   },
   "common": {

@@ -140,6 +140,7 @@ from onyx.db.chat_response import (
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.chat_subagents import (
+    agent_run_summaries,
     latest_agent_response,
     load_session_agent_metadata,
     selected_agent_message_ids,
@@ -1727,10 +1728,18 @@ def get_chat_session_agents(
         # `spawn_agent` children; Deep Research workers run in the foreground
         if isinstance(agent.restoration_config, ChatConfiguration)
     ]
+    with get_session_with_current_tenant() as db_session:
+        summaries = agent_run_summaries(
+            db_session,
+            [int(agent.latest_run_id) for agent in agents if agent.latest_run_id],
+        )
     cache = get_cache_backend()
     subagents: list[ChatSubagent] = []
     for agent in agents:
         run_id = int(agent.latest_run_id) if agent.latest_run_id else None
+        model, duration = (
+            summaries.get(run_id, (None, None)) if run_id is not None else (None, None)
+        )
         live = run_id is not None and (
             agent.status is None or not agent.status.is_terminal
         )
@@ -1749,6 +1758,8 @@ def get_chat_session_agents(
                 latest_run_id=run_id,
                 stream_id=pointer.stream_id if pointer else None,
                 activity_tool=pointer.activity_tool if pointer else None,
+                model=model,
+                duration_seconds=duration,
             )
         )
     return subagents
@@ -1768,7 +1779,7 @@ def _authorized_agent(session_id: UUID, agent_id: UUID, user: User) -> None:
 
 
 def _live_response_id(latest: ChatMessage | None) -> int | None:
-    """The response whose stream an agent tab may follow: one that has not
+    """The response whose stream a subagent view may follow: one that has not
     ended. A worker that died leaves its pointer behind after recovery saves
     the failure, as the agents list knows."""
     if latest is None:

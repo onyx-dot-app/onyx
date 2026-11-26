@@ -862,6 +862,8 @@ def reserve_child_response__no_commit(
         token_count=0,
         message_type=MessageType.ASSISTANT,
         response_status=RunStatus.RUNNING,
+        # A child runs on its spawner's model
+        model_display_name=parent.model_display_name,
     )
     session.add(response)
     session.flush()

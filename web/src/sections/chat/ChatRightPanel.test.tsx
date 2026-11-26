@@ -157,7 +157,6 @@ function Chat({
             open={(retrieval && sourcesOpen) || filesOpen}
             sources={SOURCES}
             hasSources
-            setPresentingDocument={() => {}}
           />
         </PublishedFilesPanelContext.Provider>
       </div>
@@ -836,12 +835,7 @@ function StreamingPage() {
   const filesOpen = useFilesShown();
   const rightPanel = useMemo(
     () => (
-      <CurrentChatRightPanel
-        open={filesOpen}
-        sources={SOURCES}
-        hasSources
-        setPresentingDocument={() => {}}
-      />
+      <CurrentChatRightPanel open={filesOpen} sources={SOURCES} hasSources />
     ),
     [filesOpen]
   );

@@ -592,6 +592,25 @@ def selected_agent_message_ids(
     return ids
 
 
+def agent_run_summaries(
+    db_session: Session, run_ids: Collection[int]
+) -> dict[int, tuple[str | None, float | None]]:
+    """Each run's model name and saved processing time, by response id."""
+    if not run_ids:
+        return {}
+    rows = db_session.execute(
+        select(
+            ChatMessage.id,
+            ChatMessage.model_display_name,
+            ChatMessage.processing_duration_seconds,
+        ).where(ChatMessage.id.in_(run_ids))
+    ).all()
+    return {
+        row.id: (row.model_display_name, row.processing_duration_seconds)
+        for row in rows
+    }
+
+
 def load_session_agent_metadata(
     message_id: int, *, branch: ChatBranch | None = None, include_root: bool = True
 ) -> list[AgentInfo]:

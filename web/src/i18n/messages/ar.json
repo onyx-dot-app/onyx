@@ -12809,14 +12809,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "جارٍ تشغيل الوكيل الفرعي {name}",
-            "done": "تم تشغيل الوكيل الفرعي {name}",
-            "failed": "تعذّر تشغيل الوكيل الفرعي {name}",
-            "runningUnnamed": "جارٍ تشغيل الوكيل الفرعي",
-            "doneUnnamed": "تم تشغيل الوكيل الفرعي",
-            "failedUnnamed": "تعذّر تشغيل الوكيل الفرعي"
-          },
           "send": {
             "running": "جارٍ إرسال رسالة إلى {name}",
             "done": "تم إرسال رسالة إلى {name}",
@@ -12832,16 +12824,17 @@
             "runningUnnamed": "جارٍ إيقاف الوكيل الفرعي",
             "doneUnnamed": "تم إيقاف الوكيل الفرعي",
             "failedUnnamed": "تعذّر إيقاف الوكيل الفرعي"
-          },
-          "open": "فتح الوكيل"
+          }
         },
         "agentGroup": {
           "title": "{count, plural, one {وكيل فرعي واحد} other {# وكلاء فرعيون}}",
-          "working": "{count, number} قيد العمل",
-          "done": "تم",
-          "failed": "{count, plural, one {فشل واحد} other {فشل #}}",
+          "summary": {
+            "working": "{count, number} قيد العمل",
+            "done": "{count, number} مكتمل",
+            "failed": "{count, number} فشل",
+            "stopped": "{count, number} متوقف"
+          },
           "activity": "يستخدم {tool}",
-          "running": "قيد التشغيل",
           "open": "فتح {name}"
         }
       },
@@ -13577,10 +13570,6 @@
       },
       "resizeHandle": {
         "label": "تغيير حجم اللوحة"
-      },
-      "agentTab": {
-        "failed": "تعذّر تحميل محادثة هذا الوكيل.",
-        "empty": "لا توجد رسائل لهذا الوكيل بعد."
       }
     },
     "export": {
@@ -13641,6 +13630,35 @@
       "next": "التطابق التالي",
       "placeholder": "البحث في الجلسة",
       "previous": "التطابق السابق"
+    },
+    "subagents": {
+      "status": {
+        "starting": "قيد البدء",
+        "running": "قيد التشغيل",
+        "waiting": "في الانتظار",
+        "completed": "اكتمل",
+        "stopped": "أُوقف",
+        "failed": "فشل",
+        "limit": "بلغ حد الخطوات"
+      },
+      "timedStatus": {
+        "running": "قيد التشغيل {elapsed}",
+        "waiting": "في الانتظار {elapsed}",
+        "completed": "اكتمل في {elapsed}"
+      },
+      "view": {
+        "parent": "وكيل فرعي من",
+        "parentOf": "وكيل فرعي من · {title}",
+        "openParentChat": "فتح المحادثة الأصلية",
+        "empty": "لا توجد رسائل لهذا الوكيل بعد.",
+        "failed": "تعذّر تحميل محادثة هذا الوكيل."
+      },
+      "bar": {
+        "runsOnItsOwn": "يعمل بمفرده",
+        "openParent": "فتح الأصل",
+        "announcement": "الوكيل الفرعي {model}: {status}",
+        "announcementUnnamed": "وكيل فرعي: {status}"
+      }
     }
   },
   "common": {
