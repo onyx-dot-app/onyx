@@ -1093,6 +1093,17 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             ) from e
         return _read(daemon, session_id, target, max_bytes=max_bytes, path=path)
 
+    def stream_file(
+        self, ref: HarnessSandboxRef, path: str, *, max_bytes: int
+    ) -> Iterator[bytes]:
+        daemon, session_id, target = self._file_target(ref, path)
+        size, chunks = _open_read(
+            daemon, session_id, target, max_bytes=max_bytes, path=path
+        )
+        if size > max_bytes:
+            raise _too_large(path, max_bytes)
+        return _limited_chunks(chunks, max_bytes=max_bytes, path=path)
+
     def write_file(
         self,
         ref: HarnessSandboxRef,
@@ -1719,7 +1730,7 @@ def _write(
     )
 
 
-def _read(
+def _open_read(
     daemon: SandboxDaemonClient,
     session_id: str,
     target: str,
@@ -1727,10 +1738,10 @@ def _read(
     max_bytes: int,
     path: str,
     timeout_seconds: float | None = None,
-) -> bytes:
-    """The read of read_file and the render. `path` names the file in
-    errors. `timeout_seconds` replaces the transfer timeout."""
-    # Dropping the chunk iterator unread cancels the stream.
+) -> tuple[int, Iterator[bytes]]:
+    """The file's size and its chunks, at most max_bytes + 1 bytes. `path`
+    names the file in errors. `timeout_seconds` replaces the transfer
+    timeout. Dropping the chunk iterator unread cancels the stream."""
     try:
         info, chunks = daemon.read_file(
             session_id=session_id,
@@ -1746,11 +1757,49 @@ def _read(
             # path; the daemon's message names the path.
             raise HarnessSandboxError(e.message) from e
         raise
-    data = b"" if info.size > max_bytes else b"".join(chunks)
-    if info.size > max_bytes or len(data) > max_bytes:
-        raise SandboxFileTooLargeError(
-            f"{path!r} is larger than the limit of {max_bytes} bytes"
-        )
+    return info.size, chunks
+
+
+def _too_large(path: str, max_bytes: int) -> SandboxFileTooLargeError:
+    return SandboxFileTooLargeError(
+        f"{path!r} is larger than the limit of {max_bytes} bytes"
+    )
+
+
+def _limited_chunks(
+    chunks: Iterator[bytes], *, max_bytes: int, path: str
+) -> Iterator[bytes]:
+    """The chunks, with an error when the file grew over max_bytes."""
+    read = 0
+    for chunk in chunks:
+        read += len(chunk)
+        if read > max_bytes:
+            raise _too_large(path, max_bytes)
+        yield chunk
+
+
+def _read(
+    daemon: SandboxDaemonClient,
+    session_id: str,
+    target: str,
+    *,
+    max_bytes: int,
+    path: str,
+    timeout_seconds: float | None = None,
+) -> bytes:
+    """The read of read_file and the render. `path` names the file in
+    errors. `timeout_seconds` replaces the transfer timeout."""
+    size, chunks = _open_read(
+        daemon,
+        session_id,
+        target,
+        max_bytes=max_bytes,
+        path=path,
+        timeout_seconds=timeout_seconds,
+    )
+    data = b"" if size > max_bytes else b"".join(chunks)
+    if size > max_bytes or len(data) > max_bytes:
+        raise _too_large(path, max_bytes)
     return data
 
 

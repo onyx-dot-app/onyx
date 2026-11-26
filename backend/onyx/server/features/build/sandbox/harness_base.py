@@ -429,6 +429,15 @@ class HarnessSandbox(abc.ABC):
         link takes out of its root."""
 
     @abc.abstractmethod
+    def stream_file(
+        self, ref: HarnessSandboxRef, path: str, *, max_bytes: int
+    ) -> Iterator[bytes]:
+        """read_file, as chunks that are not kept in memory. Raises the
+        same errors before the first chunk, and SandboxFileTooLargeError
+        while it reads a file that grows over max_bytes. Dropping the
+        iterator unread cancels the transfer."""
+
+    @abc.abstractmethod
     def write_file(
         self,
         ref: HarnessSandboxRef,
