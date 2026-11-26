@@ -890,11 +890,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         proxy_url = (
             f"http://{command_proxy_user(ref.session_id, command_id)}:x@127.0.0.1:3128"
         )
-        # A Stop that came during the wake starts no command.
-        if (cancellation := current_cancellation()) is not None:
-            cancellation.check()
         if hold is not None:
             hold.begin(command_id)
+        # A Stop that came during the wake or the hold's begin starts no
+        # command.
+        if (cancellation := current_cancellation()) is not None:
+            cancellation.check()
         try:
             # The daemon makes the session directory, the default cwd.
             execution_id = daemon.start(
@@ -982,11 +983,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             raise ExecSessionEndedError(exec_session_id)
         daemon = sandbox_daemon(self._client_factory, placed)
         text, interrupt, _ = chars.partition(INTERRUPT_CHAR)
-        # A Stop that came before the write writes nothing.
-        if (cancellation := current_cancellation()) is not None:
-            cancellation.check()
         if hold is not None and record.command_id is not None:
             hold.begin(record.command_id)
+        # A Stop that came before the write or during the hold's begin
+        # writes nothing.
+        if (cancellation := current_cancellation()) is not None:
+            cancellation.check()
         try:
             if text:
                 daemon.interact(record.execution_id, data=text.encode())

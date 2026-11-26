@@ -731,6 +731,35 @@ def test_a_call_stopped_before_its_side_effect_does_nothing(
     assert [bytes(e.stdin_data) for e in executions] == [b""]
 
 
+def test_a_stop_during_the_hold_begin_does_nothing(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+) -> None:
+    """A Stop while `hold.begin` waits (on the last call's cleanup) starts
+    no command and writes nothing."""
+    ref = new_ref()
+    _, started = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    session = started.session_id
+    assert session is not None
+    signal = CancellationSignal()
+
+    class _StoppedInBegin(_Hold):
+        def begin(self, command_id: UUID) -> None:
+            super().begin(command_id)
+            signal.cancel()
+
+    with cancellation_scope(signal):
+        with pytest.raises(AgentCancelled):
+            _run(sandbox.exec_command(ref, "say never", hold=_StoppedInBegin()))
+    signal = CancellationSignal()
+    with cancellation_scope(signal):
+        with pytest.raises(AgentCancelled):
+            _run(sandbox.write_stdin(ref, session, "never", hold=_StoppedInBegin()))
+
+    executions = node.agent.executions[str(ref.sandbox_id)].values()
+    assert [e.argv[-1] for e in executions] == ["cat"]
+    assert [bytes(e.stdin_data) for e in executions] == [b""]
+
+
 def test_ctrl_c_sends_sigint_to_the_command(
     tenant_cache: CacheBackend,
     sandbox: FirecrackerHarnessSandbox,
