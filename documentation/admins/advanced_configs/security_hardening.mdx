@@ -219,8 +219,9 @@ to block server-side request forgery.
   refuses private and internal IPs.
 - **Validate LLM Requests**: URL fetches started by the LLM (`open_url`, MCP, OAuth) are validated.
   Connectors an admin configured can still reach private IPs.
-- **Allow Private Network**: like Validate LLM Requests, and admin-configured MCP and OAuth endpoints may also
-  reach private LAN hosts. Loopback and cloud metadata addresses stay blocked.
+- **Allow Private Network**: like Validate LLM Requests, and admin-configured MCP and OAuth endpoints, OpenAPI
+  schema URLs and GraphQL introspection may also reach private LAN hosts.
+  Loopback and cloud metadata addresses stay blocked.
 - **Disabled**: connectors are not validated, and MCP, OAuth, and JWT key fetches may reach private and loopback
   hosts. Cloud metadata addresses stay blocked, and `open_url` still refuses loopback. Use only on a trusted network,
   for example to reach a local LLM backend.

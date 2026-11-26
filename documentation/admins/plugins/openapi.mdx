@@ -32,6 +32,11 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     - A GraphQL endpoint. See [GraphQL APIs](#graphql-apis).
     - The base URL of a REST API with no schema.
 
+    Onyx loads a schema URL or a GraphQL schema at the [SSRF
+    Protection](/admins/advanced_configs/security_hardening#ssrf-protection) level: by default it blocks private,
+    loopback, and link-local addresses. For an API on a private host,
+    upload the schema file or select **Allow Private Network**.
+
     To use a schema file, click **Upload openapi.json, openapi.yaml or schema.graphql** and select a JSON or YAML file.
     Enter the base URL too if the schema does not give a full server URL. Onyx shows what it found,
     for example "REST API, 12 endpoints".
