@@ -2474,6 +2474,22 @@ def test_a_command_row_names_the_request_and_is_announced_to_the_call(
     assert notified == []
 
 
+def test_a_command_card_shows_the_size_of_a_large_body() -> None:
+    ctx = _ctx().model_copy(update={"chat_command_id": _COMMAND})
+    body = {"text": "x" * (128 * 1024)}
+    raw = json.dumps(body).encode()
+    flow = make_flow(raw_content=raw)
+    flow.request.path = "/api/chat.postMessage"
+
+    payload = gate._approval_payload(flow, ctx, make_matched_actions(payload=body))
+
+    assert payload == {
+        "method": "POST",
+        "path": "/api/chat.postMessage",
+        "body_bytes": len(raw),
+    }
+
+
 def test_a_chat_recheck_matches_the_agents_integrations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

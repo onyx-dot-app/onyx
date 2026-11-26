@@ -7,6 +7,7 @@ Recognition failures block forwarding; unrelated traffic remains ungated.
 import asyncio
 import base64
 import binascii
+import json
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID
@@ -1515,10 +1516,15 @@ def parse_session_tag(tag: str) -> tuple[UUID, UUID | None]:
     return UUID(session), UUID(command) if separator else None
 
 
+# The CLI reads a stream line of at most 1 MiB, and the card is one line.
+_CARD_BODY_MAX_BYTES = 64 * 1024
+
+
 def _approval_payload(
     flow: http.HTTPFlow, ctx: SessionContext, matched_actions: AllMatchedActions
 ) -> dict[str, Any]:
-    """What the card shows. A chat card also names the method and path."""
+    """What the card shows. A chat card also names the method and path, and
+    shows the size of a body too large to show."""
     if ctx.chat_command_id is None:
         return matched_actions.payload
     payload: dict[str, Any] = {
@@ -1526,7 +1532,10 @@ def _approval_payload(
         "path": flow.request.path,
     }
     if matched_actions.payload:
-        payload["body"] = matched_actions.payload
+        if len(json.dumps(matched_actions.payload)) > _CARD_BODY_MAX_BYTES:
+            payload["body_bytes"] = len(flow.request.raw_content or b"")
+        else:
+            payload["body"] = matched_actions.payload
     return payload
 
 
