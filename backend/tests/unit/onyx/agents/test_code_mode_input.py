@@ -63,7 +63,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolApprovalRequest,
     ToolApprovalResolved,
 )
-from onyx.tools.constants import EXEC_TOOL_NAME, WAIT_TOOL_NAME
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, WAIT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
@@ -248,7 +248,7 @@ class Agents:
 def _execute(call_id: str, code: str, yield_ms: int = 10_000) -> ToolCall:
     return ToolCall(
         id=call_id,
-        name=EXEC_TOOL_NAME,
+        name=EXECUTE_CODE_TOOL_NAME,
         arguments={"code": code, "yield_time_ms": yield_ms},
     )
 
@@ -363,7 +363,7 @@ def test_a_background_cell_shows_its_request_before_the_model_waits() -> None:
     assert saved.progress is not None
     assert isinstance(saved.progress.pending_tool_calls["wait"], NestedInputWait)
     shown = [event for event in events if isinstance(event, InputRequiredEvent)]
-    # Shown once, at the cell's exec call, before wait saved it.
+    # Shown once, at the cell's execute_code call, before wait saved it.
     assert [event.tool_call.id for event in shown] == ["program"]
 
     run.submit(_answer(InputDecision.APPROVE))
@@ -1162,7 +1162,7 @@ def test_a_restored_cell_gives_the_hook_the_output_that_its_cut_leaves_out() -> 
     agents = Agents(
         ToolCall(
             id="program",
-            name=EXEC_TOOL_NAME,
+            name=EXECUTE_CODE_TOOL_NAME,
             arguments={"code": program, "max_output_tokens": 75},
         )
     )
@@ -1197,7 +1197,7 @@ def test_an_unresumed_cell_gives_the_hook_the_output_that_its_cut_leaves_out() -
     agents = Agents(
         ToolCall(
             id="program",
-            name=EXEC_TOOL_NAME,
+            name=EXECUTE_CODE_TOOL_NAME,
             arguments={"code": program, "max_output_tokens": 75},
         )
     )
