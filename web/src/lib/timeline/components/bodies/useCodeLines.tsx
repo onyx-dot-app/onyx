@@ -1,100 +1,88 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+// Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
+
+import { useMemo } from "react";
 import type { CodePanelLine } from "@opal/components";
+import type { GrammarState } from "shiki/core";
+import type { CodeHighlighter } from "@/lib/codeHighlight/highlighter";
 import { useCodeHighlighter } from "@/lib/codeHighlight/hooks";
 
-/** The least time between two highlight passes over streaming code. */
-const STREAMING_HIGHLIGHT_MS = 250;
-
 interface UseCodeLinesOptions {
-  /**
-   * The code still grows. Only its completed lines are highlighted as one
-   * block, again each time a line completes; the line still arriving is
-   * highlighted alone. So each update costs one line, not the whole block.
-   */
+  /** The code still grows: its last line shows plain until it completes. */
   streaming?: boolean;
-  /** Guess the language of untagged code once it stops growing. */
-  detect?: boolean;
 }
 
 /**
- * Code as numbered `CodePanel` lines, highlighted once the highlighter loads
- * (plain text until then, or without a known language). The code is
- * highlighted as one block, so a block comment or a multi-line string keeps
- * its colors on every line.
+ * Highlights completed lines once each. Code that only grows continues from
+ * the grammar state after the last line, so each update costs the new lines,
+ * and a block comment or multi-line string keeps its colors on every line.
+ */
+function createIncrementalHighlighter(highlighter: CodeHighlighter) {
+  let source = "";
+  let lines: string[] = [];
+  let state: GrammarState | undefined;
+
+  return (completed: string): string[] | null => {
+    const next = `${completed}\n`;
+    if (!next.startsWith(source)) {
+      source = "";
+      lines = [];
+      state = undefined;
+    }
+    if (next.length > source.length) {
+      try {
+        const result = highlighter.highlight(
+          next.slice(source.length, -1),
+          state
+        );
+        lines = [...lines, ...result.lines];
+        state = result.state;
+        source = next;
+      } catch {
+        return null;
+      }
+    }
+    return lines;
+  };
+}
+
+/**
+ * Code as numbered `CodePanel` lines. Plain text paints first; Shiki tokens
+ * replace it once the grammar loads. Unknown languages stay plain.
  */
 export function useCodeLines(
   code: string,
   language: string | undefined,
-  { streaming = false, detect = false }: UseCodeLinesOptions = {}
+  { streaming = false }: UseCodeLinesOptions = {}
 ): CodePanelLine[] {
-  const highlighter = useCodeHighlighter(!!code && (!!language || detect));
-
-  const detected = useMemo(
-    () =>
-      !language && detect && !streaming && highlighter
-        ? highlighter.detectLanguage(code)
-        : null,
-    [language, detect, streaming, highlighter, code]
+  const highlighter = useCodeHighlighter(code ? language : undefined);
+  const incremental = useMemo(
+    () => (highlighter ? createIncrementalHighlighter(highlighter) : null),
+    [highlighter]
   );
-  const resolvedLanguage = language ?? detected ?? undefined;
 
-  // While streaming, `head` is the completed lines and `tail` the line still
-  // arriving; otherwise `head` is all of the code.
   const split = streaming ? code.lastIndexOf("\n") : code.length;
-  const head = split < 0 ? "" : code.slice(0, split);
-  const tail = streaming ? code.slice(split + 1) : "";
-
-  // Finished code is highlighted at once. While code streams, the
-  // completed lines are highlighted again at most every
-  // STREAMING_HIGHLIGHT_MS, so a long block does not rescan its whole head
-  // on every new line; lines since the last pass show as plain text.
-  const doneHtml = useMemo(
-    () =>
-      !streaming && highlighter && resolvedLanguage && split >= 0
-        ? highlighter.highlightLines(head, resolvedLanguage)
-        : null,
-    [streaming, highlighter, resolvedLanguage, head, split]
-  );
-  const [streamedHtml, setStreamedHtml] = useState<string[] | null>(null);
-  // When the last pass ran. A new line moves the pass to this plus
-  // STREAMING_HIGHLIGHT_MS, so lines that keep arriving cannot delay it.
-  const lastPass = useRef(0);
-  useEffect(() => {
-    if (!streaming || !highlighter || !resolvedLanguage || split < 0) return;
-    const pass = setTimeout(
-      () => {
-        lastPass.current = Date.now();
-        setStreamedHtml(highlighter.highlightLines(head, resolvedLanguage));
-      },
-      Math.max(0, lastPass.current + STREAMING_HIGHLIGHT_MS - Date.now())
-    );
-    return () => clearTimeout(pass);
-  }, [streaming, highlighter, resolvedLanguage, head, split]);
-  const headHtml = streaming ? streamedHtml : doneHtml;
-  const tailHtml = useMemo(
-    () =>
-      highlighter && resolvedLanguage && tail
-        ? (highlighter.highlightLines(tail, resolvedLanguage)?.[0] ?? null)
-        : null,
-    [highlighter, resolvedLanguage, tail]
+  const completed = split < 0 ? null : code.slice(0, split);
+  const html = useMemo(
+    () => (incremental && completed !== null ? incremental(completed) : null),
+    [incremental, completed]
   );
 
-  return useMemo(() => {
-    const lines = code.split("\n");
-    const headCount = streaming ? lines.length - 1 : lines.length;
-    return lines.map((line, index) => {
-      const html = index < headCount ? headHtml?.[index] : tailHtml;
-      return {
-        number: index + 1,
-        content:
-          html != null ? (
-            <span dangerouslySetInnerHTML={{ __html: html || " " }} />
-          ) : (
-            line
-          ),
-      };
-    });
-  }, [code, streaming, headHtml, tailHtml]);
+  return useMemo(
+    () =>
+      code.split("\n").map((line, index) => {
+        const lineHtml = html?.[index];
+        return {
+          number: index + 1,
+          content:
+            lineHtml != null ? (
+              <span dangerouslySetInnerHTML={{ __html: lineHtml || " " }} />
+            ) : (
+              line
+            ),
+        };
+      }),
+    [code, html]
+  );
 }

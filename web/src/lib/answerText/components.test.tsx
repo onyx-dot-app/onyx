@@ -125,6 +125,15 @@ test("a streaming answer renders the same text as a finished one", () => {
   expect(streamed.querySelectorAll(".prose")).toHaveLength(1);
 });
 
+test("a fence title names the code block", async () => {
+  render(
+    <AnswerMarkdown content={'```ts title="src/a.ts"\nconst a = 1;\n```\n'} />
+  );
+
+  const block = await screen.findByTestId("answer-code-block");
+  expect(block).toHaveTextContent("src/a.ts");
+});
+
 test("a code block keeps its wrap choice when the answer finishes", async () => {
   const user = setupUser();
   const content = "Intro.\n\n```python\nprint(1)\n```\n\nThe end.";

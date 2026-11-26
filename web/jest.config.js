@@ -36,6 +36,11 @@ const esmPackages = [
   "unified",
   "lowlight",
   "highlight\\.js",
+  "shiki",
+  "@shikijs",
+  "oniguruma-.*",
+  "regex",
+  "regex-.*",
   // Markdown Utilities
   "bail",
   "is-plain-obj",
@@ -114,7 +119,7 @@ const sharedConfig = {
 
   // Transpile-only (no type-checking; types are checked separately via `types:check`).
   transform: {
-    "^.+\\.(t|j)sx?$": [
+    "^.+\\.(m?js|jsx|tsx?)$": [
       "@swc/jest",
       {
         jsc: {

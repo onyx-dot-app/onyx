@@ -1,5 +1,4 @@
-import hljs from "highlight.js/lib/core";
-import { render } from "@tests/setup/test-utils";
+import { render, waitFor } from "@tests/setup/test-utils";
 import { PythonToolRenderer } from "@/lib/timeline/chat/renderers/code/PythonToolRenderer";
 import { RenderType } from "@/lib/timeline/chat/message/messageComponents/types";
 import {
@@ -9,14 +8,7 @@ import {
 
 const MALICIOUS_CODE = '<img src="x" onerror="window.__pwned=1">';
 
-afterEach(() => {
-  jest.restoreAllMocks();
-});
-
-test("escapes the code when syntax highlighting fails", () => {
-  jest.spyOn(hljs, "highlight").mockImplementation(() => {
-    throw new Error("highlight failed");
-  });
+test("escapes the code in highlighted lines", async () => {
   const packets: PythonToolPacket[] = [
     {
       placement: { turn_index: 0 },
@@ -38,6 +30,9 @@ test("escapes the code when syntax highlighting fails", () => {
     </PythonToolRenderer>
   );
 
+  await waitFor(() =>
+    expect(container.querySelector('span[style*="--shiki"]')).not.toBeNull()
+  );
   expect(container.querySelector("img")).toBeNull();
   expect(container.textContent).toContain(MALICIOUS_CODE);
 });
