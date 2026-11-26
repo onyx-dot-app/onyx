@@ -6,6 +6,7 @@ import {
 } from "@/lib/timeline/chat/packetHelpers";
 import {
   type ExecEnd,
+  isFailedCustomToolDelta,
   type Packet,
   PacketType,
 } from "@/app/app/services/streamingModels";
@@ -98,9 +99,10 @@ function isFailurePacket(packet: Packet, interrupted: boolean): boolean {
     case PacketType.APPLY_PATCH_END:
     case PacketType.PUBLISH_FILES_END:
       return obj.error !== null;
-    // Auth, unreachable, blocked and HTTP errors of an external tool.
+    // Auth, unreachable, blocked and HTTP errors of an external tool, and a
+    // call rejected without details.
     case PacketType.CUSTOM_TOOL_DELTA:
-      return !!obj.error;
+      return isFailedCustomToolDelta(obj);
     default:
       return false;
   }

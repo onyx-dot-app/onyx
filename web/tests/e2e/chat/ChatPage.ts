@@ -47,10 +47,16 @@ export class ChatPage {
   readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
   readonly agentResultsDividers: Locator;
+  /** The chat's activity card, which opens when agents start. */
+  readonly activityPanel: Locator;
+  /** One Stop button per live agent in the activity card. */
+  readonly stopAgentButtons: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
+  /** Shows above the composer while a sent message is edited there. */
+  readonly editMessageBanner: Locator;
   readonly errorBanners: Locator;
   /** The toggle at the header's end that opens and closes the right panel. */
   readonly rightPanelToggle: Locator;
@@ -87,12 +93,17 @@ export class ChatPage {
       "Subagent results received",
       { exact: true }
     );
+    this.activityPanel = page.getByRole("region", { name: "Activity" });
+    this.stopAgentButtons = this.activityPanel.getByRole("button", {
+      name: /^Stop /,
+    });
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
       name: "Scroll to bottom",
     });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
     this.errorBanners = page.getByTestId("chat-error-banner");
+    this.editMessageBanner = page.getByTestId("edit-message-banner");
     this.rightPanelToggle = page.getByRole("button", {
       name: "Toggle panel",
     });
@@ -388,7 +399,7 @@ export class ChatPage {
     const width = await this.rightPanelWidth();
     const viewport = this.page.viewportSize();
     if (!viewport) throw new Error("The page has no viewport");
-    // The panel slides open: drag once its edge is in place
+    // Drag once the panel's edge is in place
     await expect
       .poll(async () => (await handle.boundingBox())?.x ?? Infinity)
       .toBeLessThan(viewport.width - width + 2);
@@ -589,6 +600,15 @@ export class ChatPage {
 
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
+  /** Stops one live agent, by its name, from the activity card. */
+  async stopAgent(name: string): Promise<void> {
+    // The Stop takes the place of the run time while the row is hovered
+    await this.activityPanel.getByText(name, { exact: true }).hover();
+    await this.activityPanel
+      .getByRole("button", { name: `Stop ${name}`, exact: true })
+      .click();
+  }
+
   async reload({ skills = false } = {}): Promise<void> {
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
@@ -1135,23 +1155,30 @@ export class ChatPage {
       .click();
   }
 
-  async editHumanMessage(text: string, index = 0): Promise<void> {
+  /** Loads the sent message into the composer for an edit. */
+  async startHumanMessageEdit(index = 0): Promise<void> {
     const message = this.humanMessage(index);
     await message.hover();
     await message.getByTestId("HumanMessage/edit-button").click();
-    await message.getByRole("textbox").fill(text);
+    await expect(this.editMessageBanner).toBeVisible();
   }
 
-  async submitHumanMessageEdit(index = 0): Promise<void> {
-    await this.humanMessage(index)
-      .getByRole("button", { name: "Submit", exact: true })
-      .click();
+  async editHumanMessage(text: string, index = 0): Promise<void> {
+    await this.startHumanMessageEdit(index);
+    await this.inputBar.fill(text);
   }
 
-  async cancelHumanMessageEdit(index = 0): Promise<void> {
-    await this.humanMessage(index)
-      .getByRole("button", { name: "Cancel", exact: true })
+  async submitHumanMessageEdit(): Promise<void> {
+    await this.inputBar.textbox.focus();
+    await this.inputBar.send();
+    await expect(this.editMessageBanner).toBeHidden();
+  }
+
+  async cancelHumanMessageEdit(): Promise<void> {
+    await this.editMessageBanner
+      .getByRole("button", { name: "Cancel editing message" })
       .click();
+    await expect(this.editMessageBanner).toBeHidden();
   }
 
   async expectHumanMessage(text: string, index = 0): Promise<void> {

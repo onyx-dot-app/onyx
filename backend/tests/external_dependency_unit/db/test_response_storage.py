@@ -705,6 +705,64 @@ def test_abandoned_background_child_is_delivered_as_failure(
     assert stored.response_failure.kind == RunFailureKind.EXECUTION
 
 
+def test_agent_completion_cites_the_sources_of_every_step(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """Each step's metadata holds only the sources new to its run, so the
+    completion's output collects the sources of all the run's steps."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Sources [2] and [3].", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None
+    snapshot = response_snapshot(child)
+    snapshot.steps = _steps(
+        child.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="lookup", name="lookup", arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="lookup", tool_name="lookup", content="Found"
+            ),
+            AssistantMessage(content=[TextContent(text="Sources [2] and [3].")]),
+        ],
+    )
+    snapshot.answer_step_index = 1
+    snapshot.steps[0].message.metadata = ChatMessageMetadata(
+        sources={2: _source_doc("first-source")}
+    )
+    snapshot.steps[1].message.metadata = ChatMessageMetadata(
+        sources={3: _source_doc("second-source")}
+    )
+    projected = project_response(snapshot, tool_ids={})
+    save_chat_turn(
+        message_text=projected.answer or "",
+        reasoning_tokens=projected.reasoning,
+        tool_calls=projected.tool_calls,
+        citation_to_doc=projected.citation_to_doc,
+        all_search_docs=projected.all_search_docs,
+        db_session=db_session,
+        assistant_message=child_row,
+        response_record=projected.response,
+        presentation=projected.presentation,
+    )
+    db_session.expire_all()
+
+    [completion] = read_agent_completions(db_session, [child_row.id])
+
+    assert completion.output is not None
+    assert completion.output.text == "Sources [2] and [3]."
+    cited = message_citation_sources(completion.output)
+    assert {number: doc.document_id for number, doc in cited.items()} == {
+        2: "first-source",
+        3: "second-source",
+    }
+
+
 def test_agent_completion_preserves_cited_output_and_durable_input_receipt(
     db_session: Session, conversation: ChatSession
 ) -> None:
@@ -3677,6 +3735,51 @@ def test_projected_response_round_trip_replays_tool_and_answer(
     assert memory[0].memory_text == "Prefers tea"
     assert memory[0].memory_id == 7
     assert memory[0].operation == "add"
+
+
+def test_response_stopped_before_its_answer_keeps_its_duration(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    response.time_sent = datetime.now(timezone.utc) - timedelta(seconds=14)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="remember", name="memory", arguments={"text": "Prefers tea"}
+                    )
+                ]
+            ),
+        ],
+    )
+    projected = project_response(
+        RunState(
+            run_id=record.run_id,
+            agent_id=record.agent_id,
+            status=RunStatus.CANCELLED,
+            input_messages=record.input_messages,
+            steps=record.steps,
+        ),
+        tool_ids={},
+    )
+    assert projected.cancelled
+    assert projected.pre_answer_processing_time is None
+    message_id, session_id = response.id, conversation.id
+    db_session.commit()
+    save_chat_response_to_db(
+        message_id=message_id,
+        chat_session_id=session_id,
+        expected_persist_content=True,
+        response=projected,
+    )
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, message_id)
+    assert stored is not None
+    assert stored.processing_duration_seconds is not None
+    assert 14 <= stored.processing_duration_seconds < 60
 
 
 def test_search_projection_restores_saved_source_cards(

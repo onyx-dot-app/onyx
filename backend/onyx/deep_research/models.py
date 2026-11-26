@@ -1,11 +1,12 @@
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SearchDoc, new_or_changed
 from onyx.file_store.models import FileToolMetadata
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import Message, ReasoningEffort
 from onyx.tools.file_snapshot import SavedContextFiles
 from onyx.tools.tool_implementations.search.models import SearchContext
 
@@ -37,6 +38,19 @@ class ResearchMessageMetadata(BaseModel):
     is_intermediate: bool = False
     sources: dict[int, SearchDoc] = Field(default_factory=dict)
     elapsed_seconds: float = 0
+
+
+def new_sources(
+    sources: Mapping[int, SearchDoc], earlier: Sequence[Message]
+) -> dict[int, SearchDoc]:
+    """The sources that the run's earlier messages do not carry, or carry an
+    older copy of. A research step that no reader reads alone holds only
+    these: readers fold the steps of the run."""
+    carried: dict[int, SearchDoc] = {}
+    for message in earlier:
+        if isinstance(message.metadata, ResearchMessageMetadata):
+            carried.update(message.metadata.sources)
+    return new_or_changed(sources, carried)
 
 
 class ResearchTask(BaseModel):

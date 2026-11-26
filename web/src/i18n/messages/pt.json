@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "Anexo enviado"
-        }
+        },
+        "next": "Próxima imagem",
+        "position": "{current} / {total}",
+        "previous": "Imagem anterior"
       },
       "inMessageImage": {
         "downloadButton": {
@@ -11977,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "Subagentes trabalhando",
         "attachFilesButton": {
           "tooltip": "Anexar arquivos"
         },
@@ -12030,9 +12032,6 @@
           "interruptLabel": "Interromper",
           "waitHint": "Aguarde a resposta terminar.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "Parar subagentes"
         },
         "questionAttachmentsHint": "As respostas às perguntas do agente não podem incluir arquivos. Remova os arquivos para responder."
       },
@@ -12180,8 +12179,7 @@
         "withdrawFailed": "Não foi possível remover a mensagem pendente.",
         "loadFailed": "Não foi possível carregar as mensagens pendentes.",
         "alreadyAccepted": "Esta mensagem já foi aceita e não está mais pendente.",
-        "interruptFailed": "Não foi possível enviar esta mensagem agora. Ela continua pendente.",
-        "stopSubagentsFailed": "Não foi possível parar os subagentes."
+        "interruptFailed": "Não foi possível enviar esta mensagem agora. Ela continua pendente."
       },
       "pendingToolApproval": {
         "toast": "Primeiro aprove ou rejeite as chamadas de ferramenta pendentes."
@@ -12191,6 +12189,16 @@
       },
       "pendingUserInput": {
         "toast": "Responda primeiro às solicitações de aprovação ou perguntas pendentes."
+      },
+      "fileDropOverlay": {
+        "label": "Solte arquivos para anexar"
+      },
+      "editMessageBanner": {
+        "label": "Editando no campo de mensagem",
+        "cancelButton": {
+          "label": "Cancelar",
+          "ariaLabel": "Cancelar a edição da mensagem"
+        }
       }
     },
     "messages": {
@@ -12205,11 +12213,24 @@
       "agentResults": {
         "received": "Resultados dos subagentes recebidos"
       },
-      "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "Copiado!",
-          "label": "Copiar"
+      "callout": {
+        "note": {
+          "title": "Nota"
         },
+        "tip": {
+          "title": "Dica"
+        },
+        "important": {
+          "title": "Importante"
+        },
+        "warning": {
+          "title": "Aviso"
+        },
+        "caution": {
+          "title": "Cuidado"
+        }
+      },
+      "codeBlock": {
         "wrapButton": {
           "unwrapLabel": "Não quebrar linhas",
           "wrapLabel": "Quebrar linhas"
@@ -12257,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} não conseguiu alcançar o servidor"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} falhou"
         }
       },
       "customToolAuth": {
@@ -12373,14 +12397,6 @@
         },
         "artifactError": {
           "message": "Este arquivo não está disponível."
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "Cancelar"
-        },
-        "submitButton": {
-          "label": "Enviar"
         }
       },
       "messageSwitcher": {
@@ -12536,6 +12552,9 @@
           "runningCommand": {
             "label": "Executando comando..."
           },
+          "runningProgram": {
+            "label": "Executando {program}..."
+          },
           "editingFiles": {
             "label": "Editando arquivos..."
           },
@@ -12544,48 +12563,6 @@
           },
           "browsing": {
             "label": "Navegando em páginas web..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "Fazendo algum trabalho...",
-              "done": "Trabalho concluído"
-            },
-            "crunchingDetails": {
-              "working": "Analisando os detalhes...",
-              "done": "Detalhes analisados"
-            },
-            "connectingDots": {
-              "working": "Ligando os pontos...",
-              "done": "Pontos ligados"
-            },
-            "runningNumbers": {
-              "working": "Fazendo as contas...",
-              "done": "Contas feitas"
-            },
-            "fillingGaps": {
-              "working": "Preenchendo as lacunas...",
-              "done": "Lacunas preenchidas"
-            },
-            "sortingThingsOut": {
-              "working": "Organizando as coisas...",
-              "done": "Coisas organizadas"
-            },
-            "gatheringPieces": {
-              "working": "Juntando as peças...",
-              "done": "Peças juntadas"
-            },
-            "workingThroughIt": {
-              "working": "Resolvendo...",
-              "done": "Resolvido"
-            },
-            "ironingOutDetails": {
-              "working": "Acertando os detalhes...",
-              "done": "Detalhes acertados"
-            },
-            "roundingThingsOut": {
-              "working": "Finalizando...",
-              "done": "Finalizado"
-            }
           }
         },
         "internalSearch": {
@@ -12612,9 +12589,6 @@
             "before": "antes de {date}",
             "between": "de {start} a {end}"
           }
-        },
-        "interruptedThinking": {
-          "label": "Pensamento interrompido"
         },
         "memory": {
           "default": {
@@ -12737,10 +12711,10 @@
           "label": "{count, plural, one {# etapa} other {# etapas}}"
         },
         "thoughtDuration": {
-          "label": "Pensou por {duration}"
+          "label": "Trabalhou por {duration}"
         },
         "thoughtUnknownDuration": {
-          "label": "Pensou por algum tempo"
+          "label": "Trabalhou"
         },
         "toggleRow": {
           "ariaLabel": "Alternar a linha do tempo"
@@ -12799,6 +12773,9 @@
               "patching": {
                 "status": "{count, plural, =0 {Aplicando patch aos arquivos…} one {Aplicando patch a # arquivo…} other {Aplicando patch a # arquivos…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {Excluir arquivo} other {Arquivo vazio}}"
             }
           },
           "stopped": {
@@ -12811,6 +12788,50 @@
             "failed": {
               "status": "Falha ao publicar"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "Lendo a habilidade {name}",
+            "done": "Habilidade {name} lida",
+            "failed": "Não foi possível ler a habilidade {name}",
+            "runningUnnamed": "Lendo a habilidade",
+            "doneUnnamed": "Habilidade lida",
+            "failedUnnamed": "Não foi possível ler a habilidade"
+          },
+          "load": {
+            "running": "Carregando a habilidade {name}",
+            "done": "Habilidade {name} carregada",
+            "failed": "Não foi possível carregar a habilidade {name}",
+            "runningUnnamed": "Carregando a habilidade",
+            "doneUnnamed": "Habilidade carregada",
+            "failedUnnamed": "Não foi possível carregar a habilidade"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Iniciando o subagente {name}",
+            "done": "Subagente {name} iniciado",
+            "failed": "Não foi possível iniciar o subagente {name}",
+            "runningUnnamed": "Iniciando o subagente",
+            "doneUnnamed": "Subagente iniciado",
+            "failedUnnamed": "Não foi possível iniciar o subagente"
+          },
+          "send": {
+            "running": "Enviando mensagem para {name}",
+            "done": "Mensagem enviada para {name}",
+            "failed": "Não foi possível enviar a mensagem para {name}",
+            "runningUnnamed": "Enviando mensagem para o subagente",
+            "doneUnnamed": "Mensagem enviada para o subagente",
+            "failedUnnamed": "Não foi possível enviar a mensagem para o subagente"
+          },
+          "interrupt": {
+            "running": "Interrompendo {name}",
+            "done": "{name} interrompido",
+            "failed": "Não foi possível interromper {name}",
+            "runningUnnamed": "Interrompendo o subagente",
+            "doneUnnamed": "Subagente interrompido",
+            "failedUnnamed": "Não foi possível interromper o subagente"
           }
         }
       },
@@ -13579,22 +13600,33 @@
       },
       "agents": {
         "title": "Agentes",
+        "titleRunning": "Agentes · {count} em execução",
         "status": {
-          "starting": "Iniciando",
-          "running": "Em execução",
-          "suspended": "Aguardando",
           "complete": "Concluído",
           "limit": "Limite de etapas atingido",
           "cancelled": "Cancelado",
           "stopped": "Parado",
           "error": "Falhou"
         },
-        "finished": "Agentes anteriores"
+        "finished": "Agentes anteriores",
+        "stop": "Parar {name}",
+        "stopTooltip": "Parar agente",
+        "stopFailed": "Não foi possível parar o agente."
       },
       "files": {
         "title": "Arquivos",
         "viewAll": "{count, plural, one {Ver # arquivo} other {Ver todos os # arquivos}}"
       }
+    },
+    "find": {
+      "capped": "Pesquisou {count, plural, one {a última mensagem} other {as últimas # mensagens}}",
+      "close": "Fechar localização",
+      "count": "{current} de {total}",
+      "label": "Localizar na sessão",
+      "loadingOlder": "Carregando mensagens anteriores…",
+      "next": "Próximo resultado",
+      "placeholder": "Localizar na sessão",
+      "previous": "Resultado anterior"
     }
   },
   "common": {
@@ -15082,6 +15114,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, one {# adição} other {# adições}}, {removed, plural, one {# exclusão} other {# exclusões}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# linha inalterada} other {# linhas inalteradas}}"
         },
@@ -16678,6 +16713,12 @@
       "deleteError": {
         "message": "Falha ao excluir o chat. Tente novamente."
       },
+      "markRead": {
+        "label": "Marcar como lida"
+      },
+      "markUnread": {
+        "label": "Marcar como não lida"
+      },
       "moveToProject": {
         "label": "Mover para um projeto"
       },
@@ -16686,6 +16727,12 @@
       },
       "projectSearchInput": {
         "placeholder": "Pesquisar projetos"
+      },
+      "regenerateTitle": {
+        "label": "Regenerar título"
+      },
+      "regenerateTitleError": {
+        "message": "Falha ao regenerar o título. Tente novamente."
       },
       "removeFromProject": {
         "label": "Remover de {projectName}"
@@ -16710,9 +16757,11 @@
           "label": "Trabalhando"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Compartilhar"
+      },
+      "updatedNow": {
+        "label": "agora"
       }
     },
     "chatSearch": {
@@ -16758,6 +16807,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "Trocar modelo"
+        },
+        "findInChat": {
+          "label": "Localizar na sessão"
         },
         "nextChat": {
           "label": "Próxima sessão"

@@ -6,14 +6,16 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.models import AgentState
 from onyx.agents.runtime import Run
+from onyx.agents.tools import ToolInvocation
 from onyx.chat.models import ChatMessageMetadata
 from onyx.chat.presentation import project_response
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
 from onyx.deep_research.models import ResearchAgentCallResult
-from onyx.deep_research.research_agent import ResearchAgent
+from onyx.deep_research.research_agent import ResearchFeature
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
@@ -43,6 +45,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
 )
 from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
 from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OPEN_URL_SHAPES,
     OpenURLTool,
@@ -107,8 +110,7 @@ def test_timed_out_child_preserves_successful_sibling(
             content=[TextContent(text="Final report" if results else "Plan")]
         )
 
-    feature = DeepResearchAgent(
-        [],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(reply),
         len,
@@ -120,7 +122,7 @@ def test_timed_out_child_preserves_successful_sibling(
     )
     runs: list[Run] = []
     result = run_agent(
-        feature,
+        feature.agent(AgentState()),
         messages=[UserMessage(content="Research")],
         max_steps=4,
         coordinator=AgentCoordinator(),
@@ -139,7 +141,7 @@ def test_timed_out_child_preserves_successful_sibling(
 @pytest.mark.parametrize("parent", [False, True])
 def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
     requests: list[GenerationRequest] = []
-    feature: DeepResearchAgent | ResearchAgent
+    feature: DeepResearchFeature | ResearchFeature
 
     class SearchStub(EchoTool):
         @property
@@ -175,8 +177,7 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
 
     llm = FakeModelClient(reply)
     feature = (
-        DeepResearchAgent(
-            [],
+        DeepResearchFeature(
             [],
             llm,
             len,
@@ -187,10 +188,12 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
             skip_clarification=True,
         )
         if parent
-        else ResearchAgent([SearchStub()], llm, len, None, "", ReasoningEffort.LOW)
+        else ResearchFeature([SearchStub()], llm, len, None, "", ReasoningEffort.LOW)
     )
     result = run_agent(
-        feature, messages=[UserMessage(content="Research")], max_steps=10
+        feature.agent(AgentState()),
+        messages=[UserMessage(content="Research")],
+        max_steps=10,
     )
     assert result.output.text == "Report"
     assert len(requests) == 2
@@ -254,8 +257,7 @@ def test_deep_research_reuses_sources_from_chat_history(source_kind: str) -> Non
             )
         return AssistantMessage(content=[TextContent(text="Evidence [7]")])
 
-    feature = DeepResearchAgent(
-        history,
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(reply),
         len,
@@ -267,7 +269,7 @@ def test_deep_research_reuses_sources_from_chat_history(source_kind: str) -> Non
     )
     runs: list[Run] = []
     run_agent(
-        feature,
+        feature.agent(AgentState(messages=history)),
         messages=[UserMessage(content="Explain the evidence")],
         max_steps=4,
         runs=runs,
@@ -282,8 +284,7 @@ def test_request_context_is_trailing_uncacheable_and_restorable() -> None:
     from onyx.agents.models import AgentStep, StepInput
 
     question = UserMessage(content="Research the launch")
-    feature = DeepResearchAgent(
-        [question],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(lambda _request, _signal: AssistantMessage(content=[])),
         len,
@@ -293,6 +294,7 @@ def test_request_context_is_trailing_uncacheable_and_restorable() -> None:
         None,
         additional_context="Use the October launch plan",
     )
+    agent = feature.agent(AgentState(messages=[question]))
     state = feature.capture_state()
     assert state.request_context == "Use the October launch plan"
     feature.restore_state(state.model_dump(mode="json"))
@@ -311,7 +313,7 @@ def test_request_context_is_trailing_uncacheable_and_restorable() -> None:
     assert context.text.startswith("<system-reminder>")
     assert not context.cacheable
     assert request.messages[-2].cacheable
-    assert [message.text for message in feature.state.messages] == [question.text]
+    assert [message.text for message in agent.state.messages] == [question.text]
 
 
 def test_project_images_use_stable_preamble_and_file_references(
@@ -333,8 +335,7 @@ def test_project_images_use_stable_preamble_and_file_references(
         content_text=None,
         token_count=100,
     )
-    feature = DeepResearchAgent(
-        [],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(lambda _request, _signal: AssistantMessage(content=[])),
         len,
@@ -395,8 +396,7 @@ def test_research_cycles_keep_system_and_tool_phase_stable(
         "onyx.deep_research.agent.model_is_reasoning_model",
         lambda *_args: reasoning,
     )
-    feature = DeepResearchAgent(
-        [],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(lambda _request, _signal: AssistantMessage(content=[])),
         len,
@@ -487,7 +487,7 @@ def test_research_tools_show_their_summaries_and_the_prompt_their_guidance(
         open_url,
     ]
     run_agent(
-        ResearchAgent(tools, llm, len, None, "", ReasoningEffort.LOW),
+        ResearchFeature(tools, llm, len, None, "", ReasoningEffort.LOW).agent(),
         max_steps=3,
         messages=[UserMessage(content="Find facts")],
     )
@@ -511,3 +511,130 @@ def test_research_tools_show_their_summaries_and_the_prompt_their_guidance(
     assert INTERNAL_SEARCH_TOOL_DESCRIPTION in system
     assert OPEN_URLS_TOOL_DESCRIPTION.format(name=open_url.name) in system
     assert OPEN_URLS_GUIDANCE not in system
+
+
+def _source(document_id: str) -> SearchDoc:
+    return SearchDoc(
+        document_id=document_id,
+        chunk_ind=0,
+        semantic_identifier=document_id,
+        blurb=document_id,
+        source_type=DocumentSource.WEB,
+        boost=0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+
+
+@pytest.mark.parametrize("report", [False, True], ids=["research", "report"])
+def test_deep_research_steps_hold_new_sources_and_the_report_holds_all(
+    report: bool,
+) -> None:
+    from onyx.agents.models import AgentStep, StepInput, StepResult
+    from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
+    from onyx.llm.models import GenerationOptions
+
+    a, b = _source("a"), _source("b")
+    feature = DeepResearchFeature(
+        [],
+        FakeModelClient(lambda _request, _signal: AssistantMessage(content=[])),
+        len,
+        None,
+        "",
+        ReasoningEffort.LOW,
+        None,
+    )
+    feature.citation_mapping = {1: a, 2: b}
+    plan = AssistantMessage(
+        content=[TextContent(text="Compare launch evidence")],
+        metadata=ResearchMessageMetadata(phase=ResearchPhase.PLANNING),
+    )
+    tool_name = GENERATE_REPORT_TOOL_NAME if report else RESEARCH_AGENT_TOOL_NAME
+    research = AssistantMessage(
+        content=[ToolCall(id="call", name=tool_name, arguments={})],
+        metadata=ResearchMessageMetadata(phase=ResearchPhase.RESEARCH, sources={1: a}),
+    )
+    result = ToolResultMessage(tool_call_id="call", tool_name=tool_name, content="ok")
+    prepared = feature._prepare_step(
+        StepInput(
+            history=(),
+            input_messages=(UserMessage(content="Research the launch"),),
+            messages=(plan, research, result),
+            previous=StepResult(
+                step=AgentStep(index=1, limit=8),
+                message=research,
+                tool_results=(result,),
+                options=GenerationOptions(),
+            ),
+            step=AgentStep(index=2, limit=8),
+        )
+    )
+    metadata = prepared.output_metadata
+    assert isinstance(metadata, ResearchMessageMetadata)
+    if report:
+        assert metadata.phase == ResearchPhase.REPORT
+        assert metadata.sources == {1: a, 2: b}
+    else:
+        assert metadata.phase == ResearchPhase.RESEARCH
+        assert metadata.sources == {2: b}
+
+
+class _CitingWebSearch(EchoTool):
+    """Each call finds one new document under the next citation number."""
+
+    @property
+    def name(self) -> str:
+        return WebSearchTool.NAME
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        document = _source(str(invocation.arguments["value"]))
+        return ToolResult(
+            content=document.document_id,
+            details=SearchDocsResponse(
+                search_docs=[document],
+                citation_mapping={context.next_citation_num: document.document_id},
+            ),
+        )
+
+
+def test_research_steps_hold_new_sources_and_the_report_holds_all() -> None:
+    from onyx.deep_research.models import ResearchMessageMetadata
+
+    def search(value: str) -> Delta:
+        return Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    index=0,
+                    id=f"call-{value}",
+                    function=ResponseFunctionCall(
+                        name=WebSearchTool.NAME, arguments=f'{{"value":"{value}"}}'
+                    ),
+                )
+            ]
+        )
+
+    agent = ResearchFeature(
+        [_CitingWebSearch()],
+        ScriptedLLM(
+            [search("a"), search("b"), search("c"), Delta(content="Report [1]")],
+            128000,
+        ),
+        len,
+        None,
+        "",
+        ReasoningEffort.LOW,
+    ).agent()
+    runs: list[Run] = []
+    run_agent(
+        agent, runs=runs, max_steps=4, messages=[UserMessage(content="Find facts")]
+    )
+    sources = [
+        {
+            number: doc.document_id
+            for number, doc in step.message.metadata.sources.items()
+        }
+        for step in runs[-1].snapshot().steps
+        if isinstance(step.message.metadata, ResearchMessageMetadata)
+    ]
+    assert sources == [{}, {1: "a"}, {2: "b"}, {1: "a", 2: "b", 3: "c"}]

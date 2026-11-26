@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "アップロードされた添付ファイル"
-        }
+        },
+        "next": "次の画像",
+        "position": "{current} / {total}",
+        "previous": "前の画像"
       },
       "inMessageImage": {
         "downloadButton": {
@@ -11977,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "サブエージェントが作業中",
         "attachFilesButton": {
           "tooltip": "ファイルを添付"
         },
@@ -12030,9 +12032,6 @@
           "interruptLabel": "中断",
           "waitHint": "応答が終わるまでお待ちください。",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "サブエージェントを停止"
         },
         "questionAttachmentsHint": "エージェントの質問への回答にはファイルを含められません。回答するにはファイルを削除してください。"
       },
@@ -12180,8 +12179,7 @@
         "withdrawFailed": "保留中のメッセージを削除できませんでした。",
         "loadFailed": "保留中のメッセージを読み込めませんでした。",
         "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
-        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
-        "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
+        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。"
       },
       "pendingToolApproval": {
         "toast": "先に保留中のツール呼び出しを承認または拒否してください。"
@@ -12191,6 +12189,16 @@
       },
       "pendingUserInput": {
         "toast": "先に保留中の承認リクエストまたは質問に対応してください。"
+      },
+      "fileDropOverlay": {
+        "label": "ファイルをドロップして添付"
+      },
+      "editMessageBanner": {
+        "label": "入力欄で編集中",
+        "cancelButton": {
+          "label": "キャンセル",
+          "ariaLabel": "メッセージの編集をキャンセル"
+        }
       }
     },
     "messages": {
@@ -12205,11 +12213,24 @@
       "agentResults": {
         "received": "サブエージェントの結果を受信しました"
       },
-      "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "コピーしました！",
-          "label": "コピー"
+      "callout": {
+        "note": {
+          "title": "注記"
         },
+        "tip": {
+          "title": "ヒント"
+        },
+        "important": {
+          "title": "重要"
+        },
+        "warning": {
+          "title": "警告"
+        },
+        "caution": {
+          "title": "注意"
+        }
+      },
+      "codeBlock": {
         "wrapButton": {
           "unwrapLabel": "折り返さない",
           "wrapLabel": "折り返す"
@@ -12257,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} はサーバーに接続できませんでした"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} が失敗しました"
         }
       },
       "customToolAuth": {
@@ -12373,14 +12397,6 @@
         },
         "artifactError": {
           "message": "このファイルは利用できません。"
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "キャンセル"
-        },
-        "submitButton": {
-          "label": "送信"
         }
       },
       "messageSwitcher": {
@@ -12536,6 +12552,9 @@
           "runningCommand": {
             "label": "コマンドを実行中..."
           },
+          "runningProgram": {
+            "label": "{program} を実行中..."
+          },
           "editingFiles": {
             "label": "ファイルを編集中..."
           },
@@ -12544,48 +12563,6 @@
           },
           "browsing": {
             "label": "ウェブページを閲覧中..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "作業中...",
-              "done": "作業しました"
-            },
-            "crunchingDetails": {
-              "working": "詳細を分析中...",
-              "done": "詳細を分析しました"
-            },
-            "connectingDots": {
-              "working": "点と点をつないでいます...",
-              "done": "点と点をつなぎました"
-            },
-            "runningNumbers": {
-              "working": "数字を計算中...",
-              "done": "数字を計算しました"
-            },
-            "fillingGaps": {
-              "working": "足りない部分を補っています...",
-              "done": "足りない部分を補いました"
-            },
-            "sortingThingsOut": {
-              "working": "整理しています...",
-              "done": "整理しました"
-            },
-            "gatheringPieces": {
-              "working": "ピースを集めています...",
-              "done": "ピースを集めました"
-            },
-            "workingThroughIt": {
-              "working": "取り組んでいます...",
-              "done": "取り組みました"
-            },
-            "ironingOutDetails": {
-              "working": "細部を詰めています...",
-              "done": "細部を詰めました"
-            },
-            "roundingThingsOut": {
-              "working": "仕上げています...",
-              "done": "仕上げました"
-            }
           }
         },
         "internalSearch": {
@@ -12612,9 +12589,6 @@
             "before": "{date}より前",
             "between": "{start}から{end}まで"
           }
-        },
-        "interruptedThinking": {
-          "label": "中断された思考"
         },
         "memory": {
           "default": {
@@ -12737,10 +12711,10 @@
           "label": "{count, plural, one {# ステップ} other {# ステップ}}"
         },
         "thoughtDuration": {
-          "label": "{duration} 思考しました"
+          "label": "{duration} 作業しました"
         },
         "thoughtUnknownDuration": {
-          "label": "しばらく思考しました"
+          "label": "作業しました"
         },
         "toggleRow": {
           "ariaLabel": "タイムラインを切り替え"
@@ -12799,6 +12773,9 @@
               "patching": {
                 "status": "{count, plural, =0 {ファイルにパッチを適用中…} one {# 個のファイルにパッチを適用中…} other {# 個のファイルにパッチを適用中…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {ファイルを削除} other {空のファイル}}"
             }
           },
           "stopped": {
@@ -12811,6 +12788,50 @@
             "failed": {
               "status": "公開に失敗しました"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "スキル {name} を読み込み中",
+            "done": "スキル {name} を読みました",
+            "failed": "スキル {name} を読めませんでした",
+            "runningUnnamed": "スキルを読み込み中",
+            "doneUnnamed": "スキルを読みました",
+            "failedUnnamed": "スキルを読めませんでした"
+          },
+          "load": {
+            "running": "スキル {name} をロード中",
+            "done": "スキル {name} をロードしました",
+            "failed": "スキル {name} をロードできませんでした",
+            "runningUnnamed": "スキルをロード中",
+            "doneUnnamed": "スキルをロードしました",
+            "failedUnnamed": "スキルをロードできませんでした"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "サブエージェント {name} を起動中",
+            "done": "サブエージェント {name} を起動しました",
+            "failed": "サブエージェント {name} を起動できませんでした",
+            "runningUnnamed": "サブエージェントを起動中",
+            "doneUnnamed": "サブエージェントを起動しました",
+            "failedUnnamed": "サブエージェントを起動できませんでした"
+          },
+          "send": {
+            "running": "{name} にメッセージを送信中",
+            "done": "{name} にメッセージを送信しました",
+            "failed": "{name} にメッセージを送信できませんでした",
+            "runningUnnamed": "サブエージェントにメッセージを送信中",
+            "doneUnnamed": "サブエージェントにメッセージを送信しました",
+            "failedUnnamed": "サブエージェントにメッセージを送信できませんでした"
+          },
+          "interrupt": {
+            "running": "{name} を中断中",
+            "done": "{name} を中断しました",
+            "failed": "{name} を中断できませんでした",
+            "runningUnnamed": "サブエージェントを中断中",
+            "doneUnnamed": "サブエージェントを中断しました",
+            "failedUnnamed": "サブエージェントを中断できませんでした"
           }
         }
       },
@@ -13579,22 +13600,33 @@
       },
       "agents": {
         "title": "エージェント",
+        "titleRunning": "エージェント · {count} 件実行中",
         "status": {
-          "starting": "開始中",
-          "running": "実行中",
-          "suspended": "待機中",
           "complete": "完了",
           "limit": "ステップ上限に到達",
           "cancelled": "キャンセル済み",
           "stopped": "停止済み",
           "error": "失敗"
         },
-        "finished": "以前のエージェント"
+        "finished": "以前のエージェント",
+        "stop": "{name} を停止",
+        "stopTooltip": "エージェントを停止",
+        "stopFailed": "エージェントを停止できませんでした。"
       },
       "files": {
         "title": "ファイル",
         "viewAll": "{count, plural, other {#件のファイルをすべて表示}}"
       }
+    },
+    "find": {
+      "capped": "最新の {count, plural, other {# 件のメッセージ}}を検索しました",
+      "close": "検索を閉じる",
+      "count": "{current} / {total}",
+      "label": "セッション内を検索",
+      "loadingOlder": "以前のメッセージを読み込み中…",
+      "next": "次の一致",
+      "placeholder": "セッション内を検索",
+      "previous": "前の一致"
     }
   },
   "common": {
@@ -15082,6 +15114,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, other {#行追加}}、{removed, plural, other {#行削除}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {変更なしの行 #行} other {変更なしの行 #行}}"
         },
@@ -16678,6 +16713,12 @@
       "deleteError": {
         "message": "チャットを削除できませんでした。もう一度お試しください。"
       },
+      "markRead": {
+        "label": "既読にする"
+      },
+      "markUnread": {
+        "label": "未読にする"
+      },
       "moveToProject": {
         "label": "プロジェクトに移動"
       },
@@ -16686,6 +16727,12 @@
       },
       "projectSearchInput": {
         "placeholder": "プロジェクトを検索"
+      },
+      "regenerateTitle": {
+        "label": "タイトルを再生成"
+      },
+      "regenerateTitleError": {
+        "message": "タイトルを再生成できませんでした。もう一度お試しください。"
       },
       "removeFromProject": {
         "label": "{projectName} から削除"
@@ -16710,9 +16757,11 @@
           "label": "処理中"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共有"
+      },
+      "updatedNow": {
+        "label": "今"
       }
     },
     "chatSearch": {
@@ -16758,6 +16807,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "モデルを変更"
+        },
+        "findInChat": {
+          "label": "セッション内を検索"
         },
         "nextChat": {
           "label": "次のセッション"

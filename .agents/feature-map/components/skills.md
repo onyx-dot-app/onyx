@@ -460,7 +460,7 @@ revoked skill keeps its text in old turns, as in Codex. The read
 (`db/plugin.py:get_visible_versions_skill_md`) returns text only for versions
 of skills the user can see at acceptance: the pinned version decides the
 content, and current access decides whether it is read.
-`chat/execution.py:create_chat_agent` adds `skills_list` and the skill read
+`chat/execution.py:construct_chat_tools` adds `skills_list` and the skill read
 tool, `skills_read` or `skill` for Claude models
 (`tools/tool_implementations/skills/skill_tools.py`) when the user has a chat
 skill when the turn starts (`ChatTurnSetup.has_chat_skills`), whatever the

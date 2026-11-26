@@ -3,11 +3,12 @@
 from collections.abc import Collection
 from uuid import UUID
 
-from pydantic import JsonValue, TypeAdapter
+from pydantic import JsonValue, TypeAdapter, ValidationError
 from sqlalchemy import any_, exists, select, true, union
 from sqlalchemy.orm import Session, aliased
 
 from onyx.agents.models import InputSource, RunFailure, RunFailureKind, RunStatus
+from onyx.chat.checkpoint import CheckpointVersionError
 from onyx.chat.models import ParkedRun, ResponseCheckpoint, SavedCheckpoint
 from onyx.db.approval_request import close_pending_approval_requests__no_commit
 from onyx.db.chat import (
@@ -156,13 +157,14 @@ def claim_checkpoint__no_commit(
     row = session.get(ChatResponseCheckpoint, message_id, populate_existing=True)
     if row is None or response.response_status != RunStatus.SUSPENDED:
         return None
+    try:
+        data = ResponseCheckpoint.model_validate(row.state)
+    except ValidationError as error:
+        raise CheckpointVersionError("Checkpoint changed shape") from error
     row.ownership_version += 1
     response.response_status = RunStatus.RUNNING
     session.flush()
-    return SavedCheckpoint(
-        ownership_version=row.ownership_version,
-        data=ResponseCheckpoint.model_validate(row.state),
-    )
+    return SavedCheckpoint(ownership_version=row.ownership_version, data=data)
 
 
 def check_checkpoint_owner__no_commit(

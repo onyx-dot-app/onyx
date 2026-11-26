@@ -345,6 +345,8 @@ class PendingChatMessageRequest(BaseModel):
 class ChatRenameRequest(BaseModel):
     chat_session_id: UUID
     name: str | None = None
+    # With no name: replace a saved name too, instead of returning it.
+    regenerate: bool = False
 
 
 class ChatSessionUpdateRequest(BaseModel):
@@ -416,6 +418,11 @@ class QuestionAnswersResponse(BaseModel):
     # The stream that continues the question's response, when the answer
     # started it or found it running; None while the response still waits.
     continuation: CurrentStreamInfo | None = None
+
+
+class StopSubagentsRequest(BaseModel):
+    # Stops this agent and the agents below it; None stops every agent.
+    agent_id: UUID | None = None
 
 
 class StopSubagentsResponse(BaseModel):
@@ -521,6 +528,8 @@ class ChatSubagent(BaseModel):
     # None before its first run starts
     status: RunStatus | None
     stopped_by_user: bool
+    # When its current or latest run started
+    started_at: datetime | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):

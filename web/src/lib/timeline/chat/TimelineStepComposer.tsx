@@ -11,6 +11,8 @@ export interface TimelineStepComposerProps {
   status?: TimelineEntryStatus;
   /** Shown at the end of the first row's header, e.g. a memory's tag. */
   headerAccessory?: React.ReactNode;
+  /** The step's key: its rows keep their open state in the run card. */
+  stepId?: string;
 }
 
 /**
@@ -21,6 +23,7 @@ export function TimelineStepComposer({
   results,
   status = "done",
   headerAccessory,
+  stepId,
 }: TimelineStepComposerProps) {
   return (
     <>
@@ -30,6 +33,7 @@ export function TimelineStepComposer({
         ) : (
           <RunStep
             key={index}
+            id={stepId === undefined ? undefined : `${stepId}:${index}`}
             status={index === 0 ? status : "done"}
             icon={result.icon as IconFunctionComponent | undefined}
             title={result.status ?? undefined}
@@ -37,7 +41,10 @@ export function TimelineStepComposer({
             titleKey={result.statusKey}
             defaultExpanded={result.isExpanded}
             body={result.content}
-            headerAccessory={index === 0 ? headerAccessory : undefined}
+            headerAccessory={
+              result.headerAccessory ??
+              (index === 0 ? headerAccessory : undefined)
+            }
           />
         )
       )}

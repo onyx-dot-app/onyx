@@ -20,10 +20,7 @@ import { resolveFilePreviewFormat, svgDataUrl } from "@/lib/filePreview/format";
 import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 import { DownloadButton } from "@/sections/file-preview/DownloadButton";
 import { PreviewUnavailable } from "@/sections/file-preview/PreviewUnavailable";
-import {
-  CodeFilePreview,
-  MAX_HIGHLIGHTED_CHARACTERS,
-} from "@/sections/file-preview/CodeFilePreview";
+import { CodeFilePreview } from "@/sections/file-preview/CodeFilePreview";
 import { MarkdownFilePreview } from "@/sections/file-preview/MarkdownFilePreview";
 import { SpreadsheetPreview } from "@/sections/file-preview/SpreadsheetPreview";
 import { ImagePreview } from "@/sections/file-preview/ImagePreview";
@@ -44,6 +41,8 @@ const HTML_PREVIEW_PROLOGUE = `<!DOCTYPE html><meta http-equiv="Content-Security
 
 // A fast load shows nothing; a slower one shows the loader
 const LOADER_DELAY_MS = 300;
+
+const MAX_RENDERED_MARKDOWN_CHARACTERS = 200_000;
 
 interface LoadingProps {
   // A line under the loader, read out by screen readers
@@ -226,7 +225,7 @@ export const FilePreviewBody = memo(function FilePreviewBody({
       }
       case "markdown": {
         // Long markdown shows as source, which renders in linear time
-        const tooLong = data.text.length > MAX_HIGHLIGHTED_CHARACTERS;
+        const tooLong = data.text.length > MAX_RENDERED_MARKDOWN_CHARACTERS;
         const source = tooLong || showSource;
         content = source ? (
           <CodeFilePreview text={data.text} language="plaintext" />

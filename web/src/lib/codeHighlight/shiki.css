@@ -1,0 +1,8 @@
+/* Shiki dual-theme tokens: each span carries both colors as variables. */
+span[style*="--shiki-light"] {
+  color: var(--shiki-light);
+}
+
+.dark span[style*="--shiki-dark"] {
+  color: var(--shiki-dark);
+}

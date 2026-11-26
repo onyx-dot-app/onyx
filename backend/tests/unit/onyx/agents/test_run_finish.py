@@ -19,6 +19,7 @@ from onyx.agents.models import (
     PreparedStep,
     ReleaseFailed,
     RunFailureKind,
+    RunHooks,
     RunState,
     RunStatus,
     ToolCallContext,
@@ -110,7 +111,7 @@ def _agent(
                 execute=execute,
             )
         ],
-        on_finish=hook,
+        feature=RunHooks(on_finish=hook),
     )
 
 
@@ -375,12 +376,14 @@ def test_an_amendment_reaches_its_call_when_the_provider_repeats_call_ids(
                 execute=lambda _invocation: ToolResult(content=next(step)),
             )
         ],
-        on_finish=close_first,
-        prepare_step=(
-            lambda _input: PreparedStep(assemble_messages=_without_tool_steps)
-        )
-        if compacted
-        else None,
+        feature=RunHooks(
+            on_finish=close_first,
+            prepare_step=(
+                lambda _input: PreparedStep(assemble_messages=_without_tool_steps)
+            )
+            if compacted
+            else None,
+        ),
     )
     run, _events, saved = _run(agent)
     assert run.status == RunStatus.COMPLETE
@@ -459,8 +462,7 @@ def test_suspend_hook_amends_results_before_the_run_suspends() -> None:
             )
             for name in ("cell", "approve")
         ],
-        before_tool_call=gate,
-        on_suspend=hook,
+        feature=RunHooks(before_tool_call=gate, on_suspend=hook),
     )
     coordinator = AgentCoordinator()
     run = agent.start(max_steps=2, coordinator=coordinator, on_event=events.append)
@@ -509,11 +511,13 @@ def test_suspend_hook_stopped_by_cancellation_finishes_the_run() -> None:
                 execute=lambda _invocation: ToolResult(content="running"),
             )
         ],
-        before_tool_call=lambda _context: PendingToolInput(
-            request_id="permission", prompt="Proceed?", mode=InputMode.EXECUTE
+        feature=RunHooks(
+            before_tool_call=lambda _context: PendingToolInput(
+                request_id="permission", prompt="Proceed?", mode=InputMode.EXECUTE
+            ),
+            on_suspend=stop,
+            on_finish=finish,
         ),
-        on_suspend=stop,
-        on_finish=finish,
     )
     coordinator = AgentCoordinator()
     run = agent.start(
@@ -609,11 +613,13 @@ def test_a_suspend_hook_failure_fails_the_run_unless_the_user_stopped_it(
                 execute=lambda _invocation: ToolResult(content="running"),
             )
         ],
-        before_tool_call=lambda _context: PendingToolInput(
-            request_id="permission", prompt="Proceed?", mode=InputMode.EXECUTE
+        feature=RunHooks(
+            before_tool_call=lambda _context: PendingToolInput(
+                request_id="permission", prompt="Proceed?", mode=InputMode.EXECUTE
+            ),
+            on_suspend=suspend,
+            on_finish=finish,
         ),
-        on_suspend=suspend,
-        on_finish=finish,
     )
     coordinator = AgentCoordinator()
     run = agent.start(
@@ -722,8 +728,8 @@ def test_a_failing_on_drained_hook_still_leaves_the_run_idle_and_reusable(
                 execute=lambda _invocation: ToolResult(content="approved"),
             )
         ],
-        before_tool_call=gate,
         on_drained=on_drained,
+        feature=RunHooks(before_tool_call=gate),
     )
     for _ in range(2):
         run = agent.start(max_steps=2)
@@ -898,8 +904,7 @@ def test_amended_and_recorded_results_go_through_prepare_tool_result() -> None:
                 execute=lambda _invocation: ToolResult(content="running"),
             )
         ],
-        on_finish=FinishHook(),
-        prepare_tool_result=prepare,
+        feature=RunHooks(on_finish=FinishHook(), prepare_tool_result=prepare),
     )
     run, events, saved = _run(agent)
 
@@ -930,8 +935,7 @@ def test_an_amendment_whose_preparation_fails_applies_as_the_hook_made_it(
                 execute=lambda _invocation: ToolResult(content="running"),
             )
         ],
-        on_finish=FinishHook(),
-        prepare_tool_result=prepare,
+        feature=RunHooks(on_finish=FinishHook(), prepare_tool_result=prepare),
     )
     run, events, saved = _run(agent)
 
@@ -974,8 +978,7 @@ def test_a_stopped_run_applies_its_amendments_without_preparing_them() -> None:
                 execute=lambda _invocation: ToolResult(content="running"),
             )
         ],
-        on_finish=FinishHook(),
-        prepare_tool_result=prepare,
+        feature=RunHooks(on_finish=FinishHook(), prepare_tool_result=prepare),
     )
     run, events, saved = _run(agent, cancellation=cancellation)
 

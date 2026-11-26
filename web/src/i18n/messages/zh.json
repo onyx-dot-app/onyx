@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "已上传的附件"
-        }
+        },
+        "next": "下一张图片",
+        "position": "{current} / {total}",
+        "previous": "上一张图片"
       },
       "inMessageImage": {
         "downloadButton": {
@@ -11977,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "子代理正在工作",
         "attachFilesButton": {
           "tooltip": "附加文件"
         },
@@ -12030,9 +12032,6 @@
           "interruptLabel": "中断",
           "waitHint": "请等待回复完成。",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "停止子代理"
         },
         "questionAttachmentsHint": "回答智能体的问题时不能包含文件。请移除文件后再回答。"
       },
@@ -12180,8 +12179,7 @@
         "withdrawFailed": "无法移除待处理消息。",
         "loadFailed": "无法加载待处理消息。",
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
-        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
-        "stopSubagentsFailed": "无法停止子代理。"
+        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。"
       },
       "pendingToolApproval": {
         "toast": "请先批准或拒绝待处理的工具调用。"
@@ -12191,6 +12189,16 @@
       },
       "pendingUserInput": {
         "toast": "请先处理待处理的批准请求或问题。"
+      },
+      "fileDropOverlay": {
+        "label": "拖放文件以附加"
+      },
+      "editMessageBanner": {
+        "label": "正在输入框中编辑",
+        "cancelButton": {
+          "label": "取消",
+          "ariaLabel": "取消编辑消息"
+        }
       }
     },
     "messages": {
@@ -12205,11 +12213,24 @@
       "agentResults": {
         "received": "已收到子代理结果"
       },
-      "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "已复制！",
-          "label": "复制"
+      "callout": {
+        "note": {
+          "title": "备注"
         },
+        "tip": {
+          "title": "提示"
+        },
+        "important": {
+          "title": "重要"
+        },
+        "warning": {
+          "title": "警告"
+        },
+        "caution": {
+          "title": "注意"
+        }
+      },
+      "codeBlock": {
         "wrapButton": {
           "unwrapLabel": "取消换行",
           "wrapLabel": "自动换行"
@@ -12257,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} 无法连接到其服务器"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} 失败"
         }
       },
       "customToolAuth": {
@@ -12373,14 +12397,6 @@
         },
         "artifactError": {
           "message": "此文件不可用。"
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "取消"
-        },
-        "submitButton": {
-          "label": "提交"
         }
       },
       "messageSwitcher": {
@@ -12536,6 +12552,9 @@
           "runningCommand": {
             "label": "正在运行命令..."
           },
+          "runningProgram": {
+            "label": "正在运行 {program}..."
+          },
           "editingFiles": {
             "label": "正在编辑文件..."
           },
@@ -12544,48 +12563,6 @@
           },
           "browsing": {
             "label": "正在浏览网页..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "正在处理...",
-              "done": "已完成处理"
-            },
-            "crunchingDetails": {
-              "working": "正在梳理细节...",
-              "done": "已梳理细节"
-            },
-            "connectingDots": {
-              "working": "正在串联线索...",
-              "done": "已串联线索"
-            },
-            "runningNumbers": {
-              "working": "正在计算数据...",
-              "done": "已计算数据"
-            },
-            "fillingGaps": {
-              "working": "正在填补空白...",
-              "done": "已填补空白"
-            },
-            "sortingThingsOut": {
-              "working": "正在整理思路...",
-              "done": "已整理思路"
-            },
-            "gatheringPieces": {
-              "working": "正在拼凑信息...",
-              "done": "已拼凑信息"
-            },
-            "workingThroughIt": {
-              "working": "正在逐步解决...",
-              "done": "已逐步解决"
-            },
-            "ironingOutDetails": {
-              "working": "正在完善细节...",
-              "done": "已完善细节"
-            },
-            "roundingThingsOut": {
-              "working": "正在收尾...",
-              "done": "已收尾"
-            }
           }
         },
         "internalSearch": {
@@ -12612,9 +12589,6 @@
             "before": "{date} 之前",
             "between": "从 {start} 到 {end}"
           }
-        },
-        "interruptedThinking": {
-          "label": "思考已中断"
         },
         "memory": {
           "default": {
@@ -12737,10 +12711,10 @@
           "label": "{count, plural, one {# 个步骤} other {# 个步骤}}"
         },
         "thoughtDuration": {
-          "label": "思考了 {duration}"
+          "label": "工作了 {duration}"
         },
         "thoughtUnknownDuration": {
-          "label": "思考了一段时间"
+          "label": "已工作"
         },
         "toggleRow": {
           "ariaLabel": "切换时间线"
@@ -12799,6 +12773,9 @@
               "patching": {
                 "status": "{count, plural, =0 {正在修补文件…} one {正在修补 # 个文件…} other {正在修补 # 个文件…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {删除文件} other {空文件}}"
             }
           },
           "stopped": {
@@ -12811,6 +12788,50 @@
             "failed": {
               "status": "发布失败"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "正在读取技能 {name}",
+            "done": "已读取技能 {name}",
+            "failed": "无法读取技能 {name}",
+            "runningUnnamed": "正在读取技能",
+            "doneUnnamed": "已读取技能",
+            "failedUnnamed": "无法读取技能"
+          },
+          "load": {
+            "running": "正在加载技能 {name}",
+            "done": "已加载技能 {name}",
+            "failed": "无法加载技能 {name}",
+            "runningUnnamed": "正在加载技能",
+            "doneUnnamed": "已加载技能",
+            "failedUnnamed": "无法加载技能"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "正在启动子代理 {name}",
+            "done": "已启动子代理 {name}",
+            "failed": "无法启动子代理 {name}",
+            "runningUnnamed": "正在启动子代理",
+            "doneUnnamed": "已启动子代理",
+            "failedUnnamed": "无法启动子代理"
+          },
+          "send": {
+            "running": "正在向 {name} 发送消息",
+            "done": "已向 {name} 发送消息",
+            "failed": "无法向 {name} 发送消息",
+            "runningUnnamed": "正在向子代理发送消息",
+            "doneUnnamed": "已向子代理发送消息",
+            "failedUnnamed": "无法向子代理发送消息"
+          },
+          "interrupt": {
+            "running": "正在中断 {name}",
+            "done": "已中断 {name}",
+            "failed": "无法中断 {name}",
+            "runningUnnamed": "正在中断子代理",
+            "doneUnnamed": "已中断子代理",
+            "failedUnnamed": "无法中断子代理"
           }
         }
       },
@@ -13579,22 +13600,33 @@
       },
       "agents": {
         "title": "智能体",
+        "titleRunning": "智能体 · {count} 个运行中",
         "status": {
-          "starting": "启动中",
-          "running": "运行中",
-          "suspended": "等待中",
           "complete": "已完成",
           "limit": "已达步骤上限",
           "cancelled": "已取消",
           "stopped": "已停止",
           "error": "失败"
         },
-        "finished": "之前的智能体"
+        "finished": "之前的智能体",
+        "stop": "停止 {name}",
+        "stopTooltip": "停止智能体",
+        "stopFailed": "无法停止该智能体。"
       },
       "files": {
         "title": "文件",
         "viewAll": "{count, plural, other {查看全部 # 个文件}}"
       }
+    },
+    "find": {
+      "capped": "已搜索最近的 {count, plural, other {# 条消息}}",
+      "close": "关闭查找",
+      "count": "第 {current} 个，共 {total} 个",
+      "label": "在会话中查找",
+      "loadingOlder": "正在加载更早的消息…",
+      "next": "下一个匹配项",
+      "placeholder": "在会话中查找",
+      "previous": "上一个匹配项"
     }
   },
   "common": {
@@ -15082,6 +15114,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, other {新增 # 行}}，{removed, plural, other {删除 # 行}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# 行未更改} other {# 行未更改}}"
         },
@@ -16678,6 +16713,12 @@
       "deleteError": {
         "message": "删除对话失败。请重试。"
       },
+      "markRead": {
+        "label": "标记为已读"
+      },
+      "markUnread": {
+        "label": "标记为未读"
+      },
       "moveToProject": {
         "label": "移动到项目"
       },
@@ -16686,6 +16727,12 @@
       },
       "projectSearchInput": {
         "placeholder": "搜索项目"
+      },
+      "regenerateTitle": {
+        "label": "重新生成标题"
+      },
+      "regenerateTitleError": {
+        "message": "重新生成标题失败，请重试。"
       },
       "removeFromProject": {
         "label": "从 {projectName} 中移除"
@@ -16710,9 +16757,11 @@
           "label": "处理中"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共享"
+      },
+      "updatedNow": {
+        "label": "刚刚"
       }
     },
     "chatSearch": {
@@ -16758,6 +16807,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "更换模型"
+        },
+        "findInChat": {
+          "label": "在会话中查找"
         },
         "nextChat": {
           "label": "下一个会话"

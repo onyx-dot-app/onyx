@@ -1,0 +1,183 @@
+---
+title: "Desktop App Managed Policy"
+description: "Set up the Onyx desktop app in advance with MDM, Group Policy, or a Linux policy file"
+icon: "sliders"
+---
+
+IT admins can set up the [Onyx Desktop App](/deployment/local/desktop_app) on company devices with a managed policy.
+Use Kandji, Jamf, or Intune on macOS, Group Policy or Intune on Windows, and a policy file on Linux.
+With a managed server, the app skips onboarding and opens at sign-in.
+
+The app reads the policy at launch, every 5 minutes, before each update check, and each time **Preferences** opens.
+A managed value wins over the value that the user set. **Preferences** shows managed values read-only,
+with **Managed by your organization**.
+
+Sample files for each platform are in the [`desktop/deploy`
+folder](https://github.com/onyx-dot-app/onyx/tree/main/desktop/deploy) of the Onyx repository.
+
+## Upgrade from the previous desktop app
+
+The previous Onyx desktop app had no managed policy. IT admins preset its server with a `config.json` file.
+The new app imports that file at its first launch (see [Upgrade from the previous desktop
+app](/deployment/local/desktop_app#upgrade-from-the-previous-desktop-app)), but the user can then change the server.
+Map the previous keys to policy keys:
+
+| Previous `config.json` key | Policy key |
+| --- | --- |
+| `server_url` | `ServerURL`. Add `LockServerURL` so that users cannot change the server. |
+| `summon_shortcut` | `LauncherShortcut`. The shortcut now opens the launcher, not the main window. `null` (no shortcut) maps to `DisableLauncher`. |
+| `window_title`, `show_menu_bar`, `hide_window_decorations`, `summon_opens_new_chat` | No policy key. The new app does not have these settings. |
+
+Deploy the policy before you deploy the new app, so that the first launch already uses it.
+
+## Policy keys
+
+| Key | Type | Effect |
+| --- | --- | --- |
+| `ServerURL` | string | The Onyx server. Use the server's origin: scheme, host, and port, for example `https://onyx.example.com`. `http://` is allowed here for an intranet server. If the user has not saved a server, the app skips onboarding. A server that the user saves later wins, unless `LockServerURL` is set. |
+| `LockServerURL` | boolean | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the app uses the last valid `ServerURL` that it read, else the user's saved server, and the user cannot change it. |
+| `DisableAutoUpdate` | boolean | The app does not check for updates, and does not install an update that it already downloaded. **Check for Updates…** says that updates are managed. Windows and Linux builds have no automatic updates, so the key changes nothing there. |
+| `LauncherShortcut` | string | The global shortcut that opens the launcher, in the **Preferences** format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
+| `DisableLauncher` | boolean | Turns off the launcher shortcut, and the launcher does not open. An open launcher closes at the next policy read. |
+| `LaunchAtLogin` | boolean | Turns **Launch at login** on or off, and locks the switch in **Preferences**. See [Launch at login](#launch-at-login). |
+| `DisableNotifications` | boolean | Turns off desktop notifications. |
+
+A change to `ServerURL` applies at the next launch of the app.
+If the new managed server is locked and is not the server in use,
+**Preferences** says that Onyx uses it after a restart. If a policy read turns `LockServerURL` on,
+the app locks the server in use right away. Turning the lock off takes effect at the next launch.
+A change to the other keys applies at the next policy read.
+
+Booleans accept `true` and `false`, `1` and `0`, and `yes` and `no`, also as strings.
+
+## Invalid policy
+
+The app does not ignore a policy that it cannot read. It fails closed:
+
+- If the policy or one of its values cannot be read, **Preferences** shows "Your organization's Onyx policy is invalid".
+- If the Linux policy file exists but the app cannot read it, or it is not a valid JSON object, the server is locked
+  and updates are off.
+- If the app cannot read a Windows policy key or value, each value that it cannot read counts as invalid.
+- An invalid `LockServerURL`, `DisableAutoUpdate`, `DisableLauncher`, or `DisableNotifications` value counts as
+  `true`.
+- An invalid `ServerURL`, `LauncherShortcut`, or `LaunchAtLogin` value is ignored.
+
+The app writes each invalid key and the reason to its log file.
+See [Collect the log](/deployment/local/desktop_app#collect-the-log).
+
+## macOS
+
+The app reads forced managed preferences for the bundle ID `app.onyx.desktop`.
+Values that a user writes with `defaults write` are not managed, and the app ignores them.
+
+Upload a configuration profile as a custom profile in your MDM (Kandji: **Custom Profile**; Jamf Pro:
+**Configuration Profiles**, **Upload**; Intune: **macOS**, **Templates**, **Custom**).
+Start from [`Onyx.mobileconfig`](https://github.com/onyx-dot-app/onyx/blob/main/desktop/deploy/macos/Onyx.mobileconfig).
+Give each payload a new `PayloadUUID` (`uuidgen`).
+
+The profile puts the keys in a `com.apple.ManagedClient.preferences` payload for `app.onyx.desktop`:
+
+```xml
+<key>app.onyx.desktop</key>
+<dict>
+  <key>Forced</key>
+  <array>
+    <dict>
+      <key>mcx_preference_settings</key>
+      <dict>
+        <key>ServerURL</key>
+        <string>https://onyx.example.com</string>
+        <key>LockServerURL</key>
+        <true/>
+        <key>LaunchAtLogin</key>
+        <true/>
+      </dict>
+    </dict>
+  </array>
+</dict>
+```
+
+To see the values that the app gets on a device, run:
+
+```bash
+defaults read "/Library/Managed Preferences/app.onyx.desktop"
+```
+
+## Windows
+
+The app reads `HKLM\SOFTWARE\Policies\Onyx\Desktop`, then the same key under `HKCU`.
+A machine value wins over a user value. If the app cannot read a machine key or value (for example, access is denied),
+it does not use the user value, and the value counts as not valid.
+
+Use `REG_SZ` for strings, and `REG_DWORD` (`0` or `1`) for booleans.
+
+For Group Policy, or Intune with an imported ADMX,
+use the templates in [`desktop/deploy/windows`](https://github.com/onyx-dot-app/onyx/tree/main/desktop/deploy/windows):
+copy `Onyx.admx` to `PolicyDefinitions`, and `en-US/Onyx.adml` to `PolicyDefinitions/en-US`.
+You can also deploy the values with Group Policy Preferences (Registry), an Intune script, or a `.reg` file:
+
+```reg
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Onyx\Desktop]
+"ServerURL"="https://onyx.example.com"
+"LockServerURL"=dword:00000001
+"DisableAutoUpdate"=dword:00000000
+"LauncherShortcut"="CommandOrControl+Shift+Space"
+"DisableLauncher"=dword:00000000
+"LaunchAtLogin"=dword:00000001
+"DisableNotifications"=dword:00000000
+```
+
+The installers do not set policy values. Deploy the values separately.
+
+## Linux
+
+The app reads `/etc/onyx-desktop/policy.json`: one JSON object with the same keys. A UTF-8 byte order mark is allowed.
+
+Make the file readable by all users and writable only by root, for example `root:root` with mode `644`.
+The app does not trust the file if the file, or a directory above it,
+is not owned by root or is writable by group or others. A sticky directory such as `/tmp` is allowed.
+Each symbolic link on the path must also be owned by root,
+and the directories on the way to its target get the same check.
+A file that the app does not trust counts as a policy that it cannot read (see [Invalid policy](#invalid-policy)),
+so the server is locked and updates are off.
+
+```json
+{
+  "ServerURL": "https://onyx.example.com",
+  "LockServerURL": true,
+  "DisableAutoUpdate": false,
+  "LauncherShortcut": "CommandOrControl+Shift+Space",
+  "DisableLauncher": false,
+  "LaunchAtLogin": true,
+  "DisableNotifications": false
+}
+```
+
+<Warning>
+  A policy file that is not a valid JSON object, for example one with a trailing comma,
+  locks the server and turns off updates.
+  Check the file with `python3 -m json.tool /etc/onyx-desktop/policy.json` before you deploy it.
+</Warning>
+
+## Launch at login
+
+The app adds a login item for the current user only:
+
+- macOS: a LaunchAgent.
+- Windows: a value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+- Linux: `~/.config/autostart/app.onyx.desktop.desktop`.
+
+`LaunchAtLogin` is best effort. A user can still turn the item off in System Settings, Task Manager,
+or the startup settings of the desktop. While the app runs,
+it sets the item again within five minutes (at each policy read, or when **Preferences** opens).
+If the app does not run, nothing sets the item again.
+
+To make sure that the app opens at login, deploy the login item with your management tool instead:
+
+- macOS: a managed login item (the `com.apple.servicemanagement` payload) for the bundle ID `app.onyx.desktop`, or a
+  LaunchAgent in `/Library/LaunchAgents`.
+- Windows: a value under `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`, with Group Policy Preferences or
+  Intune. Put the path in quotes.
+- Linux: a `.desktop` file in `/etc/xdg/autostart`.

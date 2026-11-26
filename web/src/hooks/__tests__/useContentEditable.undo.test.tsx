@@ -461,3 +461,51 @@ describe("paste tile edits", () => {
     expect(tile).toHaveAttribute("aria-label", "Pasted text: edited, 2 lines");
   });
 });
+
+describe("paste over a selection", () => {
+  it("replaces a selected draft that holds a matching tile", () => {
+    render(<Harness pasteTilesEnabled />);
+    const longText = "line1\nline2\nline3\nline4\nline5";
+    typeText("note ");
+    act(() => api.pasteText(longText));
+    act(() => {
+      const range = document.createRange();
+      range.selectNodeContents(input());
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    });
+
+    act(() => api.pasteText(longText));
+
+    expect(api.message).toBe(longText);
+    expect(input().querySelectorAll("[data-rich-tile]")).toHaveLength(1);
+  });
+
+  it("Enter after a paste over a selected tile opens no editor", () => {
+    render(<Harness pasteTilesEnabled />);
+    const longText = "line1\nline2\nline3\nline4\nline5";
+    act(() => api.pasteText(longText));
+    const key = (name: string) =>
+      ({
+        key: name,
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+        preventDefault: () => {},
+        nativeEvent: { isComposing: false },
+      }) as unknown as React.KeyboardEvent<HTMLDivElement>;
+    act(() => {
+      api.handleTileKeyDown(key("ArrowLeft"));
+    });
+
+    act(() => api.pasteText(longText));
+    act(() => {
+      api.handleTileKeyDown(key("Enter"));
+    });
+
+    expect(api.tilePopover).toBeNull();
+    expect(input().querySelectorAll("[data-rich-tile]")).toHaveLength(1);
+  });
+});

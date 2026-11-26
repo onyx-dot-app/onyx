@@ -49,6 +49,7 @@ import type {
   ChatSessionQueue,
   ChatSessionStatus,
   ChatSubagent,
+  ChatSubagents,
   ComposedMessage,
   Mention,
   PendingChatMessage,
@@ -602,7 +603,6 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   // One request per chat at a time. The composer keeps new input until it ends.
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const busy = busyKey !== null && busyKey === pendingKey;
-  const hasActiveSubagents = status?.has_active_subagents ?? false;
   const showPendingRequest = useShowPendingRequest();
 
   return useMemo(() => {
@@ -642,7 +642,6 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       messages: messages ?? EMPTY_PENDING_MESSAGES,
       error: error ? t("loadFailed") : null,
       busy,
-      hasActiveSubagents,
       needsResponseSelection,
       submit: async ({ message, mentions }, delivery, turn) =>
         (await request(async (key) => {
@@ -714,28 +713,12 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
           }
         });
       },
-      stopSubagents: async () => {
-        const status = statusKey;
-        if (!sessionId || !status) return;
-        try {
-          await errorHandlingFetchWith<unknown>(
-            `/api/chat/chat-session/${sessionId}/stop-subagents`,
-            { method: "POST" }
-          );
-        } catch (failure) {
-          toast.error(fetchErrorDetail(failure) ?? t("stopSubagentsFailed"));
-        } finally {
-          // A status change also reloads the agents list (`useChatSubagents`)
-          void mutate(status);
-        }
-      },
     };
   }, [
     enabled,
     messages,
     error,
     busy,
-    hasActiveSubagents,
     needsResponseSelection,
     sessionId,
     pendingKey,
@@ -1012,32 +995,41 @@ export function publishedFilesOf(
   return files;
 }
 
+const NO_SUBAGENTS: ChatSubagent[] = [];
+
 /**
- * The chat's background agents, by the newest response that started them.
- * They load once the chat's status does, again when it changes whether agents
- * are active or which response is newest, and poll while agents are active.
- * The status polls as the queue's does, also for chats without a queue, and
- * while a reply streams (`streaming`), which can start agents.
+ * The chat's background agents, by the newest response that started them,
+ * and `stopAgent`, which stops one agent and the agents below it. They load
+ * once the chat's status does, again when it changes whether agents are
+ * active or which response is newest, and poll while agents are active. The
+ * status polls as the queue's does, also for chats without a queue, and while
+ * a reply streams (`streaming`), which can start agents. `loaded` turns true
+ * once a list has been read from the server since the hook mounted.
  */
 export function useChatSubagents(
   sessionId: string,
   streaming: boolean
-): ChatSubagent[] {
-  const { data: status } = useSWR<ChatSessionStatus, Error>(
-    SWR_KEYS.chatSessionStatus(sessionId),
-    errorHandlingFetcher,
-    {
-      // A number while a reply streams: each streamed packet renders the
-      // caller again, and a new function would restart SWR's timer
-      refreshInterval: streaming
-        ? SERVER_WORK_POLL_MS
-        : (current) => statusPollInterval(current),
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+): ChatSubagents {
+  const t = useTranslations("chat.activity.agents");
+  const { data: status, mutate: reloadStatus } = useSWR<
+    ChatSessionStatus,
+    Error
+  >(SWR_KEYS.chatSessionStatus(sessionId), errorHandlingFetcher, {
+    // A number while a reply streams: each streamed packet renders the
+    // caller again, and a new function would restart SWR's timer
+    refreshInterval: streaming
+      ? SERVER_WORK_POLL_MS
+      : (current) => statusPollInterval(current),
+    onErrorRetry: skipRetryOnAuthError,
+  });
   const active = status?.has_active_subagents ?? false;
   const url = SWR_KEYS.chatSessionAgents(sessionId);
-  const { data } = useSWR<ChatSubagent[], Error>(
+  const {
+    data,
+    error,
+    isValidating,
+    mutate: reloadAgents,
+  } = useSWR<ChatSubagent[], Error>(
     status ? [url, active, status.latest_response_id] : null,
     () => errorHandlingFetcher<ChatSubagent[]>(url),
     {
@@ -1046,7 +1038,37 @@ export function useChatSubagents(
       onErrorRetry: skipRetryOnAuthError,
     }
   );
-  return data ?? [];
+  // A cached list from an earlier visit is stale until a read here succeeds;
+  // SWR keeps the cached list after a failed read.
+  const [loaded, setLoaded] = useState(false);
+  if (!loaded && data !== undefined && !isValidating && error === undefined) {
+    setLoaded(true);
+  }
+  const stopAgent = useCallback(
+    async (agentId: string) => {
+      try {
+        await errorHandlingFetchWith<unknown>(
+          `/api/chat/chat-session/${sessionId}/stop-subagents`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agent_id: agentId }),
+          }
+        );
+      } catch (failure) {
+        toast.error(fetchErrorDetail(failure) ?? t("stopFailed"));
+      } finally {
+        void reloadStatus();
+        void reloadAgents();
+      }
+    },
+    [sessionId, t, reloadStatus, reloadAgents]
+  );
+  return {
+    agents: data ?? NO_SUBAGENTS,
+    loaded,
+    stopAgent,
+  };
 }
 
 /**

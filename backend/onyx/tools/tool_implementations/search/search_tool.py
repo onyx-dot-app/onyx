@@ -898,7 +898,7 @@ class SearchTool(Tool):
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        message_history = tool_message_history(list(invocation.messages))
+        message_history = tool_message_history(invocation.messages)
         original_query = next(
             (
                 message.message
@@ -1309,9 +1309,14 @@ class SearchTool(Tool):
             else []
         )
         time_filter = expansion.time_filter
-        search_output.sources = emitted_sources
-        search_output.time_filter_start = time_filter.start if time_filter else None
-        search_output.time_filter_end = time_filter.end if time_filter else None
+        # Published progress is immutable: each update gets a new response.
+        search_output = search_output.model_copy(
+            update={
+                "sources": emitted_sources,
+                "time_filter_start": time_filter.start if time_filter else None,
+                "time_filter_end": time_filter.end if time_filter else None,
+            }
+        )
         if update is not None:
             update(ToolProgress(details=search_output))
 
@@ -1403,7 +1408,7 @@ class SearchTool(Tool):
             [q for q, _ in deduplicated_keyword_queries],
         )
 
-        search_output.queries = all_queries
+        search_output = search_output.model_copy(update={"queries": all_queries})
         if update is not None:
             update(ToolProgress(details=search_output))
 
@@ -1737,8 +1742,9 @@ class SearchTool(Tool):
         final_ui_docs = convert_inference_sections_to_search_docs(
             selected_sections, is_internet=False
         )
-        search_output.search_docs = search_docs
-        search_output.displayed_docs = final_ui_docs
+        search_output = search_output.model_copy(
+            update={"search_docs": search_docs, "displayed_docs": final_ui_docs}
+        )
         if update is not None:
             update(ToolProgress(details=search_output))
 

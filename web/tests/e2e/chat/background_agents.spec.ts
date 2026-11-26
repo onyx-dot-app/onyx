@@ -96,33 +96,31 @@ test("separate background results reach an idle chat and survive reload @code-mo
     const session: { chat_session_id: string } = await (await created).json();
     sessionId = session.chat_session_id;
     await expect(chatPage.scrollContainer).toContainText(initialAnswer);
-    await expect(chatPage.inputBar.subagentActivity).toHaveText(
-      "Subagents working"
-    );
+    await expect(chatPage.stopAgentButtons.first()).toBeVisible();
     await chatPage.editHumanMessage("Use a separate branch without research.");
     await chatPage.submitHumanMessageEdit();
     await expect(chatPage.scrollContainer).toContainText(
       MOCK_LLM_DEFAULT_RESPONSE
     );
-    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.stopAgentButtons).toHaveCount(0);
     await chatPage.selectPreviousHumanMessage();
     await expect(chatPage.scrollContainer).toContainText(initialAnswer);
-    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
+    await expect(chatPage.stopAgentButtons.first()).toBeVisible();
     await releaseMockLlmGate(gateId);
     await releaseMockLlmGate(firstReplyGateId);
     await chatPage.expectAnswerParagraph(firstAnswer);
-    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
+    await expect(chatPage.stopAgentButtons.first()).toBeVisible();
     await releaseMockLlmGate(secondGateId);
     await releaseMockLlmGate(secondReplyGateId);
     await chatPage.expectAnswerParagraph(finalAnswer);
-    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.stopAgentButtons).toHaveCount(0);
     await expect(chatPage.agentResultsDividers).toHaveCount(2);
     await chatPage.reload();
     await chatPage.expectAnswerParagraph(initialAnswer);
     await chatPage.expectAnswerParagraph(firstAnswer);
     await chatPage.expectAnswerParagraph(finalAnswer);
     await expect(chatPage.agentResultsDividers).toHaveCount(2);
-    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.stopAgentButtons).toHaveCount(0);
     await expect(chatPage.scrollContainer).not.toContainText(
       "Private child result:"
     );
@@ -135,7 +133,7 @@ test("separate background results reach an idle chat and survive reload @code-mo
   }
 });
 
-test("Stop subagents ends background work @code-mode", async ({
+test("Stop on an agent in the activity card ends its work @code-mode", async ({
   api,
   chatPage,
   page,
@@ -183,7 +181,7 @@ test("Stop subagents ends background work @code-mode", async ({
     await chatPage.inputBar.send();
     const session: { chat_session_id: string } = await (await created).json();
     sessionId = session.chat_session_id;
-    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
+    await expect(chatPage.stopAgentButtons.first()).toBeVisible();
     // Stop only after the child reaches the model, so its late result is real.
     await expect
       .poll(async () => (await getMockLlmConversationRequests(gateId)).length)
@@ -191,13 +189,13 @@ test("Stop subagents ends background work @code-mode", async ({
     const stopped = page.waitForResponse((response) =>
       response.url().endsWith(`/chat-session/${sessionId}/stop-subagents`)
     );
-    await chatPage.inputBar.stopSubagents();
+    await chatPage.stopAgent("research");
     expect((await stopped).ok()).toBe(true);
     // The released child can finish its reply; Stop must still drop its result.
     await releaseMockLlmGate(gateId);
-    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.stopAgentButtons).toHaveCount(0);
     await chatPage.reload();
-    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.stopAgentButtons).toHaveCount(0);
     await expect(chatPage.agentResultsDividers).toHaveCount(0);
     await expect(chatPage.scrollContainer).not.toContainText(
       "Private child result:"
@@ -298,19 +296,17 @@ test("a root that waits for its agents answers their results once @code-mode", a
     sessionId = session.chat_session_id;
     // The wait ends the turn with the status; the agents keep working.
     await chatPage.expectAnswerParagraph(status);
-    await expect(chatPage.inputBar.subagentActivity).toHaveText(
-      "Subagents working"
-    );
+    await expect(chatPage.stopAgentButtons.first()).toBeVisible();
     await releaseMockLlmGate(gateId);
     await expect
       .poll(async () => (await getMockLlmConversationRequests(gateId)).length)
       .toBe(2);
     // The researcher has answered; the wait holds its result for verification.
-    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
+    await expect(chatPage.stopAgentButtons.first()).toBeVisible();
     await expect(chatPage.agentResultsDividers).toHaveCount(0);
     await releaseMockLlmGate(secondGateId);
     await chatPage.expectAnswerParagraph(finalAnswer);
-    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.stopAgentButtons).toHaveCount(0);
     await expect(chatPage.agentResultsDividers).toHaveCount(1);
     await chatPage.reload();
     await chatPage.expectAnswerParagraph(status);

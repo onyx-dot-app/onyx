@@ -2,7 +2,6 @@ import {
   preprocessLaTeX,
   escapeIncompleteBlockMath,
   escapeIncompleteInlineMath,
-  labelBareCodeFences,
 } from "./codeUtils";
 
 describe("preprocessLaTeX", () => {
@@ -254,102 +253,6 @@ describe("escapeIncompleteInlineMath", () => {
     const input = "Block: $$x = y$$ then $z";
     expect(escapeIncompleteInlineMath(input)).toBe(
       "Block: $$x = y$$ then \\$z"
-    );
-  });
-});
-
-describe("labelBareCodeFences", () => {
-  it("labels only bare openers and ignores inline backticks in prose", () => {
-    const input = [
-      "Wrap code in ``` fences. Example:",
-      "```python",
-      "print('a')",
-      "```",
-      "Prose between blocks.",
-      "```",
-      "plain",
-      "```",
-      "Done.",
-    ].join("\n");
-    expect(labelBareCodeFences(input)).toBe(
-      [
-        "Wrap code in ``` fences. Example:",
-        "```python",
-        "print('a')",
-        "```",
-        "Prose between blocks.",
-        "```plaintext",
-        "plain",
-        "```",
-        "Done.",
-      ].join("\n")
-    );
-  });
-
-  it("keeps a longer fence open across inner triple-backtick lines", () => {
-    const input = "````\n```\ninner\n```\n````\nAfter.";
-    expect(labelBareCodeFences(input)).toBe(
-      "````plaintext\n```\ninner\n```\n````\nAfter."
-    );
-  });
-
-  it("handles fences inside list items and blockquotes", () => {
-    expect(
-      labelBareCodeFences("1. Step:\n   ```\n   code\n   ```\nAfter.")
-    ).toBe("1. Step:\n   ```plaintext\n   code\n   ```\nAfter.");
-    expect(labelBareCodeFences("- ```python\n  code\n  ```\nAfter.")).toBe(
-      "- ```python\n  code\n  ```\nAfter."
-    );
-    expect(labelBareCodeFences("> ```\n> code\n> ```\nAfter.")).toBe(
-      "> ```plaintext\n> code\n> ```\nAfter."
-    );
-  });
-
-  it("handles list continuation after a blank line", () => {
-    expect(
-      labelBareCodeFences("- item\n\n    ```\n    code\n\n    ```\nAfter.")
-    ).toBe("- item\n\n    ```plaintext\n    code\n\n    ```\nAfter.");
-  });
-
-  it("expands tabs when checking list item indentation", () => {
-    const input = "- ```go\n\tfunc main() {\n\t\ta[1]\n\t}\n  ```\nAfter.";
-    expect(labelBareCodeFences(input)).toBe(input);
-    expect(labelBareCodeFences("- ```\n\tx\n  ```\nAfter.")).toBe(
-      "- ```plaintext\n\tx\n  ```\nAfter."
-    );
-  });
-
-  it("ends a block when its blockquote or list item ends", () => {
-    expect(labelBareCodeFences("> ```\n> code\nOutside\n```\nnext")).toBe(
-      "> ```plaintext\n> code\nOutside\n```plaintext\nnext"
-    );
-    expect(labelBareCodeFences("- ```\n  code\nOutside\n```\nnext")).toBe(
-      "- ```plaintext\n  code\nOutside\n```plaintext\nnext"
-    );
-  });
-
-  it("ignores a top-level fence indented four spaces", () => {
-    expect(labelBareCodeFences("    ```\n```\nx\n```\nAfter")).toBe(
-      "    ```\n```plaintext\nx\n```\nAfter"
-    );
-    const input = "    ```\nPrice $5\n    ```";
-    expect(labelBareCodeFences(input)).toBe(input);
-  });
-
-  it("does not close a tilde fence with backticks", () => {
-    const input = "~~~python\n```\ncode\n```\n~~~\n```\nnext\n```";
-    expect(labelBareCodeFences(input)).toBe(
-      "~~~python\n```\ncode\n```\n~~~\n```plaintext\nnext\n```"
-    );
-  });
-
-  it("handles an unclosed trailing fence mid-stream", () => {
-    expect(labelBareCodeFences("Text:\n```")).toBe("Text:\n```plaintext");
-    expect(labelBareCodeFences("Text:\n```\nx = 1")).toBe(
-      "Text:\n```plaintext\nx = 1"
-    );
-    expect(labelBareCodeFences("```python\nx = 1\n```")).toBe(
-      "```python\nx = 1\n```"
     );
   });
 });

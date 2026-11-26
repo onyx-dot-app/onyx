@@ -1,6 +1,7 @@
 @import "@onyx-ai/opal/root.css";
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
+@import "./css/chat-find.css" layer(base);
 @import "./css/comet.css" layer(base);
 @import "./css/divider.css" layer(base);
 @import "./css/general-layouts.css" layer(base);
@@ -25,8 +26,8 @@
 /* The page content's room for the chat's right panel toggle: its 12px inset
    and its 36px button, which abuts the next button as the header's buttons
    abut each other. The panel's size button sits beside it at the same 48px
-   (`end-12` in sections/chat/ChatRightPanel.tsx). Registered so the page can
-   ease it with the panel's slide. */
+   (`end-12` in sections/chat/ChatRightPanel.tsx). Registered for its
+   48px default where no open panel sets it. */
 @property --panel-toggle-reserve {
   syntax: "<length>";
   inherits: true;

@@ -1,7 +1,11 @@
 import React from "react";
+import { cn } from "@opal/utils";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 
 export interface ResponseInsetProps {
+  /** A step row of its own (a decided approval or question): its icon
+   *  lines up with the run's step icons, so it takes no inset. */
+  flush?: boolean;
   children?: React.ReactNode;
 }
 
@@ -12,10 +16,15 @@ export interface ResponseInsetProps {
  * padding, plus 1px because icon glyphs are drawn about 1px inside their box.
  * The item's start then lines up with the run card's visible icon.
  */
-export function ResponseInset({ children }: ResponseInsetProps) {
+export function ResponseInset({ flush = false, children }: ResponseInsetProps) {
   return (
     <TimelineRoot>
-      <div className="ps-[calc(var(--spacing-inline-4)+var(--timeline-header-text-padding-x)+var(--padding-text-2)+1px)]">
+      <div
+        className={cn(
+          !flush &&
+            "ps-[calc(var(--spacing-inline-4)+var(--timeline-header-text-padding-x)+var(--padding-text-2)+1px)]"
+        )}
+      >
         {children}
       </div>
     </TimelineRoot>

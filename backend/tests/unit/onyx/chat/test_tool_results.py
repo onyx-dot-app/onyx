@@ -183,6 +183,7 @@ def test_later_prompts_replay_program_observations_with_their_images() -> None:
         reminder_message=None,
         context_files=None,
         token_counter=len,
+        search_passage_cache={},
     )
     [replayed] = [m for m in prompt if isinstance(m, ToolResultMessage)]
     assert replayed.text == content

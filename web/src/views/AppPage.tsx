@@ -25,7 +25,11 @@ import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
-import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import AppInputBar, {
+  type AppInputBarHandle,
+  type ComposerSubmission,
+} from "@/sections/input/AppInputBar";
+import { FileDropOverlay } from "@/sections/input/FileDropOverlay";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
@@ -72,19 +76,24 @@ import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/lib/chatScroll/components/ChatScrollContainer";
+import ChatFind from "@/sections/chat/ChatFind";
 import {
   ProjectContextPanel,
   ProjectChatSessionList,
 } from "@/lib/projects/components";
 import { useProjectsContext } from "@/lib/projects/providers";
-import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
+import type {
+  ComposedMessage,
+  MessageEdit,
+  UnsentMessage,
+} from "@/lib/chat/types";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSuggestedQuestions } from "@/lib/suggestedQuestions/hooks";
-import { isFilePending } from "@/lib/projects/utils";
+import { isFilePending, resendFiles } from "@/lib/projects/utils";
 import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
 import { STEP_CONFIG } from "@/lib/onboarding/constants";
@@ -325,6 +334,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const restoreInputBar = useCallback((unsent: UnsentMessage) => {
     chatInputBarRef.current?.restore(unsent);
+  }, []);
+
+  const editMessage = useCallback((edit: MessageEdit) => {
+    chatInputBarRef.current?.editMessage(edit);
   }, []);
 
   // Add refs needed by useChatSessionController
@@ -606,7 +619,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       mentions: lastUserMsg.mentions ?? [],
-      currentMessageFiles: currentMessageFiles,
+      currentMessageFiles: resendFiles(lastUserMsg, currentMessageFiles),
       deepResearch:
         deepResearchEnabledForCurrentWorkflow && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
@@ -692,7 +705,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   );
 
   const handleAppInputBarSubmit = useCallback(
-    async (composed: ComposedMessage) => {
+    async (composed: ComposerSubmission) => {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
@@ -920,7 +933,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           noPaste
           noKeyboard
         >
-          {({ getRootProps }) => (
+          {({ getRootProps, isDragActive }) => (
             <div
               className="h-full w-full flex flex-col items-center outline-hidden relative"
               {...getRootProps({ tabIndex: -1 })}
@@ -981,6 +994,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                         wide={wideChatActive}
+                        overlay={<ChatFind />}
                         footer={
                           <div
                             aria-hidden
@@ -1000,8 +1014,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           stopGenerating={stopGenerating}
                           onResubmit={handleResubmitLastMessage}
                           anchorNodeId={anchorNodeId}
-                          selectedModels={multiModel.selectedModels}
                           wideChat={wideChatActive}
+                          onEditMessage={editMessage}
                         />
                       </ChatScrollContainer>
                     </Section>
@@ -1344,6 +1358,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   </Fade>
                 </div>
               </div>
+              {isDragActive && <FileDropOverlay />}
             </div>
           )}
         </Dropzone>

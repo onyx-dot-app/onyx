@@ -96,6 +96,7 @@ from onyx.db.approval_request import (
 from onyx.db.chat import (
     add_chat_session__no_commit,
     add_chats_to_session_from_slack_thread,
+    agent_subtree_ids,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
@@ -135,7 +136,10 @@ from onyx.db.chat_response import (
     waiting_approval_reply_ids,
 )
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.chat_subagents import load_session_agent_metadata
+from onyx.db.chat_subagents import (
+    load_run_start_times,
+    load_session_agent_metadata,
+)
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     ApprovalDecidedVia,
@@ -227,6 +231,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
     SetPreferredResponseRequest,
     StopChatResponse,
+    StopSubagentsRequest,
     StopSubagentsResponse,
     UpdateChatSessionReasoningRequest,
     UpdateChatSessionTemperatureRequest,
@@ -736,15 +741,27 @@ def rename_chat_session(
             return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
 
     # Returns a saved name, including one the chat turn is still generating.
-    return RenameChatSessionResponse(
-        new_name=name_chat_session(
+    try:
+        new_name = name_chat_session(
             chat_session_id=chat_session_id,
             user=user,
             additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
+            regenerate=rename_req.regenerate,
         )
-    )
+    except OnyxError:
+        raise
+    except Exception as error:
+        if not rename_req.regenerate:
+            raise
+        # A failed regeneration keeps the old name and reports the model failure.
+        logger.warning("Failed to regenerate chat session name: %s", error)
+        raise OnyxError(
+            OnyxErrorCode.LLM_PROVIDER_ERROR,
+            "Could not generate a new chat name",
+        ) from error
+    return RenameChatSessionResponse(new_name=new_name)
 
 
 @router.patch("/chat-session/{session_id}")
@@ -1661,18 +1678,29 @@ def get_chat_session_agents(
         selected, branch = get_selected_branch(db_session, session_id)
     if selected is None:
         return []
+    # Each loader opens its own session, so this one is closed first
+    agents = [
+        agent
+        for agent in load_session_agent_metadata(
+            selected.id, branch=branch, include_root=False
+        )
+        # `spawn_agent` children; Deep Research workers run in the foreground
+        if isinstance(agent.restoration_config, ChatConfiguration)
+    ]
+    started = load_run_start_times(
+        [int(agent.latest_run_id) for agent in agents if agent.latest_run_id]
+    )
     return [
         ChatSubagent(
             id=UUID(agent.id),
             path=agent.path,
             status=agent.status,
             stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
+            started_at=started.get(int(agent.latest_run_id))
+            if agent.latest_run_id
+            else None,
         )
-        for agent in load_session_agent_metadata(
-            selected.id, branch=branch, include_root=False
-        )
-        # `spawn_agent` children; Deep Research workers run in the foreground
-        if isinstance(agent.restoration_config, ChatConfiguration)
+        for agent in agents
     ]
 
 
@@ -1922,23 +1950,29 @@ def update_chat_tool_options(
 @router.post("/chat-session/{session_id}/stop-subagents")
 def stop_chat_subagents(
     session_id: UUID,
+    body: StopSubagentsRequest | None = None,
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> StopSubagentsResponse:
     """Stop every active background agent on the selected branch, parked
-    ones included.
+    ones included, or only the body's agent and the agents below it.
 
     The root turn and its foreground workers keep running. Pending work for
-    agents below the root is dropped. The requests that the agents wait on end
-    as the user's rejection. A stopped agent's result wakes no agent; the root
-    reads it as a notice at its next step.
+    the stopped agents is dropped. The requests that the agents wait on end
+    as the user's rejection. A stopped agent's result wakes no agent; its
+    parent reads it as a notice at its next step.
     """
     get_human_input_session(db_session, session_id, user)
     cache = get_cache_backend()
     lock_agent(db_session, str(session_id))
+    agent_ids: set[UUID] | None = None
+    if body is not None and body.agent_id is not None:
+        agent_ids = agent_subtree_ids(db_session, session_id, body.agent_id)
+        if not agent_ids:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Agent not found")
     _, branch = get_selected_branch(db_session, session_id)
-    stopped = active_agent_response_ids(db_session, branch.message_ids)
-    drop_agent_work__no_commit(db_session, branch)
+    stopped = active_agent_response_ids(db_session, branch.message_ids, agent_ids)
+    drop_agent_work__no_commit(db_session, branch, agent_ids)
     close_pending_approval_requests__no_commit(
         db_session,
         ApprovalDecision.REJECTED,

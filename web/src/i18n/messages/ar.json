@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "مرفق تم رفعه"
-        }
+        },
+        "next": "الصورة التالية",
+        "position": "{current} / {total}",
+        "previous": "الصورة السابقة"
       },
       "inMessageImage": {
         "downloadButton": {
@@ -11977,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "الوكلاء الفرعيون يعملون",
         "attachFilesButton": {
           "tooltip": "إرفاق ملفات"
         },
@@ -12030,9 +12032,6 @@
           "interruptLabel": "مقاطعة",
           "waitHint": "انتظر حتى ينتهي الرد.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "إيقاف الوكلاء الفرعيين"
         },
         "questionAttachmentsHint": "لا يمكن أن تتضمن الإجابات عن أسئلة الوكيل ملفات. أزل الملفات للإجابة."
       },
@@ -12180,8 +12179,7 @@
         "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
         "loadFailed": "تعذر تحميل الرسائل المعلقة.",
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
-        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
-        "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
+        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار."
       },
       "pendingToolApproval": {
         "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
@@ -12191,6 +12189,16 @@
       },
       "pendingUserInput": {
         "toast": "تعامل مع طلبات الموافقة أو الأسئلة المعلقة أولًا."
+      },
+      "fileDropOverlay": {
+        "label": "أفلت الملفات لإرفاقها"
+      },
+      "editMessageBanner": {
+        "label": "جارٍ التعديل في محرر الرسائل",
+        "cancelButton": {
+          "label": "إلغاء",
+          "ariaLabel": "إلغاء تعديل الرسالة"
+        }
       }
     },
     "messages": {
@@ -12205,11 +12213,24 @@
       "agentResults": {
         "received": "تم استلام نتائج الوكيل الفرعي"
       },
-      "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "تم النسخ!",
-          "label": "نسخ"
+      "callout": {
+        "note": {
+          "title": "ملاحظة"
         },
+        "tip": {
+          "title": "نصيحة"
+        },
+        "important": {
+          "title": "مهم"
+        },
+        "warning": {
+          "title": "تحذير"
+        },
+        "caution": {
+          "title": "تنبيه"
+        }
+      },
+      "codeBlock": {
         "wrapButton": {
           "unwrapLabel": "إلغاء الالتفاف",
           "wrapLabel": "التفاف"
@@ -12257,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"
+        },
+        "callFailedStatus": {
+          "text": "فشل {toolName}"
         }
       },
       "customToolAuth": {
@@ -12373,14 +12397,6 @@
         },
         "artifactError": {
           "message": "هذا الملف غير متاح."
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "إلغاء"
-        },
-        "submitButton": {
-          "label": "إرسال"
         }
       },
       "messageSwitcher": {
@@ -12536,6 +12552,9 @@
           "runningCommand": {
             "label": "جارٍ تشغيل الأمر..."
           },
+          "runningProgram": {
+            "label": "جارٍ تشغيل {program}..."
+          },
           "editingFiles": {
             "label": "جارٍ تعديل الملفات..."
           },
@@ -12544,48 +12563,6 @@
           },
           "browsing": {
             "label": "جارٍ تصفح صفحات الويب..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "جارٍ العمل...",
-              "done": "تم إنجاز العمل"
-            },
-            "crunchingDetails": {
-              "working": "جارٍ تدقيق التفاصيل...",
-              "done": "تم تدقيق التفاصيل"
-            },
-            "connectingDots": {
-              "working": "جارٍ ربط النقاط...",
-              "done": "تم ربط النقاط"
-            },
-            "runningNumbers": {
-              "working": "جارٍ حساب الأرقام...",
-              "done": "تم حساب الأرقام"
-            },
-            "fillingGaps": {
-              "working": "جارٍ سد الثغرات...",
-              "done": "تم سد الثغرات"
-            },
-            "sortingThingsOut": {
-              "working": "جارٍ ترتيب الأمور...",
-              "done": "تم ترتيب الأمور"
-            },
-            "gatheringPieces": {
-              "working": "جارٍ جمع القطع...",
-              "done": "تم جمع القطع"
-            },
-            "workingThroughIt": {
-              "working": "جارٍ العمل على ذلك...",
-              "done": "تم العمل على ذلك"
-            },
-            "ironingOutDetails": {
-              "working": "جارٍ ضبط التفاصيل...",
-              "done": "تم ضبط التفاصيل"
-            },
-            "roundingThingsOut": {
-              "working": "جارٍ استكمال الصورة...",
-              "done": "تم استكمال الصورة"
-            }
           }
         },
         "internalSearch": {
@@ -12612,9 +12589,6 @@
             "before": "قبل {date}",
             "between": "من {start} إلى {end}"
           }
-        },
-        "interruptedThinking": {
-          "label": "تفكير متقطع"
         },
         "memory": {
           "default": {
@@ -12737,10 +12711,10 @@
           "label": "{count, plural, one {خطوة واحدة} other {# خطوات}}"
         },
         "thoughtDuration": {
-          "label": "فكّر لمدة {duration}"
+          "label": "عمل لمدة {duration}"
         },
         "thoughtUnknownDuration": {
-          "label": "فكّر لبعض الوقت"
+          "label": "عمل"
         },
         "toggleRow": {
           "ariaLabel": "تبديل الخط الزمني"
@@ -12799,6 +12773,9 @@
               "patching": {
                 "status": "{count, plural, =0 {جارٍ تصحيح الملفات…} one {جارٍ تصحيح ملف واحد…} two {جارٍ تصحيح ملفين…} few {جارٍ تصحيح # ملفات…} many {جارٍ تصحيح # ملفًا…} other {جارٍ تصحيح # ملف…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {حذف الملف} other {ملف فارغ}}"
             }
           },
           "stopped": {
@@ -12811,6 +12788,50 @@
             "failed": {
               "status": "فشل النشر"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "جارٍ قراءة المهارة {name}",
+            "done": "تمت قراءة المهارة {name}",
+            "failed": "تعذّرت قراءة المهارة {name}",
+            "runningUnnamed": "جارٍ قراءة المهارة",
+            "doneUnnamed": "تمت قراءة المهارة",
+            "failedUnnamed": "تعذّرت قراءة المهارة"
+          },
+          "load": {
+            "running": "جارٍ تحميل المهارة {name}",
+            "done": "تم تحميل المهارة {name}",
+            "failed": "تعذّر تحميل المهارة {name}",
+            "runningUnnamed": "جارٍ تحميل المهارة",
+            "doneUnnamed": "تم تحميل المهارة",
+            "failedUnnamed": "تعذّر تحميل المهارة"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "جارٍ تشغيل الوكيل الفرعي {name}",
+            "done": "تم تشغيل الوكيل الفرعي {name}",
+            "failed": "تعذّر تشغيل الوكيل الفرعي {name}",
+            "runningUnnamed": "جارٍ تشغيل الوكيل الفرعي",
+            "doneUnnamed": "تم تشغيل الوكيل الفرعي",
+            "failedUnnamed": "تعذّر تشغيل الوكيل الفرعي"
+          },
+          "send": {
+            "running": "جارٍ إرسال رسالة إلى {name}",
+            "done": "تم إرسال رسالة إلى {name}",
+            "failed": "تعذّر إرسال رسالة إلى {name}",
+            "runningUnnamed": "جارٍ إرسال رسالة إلى الوكيل الفرعي",
+            "doneUnnamed": "تم إرسال رسالة إلى الوكيل الفرعي",
+            "failedUnnamed": "تعذّر إرسال رسالة إلى الوكيل الفرعي"
+          },
+          "interrupt": {
+            "running": "جارٍ إيقاف {name}",
+            "done": "تم إيقاف {name}",
+            "failed": "تعذّر إيقاف {name}",
+            "runningUnnamed": "جارٍ إيقاف الوكيل الفرعي",
+            "doneUnnamed": "تم إيقاف الوكيل الفرعي",
+            "failedUnnamed": "تعذّر إيقاف الوكيل الفرعي"
           }
         }
       },
@@ -13579,22 +13600,33 @@
       },
       "agents": {
         "title": "الوكلاء",
+        "titleRunning": "الوكلاء · {count} قيد التشغيل",
         "status": {
-          "starting": "قيد البدء",
-          "running": "قيد التشغيل",
-          "suspended": "في الانتظار",
           "complete": "تم",
           "limit": "بلغ حد الخطوات",
           "cancelled": "أُلغي",
           "stopped": "أُوقف",
           "error": "فشل"
         },
-        "finished": "الوكلاء السابقون"
+        "finished": "الوكلاء السابقون",
+        "stop": "إيقاف {name}",
+        "stopTooltip": "إيقاف الوكيل",
+        "stopFailed": "تعذّر إيقاف الوكيل."
       },
       "files": {
         "title": "الملفات",
         "viewAll": "{count, plural, one {عرض # ملف} other {عرض كل الملفات (#)}}"
       }
+    },
+    "find": {
+      "capped": "تم البحث في {count, plural, zero {# رسالة} one {آخر رسالة} two {آخر رسالتين} few {آخر # رسائل} many {آخر # رسالة} other {آخر # رسالة}}",
+      "close": "إغلاق البحث",
+      "count": "{current} من {total}",
+      "label": "البحث في الجلسة",
+      "loadingOlder": "جارٍ تحميل الرسائل الأقدم…",
+      "next": "التطابق التالي",
+      "placeholder": "البحث في الجلسة",
+      "previous": "التطابق السابق"
     }
   },
   "common": {
@@ -15082,6 +15114,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, one {# إضافة} other {# إضافات}}، {removed, plural, one {# حذف} other {# عمليات حذف}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# سطر دون تغيير} other {# أسطر دون تغيير}}"
         },
@@ -16678,6 +16713,12 @@
       "deleteError": {
         "message": "فشل حذف المحادثة. يرجى المحاولة مرة أخرى."
       },
+      "markRead": {
+        "label": "وضع علامة كمقروءة"
+      },
+      "markUnread": {
+        "label": "وضع علامة كغير مقروءة"
+      },
       "moveToProject": {
         "label": "نقل إلى مشروع"
       },
@@ -16686,6 +16727,12 @@
       },
       "projectSearchInput": {
         "placeholder": "البحث في المشاريع"
+      },
+      "regenerateTitle": {
+        "label": "إعادة إنشاء العنوان"
+      },
+      "regenerateTitleError": {
+        "message": "فشلت إعادة إنشاء العنوان. يرجى المحاولة مرة أخرى."
       },
       "removeFromProject": {
         "label": "إزالة من {projectName}"
@@ -16710,9 +16757,11 @@
           "label": "قيد العمل"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "مشاركة"
+      },
+      "updatedNow": {
+        "label": "الآن"
       }
     },
     "chatSearch": {
@@ -16758,6 +16807,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "تغيير النموذج"
+        },
+        "findInChat": {
+          "label": "البحث في الجلسة"
         },
         "nextChat": {
           "label": "الجلسة التالية"

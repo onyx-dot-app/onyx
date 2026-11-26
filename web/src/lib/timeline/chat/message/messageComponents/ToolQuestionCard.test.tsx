@@ -6,7 +6,11 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import ToolQuestionCard from "@/lib/timeline/chat/message/messageComponents/ToolQuestionCard";
-import { PENDING_QUESTION, useToolRequestUi } from "@/lib/chat/toolApprovals";
+import {
+  PENDING_QUESTION,
+  type ToolQuestionStatus,
+  useToolRequestUi,
+} from "@/lib/chat/toolApprovals";
 import {
   PacketType,
   type ToolQuestionRequest,
@@ -494,8 +498,61 @@ test("each question has its own page, and the choices stay across pages", async 
       { question_id: "tone", option_labels: ["Formal"], user_note: null },
     ],
   });
-  // The record lists every answer.
-  expect(screen.getByText("Scope: Docs")).toBeInTheDocument();
-  expect(screen.getByText("Format: A table")).toBeInTheDocument();
-  expect(screen.getByText("Tone: Formal")).toBeInTheDocument();
+  // The record's title lists every answer.
+  expect(
+    screen.getByText("Scope: Docs · Format: A table · Tone: Formal")
+  ).toBeInTheDocument();
+});
+
+describe("record", () => {
+  function renderRecord(status: ToolQuestionStatus) {
+    return render(
+      <ToolQuestionCard question={{ turnIndex: 1, request, status }} />
+    );
+  }
+
+  test("an answered question is a step titled with its answer that opens onto the question", async () => {
+    const user = setupUser();
+    renderRecord({
+      kind: "answered",
+      answers: [
+        {
+          question_id: "scope",
+          option_labels: ["Docs"],
+          user_note: "and the README",
+        },
+      ],
+      message: null,
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Answered");
+    const title = "Scope: Docs (and the README)";
+    expect(screen.getByText(title)).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: `Expand ${title}` });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Which files should I change?")).toBeVisible();
+    expect(screen.getByText("Docs (and the README)")).toBeVisible();
+  });
+
+  test.each([
+    [
+      "answered in the chat",
+      { kind: "answered", answers: null, message: "Only the docs" },
+      "Answered in the chat",
+    ],
+    ["cancelled", { kind: "cancelled" }, "Not answered"],
+    ["closed", { kind: "closed" }, "No longer waiting"],
+  ] satisfies [string, ToolQuestionStatus, string][])(
+    "a question %s is a step titled with its outcome that opens onto the question",
+    async (_, status, outcome) => {
+      const user = setupUser();
+      renderRecord(status);
+
+      expect(screen.getByRole("status")).toHaveTextContent(outcome);
+      const toggle = screen.getByRole("button", { name: `Expand ${outcome}` });
+      await user.click(toggle);
+      expect(screen.getByText("Which files should I change?")).toBeVisible();
+    }
+  );
 });

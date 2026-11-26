@@ -7,7 +7,7 @@ import { Section } from "@opal/layouts";
 import { Text } from "@opal/components/text/components";
 import { CopyButton } from "@opal/components/buttons/copy-button/components";
 import { LineLoader } from "@opal/loaders/line-loader/components";
-import type { RichStr } from "@opal/types";
+import type { RichNodes, RichStr } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,8 +72,8 @@ interface CodePanelColumnsProps {
 }
 
 interface CodePanelOutputProps {
-  /** The output text. */
-  children?: string;
+  /** The output text, or styled nodes made with `richNodes()`. */
+  children?: string | RichNodes;
   /** Error output: red text on a red tint. @default false */
   error?: boolean;
   /**
@@ -128,6 +128,7 @@ function CodePanelHeader({
       >
         <div className="opal-code-panel-title">
           <Text
+            as="p"
             font="secondary-mono"
             color="text-03"
             maxLines={1}

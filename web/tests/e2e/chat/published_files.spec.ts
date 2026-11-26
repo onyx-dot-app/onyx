@@ -653,8 +653,9 @@ test.describe("Published files", () => {
         expect(frame.end).toBeGreaterThanOrEqual(frame.rowEnd);
       });
 
-      // Escape leaves full screen: the panel shrinks to its medium width at
-      // the workspace's end, and the page beside it stays still. Then Escape
+      // Escape leaves full screen: the panel takes its medium width at the
+      // workspace's end in one frame, and the page beside it stays still. A
+      // slide would lay out the chat on each frame. Then Escape
       // closes each file's tab, then the panel.
       await chatPage.expectRightPanelSettled("row");
       const frames = await chatPage.rightPanelFrames(() =>
@@ -667,12 +668,13 @@ test.describe("Published files", () => {
       expect(first.width).toBe(first.rowEnd - first.rowStart);
       // The handle reports the width rounded
       expect(Math.abs(last.width - medium)).toBeLessThanOrEqual(1);
-      // The panel draws frames between the two widths
-      expect(
-        frames.some(
-          (frame) => frame.width < first.width - 1 && frame.width > medium + 1
-        )
-      ).toBe(true);
+      // No frame shows a width between the two
+      frames.forEach((frame) => {
+        expect(
+          Math.abs(frame.width - first.width) <= 1 ||
+            Math.abs(frame.width - medium) <= 1
+        ).toBe(true);
+      });
       expect(first.pageWidth).toBeGreaterThan(0);
       frames.forEach((frame, index) => {
         expect(frame.end).toBe(first.end);

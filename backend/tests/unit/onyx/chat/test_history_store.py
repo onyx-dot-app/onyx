@@ -17,7 +17,7 @@ from onyx.agents.models import (
 )
 from onyx.cache.interface import CacheBackend
 from onyx.chat import incognito_context
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.history_store import (
@@ -126,9 +126,10 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root(
         tools=[],
         inject_memories=False,
     )
-    assert isinstance(restored, ChatAgent)
+    feature = restored.feature
+    assert isinstance(feature, ChatFeature)
     assert restored.id == "child"
-    names = {tool.name for tool in restored.application_tools}
+    names = {tool.name for tool in feature.application_tools}
     assert (SPAWN_AGENT_TOOL_NAME in names) == (depth < MAX_CHILD_DEPTH)
     assert {"list_agents", "interrupt_agent", SEND_MESSAGE_TOOL_NAME} <= names
     assert (

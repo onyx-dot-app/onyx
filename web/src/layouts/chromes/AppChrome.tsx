@@ -280,6 +280,7 @@ function Header() {
               {/*
           Right:
           - share menu
+          - activity card toggle
         */}
               {/* Without center content, the left side takes the free room */}
               <div
@@ -312,19 +313,6 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
-                {/* Once the store holds the chat on screen, also for a chat
-                    outside the loaded Recents */}
-                {appPosition.isChat() &&
-                  storeSessionId !== null &&
-                  storeSessionId === appPosition.chat() &&
-                  !incognitoEnabled && (
-                    <FrostedDiv className="flex shrink flex-row items-center">
-                      <ChatActivity
-                        key={storeSessionId}
-                        sessionId={storeSessionId}
-                      />
-                    </FrostedDiv>
-                  )}
                 {/* Only for the chat on screen: during a navigation to another
                     chat, the URL's session is still the one these act on. */}
                 {appPosition.isChat() &&
@@ -359,6 +347,19 @@ function Header() {
                           ]}
                         />
                       </Dropdown>
+                    </FrostedDiv>
+                  )}
+                {/* After the share menu. Once the store holds the chat on
+                    screen, also for a chat outside the loaded Recents */}
+                {appPosition.isChat() &&
+                  storeSessionId !== null &&
+                  storeSessionId === appPosition.chat() &&
+                  !incognitoEnabled && (
+                    <FrostedDiv className="flex shrink flex-row items-center">
+                      <ChatActivity
+                        key={storeSessionId}
+                        sessionId={storeSessionId}
+                      />
                     </FrostedDiv>
                   )}
               </div>
@@ -510,8 +511,7 @@ export default function AppChrome({ children }: AppChromeProps) {
               ref={pageRef}
               data-app-page
               className={cn(
-                // Eases the room for the panel toggle with the panel's slide
-                "@container relative isolate flex-1 flex flex-col min-h-0 [transition-property:--panel-toggle-reserve] ease-in-out duration-300 motion-reduce:transition-none",
+                "@container relative isolate flex-1 flex flex-col min-h-0",
                 // A docked activity card covers the workspace's end below the
                 // header: the chat's scrolled content, its input row
                 // (`data-activity-room`) and the footer make room. The header
