@@ -1,6 +1,7 @@
 """Research deadlines and failed children must preserve the parent's report."""
 
 from threading import Event, Timer
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -18,6 +19,12 @@ from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_TOOL_NAME,
 )
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.model_capabilities import ToolFamily
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -26,11 +33,29 @@ from onyx.llm.models import (
     TextContent,
     ToolCall,
     ToolChoiceOptions,
+    ToolResult,
     ToolResultMessage,
     UserMessage,
 )
+from onyx.prompts.deep_research.dr_tool_prompts import (
+    INTERNAL_SEARCH_TOOL_DESCRIPTION,
+    OPEN_URLS_TOOL_DESCRIPTION,
+)
+from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
+from onyx.tools.interface import Tool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    OPEN_URL_SHAPES,
+    OpenURLTool,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, run_agent
+from tests.unit.onyx.agents.fakes import (
+    EchoTool,
+    FakeModelClient,
+    ScriptedLLM,
+    run_agent,
+)
+from tests.unit.onyx.tools.code_mode.fakes import FakeWebSearchTool
 
 
 def test_timed_out_child_preserves_successful_sibling(
@@ -416,3 +441,73 @@ def test_research_cycles_keep_system_and_tool_phase_stable(
     assert "currently used 0" in requests[0].messages[-1].text
     assert "currently used 1" in requests[1].messages[-1].text
     assert all(not request.messages[-1].cacheable for request in requests)
+
+
+@pytest.mark.parametrize("web_fetch_disabled", [False, True])
+def test_research_tools_show_their_summaries_and_the_prompt_their_guidance(
+    web_fetch_disabled: bool,
+) -> None:
+    llm = ScriptedLLM(
+        [
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        index=0,
+                        id="report",
+                        function=ResponseFunctionCall(
+                            name=GENERATE_REPORT_TOOL_NAME, arguments="{}"
+                        ),
+                    )
+                ]
+            ),
+            Delta(content="Report"),
+        ],
+        128000,
+    )
+    open_url = OpenURLTool(
+        tool_id=4,
+        document_index=MagicMock(),
+        user=MagicMock(),
+        content_provider=MagicMock(),
+        web_fetch_disabled=web_fetch_disabled,
+        shape=OPEN_URL_SHAPES[ToolFamily.OPENAI],
+    )
+    tools: list[Tool] = [
+        SearchTool(
+            tool_id=1,
+            user=MagicMock(is_anonymous=False),
+            persona_search_info=MagicMock(document_set_names=[]),
+            llm=MagicMock(),
+            document_index=MagicMock(),
+            user_selected_filters=None,
+            project_id_filter=None,
+            enable_slack_search=False,
+        ),
+        FakeWebSearchTool(lambda *_: ToolResult(content="")),
+        open_url,
+    ]
+    run_agent(
+        ResearchAgent(tools, llm, len, None, "", ReasoningEffort.LOW),
+        max_steps=3,
+        messages=[UserMessage(content="Find facts")],
+    )
+    request = llm.requests[0]
+    descriptions = {
+        tool["function"]["name"]: tool["function"]["description"]
+        for tool in request["tools"]
+    }
+    assert {
+        name: descriptions[name]
+        for name in (SearchTool.NAME, WebSearchTool.NAME, open_url.name)
+    } == {
+        SearchTool.NAME: "Search connected applications for information.",
+        WebSearchTool.NAME: "Search the web for information. Returns a list of "
+        "search results with titles, metadata, and snippets.",
+        open_url.name: OpenURLTool.SUMMARY_NO_WEB_FETCH
+        if web_fetch_disabled
+        else "Open and read the content of one or more URLs.",
+    }
+    system = request["prompt"][0].content
+    assert INTERNAL_SEARCH_TOOL_DESCRIPTION in system
+    assert OPEN_URLS_TOOL_DESCRIPTION.format(name=open_url.name) in system
+    assert OPEN_URLS_GUIDANCE not in system

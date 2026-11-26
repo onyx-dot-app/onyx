@@ -20,11 +20,11 @@ INTERNAL_SEARCH_TOOL = {
 }
 
 # Code mode (CODE_MODE_ENABLED): retrieval tools are async functions inside
-# exec programs; the description lists their stubs.
-EXEC_TOOL = {
+# execute_code programs; the description lists their stubs.
+RUN_TOOL = {
     "type": "function",
     "function": {
-        "name": "exec",
+        "name": "execute_code",
         "description": (
             "Run a Python program that calls the tools listed below.\n\n"
             "Functions:\n```python\n"
@@ -49,7 +49,7 @@ WAIT_TOOL = {
     "type": "function",
     "function": {
         "name": "wait",
-        "description": "Waits on a running `exec` cell.",
+        "description": "Waits on a running `execute_code` cell.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -64,11 +64,11 @@ WAIT_TOOL = {
 }
 
 # The Claude shapes of the same operations (backend code_mode/shapes.py).
-REPL_TOOL = {
+CLAUDE_RUN_TOOL = {
     "type": "function",
     "function": {
-        **EXEC_TOOL["function"],
-        "name": "repl",
+        **RUN_TOOL["function"],
+        "name": "execute_code",
         "parameters": {
             "type": "object",
             "properties": {"code": {"type": "string"}, "timeout": {"type": "integer"}},
@@ -81,7 +81,7 @@ POLL_TOOL = {
     "type": "function",
     "function": {
         "name": "poll",
-        "description": "Polls a running `repl` cell.",
+        "description": "Polls a running `execute_code` cell.",
         "parameters": {
             "type": "object",
             "properties": {

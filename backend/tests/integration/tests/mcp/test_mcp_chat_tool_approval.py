@@ -1047,12 +1047,12 @@ def test_a_program_that_waits_for_approval_pauses_and_continues(
         f"tools.{hello_function}(name='team'))\n"
         "print('ticket', ticket)\nprint('greeting', greeting)\n"
     )
-    program = ToolCall(id="program", name="exec", arguments={"code": code})
+    program = ToolCall(id="program", name="execute_code", arguments={"code": code})
     mock_llm.conversation(
         "chat",
         Reply(
             tool_calls=[program],
-            conditions=RequestConditions(offers=["exec"]),
+            conditions=RequestConditions(offers=["execute_code"]),
         ),
         Reply(text="Done.", conditions=RequestConditions(has_results_for=["program"])),
     )
@@ -1109,10 +1109,10 @@ def _cells(first: str, second: str) -> tuple[ToolCall, ToolCall, ToolCall]:
     return (
         ToolCall(
             id="cell1",
-            name="exec",
+            name="execute_code",
             arguments={"code": f"yield_control()\n{first}"},
         ),
-        ToolCall(id="cell2", name="exec", arguments={"code": second}),
+        ToolCall(id="cell2", name="execute_code", arguments={"code": second}),
         ToolCall(
             id="wait1",
             name="wait",
@@ -1127,7 +1127,7 @@ def _one_call_per_reply(calls: list[ToolCall]) -> list[Reply]:
         Reply(
             tool_calls=[call],
             conditions=RequestConditions(
-                offers=["exec"],
+                offers=["execute_code"],
                 has_results_for=[previous.id for previous in calls[:index]],
             ),
         )
@@ -2046,8 +2046,10 @@ def test_a_program_in_an_agent_parks_and_continues(
     mock_llm.conversation(
         task,
         Reply(
-            tool_calls=[ToolCall(id="program", name="exec", arguments={"code": code})],
-            conditions=RequestConditions(offers=["exec"]),
+            tool_calls=[
+                ToolCall(id="program", name="execute_code", arguments={"code": code})
+            ],
+            conditions=RequestConditions(offers=["execute_code"]),
         ),
         Reply(
             text="Mailer report.",
