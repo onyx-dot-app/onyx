@@ -220,8 +220,6 @@ export const rawSocket = (socketPath: string): Promise<NodeNet.Socket> =>
     socket.on("error", reject);
   });
 
-export type Site = { readonly url: string; readonly stop: () => Promise<void> };
-
 const PAGES: Record<string, string> = {
   "/form": `<!doctype html><title>Form page</title>
     <button id="btn" style="position:absolute;left:100px;top:100px;width:200px;height:60px" onclick="document.getElementById('out').textContent='clicked '+(++window.n)">Press me</button>
@@ -264,9 +262,36 @@ const PAGES: Record<string, string> = {
   "/popup": `<!doctype html><title>Opener</title><a id="pop" href="/second" target="_blank">Open popup</a>`,
 };
 
+export type Site = { readonly url: string; readonly stop: () => Promise<void>; readonly bigDownloadsStopped: number };
+
 export const startSite = async (): Promise<Site> => {
+  let bigDownloadsStopped = 0;
   const server = NodeHttp.createServer((request, response) => {
     const path = (request.url ?? "/").split("?")[0] ?? "/";
+    // 512 MiB at 160 MiB/s, over the chat download budget. Chromium reports download progress
+    // about once a second. Counts responses that the client stops early.
+    if (path === "/big-download") {
+      response.writeHead(200, {
+        "content-type": "application/octet-stream",
+        "content-disposition": 'attachment; filename="big.bin"',
+      });
+      const chunk = Buffer.alloc(16 * 1024 * 1024);
+      let left = 32;
+      const timer = setInterval(() => {
+        if (response.destroyed || response.writableNeedDrain) return;
+        left -= 1;
+        if (left > 0) response.write(chunk);
+        else {
+          clearInterval(timer);
+          response.end(chunk);
+        }
+      }, 100);
+      response.on("close", () => {
+        clearInterval(timer);
+        if (!response.writableFinished) bigDownloadsStopped += 1;
+      });
+      return;
+    }
     if (path === "/file.txt") {
       response.writeHead(200, {
         "content-type": "application/octet-stream",
@@ -294,6 +319,9 @@ export const startSite = async (): Promise<Site> => {
   const address = server.address() as NodeNet.AddressInfo;
   return {
     url: `http://127.0.0.1:${address.port}`,
+    get bigDownloadsStopped() {
+      return bigDownloadsStopped;
+    },
     stop: () =>
       new Promise((resolve) => {
         server.closeAllConnections();
