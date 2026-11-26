@@ -12205,6 +12205,23 @@
       "agentResults": {
         "received": "Ergebnisse der Subagenten empfangen"
       },
+      "callout": {
+        "note": {
+          "title": "Hinweis"
+        },
+        "tip": {
+          "title": "Tipp"
+        },
+        "important": {
+          "title": "Wichtig"
+        },
+        "warning": {
+          "title": "Warnung"
+        },
+        "caution": {
+          "title": "Vorsicht"
+        }
+      },
       "codeBlock": {
         "copyButton": {
           "copiedLabel": "Kopiert!",

@@ -12205,6 +12205,23 @@
       "agentResults": {
         "received": "하위 에이전트 결과를 받았습니다"
       },
+      "callout": {
+        "note": {
+          "title": "참고"
+        },
+        "tip": {
+          "title": "팁"
+        },
+        "important": {
+          "title": "중요"
+        },
+        "warning": {
+          "title": "경고"
+        },
+        "caution": {
+          "title": "주의"
+        }
+      },
       "codeBlock": {
         "copyButton": {
           "copiedLabel": "복사됨!",

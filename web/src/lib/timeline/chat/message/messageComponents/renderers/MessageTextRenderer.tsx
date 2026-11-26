@@ -355,11 +355,6 @@ export const MessageTextRenderer: MessageRenderer<
           {children}
         </ol>
       ),
-      li: ({ className, children, ...rest }) => (
-        <li className={className} {...rest}>
-          {children}
-        </li>
-      ),
       table: ({ node, className, children, ...rest }) => (
         <ScrollableTable
           className={className}

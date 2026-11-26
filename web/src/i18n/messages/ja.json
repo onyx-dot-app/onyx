@@ -12205,6 +12205,23 @@
       "agentResults": {
         "received": "サブエージェントの結果を受信しました"
       },
+      "callout": {
+        "note": {
+          "title": "注記"
+        },
+        "tip": {
+          "title": "ヒント"
+        },
+        "important": {
+          "title": "重要"
+        },
+        "warning": {
+          "title": "警告"
+        },
+        "caution": {
+          "title": "注意"
+        }
+      },
       "codeBlock": {
         "copyButton": {
           "copiedLabel": "コピーしました！",

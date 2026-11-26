@@ -12205,6 +12205,23 @@
       "agentResults": {
         "received": "تم استلام نتائج الوكيل الفرعي"
       },
+      "callout": {
+        "note": {
+          "title": "ملاحظة"
+        },
+        "tip": {
+          "title": "نصيحة"
+        },
+        "important": {
+          "title": "مهم"
+        },
+        "warning": {
+          "title": "تحذير"
+        },
+        "caution": {
+          "title": "تنبيه"
+        }
+      },
       "codeBlock": {
         "copyButton": {
           "copiedLabel": "تم النسخ!",
