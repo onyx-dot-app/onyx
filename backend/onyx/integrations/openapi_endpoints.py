@@ -275,7 +275,9 @@ def apply_endpoint_lines(
     # A removed operation's key keeps its stored policies, so a new endpoint
     # must not take it.
     stored_ids = {
-        operation.get("operationId") for *_, operation in openapi_operations(original)
+        operation_id
+        for *_, operation in openapi_operations(original)
+        if isinstance(operation_id := operation.get("operationId"), str)
     }
     for key, index in new_lines.items():
         new_id = wanted[key]["operationId"]

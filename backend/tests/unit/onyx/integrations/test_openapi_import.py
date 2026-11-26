@@ -524,3 +524,12 @@ def test_import_skips_an_operation_whose_line_cannot_save() -> None:
         base_url=view.base_url,
         lines=view.endpoints,
     )
+
+
+def test_lines_save_over_a_spec_with_an_operation_id_that_is_not_text() -> None:
+    spec = _callable_spec()
+    spec["paths"]["/pets/{petId}"]["delete"]["operationId"] = ["deletePet"]
+
+    saved = _apply(spec, ["GET /pets/{petId}?verbose Read a pet", "GET /cats Cats"])
+
+    assert "/cats" in saved["paths"]
