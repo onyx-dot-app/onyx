@@ -190,6 +190,11 @@ export class ViewerClient {
     this.socket.write(encodeJson(value));
   }
 
+  /** One write, so the service reads the messages in one chunk. */
+  sendAll(values: ReadonlyArray<Record<string, unknown>>) {
+    this.socket.write(Buffer.concat(values.map((value) => encodeJson(value))));
+  }
+
   async waitFor<A>(check: () => A | undefined | null | false, timeoutMs = 10_000): Promise<A> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -277,10 +282,17 @@ const PAGES: Record<string, string> = {
   "/popup": `<!doctype html><title>Opener</title><a id="pop" href="/second" target="_blank">Open popup</a>`,
 };
 
-export type Site = { readonly url: string; readonly stop: () => Promise<void>; readonly bigDownloadsStopped: number };
+export type Site = {
+  readonly url: string;
+  readonly stop: () => Promise<void>;
+  readonly bigDownloadsStopped: number;
+  readonly bigDownloadsPeak: number;
+};
 
 export const startSite = async (): Promise<Site> => {
   let bigDownloadsStopped = 0;
+  let bigDownloadsRunning = 0;
+  let bigDownloadsPeak = 0;
   const server = NodeHttp.createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://site");
     const path = url.pathname;
@@ -291,6 +303,8 @@ export const startSite = async (): Promise<Site> => {
         "content-type": "application/octet-stream",
         "content-disposition": 'attachment; filename="big.bin"',
       });
+      bigDownloadsRunning += 1;
+      bigDownloadsPeak = Math.max(bigDownloadsPeak, bigDownloadsRunning);
       const chunk = Buffer.alloc(Number(url.searchParams.get("chunkMiB") ?? 16) * 1024 * 1024);
       let left = Number(url.searchParams.get("chunks") ?? 32);
       const timer = setInterval(() => {
@@ -304,6 +318,7 @@ export const startSite = async (): Promise<Site> => {
       }, 100);
       response.on("close", () => {
         clearInterval(timer);
+        bigDownloadsRunning -= 1;
         if (!response.writableFinished) bigDownloadsStopped += 1;
       });
       return;
@@ -337,6 +352,9 @@ export const startSite = async (): Promise<Site> => {
     url: `http://127.0.0.1:${address.port}`,
     get bigDownloadsStopped() {
       return bigDownloadsStopped;
+    },
+    get bigDownloadsPeak() {
+      return bigDownloadsPeak;
     },
     stop: () =>
       new Promise((resolve) => {

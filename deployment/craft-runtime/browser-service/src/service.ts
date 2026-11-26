@@ -16,7 +16,7 @@ import type {
   Page,
 } from "playwright-core";
 import { HUMAN_CONTROL_MESSAGE, isTimeout, OperationError, toOperationError } from "./errors.ts";
-import { encodeFrame, encodeJson, KIND_JPEG, KIND_JSON, readMessages } from "./framing.ts";
+import { encodeFrame, encodeJson, KIND_JPEG, KIND_JSON, MAX_FRAME_LENGTH, readMessages } from "./framing.ts";
 import type { Message } from "./framing.ts";
 import * as BrowserPage from "./page.ts";
 import type { Point, Target } from "./page.ts";
@@ -258,6 +258,8 @@ const optStrings = (params: Record<string, unknown>, key: string): Array<string>
   return value as Array<string>;
 };
 
+const remainingMs = (deadlineMs: number) => Math.max(1, Math.floor(deadlineMs - performance.now()));
+
 const timeoutOf = (params: Record<string, unknown>) => {
   const value = optNumber(params, "timeoutMs");
   if (value === undefined) return BrowserPage.DEFAULT_TIMEOUT_MS;
@@ -407,7 +409,15 @@ export class BrowserService {
       reply = { ok: false, error: { code: error.code, message: error.message } };
       this.log("call", { method, chat, ms: Date.now() - started, ok: false, code: error.code, message: error.message });
     }
-    if (!socket.destroyed) socket.end(encodeJson(reply));
+    let bytes = encodeJson(reply);
+    if (bytes.length - 4 > MAX_FRAME_LENGTH) {
+      this.log("call_reply_too_large", { method, chat, bytes: bytes.length });
+      bytes = encodeJson({
+        ok: false,
+        error: { code: "failed", message: "The browser finished, but its reply was too large to return." },
+      });
+    }
+    if (!socket.destroyed) socket.end(bytes);
   }
 
   private chatFor(id: string): ChatState {
@@ -698,11 +708,12 @@ export class BrowserService {
     const deadlineMs = performance.now() + timeoutMs;
     switch (method) {
       case "status": {
+        const current = chat.current;
         const tabs = await Promise.all([...chat.tabs.values()].map((tab) => this.freshTabJson(tab)));
-        return { tabs, current: chat.current };
+        return { tabs, current };
       }
       case "open":
-        return this.open(chat, params, timeoutMs, deadlineMs);
+        return this.open(chat, params, deadlineMs);
       case "navigate": {
         const tab = this.resolveTab(chat, params);
         const url = optString(params, "url");
@@ -713,7 +724,7 @@ export class BrowserService {
           throw invalid("history must be back, forward or reload.");
         const target =
           url === undefined ? { history: history as HistoryStep } : { url: normalizeUrl(url) };
-        await this.agentWrite(tab, deadlineMs, () => this.navigate(tab, target, "load", timeoutMs));
+        await this.agentWrite(tab, deadlineMs, () => this.navigate(tab, target, "load", remainingMs(deadlineMs)));
         return { tab: await this.freshTabJson(tab) };
       }
       case "snapshot": {
@@ -752,21 +763,22 @@ export class BrowserService {
         const expression = optString(params, "expression");
         if (expression === undefined || expression.trim() === "") throw invalid("expression is required.");
         const value = await this.agentWrite(tab, deadlineMs, () =>
-          BrowserPage.evaluate(tab.cdp, expression, timeoutMs),
+          BrowserPage.evaluate(tab.cdp, expression, remainingMs(deadlineMs)),
         );
         return { value };
       }
       case "waitFor": {
         const tab = this.resolveTab(chat, params);
-        const input: BrowserPage.WaitForInput = {
+        const input = {
           ...targetOf(params),
           text: optString(params, "text"),
           urlIncludes: optString(params, "urlIncludes"),
-          timeoutMs,
         };
         if (!hasTarget(input) && input.text === undefined && input.urlIncludes === undefined)
           throw invalid("Pass ref, selector, text or urlIncludes.");
-        await this.agentRead(tab, deadlineMs, () => BrowserPage.waitFor(tab.page, input));
+        await this.agentRead(tab, deadlineMs, () =>
+          BrowserPage.waitFor(tab.page, { ...input, timeoutMs: remainingMs(deadlineMs) }),
+        );
         return { tab: await this.freshTabJson(tab) };
       }
       case "dialog": {
@@ -784,19 +796,15 @@ export class BrowserService {
     }
   }
 
-  private async open(
-    chat: ChatState,
-    params: Record<string, unknown>,
-    timeoutMs: number,
-    deadlineMs: number,
-  ) {
+  private async open(chat: ChatState, params: Record<string, unknown>, deadlineMs: number) {
     const rawUrl = optString(params, "url");
     const url = rawUrl === undefined ? undefined : normalizeUrl(rawUrl);
     const newTab = optBoolean(params, "newTab") ?? false;
     const existing = newTab || chat.current === null ? undefined : chat.tabs.get(chat.current);
     if (existing) {
       await this.agentWrite(existing, deadlineMs, async () => {
-        if (url !== undefined) await this.navigate(existing, { url }, "domcontentloaded", timeoutMs);
+        if (url !== undefined)
+          await this.navigate(existing, { url }, "domcontentloaded", remainingMs(deadlineMs));
       });
       return { tab: await this.freshTabJson(existing) };
     }
@@ -805,7 +813,7 @@ export class BrowserService {
     if (url !== undefined && url !== "about:blank") {
       try {
         await this.agentWrite(tab, deadlineMs, () =>
-          this.navigate(tab, { url }, "domcontentloaded", timeoutMs),
+          this.navigate(tab, { url }, "domcontentloaded", remainingMs(deadlineMs)),
         );
       } catch (cause) {
         // A failed open returns no tab; the download case keeps it so the file saves.
@@ -838,7 +846,7 @@ export class BrowserService {
     };
     if (tab.control.controller !== null) return tab.control.observe(guarded);
     return tab.control.agent(guarded, deadlineMs).catch((cause: unknown) => {
-      if (cause instanceof BrowserControlInterrupted && cause.reason === "humanControl")
+      if (cause instanceof BrowserControlInterrupted && cause.reason !== "closed")
         return tab.control.observe(guarded);
       throw cause;
     });
@@ -911,7 +919,7 @@ export class BrowserService {
     const action = optString(params, "action");
     const target = targetOf(params);
     // Time spent queued behind other work on this tab counts against the deadline.
-    const timeoutMs = Math.max(1, Math.floor(deadlineMs - performance.now()));
+    const timeoutMs = remainingMs(deadlineMs);
     const pointer = this.pointerFor(tab);
     switch (action) {
       case "click": {
@@ -1087,6 +1095,7 @@ export class BrowserService {
     if (state === "inProgress") {
       if (download && this.chatDownloadBytes(download.chat) > DOWNLOAD_MAX_BYTES) {
         this.activeDownloads.delete(guid);
+        download.chat.downloads -= 1;
         this.log("download_too_large", { chat: download.chat.id, size: receivedBytes });
         this.cancelDownload(guid);
       }
@@ -1095,31 +1104,34 @@ export class BrowserService {
     this.activeDownloads.delete(guid);
     const temporary = NodePath.join(this.downloadDir, guid);
     try {
-      if (download && state === "completed") await this.saveDownload(download, temporary);
+      const saved = download !== undefined && state === "completed" && (await this.saveDownload(download, temporary));
+      if (download && !saved) download.chat.downloads -= 1;
     } finally {
       await NodeFSP.rm(temporary, { force: true }).catch(noop);
     }
   }
 
-  private async saveDownload(download: ActiveDownload, temporary: string) {
+  private async saveDownload(download: ActiveDownload, temporary: string): Promise<boolean> {
     const { chat, receivedBytes: size } = download;
     if (this.chatDownloadBytes(chat) + size > DOWNLOAD_MAX_BYTES) {
       this.log("download_too_large", { chat: chat.id, size });
-      return;
+      return false;
     }
     chat.downloadBytes += size;
-    const dir = NodePath.join(chatDir(this.sessionsRoot, chat.id), "downloads");
     let path: string | null = null;
     try {
+      const dir = await resolveInChat(this.sessionsRoot, chat.id, "downloads");
       const fileName = await reserveUniqueFile(dir, download.fileName);
       path = NodePath.join(dir, fileName);
       await NodeFSP.copyFile(temporary, path);
       this.log("download_saved", { chat: chat.id, fileName, size });
       for (const viewer of chat.viewers) this.send(viewer, { type: "download", fileName });
+      return true;
     } catch (error) {
       chat.downloadBytes -= size;
       if (path !== null) await NodeFSP.rm(path, { force: true }).catch(noop);
       this.log("download_failed", { chat: chat.id, error: String(error) });
+      return false;
     }
   }
 

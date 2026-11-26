@@ -666,6 +666,12 @@ export const type = async (page: Page, input: TypeInput) => {
       return;
     }
     await locator.fill("", { timeout: remaining() });
+    if ((await locator.evaluate(focusTextTarget, undefined, { timeout: remaining() })) !== true) {
+      throw new OperationError(
+        "not_editable",
+        "The field was cleared but could not keep focus, so no text was typed.",
+      );
+    }
     await typeKeys(page, input.text, deadline);
     return;
   }
@@ -724,14 +730,13 @@ export const select = async (page: Page, input: SelectInput): Promise<Array<stri
       "not_editable",
       "This element is not a <select>. Click a custom dropdown, then click its option.",
     );
-  const values = input.values.map(
-    (entry) =>
-      (
-        options.find((option) => option.value === entry) ??
-        options.find((option) => option.label === entry.trim())
-      )?.value ?? entry,
+  const choices = input.values.map((entry) =>
+    options.some((option) => option.value === entry) ||
+    !options.some((option) => option.label === entry.trim())
+      ? { value: entry }
+      : { label: entry.trim() },
   );
-  return locator.selectOption(values, { timeout });
+  return locator.selectOption(choices, { timeout });
 };
 
 export const drag = async (page: Page, input: DragInput, pointer: PointerReporter = noPointer) => {

@@ -77,17 +77,22 @@ describe("browser service", () => {
   let service: Service;
   let site: Site;
   const events: Array<{ readonly event: string; readonly chat: unknown }> = [];
+  const cleanups: Array<() => Promise<void>> = [];
 
   before(async () => {
     chrome = await launchChrome();
+    cleanups.unshift(() => chrome.stop());
     service = await startService(chrome.cdpUrl, (event, fields) => events.push({ event, chat: fields?.chat }));
+    cleanups.unshift(() => service.stop());
     site = await startSite();
+    cleanups.unshift(() => site.stop());
   });
 
   after(async () => {
-    await service.stop();
-    await site.stop();
-    await chrome.stop();
+    const results: Array<unknown> = [];
+    for (const cleanup of cleanups) results.push(await cleanup().then(() => null, (error: unknown) => error));
+    const failure = results.find((error) => error !== null);
+    if (failure !== undefined) throw failure;
   });
 
   test("server closes a connection that sends an oversize length", async () => {
@@ -301,9 +306,12 @@ describe("browser service", () => {
     const chat = newChat();
     await ok(service.socketPath, chat, "open", { url: `${site.url}/form` });
     const viewer = await ViewerClient.connect(service.socketPath, chat);
-    viewer.send({ type: "takeControl" });
-    await viewer.message("control", (m) => m.controller === "you");
-    viewer.close();
+    try {
+      viewer.send({ type: "takeControl" });
+      await viewer.message("control", (m) => m.controller === "you");
+    } finally {
+      viewer.close();
+    }
     const deadline = Date.now() + 5_000;
     for (;;) {
       const reply = await call(service.socketPath, chat, "act", { action: "click", selector: "#btn" });
@@ -478,8 +486,10 @@ describe("browser service", () => {
       clickAt(viewer, center.x, center.y);
       const chooser = await viewer.message("fileChooser");
       // The release arrives while the answer's path checks wait on the disk.
-      viewer.send({ type: "fileChooser", id: chooser.id, paths: ["browser-uploads/notes.txt"] });
-      viewer.send({ type: "releaseControl" });
+      viewer.sendAll([
+        { type: "fileChooser", id: chooser.id, paths: ["browser-uploads/notes.txt"] },
+        { type: "releaseControl" },
+      ]);
       await viewer.message("error");
       const text = await ok(service.socketPath, chat, "evaluate", {
         expression: "document.getElementById('picked').textContent",
@@ -643,10 +653,13 @@ describe("browser service", () => {
   test("a viewer that leaves while its new tab opens holds no control", async () => {
     const chat = newChat();
     const viewer = await ViewerClient.connect(service.socketPath, chat);
-    await viewer.message("tabs");
-    viewer.send({ type: "newTab" });
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    viewer.close();
+    try {
+      await viewer.message("tabs");
+      viewer.send({ type: "newTab" });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    } finally {
+      viewer.close();
+    }
     let tabs: Array<TabJson> = [];
     const deadline = Date.now() + 5_000;
     while (Date.now() < deadline && tabs.length === 0) {
@@ -836,10 +849,14 @@ describe("browser service", () => {
     const stopped = site.bigDownloadsStopped;
     await Promise.all(
       [1, 2].map((n) =>
-        call(service.socketPath, chat, "open", { url: `${site.url}/big-download?chunkMiB=4&chunks=50&n=${n}` }),
+        call(service.socketPath, chat, "open", {
+          url: `${site.url}/big-download?chunkMiB=4&chunks=50&n=${n}`,
+          newTab: true,
+        }),
       ),
     );
     await waitUntil(() => site.bigDownloadsStopped > stopped, 30_000);
+    assert.ok(site.bigDownloadsPeak >= 2, "the downloads did not overlap");
     const dir = NodePath.join(service.sessionsRoot, chat, "downloads");
     const size = async (name: string) => (await NodeFSP.stat(NodePath.join(dir, name))).size;
     const saved = async () => await NodeFSP.readdir(dir).catch((): Array<string> => []);
@@ -858,6 +875,113 @@ describe("browser service", () => {
     await waitUntil(() => site.bigDownloadsStopped > stopped, 30_000);
     const saved = await NodeFSP.readdir(NodePath.join(service.sessionsRoot, chat, "downloads")).catch(() => []);
     assert.deepEqual(saved, []);
+  });
+
+  test("select by label picks that option when two options share a value", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/second` });
+    await ok(service.socketPath, chat, "evaluate", {
+      expression: `document.body.innerHTML = '<select id="s"><option value="delivery">Standard</option><option value="delivery">Express</option></select>'; 1`,
+    });
+    await ok(service.socketPath, chat, "act", { action: "select", selector: "#s", values: ["Express"] });
+    const index = await ok(service.socketPath, chat, "evaluate", { expression: "document.getElementById('s').selectedIndex" });
+    assert.equal(index.value, 1);
+  });
+
+  test("a reply over the frame limit becomes an error the agent can read", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/second` });
+    await ok(service.socketPath, chat, "evaluate", {
+      expression: `document.body.innerHTML = '<select id="s"><option>None</option><option>Big</option></select>'; document.querySelectorAll('option')[1].value = 'x'.repeat(${MAX_FRAME_LENGTH}); 1`,
+    });
+    const reply = await call(service.socketPath, chat, "act", { action: "select", selector: "#s", values: ["Big"] });
+    assert.equal(reply.ok, false);
+    if (!reply.ok) assert.equal(reply.error.code, "failed");
+  });
+
+  test("type with clear types into the field when the page moves focus on clear", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/second` });
+    await ok(service.socketPath, chat, "evaluate", {
+      expression: `document.body.innerHTML = '<input id="a" value="old"><input id="b">'; document.getElementById('a').addEventListener('input', (e) => { if (e.target.value === '') document.getElementById('b').focus(); }); 1`,
+    });
+    await ok(service.socketPath, chat, "act", { action: "type", selector: "#a", text: "new", clear: true });
+    const values = await ok(service.socketPath, chat, "evaluate", {
+      expression: "[document.getElementById('a').value, document.getElementById('b').value]",
+    });
+    assert.deepEqual(values.value, ["new", ""]);
+  });
+
+  test("time spent queued counts against an evaluation's timeout", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/second` });
+    const busy = ok(service.socketPath, chat, "evaluate", {
+      expression: "new Promise((resolve) => setTimeout(() => resolve(1), 1500))",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const queued = await call(service.socketPath, chat, "evaluate", {
+      expression: "new Promise((resolve) => setTimeout(() => resolve(2), 1000))",
+      timeoutMs: 2_000,
+    });
+    assert.equal((await busy).value, 1);
+    assert.equal(queued.ok, false);
+    if (!queued.ok) assert.equal(queued.error.code, "timeout");
+  });
+
+  test("a queued read runs after a viewer takes and releases control", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/form` });
+    const viewer = await ViewerClient.connect(service.socketPath, chat);
+    viewer.autoAck = true;
+    try {
+      await viewer.message("control", (m) => m.controller === "agent");
+      const busy = ok(service.socketPath, chat, "evaluate", {
+        expression: "new Promise((resolve) => setTimeout(() => resolve(1), 1500))",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const read = call(service.socketPath, chat, "snapshot");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      viewer.send({ type: "takeControl" });
+      await viewer.message("control", (m) => m.controller === "you");
+      viewer.messages.length = 0;
+      viewer.send({ type: "releaseControl" });
+      await viewer.message("control", (m) => m.controller !== "you");
+      assert.equal((await busy).value, 1);
+      const snap = await read;
+      assert.ok(snap.ok, JSON.stringify(snap));
+    } finally {
+      viewer.close();
+    }
+  });
+
+  test("a download that does not save gives its slot back", async () => {
+    const chat = newChat();
+    const dir = NodePath.join(service.sessionsRoot, chat, "downloads");
+    await NodeFSP.mkdir(dir, { recursive: true });
+    for (let n = 0; n < 19; n += 1) await NodeFSP.writeFile(NodePath.join(dir, `saved-${n}.txt`), "x");
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/download-page` });
+    const stopped = site.bigDownloadsStopped;
+    await ok(service.socketPath, chat, "evaluate", { expression: "document.getElementById('dl').href = '/big-download'; 1" });
+    await ok(service.socketPath, chat, "act", { action: "click", selector: "#dl" });
+    await waitUntil(() => site.bigDownloadsStopped > stopped, 30_000);
+    await ok(service.socketPath, chat, "evaluate", { expression: "document.getElementById('dl').href = '/file.txt'; 1" });
+    await ok(service.socketPath, chat, "act", { action: "click", selector: "#dl" });
+    await waitUntil(async () => (await NodeFSP.readdir(dir)).includes("report.txt"));
+  });
+
+  test("a downloads folder that links outside the chat gets no file", async () => {
+    const chat = newChat();
+    const outside = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-outside-"));
+    try {
+      await NodeFSP.mkdir(NodePath.join(service.sessionsRoot, chat), { recursive: true });
+      await NodeFSP.symlink(outside, NodePath.join(service.sessionsRoot, chat, "downloads"));
+      await ok(service.socketPath, chat, "open", { url: `${site.url}/download-page` });
+      await ok(service.socketPath, chat, "act", { action: "click", selector: "#dl" });
+      await waitUntil(() => events.some((e) => e.event === "download_failed" && e.chat === chat));
+      assert.deepEqual(await NodeFSP.readdir(outside), []);
+    } finally {
+      await NodeFSP.rm(outside, { recursive: true, force: true });
+    }
   });
 
   test("bad requests get invalid_argument", async () => {

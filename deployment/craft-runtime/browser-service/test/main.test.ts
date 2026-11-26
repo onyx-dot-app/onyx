@@ -29,6 +29,7 @@ test("main.ts serves agent calls and enforces the tab limit", async () => {
     },
     stdio: ["ignore", "ignore", "pipe"],
   });
+  const exited = new Promise((resolve) => child.once("exit", resolve));
   let stderr = "";
   child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
   try {
@@ -51,7 +52,6 @@ test("main.ts serves agent calls and enforces the tab limit", async () => {
     // Every event is one JSON line.
     for (const line of stderr.trim().split("\n")) JSON.parse(line);
   } finally {
-    const exited = new Promise((resolve) => child.once("exit", resolve));
     child.kill("SIGTERM");
     await exited;
     await site.stop();
