@@ -8,7 +8,7 @@ import { SvgNotFound } from "@opal/illustrations";
 import { fetchErrorDetail } from "@/lib/fetcher";
 import { useDocumentContent } from "@/lib/documentView/hooks";
 
-const PAYLOAD_TOO_LARGE_STATUS = 413;
+const NOT_FOUND_STATUS = 404;
 
 export interface DocumentViewProps {
   documentId: string | null;
@@ -18,7 +18,7 @@ export default function DocumentView({ documentId }: DocumentViewProps) {
   const t = useTranslations("documentView");
   const { data, error, isLoading } = useDocumentContent(documentId);
 
-  if (!documentId || (error && error.status !== PAYLOAD_TOO_LARGE_STATUS)) {
+  if (!documentId || error?.status === NOT_FOUND_STATUS) {
     return (
       <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Body>
@@ -38,7 +38,7 @@ export default function DocumentView({ documentId }: DocumentViewProps) {
         <SettingsLayouts.Body>
           <IllustrationContent
             illustration={SvgNotFound}
-            title={fetchErrorDetail(error) ?? t("notFound.title")}
+            title={fetchErrorDetail(error) ?? t("loadFailed")}
           />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>

@@ -18257,6 +18257,7 @@
       "title": "Documento não encontrado",
       "description": "Documento não encontrado ou você não tem acesso"
     },
+    "loadFailed": "Não foi possível carregar este documento. Recarregue a página para tentar novamente.",
     "openSource": "Abrir fonte"
   }
 }

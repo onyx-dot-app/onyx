@@ -24,6 +24,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.mcp_server.api import mcp_server
+from onyx.mcp_server.models import FetchOutput, SearchHit, SearchOutput
 from onyx.mcp_server.utils import (
     AgentEntry,
     get_accessible_agents,
@@ -653,10 +654,9 @@ async def query_metadata(
         if not response.is_success:
             raise _tool_error(_error_payload(_extract_error_detail(response)))
         payload = PostgresQueryResponse.model_validate_json(response.content)
-        # A rejected query is a usable answer: it says how to fix the call.
-        outcome = MCPToolCallStatus.SUCCESS
         if payload.is_error:
             raise _tool_error(_error_payload(payload.result))
+        outcome = MCPToolCallStatus.SUCCESS
         return {"result": payload.result}
     except ToolError:
         raise
@@ -788,24 +788,6 @@ async def open_urls(
         raise _tool_error(_error_payload(f"URL fetch failed: {str(err)}")) from err
     finally:
         record_mcp_server_tool_outcome(tool, _start, outcome)
-
-
-class SearchHit(BaseModel):
-    id: str
-    title: str
-    url: str
-
-
-class SearchOutput(BaseModel):
-    results: list[SearchHit]
-
-
-class FetchOutput(BaseModel):
-    id: str
-    title: str
-    text: str
-    url: str
-    metadata: dict[str, str | list[str]] | None = None
 
 
 @mcp_server.tool(title="Search company knowledge", annotations=_READ_ONLY_CLOSED_WORLD)
