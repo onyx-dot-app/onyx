@@ -294,8 +294,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    an off-catalog request run unattended.
    `sandbox_proxy/addons/gate.py:GateAddon._session_grant` returns false for
    it, and `backend/onyx/server/features/build/approvals/api.py:ApprovalView.can_approve_for_session` refuses
-   "approve for session" by the same `always_asks` check, so an MCP tool
-   named `unspecified` also asks each time.
+   "approve for session" by the same `always_asks` check. The rule covers
+   only API apps: an MCP tool named `unspecified` follows the normal
+   approval rules.
    The admin Actions tab (`web/src/sections/integrations/IntegrationActionsTab.tsx`)
    reads `always_asks` on each action and does not offer Allow for it.
 8. `approval-single-writer` **Approval decisions have one writer.** Only
