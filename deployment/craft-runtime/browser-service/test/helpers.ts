@@ -65,6 +65,7 @@ export const launchChrome = async (): Promise<Chrome> => {
   }
   if (!port) {
     killAll();
+    await NodeFSP.rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     throw new Error("Chrome did not write DevToolsActivePort.");
   }
   return {
@@ -88,11 +89,11 @@ export type Service = {
   readonly stop: () => Promise<void>;
 };
 
-export const startService = async (cdpUrl: string): Promise<Service> => {
-  const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-service-"));
+export const startService = async (cdpUrl: string, existingDir?: string): Promise<Service> => {
+  const dir = existingDir ?? (await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-service-")));
   const socketPath = NodePath.join(dir, "service.sock");
   const sessionsRoot = NodePath.join(dir, "sessions");
-  await NodeFSP.mkdir(sessionsRoot);
+  await NodeFSP.mkdir(sessionsRoot, { recursive: true });
   const browser = await chromium.connectOverCDP(cdpUrl);
   const context = browser.contexts()[0];
   if (!context) throw new Error("No default context.");
@@ -100,6 +101,7 @@ export const startService = async (cdpUrl: string): Promise<Service> => {
   const service = new BrowserService({
     context,
     sessionsRoot,
+    downloadDir: NodePath.join(dir, "downloads"),
     log: (event, fields) => events.push({ event, chat: fields?.chat }),
   });
   await service.start();

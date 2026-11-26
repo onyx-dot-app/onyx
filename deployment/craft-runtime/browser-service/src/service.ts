@@ -5,7 +5,6 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
-import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import type { Socket } from "node:net";
 import type {
@@ -304,20 +303,26 @@ export class BrowserService {
   private readonly frameChats = new Map<string, ChatState>();
   private readonly activeDownloads = new Map<string, ActiveDownload>();
   private browserSession: CDPSession | null = null;
-  private downloadDir = "";
+  private readonly downloadDir: string;
   private tabCounter = 0;
   private pointerSequence = 0;
 
-  constructor(options: { context: BrowserContext; sessionsRoot: string; log: Log }) {
+  constructor(options: { context: BrowserContext; sessionsRoot: string; downloadDir: string; log: Log }) {
     this.context = options.context;
     this.sessionsRoot = options.sessionsRoot;
+    this.downloadDir = options.downloadDir;
     this.log = options.log;
   }
 
   async start() {
     const browser = this.context.browser();
     if (!browser) throw new Error("The browser context has no browser.");
-    this.downloadDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-downloads-"));
+    // A restarted service cannot know who owned the earlier pages or downloads, so it drops them.
+    const leftover = this.context.pages();
+    await Promise.all(leftover.map((page) => page.close()));
+    if (leftover.length > 0) this.log("leftover_tabs_closed", { count: leftover.length });
+    await NodeFSP.rm(this.downloadDir, { recursive: true, force: true });
+    await NodeFSP.mkdir(this.downloadDir, { recursive: true, mode: 0o700 });
     const session = await browser.newBrowserCDPSession();
     this.browserSession = session;
     session.on("Target.targetCreated", ({ targetInfo }) => {
@@ -481,13 +486,12 @@ export class BrowserService {
       tab.title = state.title;
       this.scheduleTabs(tab.chat);
     }
-    void this.watchTitle(tab, state.contextId);
+    void this.watchTitle(tab, state.contextId, state.rawTitle);
   }
 
   // A title change fires no page event, so one watch per document reports
   // the next one (T3 ServerBrowser.ts watchTitle).
-  private async watchTitle(tab: Tab, contextId: number) {
-    const title = tab.title;
+  private async watchTitle(tab: Tab, contextId: number, title: string) {
     if (tab.titleWatch?.contextId === contextId && tab.titleWatch.title === title) return;
     const watch = { contextId, title };
     tab.titleWatch = watch;
@@ -707,7 +711,6 @@ export class BrowserService {
     if (id !== undefined) {
       const tab = chat.tabs.get(id);
       if (!tab) throw new OperationError("tab_not_found", `Tab ${id.slice(0, MAX_ECHO_CHARS)} is not open in this chat.`);
-      this.setCurrent(chat, tab);
       return tab;
     }
     const current = chat.current === null ? undefined : chat.tabs.get(chat.current);
@@ -807,6 +810,7 @@ export class BrowserService {
         // Resolved outside the queue so it can unblock an action waiting on the dialog.
         if (tab.control.controller !== null)
           throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
+        this.setCurrent(chat, tab);
         await this.resolveDialog(tab, accept, optString(params, "promptText"));
         return { tab: await this.freshTabJson(tab) };
       }
@@ -849,6 +853,7 @@ export class BrowserService {
     if (tab.dialog) return Promise.reject(dialogPending());
     return tab.control.agent(async () => {
       if (tab.dialog) throw dialogPending();
+      this.setCurrent(tab.chat, tab);
       if (!tab.agentUsed) {
         tab.agentUsed = true;
         this.broadcastControl(tab);
@@ -861,6 +866,7 @@ export class BrowserService {
   private agentRead<A>(tab: Tab, deadlineMs: number, run: () => Promise<A>): Promise<A> {
     const guarded = async () => {
       if (tab.dialog) throw dialogPending();
+      this.setCurrent(tab.chat, tab);
       return run();
     };
     if (tab.control.controller !== null) return tab.control.observe(guarded);
@@ -1323,6 +1329,11 @@ export class BrowserService {
       const old = viewer.selected;
       const oldCast = viewer.cast;
       if (old) old.viewers.delete(viewer);
+      if (old && old.control.controller === viewer.id) {
+        const release = oldCast?.tab === old ? () => this.releaseViewerInput(viewer, oldCast.session) : undefined;
+        await old.control.disconnect(viewer.id, release).catch(noop);
+        this.broadcastControl(old);
+      }
       if (oldCast && (viewer.pressedKeys.size > 0 || viewer.pressedButtons.size > 0))
         await this.releaseViewerInput(viewer, oldCast.session);
       await this.stopCast(viewer);

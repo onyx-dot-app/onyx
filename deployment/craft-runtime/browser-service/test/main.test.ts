@@ -16,25 +16,45 @@ test("main.ts --check exits cleanly", () => {
 });
 
 test("main.ts serves agent calls and enforces the tab limit", async () => {
-  const chrome = await launchChrome();
-  const site = await startSite();
-  const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-main-"));
-  const socketPath = NodePath.join(dir, "service.sock");
-  const child = NodeChild.spawn(process.execPath, [MAIN], {
-    env: {
-      ...process.env,
-      ONYX_BROWSER_CDP_URL: chrome.cdpUrl,
-      ONYX_BROWSER_SOCKET: socketPath,
-      ONYX_SESSIONS_ROOT: dir,
-    },
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  const exited = new Promise((resolve) => child.once("exit", resolve));
-  let stderr = "";
-  child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+  const cleanups: Array<() => Promise<unknown>> = [];
   try {
+    const chrome = await launchChrome();
+    cleanups.unshift(() => chrome.stop());
+    const site = await startSite();
+    cleanups.unshift(() => site.stop());
+    const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-main-"));
+    cleanups.unshift(() => NodeFSP.rm(dir, { recursive: true, force: true }));
+    const socketPath = NodePath.join(dir, "service.sock");
+    const child = NodeChild.spawn(process.execPath, [MAIN], {
+      env: {
+        ...process.env,
+        ONYX_BROWSER_CDP_URL: chrome.cdpUrl,
+        ONYX_BROWSER_SOCKET: socketPath,
+        ONYX_SESSIONS_ROOT: dir,
+        TMPDIR: dir,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let ended: string | null = null;
+    const exited = new Promise<void>((resolve) => {
+      child.once("error", (error) => {
+        ended = String(error);
+        resolve();
+      });
+      child.once("exit", (code, signal) => {
+        ended = `exit ${code ?? signal}`;
+        resolve();
+      });
+    });
+    cleanups.unshift(async () => {
+      child.kill("SIGTERM");
+      await exited;
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
     const deadline = Date.now() + 15_000;
     while (!stderr.includes('"event":"listening"')) {
+      assert.equal(ended, null, `service stopped before it listened: ${stderr}`);
       assert.ok(Date.now() < deadline, `service did not start: ${stderr}`);
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
@@ -48,14 +68,10 @@ test("main.ts serves agent calls and enforces the tab limit", async () => {
     );
     const failures = opens.filter((each) => each.status === "rejected");
     assert.equal(failures.length, 2);
-    assert.match(String((failures[0] as PromiseRejectedResult).reason), /tab_limit/);
+    for (const failure of failures) assert.match(String(failure.reason), /tab_limit/);
     // Every event is one JSON line.
     for (const line of stderr.trim().split("\n")) JSON.parse(line);
   } finally {
-    child.kill("SIGTERM");
-    await exited;
-    await site.stop();
-    await chrome.stop();
-    await NodeFSP.rm(dir, { recursive: true, force: true });
+    for (const cleanup of cleanups) await cleanup().catch(() => {});
   }
 });

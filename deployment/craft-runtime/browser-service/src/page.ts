@@ -135,6 +135,8 @@ const targetPoint = async (
 
 export const TITLE_LIMIT = 512;
 
+const MASKED_VALUE = "••••••••";
+
 /**
  * Reads the main frame's URL and title, cut in an isolated world: a whole title can be larger
  * than one CDP message, which would close the browser connection. Chromium keeps one world per
@@ -142,7 +144,7 @@ export const TITLE_LIMIT = 512;
  */
 export const readPageState = async (
   cdp: CDPSession,
-): Promise<{ url: string; title: string; contextId: number }> => {
+): Promise<{ url: string; title: string; rawTitle: string; contextId: number }> => {
   const { frameTree } = await cdp.send("Page.getFrameTree");
   const world = await cdp.send("Page.createIsolatedWorld", {
     frameId: frameTree.frame.id,
@@ -150,14 +152,15 @@ export const readPageState = async (
   });
   const { result, exceptionDetails } = await cdp.send("Runtime.evaluate", {
     contextId: world.executionContextId,
-    expression: `({ url: location.href, title: document.title.slice(0, ${TITLE_LIMIT}) })`,
+    expression: PAGE_STATE_SCRIPT,
     returnByValue: true,
   });
   if (exceptionDetails) throw new Error("The page state could not be read.");
-  return { ...(result.value as { url: string; title: string }), contextId: world.executionContextId };
+  return {
+    ...(result.value as { url: string; title: string; rawTitle: string }),
+    contextId: world.executionContextId,
+  };
 };
-
-const MASKED_VALUE = "••••••••";
 
 /**
  * A `data:` URL carries its content, which can be a whole file. Keeps only the media type: the
@@ -206,6 +209,19 @@ const DOTTED_SCRIPT = `(() => {
   };
   visit(document);
   return [...new Set(values.filter((value) => value.trim()))];
+})()`;
+
+// Masks the page's password values in its title, as a snapshot does, without sending the values out.
+const PAGE_STATE_SCRIPT = `(() => {
+  const rawTitle = document.title.slice(0, ${TITLE_LIMIT});
+  let title = rawTitle;
+  const values = ${DOTTED_SCRIPT}.filter((value) => value.length <= rawTitle.length);
+  for (const value of values.sort((a, b) => b.length - a.length)) {
+    const literal = value.replace(/[.*+?^\${}()|[\\]\\\\]/g, "\\\\$&");
+    const source = value.length < 4 ? "(?<![\\\\p{L}\\\\p{N}_])" + literal + "(?![\\\\p{L}\\\\p{N}_])" : literal;
+    title = title.replace(new RegExp(source, "gu"), ${JSON.stringify(MASKED_VALUE)});
+  }
+  return { url: location.href, title, rawTitle };
 })()`;
 
 const pageChanged = () =>
@@ -564,6 +580,7 @@ type FocusCandidate = {
   readonly isContentEditable?: boolean;
   readonly shadowRoot?: { readonly activeElement: FocusCandidate | null } | null;
   readonly focus?: () => void;
+  readonly control?: FocusCandidate | null;
   getRootNode(): { readonly activeElement?: FocusCandidate | null };
   contains(other: FocusCandidate): boolean;
 };
@@ -579,6 +596,7 @@ const focusTextTarget = (target: FocusCandidate | null) => {
     if (element && ["IFRAME", "FRAME", "FENCEDFRAME", "OBJECT", "EMBED"].includes(element.tagName))
       return false;
   }
+  if (element?.tagName === "LABEL") element = element.control ?? null;
   if (element == null) return false;
   const nonText = [
     "button",
@@ -730,11 +748,12 @@ export const select = async (page: Page, input: SelectInput): Promise<Array<stri
       "not_editable",
       "This element is not a <select>. Click a custom dropdown, then click its option.",
     );
+  const present = (entry: string) =>
+    options.some((option) => option.value === entry || option.label === entry.trim());
+  // Strings match a value or a label, so Playwright can also wait for an option the page adds later.
+  if (!input.values.every(present)) return locator.selectOption(input.values, { timeout });
   const choices = input.values.map((entry) =>
-    options.some((option) => option.value === entry) ||
-    !options.some((option) => option.label === entry.trim())
-      ? { value: entry }
-      : { label: entry.trim() },
+    options.some((option) => option.value === entry) ? { value: entry } : { label: entry.trim() },
   );
   return locator.selectOption(choices, { timeout });
 };

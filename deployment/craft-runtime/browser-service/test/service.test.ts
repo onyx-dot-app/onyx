@@ -6,6 +6,7 @@ import * as NodePath from "node:path";
 import { after, before, describe, test } from "node:test";
 import { encodeJson, FrameDecoder, MAX_FRAME_LENGTH } from "../src/framing.ts";
 import { HUMAN_CONTROL_MESSAGE } from "../src/errors.ts";
+import { chromium } from "playwright-core";
 import { normalizeUrl } from "../src/paths.ts";
 import {
   call,
@@ -875,6 +876,7 @@ describe("browser service", () => {
     const stopped = site.bigDownloadsStopped;
     await ok(service.socketPath, chat, "act", { action: "click", selector: "#pop" });
     await waitUntil(() => site.bigDownloadsStopped > stopped, 30_000);
+    assert.ok(service.events.some((each) => each.event === "download_too_large" && each.chat === chat));
     const saved = await NodeFSP.readdir(NodePath.join(service.sessionsRoot, chat, "downloads")).catch(() => []);
     assert.deepEqual(saved, []);
   });
@@ -898,7 +900,86 @@ describe("browser service", () => {
     });
     const reply = await call(service.socketPath, chat, "act", { action: "select", selector: "#s", values: ["Big"] });
     assert.equal(reply.ok, false);
-    if (!reply.ok) assert.equal(reply.error.code, "failed");
+    if (!reply.ok) {
+      assert.equal(reply.error.code, "failed");
+      assert.equal(reply.error.message, "The browser finished, but its reply was too large to return.");
+    }
+  });
+
+  test("select by label waits for an option the page adds later", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/second` });
+    await ok(service.socketPath, chat, "evaluate", {
+      expression: `document.body.innerHTML = '<select id="s"><option value="standard">Standard</option></select>'; setTimeout(() => document.getElementById('s').add(new Option('Express', 'delivery')), 300); 1`,
+    });
+    await ok(service.socketPath, chat, "act", { action: "select", selector: "#s", values: ["Express"], timeoutMs: 5_000 });
+    const value = await ok(service.socketPath, chat, "evaluate", { expression: "document.getElementById('s').value" });
+    assert.equal(value.value, "delivery");
+  });
+
+  test("type with clear through a label types into its field", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/second` });
+    await ok(service.socketPath, chat, "evaluate", {
+      expression: `document.body.innerHTML = '<label for="a">Name</label><input id="a" value="old">'; 1`,
+    });
+    await ok(service.socketPath, chat, "act", { action: "type", selector: "label", text: "new", clear: true });
+    const value = await ok(service.socketPath, chat, "evaluate", { expression: "document.getElementById('a').value" });
+    assert.equal(value.value, "new");
+  });
+
+  test("status hides a password that the page puts in its title", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/second` });
+    await ok(service.socketPath, chat, "evaluate", {
+      expression: `document.body.innerHTML = '<input id="p" type="password" value="hunter22">'; document.title = 'Login hunter22'; 1`,
+    });
+    const status = await ok(service.socketPath, chat, "status");
+    assert.equal((status.tabs as Array<TabJson>)[0]?.title, "Login ••••••••");
+    const snap = await ok(service.socketPath, chat, "snapshot");
+    assert.equal((snap.tab as TabJson).title, "Login ••••••••");
+    assert.doesNotMatch(JSON.stringify(snap), /hunter22/);
+  });
+
+  test("a write refused by human control does not change the current tab", async () => {
+    const chat = newChat();
+    const first = await ok(service.socketPath, chat, "open", { url: `${site.url}/form` });
+    const tabA = (first.tab as TabJson).id;
+    const second = await ok(service.socketPath, chat, "open", { url: `${site.url}/second`, newTab: true });
+    const tabB = (second.tab as TabJson).id;
+    const viewer = await ViewerClient.connect(service.socketPath, chat);
+    try {
+      viewer.send({ type: "selectTab", tab: tabA });
+      await viewer.message("tabs", (m) => m.selected === tabA);
+      viewer.send({ type: "takeControl" });
+      await viewer.message("control", (m) => m.controller === "you");
+      const refused = await call(service.socketPath, chat, "act", { tab: tabA, action: "click", selector: "#btn" });
+      assert.equal(refused.ok, false);
+      if (!refused.ok) assert.equal(refused.error.code, "human_control");
+      const status = await ok(service.socketPath, chat, "status");
+      assert.equal(status.current, tabB);
+    } finally {
+      viewer.close();
+    }
+  });
+
+  test("a viewer that switches tabs gives up control of the old tab", async () => {
+    const chat = newChat();
+    const first = await ok(service.socketPath, chat, "open", { url: `${site.url}/form` });
+    const tabA = (first.tab as TabJson).id;
+    const viewer = await ViewerClient.connect(service.socketPath, chat);
+    try {
+      await viewer.message("tabs", (m) => m.selected === tabA);
+      viewer.send({ type: "takeControl" });
+      await viewer.message("control", (m) => m.controller === "you");
+      const second = await ok(service.socketPath, chat, "open", { url: `${site.url}/second`, newTab: true });
+      const tabB = (second.tab as TabJson).id;
+      viewer.send({ type: "selectTab", tab: tabB });
+      await viewer.message("tabs", (m) => m.selected === tabB);
+      await ok(service.socketPath, chat, "act", { tab: tabA, action: "click", selector: "#btn" });
+    } finally {
+      viewer.close();
+    }
   });
 
   test("type with clear types into the field when the page moves focus on clear", async () => {
@@ -1027,5 +1108,30 @@ describe("browser service", () => {
     const badChat = await call(service.socketPath, "NOT-A-UUID", "status");
     assert.equal(badChat.ok, false);
     if (!badChat.ok) assert.equal(badChat.error.code, "invalid_argument");
+  });
+});
+
+describe("browser service restart", () => {
+  test("start closes pages and downloads left by an earlier service", async () => {
+    const chrome = await launchChrome();
+    const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-restart-"));
+    let service: Service | null = null;
+    try {
+      const earlier = await chromium.connectOverCDP(chrome.cdpUrl);
+      const context = earlier.contexts()[0]!;
+      await context.newPage();
+      await context.newPage();
+      const stale = NodePath.join(dir, "downloads", "partial");
+      await NodeFSP.mkdir(NodePath.dirname(stale), { recursive: true });
+      await NodeFSP.writeFile(stale, "x");
+      service = await startService(chrome.cdpUrl, dir);
+      await waitUntil(() => context.pages().length === 0);
+      assert.deepEqual(await NodeFSP.readdir(NodePath.dirname(stale)), []);
+      await earlier.close();
+    } finally {
+      await service?.stop();
+      await chrome.stop();
+      await NodeFSP.rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -1,5 +1,7 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeNet from "node:net";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import { chromium } from "playwright-core";
 import { BrowserService } from "./src/service.ts";
 import type { Log } from "./src/service.ts";
@@ -43,7 +45,8 @@ const main = async () => {
     log("browser_disconnected");
     process.exit(1);
   });
-  const service = new BrowserService({ context, sessionsRoot, log });
+  const downloadDir = NodePath.join(NodeOS.tmpdir(), "onyx-browser-downloads");
+  const service = new BrowserService({ context, sessionsRoot, downloadDir, log });
   await service.start();
 
   await NodeFSP.rm(socketPath, { force: true });
