@@ -22,7 +22,10 @@ from onyx.db.enums import (
     IntegrationConnectionStatus,
     PluginInstallationPolicy,
 )
-from onyx.db.integration_connection import get_connection_by_id
+from onyx.db.integration_connection import (
+    get_connection_by_id,
+    mark_connection_needs_reconnect__no_commit,
+)
 from onyx.db.models import (
     Integration,
     Integration__User,
@@ -602,9 +605,19 @@ def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
         integration_ids.append(integration.id)
         return integration
 
-    # The user can connect the first app. Only an admin can set up the second.
+    # The user can connect the first app. Only an admin can set up the second
+    # or fix the rejected organization key of the third.
     personal = app(IntegrationAuthMode.INDIVIDUAL)
     shared = app(IntegrationAuthMode.SHARED)
+    rejected = app(IntegrationAuthMode.SHARED)
+    mark_connection_needs_reconnect__no_commit(
+        db_session,
+        add_connection(
+            db_session, rejected, None, ConnectionSecret(fields={"api_key": "old"})
+        ),
+        "The API key was rejected.",
+    )
+    db_session.commit()
     rest = _openapi(
         db_session,
         integration_ids,
@@ -614,12 +627,20 @@ def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
     )
     # A URL-pattern custom app gives no chat tool.
     url_glob = app(IntegrationAuthMode.INDIVIDUAL, ExternalAppType.CUSTOM)
-    _access(db_session, [personal, shared, rest, url_glob])
+    _access(db_session, [personal, shared, rejected, rest, url_glob])
 
     tools = _build(
         db_session,
         user,
-        _configuration({personal.id: {}, shared.id: {}, rest.id: {}, url_glob.id: {}}),
+        _configuration(
+            {
+                personal.id: {},
+                shared.id: {},
+                rejected.id: {},
+                rest.id: {},
+                url_glob.id: {},
+            }
+        ),
     )
     blocked = _build(
         db_session, user, _configuration({personal.id: {"default": "blocked"}})
@@ -628,12 +649,14 @@ def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
     assert set(tools) == {
         f"app__{personal.id}__connect",
         f"app__{shared.id}__connect",
+        f"app__{rejected.id}__connect",
         f"app__{rest.id}__connect",
     }
     assert blocked == {}
     for integration, user_can_connect in (
         (personal, True),
         (shared, False),
+        (rejected, False),
         (rest, True),
     ):
         result = tools[f"app__{integration.id}__connect"].run(
@@ -651,6 +674,7 @@ def test_an_app_with_no_sign_in_gives_one_tool_that_asks_the_user_to_connect(
         assert result.details.error is not None
         # The chat shows the connect card only when the user can sign in.
         assert result.details.error.is_auth_error is user_can_connect
+        assert ("an admin" in result.content) is not user_can_connect
 
     # An admin who blocks every action also hides the connect tool.
     set_policy(db_session, rest.id, "", BLOCKED)

@@ -355,11 +355,14 @@ class AppConnectTool(Tool):
         integration_id: int,
         integration_name: str,
         problem: ConnectionProblem,
+        shared: bool,
     ) -> None:
         self._integration_id = integration_id
         self._integration_name = integration_name
-        # The user can sign in. If not, an admin must finish the setup.
-        self._user_can_connect = problem.code is not ConnectionState.NOT_SET_UP
+        # Only an admin can fix a shared sign-in.
+        self._user_can_connect = (
+            not shared and problem.code is not ConnectionState.NOT_SET_UP
+        )
         self._reason = problem.reason
         self._name = app_action_tool_name(integration_id, "connect")
 
@@ -401,8 +404,8 @@ class AppConnectTool(Tool):
             "card to connect it. Tell the user to connect and then to send the "
             "request again. Do not call this tool again in this response."
             if self._user_can_connect
-            else f"{self._integration_name} is not set up: {self._reason} "
-            "Tell the user that an admin must finish the setup."
+            else f"{self._integration_name} cannot sign in: {self._reason} "
+            "Tell the user that an admin must fix its sign-in."
         )
         return ToolResult(
             content=message,

@@ -111,6 +111,7 @@ def _integration_tools(
                 integration_id=integration.id,
                 integration_name=integration.name,
                 problem=credentials,
+                shared=integration.auth_mode is IntegrationAuthMode.SHARED,
             )
         ]
 
