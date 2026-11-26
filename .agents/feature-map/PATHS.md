@@ -52,6 +52,7 @@ covers new files that match it.
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `backend/onyx/server/query_and_chat/models.py`, `backend/onyx/server/query_and_chat/session_loading.py`, `backend/onyx/server/query_and_chat/chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py`, `backend/onyx/server/query_and_chat/acp_stream.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
+| `backend/onyx/server/query_and_chat/chat_browser.py` | craft-sandboxes, code-execution |
 | `backend/onyx/secondary_llm_flows/chat_session_naming.py` | chat-persistence |
 | `backend/onyx/chat/session_naming.py` | chat-persistence, core-chat-loop |
 | `backend/onyx/secondary_llm_flows/memory_update.py` | chat-preferences |
@@ -65,7 +66,7 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
 | `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
-| `backend/onyx/tools/tool_implementations/sandbox/`, `backend/onyx/prompts/sandbox_tools.py` | code-execution |
+| `backend/onyx/tools/tool_implementations/sandbox/`, `backend/onyx/prompts/sandbox_tools.py`, `backend/onyx/prompts/browser_tools.py` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/custom/` | mcp-and-custom-tools |
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |

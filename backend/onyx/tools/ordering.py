@@ -24,6 +24,8 @@ class ToolRank(IntEnum):
     SHELL_INPUT = auto()
     FILE_EDIT = auto()
     PUBLISHED_FILES = auto()
+    # The chat's tabs in the sandbox's browser.
+    BROWSER = auto()
     WEB_SEARCH = auto()
     OPEN_URL = auto()
     READ_FILE = auto()

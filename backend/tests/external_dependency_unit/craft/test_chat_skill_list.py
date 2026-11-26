@@ -318,20 +318,6 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     assert skill_md.startswith(f"Skill files: {CHAT_SKILLS_PATH}/pptx/")
     assert f"python {CHAT_SKILLS_PATH}/pptx/scripts/lint.py" in skill_md
 
-    # A skill with no other files has nothing to load.
-    only_md = [
-        skill
-        for skill in built_ins.values()
-        if list(_files(build_chat_skill_files(skill, user, db_session)))
-        == [f"{skill.name}/SKILL.md"]
-    ]
-    assert only_md
-    for skill in only_md:
-        text = read_chat_skills_md([skill], user.id, db_session, with_sandbox=True)[
-            (skill.version_id, skill.path)
-        ]
-        assert not text.startswith("Skill files:")
-
 
 def _files(skill_files: ChatSkillFiles | None) -> dict[str, bytes]:
     assert skill_files is not None

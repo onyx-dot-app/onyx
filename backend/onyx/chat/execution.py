@@ -96,6 +96,7 @@ from onyx.tools.tool_constructor import (
     construct_tools,
 )
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.sandbox.browser_tools import with_browser_tools
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     SANDBOX_TOOLS,
     LoadSkillTool,
@@ -1105,7 +1106,12 @@ def create_chat_agent(
             else None
         )
         if turn is not None:
-            sandbox_tools = [tool(turn) for tool in sandbox.tools]
+            sandbox_tools = [
+                tool(turn)
+                for tool in with_browser_tools(
+                    sandbox.tools, browser=setup.browser_tools
+                )
+            ]
             # A turn that runs without asking (evals) gates no built-in
             # action, as integration policies allow its Ask actions.
             if setup.approval_mode is ApprovalMode.RUN_WITHOUT_ASKING:

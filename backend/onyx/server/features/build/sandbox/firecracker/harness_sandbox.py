@@ -6,24 +6,30 @@ only when the daemon is not initialized. A session's first use on a VM
 instance restores its last save (`session_saves`). Exec sessions live in
 durable cache records (`harness_state`), so any API pod can serve
 `write_stdin`. `purge_session` and `purge_sandbox` delete what a session or
-a user's sandbox keeps (Onyx delete hooks call them through `purge`).
+a user's sandbox keeps (Onyx delete hooks call them through `purge`). The
+browser calls reach the VM's browser service through the agent's Dial; its
+profile is the session named by the sandbox ID.
 """
 
+import asyncio
 import io
 import posixpath
 import random
 import secrets
 import tarfile
 import time
+from collections import deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from typing import IO
 from uuid import UUID, uuid4
 
 import grpc
+import grpc.aio
+from pydantic import JsonValue, ValidationError
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cancellation import (
@@ -32,10 +38,22 @@ from onyx.llm.cancellation import (
     current_cancellation,
 )
 from onyx.microvm.agent_client import (
+    AsyncDialStream,
     HostAgentClientFactory,
     HostAgentError,
     HostAgentErrorReason,
     MtlsHostAgentClientFactory,
+    open_dial_stream,
+)
+from onyx.microvm.browser_protocol import (
+    BROWSER_SERVICE_PORT,
+    BrowserCallResponse,
+    BrowserFrame,
+    BrowserFramingError,
+    FrameDecoder,
+    call_hello,
+    encode_frame,
+    parse_json_frame,
 )
 from onyx.microvm.configs import SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS
 from onyx.microvm.daemon_client import (
@@ -138,6 +156,7 @@ from onyx.server.features.build.sandbox.firecracker.session_saves import (
     tenant_scope,
 )
 from onyx.server.features.build.sandbox.harness_base import (
+    BROWSER_VIEW_LEASE_SECONDS,
     EXEC_DEFAULT_ENV,
     INTERRUPT_CHAR,
     ONYX_VM_FILES_ROOT,
@@ -146,6 +165,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     RENDER_PREVIEW_ROOT,
     RENDER_PREVIEW_SIZE_PX,
     RENDER_PREVIEW_SUFFIXES,
+    BrowserStream,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
@@ -199,6 +219,8 @@ _INIT_LOCK_SECONDS = 30.0
 # covers a restore at the agent's 15 min transfer deadline.
 _SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
 _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
+# A clear waits this long for a browser start or a profile restore to end.
+_CLEAR_SETUP_WAIT_SECONDS = 90.0
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
 # The daemon refuses Start and Run with these while it keeps its most commands.
@@ -522,6 +544,161 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             return True
         return health.running_executions > 0
 
+    # Browser
+
+    def _browser_vm(self, ref: HarnessSandboxRef) -> PlacedVm:
+        """The running VM with the browser up. The browser profile is the
+        session named by the sandbox ID: its last save comes back once per
+        VM instance, like a chat session's, and the stop's saves keep it."""
+        profile = ref.model_copy(update={"session_id": ref.sandbox_id})
+        placed, daemon = self._session_vm(profile)
+        # Under the profile's setup lock: a clear holds it, so Chrome never
+        # starts on a profile that the clear is deleting.
+        try:
+            with _session_setup_lock(
+                get_cache_backend(tenant_id=ref.tenant_id),
+                ref.sandbox_id,
+                ref.sandbox_id,
+            ):
+                daemon.browser_start(profile_session_id=str(ref.sandbox_id))
+        except (HostAgentError, SandboxDaemonError) as e:
+            if e.code is grpc.StatusCode.UNIMPLEMENTED:
+                raise HarnessSandboxError(
+                    "This sandbox runs an older image without the browser; it "
+                    "updates after the sandbox restarts."
+                ) from e
+            raise HarnessSandboxError(f"The browser did not start: {e}") from e
+        return placed
+
+    def browser_call(
+        self,
+        ref: HarnessSandboxRef,
+        method: str,
+        params: dict[str, JsonValue],
+        *,
+        timeout_seconds: float,
+    ) -> dict[str, JsonValue]:
+        placed = self._browser_vm(ref)
+        check_cancelled()
+        exchange = self._client_factory.client(placed.node.address).dial(
+            sandbox_id=placed.vm.sandbox_id,
+            generation=placed.vm.generation,
+            guest_port=BROWSER_SERVICE_PORT,
+            data=encode_frame(call_hello(str(ref.session_id), method, params)),
+            timeout=timeout_seconds,
+        )
+        cancellation = current_cancellation()
+        decoder = FrameDecoder()
+        frames: list[BrowserFrame] = []
+        try:
+            with (
+                nullcontext()
+                if cancellation is None
+                else cancellation.on_cancel(exchange.cancel)
+            ):
+                for chunk in exchange:
+                    frames = decoder.feed(chunk)
+                    if frames:
+                        break
+        except HostAgentError as e:
+            check_cancelled()
+            if e.code is grpc.StatusCode.DEADLINE_EXCEEDED:
+                raise HarnessSandboxError(
+                    f"The browser did not answer within {timeout_seconds:.0f} seconds."
+                ) from e
+            raise HarnessSandboxError(f"Could not reach the browser: {e}") from e
+        except BrowserFramingError as e:
+            raise HarnessSandboxError(f"The browser sent a bad answer: {e}") from e
+        finally:
+            # The service closes after its answer; this ends a call that the
+            # loop left early.
+            exchange.cancel()
+        check_cancelled()
+        if not frames:
+            raise HarnessSandboxError(
+                "The browser closed the connection without an answer."
+            )
+        try:
+            response = BrowserCallResponse.model_validate(parse_json_frame(frames[0]))
+        except (BrowserFramingError, ValidationError) as e:
+            raise HarnessSandboxError(f"The browser sent a bad answer: {e}") from e
+        if not response.ok:
+            raise HarnessSandboxError(
+                response.error.message if response.error else "The browser call failed."
+            )
+        return response.result or {}
+
+    async def open_browser_stream(self, ref: HarnessSandboxRef) -> BrowserStream:
+        placed = await asyncio.to_thread(self._browser_vm, ref)
+        channel = self._client_factory.aio_channel(placed.node.address)
+        try:
+            dial = await open_dial_stream(
+                channel,
+                sandbox_id=placed.vm.sandbox_id,
+                generation=placed.vm.generation,
+                guest_port=BROWSER_SERVICE_PORT,
+            )
+        except BaseException:
+            await channel.close()
+            raise
+        return _DialBrowserStream(channel, dial)
+
+    def renew_browser_view(self, ref: HarnessSandboxRef) -> None:
+        set_mark(
+            get_cache_backend(tenant_id=ref.tenant_id),
+            ref.sandbox_id,
+            f"browser_view:{ref.session_id}",
+            BROWSER_VIEW_LEASE_SECONDS,
+        )
+        self.touch(ref)
+
+    def clear_browser_data(self, ref: HarnessSandboxRef) -> None:
+        """Under the profile's save lock, so no save brings the old profile
+        back, and its setup lock, so no restore or browser start runs on
+        it meanwhile."""
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        profile_id = ref.sandbox_id
+        setup_lock = _session_setup_lock(tenant_cache, ref.sandbox_id, profile_id)
+        with session_save_lock(tenant_cache, profile_id) as held:
+            if not held:
+                raise HarnessSandboxError(
+                    "The browser profile is being saved. Try again in a minute."
+                )
+            if not setup_lock.acquire(blocking_timeout=_CLEAR_SETUP_WAIT_SECONDS):
+                raise HarnessSandboxError(
+                    "The browser is starting. Try again in a minute."
+                )
+            try:
+                self._clear_profile(tenant_cache, ref)
+            finally:
+                if setup_lock.owned():
+                    setup_lock.release()
+        logger.info("sandbox_fc_browser_data_cleared sandbox=%s", ref.sandbox_id)
+
+    def _clear_profile(
+        self, tenant_cache: CacheBackend, ref: HarnessSandboxRef
+    ) -> None:
+        """Stop Chrome, delete the profile files, then its save."""
+        profile_id = ref.sandbox_id
+        placed = self._placed_if_running(tenant_cache, ref.sandbox_id)
+        if placed is not None:
+            daemon = sandbox_daemon(self._client_factory, placed)
+            try:
+                daemon.browser_stop()
+            except (HostAgentError, SandboxDaemonError) as e:
+                # A daemon without a browser has no profile to close.
+                if e.code is not grpc.StatusCode.UNIMPLEMENTED:
+                    raise
+            daemon.delete_file(
+                session_id="", path=session_workspace(profile_id), recursive=True
+            )
+        # The profile stays set up on the instance: the next stop closes
+        # Chrome and saves the new profile.
+        with tenant_scope(ref.tenant_id):
+            delete_session_archives(
+                tenant_cache, self._archive_store, ref.sandbox_id, profile_id
+            )
+
     # Exec
 
     def _session_vm(
@@ -541,10 +718,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
 
         if set_up():
             return placed, daemon
-        with tenant_cache.lock(
-            f"{_SESSION_SETUP_LOCK_PREFIX}{ref.sandbox_id}:{ref.session_id}",
-            timeout=_SESSION_SETUP_LOCK_SECONDS,
-        ):
+        with _session_setup_lock(tenant_cache, ref.sandbox_id, ref.session_id):
             if set_up():
                 return placed, daemon
             if self._archive_store is not None:
@@ -651,8 +825,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 ExecCommand(
                     argv=["bash", "-c", cmd],
                     cwd=workdir or "",
-                    # Each chat session drives its own browser in the shared VM.
-                    env={"AGENT_BROWSER_SESSION": str(ref.session_id)},
                     stdin=True,
                     deadline_seconds=EXEC_DEADLINE_SECONDS,
                     labels=start_label,
@@ -1316,7 +1488,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             tenant_cache.get(SESSION_INSTANCES_PREFIX + str(sandbox_id)) or b"{}"
         )
         sessions = set(get_ids(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id))
-        sessions |= {str(s) for s in session_ids or []}
+        # The browser profile is the session named by the sandbox ID.
+        sessions |= {str(s) for s in [*(session_ids or []), sandbox_id]}
         with tenant_scope(tenant_id):
             for session_id in sorted(sessions | set(instances.sessions)):
                 try:
@@ -1379,6 +1552,42 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 attempt=placement.attempt,
                 generation=placement.generation,
             )
+
+
+def _session_setup_lock(
+    cache: CacheBackend, sandbox_id: UUID, session_id: UUID
+) -> CacheLock:
+    return cache.lock(
+        f"{_SESSION_SETUP_LOCK_PREFIX}{sandbox_id}:{session_id}",
+        timeout=_SESSION_SETUP_LOCK_SECONDS,
+    )
+
+
+class _DialBrowserStream(BrowserStream):
+    """A live view over one Dial stream on its own aio channel."""
+
+    def __init__(self, channel: grpc.aio.Channel, dial: AsyncDialStream) -> None:
+        self._channel = channel
+        self._dial = dial
+        self._decoder = FrameDecoder()
+        self._frames: deque[BrowserFrame] = deque()
+
+    async def send(self, frame: BrowserFrame) -> None:
+        await self._dial.write(encode_frame(frame))
+
+    async def receive(self) -> BrowserFrame | None:
+        while not self._frames:
+            data = await self._dial.read()
+            if data is None:
+                if self._decoder.pending_bytes:
+                    raise BrowserFramingError("the browser closed inside a message")
+                return None
+            self._frames.extend(self._decoder.feed(data))
+        return self._frames.popleft()
+
+    async def aclose(self) -> None:
+        self._dial.cancel()
+        await self._channel.close()
 
 
 def _raise_first(errors: list[Exception], what: str) -> None:

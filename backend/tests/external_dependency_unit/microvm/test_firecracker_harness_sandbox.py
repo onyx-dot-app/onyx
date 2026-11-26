@@ -335,7 +335,7 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     # The daemon makes the session directory and uses it as the default cwd.
     assert command.session_id == str(ref.session_id)
     assert command.cwd == ""
-    assert command.env == {"AGENT_BROWSER_SESSION": str(ref.session_id)}
+    assert command.env == {}
 
 
 def test_exec_command_reports_a_failed_command_and_relative_workdir(

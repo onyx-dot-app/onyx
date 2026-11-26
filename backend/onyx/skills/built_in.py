@@ -293,8 +293,9 @@ def built_in_skills_usage() -> SkillUsage:
 
 
 # Each must run in the chat VM without Onyx API access and have no template:
-# every chat VM gets the same files.
-CHAT_BUILT_IN_SKILL_IDS: Final[frozenset[str]] = frozenset({"pptx", "browser"})
+# every chat VM gets the same files. Chats browse with the browser tools
+# (browser_tools.py), not the browser skill.
+CHAT_BUILT_IN_SKILL_IDS: Final[frozenset[str]] = frozenset({"pptx"})
 
 
 # Named handles so callers avoid bare identity literals.

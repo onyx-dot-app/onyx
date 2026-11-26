@@ -76,6 +76,10 @@ _WINDOW_MARGIN_SECONDS = 5.0
 _TRANSFER_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 600.0)
 # WriteFile/UploadFile data messages (the daemon accepts up to 4 MiB).
 _WRITE_CHUNK_BYTES = 1 << 20
+# BrowserStart waits for Chrome and then the browser service to answer.
+_BROWSER_START_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 60.0)
+# BrowserStop kills what is left of Chrome after 5 s.
+_BROWSER_STOP_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 20.0)
 # The guest daemon's caps on one StatFiles call.
 STAT_FILES_MAX_PATHS = 1000
 STAT_FILES_MAX_PATH_BYTES = 1 << 20
@@ -568,6 +572,35 @@ class SandboxDaemonClient:
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e
         return [_execution(x) for x in r.executions]
+
+    # Browser: the VM's one Chrome and its browser service, owned by the
+    # daemon (BROWSER_SERVICE_PORT in browser_protocol).
+
+    def browser_start(self, *, profile_session_id: str) -> None:
+        """Make sure that Chrome, with the profile in the session directory
+        `profile_session_id/chrome`, and the browser service run. A daemon
+        without a browser raises UNIMPLEMENTED; a failed start
+        BROWSER_START_FAILED."""
+        try:
+            self._stub.BrowserStart(
+                sandboxd_pb2.BrowserStartRequest(profile_session_id=profile_session_id),
+                metadata=self._authed(),
+                timeout=_BROWSER_START_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+
+    def browser_stop(self) -> None:
+        """Stop the browser service, then close Chrome cleanly so that it
+        writes its cookies to the profile."""
+        try:
+            self._stub.BrowserStop(
+                sandboxd_pb2.BrowserStopRequest(),
+                metadata=self._authed(),
+                timeout=_BROWSER_STOP_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
 
     # Files. Paths are relative to /home/onyx/workspaces/<session_id>/; with
     # session_id="" they are absolute VM paths (not upload or saves).

@@ -179,6 +179,7 @@ from onyx.server.oidc_multi import router as oidc_multi_router
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.pat.api import router as pat_router
 from onyx.server.query_and_chat.chat_backend import router as chat_router
+from onyx.server.query_and_chat.chat_browser import router as chat_browser_router
 from onyx.server.query_and_chat.query_backend import admin_router as admin_query_router
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.server.saml_multi import router as saml_multi_router
@@ -610,6 +611,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, chat_browser_router)
     include_router_with_global_prefix_prepended(application, scheduled_tasks_router)
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)
