@@ -16,12 +16,12 @@ from mock_llm.profiles import turn_profile
 from mock_llm.response_plan import Knobs, prepare_response
 from onyx_client.stream_parser import ChatStreamAnalyzer
 
-from .fixtures import EXEC_TOOL, INTERNAL_SEARCH_TOOL, WAIT_TOOL
+from .fixtures import INTERNAL_SEARCH_TOOL, RUN_TOOL, WAIT_TOOL
 
 client = TestClient(app)
 MODEL = "mock-profile-search-v1-ttft0-itl0"
 BATCHED = "mock-profile-search-v1-codebatched-ttft0-itl0"
-CODE_TOOLS = [EXEC_TOOL, WAIT_TOOL]
+CODE_TOOLS = [RUN_TOOL, WAIT_TOOL]
 
 
 def question_for(rounds: int, seed: int = 0) -> str:
@@ -84,7 +84,7 @@ def run_turn(
         for call in calls:
             content = (
                 observation(step + 1, [step * 100 + 1, step * 100 + 2])
-                if call["function"]["name"] == "exec"
+                if call["function"]["name"] == "execute_code"
                 else json.dumps({"results": [{"document": step * 100 + 1}]})
             )
             messages.append(
@@ -104,7 +104,8 @@ def test_per_round_programs_follow_the_direct_plan(rounds: int) -> None:
     steps, answer = run_turn(MODEL, CODE_TOOLS, question)
     assert len(steps) == rounds
     assert all(
-        len(calls) == 1 and calls[0]["function"]["name"] == "exec" for calls in steps
+        len(calls) == 1 and calls[0]["function"]["name"] == "execute_code"
+        for calls in steps
     )
     programs = [
         json.loads(calls[0]["function"]["arguments"])["code"] for calls in steps
@@ -187,11 +188,11 @@ def reply(
 
 
 def test_search_profile_runs_no_program_without_internal_search() -> None:
-    description = EXEC_TOOL["function"]["description"]
+    description = RUN_TOOL["function"]["description"]
     web_only = {
-        **EXEC_TOOL,
+        **RUN_TOOL,
         "function": {
-            **EXEC_TOOL["function"],
+            **RUN_TOOL["function"],
             "description": description.replace("internal_search", "other_search"),
         },
     }
@@ -200,7 +201,7 @@ def test_search_profile_runs_no_program_without_internal_search() -> None:
         json.loads(call["function"]["arguments"])["code"]
         for calls in steps
         for call in calls
-        if call["function"]["name"] == "exec"
+        if call["function"]["name"] == "execute_code"
     ]
     assert programs == []
 
@@ -214,7 +215,7 @@ def test_running_cell_gets_wait_then_the_plan_continues() -> None:
     assert json.loads(wait[0]["function"]["arguments"]) == {"cell_id": 3}
     reply(messages, wait, observation(3, [4]))
     second = next_calls(MODEL, messages)
-    assert second[0]["function"]["name"] == "exec"
+    assert second[0]["function"]["name"] == "execute_code"
     assert searches(json.loads(second[0]["function"]["arguments"])["code"]) == [
         [question + " implementation"]
     ]
@@ -247,7 +248,7 @@ def test_a_later_turn_runs_its_own_program(model: str) -> None:
     history.append({"role": "assistant", "content": answer})
 
     later, _ = run_turn(model, CODE_TOOLS, question, history)
-    assert later[0][0]["function"]["name"] == "exec"
+    assert later[0][0]["function"]["name"] == "execute_code"
 
 
 def test_streamed_program_arguments_reassemble() -> None:

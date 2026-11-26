@@ -1,5 +1,7 @@
 """Owned tools author strict schemas; external schemas keep their contracts."""
 
+from unittest.mock import MagicMock
+
 import pytest
 from jsonschema import Draft202012Validator
 from pydantic import JsonValue
@@ -27,6 +29,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 
 
@@ -36,6 +39,8 @@ def _builtin_definition(tool_class: type[Tool]) -> ToolDefinition:
     if isinstance(tool, OpenURLTool):
         tool._web_fetch_disabled = False
         tool.shape = OPEN_URL_SHAPES[ToolFamily.OPENAI]
+    if isinstance(tool, WebSearchTool):
+        tool._provider = MagicMock(spec=WebSearchProvider, supports_site_filter=True)
     return tool.tool_definition()
 
 

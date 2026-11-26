@@ -133,6 +133,7 @@ from onyx.llm.model_response import (
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
+    SystemMessage,
     TextContent,
     TextContentPart,
     ToolCall,
@@ -191,7 +192,7 @@ from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.tools.constants import (
     EXEC_COMMAND_TOOL_NAME,
-    EXEC_TOOL_NAME,
+    EXECUTE_CODE_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
     LOAD_SKILL_TOOL_NAME,
     POSTGRES_TOOL_NAME,
@@ -1723,12 +1724,15 @@ def test_claude_models_get_edit_and_write_and_others_apply_patch(
     assert offered & (file_tools | {ApplyPatchTool.NAME}) == (
         file_tools if claude else {ApplyPatchTool.NAME}
     )
-    # The system prompt's sandbox section names the turn's file tools.
-    assert (
-        "edit files with `edit` and create or overwrite files with `write`."
-        if claude
-        else "edit files with `apply_patch`."
-    ) in str(request["prompt"])
+    # The file tools say that the user sees each change as a diff.
+    descriptions = {
+        tool["function"]["name"]: tool["function"]["description"]
+        for tool in request.get("tools") or []
+    }
+    assert all(
+        "The user sees the change as a diff." in descriptions[name]
+        for name in (file_tools if claude else {ApplyPatchTool.NAME})
+    )
 
 
 @pytest.mark.usefixtures("node")
@@ -1828,10 +1832,6 @@ def test_a_program_edits_and_writes_files(
     )
     chat.send(llm, code_mode=True)
 
-    assert (
-        "edit files with `tools.edit` and create or overwrite files with "
-        "`tools.write`." in str(llm.requests[0]["prompt"])
-    )
     text = last_tool_text(llm, "code")
     assert "File created successfully at: a.txt" in text
     assert "The file a.txt has been updated successfully." in text
@@ -2048,7 +2048,9 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
                 ),
                 ToolCall(
                     id="exec",
-                    name=EXEC_TOOL_NAME if code_mode else EXEC_COMMAND_TOOL_NAME,
+                    name=EXECUTE_CODE_TOOL_NAME
+                    if code_mode
+                    else EXEC_COMMAND_TOOL_NAME,
                     arguments={"code": "await tools.exec_command(cmd='echo hi')"}
                     if code_mode
                     else {"cmd": "echo hi"},
@@ -3613,7 +3615,9 @@ def _spills(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
 def _note(path: str, size: int, body: str, *, code_mode: bool = False) -> str:
     """The model's note of a spilled result."""
     # In code mode the shell is a function of programs.
-    read_with = "tools.exec_command in exec programs" if code_mode else "exec_command"
+    read_with = (
+        "tools.exec_command in execute_code programs" if code_mode else "exec_command"
+    )
     return (
         f'<persisted-output path="{path}" bytes={size}>\n{body}\n'
         f"Read the file with {read_with} (grep, sed, head, tail). It lasts while "
@@ -4168,7 +4172,7 @@ def test_parallel_cells_over_their_limit_spill_in_one_step_past_the_budget(
                 id=call_id,
                 index=index,
                 function=ResponseFunctionCall(
-                    name="exec",
+                    name="execute_code",
                     arguments=json.dumps(
                         {"code": _ROWS_PROGRAM, "max_output_tokens": 1_250}
                     ),
@@ -4800,23 +4804,23 @@ def test_a_hosted_agent_run_copies_the_chat_files(
     attach: Attach,
 ) -> None:
     """An agent host runs a worker whose sandbox call copies the chat's
-    files, so a worker on a VM that lost them gets them again. Its
-    exec_command describes the chat's files as the root's does."""
+    files, so a worker on a VM that lost them gets them again. Its system
+    prompt describes the chat's files as the root's does."""
     monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", False)
-    exec_descriptions: dict[str, str] = {}
+    system_prompts: dict[str, str] = {}
 
     def generate(
         request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
         texts = [message.text for message in request.messages]
-        [description] = [
-            tool.description
-            for tool in request.tools
-            if tool.name == EXEC_COMMAND_TOOL_NAME
-        ]
+        system_prompt = "\n".join(
+            message.text
+            for message in request.messages
+            if isinstance(message, SystemMessage)
+        )
         if "Initial task" in texts:
-            if "Follow up" in texts and "hosted" not in exec_descriptions:
-                exec_descriptions["hosted"] = description
+            if "Follow up" in texts and "hosted" not in system_prompts:
+                system_prompts["hosted"] = system_prompt
                 return AssistantMessage(
                     content=[
                         ToolCall(
@@ -4830,9 +4834,9 @@ def test_a_hosted_agent_run_copies_the_chat_files(
                 # Keep this turn active until its background copy finishes.
                 _wait_until(lambda: _attachments(node, ref) == copied)
             return AssistantMessage(content=[TextContent(text="Worker done.")])
-        if "root" in exec_descriptions:
+        if "root" in system_prompts:
             return AssistantMessage(content=[TextContent(text="Started.")])
-        exec_descriptions["root"] = description
+        system_prompts["root"] = system_prompt
         return AssistantMessage(
             content=[
                 ToolCall(
@@ -4928,8 +4932,8 @@ def test_a_hosted_agent_run_copies_the_chat_files(
     hosted_generation = cache.get(copy_generation_key(chat.chat_session_id))
     assert hosted_generation is not None
     assert int(hosted_generation) > int(generation)
-    assert exec_descriptions["root"].endswith(CHAT_FILES_LAYOUT)
-    assert exec_descriptions["hosted"] == exec_descriptions["root"]
+    assert CHAT_FILES_LAYOUT in system_prompts["root"]
+    assert CHAT_FILES_LAYOUT in system_prompts["hosted"]
 
 
 @pytest.mark.usefixtures("sandbox", "node")
