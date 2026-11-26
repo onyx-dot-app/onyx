@@ -50,3 +50,14 @@ test("a match in a closed details opens it; one in its summary does not", () => 
   revealFoldedMatch(inBody, root);
   expect(details.open).toBe(true);
 });
+
+test("a match after a CRLF covers the matched text in the node", () => {
+  const root = document.createElement("div");
+  const scope = document.createElement("p");
+  scope.setAttribute("data-chat-find-text", "row-1");
+  scope.textContent = "a\r\nfoo";
+  root.append(scope);
+
+  const ranges = collectChatFindRanges(root, "foo").get("row-1") ?? [];
+  expect(ranges.map((range) => range.toString())).toEqual(["foo"]);
+});

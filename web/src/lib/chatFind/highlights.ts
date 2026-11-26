@@ -84,7 +84,9 @@ export function collectChatFindRanges(
     ranges.set(key, scopeRanges);
 
     let text = "";
-    let nodes: { node: Node; start: number; end: number }[] = [];
+    // `map` turns a node's offset in `text` into its offset in the node:
+    // a CRLF is one space in `text` but two characters in the node.
+    let nodes: { node: Node; start: number; end: number; map: number[] }[] = [];
     const flush = () => {
       let startIndex = 0;
       let endIndex = 0;
@@ -106,8 +108,8 @@ export function collectChatFindRanges(
         const end = nodes[endIndex];
         if (!start || !end) continue;
         const range = document.createRange();
-        range.setStart(start.node, offset - start.start);
-        range.setEnd(end.node, offset + query.length - end.start);
+        range.setStart(start.node, start.map[offset - start.start] ?? 0);
+        range.setEnd(end.node, end.map[offset + query.length - end.start] ?? 0);
         scopeRanges.push(range);
       }
       text = "";
@@ -122,9 +124,16 @@ export function collectChatFindRanges(
         node instanceof Element && BLOCK_TAGS.has(node.tagName.toLowerCase());
       if (block) flush();
       if (node.nodeType === Node.TEXT_NODE) {
+        const raw = node.nodeValue ?? "";
         const start = text.length;
-        text += (node.nodeValue ?? "").replace(/\r?\n/g, " ");
-        nodes.push({ node, start, end: text.length });
+        const map: number[] = [];
+        for (let i = 0; i < raw.length; i++) {
+          map.push(i);
+          if (raw[i] === "\r" && raw[i + 1] === "\n") i++;
+          text += raw[i] === "\n" ? " " : raw[i];
+        }
+        map.push(raw.length);
+        nodes.push({ node, start, end: text.length, map });
       }
       node.childNodes.forEach(visit);
       if (block) flush();
