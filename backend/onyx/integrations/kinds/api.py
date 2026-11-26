@@ -204,14 +204,6 @@ class ApiKindHandler(IntegrationKindHandler):
     request), or a CUSTOM ``external_app`` (one action for all of its URLs, and
     no chat tools)."""
 
-    def _openapi_config(
-        self, integration: Integration, db_session: Session
-    ) -> ApiConfig | None:
-        if integration.api_app_id is None:
-            return None
-        app = get_api_app_for_integration(integration.id, db_session)
-        return self.config_from_api_app(app) if app is not None else None
-
     @staticmethod
     def config_from_api_app(app: ApiApp) -> ApiConfig | None:
         if app.api_type is ApiAppType.GRAPHQL and app.graphql_schema is not None:
@@ -239,9 +231,11 @@ class ApiKindHandler(IntegrationKindHandler):
         )
 
     def load_config(self, integration: Integration, db_session: Session) -> ApiConfig:
-        config = self._openapi_config(integration, db_session)
-        if config is not None:
-            return config
+        if integration.api_app_id is not None:
+            app = get_api_app_for_integration(integration.id, db_session)
+            config = self.config_from_api_app(app) if app is not None else None
+            if config is not None:
+                return config
         return self.config_from_external_app(
             self._external_app(integration, db_session)
         )
@@ -274,9 +268,7 @@ class ApiKindHandler(IntegrationKindHandler):
     ) -> list[IntegrationActionSpec]:
         """Makes no network call."""
         config = self.load_config(integration, db_session)
-        if config.shape is ApiShape.OPENAPI:
-            if config.openapi_spec is None:
-                return []
+        if config.shape is ApiShape.OPENAPI and config.openapi_spec is not None:
             try:
                 return [
                     openapi_action_spec(spec)
