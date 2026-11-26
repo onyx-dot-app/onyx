@@ -12781,8 +12781,8 @@
                 "status": "{count, plural, =0 {Application du correctif…} one {Application du correctif à # fichier…} other {Application du correctif à # fichiers…}}"
               }
             },
-            "deleted": {
-              "label": "Fichier supprimé"
+            "noLines": {
+              "label": "{change, select, delete {Supprimer le fichier} other {Fichier vide}}"
             }
           },
           "stopped": {
@@ -13065,9 +13065,6 @@
       "lineCount": {
         "label": "{count, plural, one {# ligne} other {# lignes}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# mot} other {# mots}}"
-      },
       "copyButton": {
         "tooltip": "Copier le contenu"
       },
@@ -13091,6 +13088,13 @@
       "renderError": {
         "title": "Impossible de prévisualiser ce fichier",
         "description": "Le fichier ne peut pas être affiché ici. Téléchargez le fichier pour l’ouvrir."
+      },
+      "unavailable": {
+        "title": "Aucun aperçu pour ce fichier",
+        "description": "Impossible de créer un aperçu de ce fichier. Téléchargez le fichier pour l’ouvrir."
+      },
+      "preparing": {
+        "status": "Préparation de l’aperçu. Cela peut prendre un peu de temps."
       },
       "unsupported": {
         "title": "L’aperçu de ce type de fichier n’est pas disponible actuellement",
@@ -13139,30 +13143,6 @@
         },
         "error": {
           "description": "Le fichier PDF n'a pas pu être chargé."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Commandes de présentation"
-        },
-        "thumbnails": {
-          "toggle": "Afficher ou masquer les miniatures des diapositives",
-          "resize": "Redimensionner les miniatures des diapositives"
-        },
-        "slides": {
-          "label": "Diapositives"
-        },
-        "previous": {
-          "label": "Diapositive précédente"
-        },
-        "next": {
-          "label": "Diapositive suivante"
-        },
-        "slide": {
-          "counter": "Diapositive {current} sur {total}"
-        },
-        "empty": {
-          "label": "Aucune diapositive dans cette présentation"
         }
       }
     },

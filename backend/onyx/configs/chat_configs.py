@@ -129,3 +129,8 @@ CODE_MODE_ENABLED = os.environ.get("CODE_MODE_ENABLED", "false").lower() == "tru
 DISABLE_POSTGRES_QUERY_TOOL = (
     os.environ.get("DISABLE_POSTGRES_QUERY_TOOL", "false").lower() == "true"
 )
+# "true" removes postgres_query's document content filter, which matches
+# document text in the vector DB.
+DISABLE_POSTGRES_QUERY_CONTENT_FILTER = (
+    os.environ.get("DISABLE_POSTGRES_QUERY_CONTENT_FILTER", "false").lower() == "true"
+)

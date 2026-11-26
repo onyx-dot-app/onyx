@@ -12781,8 +12781,8 @@
                 "status": "{count, plural, =0 {Aplicando patch aos arquivos…} one {Aplicando patch a # arquivo…} other {Aplicando patch a # arquivos…}}"
               }
             },
-            "deleted": {
-              "label": "Arquivo excluído"
+            "noLines": {
+              "label": "{change, select, delete {Excluir arquivo} other {Arquivo vazio}}"
             }
           },
           "stopped": {
@@ -13065,9 +13065,6 @@
       "lineCount": {
         "label": "{count, plural, one {# linha} other {# linhas}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# palavra} other {# palavras}}"
-      },
       "copyButton": {
         "tooltip": "Copiar conteúdo"
       },
@@ -13091,6 +13088,13 @@
       "renderError": {
         "title": "Não é possível visualizar este arquivo",
         "description": "Não foi possível exibir o arquivo aqui. Baixe o arquivo para abri-lo."
+      },
+      "unavailable": {
+        "title": "Nenhuma prévia para este arquivo",
+        "description": "Não é possível criar uma prévia deste arquivo. Baixe o arquivo para abri-lo."
+      },
+      "preparing": {
+        "status": "Preparando a prévia. Isso pode levar algum tempo."
       },
       "unsupported": {
         "title": "A prévia deste tipo de arquivo não é compatível no momento",
@@ -13139,30 +13143,6 @@
         },
         "error": {
           "description": "Não foi possível carregar o arquivo PDF."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Controles da apresentação"
-        },
-        "thumbnails": {
-          "toggle": "Mostrar ou ocultar miniaturas dos slides",
-          "resize": "Redimensionar miniaturas dos slides"
-        },
-        "slides": {
-          "label": "Slides"
-        },
-        "previous": {
-          "label": "Slide anterior"
-        },
-        "next": {
-          "label": "Próximo slide"
-        },
-        "slide": {
-          "counter": "Slide {current} de {total}"
-        },
-        "empty": {
-          "label": "Esta apresentação não tem slides"
         }
       }
     },

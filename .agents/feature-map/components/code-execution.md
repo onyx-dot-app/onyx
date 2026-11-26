@@ -435,14 +435,18 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         directory; a regular file of at most
                                         PUBLISH_FILES_MAX_BYTES, 100 MiB); for a .pdf,
                                         .pptx or .docx of at most 20 MiB,
-                                        HarnessSandbox.render_first_page (typed argv
-                                        execs, no shell: soffice to a PDF for Office
-                                        files, then pdftoppm to a 640 px JPEG, in a
-                                        scratch directory under ONYX_VM_FILES_ROOT; all
-                                        renders of the call share one 30 s budget from
-                                        when the call has its sandbox (after
-                                        SandboxTurn.start_call), and files after it get
-                                        none; None on failure); then
+                                        HarnessSandbox.render_preview with the first
+                                        page (typed argv execs, no shell: soffice to a
+                                        PDF for Office files, then pdftoppm to a 640 px
+                                        JPEG, in a scratch directory under
+                                        ONYX_VM_FILES_ROOT; the JPEG and an Office
+                                        file's PDF come back, each None when it fails
+                                        or is too large; all renders of the call share
+                                        one 30 s budget from the call's first read,
+                                        which wakes the VM, and files after it get
+                                        none; a file that the converter rejects, whose
+                                        render runs out of budget or raises, publishes
+                                        without them; a Stop stops the publish); then
                                         db/chat.save_chat_artifact: a CHAT_ARTIFACT file
                                         record and the next version of the chat_artifact
                                         of its VM path in the SandboxTurn's chat session

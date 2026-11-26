@@ -41,12 +41,20 @@ from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from typing import IO
 from uuid import UUID
 
+from onyx.file_processing.file_types import (
+    OFFICE_MIME_TYPES_BY_EXTENSION,
+    PRESENTATION_MIME_TYPE,
+    WORD_PROCESSING_MIME_TYPE,
+)
 from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     FileSet,
     HarnessSandboxRef,
+    RenderedPreview,
+    RenderFileBytes,
+    RenderSessionFile,
     SandboxPathInfo,
     session_workspace,
 )
@@ -84,18 +92,38 @@ ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
 # deletes the directory again and raises HarnessSandboxError.
 TOOL_RESULTS_ROOT = f"{ONYX_VM_FILES_ROOT}/tool-results"
 
-# render_first_page: a JPEG of a file's first page, at most this many pixels on
-# its longer side, drawn in a scratch directory of its own under this root.
-RENDER_FIRST_PAGE_SIZE_PX = 640
-RENDER_FIRST_PAGE_ROOT = f"{ONYX_VM_FILES_ROOT}/renders"
-# The suffixes it draws: a PDF directly, Office files through LibreOffice.
-RENDER_FIRST_PAGE_SUFFIXES = frozenset({".pdf", ".pptx", ".docx"})
-# Largest file that callers render, and largest JPEG that it reads back.
-RENDER_FIRST_PAGE_MAX_INPUT_BYTES = 20 << 20
-RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES = 4 << 20
-# The renders of one publish call end by this budget, which starts once
-# the call has its sandbox. A file after it publishes without a thumbnail.
-RENDER_FIRST_PAGE_BUDGET_SECONDS = 30.0
+# render_preview: the longer side, in pixels, of the JPEG of a file's first
+# page, and the root of each render's own scratch directory.
+RENDER_PREVIEW_SIZE_PX = 640
+RENDER_PREVIEW_ROOT = f"{ONYX_VM_FILES_ROOT}/renders"
+# The Office types that LibreOffice converts to a PDF, which the render
+# returns. The web's list is OFFICE_MIME_TYPES in
+# web/src/lib/filePreview/format.ts.
+RENDER_PREVIEW_PDF_MIME_TYPES = frozenset(
+    {PRESENTATION_MIME_TYPE, WORD_PROCESSING_MIME_TYPE}
+)
+# The suffixes it draws: a PDF directly, the Office types above through
+# LibreOffice.
+RENDER_PREVIEW_SUFFIXES = frozenset(
+    {
+        ".pdf",
+        *(
+            suffix
+            for suffix, mime_type in OFFICE_MIME_TYPES_BY_EXTENSION.items()
+            if mime_type in RENDER_PREVIEW_PDF_MIME_TYPES
+        ),
+    }
+)
+# Largest file that callers render, and largest JPEG and PDF that it reads
+# back. The PDF limit matches PREVIEW_BYTE_LIMITS.pdf in
+# web/src/lib/filePreview/loadChatFilePreview.ts.
+RENDER_PREVIEW_MAX_INPUT_BYTES = 20 << 20
+RENDER_PREVIEW_MAX_OUTPUT_BYTES = 4 << 20
+RENDER_PREVIEW_MAX_PDF_BYTES = 100 << 20
+# The renders of one publish call, or the render of one preview request, end
+# by this budget, which starts once the sandbox's VM runs. A publish file
+# after it publishes without a thumbnail or a PDF.
+RENDER_PREVIEW_BUDGET_SECONDS = 30.0
 
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
@@ -240,6 +268,11 @@ class SandboxFileTooLargeError(HarnessSandboxError):
 class SandboxFileNotFoundError(HarnessSandboxError):
     def __init__(self, path: str) -> None:
         super().__init__(f"{path!r} does not exist")
+
+
+class RenderBudgetSpentError(TimeoutError):
+    """A render ran out of its budget, which starts once the VM runs, so a
+    retry of the file most likely runs out too."""
 
 
 def session_relative_path(session_id: UUID, path: str) -> str:
@@ -421,16 +454,27 @@ class HarnessSandbox(abc.ABC):
         HarnessSandboxError for a purged session."""
 
     @abc.abstractmethod
-    def render_first_page(
-        self, ref: HarnessSandboxRef, path: str, *, until: float
-    ) -> bytes | None:
-        """A JPEG of the first page of a file with a RENDER_FIRST_PAGE_SUFFIXES
-        suffix, at a path that `read_file` accepts, RENDER_FIRST_PAGE_SIZE_PX
-        on its longer side, drawn by the VM's poppler and LibreOffice by
-        `until` (time.monotonic()). Callers pass files up to
-        RENDER_FIRST_PAGE_MAX_INPUT_BYTES. Returns None, and logs why, on any
-        failure. A cancel of the current signal kills the render and raises
-        AgentCancelled."""
+    def render_preview(
+        self,
+        source: RenderSessionFile | RenderFileBytes,
+        *,
+        first_page: bool,
+        budget_seconds: float,
+    ) -> RenderedPreview | None:
+        """Render a file with a RENDER_PREVIEW_SUFFIXES suffix, up to
+        RENDER_PREVIEW_MAX_INPUT_BYTES, with the VM's LibreOffice and
+        poppler: the PDF that LibreOffice makes of an Office file, and with
+        `first_page`, a JPEG of the first page, RENDER_PREVIEW_SIZE_PX on its
+        longer side. The callers ask for the first page or pass an Office
+        file. The budget starts once the sandbox's VM runs.
+
+        Returns None, and logs why, when the converter rejects the file: a
+        step fails, or LibreOffice makes no PDF. An output that is too large,
+        or a first page that poppler cannot draw from a converted PDF, is
+        None in the result. Raises RenderBudgetSpentError when the budget
+        runs out, and the sandbox's own errors when the sandbox cannot be
+        reached, after which a retry can succeed. A cancel of the current
+        signal kills the render and raises AgentCancelled."""
 
     @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:
