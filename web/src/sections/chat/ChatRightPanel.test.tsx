@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
+import { IncognitoProvider, useIncognito } from "@/providers/IncognitoProvider";
 import { fileResponse } from "@tests/setup/fileResponse";
 import {
   PacketType,
@@ -30,6 +31,7 @@ import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import {
   type ComponentProps,
   type ReactNode,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -145,10 +147,12 @@ function Chat({
   replies,
   workspaceWidth = 0,
   retrieval = true,
+  incognito = false,
 }: {
   replies: PublishedFile[][];
   workspaceWidth?: number;
   retrieval?: boolean;
+  incognito?: boolean;
 }) {
   const sourcesOpen = useSourcesShown();
   const panelOpen = useRightPanelShown();
@@ -162,26 +166,35 @@ function Chat({
     [panelToggleSlot]
   );
   return (
-    <AppWorkspaceElementsContext.Provider value={elements}>
-      <div ref={workspace} data-workspace-width={workspaceWidth}>
-        <div ref={setPanelToggleSlot} />
-        <PublishedFilesPanelContext.Provider
-          value={{ ...CHAT_FILES_PANEL, chatId: "session" }}
-        >
-          <div ref={page} data-testid="page">
-            {replies.map((files, index) => (
-              <PublishedFileCards key={index} files={files} />
-            ))}
-          </div>
-          <CurrentChatRightPanel
-            open={panelOpen && (retrieval || !sourcesOpen)}
-            sources={SOURCES}
-            hasSources
-          />
-        </PublishedFilesPanelContext.Provider>
-      </div>
-    </AppWorkspaceElementsContext.Provider>
+    <IncognitoProvider>
+      {incognito && <IncognitoOn />}
+      <AppWorkspaceElementsContext.Provider value={elements}>
+        <div ref={workspace} data-workspace-width={workspaceWidth}>
+          <div ref={setPanelToggleSlot} />
+          <PublishedFilesPanelContext.Provider
+            value={{ ...CHAT_FILES_PANEL, chatId: "session" }}
+          >
+            <div ref={page} data-testid="page">
+              {replies.map((files, index) => (
+                <PublishedFileCards key={index} files={files} />
+              ))}
+            </div>
+            <CurrentChatRightPanel
+              open={panelOpen && (retrieval || !sourcesOpen)}
+              sources={SOURCES}
+              hasSources
+            />
+          </PublishedFilesPanelContext.Provider>
+        </div>
+      </AppWorkspaceElementsContext.Provider>
+    </IncognitoProvider>
   );
+}
+
+function IncognitoOn() {
+  const { setIncognitoEnabled } = useIncognito();
+  useEffect(() => setIncognitoEnabled(true), [setIncognitoEnabled]);
+  return null;
 }
 
 const SOURCES = <p>Cited documents</p>;
@@ -885,15 +898,17 @@ function Chrome({
   );
   onRender?.();
   return (
-    <RootLayoutRightPanelSlotContext.Provider value={setSlot}>
-      <AppWorkspaceElementsContext.Provider value={elements}>
-        <div ref={workspace} data-workspace-width={1000}>
-          <div ref={setPanelToggleSlot} />
-          <div ref={page}>{children}</div>
-          <div data-testid="slot">{slot}</div>
-        </div>
-      </AppWorkspaceElementsContext.Provider>
-    </RootLayoutRightPanelSlotContext.Provider>
+    <IncognitoProvider>
+      <RootLayoutRightPanelSlotContext.Provider value={setSlot}>
+        <AppWorkspaceElementsContext.Provider value={elements}>
+          <div ref={workspace} data-workspace-width={1000}>
+            <div ref={setPanelToggleSlot} />
+            <div ref={page}>{children}</div>
+            <div data-testid="slot">{slot}</div>
+          </div>
+        </AppWorkspaceElementsContext.Provider>
+      </RootLayoutRightPanelSlotContext.Provider>
+    </IncognitoProvider>
   );
 }
 
@@ -1448,6 +1463,16 @@ describe("the chat's browser", () => {
     );
     expect(panel().browserOpen).toBe(false);
     expect(socket().readyState).toBe(3);
+  });
+
+  test("an incognito chat's + menu offers no browser", async () => {
+    setReplies([[REPORT]]);
+    render(<Chat replies={[[REPORT]]} incognito />);
+    update({ type: "showTab", tabId: "files" });
+    fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
+    expect(
+      (await screen.findAllByRole("menuitem")).map((item) => item.textContent)
+    ).toEqual(["Files", "Sources"]);
   });
 
   test("Browser in the + menu opens a new page and shows it", async () => {
