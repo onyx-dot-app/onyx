@@ -135,3 +135,20 @@ test("a final newline and the end-of-file marker add no rows", () => {
   const full = parseApplyPatch(`*** Add File: a.txt\n${rows}\n*** End Patch\n`);
   expect(full.omittedLines).toBe(0);
 });
+
+test("each file keeps its operation, and files past the line limit are counted", () => {
+  const rows = Array.from({ length: 2000 }, (_, i) => `+l${i}`).join("\n");
+  const parsed = parseApplyPatch(
+    `*** Begin Patch\n*** Add File: a.txt\n${rows}\n*** Delete File: gone.py\n*** End Patch`
+  );
+  expect(parsed.files.map((file) => [file.path, file.change])).toEqual([
+    ["a.txt", "add"],
+  ]);
+  expect(parsed.omittedFiles).toBe(1);
+
+  const small = parseApplyPatch(
+    "*** Begin Patch\n*** Delete File: gone.py\n*** Update File: a.py\n@@\n-x\n+y\n*** End Patch"
+  );
+  expect(small.files.map((file) => file.change)).toEqual(["delete", "update"]);
+  expect(small.omittedFiles).toBe(0);
+});
