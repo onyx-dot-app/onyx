@@ -706,8 +706,17 @@ export default function AgentEditorPage({
       if (values.code_interpreter && codeInterpreterTool) {
         toolIds.push(codeInterpreterTool.id);
       }
-      if (values.browser && browserTool) {
-        toolIds.push(browserTool.id);
+      // Browser is hidden while the admin has it off; keep the agent's saved one.
+      const savedBrowserTool = existingAgent?.tools?.find(
+        (tool) => tool.in_code_tool_id === BROWSER_TOOL_ID
+      );
+      const keptBrowserTool = browserTool
+        ? values.browser
+          ? browserTool
+          : undefined
+        : savedBrowserTool;
+      if (keptBrowserTool) {
+        toolIds.push(keptBrowserTool.id);
       }
 
       // Build submission data
