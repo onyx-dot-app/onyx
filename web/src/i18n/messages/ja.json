@@ -12807,7 +12807,31 @@
               "status": "{phase, select, running {ページを読み取っています} failed {ページを読み取れませんでした} canceled {キャンセルしました} other {ページを読み取りました}}"
             },
             "act": {
-              "status": "{phase, select, running {ページを操作しています} failed {ページを操作できませんでした} canceled {キャンセルしました} other {ページを操作しました}}"
+              "status": "{phase, select, running {ページを操作しています} failed {ページを操作できませんでした} canceled {キャンセルしました} other {ページを操作しました}}",
+              "click": {
+                "status": "{phase, select, running {要素をクリックしています} failed {要素をクリックできませんでした} canceled {キャンセルしました} other {要素をクリックしました}}"
+              },
+              "type": {
+                "status": "{phase, select, running {「{text}」を入力しています} failed {「{text}」を入力できませんでした} canceled {キャンセルしました} other {「{text}」を入力しました}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {要素にカーソルを合わせています} failed {要素にカーソルを合わせられませんでした} canceled {キャンセルしました} other {要素にカーソルを合わせました}}"
+              },
+              "select": {
+                "status": "{phase, select, running {オプションを選択しています} failed {オプションを選択できませんでした} canceled {キャンセルしました} other {オプションを選択しました}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {要素をドラッグしています} failed {要素をドラッグできませんでした} canceled {キャンセルしました} other {要素をドラッグしました}}"
+              },
+              "press": {
+                "status": "{phase, select, running {{key} を押しています} failed {{key} を押せませんでした} canceled {キャンセルしました} other {{key} を押しました}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {ページをスクロールしています} failed {ページをスクロールできませんでした} canceled {キャンセルしました} other {ページをスクロールしました}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {ファイルをアップロードしています} failed {ファイルをアップロードできませんでした} canceled {キャンセルしました} other {ファイルをアップロードしました}}"
+              }
             },
             "waitFor": {
               "status": "{phase, select, running {ページを待っています} failed {ページの準備ができませんでした} canceled {キャンセルしました} other {ページを待ちました}}"

@@ -12807,7 +12807,31 @@
               "status": "{phase, select, running {Lecture de la page} failed {Impossible de lire la page} canceled {Annulé} other {Page lue}}"
             },
             "act": {
-              "status": "{phase, select, running {Utilisation de la page} failed {Impossible d’utiliser la page} canceled {Annulé} other {Page utilisée}}"
+              "status": "{phase, select, running {Utilisation de la page} failed {Impossible d’utiliser la page} canceled {Annulé} other {Page utilisée}}",
+              "click": {
+                "status": "{phase, select, running {Clic sur un élément} failed {Impossible de cliquer sur l’élément} canceled {Annulé} other {Clic effectué sur un élément}}"
+              },
+              "type": {
+                "status": "{phase, select, running {Saisie de « {text} »} failed {Impossible de saisir « {text} »} canceled {Annulé} other {« {text} » saisi}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {Survol d’un élément} failed {Impossible de survoler l’élément} canceled {Annulé} other {Élément survolé}}"
+              },
+              "select": {
+                "status": "{phase, select, running {Sélection d’une option} failed {Impossible de sélectionner l’option} canceled {Annulé} other {Option sélectionnée}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {Glissement d’un élément} failed {Impossible de faire glisser l’élément} canceled {Annulé} other {Élément glissé}}"
+              },
+              "press": {
+                "status": "{phase, select, running {Appui sur {key}} failed {Impossible d’appuyer sur {key}} canceled {Annulé} other {Appui sur {key} effectué}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {Défilement de la page} failed {Impossible de faire défiler la page} canceled {Annulé} other {Page défilée}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {Envoi de fichiers} failed {Impossible d’envoyer les fichiers} canceled {Annulé} other {Fichiers envoyés}}"
+              }
             },
             "waitFor": {
               "status": "{phase, select, running {Attente de la page} failed {La page n’a pas été prête} canceled {Annulé} other {Page attendue}}"

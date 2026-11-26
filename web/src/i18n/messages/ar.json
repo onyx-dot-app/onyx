@@ -12807,7 +12807,31 @@
               "status": "{phase, select, running {جارٍ قراءة الصفحة} failed {تعذّرت قراءة الصفحة} canceled {أُلغي} other {قُرئت الصفحة}}"
             },
             "act": {
-              "status": "{phase, select, running {جارٍ استخدام الصفحة} failed {تعذّر استخدام الصفحة} canceled {أُلغي} other {استُخدمت الصفحة}}"
+              "status": "{phase, select, running {جارٍ استخدام الصفحة} failed {تعذّر استخدام الصفحة} canceled {أُلغي} other {استُخدمت الصفحة}}",
+              "click": {
+                "status": "{phase, select, running {جارٍ النقر على عنصر} failed {تعذّر النقر على العنصر} canceled {أُلغي} other {تم النقر على عنصر}}"
+              },
+              "type": {
+                "status": "{phase, select, running {جارٍ كتابة “{text}”} failed {تعذّرت كتابة “{text}”} canceled {أُلغي} other {تمت كتابة “{text}”}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {جارٍ التمرير فوق عنصر} failed {تعذّر التمرير فوق العنصر} canceled {أُلغي} other {تم التمرير فوق عنصر}}"
+              },
+              "select": {
+                "status": "{phase, select, running {جارٍ تحديد خيار} failed {تعذّر تحديد الخيار} canceled {أُلغي} other {تم تحديد خيار}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {جارٍ سحب عنصر} failed {تعذّر سحب العنصر} canceled {أُلغي} other {تم سحب عنصر}}"
+              },
+              "press": {
+                "status": "{phase, select, running {جارٍ الضغط على {key}} failed {تعذّر الضغط على {key}} canceled {أُلغي} other {تم الضغط على {key}}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {جارٍ تمرير الصفحة} failed {تعذّر تمرير الصفحة} canceled {أُلغي} other {تم تمرير الصفحة}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {جارٍ رفع الملفات} failed {تعذّر رفع الملفات} canceled {أُلغي} other {تم رفع الملفات}}"
+              }
             },
             "waitFor": {
               "status": "{phase, select, running {جارٍ انتظار الصفحة} failed {لم تصبح الصفحة جاهزة} canceled {أُلغي} other {تم انتظار الصفحة}}"

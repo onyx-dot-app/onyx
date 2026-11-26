@@ -2,7 +2,13 @@ import { type ComponentProps, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { CodePanel } from "@opal/components";
 import type { JsonValue } from "@/lib/json";
-import { SvgGlobe } from "@opal/icons";
+import {
+  SvgBrowserFile,
+  SvgGlobe,
+  SvgKeyboard,
+  SvgMousePointer,
+} from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   type CustomToolPacket,
   type Packet,
@@ -40,6 +46,77 @@ function host(url: string): string {
     return new URL(url).host || url;
   } catch {
     return url;
+  }
+}
+
+const MAX_TYPED_CHARS = 40;
+
+function argString(
+  args: Record<string, unknown> | null,
+  name: string
+): string | null {
+  const value = args?.[name];
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+/** A `browser_act` call says which action it took, with its text or key. */
+function actStatus(
+  t: ReturnType<
+    typeof useTranslations<"chat.messages.timeline.sandbox.browser">
+  >,
+  phase: Phase,
+  args: Record<string, unknown> | null
+): string {
+  const text = argString(args, "text");
+  const key = argString(args, "key");
+  switch (argString(args, "action")) {
+    case "click":
+      return t("act.click.status", { phase });
+    case "type":
+      return text
+        ? t("act.type.status", {
+            phase,
+            text:
+              text.length > MAX_TYPED_CHARS
+                ? `${text.slice(0, MAX_TYPED_CHARS)}…`
+                : text,
+          })
+        : t("act.status", { phase });
+    case "hover":
+      return t("act.hover.status", { phase });
+    case "select":
+      return t("act.select.status", { phase });
+    case "drag":
+      return t("act.drag.status", { phase });
+    case "press":
+      return key
+        ? t("act.press.status", { phase, key })
+        : t("act.status", { phase });
+    case "scroll":
+      return t("act.scroll.status", { phase });
+    case "upload":
+      return t("act.upload.status", { phase });
+    default:
+      return t("act.status", { phase });
+  }
+}
+
+/** Pointer actions get a cursor, typing a keyboard, uploads a browser with a file. */
+function actIcon(args: Record<string, unknown> | null): IconFunctionComponent {
+  switch (argString(args, "action")) {
+    case "click":
+    case "hover":
+    case "select":
+    case "drag":
+    case "press":
+    case "scroll":
+      return SvgMousePointer;
+    case "type":
+      return SvgKeyboard;
+    case "upload":
+      return SvgBrowserFile;
+    default:
+      return SvgGlobe;
   }
 }
 
@@ -114,7 +191,7 @@ export function BrowserToolRenderer({
       status = t("snapshot.status", { phase });
       break;
     case "browser_act":
-      status = t("act.status", { phase });
+      status = actStatus(t, phase, call.args);
       break;
     case "browser_wait_for":
       status = t("waitFor.status", { phase });
@@ -175,7 +252,7 @@ export function BrowserToolRenderer({
 
   return children([
     {
-      icon: SvgGlobe,
+      icon: toolName === "browser_act" ? actIcon(call.args) : SvgGlobe,
       status,
       supportsCollapsible: true,
       content,

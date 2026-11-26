@@ -12807,7 +12807,31 @@
               "status": "{phase, select, running {페이지 읽는 중} failed {페이지를 읽을 수 없음} canceled {취소됨} other {페이지를 읽음}}"
             },
             "act": {
-              "status": "{phase, select, running {페이지 사용 중} failed {페이지를 사용할 수 없음} canceled {취소됨} other {페이지를 사용함}}"
+              "status": "{phase, select, running {페이지 사용 중} failed {페이지를 사용할 수 없음} canceled {취소됨} other {페이지를 사용함}}",
+              "click": {
+                "status": "{phase, select, running {요소 클릭 중} failed {요소를 클릭할 수 없음} canceled {취소됨} other {요소를 클릭함}}"
+              },
+              "type": {
+                "status": "{phase, select, running {“{text}” 입력 중} failed {“{text}”을(를) 입력할 수 없음} canceled {취소됨} other {“{text}”을(를) 입력함}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {요소 위로 커서 이동 중} failed {요소 위로 커서를 이동할 수 없음} canceled {취소됨} other {요소 위로 커서를 이동함}}"
+              },
+              "select": {
+                "status": "{phase, select, running {옵션 선택 중} failed {옵션을 선택할 수 없음} canceled {취소됨} other {옵션을 선택함}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {요소 드래그 중} failed {요소를 드래그할 수 없음} canceled {취소됨} other {요소를 드래그함}}"
+              },
+              "press": {
+                "status": "{phase, select, running {{key} 누르는 중} failed {{key}을(를) 누를 수 없음} canceled {취소됨} other {{key}을(를) 누름}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {페이지 스크롤 중} failed {페이지를 스크롤할 수 없음} canceled {취소됨} other {페이지를 스크롤함}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {파일 업로드 중} failed {파일을 업로드할 수 없음} canceled {취소됨} other {파일을 업로드함}}"
+              }
             },
             "waitFor": {
               "status": "{phase, select, running {페이지 기다리는 중} failed {페이지가 준비되지 않음} canceled {취소됨} other {페이지를 기다림}}"

@@ -1,6 +1,12 @@
 import { render, screen } from "@tests/setup/test-utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
+  SvgBrowserFile,
+  SvgGlobe,
+  SvgKeyboard,
+  SvgMousePointer,
+} from "@opal/icons";
+import {
   type CustomToolPacket,
   PacketType,
 } from "@/app/app/services/streamingModels";
@@ -101,7 +107,56 @@ test("a done call keeps its request and the page's response", () => {
     { placement, obj: { type: PacketType.SECTION_END } },
   ];
   renderStatus(toolPackets);
-  expect(screen.getByText("Used the page")).toBeInTheDocument();
+  expect(screen.getByText("Clicked an element")).toBeInTheDocument();
   expect(screen.getByText("click")).toBeInTheDocument();
   expect(screen.getByText("Clicked the Sign in button")).toBeInTheDocument();
+});
+
+test("typing and key presses name their text and key", () => {
+  renderStatus(
+    packets(
+      "browser_act",
+      { action: "type", ref: "e3", text: "onyx docs" },
+      true
+    )
+  );
+  expect(screen.getByText("Typed “onyx docs”")).toBeInTheDocument();
+  renderStatus(
+    packets("browser_act", { action: "press", key: "Enter" }, false)
+  );
+  expect(screen.getByText("Pressing Enter")).toBeInTheDocument();
+});
+
+test("each browser action gets its own icon", () => {
+  const icons: Record<string, unknown> = {};
+  const toolCalls: [string, string, Record<string, unknown>][] = [
+    ["click", "browser_act", { action: "click", ref: "e1" }],
+    ["scroll", "browser_act", { action: "scroll", delta_y: 400 }],
+    ["type", "browser_act", { action: "type", text: "hi" }],
+    ["upload", "browser_act", { action: "upload", paths: ["a.pdf"] }],
+    ["open", "browser_open", { url: "https://onyx.app" }],
+  ];
+  for (const [label, toolName, args] of toolCalls) {
+    render(
+      <BrowserToolRenderer
+        packets={packets(toolName, args, true)}
+        nestedCalls={[]}
+        state={{}}
+        onComplete={jest.fn()}
+        renderType={RenderType.FULL}
+        animate={false}
+        stopPacketSeen={false}
+      >
+        {(results) => {
+          icons[label] = results[0]?.icon;
+          return <></>;
+        }}
+      </BrowserToolRenderer>
+    );
+  }
+  expect(icons.click).toBe(SvgMousePointer);
+  expect(icons.scroll).toBe(SvgMousePointer);
+  expect(icons.type).toBe(SvgKeyboard);
+  expect(icons.upload).toBe(SvgBrowserFile);
+  expect(icons.open).toBe(SvgGlobe);
 });
