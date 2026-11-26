@@ -71,7 +71,13 @@ export function endsInOpenCodeFence(text: string): boolean {
       fence = {
         marker: opener[2],
         depth,
-        indent: inList ? prefix.length : Math.min(prefix.length, listContent),
+        // A fence continues the open list item only when it reaches the
+        // item's content; one that falls short stands outside the list.
+        indent: inList
+          ? prefix.length
+          : prefix.length >= listContent
+            ? listContent
+            : 0,
       };
     } else if (!isBlankLine(rest)) {
       const item = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/.exec(rest);
