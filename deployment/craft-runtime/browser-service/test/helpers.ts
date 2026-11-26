@@ -96,7 +96,7 @@ export const startService = async (cdpUrl: string): Promise<Service> => {
   const context = browser.contexts()[0];
   if (!context) throw new Error("No default context.");
   const service = new BrowserService({ context, sessionsRoot, log: () => {} });
-  service.start();
+  await service.start();
   const server = NodeNet.createServer({ allowHalfOpen: true }, (socket) => service.handleConnection(socket));
   await new Promise<void>((resolve) => server.listen(socketPath, resolve));
   return {
@@ -213,6 +213,14 @@ export class ViewerClient {
   }
 }
 
+export const waitUntil = async (check: () => boolean | Promise<boolean>, timeoutMs = 10_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error("waitUntil timed out");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+};
+
 export const rawSocket = (socketPath: string): Promise<NodeNet.Socket> =>
   new Promise((resolve, reject) => {
     const socket = NodeNet.connect(socketPath);
@@ -260,6 +268,8 @@ const PAGES: Record<string, string> = {
       if (--left === 0) clearInterval(timer);
     }, 100);</script>`,
   "/key-alert": `<!doctype html><title>Key alert</title><input id="field" autofocus onkeydown="alert('key')">`,
+  "/popup-download": `<!doctype html><title>Popup download</title>
+    <button id="pop" onclick="window.open('/big-download','_blank','noopener')">Download</button>`,
   "/popup": `<!doctype html><title>Opener</title><a id="pop" href="/second" target="_blank">Open popup</a>`,
 };
 
@@ -268,16 +278,17 @@ export type Site = { readonly url: string; readonly stop: () => Promise<void>; r
 export const startSite = async (): Promise<Site> => {
   let bigDownloadsStopped = 0;
   const server = NodeHttp.createServer((request, response) => {
-    const path = (request.url ?? "/").split("?")[0] ?? "/";
-    // 512 MiB at 160 MiB/s, over the chat download budget. Chromium reports download progress
-    // about once a second. Counts responses that the client stops early.
+    const url = new URL(request.url ?? "/", "http://site");
+    const path = url.pathname;
+    // By default 512 MiB at 160 MiB/s, over the chat download budget. Chromium reports download
+    // progress about once a second. Counts responses that the client stops early.
     if (path === "/big-download") {
       response.writeHead(200, {
         "content-type": "application/octet-stream",
         "content-disposition": 'attachment; filename="big.bin"',
       });
-      const chunk = Buffer.alloc(16 * 1024 * 1024);
-      let left = 32;
+      const chunk = Buffer.alloc(Number(url.searchParams.get("chunkMiB") ?? 16) * 1024 * 1024);
+      let left = Number(url.searchParams.get("chunks") ?? 32);
       const timer = setInterval(() => {
         if (response.destroyed || response.writableNeedDrain) return;
         left -= 1;

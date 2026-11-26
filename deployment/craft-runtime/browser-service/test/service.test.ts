@@ -15,6 +15,7 @@ import {
   startService,
   startSite,
   ViewerClient,
+  waitUntil,
 } from "./helpers.ts";
 import type { Chrome, Service, Site } from "./helpers.ts";
 
@@ -816,6 +817,35 @@ describe("browser service", () => {
     } finally {
       viewer.close();
     }
+  });
+
+  test("downloads that run at the same time share the budget", async () => {
+    const chat = newChat();
+    const stopped = site.bigDownloadsStopped;
+    await Promise.all(
+      [1, 2].map((n) =>
+        call(service.socketPath, chat, "open", { url: `${site.url}/big-download?chunkMiB=4&chunks=50&n=${n}` }),
+      ),
+    );
+    await waitUntil(() => site.bigDownloadsStopped > stopped, 30_000);
+    const dir = NodePath.join(service.sessionsRoot, chat, "downloads");
+    const size = async (name: string) => (await NodeFSP.stat(NodePath.join(dir, name))).size;
+    const saved = async () => await NodeFSP.readdir(dir).catch((): Array<string> => []);
+    await waitUntil(async () => {
+      const names = await saved();
+      return names.length === 1 && (await size(names[0]!)) === 200 * 1024 * 1024;
+    }, 30_000);
+    assert.equal((await saved()).length, 1);
+  });
+
+  test("a download that starts in a popup counts against the chat budget", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/popup-download` });
+    const stopped = site.bigDownloadsStopped;
+    await ok(service.socketPath, chat, "act", { action: "click", selector: "#pop" });
+    await waitUntil(() => site.bigDownloadsStopped > stopped, 30_000);
+    const saved = await NodeFSP.readdir(NodePath.join(service.sessionsRoot, chat, "downloads")).catch(() => []);
+    assert.deepEqual(saved, []);
   });
 
   test("bad requests get invalid_argument", async () => {
