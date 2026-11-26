@@ -1,5 +1,9 @@
-import type { CaptureResult } from "posthog-js";
-import { redactEventUrls, redactUrl } from "@/lib/analytics/redact";
+import type { CaptureResult, CapturedNetworkRequest } from "posthog-js";
+import {
+  redactCapturedRequest,
+  redactEventUrls,
+  redactUrl,
+} from "@/lib/analytics/redact";
 
 describe("redactUrl", () => {
   test.each([
@@ -59,5 +63,20 @@ describe("redactEventUrls", () => {
 
   test("passes a dropped event through", () => {
     expect(redactEventUrls(null)).toBeNull();
+  });
+});
+
+describe("redactCapturedRequest", () => {
+  test("hides the token in the URL a replay records, keeping the rest", () => {
+    // The recorder passes the page URL as a bare `{ name }`.
+    const request = {
+      name: "https://onyx.example.com/auth/magic-link?token=abc",
+      method: "GET",
+    } as CapturedNetworkRequest;
+
+    expect(redactCapturedRequest(request)).toEqual({
+      name: "https://onyx.example.com/auth/magic-link?token=redacted",
+      method: "GET",
+    });
   });
 });

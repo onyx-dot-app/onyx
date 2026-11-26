@@ -1,4 +1,4 @@
-import type { CaptureResult } from "posthog-js";
+import type { CaptureResult, CapturedNetworkRequest } from "posthog-js";
 
 // Query parameters that carry a credential: the sign-in, verification and
 // password-reset links put a single-use token in `token`.
@@ -52,4 +52,14 @@ export function redactEventUrls(
     }
   }
   return event;
+}
+
+/**
+ * PostHog `session_recording.maskCapturedNetworkRequestFn`: session replay
+ * runs the page URL and each network request's URL (`name`) through it.
+ */
+export function redactCapturedRequest(
+  request: CapturedNetworkRequest
+): CapturedNetworkRequest {
+  return { ...request, name: redactUrl(request.name) };
 }
