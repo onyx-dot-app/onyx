@@ -557,6 +557,24 @@ def _apply(spec: dict[str, Any], lines: list[str]) -> dict[str, Any]:
     )
 
 
+def test_a_line_with_a_dotted_path_parameter_saves_and_builds_its_url() -> None:
+    saved = _apply(
+        _callable_spec(),
+        [*endpoint_lines(_callable_spec()), "GET /orders/{order.id} Get an order"],
+    )
+
+    validate_openapi_schema(saved)
+    order = next(
+        spec
+        for spec in openapi_to_method_specs(saved)
+        if spec.path == "/orders/{order.id}"
+    )
+    assert (
+        order.build_url("https://pets.example.com/v2", {"order.id": "a/b"}, {})
+        == "https://pets.example.com/v2/orders/a%2Fb"
+    )
+
+
 def test_the_base_url_replaces_each_imported_server() -> None:
     spec = _callable_spec()
     spec["servers"] = [
@@ -776,7 +794,7 @@ def test_lines_save_over_a_spec_with_an_operation_id_that_is_not_text() -> None:
     assert "/cats" in saved["paths"]
 
 
-def test_import_skips_an_operation_with_a_numbered_path_parameter() -> None:
+def test_import_keeps_an_operation_with_a_numbered_path_parameter() -> None:
     spec = _callable_spec()
     spec["paths"]["/{0}"] = {
         "get": {
@@ -788,8 +806,8 @@ def test_import_skips_an_operation_with_a_numbered_path_parameter() -> None:
 
     view = _import(json.dumps(spec))
 
-    assert [line.split(":")[0] for line in view.skipped] == ["GET /{0}"]
-    assert json.loads(view.openapi_document) == _callable_spec()
+    assert view.skipped == []
+    assert json.loads(view.openapi_document) == spec
 
 
 def test_a_yaml_alias_is_refused() -> None:

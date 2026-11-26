@@ -18,6 +18,8 @@ REQUEST_BODY = "requestBody"
 OPENAPI_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
 # The HTTP methods that an API tool sends.
 TOOL_HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+# A `{name}` in a path template. The name is any text, as in OpenAPI.
+PATH_PARAM = re.compile(r"\{([^{}]*)\}")
 
 
 class _OpenApiYamlLoader(UniqueKeySafeLoader):
@@ -133,18 +135,13 @@ class MethodSpec(BaseModel):
         path_params: Mapping[str, JsonValue],
         query_params: Mapping[str, JsonValue],
     ) -> str:
-        encoded_path_params = {
-            name: quote(str(value), safe="") for name, value in path_params.items()
-        }
-        url = f"{base_url}{self.path}"
-        try:
-            url = url.format(**encoded_path_params)
-        except KeyError as e:
-            raise ValueError(f"Missing path parameter: {e}") from e
-        except IndexError as e:
-            raise ValueError(
-                f"The path {self.path} has a parameter that is a number or empty."
-            ) from e
+        def path_value(match: re.Match[str]) -> str:
+            name = match.group(1)
+            if name not in path_params:
+                raise ValueError(f"Missing path parameter: '{name}'")
+            return quote(str(path_params[name]), safe="")
+
+        url = base_url + PATH_PARAM.sub(path_value, self.path)
         if query_params:
             url += f"?{urlencode(query_params)}"
         return url

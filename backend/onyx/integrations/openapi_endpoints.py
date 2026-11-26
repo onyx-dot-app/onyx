@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     OPENAPI_METHODS,
+    PATH_PARAM,
     TOOL_HTTP_METHODS,
     InlineBudget,
     check_unique_name,
@@ -24,7 +25,6 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     resolve_ref,
 )
 
-_PATH_PARAM = re.compile(r"\{([^{}]*)\}")
 _PARAM_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-]*")
 _QUERY_NAME = re.compile(r"[^\s&?=#]+")
 # The characters of a query name that a line writes as %XX.
@@ -141,10 +141,10 @@ def _parse_line(text: str) -> tuple[str, str, list[str], str]:
     path, _, query_text = parts[1].partition("?")
     if "#" in path:
         raise ValueError("The path must not have a #. Write %23 for a # in a path.")
-    unpaired = _PATH_PARAM.sub("", path)
+    unpaired = PATH_PARAM.sub("", path)
     if "{" in unpaired or "}" in unpaired:
         raise ValueError("Each { in the path needs a matching }.")
-    path_params = _PATH_PARAM.findall(path)
+    path_params = PATH_PARAM.findall(path)
     for param in path_params:
         if not _PARAM_NAME.fullmatch(param):
             raise ValueError(f"'{{{param}}}' is not a valid path parameter.")
@@ -189,7 +189,7 @@ def _operation(
         }
         params = [
             _string_param(p, "path")
-            for p in _PATH_PARAM.findall(path)
+            for p in PATH_PARAM.findall(path)
             if (p, "path") not in defined
         ]
         params += [
