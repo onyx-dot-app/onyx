@@ -1812,6 +1812,66 @@ describe("with a scripted fetch", () => {
     ]);
   });
 
+  test("a live browser_open start on a followed stream shows the Browser tab; a replayed one does not", async () => {
+    const raw = [
+      { ...savedMessage(631, "user", "Question"), latest_child_message: 632 },
+      savedMessage(632, "assistant", ""),
+    ];
+    const tree = processRawChatHistory(raw, [[]]);
+    useChatSessionStore.setState({ currentSessionId: "session" });
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: tree,
+    });
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(() => new Promise<Response>(() => {}));
+    const browserOpen: Packet = {
+      placement: { turn_index: 0 },
+      obj: {
+        type: "custom_tool_start",
+        tool_name: "browser_open",
+        display_name: "Open browser",
+      },
+    };
+    let goLive: () => void = () => undefined;
+    const live = new Promise<void>((resolve) => {
+      goLive = resolve;
+    });
+    jest.mocked(resumeStream).mockImplementation(async function* () {
+      yield { stream_id: 632, next_cursor: 0, replay_complete: false };
+      yield browserOpen;
+      yield { stream_id: 632, next_cursor: 1, replay_complete: true };
+      await live;
+      yield browserOpen;
+      yield { stream_id: 632, next_cursor: 2, replay_complete: true };
+      await new Promise<never>(() => {});
+    });
+    const browserShown = () =>
+      useChatSessionStore.getState().sessions.get("session")!.rightPanel
+        .browserOpen;
+
+    void followChatSession({
+      sessionId: "session",
+      controller: useChatSessionStore.getState().sessions.get("session")!
+        .abortController,
+      errorMessage,
+      stream: stream(632),
+      messageMap: tree,
+    });
+    const answer = () =>
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.get(632);
+    await waitFor(() => expect(answer()?.replay?.cursor).toBe(1));
+    expect(browserShown()).toBe(false);
+
+    goLive();
+    await waitFor(() => expect(answer()?.replay?.cursor).toBe(2));
+    expect(browserShown()).toBe(true);
+  });
+
   test("a resume stream the server cannot find is not retried", async () => {
     const log = jest.spyOn(console, "error").mockImplementation(() => {});
     const raw = [
