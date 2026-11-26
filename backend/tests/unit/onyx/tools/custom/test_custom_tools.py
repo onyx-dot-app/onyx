@@ -1124,3 +1124,36 @@ def test_a_path_parameter_cannot_leave_the_server_url(
     assert isinstance(response, ToolResult)
     assert response.is_error
     pinned.assert_not_called()
+
+
+@pytest.mark.parametrize("url", ["http://169.254.169.254/graphql", _LOOPBACK_URL])
+def test_graphql_and_spec_fetches_refuse_blocked_hosts(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    """The GraphQL endpoint save, the introspection call and the spec URL
+    import refuse a metadata or loopback host and open no connection."""
+    from onyx.integrations import service
+    from onyx.server.features.integrations.models import (
+        GraphQLConfigInput,
+        GraphQLIntrospectRequest,
+        OpenApiEndpointsRequest,
+    )
+
+    _set_ssrf_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
+    settings = unittest.mock.MagicMock()
+    settings.ssrf_protection_level = SSRFProtectionLevel.VALIDATE_ALL
+    monkeypatch.setattr(service, "get_security_settings", lambda: settings)
+    with patch("onyx.utils.url._pinned_request") as pinned:
+        with pytest.raises(OnyxError):
+            service._graphql_config(
+                GraphQLConfigInput(
+                    endpoint_url=url, graphql_schema="type Query { a: Int }"
+                )
+            )
+        with pytest.raises(OnyxError):
+            service.introspect_graphql_endpoint(
+                GraphQLIntrospectRequest(endpoint_url=url)
+            )
+        with pytest.raises(OnyxError):
+            service.import_openapi_document(OpenApiEndpointsRequest(spec_url=url))
+    pinned.assert_not_called()
