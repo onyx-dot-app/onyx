@@ -28,5 +28,6 @@ export function getLanguageFromPath(
     sql: "sql",
   };
 
-  return langMap[ext];
+  // Other extensions pass through; the highlighter resolves or rejects them.
+  return langMap[ext] ?? ext;
 }
