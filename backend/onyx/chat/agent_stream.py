@@ -110,7 +110,7 @@ class BackgroundRunStream:
         try:
             with get_session_with_tenant(tenant_id=tenant_id) as session:
                 execution, replay = read_suspended_response_replay(
-                    session, self._response_id
+                    session, self._response_id, claimed=True
                 )
             self._presenter.replay(execution.response, replay, execution.presentation)
         except Exception:

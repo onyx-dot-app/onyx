@@ -51,6 +51,7 @@ from onyx.chat.models import (
     PendingChatMessage,
     SavedToolQuestion,
 )
+from onyx.chat.presentation import overall_stop
 from onyx.chat.process_message import (
     USER_INPUT_PENDING,
     dispatch_pending_chat_messages,
@@ -235,11 +236,13 @@ from onyx.server.query_and_chat.models import (
     UpdateChatSessionTemperatureRequest,
     UpdateChatSessionThreadRequest,
 )
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.session_loading import (
     load_session_tools,
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
     Packet,
     StreamCursor,
     UserMessagePacket,
@@ -1539,10 +1542,13 @@ def _session_messages_and_packets(
     session_id: UUID,
     user_id: UUID | None,
     message_ids: set[int] | None = None,
-    agent_session: bool = False,
+    root_session_id: UUID | None = None,
 ) -> tuple[list[ChatMessageDetail], list[list[Packet]]]:
     """A session's messages and each response's replay packets. The caller
-    checked access to the session."""
+    checked access to the session. With `root_session_id`, the session is one
+    of that chat's subagents: its approvals live under the root, and its ended
+    responses get the stop packet that a root's replay carries."""
+    agent_session = root_session_id is not None
     session_messages = get_chat_messages_by_session(
         chat_session_id=session_id,
         user_id=user_id,
@@ -1565,7 +1571,7 @@ def _session_messages_and_packets(
         msg for msg in session_messages if msg.message_type == MessageType.ASSISTANT
     ]
     chat_approvals = load_chat_approvals(
-        db_session, session_id, [msg.id for msg in responses]
+        db_session, root_session_id or session_id, [msg.id for msg in responses]
     )
     child_responses = load_child_responses(db_session, responses)
     packets = [
@@ -1578,6 +1584,24 @@ def _session_messages_and_packets(
         )
         for msg in responses
     ]
+    if agent_session:
+        # A child's saved output ends without the stop that a root's has; a
+        # running response's comes from its live stream.
+        for msg, response_packets in zip(responses, packets, strict=True):
+            status = msg.response_status
+            if (
+                status is not None
+                and (status.is_terminal or status == RunStatus.SUSPENDED)
+                and not any(
+                    isinstance(packet.obj, OverallStop) for packet in response_packets
+                )
+            ):
+                response_packets.append(
+                    Packet(
+                        placement=Placement(turn_index=0),
+                        obj=overall_stop(status, msg.response_failure),
+                    )
+                )
     return details, packets
 
 
@@ -1671,7 +1695,7 @@ def get_chat_subagent_history(
             else None
         )
         messages, packets = _session_messages_and_packets(
-            db_session, agent_id, user.id, agent_session=True
+            db_session, agent_id, user.id, root_session_id=session_id
         )
     return ChatSubagentHistory(
         messages=messages,

@@ -21,9 +21,11 @@ from onyx.agents.tools import ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import process_message
 from onyx.chat.agent import ChatAgent
+from onyx.chat.agent_stream import BackgroundRunStream
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import dispatch_pending_chat_messages
 from onyx.chat.run_store import INPUT_POLL_SECONDS, ChatRunStore
+from onyx.chat.stream_buffer import read_stream_chunks
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -43,6 +45,12 @@ from onyx.llm.override_models import LLMOverride
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat.chat_backend import (
     get_chat_session_processing_status,
+    get_chat_subagent_history,
+)
+from onyx.server.query_and_chat.streaming_models import (
+    AWAITING_USER,
+    OverallStop,
+    ToolApprovalRequest,
 )
 from onyx.tools.constants import EXEC_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolApprovalScope, ToolContext
@@ -353,6 +361,96 @@ def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
     finally:
         for coordinator in coordinators:
             assert coordinator.close(timeout=10)
+
+
+def test_a_parked_agents_history_shows_its_approval_and_waits(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A subagent's saved transcript reads its approvals under the root chat,
+    and its parked response ends as waiting for the user."""
+    sent: list[str] = []
+    agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
+    agent_session_id = db_session.get_one(
+        ChatMessage, agent_response_id
+    ).chat_session_id
+    history = get_chat_subagent_history(
+        chat.chat_session_id, agent_session_id, user=chat.user
+    )
+    [*_, response] = history.packets
+    assert any(isinstance(packet.obj, ToolApprovalRequest) for packet in response)
+    assert response[-1].obj == OverallStop(stop_reason=AWAITING_USER)
+
+
+def test_a_resumed_agent_streams_its_saved_output_and_its_continuation(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The host that resumes a decided agent claims its response before the
+    run registers; the agent's live stream still starts with the saved output
+    and carries the continuation to its end."""
+    sent: list[str] = []
+    agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
+    [row] = chat.rows(db_session)
+    chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    tool = _gated(chat.integration_id, sent)
+    streams: list[BackgroundRunStream] = []
+
+    class RecordedStream(BackgroundRunStream):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            streams.append(self)
+
+    monkeypatch.setattr("onyx.chat.run_store.BackgroundRunStream", RecordedStream)
+
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
+        return _agent(tool, checkpoint)
+
+    def agent_status() -> RunStatus | None:
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            return session.get_one(ChatMessage, agent_response_id).response_status
+
+    cache = get_cache_backend()
+    host = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=chat.chat_session_id,
+        response_id=chat.response_id,
+        visible_response_ids=[],
+        cache=cache,
+        follow_up_steps=3,
+        user=chat.user,
+        tools=[tool],
+    )
+    coordinator = AgentCoordinator()
+    host.bind(coordinator, build_agent=rebuild)
+    try:
+        until(
+            lambda: (
+                host.poll_control() is None
+                and agent_status() == RunStatus.COMPLETE
+                and not host.has_owned_work
+            ),
+            timeout=60,
+        )
+    finally:
+        assert coordinator.close(timeout=10)
+    assert sent == ["team"]
+    [stream] = streams
+    agent_session_id = db_session.get_one(
+        ChatMessage, agent_response_id
+    ).chat_session_id
+    read = read_stream_chunks(cache, agent_session_id, stream.stream_id, 0)
+    assert read is not None
+    assert not read.gap
+    assert read.done
+    text = "".join(read.blocks)
+    # The saved program call, then its result and the finished stop
+    assert '"replay_end"' in text
+    assert "sent" in text
+    assert '"finished"' in text
 
 
 @pytest.mark.parametrize("unavailable", ["raises", "falls_back"])

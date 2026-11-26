@@ -1353,15 +1353,16 @@ def save_response_record__no_commit(
 
 
 def read_suspended_response_replay(
-    db_session: Session, response_id: int
+    db_session: Session, response_id: int, *, claimed: bool = False
 ) -> tuple[ChatExecutionRecord, ResponseReplayData]:
     """The saved output of a suspended response, to replay where its run
-    continues."""
+    continues. A `claimed` response is one whose resume already marked it
+    running, as an agent host's claim of a parked run does."""
     message = db_session.get(ChatMessage, response_id)
     if message is None:
         raise ValueError("The response is not suspended")
     read = read_chat_execution(message, load_child_responses(db_session, [message]))
-    if read is None or read[0].response.status != RunStatus.SUSPENDED:
+    if read is None or (not claimed and read[0].response.status != RunStatus.SUSPENDED):
         raise ValueError("The response is not suspended")
     execution, tool_calls = read
     return execution, read_response_replay_data(

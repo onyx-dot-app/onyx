@@ -2902,6 +2902,11 @@ def test_a_background_agent_streams_live_and_its_history_and_activity_show(
     assert agent["stream_id"] is None
     finished = client.get(f"/chat/chat-session/{chat.id}/agents/{agent['id']}/history")
     assert finished.json()["stream"] is None
+    # The saved reply ends, as a root's replay does
+    assert finished.json()["packets"][-1][-1]["obj"] == {
+        "type": "stop",
+        "stop_reason": "finished",
+    }
     assert any(
         "Worker result" in message["message"] for message in finished.json()["messages"]
     )
