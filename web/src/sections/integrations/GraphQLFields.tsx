@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -39,6 +40,9 @@ export default function GraphQLFields({
 }: GraphQLFieldsProps) {
   const t = useTranslations("admin.integrations.add.graphql");
   const tAdd = useTranslations("admin.integrations.add");
+  // True from a file pick until its text arrives, so an empty file is told
+  // apart from the clear button, which also reports "".
+  const readingFileRef = useRef(false);
 
   /** Applies the schema when it fits; false when it is over the limit. */
   function setSchema(text: string): boolean {
@@ -111,10 +115,19 @@ export default function GraphQLFields({
             variant={disabled ? "disabled" : "primary"}
             maxSizeKb={SPEC_MAX_SIZE_KB}
             onFileSizeExceeded={() => onImportErrorChange(tAdd("api.tooLarge"))}
-            onReadingChange={onLoadingChange}
+            onReadingChange={(reading) => {
+              if (reading) readingFileRef.current = true;
+              onLoadingChange(reading);
+            }}
             setValue={(text) => {
+              const fromFile = readingFileRef.current;
+              readingFileRef.current = false;
               if (text.trim()) setSchema(text);
-              else onImportErrorChange(null);
+              // A blank file or paste is a failed load; a clear keeps the schema.
+              else
+                onImportErrorChange(
+                  fromFile || text ? t("schema.required") : null
+                );
             }}
           />
           <InputTextArea

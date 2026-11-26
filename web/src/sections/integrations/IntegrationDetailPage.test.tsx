@@ -845,6 +845,40 @@ test("blocks Save after a refused schema upload until the schema fits", async ()
   await waitFor(() => expect(save).toBeEnabled());
 });
 
+test("a blank schema upload blocks Save until it is cleared", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "graphql",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: GRAPHQL_CONFIG,
+    }),
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const input =
+    activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("No file input");
+  await u.upload(input, new File([], "schema.graphql"));
+
+  expect(
+    await view.findByText(copy.add.graphql.schema.required)
+  ).toBeInTheDocument();
+  expect(save).toBeDisabled();
+
+  await u.click(view.getByRole("button", { name: "Clear file" }));
+  await waitFor(() => expect(save).toBeEnabled());
+  expect(
+    view.getByRole("textbox", { name: copy.add.graphql.schema.title })
+  ).toHaveValue(GRAPHQL_CONFIG.graphql_schema);
+});
+
 test("a schema loaded from the endpoint clears a refused upload", async () => {
   const loaded = "type Query { b: Int }";
   mockFetch({
