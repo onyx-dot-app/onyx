@@ -1,7 +1,9 @@
 import { useEffect } from "react";
+import useSWR, { SWRConfig } from "swr";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
-import type { CustomSkill } from "@/lib/skills/types";
+import type { CustomSkill, SkillsList } from "@/lib/skills/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useSkillBulkActions } from "@/sections/skills/useSkillBulkActions";
 
 const mockBulkUpdateSkills = jest.fn();
@@ -87,6 +89,42 @@ test("a row delete keeps the selection of other plugins", async () => {
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull()
   );
   expect(screen.getByTestId("selection")).toHaveTextContent(toggling.id);
+});
+
+function CachedNames() {
+  const { data } = useSWR<SkillsList>(SWR_KEYS.userSkills, null);
+  return (
+    <p data-testid="cached">
+      {(data?.customs ?? []).map((skill) => skill.name).join(",")}
+    </p>
+  );
+}
+
+test("a delete drops the deleted plugin from the cached list", async () => {
+  mockBulkUpdateSkills.mockResolvedValue({
+    succeeded: [target.id],
+    failed: [],
+  });
+  const list: SkillsList = { builtins: [], customs: [toggling, target] };
+  const user = setupUser();
+  render(
+    <SWRConfig
+      value={{
+        provider: () => new Map([[SWR_KEYS.userSkills, { data: list }]]),
+      }}
+    >
+      <Harness items={[toggling, target]} />
+      <CachedNames />
+    </SWRConfig>
+  );
+  expect(screen.getByTestId("cached")).toHaveTextContent("toggling,target");
+
+  await user.click(screen.getByRole("button", { name: "delete target" }));
+  await user.click(await screen.findByRole("button", { name: "Delete" }));
+
+  await waitFor(() =>
+    expect(screen.getByTestId("cached")).toHaveTextContent(/^toggling$/)
+  );
 });
 
 test("a selected plugin that leaves the list starts a new sharing draft", async () => {

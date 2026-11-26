@@ -32,7 +32,8 @@ import {
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import type { SkillEnablement } from "@/lib/skills/hooks";
 import { canShareSkill } from "@/lib/skills/sharing";
-import type { CustomSkill } from "@/lib/skills/types";
+import type { CustomSkill, SkillsList } from "@/lib/skills/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { skillIcon } from "@/sections/customize/skillIcon";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 
@@ -125,6 +126,18 @@ export function useSkillBulkActions({
         const deleted = new Set(result.succeeded);
         setSelectedIds(
           (current) => new Set([...current].filter((id) => !deleted.has(id)))
+        );
+        // Drop the deleted skills now, so a failed refresh does not show them.
+        await mutate<SkillsList>(
+          SWR_KEYS.userSkills,
+          (current) =>
+            current && {
+              ...current,
+              customs: current.customs.filter(
+                (skill) => !deleted.has(skill.id)
+              ),
+            },
+          { revalidate: false }
         );
       } else {
         setSelectedIds(
