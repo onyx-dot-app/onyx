@@ -561,7 +561,9 @@ def _imported_view(document: str) -> OpenApiConfigView:
 
 def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigView:
     """The base URL and the endpoint lines of a spec to import. A spec URL
-    that Onyx cannot fetch is ``BAD_GATEWAY``."""
+    that Onyx cannot reach is ``BAD_GATEWAY``. A non-2xx answer is
+    ``INVALID_INPUT``: the server is up, but the URL is not a spec, as for a
+    GraphQL endpoint that only takes POST."""
     if request.openapi_document is not None:
         check_api_document_size(request.openapi_document, "spec")
         return _imported_view(request.openapi_document)
@@ -581,7 +583,7 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
         ) as response:
             if not 200 <= response.status_code < 300:
                 raise OnyxError(
-                    OnyxErrorCode.BAD_GATEWAY,
+                    OnyxErrorCode.INVALID_INPUT,
                     f"The spec URL answered with HTTP {response.status_code}.",
                 )
             body = read_bounded_body(

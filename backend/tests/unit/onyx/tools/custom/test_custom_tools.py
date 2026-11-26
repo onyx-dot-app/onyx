@@ -1123,8 +1123,11 @@ def test_graphql_and_spec_fetches_refuse_blocked_hosts(
         assert hint in error.detail
 
 
-@pytest.mark.parametrize("status", [404, 500])
-def test_a_setup_fetch_that_answers_an_error_is_a_bad_gateway(status: int) -> None:
+@pytest.mark.parametrize("status", [404, 405, 500])
+def test_a_setup_fetch_that_answers_an_error(status: int) -> None:
+    """Introspection is the last check, so an error answer is BAD_GATEWAY.
+    A spec URL that answers an error is reachable but is not a spec, so it is
+    INVALID_INPUT, and the client goes on to try GraphQL."""
     from onyx.error_handling.error_codes import OnyxErrorCode
     from onyx.integrations import service
     from onyx.server.features.integrations.models import (
@@ -1151,7 +1154,7 @@ def test_a_setup_fetch_that_answers_an_error_is_a_bad_gateway(status: int) -> No
                 OpenApiEndpointsRequest(spec_url="https://api.example.com/spec.json")
             )
     assert introspection.value.error_code is OnyxErrorCode.BAD_GATEWAY
-    assert spec_fetch.value.error_code is OnyxErrorCode.BAD_GATEWAY
+    assert spec_fetch.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 @pytest.mark.parametrize(
