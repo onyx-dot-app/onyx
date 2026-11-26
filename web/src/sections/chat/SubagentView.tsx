@@ -105,6 +105,8 @@ export function SubagentView({
     <div
       ref={scroller}
       data-testid="subagent-view"
+      // Makes room for a docked activity card, as the chat does (`AppChrome`)
+      data-chat-scroll
       className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
       onScroll={(event) => {
         const element = event.currentTarget;
