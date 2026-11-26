@@ -470,6 +470,15 @@ def validate_openapi_definition(definition: dict[str, Any]) -> None:
         ) from e
 
 
+def check_api_document_size(text: str, label: str) -> None:
+    """Refuse an API document, endpoint list or schema that the spec import
+    could not take."""
+    if len(text.encode()) > _MAX_SPEC_BYTES:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE, f"The {label} is larger than 5 MB."
+        )
+
+
 def _openapi_document(
     config: OpenApiConfigInput,
     stored: str | None,
@@ -480,6 +489,10 @@ def _openapi_document(
     """The document to store and its parsed spec: the one sent, or the
     endpoint lines applied to the one sent, else to ``stored``. A line error
     names its line in ``extra.line_errors``."""
+    if config.openapi_document is not None:
+        check_api_document_size(config.openapi_document, "spec")
+    if config.endpoints is not None:
+        check_api_document_size("\n".join(config.endpoints), "endpoint list")
     try:
         if config.endpoints is None:
             if config.openapi_document is None:
@@ -550,10 +563,7 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
     """The base URL and the endpoint lines of a spec to import. A spec URL
     that Onyx cannot fetch is ``BAD_GATEWAY``."""
     if request.openapi_document is not None:
-        if len(request.openapi_document.encode()) > _MAX_SPEC_BYTES:
-            raise OnyxError(
-                OnyxErrorCode.PAYLOAD_TOO_LARGE, "The spec is larger than 5 MB."
-            )
+        check_api_document_size(request.openapi_document, "spec")
         return _imported_view(request.openapi_document)
     if request.spec_url is None:
         raise RuntimeError("Bug: the model requires the spec text or a URL.")
@@ -604,7 +614,9 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
 
 
 def _graphql_endpoint_url(config: GraphQLConfigInput) -> str:
-    """The stripped endpoint URL. Raises ``OnyxError`` for a blocked host."""
+    """The stripped endpoint URL. Raises ``OnyxError`` for a blocked host or
+    a schema over the size limit."""
+    check_api_document_size(config.graphql_schema, "schema")
     endpoint_url = config.endpoint_url.strip()
     try:
         # No DNS at save time; each call resolves and checks again.

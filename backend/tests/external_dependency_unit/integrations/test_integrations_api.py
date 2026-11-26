@@ -2066,3 +2066,89 @@ def test_custom_tool_alias_save_keeps_oauth_sign_in(
             admin,
         )
     assert exc.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
+_TOO_LARGE_TEXT = "x" * (5 * 1024 * 1024 + 1)
+
+
+@pytest.mark.parametrize("field", ["openapi_document", "endpoints", "graphql_schema"])
+def test_a_document_over_5_mb_is_refused_on_create_and_update(
+    db_session: Session, admin: User, created: Created, field: str
+) -> None:
+    small: OpenApiConfigInput | GraphQLConfigInput
+    large: OpenApiConfigInput | GraphQLConfigInput
+    if field == "graphql_schema":
+        small = GraphQLConfigInput(
+            endpoint_url="https://gql.example.com/graphql",
+            graphql_schema="type Query { ticket(id: ID!): String }",
+        )
+        large = GraphQLConfigInput(
+            endpoint_url="https://gql.example.com/graphql",
+            graphql_schema=_TOO_LARGE_TEXT,
+        )
+    else:
+        small = OpenApiConfigInput(openapi_document=json.dumps(OPENAPI_SPEC))
+        large = (
+            OpenApiConfigInput(openapi_document=_TOO_LARGE_TEXT)
+            if field == "openapi_document"
+            else OpenApiConfigInput(
+                base_url="https://weather.example.com",
+                endpoints=[f"GET /forecast {_TOO_LARGE_TEXT}"],
+            )
+        )
+
+    def create(config: OpenApiConfigInput | GraphQLConfigInput) -> IntegrationCreate:
+        return IntegrationCreate(
+            for_organization=True,
+            name=f"large-{uuid4().hex[:8]}",
+            auth_mode=IntegrationAuthMode.NONE,
+            config=config,
+        )
+
+    with pytest.raises(OnyxError) as error:
+        admin_api.create_integration(create(large), admin, db_session)
+    assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
+    db_session.rollback()
+
+    detail = admin_api.create_integration(create(small), admin, db_session)
+    created.add(detail.id)
+    with pytest.raises(OnyxError) as error:
+        admin_api.update_integration(
+            detail.id, IntegrationUpdate(config=large), admin, db_session
+        )
+    assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
+
+
+def test_the_custom_tool_alias_refuses_a_spec_over_5_mb(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    large = {
+        **OPENAPI_SPEC,
+        "info": {**OPENAPI_SPEC["info"], "description": _TOO_LARGE_TEXT},
+    }
+
+    def tool(definition: dict[str, Any]) -> CustomToolCreate:
+        return CustomToolCreate(
+            name=f"large-{uuid4().hex[:8]}",
+            description="Large",
+            definition=definition,
+            custom_headers=[],
+            passthrough_auth=False,
+        )
+
+    with pytest.raises(OnyxError) as error:
+        tool_api.create_custom_tool(tool(large), db_session, admin)
+    assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
+    db_session.rollback()
+
+    snapshot = tool_api.create_custom_tool(tool(OPENAPI_SPEC), db_session, admin)
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+    with pytest.raises(OnyxError) as error:
+        tool_api.update_custom_tool(
+            snapshot.id, CustomToolUpdate(definition=large), db_session, admin
+        )
+    assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE

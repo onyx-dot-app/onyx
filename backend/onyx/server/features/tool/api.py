@@ -52,6 +52,7 @@ from onyx.integrations.connections import (
     render_headers,
 )
 from onyx.integrations.service import (
+    check_api_document_size,
     create_integration__no_commit,
     delete_integration_for_user__no_commit,
     get_manageable_integration,
@@ -310,6 +311,8 @@ def create_custom_tool(
 ) -> ToolSnapshot:
     _check_default_chat_permission(tool_data.default_chat_enabled, user)
     _refuse_oauth_config(tool_data.oauth_config_id)
+    document = json.dumps(tool_data.definition)
+    check_api_document_size(document, "spec")
     _method_specs(tool_data.definition)
     auth = _auth_settings(tool_data.custom_headers or [], tool_data.passthrough_auth)
     integration = create_integration__no_commit(
@@ -322,9 +325,7 @@ def create_custom_tool(
             auth_method=auth.auth_method,
             credential_fields=auth.credential_fields,
             header_template=auth.header_template,
-            config=OpenApiConfigInput(
-                openapi_document=json.dumps(tool_data.definition)
-            ),
+            config=OpenApiConfigInput(openapi_document=document),
         ),
         db_session,
     )
@@ -359,10 +360,10 @@ def update_custom_tool(
     if tool_data.description is not None:
         update.description = tool_data.description
     if tool_data.definition is not None:
+        document = json.dumps(tool_data.definition)
+        check_api_document_size(document, "spec")
         _method_specs(tool_data.definition)
-        update.config = OpenApiConfigInput(
-            openapi_document=json.dumps(tool_data.definition)
-        )
+        update.config = OpenApiConfigInput(openapi_document=document)
 
     organization_fields: dict[str, str] = {}
     if tool_data.custom_headers is not None or tool_data.passthrough_auth is not None:
