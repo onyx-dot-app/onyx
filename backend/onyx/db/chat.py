@@ -2123,6 +2123,8 @@ def reserve_chat_response_ids(
     """Reserve assistant responses and select the last response as the active branch.
 
     Pending sends without a target were submitted while this turn prepared.
+    The parent must exist: it is read from the session when the session holds
+    it, with no new read that would show a delete by another transaction.
     """
     if not model_display_names:
         raise ValueError("At least one response model is required")
@@ -2160,11 +2162,8 @@ def reserve_chat_response_ids(
     db_session.flush()
 
     # Point parent's latest_child to the last reserved message
-    parent = (
-        db_session.query(ChatMessage)
-        .filter(ChatMessage.id == parent_message_id)
-        .first()
-    )
+    # A parent that this session just saved comes from its identity map.
+    parent = db_session.get(ChatMessage, parent_message_id)
     if parent:
         parent.latest_child_message_id = reserved[-1].id
 
@@ -2815,8 +2814,6 @@ def create_chat_history_chain(
     stop_at_message_id: int | None = None,
 ) -> list[ChatMessage]:
     """Build the linear chain of messages without including the root message"""
-    mainline_messages: list[ChatMessage] = []
-
     all_chat_messages = get_chat_messages_by_session(
         chat_session_id=chat_session_id,
         user_id=None,
@@ -2837,6 +2834,15 @@ def create_chat_history_chain(
                 "Invalid root message, unable to fetch valid chat message sequence"
             )
 
+    return _selected_chain(root_message, stop_at_message_id)
+
+
+def _selected_chain(
+    root_message: ChatMessage, stop_at_message_id: int | None = None
+) -> list[ChatMessage]:
+    """Follow the latest children from the root. The session's messages must
+    be loaded, so that each step reads none."""
+    mainline_messages: list[ChatMessage] = []
     current_message: ChatMessage | None = root_message
     previous_message: ChatMessage | None = None
     while current_message is not None:
@@ -2895,10 +2901,31 @@ def load_message_branch(
     The parent must be on the selected branch, unless `any_branch`: then a
     parent off it, such as the suspended response of another model of a
     multi-model turn, brings its own ancestry."""
-    history = create_chat_history_chain(
-        chat_session_id, db_session, prefetch_top_two_level_tool_calls=False
+    # One read gives the root and the chain (`create_chat_history_chain`).
+    all_chat_messages = get_chat_messages_by_session(
+        chat_session_id=chat_session_id,
+        user_id=None,
+        db_session=db_session,
+        skip_permission_check=True,
+        prefetch_top_two_level_tool_calls=False,
     )
-    root = get_or_create_root_message(chat_session_id, db_session)
+    if not all_chat_messages:
+        root = get_or_create_root_message(chat_session_id, db_session)
+    else:
+        root = all_chat_messages[0]
+        if root.parent_message is not None:
+            raise RuntimeError(
+                "Invalid root message, unable to fetch valid chat message sequence"
+            )
+        # Roots sort first, so a second root is the second message.
+        if (
+            len(all_chat_messages) > 1
+            and all_chat_messages[1].parent_message_id is None
+        ):
+            raise Exception(
+                "Multiple root messages found for chat session. Data inconsistency detected."
+            )
+    history = _selected_chain(root)
     if parent_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
         parent = history[-1] if history else root
     elif parent_id is None or parent_id == root.id:
