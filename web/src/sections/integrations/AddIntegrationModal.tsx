@@ -578,7 +578,10 @@ export default function AddIntegrationModal({
             aria-label={t(`${urlKey}.title`)}
             placeholder={t(`${urlKey}.placeholder`)}
             value={url}
-            onChange={(event) => setUrl(event.target.value)}
+            onChange={(event) => {
+              setUrl(event.target.value);
+              setDetectError(null);
+            }}
           />
         </InputVertical>
         {flow === "api" && (
@@ -599,7 +602,10 @@ export default function AddIntegrationModal({
                   prominence="tertiary"
                   icon={SvgX}
                   aria-label={t("api.upload.remove")}
-                  onClick={() => setFile(null)}
+                  onClick={() => {
+                    setFile(null);
+                    setDetectError(null);
+                  }}
                 />
               </>
             ) : (
@@ -620,7 +626,10 @@ export default function AddIntegrationModal({
                   setFileError(null);
                   picked
                     .text()
-                    .then((text) => setFile({ name: picked.name, text }))
+                    .then((text) => {
+                      setFile({ name: picked.name, text });
+                      setDetectError(null);
+                    })
                     .catch(() => setFileError(t("api.failed")))
                     .finally(() => setReadingFile(false));
                 }}

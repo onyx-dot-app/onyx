@@ -771,6 +771,9 @@ describe("Custom API", () => {
     expect(await screen.findByText(add.api.checkFailed)).toBeInTheDocument();
     expect(screen.queryByText(add.detected.rest)).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await user.type(screen.getByLabelText(add.api.url.title), "/v2");
+    expect(screen.queryByText(add.api.checkFailed)).not.toBeInTheDocument();
   });
 
   test("waits for the spec file and shows a read error", async () => {
