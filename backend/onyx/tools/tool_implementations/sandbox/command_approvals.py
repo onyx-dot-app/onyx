@@ -168,17 +168,16 @@ class CommandApprovals:
         leaves the foreground and its requests that wait end."""
         self._stop.set()
         command_id = self._command_id
-        if self._thread is not None:
-            if command_id is not None:
-                try:
-                    # The watcher's wait for an announcement ends now, not at
-                    # its timeout.
-                    approval_cache.end_announcement_wait(command_id, self._cache())
-                except Exception:
-                    logger.exception("command_watch_wake_failed command=%s", command_id)
-            self._thread.join(timeout=_JOIN_SECONDS)
         if command_id is None:
             return
+        if self._thread is not None:
+            try:
+                # The watcher's wait for an announcement ends now, not at its
+                # timeout.
+                approval_cache.end_announcement_wait(command_id, self._cache())
+            except Exception:
+                logger.exception("command_watch_wake_failed command=%s", command_id)
+            self._thread.join(timeout=_JOIN_SECONDS)
         decision = ApprovalDecision.REJECTED if cancelled else ApprovalDecision.EXPIRED
         ended: list[UUID] = []
         cleanup: threading.Event | None = None
