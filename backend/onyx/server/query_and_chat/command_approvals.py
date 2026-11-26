@@ -46,16 +46,20 @@ def _response(
 def _now_blocked(
     db_session: Session,
     rows: list[ActionApproval],
-    integration_id: int,
+    integration_id: int | None,
     chat_session_id: UUID,
     user_id: UUID,
 ) -> set[UUID]:
     """The requests of `rows` that the proxy's final check now refuses: the
-    integration is gone or turned off, or the current policies block one of
-    their actions."""
+    integration is gone (a deleted one leaves the rows without one) or
+    turned off, or the current policies block one of their actions."""
     if not rows:
         return set()
-    integration = get_integration_by_id(integration_id, db_session)
+    integration = (
+        None
+        if integration_id is None
+        else get_integration_by_id(integration_id, db_session)
+    )
     if integration is None or not integration.enabled:
         return {row.approval_id for row in rows}
     policies = resolve_chat_action_policies(
@@ -86,13 +90,13 @@ def decide_command_approval(
     """Approve the request once or for the rest of its command, or reject
     it. Approving for the command also approves the command's other waiting
     requests that the grant covers. Approving a request that the current
-    policies block saves a rejection by the policy, also for a covered one. Repeating a saved
-    decision returns it; a different one, or a request that no longer waits,
-    is a conflict."""
+    policies block, or whose integration is deleted, saves a rejection by the
+    policy, also for a covered one. Repeating a saved decision returns it; a
+    different one, or a request that no longer waits, is a conflict."""
     command_id = row.command_id
     chat_session_id = row.chat_session_id
     integration_id = row.integration_id
-    if chat_session_id is None or command_id is None or integration_id is None:
+    if chat_session_id is None or command_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
     blocked = choice != ApprovalChoice.REJECT and bool(
         _now_blocked(db_session, [row], integration_id, chat_session_id, user_id)
@@ -148,7 +152,7 @@ def decide_command_approval(
         # comes before the scan below locks other rows of the command, so two
         # decisions of one command never wait on each other's rows.
         db_session.commit()
-        if for_command:
+        if for_command and integration_id is not None:
             try:
                 # A request that misses the grant committed its row before
                 # the scan below reads it.
@@ -166,7 +170,7 @@ def decide_command_approval(
 
     covered_ids: list[UUID] = []
     blocked_ids: list[UUID] = []
-    if for_command:
+    if for_command and integration_id is not None:
         covered_rows: list[ActionApproval] = []
         for other in action_approval.list_pending_command_action_approvals(
             db_session,

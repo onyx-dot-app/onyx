@@ -855,6 +855,32 @@ def test_the_card_of_a_request_that_the_policies_now_block_ends_disabled(
 
 
 @pytest.mark.parametrize(
+    ("choice", "decided_via"),
+    [
+        (ApprovalChoice.REJECT, ApprovalDecidedVia.USER),
+        (ApprovalChoice.APPROVE_ONCE, ApprovalDecidedVia.POLICY),
+    ],
+)
+def test_a_decision_after_the_integration_is_deleted_rejects_and_wakes_the_gate(
+    db_session: Session,
+    chat: _Chat,
+    choice: ApprovalChoice,
+    decided_via: ApprovalDecidedVia,
+) -> None:
+    """The integration of an open card is deleted: its row keeps no
+    integration, and a decision still ends the request that waits."""
+    command_id, reports, approvals = _command(chat)
+    held = _HeldRequest(_gate(), _ctx(chat, command_id), _matched(chat.integration_id))
+    reports.wait_for(lambda: bool(reports.cards()))
+    delete_integrations(db_session, [chat.integration_id])
+
+    assert _decide(db_session, chat, held.approval_id, choice) == decided_via
+
+    assert held.result() == ApprovalDecision.REJECTED
+    approvals.end(cancelled=False)
+
+
+@pytest.mark.parametrize(
     ("case", "error_code"),
     [
         ("another_user", OnyxErrorCode.NOT_FOUND),
