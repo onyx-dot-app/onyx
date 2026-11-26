@@ -1,6 +1,6 @@
 // Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
 
-import { type ComponentProps, useEffect } from "react";
+import { type ComponentProps, useContext, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { LineItemButton, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -14,6 +14,7 @@ import {
   isLiveSubagent,
   openSubagent,
   subagentStartedAt,
+  SubagentTabsContext,
   useSpawnedSubagents,
 } from "@/lib/chat/subagents";
 import type { ChatSubagent } from "@/lib/chat/types";
@@ -53,6 +54,7 @@ interface SpawnedRowProps {
 /** One spawned agent: what it does now, its run time, and its transcript. */
 function SpawnedRow({ name, task, agent }: SpawnedRowProps) {
   const t = useTranslations("chat.messages.timeline.agentGroup");
+  const opens = useContext(SubagentTabsContext);
   const live = agent !== undefined && isLiveSubagent(agent);
   const activity =
     live && agent.activity_tool
@@ -66,8 +68,9 @@ function SpawnedRow({ name, task, agent }: SpawnedRowProps) {
       description={activity || undefined}
       descriptionMaxLines={1}
       disabled={!agent}
+      presentational={!opens}
       aria-label={t("open", { name })}
-      onClick={agent ? () => openSubagent(agent) : undefined}
+      onClick={agent && opens ? () => openSubagent(agent) : undefined}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0.5}>
           {live && (
@@ -87,7 +90,9 @@ function SpawnedRow({ name, task, agent }: SpawnedRowProps) {
               }
             />
           )}
-          {agent && <SvgChevronRight className="size-4 text-text-03" />}
+          {agent && opens && (
+            <SvgChevronRight className="size-4 text-text-03" />
+          )}
         </Section>
       }
     />

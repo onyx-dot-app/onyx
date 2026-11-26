@@ -52,22 +52,22 @@ export const SubagentPathContext = createContext("/root");
 
 /**
  * Whether the page shows subagent tabs: the chat page's right panel does; the
- * extension's has only Sources, so it opens no agent.
+ * extension's has only Sources, so it opens no agent. Agent status still
+ * loads there.
  */
 export const SubagentTabsContext = createContext(true);
 
 /**
  * The open chat's agents that the rendering agent spawned with these names,
  * once the agents list holds them; undefined for an empty name, a name it
- * does not hold (such as in a shared chat), or a page without subagent tabs.
+ * does not hold (such as in a shared chat).
  */
 export function useSpawnedSubagents(
   names: readonly string[]
 ): (ChatSubagent | undefined)[] {
   const base = useContext(SubagentPathContext);
-  const opens = useContext(SubagentTabsContext);
   const sessionId = useChatSessionStore((state) => state.currentSessionId);
-  const { agents } = useChatSubagents(opens ? sessionId : null, false);
+  const { agents } = useChatSubagents(sessionId, false);
   return names.map((name) =>
     name ? agents.find((agent) => agent.path === `${base}/${name}`) : undefined
   );

@@ -13,6 +13,7 @@ import {
   type TransformedStep,
 } from "@/lib/timeline/chat/transformers";
 import AgentGroupRenderer from "@/lib/timeline/chat/renderers/agent/AgentGroupRenderer";
+import { SubagentTabsContext } from "@/lib/chat/subagents";
 import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";
 import { AgentToolRenderer } from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
 
@@ -263,4 +264,47 @@ test("a Claude spawn whose description has a slash opens the agent the server na
   expect(
     useChatSessionStore.getState().sessions.get("s")?.rightPanel.activeId
   ).toBe("agent:c-1");
+});
+
+test("on a page without subagent tabs, a finished group does not read as working and opens nothing", async () => {
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    const body = String(input).endsWith("/agents")
+      ? [
+          agent("a-1", "/root/alpha", "complete", null),
+          agent("b-1", "/root/beta", "complete", null),
+        ]
+      : STATUS;
+    return new Response(JSON.stringify(body), { status: 200 });
+  });
+  render(
+    <SubagentTabsContext.Provider value={false}>
+      <AgentGroupRenderer
+        packets={[
+          ...spawn(0, "alpha", "Find sources"),
+          ...spawn(1, "beta", "Check facts"),
+        ]}
+        nestedCalls={[]}
+        state={{}}
+        onComplete={jest.fn()}
+        renderType={RenderType.FULL}
+        animate={false}
+        stopPacketSeen={false}
+      >
+        {(results) => (
+          <div>
+            {results.map((result, index) => (
+              <div key={index}>
+                <div data-testid="accessory">{result.headerAccessory}</div>
+                <div data-testid="body">{result.content}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </AgentGroupRenderer>
+    </SubagentTabsContext.Provider>
+  );
+
+  expect(await screen.findByText("Done")).toBeVisible();
+  expect(screen.queryByText(/working/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Open alpha" })).toBeNull();
 });

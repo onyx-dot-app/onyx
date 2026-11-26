@@ -1,4 +1,4 @@
-import { type ComponentProps, useEffect } from "react";
+import { type ComponentProps, useContext, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
@@ -6,7 +6,11 @@ import { codeSpan, markdown } from "@opal/utils";
 import type { CustomToolPacket } from "@/app/app/services/streamingModels";
 import type { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { openSubagent, useSpawnedSubagents } from "@/lib/chat/subagents";
+import {
+  openSubagent,
+  SubagentTabsContext,
+  useSpawnedSubagents,
+} from "@/lib/chat/subagents";
 import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";
 
 /**
@@ -20,6 +24,7 @@ export function AgentToolRenderer({
   children,
 }: ComponentProps<MessageRenderer<CustomToolPacket, {}>>) {
   const t = useTranslations("chat.messages.timeline.agentTool");
+  const opens = useContext(SubagentTabsContext);
   const call = agentToolCalls(packets)[0];
   const name = call?.name ?? "";
   const isComplete = call?.isComplete ?? false;
@@ -44,7 +49,7 @@ export function AgentToolRenderer({
       status: title("running"),
       // A call that never ended keeps its running title.
       doneStatus: isComplete ? title(call?.failed ? "failed" : "done") : null,
-      headerAccessory: agent && (
+      headerAccessory: agent && opens && (
         <Button
           icon={SvgChevronRight}
           prominence="tertiary"
