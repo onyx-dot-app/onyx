@@ -928,6 +928,8 @@ def test_a_failed_wake_does_not_stop_the_other_wakes(
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
     try:
         _decide(db_session, chat, first.approval_id, ApprovalChoice.APPROVE_COMMAND)
+        assert len(failed) == 1
+        assert failed[0] in (second.approval_id, third.approval_id)
         woken = second if failed == [third.approval_id] else third
         assert first.result() == ApprovalDecision.APPROVED
         assert woken.result() == ApprovalDecision.APPROVED
