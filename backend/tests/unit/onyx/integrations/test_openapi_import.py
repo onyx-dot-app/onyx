@@ -451,6 +451,17 @@ def test_import_drops_and_lists_an_entry_that_is_not_an_object() -> None:
     validate_openapi_schema(json.loads(view.openapi_document))
 
 
+def test_import_lists_a_path_item_reference() -> None:
+    spec = _callable_spec()
+    spec["components"]["pathItems"] = {"Owners": {"get": {"operationId": "owners"}}}
+    spec["paths"]["/owners"] = {"$ref": "#/components/pathItems/Owners"}
+
+    view = _import(json.dumps(spec))
+
+    assert view.skipped == ["The path item of /owners: its $ref is not supported"]
+    assert "/owners" not in json.loads(view.openapi_document)["paths"]
+
+
 def test_extensions_under_paths_are_not_endpoints() -> None:
     """OpenAPI allows ``x-*`` keys under ``paths`` with any value."""
     spec = _callable_spec()
