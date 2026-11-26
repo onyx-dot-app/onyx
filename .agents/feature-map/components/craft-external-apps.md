@@ -175,7 +175,9 @@ does not match an integration that the chat turned off, unless it is
 Required: the proxy injects no credential and applies no policy, so a
 request to a public API still goes out without the app's credentials. An
 action that the chat turned off on an integration that still matches is
-Blocked. A chat Ask gets `approval_needs_tool`. Its detail names
+Blocked. A chat Ask from a foreground command that a client streams waits
+for an approval card (see the command approvals below); any other chat Ask
+gets `approval_needs_tool`. Its detail names
 the chat tools to call instead, and the connect tool for a user with no
 sign-in, or says that the app has no tool for the request, as for a URL-pattern app (`sandbox_proxy/addons/gate.py:_chat_tool_hint`, which asks `integrations/kinds/api.py:chat_tool_name` for each action; `GatedTarget.api_shape` gives the shape, None for an MCP server). `AllMatchedActions` sorts actions
 strictest first, and `governing_action` decides the verdict.
