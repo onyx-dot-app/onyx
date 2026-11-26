@@ -17640,7 +17640,7 @@
         "saveFailed": "无法保存。请重试。",
         "alwaysAsks": "Onyx 会为每个此类请求请求审批。",
         "switch": {
-          "label": "始终允许 {name}",
+          "label": "{name} 不要询问我",
           "visibleLabel": "不要询问我"
         },
         "retry": {

@@ -17640,7 +17640,7 @@
         "saveFailed": "Enregistrement impossible. Réessayez.",
         "alwaysAsks": "Onyx demande une approbation pour chacune de ces requêtes.",
         "switch": {
-          "label": "Toujours autoriser {name}",
+          "label": "Ne pas me demander pour {name}",
           "visibleLabel": "Ne pas me demander"
         },
         "retry": {

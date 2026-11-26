@@ -17640,7 +17640,7 @@
         "saveFailed": "Could not save. Try again.",
         "alwaysAsks": "Onyx asks for approval for each of these requests.",
         "switch": {
-          "label": "Always allow {name}",
+          "label": "Don't ask me about {name}",
           "visibleLabel": "Don't ask me"
         },
         "retry": {

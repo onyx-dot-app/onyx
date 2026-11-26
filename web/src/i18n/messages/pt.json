@@ -17640,7 +17640,7 @@
         "saveFailed": "Não foi possível salvar. Tente novamente.",
         "alwaysAsks": "O Onyx pede aprovação para cada uma dessas solicitações.",
         "switch": {
-          "label": "Sempre permitir {name}",
+          "label": "Não me perguntar sobre {name}",
           "visibleLabel": "Não me perguntar"
         },
         "retry": {

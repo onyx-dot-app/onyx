@@ -17640,7 +17640,7 @@
         "saveFailed": "Speichern fehlgeschlagen. Versuchen Sie es erneut.",
         "alwaysAsks": "Onyx fragt bei jeder dieser Anfragen nach einer Freigabe.",
         "switch": {
-          "label": "{name} immer erlauben",
+          "label": "Nicht fragen bei {name}",
           "visibleLabel": "Nicht fragen"
         },
         "retry": {
