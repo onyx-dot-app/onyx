@@ -185,8 +185,10 @@ earlier one), `approved_for_command` (a command grant; command requests
 only), `rejected` (also a user Stop of a live turn), `disabled` (an
 approval of a tool that the policy now disables, or a request deleted with its
 tool's server), or `cancelled` for a call that stopped waiting without a
-decision. Requests have no deadline. A turn whose run has nothing left but
-approval waits ends its stream with its requests, then
+decision. Tool requests have no deadline. A command request expires after
+`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` (180 s by default) and resolves as
+`cancelled` in the same stream; it never suspends the turn. A turn whose run has
+nothing left but tool approval waits ends its stream with its requests, then
 `stop(awaiting_user)` (`chat/presentation.py:overall_stop` maps
 `SUSPENDED`); after the decisions the response continues in a new stream,
 under a new stream ID, that clients follow from cursor 0: it replays the saved
