@@ -515,8 +515,8 @@ termination grace period is much shorter, so it ends running turns first
   `handle_stream_message_objects` into a `ChatFullResponse` with
   `gather_stream_full`. List the callers with
   `git grep -n "run_chat_turn(\|handle_stream_message_objects(" backend`. Do not
-  start a `ChatFeature` directly: admission, delivery and saving live in
-  `start_chat_turn`.
+  start the `Agent` that `ChatFeature.agent()` builds directly: admission,
+  delivery and saving live in `start_chat_turn`.
 - `investigate-stuck-turn` **Investigate a turn that does not end, a stop that
   does nothing, or a send refused as busy.** In `backend/log/api_server_debug.log`,
   find "Chat turn control failed", "Chat response polling failed", "Chat response

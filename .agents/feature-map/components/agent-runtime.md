@@ -115,8 +115,8 @@ Agent (history, checkpoint, tools, feature, on_drained)
   (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
   passes `ChatFeature.max_steps`: `MAX_LLM_CYCLES`, or `CODE_MODE_MAX_LLM_CYCLES`
   when code mode applies (`ChatFeature.code_cells` is set).
-- `RunHooks.on_finish` runs once at the end of every run, without the execution
-  lock, with the run's recorded tool results.
+- `RunHooks.on_finish`, when a feature supplies it, runs once at the end of
+  the run, without the execution lock, with the run's recorded tool results.
   `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
   `agents/models.py:ToolResultAmendment` list, and `Run._apply_amendments`
   sets those results and publishes `ToolResultAmendedEvent` for each,
@@ -142,8 +142,8 @@ Agent (history, checkpoint, tools, feature, on_drained)
   results and the run still suspends. A suspend hook that stops for
   cancellation finishes the run as cancelled. Chat uses both hooks to close
   code mode cells ([[code-execution#code-mode-interrupted-run]]).
-  `Agent.on_drained` runs after each finish or suspension once the run's work
-  drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
+  `Agent.on_drained`, when a caller supplies it, runs after each finish or
+  suspension once the run's work drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
   threads, work that a tool added through `ToolInvocation.run_work` (a code
   mode cell's driver, and its tool call threads through `track_detached`), and its foreground
   children's work (`Run.track_child_work`), not background children. A suspension calls it only when no foreground child
