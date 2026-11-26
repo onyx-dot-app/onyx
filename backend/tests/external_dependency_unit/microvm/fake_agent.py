@@ -27,6 +27,7 @@ from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentErrorReason,
 )
+from onyx.microvm.browser_protocol import BROWSER_SERVICE_PROTOCOL
 from onyx.microvm.daemon_client import (
     SANDBOX_ID_HEADER,
     SANDBOXD_ERROR_DOMAIN,
@@ -256,6 +257,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.dial_targets: dict[tuple[str, int], tuple[str, int]] = {}
         # BrowserStart fails with this status code (None: it works).
         self.browser_start_error: grpc.StatusCode | None = None
+        # The service protocol that BrowserStart reports.
+        self.browser_service_protocol = BROWSER_SERVICE_PROTOCOL
         # Browser and session save calls in order: "browser_start:<profile>",
         # "browser_stop", "capture:<session>".
         self.events: list[str] = []
@@ -1768,7 +1771,9 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             if self.agent.browser_start_error is not None:
                 context.abort(self.agent.browser_start_error, "no browser")
             self.agent.events.append(f"browser_start:{request.profile_session_id}")
-            return sandboxd_pb2.BrowserStartResponse()
+            return sandboxd_pb2.BrowserStartResponse(
+                service_protocol=self.agent.browser_service_protocol
+            )
 
     def BrowserStop(  # noqa: N802
         self,

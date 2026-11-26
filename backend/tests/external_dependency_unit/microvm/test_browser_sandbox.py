@@ -340,6 +340,11 @@ def test_bad_answers_and_an_unreachable_browser_raise_sandbox_errors(
     with pytest.raises(HarnessSandboxError, match="older image"):
         sandbox.browser_call(ref, "status", {}, timeout_seconds=10)
 
+    node.agent.browser_start_error = None
+    node.agent.browser_service_protocol = 0
+    with pytest.raises(HarnessSandboxError, match="older image"):
+        sandbox.browser_call(ref, "status", {}, timeout_seconds=10)
+
 
 def test_a_stop_cancels_a_call_in_progress(
     sandbox: FirecrackerHarnessSandbox,

@@ -576,19 +576,21 @@ class SandboxDaemonClient:
     # Browser: the VM's one Chrome and its browser service, owned by the
     # daemon (BROWSER_SERVICE_PORT in browser_protocol).
 
-    def browser_start(self, *, profile_session_id: str) -> None:
+    def browser_start(self, *, profile_session_id: str) -> int:
         """Make sure that Chrome, with the profile in the session directory
-        `profile_session_id/chrome`, and the browser service run. A daemon
+        `profile_session_id/chrome`, and the browser service run. Returns the
+        browser service protocol that the daemon relays, 0 for none. A daemon
         without a browser raises UNIMPLEMENTED; a failed start
         BROWSER_START_FAILED."""
         try:
-            self._stub.BrowserStart(
+            r = self._stub.BrowserStart(
                 sandboxd_pb2.BrowserStartRequest(profile_session_id=profile_session_id),
                 metadata=self._authed(),
                 timeout=_BROWSER_START_TIMEOUT_SECONDS,
             )
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e
+        return r.service_protocol
 
     def browser_stop(self) -> None:
         """Stop the browser service, then close Chrome cleanly so that it

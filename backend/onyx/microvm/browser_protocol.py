@@ -18,6 +18,9 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 # The guest daemon relays this vsock port to the browser service.
 BROWSER_SERVICE_PORT = 3011
+# The browser service protocol that this client speaks; BrowserStart
+# reports the one the daemon relays (0: none).
+BROWSER_SERVICE_PROTOCOL = 1
 # Largest N (kind byte and payload). A larger length closes the connection.
 MAX_FRAME_BYTES = 16 << 20
 _HEADER = struct.Struct(">I")

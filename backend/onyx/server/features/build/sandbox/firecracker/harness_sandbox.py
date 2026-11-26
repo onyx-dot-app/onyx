@@ -47,6 +47,7 @@ from onyx.microvm.agent_client import (
 )
 from onyx.microvm.browser_protocol import (
     BROWSER_SERVICE_PORT,
+    BROWSER_SERVICE_PROTOCOL,
     BrowserCallResponse,
     BrowserFrame,
     BrowserFramingError,
@@ -243,6 +244,10 @@ _SANDBOX_FILE_TYPES: dict[FileType, SandboxFileType] = {
 }
 # The tail of a failed render command's output that its log keeps.
 _RENDER_LOG_OUTPUT_BYTES = 2000
+_OLDER_BROWSER_IMAGE = (
+    "This sandbox runs an older image without the browser; it updates after "
+    "the sandbox restarts."
+)
 _STAT_ERRORS: dict[StatError, SandboxPathFault] = {
     StatError.ESCAPES: "escapes",
     StatError.LOOP: "loop",
@@ -562,14 +567,15 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 ref.sandbox_id,
                 ref.sandbox_id,
             ):
-                daemon.browser_start(profile_session_id=str(ref.sandbox_id))
+                service_protocol = daemon.browser_start(
+                    profile_session_id=str(ref.sandbox_id)
+                )
         except (HostAgentError, SandboxDaemonError) as e:
             if e.code is grpc.StatusCode.UNIMPLEMENTED:
-                raise HarnessSandboxError(
-                    "This sandbox runs an older image without the browser; it "
-                    "updates after the sandbox restarts."
-                ) from e
+                raise HarnessSandboxError(_OLDER_BROWSER_IMAGE) from e
             raise HarnessSandboxError(f"The browser did not start: {e}") from e
+        if service_protocol != BROWSER_SERVICE_PROTOCOL:
+            raise HarnessSandboxError(_OLDER_BROWSER_IMAGE)
         return placed
 
     def browser_call(
