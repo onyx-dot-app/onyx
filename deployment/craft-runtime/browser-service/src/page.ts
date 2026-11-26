@@ -697,8 +697,14 @@ export const hover = async (page: Page, input: HoverInput, pointer: PointerRepor
   await locator.hover({ timeout: remaining() });
 };
 
+const requiredLocator = (page: Page, input: Target): Locator => {
+  const locator = targetLocator(page, input);
+  if (locator === null) throw new OperationError("invalid_argument", "Pass a ref or a selector.");
+  return locator;
+};
+
 export const select = async (page: Page, input: SelectInput): Promise<Array<string>> => {
-  const locator = targetLocator(page, input)!;
+  const locator = requiredLocator(page, input);
   const timeout = input.timeoutMs;
   const options = await locator.evaluate(
     (element) =>
@@ -730,8 +736,8 @@ export const select = async (page: Page, input: SelectInput): Promise<Array<stri
 export const drag = async (page: Page, input: DragInput, pointer: PointerReporter = noPointer) => {
   const deadline = Date.now() + input.timeoutMs;
   const remaining = () => Math.max(1, deadline - Date.now());
-  const source = targetLocator(page, input.source)!;
-  const target = targetLocator(page, input.target)!;
+  const source = requiredLocator(page, input.source);
+  const target = requiredLocator(page, input.target);
   await pointer(await targetPoint(page, source, {}, remaining), "move");
   // Observe drag rejection immediately; steps give the page mousemoves during the drag.
   const dragFailure = source.dragTo(target, { timeout: remaining(), steps: 5 }).then(
