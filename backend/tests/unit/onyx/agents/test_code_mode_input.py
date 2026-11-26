@@ -13,6 +13,7 @@ import pydantic_monty
 import pytest
 from pydantic import BaseModel, JsonValue
 
+from onyx.agents.concurrency import WorkTracker
 from onyx.agents.events import (
     AgentEvent,
     AgentSuspendedEvent,
@@ -864,13 +865,16 @@ def test_a_program_that_parks_right_after_its_offer_takes_the_answer(
     runs: list[Run] = []
     if late_wake:
         suspending = threading.Event()
-        notify = Run.notify_tool_activity
+        finished = WorkTracker.finished
         suspend = CodeCells.suspend
 
-        def late_notify(self: Run) -> None:
-            if threading.current_thread().name == "code-mode-cell-1":
+        def late_wake_after_end(self: WorkTracker) -> None:
+            finished(self)
+            if (
+                threading.current_thread().name == "code-mode-cell-1"
+                and self is runs[0].work.held
+            ):
                 suspending.wait(2)
-            notify(self)
 
         def marked_suspend(
             self: CodeCells, results: Sequence[ToolResultMessage]
@@ -878,7 +882,7 @@ def test_a_program_that_parks_right_after_its_offer_takes_the_answer(
             suspending.set()
             return suspend(self, results)
 
-        monkeypatch.setattr(Run, "notify_tool_activity", late_notify)
+        monkeypatch.setattr(WorkTracker, "finished", late_wake_after_end)
         monkeypatch.setattr(CodeCells, "suspend", marked_suspend)
     agents = Agents(
         reply=_one_call_per_step(

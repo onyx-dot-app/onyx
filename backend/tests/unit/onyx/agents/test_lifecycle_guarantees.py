@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from onyx.agents.events import AgentEndEvent, AgentEvent, ToolEndEvent
 from onyx.agents.models import (
+    AgentState,
     PreparedStep,
     RunFailureKind,
     StepInput,
@@ -223,6 +224,43 @@ def test_failed_handle_releases_agent_and_preserves_error_classification(
     gc.collect()
     assert reference() is None
     assert run.snapshot().failure is not None
+
+
+def test_finished_run_is_freed_without_a_garbage_collection_pass() -> None:
+    def model(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if len(request.messages) == 1:
+            return AssistantMessage(
+                content=[ToolCall(id="call", name="lookup", arguments={})]
+            )
+        return AssistantMessage(content=[TextContent(text="done")])
+
+    agent = Agent(
+        FakeModelClient(model),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content="question")]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="lookup", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="found"),
+            )
+        ],
+    )
+    events: list[AgentEvent] = []
+    gc.collect()
+    gc.disable()
+    try:
+        run = agent.start(max_steps=2, background=False, on_event=events.append)
+        assert run.result(timeout=5).output.text == "done"
+        assert run.wait_for_idle(5)
+        freed = threading.Event()
+        weakref.finalize(run, freed.set)
+        del run, agent
+        # Worker threads can still be leaving frames that hold the run.
+        assert freed.wait(5)
+    finally:
+        gc.enable()
 
 
 def test_wait_timeout_and_waiter_cancellation_leave_run_active() -> None:

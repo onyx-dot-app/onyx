@@ -217,7 +217,7 @@ class ToolBatch:
 
     def execute(self) -> bool:
         try:
-            with self.run.cancellation_signal.on_cancel(self.run.notify_tool_activity):
+            with self.run.cancellation_signal.on_cancel(self.run.work.notify_activity):
                 while True:
                     self.run.cancellation_signal.check()
                     self.run.begin_work_cycle()
@@ -285,14 +285,14 @@ class ToolBatch:
                         # See ToolInvocation.run_work. Work that ended since
                         # the cycle began, such as a program that parked
                         # after its offer, gets another cycle.
-                        if self.run.tool_phase_idle:
+                        if self.run.work.tool_phase_idle:
                             return False
                     # Each held job that ends, such as a call or a program
                     # that parks, starts another cycle.
                     self.run.wait_for_tool_activity()
         except BaseException:
             self.run.cancellation_signal.cancel()
-            self.run.notify_tool_activity()
+            self.run.work.notify_activity()
             raise
 
     def _continue_child_wait(self, call: ToolCall, pending: ChildRunWait) -> None:
