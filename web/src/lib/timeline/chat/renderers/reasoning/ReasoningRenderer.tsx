@@ -3,7 +3,6 @@ import { useTranslations } from "next-intl";
 
 import {
   PacketType,
-  ReasoningDelta,
   ReasoningPacket,
 } from "@/app/app/services/streamingModels";
 import {
@@ -15,7 +14,10 @@ import {
   splitThinkingTitle,
 } from "@/lib/timeline/components/bodies/ThinkingBody";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { reasoningPreview } from "@/lib/timeline/chat/renderers/reasoning/reasoningPreview";
+import {
+  reasoningPreview,
+  reasoningText,
+} from "@/lib/timeline/chat/renderers/reasoning/reasoningPreview";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
@@ -30,17 +32,8 @@ function constructCurrentReasoningState(packets: ReasoningPacket[]) {
       // Support reasoning_done from backend
       (p.obj as any).type === PacketType.REASONING_DONE
   );
-  const deltas = packets
-    .filter((p) => p.obj.type === PacketType.REASONING_DELTA)
-    .map((p) => p.obj as ReasoningDelta);
 
-  const content = deltas.map((d) => d.reasoning).join("");
-
-  return {
-    hasStart,
-    hasEnd,
-    content,
-  };
+  return { hasStart, hasEnd, content: reasoningText(packets) };
 }
 
 export const ReasoningRenderer: MessageRenderer<

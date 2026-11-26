@@ -681,46 +681,28 @@ def update_chat_session(
     return chat_session
 
 
-def save_chat_session_name_if_unnamed(
+def save_generated_chat_session_name(
     db_session: Session,
     user_id: UUID | None,
     chat_session_id: UUID,
+    expected_name: str | None,
     name: str,
 ) -> bool:
-    """Save an auto-generated name only while the chat has none, so a rename
-    made during generation wins. Returns whether the name was saved."""
-    statement = (
-        update(ChatSession)
-        .where(
-            ChatSession.id == chat_session_id,
-            ChatSession.deleted.is_(False),
-            or_(ChatSession.description.is_(None), ChatSession.description == ""),
+    """Save a generated name only while the chat still has `expected_name`
+    (None means no name yet), so a rename made during generation wins.
+    Returns whether the name was saved."""
+    if expected_name:
+        name_unchanged = ChatSession.description == expected_name
+    else:
+        name_unchanged = or_(
+            ChatSession.description.is_(None), ChatSession.description == ""
         )
-        .values(description=name)
-        .returning(ChatSession.id)
-    )
-    if user_id is not None:
-        statement = statement.where(ChatSession.user_id == user_id)
-    saved_id = db_session.execute(statement).scalar_one_or_none()
-    db_session.commit()
-    return saved_id is not None
-
-
-def replace_chat_session_name_if_unchanged(
-    db_session: Session,
-    user_id: UUID | None,
-    chat_session_id: UUID,
-    expected_name: str,
-    name: str,
-) -> bool:
-    """Replace a generated name only while the chat still has `expected_name`,
-    so a rename made during generation wins. Returns whether it was saved."""
     statement = (
         update(ChatSession)
         .where(
             ChatSession.id == chat_session_id,
             ChatSession.deleted.is_(False),
-            ChatSession.description == expected_name,
+            name_unchanged,
         )
         .values(description=name)
         .returning(ChatSession.id)
