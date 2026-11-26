@@ -663,6 +663,47 @@ describe("Custom API", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  test("Back to a bad URL after an uploaded spec shows the URL error", async () => {
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": {
+        shape: "openapi",
+        openapi_document: "{}",
+        base_url: "https://prod.example.com",
+        endpoints: ["GET /pets List pets"],
+        skipped: [],
+      },
+    });
+    const { user } = open({ kind: "api" });
+    // jsdom's File has no text().
+    const spec = Object.assign(
+      new File(["{}"], "openapi.json", { type: "application/json" }),
+      { text: async () => "{}" }
+    );
+    await user.upload(screen.getByLabelText(add.api.upload.label), spec);
+    await screen.findByText(
+      add.api.upload.chosen.replace("{file}", "openapi.json")
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: add.name.title }),
+      "Pets"
+    );
+    await user.click(screen.getByRole("button", { name: add.continue }));
+    await screen.findByRole("button", { name: /^Add$/ });
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.type(
+      screen.getByRole("textbox", { name: add.api.url.title }),
+      "api.example.com/v2"
+    );
+    await user.click(screen.getByRole("button", { name: add.continue }));
+
+    expect(screen.getByText(add.api.url.error)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Add$/ })
+    ).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   test("a spec with several servers asks which base URL to call", async () => {
     const fetchMock = mockFetch({
       "POST /api/admin/integrations/openapi-import": {

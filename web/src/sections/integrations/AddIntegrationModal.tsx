@@ -339,6 +339,8 @@ export default function AddIntegrationModal({
     setDetectError(null);
     if (!name.trim()) return;
     const target = normalizedUrl(url);
+    // A bad URL is not a blank one: never reuse a setup from no URL.
+    if (url.trim() && !target) return;
     const last = detectedFrom.current;
     if (last && last.url === target && last.file === file) {
       setShowErrors(false);
@@ -349,7 +351,7 @@ export default function AddIntegrationModal({
       if (target) void probeMcp(name, target);
       return;
     }
-    if (url.trim() ? !target : !file) return;
+    if (!target && !file) return;
     void detectCustomApi(target);
   }
 
