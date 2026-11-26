@@ -69,8 +69,14 @@ check() {
 }
 
 log "the entrypoint refuses root"
-if docker run --rm --user 0:0 "${image}" --listen tcp:0.0.0.0:8052 >/dev/null 2>&1; then
+# A bad --listen makes a daemon that the guard lets through exit at once;
+# only the guard prints the diagnostic.
+if out=$(docker run --rm --user 0:0 "${image}" --listen none 2>&1); then
   log "FAIL: the entrypoint started as root"
+  exit 1
+fi
+if [[ "${out}" != *"run as uid 1000, not root"* ]]; then
+  log "FAIL: the entrypoint did not refuse root: ${out}"
   exit 1
 fi
 
