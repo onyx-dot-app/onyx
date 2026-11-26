@@ -21,12 +21,10 @@ If it is unclear which tool to use, consider using multiple in parallel to be ef
 """.lstrip()
 
 
-# `{name}` is the code mode run tool's name in the model's shape. The program
-# language and a call's syntax come first, where the model reads them before
-# it writes a program.
+# `{name}` is the code mode run tool's name in the model's shape.
 CODE_MODE_GUIDANCE = """
 ## {name}
-Call tools from Python programs with `{name}`. Each tool is an async Python function of the `tools` namespace, called with keyword arguments: `result = await tools.tool_name(argument=value)`. The `{name}` description lists the functions. Batch independent calls in one `{name}` with `asyncio.gather`, and inspect every result. Keep dependent or judgment-based follow-ups in a later call. Avoid unnecessary output.
+Call tools from Python programs with `{name}`; its description lists the functions. Batch independent calls in one `{name}` with `asyncio.gather`, and inspect every result. Keep dependent or judgment-based follow-ups in a later call. Avoid unnecessary output.
 """.lstrip()
 
 

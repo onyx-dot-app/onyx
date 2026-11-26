@@ -139,10 +139,10 @@ def code_mode_description(stubs: ToolStubs, limits: SandboxLimits) -> str:
         else f"\n- `await {shape.describe.name}(name)` returns the name, description "
         "and full stub of one function."
     )
-    return f"""Run a Python program that calls the tools listed below, as in `result = await {TOOLS_NAMESPACE}.tool_name(argument=value)`. Each `{run}` call starts a fresh Python interpreter: variables, functions and imports from earlier calls are gone. Keep values across calls with `store(key, value)` and `load(key)`. Use `{run}` to combine tool calls in one step, run independent calls in parallel, and filter large results before you read them.
+    return f"""Run a Python program that calls the tools listed below. Each `{run}` call starts a fresh Python interpreter: variables, functions and imports from earlier calls are gone. Keep values across calls with `store(key, value)` and `load(key)`. Use `{run}` to combine tool calls in one step, run independent calls in parallel, and filter large results before you read them.
 
 - The program runs in Monty, a sandboxed Python interpreter, not CPython. The program is for calling and combining the tools below. It has no files, processes or network of its own; anything outside the program comes from a tool.
-- Each tool is an async Python function of the `{TOOLS_NAMESPACE}` namespace, which every program has. Call it as `{TOOLS_NAMESPACE}.<name>` with keyword arguments only and `await` the result. These functions exist only inside programs: you cannot call them as tools yourself. Top-level `await` works; do not call `asyncio.run()`.
+- Each tool is an async Python function of the `{TOOLS_NAMESPACE}` namespace, which every program has. Call it as `{TOOLS_NAMESPACE}.<name>` with keyword arguments only and `await` the result, for example `result = await {TOOLS_NAMESPACE}.tool_name(argument=value)`. These functions exist only inside programs: you cannot call them as tools yourself. Top-level `await` works; do not call `asyncio.run()`.
 - Await every call; calls that are not awaited are cancelled when the program ends.
 - Run independent calls in parallel with `asyncio.gather`, for example `a, b = await asyncio.gather({TOOLS_NAMESPACE}.f(x=1), {TOOLS_NAMESPACE}.g(y=2))`. Make a call that needs an earlier result after that result is available.
 - `asyncio.gather` takes no keyword arguments, so `return_exceptions=True` is not available, and one failed call fails the whole gather. To keep the other results, wrap each call:

@@ -406,29 +406,29 @@ def test_code_mode_guidance_names_the_shape_s_run_tool(family: ToolFamily) -> No
 
 
 @pytest.mark.parametrize("family", list(ToolFamily))
-def test_code_mode_shows_a_python_call_where_the_model_reads_first(
+def test_code_mode_names_python_and_a_fresh_interpreter_first(
     family: ToolFamily,
 ) -> None:
     """The run tool's first line and the code mode section's first line say
-    that programs are Python and show a Python tool call; the run tool's
-    also says that each call starts a fresh interpreter."""
+    that programs are Python, in words and without an example call; the run
+    tool's also says that each call starts a fresh interpreter."""
     shape = CODE_MODE_SHAPES[family]
     offered = with_code_mode([MemoryTool(tool_id=1, llm=MagicMock())], shape)[0]
     [code_tool] = [tool for tool in offered if isinstance(tool, CodeModeTool)]
-    python_call = "`result = await tools.tool_name(argument=value)`"
+    run_line = code_tool.tool_definition().description.split("\n", 1)[0]
     section = _code_mode_prompt(offered).split(f"## {shape.run_name}\n", 1)[1]
-    for first_line in (
-        code_tool.tool_definition().description.split("\n", 1)[0],
-        section.split("\n", 1)[0],
-    ):
-        assert "Python program" in first_line
-        assert python_call in first_line
-    # The run tool's opening also says that no state carries over by itself.
+    assert run_line.startswith("Run a Python program that calls the tools")
+    assert section.startswith(
+        f"Call tools from Python programs with `{shape.run_name}`"
+    )
+    assert [
+        line for line in (run_line, section.split("\n", 1)[0]) if "await" in line
+    ] == []
     assert (
         f"Each `{shape.run_name}` call starts a fresh Python interpreter: variables, "
         "functions and imports from earlier calls are gone. Keep values across "
         "calls with `store(key, value)` and `load(key)`."
-    ) in code_tool.tool_definition().description.split("\n", 1)[0]
+    ) in run_line
 
 
 def _unused(*_: object) -> ToolResult:
