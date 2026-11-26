@@ -304,6 +304,20 @@ def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
     return method_specs
 
 
+def _with_variable_defaults(url: str, variables: object) -> str:
+    """``url`` with each ``{name}`` server variable set to its default. A
+    variable with no string default stays as it is."""
+    if not isinstance(variables, dict):
+        return url
+
+    def default(match: re.Match[str]) -> str:
+        variable = variables.get(match.group(1))
+        value = variable.get("default") if isinstance(variable, dict) else None
+        return value if isinstance(value, str) else match.group(0)
+
+    return re.sub(r"\{([^{}]+)\}", default, url)
+
+
 def openapi_to_url(openapi_schema: dict[str, dict | str]) -> str:
     """
     Extract URLs from the servers section of an OpenAPI schema.
@@ -322,7 +336,7 @@ def openapi_to_url(openapi_schema: dict[str, dict | str]) -> str:
         if url is not None and not isinstance(url, str):
             raise ValueError("`servers[].url` must be a string")
         if url:
-            urls.append(url)
+            urls.append(_with_variable_defaults(url, server.get("variables")))
 
     if len(urls) != 1:
         raise ValueError(

@@ -151,6 +151,27 @@ def test_a_spec_with_path_parameters_validates_and_builds_tools() -> None:
     ) == ["deletePet", "getPet"]
 
 
+def test_server_variables_take_their_defaults() -> None:
+    spec = _callable_spec()
+    spec["servers"] = [
+        {
+            "url": "https://pets.example.com/{version}",
+            "variables": {"version": {"default": "v2"}},
+        }
+    ]
+
+    assert _import(json.dumps(spec)).base_url == "https://pets.example.com/v2"
+    tools = build_custom_tools_from_openapi_schema_and_headers(
+        1,
+        spec,
+        dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
+    )
+    assert {tool._base_url for tool in tools} == {"https://pets.example.com/v2"}
+    # With no default, the admin sets the base URL.
+    del spec["servers"][0]["variables"]["version"]["default"]
+    assert openapi_to_url(spec) == "https://pets.example.com/{version}"
+
+
 def test_import_drops_an_operation_without_a_json_body() -> None:
     view = _import(json.dumps(SPEC))
 
