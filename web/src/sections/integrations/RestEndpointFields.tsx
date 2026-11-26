@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -69,6 +69,9 @@ export default function RestEndpointFields({
   // Save drops the actions of these operations, so show them before Save.
   const [skipped, setSkipped] = useState<string[]>([]);
   const [rejected, setRejected] = useState(false);
+  // True from a file pick until its text arrives, so an empty or unreadable
+  // file is told apart from the clear button, which also reports "".
+  const readingFileRef = useRef(false);
 
   async function runImport(
     body: { openapi_document: string } | { spec_url: string }
@@ -117,17 +120,31 @@ export default function RestEndpointFields({
                 onImportErrorChange(tAdd("api.tooLarge"));
               }}
               // Called before setValue, which may start an import.
-              onReadingChange={onImportingChange}
+              onReadingChange={(reading) => {
+                if (reading) readingFileRef.current = true;
+                onImportingChange(reading);
+              }}
               setValue={(text) => {
-                setRejected(false);
+                const fromFile = readingFileRef.current;
+                readingFileRef.current = false;
+                // A blank or unreadable file is a failed import; a clear
+                // keeps the current spec.
+                const failed = !text.trim() && (fromFile || text !== "");
+                setRejected(failed);
                 const over = specTextTooLarge(text);
-                onImportErrorChange(over ? tAdd("api.tooLarge") : null);
+                onImportErrorChange(
+                  over
+                    ? tAdd("api.tooLarge")
+                    : failed
+                      ? t("import.failed")
+                      : null
+                );
                 if (!over && text.trim())
                   void runImport({ openapi_document: text });
               }}
             />
-            {/* A refused file is never attached, so the control has no clear
-                button; this one keeps the current spec. */}
+            {/* A refused or unreadable file is never attached, so the control
+                has no clear button; this one keeps the current spec. */}
             {rejected && importError !== null && (
               <Button
                 type="button"

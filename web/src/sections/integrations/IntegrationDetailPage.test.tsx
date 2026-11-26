@@ -564,6 +564,58 @@ test("a refused REST upload can be discarded to keep the current spec", async ()
   expect(save).toBeEnabled();
 });
 
+/** Makes the next file read fail, as an unreadable file does. */
+function failNextRead(): void {
+  jest
+    .spyOn(FileReader.prototype, "readAsText")
+    .mockImplementationOnce(function (this: FileReader) {
+      setTimeout(() => this.dispatchEvent(new ProgressEvent("error")));
+    });
+}
+
+test.each([
+  ["a blank", false],
+  ["an unreadable", true],
+])(
+  "%s REST upload blocks Save until it is discarded",
+  async (_, unreadable) => {
+    mockFetch({
+      [URL_DETAIL]: makeDetail({
+        kind: "api",
+        shape: "openapi",
+        auth_mode: "none",
+        auth_method: null,
+        oauth_client: null,
+        config: OPENAPI_VIEW,
+      }),
+    });
+    if (unreadable) failNextRead();
+    const u = user();
+    open("configuration");
+    const view = await inPanel();
+    const save = await view.findByRole("button", {
+      name: detailCopy.configuration.save,
+    });
+    const input =
+      activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("No file input");
+    await u.upload(input, new File(unreadable ? ["{}"] : [], "openapi.json"));
+
+    expect(
+      await view.findByText(copy.add.rest.import.failed)
+    ).toBeInTheDocument();
+    expect(save).toBeDisabled();
+
+    await u.click(
+      view.getByRole("button", { name: copy.add.api.upload.remove })
+    );
+    expect(
+      view.queryByText(copy.add.rest.import.failed)
+    ).not.toBeInTheDocument();
+    expect(save).toBeEnabled();
+  }
+);
+
 test("a failed spec import blocks Save until the import is discarded", async () => {
   mockFetch({
     [URL_DETAIL]: makeDetail({
@@ -889,6 +941,35 @@ test("a blank schema upload blocks Save until it is cleared", async () => {
   expect(
     view.getByRole("textbox", { name: copy.add.graphql.schema.title })
   ).toHaveValue(GRAPHQL_CONFIG.graphql_schema);
+});
+
+test("an unreadable schema upload blocks Save", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "graphql",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: GRAPHQL_CONFIG,
+    }),
+  });
+  failNextRead();
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const input =
+    activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("No file input");
+  await u.upload(input, new File(["type Query { a: Int }"], "schema.graphql"));
+
+  expect(
+    await view.findByText(copy.add.graphql.schema.required)
+  ).toBeInTheDocument();
+  expect(save).toBeDisabled();
 });
 
 test("a schema loaded from the endpoint clears a refused upload", async () => {
