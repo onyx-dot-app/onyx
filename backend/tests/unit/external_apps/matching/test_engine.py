@@ -13,6 +13,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
+from onyx.integrations.models import ApiShape
 
 
 def test_rejects_empty_actions() -> None:
@@ -20,7 +21,10 @@ def test_rejects_empty_actions() -> None:
         AllMatchedActions(
             actions=(),
             target=GatedTarget(
-                integration_id=1, kind=IntegrationKind.API, app_name="X"
+                integration_id=1,
+                kind=IntegrationKind.API,
+                app_name="X",
+                api_shape=ApiShape.PRESET,
             ),
         )
 

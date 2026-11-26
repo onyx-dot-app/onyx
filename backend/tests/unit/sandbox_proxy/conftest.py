@@ -33,7 +33,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
-from onyx.integrations.models import UsableIntegrationIds
+from onyx.integrations.models import ApiShape, UsableIntegrationIds
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
@@ -264,7 +264,10 @@ def make_matched_actions(
             ),
         ),
         target=GatedTarget(
-            integration_id=external_app_id, kind=IntegrationKind.API, app_name=app_name
+            integration_id=external_app_id,
+            kind=IntegrationKind.API,
+            app_name=app_name,
+            api_shape=ApiShape.PRESET,
         ),
         payload=payload if payload is not None else {},
     )

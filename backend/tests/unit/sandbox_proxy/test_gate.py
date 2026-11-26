@@ -42,6 +42,7 @@ from onyx.external_apps.matching.engine import (
     MatchedAction,
 )
 from onyx.external_apps.providers.gmail import GmailAction
+from onyx.integrations.models import ApiShape
 from onyx.sandbox_proxy import approval_cache, destination_policy
 from onyx.sandbox_proxy.addons import gate
 from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
@@ -215,7 +216,12 @@ _MATCH_MULTI_ASK = AllMatchedActions(
             policy=ActionPolicy.ASK,
         ),
     ),
-    target=GatedTarget(integration_id=42, kind=IntegrationKind.API, app_name="Slack"),
+    target=GatedTarget(
+        integration_id=42,
+        kind=IntegrationKind.API,
+        app_name="Slack",
+        api_shape=ApiShape.PRESET,
+    ),
     payload={"text": "hi"},
 )
 _MATCH_ALWAYS = make_matched_actions(
@@ -2127,35 +2133,40 @@ def _chat_policies(
 
 
 @pytest.mark.parametrize(
-    ("action_types", "api_app", "chat_tools", "hint"),
+    ("action_types", "api_shape", "hint"),
     [
-        (("create_ticket",), True, True, "call: custom__51__create_ticket."),
-        (("unspecified",), True, True, "Tickets has no tool for this request."),
+        (("create_ticket",), ApiShape.OPENAPI, "call: custom__51__create_ticket."),
+        (
+            ("unspecified",),
+            ApiShape.OPENAPI,
+            "Tickets has no tool for this request.",
+        ),
         (
             ("query.viewer", "query.repository"),
-            True,
-            True,
+            ApiShape.GRAPHQL,
             "split the request: one call of each of custom__51__query_viewer, "
             "custom__51__query_repository.",
         ),
-        (("unspecified",), False, True, "call: app__51__request."),
+        (("unspecified",), ApiShape.PRESET, "call: app__51__request."),
         # Chat offers only the connect tool while the user has no sign-in.
         (
             ("create_ticket",),
-            True,
-            True,
+            ApiShape.OPENAPI,
             "If Tickets is not connected, call app__51__connect instead.",
         ),
         # A URL-pattern app has no chat tools.
-        (("unspecified",), False, False, "Tickets has no tool for this request."),
+        (
+            ("unspecified",),
+            ApiShape.URL_PATTERN,
+            "Tickets has no tool for this request.",
+        ),
     ],
 )
 @pytest.mark.asyncio
 async def test_an_ask_from_a_chat_names_the_tool_of_an_api_app(
     monkeypatch: pytest.MonkeyPatch,
     action_types: tuple[str, ...],
-    api_app: bool,
-    chat_tools: bool,
+    api_shape: ApiShape,
     hint: str,
 ) -> None:
     match = AllMatchedActions(
@@ -2172,8 +2183,7 @@ async def test_an_ask_from_a_chat_names_the_tool_of_an_api_app(
             integration_id=51,
             kind=IntegrationKind.API,
             app_name="Tickets",
-            api_app=api_app,
-            chat_tools=chat_tools,
+            api_shape=api_shape,
         ),
     )
     addon, _ = _command_gate(monkeypatch, match=match, foreground=False)

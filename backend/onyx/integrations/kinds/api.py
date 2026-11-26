@@ -70,6 +70,7 @@ from onyx.tools.tool_implementations.app_action.app_action_tool import (
     AppActionSettings,
     AppActionTool,
 )
+from onyx.tools.tool_name import api_app_tool_name, preset_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -194,6 +195,20 @@ def _other_request_action(
         description=description,
         default_policy=IntegrationActionPolicyValue.ASK,
     )
+
+
+def chat_tool_name(shape: ApiShape, integration_id: int, action_key: str) -> str | None:
+    """The chat tool that ``ApiKindHandler.build_chat_tools`` gives for an
+    action, or None when the app has no chat tool for it: a URL-pattern app
+    has none, and a REST or GraphQL app has none for the other-request
+    action."""
+    if not shape.has_chat_tools:
+        return None
+    if shape is ApiShape.PRESET:
+        return preset_tool_name(integration_id, action_key)
+    if action_key == OTHER_REQUEST_ACTION_KEY:
+        return None
+    return api_app_tool_name(integration_id, action_key)
 
 
 class ApiKindHandler(IntegrationKindHandler):

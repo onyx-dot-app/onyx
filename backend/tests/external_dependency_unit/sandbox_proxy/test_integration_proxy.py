@@ -44,7 +44,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.craft import list_task_integration_views
-from onyx.integrations.models import EffectivePolicy, LinkValue
+from onyx.integrations.models import ApiShape, EffectivePolicy, LinkValue
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
@@ -793,7 +793,7 @@ def test_a_chat_session_takes_the_policies_of_its_chat(
 
     def policy(method: str, path: str, ctx: SessionContext = chat_ctx) -> ActionPolicy:
         matched = _evaluate(_request(f"https://{host}{path}", method=method), user)
-        assert matched.target.api_app and matched.target.chat_tools
+        assert matched.target.api_shape is ApiShape.OPENAPI
         resolved = addon._resolve_request_policies(ctx, matched)
         return resolved.governing_action.policy
 
@@ -828,7 +828,7 @@ def test_a_chat_matches_the_linked_integrations_of_its_agent(
     assert isinstance(matched, AllMatchedActions)
     assert matched.target.integration_id == app.id
     # A URL-pattern app has no chat tool that the gate can name.
-    assert not matched.target.chat_tools
+    assert matched.target.api_shape is ApiShape.URL_PATTERN
     assert _evaluate(request, user) is None
     assert (
         IntegrationRequestEvaluator().evaluate(request, TENANT, user.id, uuid4())

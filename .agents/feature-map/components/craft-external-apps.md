@@ -177,7 +177,7 @@ request to a public API still goes out without the app's credentials. An
 action that the chat turned off on an integration that still matches is
 Blocked. A chat Ask gets `approval_needs_tool`. Its detail names
 the chat tools to call instead, and the connect tool for a user with no
-sign-in, or says that the app has no tool for the request, as for a custom app (`sandbox_proxy/addons/gate.py:_app_tool_hint`). `AllMatchedActions` sorts actions
+sign-in, or says that the app has no tool for the request, as for a URL-pattern app (`sandbox_proxy/addons/gate.py:_chat_tool_hint`, which asks `integrations/kinds/api.py:chat_tool_name` for each action; `GatedTarget.api_shape` gives the shape, None for an MCP server). `AllMatchedActions` sorts actions
 strictest first, and `governing_action` decides the verdict.
 
 **Approvals.** For an Ask verdict, `GateAddon._apply_session_grant` first looks
@@ -284,7 +284,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    Ask is held only while a call of the chat waits on the command
    ([[#chat-command-approvals]]); otherwise, as for a background process, it is
    refused with `approval_needs_tool`, which names the chat tool
-   (`sandbox_proxy/addons/gate.py:_app_tool_hint`: `custom__<id>__<action key>` for a REST or GraphQL app,
+   (`integrations/kinds/api.py:chat_tool_name`: `custom__<id>__<action key>` for a REST or GraphQL app,
    `app__<id>__<action>` for a preset), or says that the app has no tool for
    the request, as for a request that matches only `unspecified`. The command ID is a same-user hint like
    the session tag: a process of the VM can send another command's ID. The initial IP listing fails loudly when

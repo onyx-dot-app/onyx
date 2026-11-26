@@ -43,6 +43,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
+from onyx.integrations.models import ApiShape
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -194,6 +195,7 @@ def test_save_parked_approval_commits_before_announce_and_notifies(
             integration_id=app_integration_id(db_session, external_app),
             kind=IntegrationKind.API,
             app_name=external_app.name,
+            api_shape=ApiShape.PRESET,
         ),
         payload={"text": "hi"},
     )

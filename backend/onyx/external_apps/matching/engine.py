@@ -17,6 +17,7 @@ from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.external_apps.providers.actions import EndpointSpec, GraphQLOp
 from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.integrations.models import ApiShape
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -43,10 +44,9 @@ class GatedTarget(BaseModel):
     integration_id: int
     kind: IntegrationKind
     app_name: str
-    # An OpenAPI or GraphQL app: its chat tools are named by ``api_app_tool_name``.
-    api_app: bool = False
-    # False for an app with no chat tools: a CUSTOM external app.
-    chat_tools: bool = True
+    # The shape of an API integration; None for an MCP server. The chat tool
+    # hint of the gate reads it (``kinds/api.py:chat_tool_name``).
+    api_shape: ApiShape | None = None
 
 
 class AllMatchedActions(BaseModel):

@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
     ActionPolicy,
-    ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationKind,
 )
@@ -169,9 +168,7 @@ class IntegrationRequestEvaluator(RequestEvaluator):
                 integration_id=integration.id,
                 kind=integration.kind,
                 app_name=integration.name,
-                api_app=integration.kind is IntegrationKind.API
-                and match_target.endpoint is not None,
-                chat_tools=match_target.app_type is not ExternalAppType.CUSTOM,
+                api_shape=match_target.api_shape,
             )
         if not match.actions:
             return McpProtocolRequest(target=target)

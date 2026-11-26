@@ -26,7 +26,6 @@ from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    IntegrationKind,
 )
 from onyx.db.integration import get_integration_by_id
 from onyx.db.notification import create_notification
@@ -40,6 +39,7 @@ from onyx.external_apps.matching.engine import (
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.craft import resolve_craft_action_policies
+from onyx.integrations.kinds.api import chat_tool_name
 from onyx.integrations.models import EffectivePolicy
 from onyx.integrations.policy import always_asks, resolve_chat_action_policies
 from onyx.sandbox_proxy import approval_cache
@@ -89,7 +89,7 @@ from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
 )
-from onyx.tools.tool_name import api_app_tool_name, preset_tool_name
+from onyx.tools.tool_name import connect_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -1640,29 +1640,30 @@ def _storable_preview(body: dict[str, Any]) -> bool:
 
 def _approval_needs_tool(matched_actions: AllMatchedActions) -> http.Response:
     return http_403(
-        SandboxProxyError.APPROVAL_NEEDS_TOOL, detail=_app_tool_hint(matched_actions)
+        SandboxProxyError.APPROVAL_NEEDS_TOOL, detail=_chat_tool_hint(matched_actions)
     )
 
 
-def _app_tool_hint(matched_actions: AllMatchedActions) -> str:
-    """Which chat tools send the refused request with an approval card."""
+def _chat_tool_hint(matched_actions: AllMatchedActions) -> str:
+    """Which chat tools send the refused proxied request with an approval
+    card."""
     target = matched_actions.target
-    if target.kind is not IntegrationKind.API:
+    shape = target.api_shape
+    if shape is None:
         return f"Use the tool of {target.app_name} for this action."
-    tool_name = api_app_tool_name if target.api_app else preset_tool_name
     tools = [
-        tool_name(target.integration_id, action.action_type)
+        name
         for action in matched_actions.actions
-        if target.chat_tools
-        and action.policy is ActionPolicy.ASK
-        and not (target.api_app and always_asks(target.kind, action.action_type))
+        if action.policy is ActionPolicy.ASK
+        and (name := chat_tool_name(shape, target.integration_id, action.action_type))
+        is not None
     ]
     if not tools:
         return f"{target.app_name} has no tool for this request."
     # Chat offers only the connect tool while the user has no sign-in.
     connect = (
         f" If {target.app_name} is not connected, call "
-        f"{preset_tool_name(target.integration_id, 'connect')} instead."
+        f"{connect_tool_name(target.integration_id)} instead."
     )
     if len(tools) == 1:
         return f"For {target.app_name}, call: {tools[0]}.{connect}"
