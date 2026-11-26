@@ -1521,6 +1521,10 @@
           "description": "ウェブを検索して、リアルタイムの情報と最新の結果を取得します。",
           "title": "ウェブ検索"
         }
+      },
+      "browser": {
+        "title": "ブラウザー",
+        "description": "エージェントがサンドボックス内でウェブブラウザーを使えるようにします。ユーザーはチャットパネルでその様子を見たり、操作を引き継いだりできます。"
       }
     },
     "codeInterpreter": {
@@ -13546,6 +13550,9 @@
       },
       "resizeHandle": {
         "label": "パネルのサイズを変更"
+      },
+      "browserTab": {
+        "label": "ブラウザー"
       }
     },
     "export": {
@@ -13594,6 +13601,88 @@
       "files": {
         "title": "ファイル",
         "viewAll": "{count, plural, other {#件のファイルをすべて表示}}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "ブラウザーのページ",
+        "inputDescription": "ブラウザーのページから離れるには Shift+Esc を押します。"
+      },
+      "download": {
+        "saved": "{fileName} をこのチャットのファイルにダウンロードしました",
+        "showFiles": "ファイルを表示"
+      },
+      "clearData": {
+        "action": "ブラウザーのデータを消去",
+        "title": "ブラウザーのデータを消去しますか？",
+        "description": "ブラウザー内のすべてのサイトからサインアウトし、すべてのチャットで Cookie、履歴、保存データを削除します。",
+        "confirm": "データを消去",
+        "done": "ブラウザーのデータを消去しました",
+        "error": "ブラウザーのデータを消去できませんでした。もう一度お試しください。"
+      },
+      "urlBar": {
+        "back": "戻る",
+        "forward": "進む",
+        "reload": "再読み込み",
+        "label": "アドレス",
+        "placeholder": "URL を入力"
+      },
+      "moreMenu": {
+        "label": "その他のブラウザー操作"
+      },
+      "tabs": {
+        "new": "新しいタブ"
+      },
+      "control": {
+        "you": "このタブはあなたが操作しています",
+        "agent": "このタブはエージェントが操作しています",
+        "anotherViewer": "このタブは別のウィンドウで操作されています",
+        "none": "このタブは誰も操作していません",
+        "take": "操作を引き継ぐ",
+        "release": "操作を戻す"
+      },
+      "status": {
+        "connecting": "ブラウザーに接続しています",
+        "starting": "ブラウザーを起動しています",
+        "blank": {
+          "title": "まだページがありません",
+          "description": "上の欄に URL を入力してページを開きます。"
+        },
+        "noTabs": {
+          "title": "開いているページはありません",
+          "description": "エージェントが開いたページがここに表示されます。新しいタブを開くこともできます。"
+        },
+        "disconnected": {
+          "title": "ブラウザーとの接続が切れました",
+          "description": "再接続を試みています。"
+        },
+        "disabled": {
+          "title": "ブラウザーはオフです",
+          "description": "管理者がブラウザーをオフにしたか、このチャットのブラウザーを表示する権限がありません。"
+        },
+        "error": {
+          "title": "ブラウザーを利用できません",
+          "description": "チャットのサンドボックスを起動できませんでした。後でもう一度お試しください。"
+        },
+        "retry": "再試行"
+      },
+      "dialog": {
+        "label": "ページのダイアログ",
+        "response": "ダイアログへの応答",
+        "responsePlaceholder": "応答を入力",
+        "dismiss": "閉じる",
+        "accept": "承諾",
+        "takeControl": "応答するには操作を引き継いでください。"
+      },
+      "fileChooser": {
+        "label": "ページに渡すファイルを選択",
+        "askOne": "ページがファイルを求めています。",
+        "askMany": "ページが複数のファイルを求めています。",
+        "cancel": "キャンセル",
+        "chooseOne": "ファイルを選択",
+        "chooseMany": "ファイルを選択",
+        "inputLabel": "ページに渡すファイル",
+        "error": "ファイルをアップロードできませんでした。もう一度お試しください。"
       }
     }
   },

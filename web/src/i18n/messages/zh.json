@@ -1521,6 +1521,10 @@
           "description": "搜索网络以获取实时信息和最新结果。",
           "title": "网络搜索"
         }
+      },
+      "browser": {
+        "title": "浏览器",
+        "description": "允许智能体在其沙盒中使用网页浏览器。用户可以在聊天面板中观看并接管控制。"
       }
     },
     "codeInterpreter": {
@@ -13546,6 +13550,9 @@
       },
       "resizeHandle": {
         "label": "调整面板大小"
+      },
+      "browserTab": {
+        "label": "浏览器"
       }
     },
     "export": {
@@ -13594,6 +13601,88 @@
       "files": {
         "title": "文件",
         "viewAll": "{count, plural, other {查看全部 # 个文件}}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "浏览器页面",
+        "inputDescription": "按 Shift+Esc 离开浏览器页面。"
+      },
+      "download": {
+        "saved": "已将 {fileName} 下载到此聊天的文件中",
+        "showFiles": "显示文件"
+      },
+      "clearData": {
+        "action": "清除浏览器数据",
+        "title": "清除浏览器数据？",
+        "description": "这会让你在浏览器中退出所有网站，并删除所有聊天的 Cookie、历史记录和已保存的数据。",
+        "confirm": "清除数据",
+        "done": "已清除浏览器数据",
+        "error": "无法清除浏览器数据。请重试。"
+      },
+      "urlBar": {
+        "back": "后退",
+        "forward": "前进",
+        "reload": "重新加载",
+        "label": "地址",
+        "placeholder": "输入网址"
+      },
+      "moreMenu": {
+        "label": "更多浏览器操作"
+      },
+      "tabs": {
+        "new": "新建标签页"
+      },
+      "control": {
+        "you": "你正在控制此标签页",
+        "agent": "智能体正在控制此标签页",
+        "anotherViewer": "另一个窗口正在控制此标签页",
+        "none": "没有人在控制此标签页",
+        "take": "接管控制",
+        "release": "释放控制"
+      },
+      "status": {
+        "connecting": "正在连接浏览器",
+        "starting": "正在启动浏览器",
+        "blank": {
+          "title": "还没有页面",
+          "description": "在上方输入 URL 以打开页面。"
+        },
+        "noTabs": {
+          "title": "没有打开的页面",
+          "description": "智能体打开的页面会显示在这里。你也可以打开新标签页。"
+        },
+        "disconnected": {
+          "title": "浏览器已断开连接",
+          "description": "正在尝试重新连接。"
+        },
+        "disabled": {
+          "title": "浏览器已关闭",
+          "description": "管理员关闭了浏览器，或者你无法查看此聊天的浏览器。"
+        },
+        "error": {
+          "title": "浏览器不可用",
+          "description": "无法启动此聊天的沙盒。请稍后重试。"
+        },
+        "retry": "重试"
+      },
+      "dialog": {
+        "label": "页面对话框",
+        "response": "对话框回复",
+        "responsePlaceholder": "输入回复",
+        "dismiss": "关闭",
+        "accept": "接受",
+        "takeControl": "接管控制以进行回复。"
+      },
+      "fileChooser": {
+        "label": "为页面选择文件",
+        "askOne": "页面请求一个文件。",
+        "askMany": "页面请求多个文件。",
+        "cancel": "取消",
+        "chooseOne": "选择文件",
+        "chooseMany": "选择多个文件",
+        "inputLabel": "页面文件",
+        "error": "无法上传文件。请重试。"
       }
     }
   },

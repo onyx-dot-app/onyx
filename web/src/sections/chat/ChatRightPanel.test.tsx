@@ -17,8 +17,9 @@ import {
   type Message,
 } from "@/app/app/types";
 import {
+  openBrowserInChat,
   useChatSessionStore,
-  useFilesShown,
+  useRightPanelShown,
   useSourcesShown,
 } from "@/app/app/stores/useChatSessionStore";
 import {
@@ -50,6 +51,7 @@ import {
 } from "@/sections/chat/PublishedFileCards";
 import { fetchChatFile } from "@/lib/chat/svc";
 import { startChatLoad } from "@/lib/chat/publishedFiles";
+import type { AppSettings } from "@/lib/settings/types";
 
 // Counts the panel's renders: the frame renders whenever the panel does
 const mockPanelRenders = jest.fn();
@@ -64,6 +66,24 @@ jest.mock("@/sections/chat/ChatSidePanel", () => {
     },
   };
 });
+// The "+" menu offers the browser
+jest.mock("@/lib/settings/hooks", () => {
+  const actual = jest.requireActual<typeof import("@/lib/settings/hooks")>(
+    "@/lib/settings/hooks"
+  );
+  return {
+    ...actual,
+    useSettings: (): AppSettings => ({
+      ...actual.useSettings(),
+      chat_browser_available: true,
+    }),
+  };
+});
+// Marks the globe that browser tabs show
+jest.mock("@opal/icons", () => ({
+  ...jest.requireActual("@opal/icons"),
+  SvgGlobe: () => <svg data-testid="globe-icon" />,
+}));
 jest.mock("@/lib/chat/svc", () => ({
   ...jest.requireActual("@/lib/chat/svc"),
   fetchChatFile: jest.fn(),
@@ -131,7 +151,7 @@ function Chat({
   retrieval?: boolean;
 }) {
   const sourcesOpen = useSourcesShown();
-  const filesOpen = useFilesShown();
+  const panelOpen = useRightPanelShown();
   const workspace = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLDivElement>(null);
   const [panelToggleSlot, setPanelToggleSlot] = useState<HTMLElement | null>(
@@ -154,7 +174,7 @@ function Chat({
             ))}
           </div>
           <CurrentChatRightPanel
-            open={(retrieval && sourcesOpen) || filesOpen}
+            open={panelOpen && (retrieval || !sourcesOpen)}
             sources={SOURCES}
             hasSources
           />
@@ -832,7 +852,7 @@ function StreamingPage() {
   useChatSessionStore(
     (state) => state.sessions.get(state.currentSessionId ?? "")?.messageTree
   );
-  const filesOpen = useFilesShown();
+  const filesOpen = useRightPanelShown();
   const rightPanel = useMemo(
     () => (
       <CurrentChatRightPanel open={filesOpen} sources={SOURCES} hasSources />
@@ -1250,4 +1270,267 @@ test("a file tab's URL bar shows its path and the preview's actions", async () =
     within(bar).getByRole("button", { name: "Show source" })
   ).toBeVisible();
   expect(within(shown).queryByRole("link", { name: "Download" })).toBeNull();
+});
+
+// The chat browser's websocket, which a test drives by hand
+class FakeSocket extends EventTarget {
+  static instances: FakeSocket[] = [];
+  readyState = 0;
+  binaryType = "blob";
+  sent: unknown[] = [];
+  constructor(readonly url: string) {
+    super();
+    FakeSocket.instances.push(this);
+  }
+  send(data: string) {
+    this.sent.push(JSON.parse(data));
+  }
+  close() {
+    this.readyState = 3;
+  }
+  open() {
+    this.readyState = 1;
+    this.dispatchEvent(new Event("open"));
+  }
+  receive(message: object) {
+    this.dispatchEvent(
+      Object.assign(new Event("message"), { data: JSON.stringify(message) })
+    );
+  }
+}
+
+const PAGE = {
+  id: "t1",
+  url: "https://example.com/",
+  title: "Example Domain",
+  loading: false,
+  dialog: null,
+};
+// A page without a title shows its host
+const DOCS_PAGE = {
+  ...PAGE,
+  id: "t2",
+  url: "https://docs.example.org/guide",
+  title: "",
+};
+
+describe("the chat's browser", () => {
+  const originalWebSocket = globalThis.WebSocket;
+  const socket = () => {
+    const last = FakeSocket.instances.at(-1);
+    if (!last) throw new Error("The panel opened no websocket");
+    return last;
+  };
+  const receive = (message: object) => act(() => socket().receive(message));
+  // A tab's icon sits beside its label, in the tab's frame
+  const globeOf = (tab: HTMLElement) =>
+    tab
+      .closest<HTMLElement>('[role="presentation"]')
+      ?.querySelector('[data-testid="globe-icon"]');
+
+  beforeEach(() => {
+    FakeSocket.instances = [];
+    Object.defineProperty(globalThis, "WebSocket", {
+      configurable: true,
+      writable: true,
+      value: FakeSocket,
+    });
+    jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+  });
+  afterEach(() => {
+    Object.defineProperty(globalThis, "WebSocket", {
+      configurable: true,
+      writable: true,
+      value: originalWebSocket,
+    });
+  });
+
+  test("the agent's browser_open shows the browser, whose pages are tabs with a globe beside Files", () => {
+    renderChat([[REPORT]]);
+    // Another chat's packet does not open this chat's panel
+    act(() => openBrowserInChat("another-session"));
+    expect(panel().mode).toBe("closed");
+
+    act(() => openBrowserInChat("session"));
+    // Until the stream lists the pages, the browser has one tab
+    const browserTab = screen.getByRole("tab", { name: "Browser" });
+    expect(browserTab).toHaveAttribute("aria-selected", "true");
+    expect(globeOf(browserTab)).toBeInTheDocument();
+    expect(screen.getByText("Connecting to the browser")).toBeVisible();
+    expect(socket().url).toBe(
+      "ws://localhost/api/chat/sessions/session/browser/ws"
+    );
+
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE, DOCS_PAGE], selected: "t1" });
+    const strip = screen.getByRole("tablist");
+    expect(
+      within(strip)
+        .getAllByRole("tab")
+        .map((tab) => tab.getAttribute("aria-label") ?? tab.textContent)
+    ).toEqual(["Files", "Sources", "Example Domain", "docs.example.org"]);
+    const example = screen.getByRole("tab", { name: "Example Domain" });
+    expect(example).toHaveAttribute("aria-selected", "true");
+    for (const name of ["Example Domain", "docs.example.org"])
+      expect(globeOf(screen.getByRole("tab", { name }))).toBeInTheDocument();
+    expect(panel().activeId).toBe("browser");
+    // No second row of tabs inside the browser
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
+    expect(socket().sent).toEqual([]);
+
+    // Files hides the browser and keeps its tabs and connection
+    act(() => screen.getByRole("tab", { name: "Files" }).click());
+    expect(
+      screen.getByRole("tab", { name: "docs.example.org" })
+    ).toBeInTheDocument();
+    expect(FakeSocket.instances).toHaveLength(1);
+  });
+
+  test("a browser tab selects its page, and the stream's selection marks the active tab", () => {
+    renderChat([[REPORT]]);
+    act(() => openBrowserInChat("session"));
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE, DOCS_PAGE], selected: "t1" });
+
+    act(() => screen.getByRole("tab", { name: "docs.example.org" }).click());
+    expect(socket().sent).toEqual([{ type: "selectTab", tab: "t2" }]);
+    receive({ type: "tabs", tabs: [PAGE, DOCS_PAGE], selected: "t2" });
+    expect(
+      screen.getByRole("tab", { name: "docs.example.org" })
+    ).toHaveAttribute("aria-selected", "true");
+    expect(socket().sent).toHaveLength(1);
+    expect(FakeSocket.instances).toHaveLength(1);
+
+    // From Files, a page's tab shows the browser on that page
+    act(() => screen.getByRole("tab", { name: "Files" }).click());
+    act(() => screen.getByRole("tab", { name: "Example Domain" }).click());
+    expect(socket().sent.at(-1)).toEqual({ type: "selectTab", tab: "t1" });
+    expect(panel().activeId).toBe("browser");
+    receive({ type: "tabs", tabs: [PAGE, DOCS_PAGE], selected: "t1" });
+    expect(screen.getByRole("tab", { name: "Example Domain" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    // The page closes in the browser; its tab goes with the page list
+    receive({ type: "tabs", tabs: [PAGE, DOCS_PAGE], selected: "t2" });
+    act(() =>
+      screen.getByRole("button", { name: "Close docs.example.org" }).click()
+    );
+    expect(socket().sent.at(-1)).toEqual({ type: "closeTab", tab: "t2" });
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    expect(
+      screen.queryByRole("tab", { name: "docs.example.org" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Example Domain" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    // The service moves the selection to a page that the agent opens
+    receive({
+      type: "tabs",
+      tabs: [PAGE, { ...PAGE, id: "t3", title: "Agent page" }],
+      selected: "t3",
+    });
+    expect(screen.getByRole("tab", { name: "Agent page" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(socket().sent.at(-1)).toEqual({ type: "closeTab", tab: "t2" });
+
+    // The last page closed: the browser closes and the panel goes back to
+    // Files
+    receive({ type: "tabs", tabs: [], selected: null });
+    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(panel().browserOpen).toBe(false);
+    expect(socket().readyState).toBe(3);
+  });
+
+  test("Browser in the + menu opens a new page and shows it", async () => {
+    renderChat([[REPORT]]);
+    update({ type: "showTab", tabId: "files" });
+    fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
+    // The + menu opens any panel tab: Files, the browser, and Sources when
+    // the chat has sources
+    expect(
+      (await screen.findAllByRole("menuitem")).map((item) => item.textContent)
+    ).toEqual(["Files", "Browser", "Sources"]);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Browser" }));
+    // The new page opens once the browser connects
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    expect(socket().sent).toEqual([{ type: "newTab" }]);
+    const blank = { ...PAGE, id: "t2", url: "about:blank", title: "" };
+    receive({ type: "tabs", tabs: [PAGE, blank], selected: "t2" });
+    // A new page has neither title nor host
+    const tabs = within(screen.getByRole("tablist")).getAllByRole("tab");
+    expect(tabs.at(-1)).toHaveAccessibleName("Browser");
+    expect(tabs.at(-1)).toHaveAttribute("aria-selected", "true");
+    expect(panel().activeId).toBe("browser");
+    expect(screen.getByText("No page yet")).toBeVisible();
+
+    // On a live browser it opens another page at once
+    fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Browser" }));
+    expect(socket().sent.at(-1)).toEqual({ type: "newTab" });
+    expect(FakeSocket.instances).toHaveLength(1);
+  });
+
+  test("a new page asked for before the connection goes only to its own chat's browser", async () => {
+    renderChat([[REPORT]]);
+    update({ type: "showTab", tabId: "files" });
+    fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Browser" }));
+    // Closing the browser before it connects drops the new page
+    act(() => screen.getByRole("button", { name: "Close Browser" }).click());
+    expect(panel().browserOpen).toBe(false);
+    act(() => openBrowserInChat("session"));
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    expect(socket().sent).toEqual([]);
+  });
+
+  test("an edited URL does not follow the user to another chat's page of the same id", () => {
+    // Both chats have their browser open
+    const store = useChatSessionStore.getState();
+    store.createSession("other");
+    useChatSessionStore.setState({ currentSessionId: "other" });
+    store.updateCurrentRightPanel({ type: "openBrowser" });
+    useChatSessionStore.setState({ currentSessionId: "session" });
+    renderChat([[REPORT]]);
+    act(() => openBrowserInChat("session"));
+    const live = () => {
+      socket().open();
+      socket().receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+      socket().receive({ type: "control", controller: "you" });
+    };
+    act(live);
+    const address = () => screen.getByRole("textbox", { name: "Address" });
+    fireEvent.change(address(), { target: { value: "typed.example" } });
+    expect(address()).toHaveValue("typed.example");
+    act(() => useChatSessionStore.setState({ currentSessionId: "other" }));
+    // The other chat's VM names its first page t1 too
+    act(live);
+    expect(address()).toHaveValue("https://example.com/");
+  });
+
+  test("a new page asked for before the connection does not go to another chat's browser", async () => {
+    renderChat([[REPORT]]);
+    update({ type: "showTab", tabId: "files" });
+    fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Browser" }));
+    act(() => {
+      useChatSessionStore.getState().createSession("other");
+      useChatSessionStore.setState({ currentSessionId: "other" });
+    });
+    update({ type: "openBrowser" });
+    act(() => socket().open());
+    expect(socket().url).toContain("/sessions/other/");
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    expect(socket().sent).toEqual([]);
+  });
 });

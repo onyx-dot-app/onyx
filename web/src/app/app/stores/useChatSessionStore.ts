@@ -23,7 +23,6 @@ import {
   CHAT_PANEL_STORAGE_PREFIX,
   INITIAL_RIGHT_PANEL,
   rightPanelReducer,
-  showsFiles,
   showsSources,
   type ChatRightPanelAction,
   type ChatRightPanelState,
@@ -855,15 +854,12 @@ export const useRightPanelShown = () =>
     );
   });
 
-/** Whether the open chat's right panel shows the Files list or a file. */
-export const useFilesShown = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession ? showsFiles(currentSession.rightPanel) : false;
-  });
+/** Opens the Browser tab when `sessionId` is the open chat. */
+export function openBrowserInChat(sessionId: string | null): void {
+  const store = useChatSessionStore.getState();
+  if (sessionId === null || store.currentSessionId !== sessionId) return;
+  store.updateCurrentRightPanel({ type: "openBrowser" });
+}
 
 /**
  * The agent the open session was created with, from the session the backend

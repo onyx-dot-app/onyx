@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { SvgFiles, SvgSearchMenu, SvgSidebar } from "@opal/icons";
+import { SvgFiles, SvgGlobe, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
@@ -32,6 +32,7 @@ import {
   publishedFilePath,
 } from "@/lib/chat/publishedFiles";
 import {
+  RIGHT_PANEL_BROWSER_TAB,
   RIGHT_PANEL_FILES_TAB,
   RIGHT_PANEL_SOURCES_TAB,
   openCardFileAction,
@@ -45,6 +46,7 @@ import {
 } from "@/lib/outputPanel/layout";
 import { retainedFileViewers } from "@/lib/outputPanel/tabs";
 import { getFileIcon } from "@/lib/utils";
+import { useSettings } from "@/lib/settings/hooks";
 import { PreviewActionsSlotContext } from "@/sections/file-preview/FloatingFooter";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import { OutputPanelLayout } from "@/sections/output-panel/OutputPanelLayout";
@@ -66,6 +68,15 @@ import {
   PublishedFilesGrid,
 } from "@/sections/chat/PublishedFileViews";
 import type { PublishedFilesPanel } from "@/sections/chat/PublishedFileCards";
+import { BrowserPanel } from "@/sections/chat/browser/BrowserPanel";
+import { useBrowserStream } from "@/lib/chat/browser/hooks";
+import { browserPageTitle } from "@/lib/chat/browser/stream";
+import type { BrowserDownload } from "@/lib/chat/browser/types";
+
+// A browser page's tab in the strip; the browser selects the shown page
+function browserPageTab(pageId: string): string {
+  return `${RIGHT_PANEL_BROWSER_TAB}:${pageId}`;
+}
 
 interface ChatRightPanelProps {
   // The chat whose panel this is
@@ -80,12 +91,14 @@ interface ChatRightPanelProps {
   hasSources: boolean;
   // Loads the chat's file list again; rejects when the load fails
   reloadFiles: () => Promise<void>;
+  // The "+" menu offers the chat's browser
+  browserAvailable?: boolean;
 }
 
 /**
  * The chat's right panel, built from the output panel that Craft also uses:
- * a tab strip with the Files list, Sources and a tab per open file, a URL
- * bar, and the active tab's content, beside the page at a width the user can
+ * a tab strip with the Files list, Sources, a tab per page of the chat's
+ * browser and a tab per open file, a URL bar, and the active tab's content, beside the page at a width the user can
  * drag, or over it at full size. On a workspace too narrow for both it covers
  * the page. A toggle at the workspace's top end, over the chat's header or
  * the open panel, opens and closes it; a chat shows it with or without files.
@@ -103,6 +116,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   sources,
   hasSources,
   reloadFiles,
+  browserAvailable = false,
 }: ChatRightPanelProps) {
   const t = useTranslations("chat.rightPanel");
   // Each tab's shown file, with the name that the list gives its artifact,
@@ -129,13 +143,66 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     [state.fileTabs, files]
   );
   const fileByTab = new Map(fileTabs.map((tab) => [tab.id, tab.file]));
+
+  // The chat's browser streams while the panel is open on a chat whose
+  // browser is open, so the tab strip lists its pages live
+  const tb = useTranslations("chat.browser");
+  const browserSessionId = state.browserOpen ? sessionId : null;
+  const browserOpen = browserSessionId !== null;
+  const showFilesList = useCallback(
+    () => dispatch({ type: "showTab", tabId: RIGHT_PANEL_FILES_TAB }),
+    [dispatch]
+  );
+  const onDownload = useCallback(
+    (download: BrowserDownload) => {
+      toast.info(tb("download.saved", { fileName: download.fileName }), {
+        action: {
+          icon: SvgFiles,
+          label: tb("download.showFiles"),
+          onClick: showFilesList,
+        },
+      });
+      reloadFiles().catch((error: unknown) =>
+        console.error("Failed to reload the chat's files", {
+          sessionId,
+          error,
+        })
+      );
+    },
+    [tb, showFilesList, reloadFiles, sessionId]
+  );
+  const browser = useBrowserStream({
+    sessionId: browserSessionId,
+    active: open,
+    onDownload,
+    onError: (message) => toast.error(message),
+  });
+  const pages = browser.state.tabs;
+  const browserLive = browser.state.connection === "live";
+  // The browser selects the page that it shows: its tab is the active one
+  // while the browser shows. Until the stream lists the pages, one tab
+  // stands for the browser.
+  const selectedPage = pages.find(
+    (page) => page.id === browser.state.selectedTabId
+  );
+  const browserTabId =
+    selectedPage === undefined
+      ? RIGHT_PANEL_BROWSER_TAB
+      : browserPageTab(selectedPage.id);
+  const showsBrowser =
+    browserOpen && state.activeId === RIGHT_PANEL_BROWSER_TAB;
   const shown =
     state.activeId === RIGHT_PANEL_SOURCES_TAB || fileByTab.has(state.activeId)
       ? state.activeId
-      : RIGHT_PANEL_FILES_TAB;
+      : showsBrowser
+        ? browserTabId
+        : RIGHT_PANEL_FILES_TAB;
   const shownFile = fileByTab.get(shown);
   const shownPinned = fileTabs.some((tab) => tab.id === shown && tab.pinned);
-  // Files and Sources lead the strip when they have content or are shown
+  // Files and Sources lead the strip when they have content or are shown,
+  // then a tab per page of the open browser, as T3 Code lists its browser
+  // tabs among its other tabs: a globe, the page's title or host, a close
+  // button
   const fixedTabs: PanelTabItem[] = [
     ...(files.length > 0 || shown === RIGHT_PANEL_FILES_TAB
       ? [
@@ -155,6 +222,26 @@ export const ChatRightPanel = memo(function ChatRightPanel({
             label: t("sourcesTab.label"),
             icon: SvgSearchMenu,
             closable: false,
+            movable: false,
+          },
+        ]
+      : []),
+    ...pages.map(
+      (page): PanelTabItem => ({
+        id: browserPageTab(page.id),
+        label: browserPageTitle(page) ?? t("browserTab.label"),
+        icon: SvgGlobe,
+        closable: true,
+        movable: false,
+      })
+    ),
+    ...(browserOpen && selectedPage === undefined
+      ? [
+          {
+            id: RIGHT_PANEL_BROWSER_TAB,
+            label: t("browserTab.label"),
+            icon: SvgGlobe,
+            closable: true,
             movable: false,
           },
         ]
@@ -229,12 +316,17 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // Files listed when the panel first shows them count as seen
   const { seenFileIds, seenInitialized } = state;
   useEffect(() => {
-    if (open && shown !== RIGHT_PANEL_SOURCES_TAB && !seenInitialized)
+    if (
+      open &&
+      shown !== RIGHT_PANEL_SOURCES_TAB &&
+      !showsBrowser &&
+      !seenInitialized
+    )
       dispatch({
         type: "initializeSeen",
         fileIds: files.map((file) => file.file_id),
       });
-  }, [open, shown, seenInitialized, files, dispatch]);
+  }, [open, shown, showsBrowser, seenInitialized, files, dispatch]);
   // A shown file counts as seen, also a new version that its open tab
   // moves to
   const shownFileId = open ? shownFile?.file_id : undefined;
@@ -264,6 +356,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   const shownRef = useRef({
     open,
     shown,
+    browser: showsBrowser,
     fileId: shownFile?.file_id,
     pinned: shownPinned,
   });
@@ -273,11 +366,18 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     shownRef.current = {
       open,
       shown,
+      browser: showsBrowser,
       fileId: shownFile?.file_id,
       pinned: shownPinned,
     };
     const inside = insideChangeRef.current;
     insideChangeRef.current = false;
+    // A move between the browser's tabs, such as to a page that the agent
+    // opens, leaves focus where it is
+    if (open && previous.open && previous.browser && showsBrowser) {
+      returnFocusRef.current = null;
+      return;
+    }
     // The tile to go back to only counts when the Files list comes next
     const returnTo = returnFocusRef.current;
     returnFocusRef.current = null;
@@ -308,15 +408,62 @@ export const ChatRightPanel = memo(function ChatRightPanel({
         )
       : document.getElementById(panelTabDomId(shown));
     target?.focus({ preventScroll: true });
-  }, [open, shown, shownFile, shownPinned]);
+  }, [open, shown, showsBrowser, shownFile, shownPinned]);
 
-  const selectTab = useCallback(
-    (tabId: string) => {
-      insideChangeRef.current = true;
+  const { send: sendToBrowser } = browser;
+  const pageOfTab = (tabId: string) =>
+    pages.find((page) => browserPageTab(page.id) === tabId);
+  const selectTab = (tabId: string) => {
+    insideChangeRef.current = true;
+    const page = pageOfTab(tabId);
+    if (page === undefined) {
       dispatch({ type: "showTab", tabId });
-    },
-    [dispatch]
-  );
+      return;
+    }
+    if (page.id !== selectedPage?.id)
+      sendToBrowser({ type: "selectTab", tab: page.id });
+    dispatch({ type: "showTab", tabId: RIGHT_PANEL_BROWSER_TAB });
+  };
+  // "Open browser" before the stream is live opens its page once it is. A
+  // live browser whose last page closes closes in the panel.
+  // The chat whose browser gets the pending page; closing the browser drops it
+  const newTabPendingRef = useRef<string | null>(null);
+  const hadPagesRef = useRef(false);
+  const pageCount = pages.length;
+  useEffect(() => {
+    if (!browserLive) {
+      hadPagesRef.current = false;
+      return;
+    }
+    const pending = newTabPendingRef.current;
+    newTabPendingRef.current = null;
+    if (pending !== null && pending === browserSessionId)
+      sendToBrowser({ type: "newTab" });
+    const hadPages = hadPagesRef.current;
+    hadPagesRef.current = pageCount > 0;
+    if (hadPages && pageCount === 0) {
+      insideChangeRef.current = true;
+      dispatch({ type: "closeTab", tabId: RIGHT_PANEL_BROWSER_TAB });
+    }
+  }, [browserLive, browserSessionId, pageCount, sendToBrowser, dispatch]);
+  // As T3 Code's "+" menu: each opening adds a new page and shows it
+  const openBrowserPage = () => {
+    insideChangeRef.current = true;
+    if (!(browserLive && sendToBrowser({ type: "newTab" })))
+      newTabPendingRef.current = sessionId;
+    dispatch({ type: "openBrowser" });
+  };
+  const closeTab = (tabId: string) => {
+    // The browser closes the page; its tab goes when the page list drops it
+    const page = pageOfTab(tabId);
+    if (page !== undefined) {
+      sendToBrowser({ type: "closeTab", tab: page.id });
+      return;
+    }
+    if (tabId === RIGHT_PANEL_BROWSER_TAB) newTabPendingRef.current = null;
+    dispatch({ type: "closeTab", tabId });
+  };
+
   // A tile shows the newest version, so its tab follows the newest
   const openFile = useCallback(
     (file: PublishedFile) =>
@@ -329,7 +476,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       return;
     }
     returnFocusRef.current = artifactKey(shownFile);
-    dispatch({ type: "closeTab", tabId: shown });
+    closeTab(shown);
   };
 
   // Reload loads the file list; an open file's tab keeps showing its file.
@@ -431,7 +578,9 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           aria-label={
             shown === RIGHT_PANEL_SOURCES_TAB
               ? t("sourcesTab.label")
-              : t("filesTab.label")
+              : showsBrowser
+                ? t("browserTab.label")
+                : t("filesTab.label")
           }
           className="relative h-full w-full bg-background-neutral-00 border-s"
         >
@@ -446,7 +595,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                 onClose={(tabId) => {
                   // The tab strip moves focus to the next tab itself
                   insideChangeRef.current = true;
-                  dispatch({ type: "closeTab", tabId });
+                  closeTab(tabId);
                 }}
                 onReorder={(tabId, index) => {
                   // Only file tabs move, among themselves
@@ -454,11 +603,48 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                   if (!over) return;
                   dispatch({ type: "reorderTab", tabId, overTabId: over.id });
                 }}
+                menuItems={[
+                  {
+                    kind: "action",
+                    id: RIGHT_PANEL_FILES_TAB,
+                    title: t("filesTab.label"),
+                    icon: SvgFiles,
+                    onSelect: showFilesList,
+                  },
+                  ...(browserAvailable && sessionId !== null
+                    ? [
+                        {
+                          kind: "action" as const,
+                          id: RIGHT_PANEL_BROWSER_TAB,
+                          title: t("browserTab.label"),
+                          icon: SvgGlobe,
+                          onSelect: openBrowserPage,
+                        },
+                      ]
+                    : []),
+                  ...(hasSources
+                    ? [
+                        {
+                          kind: "action" as const,
+                          id: RIGHT_PANEL_SOURCES_TAB,
+                          title: t("sourcesTab.label"),
+                          icon: SvgSearchMenu,
+                          onSelect: () =>
+                            dispatch({
+                              type: "showTab",
+                              tabId: RIGHT_PANEL_SOURCES_TAB,
+                            }),
+                        },
+                      ]
+                    : []),
+                ]}
               />
             }
             toolbar={
-              // As Craft's: reload before the search or the file's path
-              shown !== RIGHT_PANEL_SOURCES_TAB && (
+              // As Craft's: reload before the search or the file's path. The
+              // Browser has its own URL bar.
+              shown !== RIGHT_PANEL_SOURCES_TAB &&
+              !showsBrowser && (
                 <PanelUrlBar
                   displayUrl={
                     shownFile ? publishedFilePath(shownFile) : undefined
@@ -509,6 +695,29 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                   className="absolute inset-0 overflow-y-auto"
                 >
                   {sources}
+                </div>
+              )}
+              {browserSessionId !== null && (
+                // One view for all the browser's tabs, mounted while the
+                // browser is open: a switch of tabs keeps its connection
+                <div
+                  id={panelContentDomId(browserTabId)}
+                  role="tabpanel"
+                  aria-labelledby={panelTabDomId(browserTabId)}
+                  aria-hidden={!(open && showsBrowser)}
+                  inert={!(open && showsBrowser)}
+                  className={cn(
+                    "absolute inset-0",
+                    !(open && showsBrowser) &&
+                      "invisible pointer-events-none [content-visibility:hidden]"
+                  )}
+                >
+                  {/* Keyed: another chat's tab ids can match this chat's */}
+                  <BrowserPanel
+                    key={browserSessionId}
+                    sessionId={browserSessionId}
+                    stream={browser}
+                  />
                 </div>
               )}
               {fileTabs
@@ -603,6 +812,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const state = useCurrentRightPanelState();
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
   const files = usePublishedFiles("current");
+  const browserAvailable = useSettings().chat_browser_available ?? false;
   const reloadFiles = useCallback(async () => {
     if (sessionId !== null) await reloadChatPublishedFiles(sessionId);
   }, [sessionId]);
@@ -614,6 +824,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
       dispatch={dispatch}
       files={files}
       reloadFiles={reloadFiles}
+      browserAvailable={browserAvailable}
     />
   );
 }

@@ -83,6 +83,14 @@ const nextConfig = {
           process.env.INTERNAL_URL || "http://localhost:8080"
         }/build/sessions/:sessionId/webapp/_next/:hmrEndpoint`,
       },
+      // The chat browser's websocket, as Craft's HMR above: in dev the page's
+      // origin passes the upgrade and the auth cookie on to the backend
+      {
+        source: "/api/chat/sessions/:sessionId/browser/ws",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/chat/sessions/:sessionId/browser/ws`,
+      },
       {
         source: "/ph_ingest/static/:path*",
         destination: "https://us-assets.i.posthog.com/static/:path*",

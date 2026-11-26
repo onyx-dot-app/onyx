@@ -1,5 +1,6 @@
 import {
   INITIAL_RIGHT_PANEL,
+  RIGHT_PANEL_BROWSER_TAB,
   RIGHT_PANEL_FILES_TAB,
   openCardFileAction,
   RIGHT_PANEL_SOURCES_TAB,
@@ -51,6 +52,7 @@ const closeTab = (tabId: string): ChatRightPanelAction => ({
   type: "closeTab",
   tabId,
 });
+const openBrowser: ChatRightPanelAction = { type: "openBrowser" };
 const tabIds = (state: ChatRightPanelState): string[] =>
   state.fileTabs.map((tab) => rightPanelFileTab(tab.file));
 
@@ -239,5 +241,71 @@ describe("rightPanelReducer", () => {
     state = rightPanelReducer(state, { type: "closePanel" });
     state = rightPanelReducer(state, showFiles);
     expect(state.mode).toBe("medium");
+  });
+
+  describe("the Browser tab", () => {
+    test("opens the panel on the Browser, which is not a Files tab", () => {
+      const state = apply(openBrowser);
+      expect(state.browserOpen).toBe(true);
+      expect(state.activeId).toBe(RIGHT_PANEL_BROWSER_TAB);
+      expect(showsFiles(state)).toBe(false);
+      expect(showsSources(state)).toBe(false);
+      expect(state.mode).toBe("medium");
+    });
+
+    test("opening it again while shown keeps the state", () => {
+      const state = apply(openBrowser);
+      expect(rightPanelReducer(state, openBrowser)).toBe(state);
+    });
+
+    test("showTab reaches it only while it is open", () => {
+      const closed = apply(showFiles);
+      expect(
+        rightPanelReducer(closed, {
+          type: "showTab",
+          tabId: RIGHT_PANEL_BROWSER_TAB,
+        })
+      ).toBe(closed);
+
+      const state = apply(openBrowser, openFile("a"), {
+        type: "showTab",
+        tabId: RIGHT_PANEL_BROWSER_TAB,
+      });
+      expect(state.activeId).toBe(RIGHT_PANEL_BROWSER_TAB);
+      expect(tabIds(state)).toEqual([FILE_A]);
+    });
+
+    test("stays open while another tab shows, and the panel toggle comes back to Files", () => {
+      let state = apply(openBrowser, openFile("a"));
+      expect(state.browserOpen).toBe(true);
+      expect(state.activeId).not.toBe(RIGHT_PANEL_BROWSER_TAB);
+      state = apply(openBrowser, { type: "closePanel" }, showFiles);
+      expect(state.browserOpen).toBe(true);
+      expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+    });
+
+    test("closing it hands the active state to the last shown Files tab", () => {
+      let state = apply(openFile("a"), openBrowser);
+      state = rightPanelReducer(state, closeTab(RIGHT_PANEL_BROWSER_TAB));
+      expect(state.browserOpen).toBe(false);
+      expect(state.activeId).toBe(FILE_A);
+      expect(state.mode).toBe("medium");
+
+      state = apply(openBrowser, closeTab(RIGHT_PANEL_BROWSER_TAB));
+      expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+    });
+
+    test("closing it while hidden keeps the active tab", () => {
+      const state = apply(openBrowser, openFile("b"));
+      const closed = rightPanelReducer(
+        state,
+        closeTab(RIGHT_PANEL_BROWSER_TAB)
+      );
+      expect(closed.browserOpen).toBe(false);
+      expect(closed.activeId).toBe(FILE_B);
+      expect(rightPanelReducer(closed, closeTab(RIGHT_PANEL_BROWSER_TAB))).toBe(
+        closed
+      );
+    });
   });
 });

@@ -128,6 +128,7 @@ export { default as SvgMenu } from "@opal/icons/menu";
 export { default as SvgMicrophone } from "@opal/icons/microphone";
 export { default as SvgMicrophoneOff } from "@opal/icons/microphone-off";
 export { default as SvgMinus } from "@opal/icons/minus";
+export { default as SvgMousePointer } from "@opal/icons/mouse-pointer";
 export { default as SvgMinusCircle } from "@opal/icons/minus-circle";
 export { default as SvgMonitor } from "@opal/icons/monitor";
 export { default as SvgMoon } from "@opal/icons/moon";

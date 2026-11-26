@@ -412,6 +412,18 @@ export default function ChatPreferencesPage() {
                 />
               </InputHorizontal>
               <InputHorizontal
+                title={t("browser.title")}
+                description={t("browser.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={s.browser_enabled ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ browser_enabled: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
                 title={t("autoScroll.title")}
                 description={t("autoScroll.description")}
                 withLabel

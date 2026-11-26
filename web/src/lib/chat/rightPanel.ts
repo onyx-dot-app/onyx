@@ -1,10 +1,12 @@
 /**
  * The state and transitions of the chat's right panel: its mode, its tabs,
- * width, Files search and seen files. The Files list and Sources are fixed
- * tabs before the file tabs, so only the file tabs are stored in order. The
- * Files list and the file tabs follow the output panel's shared tab rules;
- * Sources stands apart. The chat store applies the transitions per chat
- * session; the shared view applies them with useReducer.
+ * width, Files search and seen files. The Files list, Sources and the
+ * browser are fixed tabs, then the file tabs, so only the file tabs are
+ * stored in order. The browser's pages and its selected page come from its
+ * stream, not from this state. The Files list and the file tabs follow the
+ * output panel's shared tab rules; Sources and the browser stand apart.
+ * The chat store applies the transitions per chat session; the shared view
+ * applies them with useReducer.
  */
 import {
   closePanelTab,
@@ -20,6 +22,7 @@ import { artifactKey, newestVersion } from "@/lib/chat/publishedFiles";
 
 export const RIGHT_PANEL_FILES_TAB = "files";
 export const RIGHT_PANEL_SOURCES_TAB = "sources";
+export const RIGHT_PANEL_BROWSER_TAB = "browser";
 const FILE_TAB_PREFIX = "file:";
 // Session storage of each chat's panel width, as Craft keeps its panel's
 export const CHAT_PANEL_STORAGE_PREFIX = "onyx:chat:output-panel:v1:";
@@ -31,9 +34,9 @@ export function rightPanelFileTab(
   return `${FILE_TAB_PREFIX}${artifactKey(file)}`;
 }
 
-/** The Files list or a file's tab, as opposed to Sources. */
+/** The Files list or a file's tab, as opposed to Sources or the browser. */
 function isFilesTab(tabId: string): boolean {
-  return tabId !== RIGHT_PANEL_SOURCES_TAB;
+  return tabId !== RIGHT_PANEL_SOURCES_TAB && tabId !== RIGHT_PANEL_BROWSER_TAB;
 }
 
 /**
@@ -58,8 +61,11 @@ export interface ChatRightPanelState {
   // The open file tabs, in order: each with the file that it opened with,
   // also when the Files list does not hold it
   fileTabs: ChatFileTab[];
-  // The active tab: the Files list, Sources or a file tab
+  // The active tab: the Files list, Sources, the browser or a file tab
   activeId: string;
+  // Whether the chat's browser is open in the panel: its pages show as tabs
+  // and its view stays mounted. The browser selects the page that it shows.
+  browserOpen: boolean;
   // The Files list and the open file tabs by most recent use. It picks the
   // tab after a closed one, and the tab that the panel toggle shows again.
   history: string[];
@@ -77,6 +83,7 @@ export const INITIAL_RIGHT_PANEL: ChatRightPanelState = {
   mode: "closed",
   fileTabs: [],
   activeId: RIGHT_PANEL_SOURCES_TAB,
+  browserOpen: false,
   history: [],
   proportion: DEFAULT_PANEL_PROPORTION,
   search: "",
@@ -85,14 +92,18 @@ export const INITIAL_RIGHT_PANEL: ChatRightPanelState = {
 };
 
 export type ChatRightPanelAction =
-  // Shows the panel on the Files list, Sources or an open file tab
+  // Shows the panel on the Files list, Sources, the open browser or an open
+  // file tab
   | { type: "showTab"; tabId: string }
+  // Opens the browser and shows it
+  | { type: "openBrowser" }
   // Shows the panel on its last shown Files tab: the list or an open file
   | { type: "showFiles" }
   // Opens a file in its artifact's tab, pinned to its version or following
   // the newest
   | ({ type: "openFile" } & ChatFileTab)
-  // Hands the active state to the last shown Files tab, as `showFiles`
+  // Closes a file tab or the browser. A closed active tab gives way to the
+  // last shown Files tab, as `showFiles`.
   | { type: "closeTab"; tabId: string }
   // Moves a file tab to another file tab's place, as a drop on that tab does
   | { type: "reorderTab"; tabId: string; overTabId: string }
@@ -112,8 +123,10 @@ function activate(
   target: FilesPanelTab
 ): ChatRightPanelState {
   const mode = state.mode === "closed" ? "medium" : state.mode;
-  if (target === RIGHT_PANEL_SOURCES_TAB)
-    return { ...state, mode, activeId: target };
+  if (typeof target === "string" && !isFilesTab(target))
+    return state.mode === mode && state.activeId === target
+      ? state
+      : { ...state, mode, activeId: target };
   const opened = openPanelTab<FilesPanelTab>(
     {
       tabs: [RIGHT_PANEL_FILES_TAB, ...state.fileTabs],
@@ -161,9 +174,15 @@ export function rightPanelReducer(
     case "showTab":
       return action.tabId === RIGHT_PANEL_FILES_TAB ||
         action.tabId === RIGHT_PANEL_SOURCES_TAB ||
+        (action.tabId === RIGHT_PANEL_BROWSER_TAB && state.browserOpen) ||
         isOpenFileTab(state, action.tabId)
         ? activate(state, action.tabId)
         : state;
+    case "openBrowser":
+      return activate(
+        state.browserOpen ? state : { ...state, browserOpen: true },
+        RIGHT_PANEL_BROWSER_TAB
+      );
     case "showFiles":
       // The history leads with the active tab when it is a Files tab
       return activate(state, state.history[0] ?? RIGHT_PANEL_FILES_TAB);
@@ -173,6 +192,17 @@ export function rightPanelReducer(
         pinned: action.pinned,
       });
     case "closeTab": {
+      if (action.tabId === RIGHT_PANEL_BROWSER_TAB) {
+        if (!state.browserOpen) return state;
+        return {
+          ...state,
+          browserOpen: false,
+          activeId:
+            state.activeId === RIGHT_PANEL_BROWSER_TAB
+              ? (state.history[0] ?? RIGHT_PANEL_FILES_TAB)
+              : state.activeId,
+        };
+      }
       if (!isOpenFileTab(state, action.tabId)) return state;
       // The Files list leads the tabs, so it is the last tab left
       const closed = closePanelTab<FilesPanelTab>(
@@ -250,7 +280,7 @@ export function openCardFileAction(
   };
 }
 
-/** Whether the panel shows Sources, or a Files tab. */
+/** Whether the panel shows Sources, the browser, or a Files tab. */
 export function showsSources(state: ChatRightPanelState): boolean {
   return state.mode !== "closed" && state.activeId === RIGHT_PANEL_SOURCES_TAB;
 }

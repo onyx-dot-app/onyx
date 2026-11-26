@@ -1521,6 +1521,10 @@
           "description": "Pesquisa na web para obter informações em tempo real e resultados atualizados.",
           "title": "Pesquisa na web"
         }
+      },
+      "browser": {
+        "title": "Navegador",
+        "description": "Permite que o agente use um navegador web na sandbox. Os usuários podem acompanhar e assumir o controle no painel do chat."
       }
     },
     "codeInterpreter": {
@@ -13546,6 +13550,9 @@
       },
       "resizeHandle": {
         "label": "Redimensionar painel"
+      },
+      "browserTab": {
+        "label": "Navegador"
       }
     },
     "export": {
@@ -13594,6 +13601,88 @@
       "files": {
         "title": "Arquivos",
         "viewAll": "{count, plural, one {Ver # arquivo} other {Ver todos os # arquivos}}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "Página do navegador",
+        "inputDescription": "Pressione Shift+Esc para sair da página do navegador."
+      },
+      "download": {
+        "saved": "{fileName} foi baixado para os arquivos deste chat",
+        "showFiles": "Mostrar arquivos"
+      },
+      "clearData": {
+        "action": "Limpar dados do navegador",
+        "title": "Limpar os dados do navegador?",
+        "description": "Isso desconecta você de todos os sites no navegador e exclui os cookies, o histórico e os dados salvos, em todos os seus chats.",
+        "confirm": "Limpar dados",
+        "done": "Dados do navegador limpos",
+        "error": "Não foi possível limpar os dados do navegador. Tente novamente."
+      },
+      "urlBar": {
+        "back": "Voltar",
+        "forward": "Avançar",
+        "reload": "Recarregar",
+        "label": "Endereço",
+        "placeholder": "Digite uma URL"
+      },
+      "moreMenu": {
+        "label": "Mais ações do navegador"
+      },
+      "tabs": {
+        "new": "Nova aba"
+      },
+      "control": {
+        "you": "Você controla esta aba",
+        "agent": "O agente controla esta aba",
+        "anotherViewer": "Outra janela controla esta aba",
+        "none": "Ninguém controla esta aba",
+        "take": "Assumir o controle",
+        "release": "Liberar o controle"
+      },
+      "status": {
+        "connecting": "Conectando ao navegador",
+        "starting": "Iniciando o navegador",
+        "blank": {
+          "title": "Nenhuma página ainda",
+          "description": "Digite um URL acima para abrir uma página."
+        },
+        "noTabs": {
+          "title": "Nenhuma página aberta",
+          "description": "As páginas que o agente abre aparecem aqui. Você também pode abrir uma nova aba."
+        },
+        "disconnected": {
+          "title": "O navegador foi desconectado",
+          "description": "Tentando conectar novamente."
+        },
+        "disabled": {
+          "title": "O navegador está desativado",
+          "description": "Um administrador desativou o navegador, ou você não pode ver o navegador deste chat."
+        },
+        "error": {
+          "title": "O navegador não está disponível",
+          "description": "Não foi possível iniciar a sandbox do chat. Tente novamente mais tarde."
+        },
+        "retry": "Tentar novamente"
+      },
+      "dialog": {
+        "label": "Caixa de diálogo da página",
+        "response": "Resposta da caixa de diálogo",
+        "responsePlaceholder": "Digite uma resposta",
+        "dismiss": "Dispensar",
+        "accept": "Aceitar",
+        "takeControl": "Assuma o controle para responder."
+      },
+      "fileChooser": {
+        "label": "Escolher arquivos para a página",
+        "askOne": "A página pede um arquivo.",
+        "askMany": "A página pede arquivos.",
+        "cancel": "Cancelar",
+        "chooseOne": "Escolher arquivo",
+        "chooseMany": "Escolher arquivos",
+        "inputLabel": "Arquivos para a página",
+        "error": "Não foi possível enviar os arquivos. Tente novamente."
       }
     }
   },

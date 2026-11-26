@@ -1521,6 +1521,10 @@
           "description": "Recherchez sur le web des informations en temps réel et des résultats à jour.",
           "title": "Recherche web"
         }
+      },
+      "browser": {
+        "title": "Navigateur",
+        "description": "Autorisez l'agent à utiliser un navigateur web dans son bac à sable. Les utilisateurs peuvent le regarder et en prendre le contrôle dans le panneau du chat."
       }
     },
     "codeInterpreter": {
@@ -13546,6 +13550,9 @@
       },
       "resizeHandle": {
         "label": "Redimensionner le panneau"
+      },
+      "browserTab": {
+        "label": "Navigateur"
       }
     },
     "export": {
@@ -13594,6 +13601,88 @@
       "files": {
         "title": "Fichiers",
         "viewAll": "{count, plural, one {Voir # fichier} other {Voir les # fichiers}}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "Page du navigateur",
+        "inputDescription": "Appuyez sur Maj+Échap pour quitter la page du navigateur."
+      },
+      "download": {
+        "saved": "{fileName} a été téléchargé dans les fichiers de ce chat",
+        "showFiles": "Afficher les fichiers"
+      },
+      "clearData": {
+        "action": "Effacer les données du navigateur",
+        "title": "Effacer les données du navigateur ?",
+        "description": "Cela vous déconnecte de tous les sites dans le navigateur et supprime ses cookies, son historique et ses données enregistrées, pour tous vos chats.",
+        "confirm": "Effacer les données",
+        "done": "Données du navigateur effacées",
+        "error": "Impossible d'effacer les données du navigateur. Réessayez."
+      },
+      "urlBar": {
+        "back": "Précédent",
+        "forward": "Suivant",
+        "reload": "Actualiser",
+        "label": "Adresse",
+        "placeholder": "Saisissez une URL"
+      },
+      "moreMenu": {
+        "label": "Autres actions du navigateur"
+      },
+      "tabs": {
+        "new": "Nouvel onglet"
+      },
+      "control": {
+        "you": "Vous contrôlez cet onglet",
+        "agent": "L'agent contrôle cet onglet",
+        "anotherViewer": "Une autre fenêtre contrôle cet onglet",
+        "none": "Personne ne contrôle cet onglet",
+        "take": "Prendre le contrôle",
+        "release": "Rendre le contrôle"
+      },
+      "status": {
+        "connecting": "Connexion au navigateur",
+        "starting": "Démarrage du navigateur",
+        "blank": {
+          "title": "Aucune page pour le moment",
+          "description": "Saisissez une URL ci-dessus pour ouvrir une page."
+        },
+        "noTabs": {
+          "title": "Aucune page n'est ouverte",
+          "description": "Les pages que l'agent ouvre s'affichent ici. Vous pouvez aussi ouvrir un nouvel onglet."
+        },
+        "disconnected": {
+          "title": "Le navigateur s'est déconnecté",
+          "description": "Nouvelle tentative de connexion."
+        },
+        "disabled": {
+          "title": "Le navigateur est désactivé",
+          "description": "Un administrateur a désactivé le navigateur, ou vous ne pouvez pas voir le navigateur de ce chat."
+        },
+        "error": {
+          "title": "Le navigateur n'est pas disponible",
+          "description": "Le bac à sable du chat n'a pas pu démarrer. Réessayez plus tard."
+        },
+        "retry": "Réessayer"
+      },
+      "dialog": {
+        "label": "Boîte de dialogue de la page",
+        "response": "Réponse à la boîte de dialogue",
+        "responsePlaceholder": "Saisissez une réponse",
+        "dismiss": "Ignorer",
+        "accept": "Accepter",
+        "takeControl": "Prenez le contrôle pour répondre."
+      },
+      "fileChooser": {
+        "label": "Choisir des fichiers pour la page",
+        "askOne": "La page demande un fichier.",
+        "askMany": "La page demande des fichiers.",
+        "cancel": "Annuler",
+        "chooseOne": "Choisir un fichier",
+        "chooseMany": "Choisir des fichiers",
+        "inputLabel": "Fichiers pour la page",
+        "error": "Impossible de téléverser les fichiers. Réessayez."
       }
     }
   },
