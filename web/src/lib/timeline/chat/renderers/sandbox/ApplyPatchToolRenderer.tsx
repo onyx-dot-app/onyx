@@ -119,8 +119,9 @@ export function ApplyPatchToolRenderer({
       : "";
 
   // One panel: each file's diff. The output band shows only when it adds
-  // something: the error, or the changed files when no diff could be shown.
-  const showOutput = error !== null || !parsed?.files.length;
+  // something: the error, or the changed files when some have no panel.
+  const showOutput =
+    error !== null || !parsed?.files.length || parsed.omittedFiles > 0;
   const content = (
     <SandboxCallContent renderType={renderType}>
       {parsed?.files.map((file, index) => (
@@ -128,7 +129,12 @@ export function ApplyPatchToolRenderer({
           key={index}
           title={stripBidiControls(file.path) || t("sandbox.patch.title")}
           copyText={index === 0 ? patch : undefined}
-          lines={file.lines}
+          lines={
+            // A delete has no lines; its panel says what happened.
+            file.change === "delete" && file.lines.length === 0
+              ? [{ type: "header", content: t("sandbox.patch.deleted.label") }]
+              : file.lines
+          }
           counts={{ added: file.added, removed: file.removed }}
         />
       ))}

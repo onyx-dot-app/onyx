@@ -1295,3 +1295,31 @@ test("input that ends the command with a failure names it in a red title", async
     view.unmount();
   }
 });
+
+test("a deleted file's panel says the file was deleted", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "*** Begin Patch\n*** Delete File: gone.py\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [{ path: "gone.py", change: "delete", move_path: null }],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("gone.py")).toBeInTheDocument();
+    expect(screen.getByText("File deleted")).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent(/D gone\.py/);
+  } finally {
+    view.unmount();
+  }
+});
