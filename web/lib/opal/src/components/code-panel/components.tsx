@@ -128,6 +128,7 @@ function CodePanelHeader({
       >
         <div className="opal-code-panel-title">
           <Text
+            as="p"
             font="secondary-mono"
             color="text-03"
             maxLines={1}
