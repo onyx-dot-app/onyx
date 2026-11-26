@@ -371,9 +371,8 @@ cannot save Always allow on an action whose admin value is not Ask.
   reads the base URL and lines of a pasted spec or of a spec URL, fetched with
   `utils/url.py:ssrf_safe_get`. It drops each operation that no tool can call
   (`backend/onyx/integrations/openapi_endpoints.py:drop_uncallable_operations`) and names it in
-  `skipped`. That includes an operation whose line does not read back the
-  same, such as a query name with a space, since the add modal sends the
-  lines back. Then it runs the create checks except the server URL ones, so a
+  `skipped`. A line writes a query name with a space or `&?=#%` as `%XX`,
+  and a save decodes it. Then it runs the create checks except the server URL ones, so a
   spec that imports also creates. A document that is not a spec is
   `INVALID_INPUT`; a spec that fails is `VALIDATION_ERROR`, which stops the
   add modal at step 1. `backend/onyx/tools/tool_implementations/custom/openapi_parsing.py:openapi_to_method_specs` merges

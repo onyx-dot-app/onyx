@@ -46,7 +46,6 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     - An operation with no `summary` or `description`. The agent reads it to know when to use the tool.
     - An operation with a request body that is not `application/json`, for example a file upload.
     - An operation with a method other than `GET`, `POST`, `PUT`, `PATCH` or `DELETE`.
-    - An operation with a query parameter name that has a space. An endpoint line cannot hold it.
 
     Onyx shows the number of skipped operations, for example "REST API, 18 endpoints.
     1 skipped." Open **Skipped endpoints** to see each one and the reason. If the schema is not OpenAPI 3,
@@ -65,7 +64,7 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     | Line part | Effect |
     | --- | --- |
     | `{name}` in the path | A required string parameter |
-    | `?a&b` after the path | Optional string query parameters `a` and `b` |
+    | `?a&b` after the path | Optional string query parameters `a` and `b`. Write a space in a name as `%20` |
     | `POST`, `PUT` or `PATCH` | A JSON body that accepts any object |
     | The text after the path | The name of the action |
 
