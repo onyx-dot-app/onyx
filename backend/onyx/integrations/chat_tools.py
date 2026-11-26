@@ -42,7 +42,7 @@ from onyx.integrations.policy import (
 from onyx.integrations.registry import get_kind_handler
 from onyx.tools.interface import Tool
 from onyx.tools.models import IntegrationChatRequest, ToolApprovalScope
-from onyx.tools.tool_implementations.app_action.app_action_tool import AppConnectTool
+from onyx.tools.tool_implementations.api_app.connect_tool import AppConnectTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

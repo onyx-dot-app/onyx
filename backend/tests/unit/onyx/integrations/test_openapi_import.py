@@ -32,7 +32,7 @@ from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     validate_openapi_schema,
 )
 from onyx.tools.tool_implementations.api_app.rest_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
+    build_rest_tools,
 )
 from tests.unit.fakes import NO_CREDENTIALS
 
@@ -349,7 +349,7 @@ def test_server_variables_take_their_defaults() -> None:
     ]
 
     assert _import(json.dumps(spec)).base_url == "https://pets.example.com/v2"
-    tools = build_custom_tools_from_openapi_schema_and_headers(
+    tools = build_rest_tools(
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),

@@ -63,12 +63,12 @@ from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     openapi_to_url,
     parse_openapi_document,
 )
-from onyx.tools.tool_implementations.api_app.rest_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
+from onyx.tools.tool_implementations.api_app.preset_tool import (
+    PresetActionTool,
+    PresetToolSettings,
 )
-from onyx.tools.tool_implementations.app_action.app_action_tool import (
-    AppActionSettings,
-    AppActionTool,
+from onyx.tools.tool_implementations.api_app.rest_tool import (
+    build_rest_tools,
 )
 from onyx.tools.tool_name import api_app_tool_name, preset_tool_name
 from onyx.utils.logger import setup_logger
@@ -366,7 +366,7 @@ class ApiKindHandler(IntegrationKindHandler):
         if config.shape is not ApiShape.OPENAPI or config.openapi_spec is None:
             return []
         keys = {action.key for action in actions}
-        tools = build_custom_tools_from_openapi_schema_and_headers(
+        tools = build_rest_tools(
             integration_id=integration.id,
             openapi_schema=config.openapi_spec,
             headers=ctx.additional_headers,
@@ -406,7 +406,7 @@ class ApiKindHandler(IntegrationKindHandler):
             for action in actions
             if action.key in rules or action.key == OTHER_REQUEST_ACTION_KEY
         ]
-        settings = AppActionSettings(
+        settings = PresetToolSettings(
             integration_id=integration.id,
             integration_name=integration.name,
             app_type=config.app_type,
@@ -416,7 +416,7 @@ class ApiKindHandler(IntegrationKindHandler):
             offered_keys=frozenset(action.key for action in offered),
         )
         return [
-            AppActionTool(
+            PresetActionTool(
                 settings,
                 action_key=action.key,
                 display_name=action.display_name,

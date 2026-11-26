@@ -120,7 +120,7 @@ def test_a_graphql_body_matches_only_a_post_to_the_graphql_endpoint(
             body=json.dumps({"query": "{ viewer { id } }"}).encode(),
         ),
     )
-    assert [action.action_type for action in matched] == [WHOLE_DOMAIN_ACTION_TYPE]
+    assert [action.action_type for action in matched] == [OTHER_REQUEST_ACTION_KEY]
 
 
 def test_a_query_string_keeps_the_graphql_endpoint() -> None:

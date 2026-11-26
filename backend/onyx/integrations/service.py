@@ -185,7 +185,7 @@ from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     parse_openapi_document,
     validate_openapi_schema,
 )
-from onyx.tools.tool_implementations.api_app.rest_tool import validate_custom_tool_url
+from onyx.tools.tool_implementations.api_app.rest_tool import validate_api_app_url
 from onyx.tools.tool_implementations.http_request import (
     ToolRequestError,
     ToolRequestFailure,
@@ -462,7 +462,7 @@ def validate_openapi_definition(definition: dict[str, Any]) -> None:
     try:
         _check_no_query_or_fragment(server_url)
         # No DNS at save time; each call resolves and checks again.
-        validate_custom_tool_url(server_url, resolve_dns=False)
+        validate_api_app_url(server_url, resolve_dns=False)
     except (SSRFException, ValueError) as e:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
@@ -624,7 +624,7 @@ def _graphql_endpoint_url(config: GraphQLConfigInput) -> str:
     endpoint_url = config.endpoint_url.strip()
     try:
         # No DNS at save time; each call resolves and checks again.
-        validate_custom_tool_url(endpoint_url, resolve_dns=False)
+        validate_api_app_url(endpoint_url, resolve_dns=False)
     except (SSRFException, ValueError) as e:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
