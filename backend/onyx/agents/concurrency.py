@@ -5,7 +5,6 @@ import time
 from collections import Counter, deque
 from collections.abc import Callable
 from concurrent.futures import Future
-from contextlib import nullcontext
 from contextvars import copy_context
 
 from onyx.agents.events import (
@@ -96,25 +95,47 @@ def wait_operation[T](
 
 
 class ExecutionWork:
-    """Track a run's jobs independently of its terminal result.
+    """Track a run's jobs independently of its terminal result, and wake its
+    tool phase when they change.
 
     `tracker` counts every job: the run drains after all of them end. `held`
     counts the jobs that the tool phase also waits for before it suspends:
-    all but those of `track_detached`. When a held job ends, such as a
-    program driver that parked, `on_held_finished` runs in one step with the
-    `held` decrement, under `lock`: a reader that holds `lock` sees both or
-    neither, so the tool phase never reads it idle without its activity.
+    all but those of `track_detached`. The activity flag starts another tool
+    phase cycle: a held job that ends sets it, as `notify_activity` does for
+    a call that ends or a cancellation, and `begin_cycle` clears it. A held
+    job's end changes `held` and the flag in one step under `condition`: a
+    reader that holds `condition` sees both or neither, so the tool phase
+    never reads it idle without its activity.
     """
 
-    def __init__(
-        self,
-        lock: threading.Condition | None = None,
-        on_held_finished: Callable[[], None] | None = None,
-    ) -> None:
+    def __init__(self, condition: threading.Condition | None = None) -> None:
         self.tracker = WorkTracker()
         self.held = WorkTracker()
-        self._lock = lock
-        self._on_held_finished = on_held_finished
+        self._condition = condition if condition is not None else threading.Condition()
+        self._activity = False
+
+    def notify_activity(self) -> None:
+        """Wake the tool phase for another cycle."""
+        with self._condition:
+            self._activity = True
+            self._condition.notify_all()
+
+    def begin_cycle(self) -> None:
+        """Acknowledge the activity that the new tool phase cycle handles."""
+        with self._condition:
+            self._activity = False
+
+    @property
+    def tool_phase_idle(self) -> bool:
+        """Whether no held job runs and none ended since the cycle began."""
+        with self._condition:
+            return self.held.idle and not self._activity
+
+    def wait_for_activity(self, ready: Callable[[], bool], timeout: float) -> bool:
+        """Wait under `condition` for activity or `ready`; False on timeout.
+        `ready` reads state that the same condition guards."""
+        with self._condition:
+            return self._condition.wait_for(lambda: ready() or self._activity, timeout)
 
     def start[T](self, operation: Callable[[], T]) -> Future[T]:
         self.tracker.started()
@@ -141,10 +162,10 @@ class ExecutionWork:
 
     def _finished(self, *, held: bool) -> None:
         if held:
-            with self._lock if self._lock is not None else nullcontext():
+            with self._condition:
                 self.held.finished()
-                if self._on_held_finished is not None:
-                    self._on_held_finished()
+                self._activity = True
+                self._condition.notify_all()
         self.tracker.finished()
 
 
