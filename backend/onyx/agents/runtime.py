@@ -858,10 +858,13 @@ class Run:
         """The caller holds the execution lock."""
         for call in calls:
             execution = record.tools[call.id]
-            execution.result = _tool_result_message(result, call, message_id)
+            recorded = execution.result = _tool_result_message(
+                result, call, message_id
+            ).model_copy(deep=True)
             execution.status = (
                 ExecutionStatus.ERROR if result.is_error else ExecutionStatus.COMPLETE
             )
+            # The recorded copy: the tool still holds `result`.
             self.publish_event(
                 ToolUpdateEvent(
                     **self.event_context,
@@ -869,8 +872,8 @@ class Run:
                     step_index=self._progress.step_index,
                     tool_call=call,
                     progress=ToolProgress(
-                        content="" if result.is_error else result.text,
-                        details=result.details,
+                        content="" if recorded.is_error else recorded.text,
+                        details=recorded.details,
                     ),
                 )
             )
@@ -878,6 +881,8 @@ class Run:
     def record_pending_tool(
         self, call: ToolCall, pending: PendingToolInput | ChildRunWait | NestedInputWait
     ) -> None:
+        # Events show the run's copy: the tool still holds `pending`.
+        pending = pending.model_copy(deep=True)
         with self.execution_lock:
             self.cancellation_signal.check()
             shown: list[NestedInputRequest] = []
@@ -896,7 +901,7 @@ class Run:
                     ):
                         self._check_new_request_id(nested.request.request_id)
                         shown.append(nested)
-            self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
+            self._progress.pending_tool_calls[call.id] = pending
             self._state.revision += 1
             if self.is_accepting and self.event_delivery:
                 for wait in shown:
@@ -916,12 +921,12 @@ class Run:
     def open_nested_input(self, request: NestedInputRequest) -> None:
         """Show an open request of a call that a tool makes for the model; see
         NestedCallGate."""
+        # Events show the run's copy: the tool still holds `request`.
+        request = request.model_copy(deep=True)
         with self.execution_lock:
             self.cancellation_signal.check()
             self._check_new_request_id(request.request.request_id)
-            self._progress.open_inputs[request.request.request_id] = request.model_copy(
-                deep=True
-            )
+            self._progress.open_inputs[request.request.request_id] = request
             self._state.revision += 1
             self.publish_event(
                 InputRequiredEvent(**self.event_context, **dict(request))
@@ -1013,7 +1018,7 @@ class Run:
                 )
                 execution.result = _tool_result_message(
                     result, call, waits[0].message_id
-                )
+                ).model_copy(deep=True)
                 execution.status = (
                     ExecutionStatus.ERROR
                     if result.is_error
@@ -1090,13 +1095,15 @@ class Run:
                 if context is None:
                     raise RuntimeError("Tool finalization requires callback context")
                 self.cancellation_signal.check()
-                result = after_tool_call(context, result.model_copy(deep=True))
+                result = after_tool_call(context, result)
                 self.cancellation_signal.check()
             finalized = True
         finally:
             with self.execution_lock:
                 if self.is_accepting and not self.cancellation_signal.cancelled:
                     if finalized and after_tool_call is not None:
+                        # Built from the recorded result: the hook returns a
+                        # new result and keeps nothing.
                         execution.result = _tool_result_message(
                             result, call, message_id
                         )
@@ -1604,7 +1611,9 @@ class Run:
                 )
                 continue
             index, message_id, execution, call = located
-            execution.result = _tool_result_message(amendment.result, call, message_id)
+            execution.result = _tool_result_message(
+                amendment.result, call, message_id
+            ).model_copy(deep=True)
             amended_ids.add(execution.result.id)
             if self.event_delivery:
                 self.event_delivery.publish(
@@ -1801,15 +1810,17 @@ def _advance_loop(
                     if progress.step_index > 0
                     else None
                 )
-                decision = StepInput(
-                    history=run._history.messages,
-                    input_messages=run._state.input_messages,
-                    messages=run._state.messages,
-                    step=step,
-                    previous=previous,
-                    received_inputs=received,
-                ).model_copy(deep=True)
-                prepared = prepare(decision)
+                # Built from recorded, validated objects: not validated again.
+                prepared = prepare(
+                    StepInput.model_construct(
+                        history=tuple(run._history.messages),
+                        input_messages=tuple(run._state.input_messages),
+                        messages=tuple(run._state.messages),
+                        step=step,
+                        previous=previous,
+                        received_inputs=tuple(received),
+                    )
+                )
                 cancellation_signal.check()
             if prepared.input_messages is None:
                 prepared = prepared.model_copy(update={"input_messages": received})
@@ -1843,14 +1854,14 @@ def _resolve_step_tools(
         allowed = advertised_names
     elif not allowed <= advertised_names:
         raise ValueError("Step permissions must select tools in the configured phase")
-    options = prepared.options.model_copy(deep=True)
+    options = prepared.options
     if isinstance(options.tool_choice, NamedToolChoice):
         if options.tool_choice.name not in allowed:
             raise ValueError("Named tool choice must be allowed for this step")
     elif not allowed:
         if options.tool_choice == ToolChoiceOptions.REQUIRED:
             raise ValueError("Required tool choice needs an allowed tool")
-        options.tool_choice = ToolChoiceOptions.NONE
+        options = options.model_copy(update={"tool_choice": ToolChoiceOptions.NONE})
     prepared = prepared.model_copy(
         update={
             "allowed_tool_names": frozenset()
@@ -1872,13 +1883,6 @@ def _advance_step(
     cancellation_signal = run.cancellation_signal
     phase_tools, prepared = _resolve_step_tools(run, prepared)
     allowed = prepared.allowed_tool_names
-    prepared = prepared.model_copy(
-        update={
-            "output_metadata": prepared.output_metadata.model_copy(deep=True)
-            if prepared.output_metadata
-            else None,
-        }
-    )
     run._step_tools = [
         tool for tool in phase_tools if allowed is None or tool.name in allowed
     ]
@@ -1946,12 +1950,7 @@ def _advance_step(
         cancellation_signal.check()
         recorded_step = StepRecord(
             input_messages=inputs,
-            message=AssistantMessage(
-                id=message_id,
-                metadata=prepared.output_metadata.model_copy(deep=True)
-                if prepared.output_metadata
-                else None,
-            ),
+            message=AssistantMessage(id=message_id, metadata=prepared.output_metadata),
             generation_status=ExecutionStatus.RUNNING,
         )
         ownership = run.coordination.coordinator.ownership if run.coordination else None
@@ -1969,7 +1968,7 @@ def _advance_step(
         request = _compact_context(
             run, llm, source, prepared, generation_context, tools=definitions
         ).model_copy(update={"reserved_tool_call_ids": reserved})
-    execution_options = request.options.model_copy(deep=True)
+    execution_options = request.options
 
     timeout = generation_context.total_timeout_s
     deadline = time.monotonic() + min(
@@ -2047,7 +2046,7 @@ def _advance_step(
             tools=definitions,
             force=True,
         ).model_copy(update={"reserved_tool_call_ids": reserved})
-        execution_options = request.options.model_copy(deep=True)
+        execution_options = request.options
         with run.execution_lock:
             recorded_step.message = AssistantMessage(
                 id=message_id, metadata=recorded_step.message.metadata
@@ -2067,7 +2066,7 @@ def _advance_step(
         if run.event_delivery:
             run.event_delivery.publish(ended)
         run._progress.options = execution_options
-        run._progress.tools = [tool.model_copy(deep=True) for tool in definitions]
+        run._progress.tools = list(definitions)
         run._progress.allowed_tool_names = allowed
         run._progress.action = RunAction.TOOLS
         run._state.revision += 1
@@ -2205,13 +2204,20 @@ def _limit_output(
     budget: TokenBudget, request: GenerationRequest, input_tokens: int
 ) -> GenerationRequest:
     allowance = budget.output_allowance(input_tokens)
-    if allowance is not None:
-        request.options.max_tokens = (
-            min(request.options.max_tokens, allowance)
-            if request.options.max_tokens is not None
-            else allowance
-        )
-    return request
+    if allowance is None:
+        return request
+    max_tokens = request.options.max_tokens
+    return request.model_copy(
+        update={
+            "options": request.options.model_copy(
+                update={
+                    "max_tokens": min(max_tokens, allowance)
+                    if max_tokens is not None
+                    else allowance
+                }
+            )
+        }
+    )
 
 
 def _execute_tools(run: Run) -> bool:
@@ -2276,11 +2282,7 @@ def _complete_step(run: Run) -> None:
     # A step whose tool results all set `terminate` ends the run.
     terminated = bool(results) and all(result.terminate for result in results)
     should_continue = (
-        after_step(
-            _step_result(run, progress.options, progress.step_index).model_copy(
-                deep=True
-            )
-        )
+        after_step(_step_result(run, progress.options, progress.step_index))
         if after_step is not None
         else bool(calls)
     ) and not terminated
@@ -2354,19 +2356,19 @@ def _complete_step(run: Run) -> None:
 def _step_result(
     run: Run, options: GenerationOptions | None, step_index: int
 ) -> StepResult:
-    """Reference recorded output; callers copy it before invoking feature callbacks."""
+    """The recorded output of a step, not a copy."""
     if options is None:
         raise ValueError("Saved step is missing generation options")
     step = run._state.steps[step_index]
-    return StepResult(
+    return StepResult.model_construct(
         step=AgentStep(index=step_index, limit=run._progress.step_limit),
         message=step.message,
-        tool_results=[
+        tool_results=tuple(
             execution.result
             for call in step.message.tool_calls
             if (execution := step.tools.get(call.id)) is not None
             and execution.result is not None
-        ],
+        ),
         options=options,
     )
 
@@ -2384,7 +2386,7 @@ def _tool_result_message(
         terminate=result.terminate,
         tool_call_id=call.id,
         tool_name=call.name,
-    ).model_copy(deep=True)
+    )
 
 
 def _record_answer(

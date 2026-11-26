@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from onyx.agents.concurrency import EventDelivery
 from onyx.agents.events import (
@@ -21,7 +21,7 @@ from onyx.agents.models import (
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.models import PromptMetadata
 from onyx.chat.prompt_formatting import prepare_model_messages
@@ -158,6 +158,37 @@ def test_default_model_accepts_application_metadata_without_chat_policy() -> Non
     assert "private metadata" not in str(llm.requests)
 
 
+def test_finalized_result_keeps_the_recorded_details_without_a_copy() -> None:
+    finalized: list[ToolResult] = []
+
+    def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
+        finalized.append(result)
+        return result
+
+    agent = Agent(
+        FakeModelClient(_model),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            _tool(
+                lambda _: ToolResult(
+                    content="found",
+                    details=CustomToolCallSummary(
+                        tool_name="lookup", response_type="json", tool_result={"id": 1}
+                    ),
+                )
+            )
+        ],
+        feature=RunHooks(after_tool_call=finalize),
+    )
+    run = agent.start(max_steps=2)
+    run.result()
+    assert run.wait_for_idle(2)
+    [result] = finalized
+    recorded = run._state.steps[0].tools[run._state.steps[0].message.tool_calls[0].id]
+    assert recorded.result is not None
+    assert recorded.result.details is result.details
+
+
 @pytest.mark.parametrize("replace", [False, True])
 def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
     requests: list[list[Message]] = []
@@ -269,10 +300,19 @@ def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) ->
         parent.close()
 
 
-def test_after_step_cannot_rewrite_accepted_output() -> None:
+@pytest.mark.parametrize(
+    "rewrite",
+    [
+        lambda step: step.tool_results.clear(),
+        lambda step: setattr(step, "message", AssistantMessage()),
+    ],
+    ids=["clear-results", "replace-message"],
+)
+def test_after_step_that_rewrites_accepted_output_fails_the_run(
+    rewrite: Callable[[StepResult], None],
+) -> None:
     def complete(step: StepResult) -> bool:
-        step.message.content.clear()
-        step.tool_results.clear()
+        rewrite(step)
         return False
 
     run = Agent(
@@ -281,7 +321,8 @@ def test_after_step_cannot_rewrite_accepted_output() -> None:
         tools=[_tool()],
         feature=RunHooks(after_step=complete),
     ).start(max_steps=1)
-    run.result()
+    with pytest.raises(RunFailed):
+        run.result()
     assert run.wait_for_idle(2)
     assert run.snapshot().messages[0].text == "Searching"
     assert run.snapshot().messages[-1].text == "original"
@@ -438,68 +479,42 @@ def test_live_and_completed_history_match_and_are_isolated() -> None:
 
 
 @pytest.mark.parametrize("with_assembly", [False, True])
-def test_prepared_request_isolates_nested_tool_arguments(with_assembly: bool) -> None:
+def test_prepared_request_shares_history_without_changing_it(
+    with_assembly: bool,
+) -> None:
     original = AssistantMessage(
         content=[
             ToolCall(id="call", name="lookup", arguments={"filters": {"q": "original"}})
         ]
     )
-    messages: list[Message] = [
-        original,
-        ToolResultMessage(tool_call_id="call", tool_name="lookup", content="found"),
-    ]
-    retained: list[Message] = []
+    found = ToolResultMessage(tool_call_id="call", tool_name="lookup", content="found")
+    messages: list[Message] = [original, found]
+    instructions = SystemMessage(content="Use sources", metadata=ExtraData())
+    assembled_from: list[Sequence[Message]] = []
 
     def assemble(history: Sequence[Message]) -> list[Message]:
-        assistant = history[0]
-        assert isinstance(assistant, AssistantMessage)
-        call = assistant.tool_calls[0].model_copy(
-            update={"arguments": {"filters": {"q": "assembled"}}}
-        )
-        result = [assistant.model_copy(update={"content": [call]}), *history[1:]]
-        retained.extend(result)
-        return result
+        assembled_from.append(history)
+        return [instructions, *history]
 
     request = PreparedStep(
         assemble_messages=assemble if with_assembly else None
     ).generation_request(messages)
-    assert original.tool_calls[0].arguments == {"filters": {"q": "original"}}
-    output = request.messages[0]
-    assert isinstance(output, AssistantMessage)
-    filters = output.tool_calls[0].arguments["filters"]
-    assert isinstance(filters, dict)
-    assert filters["q"] == ("assembled" if with_assembly else "original")
-    filters["q"] = "changed"
-    request.messages.clear()
+
+    shared = request.messages[1:] if with_assembly else request.messages
     assert len(messages) == 2
     assert original.tool_calls[0].arguments == {"filters": {"q": "original"}}
+    # Only the assistant message gets a shallow copy, for its filtered content.
+    output = shared[0]
+    assert isinstance(output, AssistantMessage)
+    assert output is not original
+    assert output.tool_calls[0] is original.tool_calls[0]
+    assert shared[1] is found
     if with_assembly:
-        assembled = retained[0]
-        assert isinstance(assembled, AssistantMessage)
-        assert assembled.tool_calls[0].arguments == {"filters": {"q": "assembled"}}
-
-
-def test_request_mutation_cannot_change_captured_assembly_instructions() -> None:
-    instructions = SystemMessage(content="Use sources", metadata=ExtraData())
-    history: list[Message] = [UserMessage(content="Question")]
-    prepared = PreparedStep(
-        assemble_messages=lambda messages: [instructions, *messages]
-    )
-    request = prepared.generation_request(history)
-    system = request.messages[0]
-    assert isinstance(system, SystemMessage)
-    system.content = "changed"
-    assert isinstance(system.metadata, ExtraData)
-    system.metadata.value = "changed"
-    question = request.messages[1]
-    assert isinstance(question, UserMessage)
-    question.content = "changed"
-
-    rebuilt = prepared.generation_request(history)
-    assert rebuilt.messages == [instructions, *history]
-    assert instructions.content == "Use sources"
-    assert instructions.metadata == ExtraData()
-    assert history[0].content == "Question"
+        assert request.messages[0] is instructions
+        # The assembler borrows a read-only tuple, like every hook input.
+        assert isinstance(assembled_from[0], tuple)
+    request.messages.clear()
+    assert messages == [original, found]
 
 
 def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
@@ -530,3 +545,61 @@ def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
     assert recorded.text == result.output.text == "answer"
     assert recorded.metadata == ExtraData()
     assert recorded.id == observed[0].message_id
+
+
+def test_tool_calls_share_one_read_only_history_view() -> None:
+    views: list[Sequence[Message]] = []
+    contexts: list[ToolCallContext] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        views.append(invocation.messages)
+        return ToolResult(content="evidence", details=ExtraData())
+
+    def model(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        step = sum(
+            isinstance(message, AssistantMessage) for message in request.messages
+        )
+        if step == 2:
+            return AssistantMessage(content=[TextContent(text="answer")])
+        return AssistantMessage(
+            content=[
+                ToolCall(id=f"{step}-a", name="lookup", arguments={}),
+                ToolCall(id=f"{step}-b", name="lookup", arguments={}),
+            ]
+        )
+
+    def before(context: ToolCallContext) -> None:
+        contexts.append(context)
+
+    run = Agent(
+        FakeModelClient(model),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content="question")]),
+        tools=[_tool(execute)],
+        feature=RunHooks(before_tool_call=before),
+    ).start(max_steps=3)
+    assert run.result(timeout=5).output.text == "answer"
+    assert run.wait_for_idle(5)
+    first_a, first_b, second_a, second_b = views
+    assert first_a is first_b and second_a is second_b
+    for context, view in zip(contexts, views, strict=True):
+        assert all(
+            shown is viewed
+            for shown, viewed in zip(context.messages, view, strict=True)
+        )
+    # The recorded messages themselves, results with their details.
+    recorded = run.snapshot()
+    assert second_a[1] is run._state.steps[0].message
+    assert second_a[2] is run._state.steps[0].tools["0-a"].result
+    assert [message.text for message in second_a] == [
+        "question",
+        "",
+        "evidence",
+        "evidence",
+    ]
+    assert recorded.messages[1] == second_a[2]
+    assert isinstance(second_a, tuple)
+    with pytest.raises(ValidationError):
+        contexts[0].messages = ()  # ty: ignore[invalid-assignment]

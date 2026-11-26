@@ -774,9 +774,10 @@ def test_model_formatting_drops_application_payloads_without_copying_them(
     assert isinstance(prepared_assistant, CanonicalAssistantMessage)
     assert isinstance(prepared_result, ToolResultMessage)
     assert prepared_result.details is None
-    prepared_assistant.tool_calls[0].arguments["query"] = "changed"
+    # New message objects that share their content with the history.
+    assert prepared_assistant is not assistant
+    assert prepared_assistant.tool_calls[0] is assistant.tool_calls[0]
     prepared_result.content = "Changed evidence"
-    assert assistant.tool_calls[0].arguments == {"query": "original"}
     assert result.content == "Evidence"
     assert result.details is details
     assert result.metadata is metadata

@@ -1,6 +1,6 @@
 import abc
 import traceback
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from functools import cache, partial
 from typing import TYPE_CHECKING, ClassVar, final
 
@@ -57,7 +57,9 @@ _MESSAGE_TYPES = {
 }
 
 
-def tool_message_history(messages: list[Message]) -> list[ChatMinimalTextMessage]:
+def tool_message_history(
+    messages: Sequence[Message],
+) -> list[ChatMinimalTextMessage]:
     return [
         ChatMinimalTextMessage(
             message=message.text,

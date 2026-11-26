@@ -239,18 +239,20 @@ class PreparedStep(BaseModel):
     assemble_messages: Callable[[Sequence[Message]], list[Message]] | None = None
 
     def generation_request(
-        self, messages: list[Message], *, tools: Sequence[ToolDefinition] = ()
+        self, messages: Sequence[Message], *, tools: Sequence[ToolDefinition] = ()
     ) -> GenerationRequest:
-        """Build a detached request; assembly must not mutate borrowed history."""
+        """Build a request that shares the history's messages, the tool
+        definitions and the options; neither assembly nor the model may change
+        them."""
         history = messages
         if self.assemble_messages is not None:
             history = self.assemble_messages(tuple(messages))
         return GenerationRequest(
             messages=messages_for_model(history),
             system_prompt=self.system_prompt,
-            tools=[tool.model_copy(deep=True) for tool in tools],
+            tools=list(tools),
             allowed_tool_names=self.allowed_tool_names,
-            options=self.options.model_copy(deep=True),
+            options=self.options,
         )
 
 
@@ -274,11 +276,13 @@ class ReleaseFailed(Exception):
 
 
 class ToolCallContext(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    """Read-only hook input; `messages` are the run's own message objects."""
+
+    model_config = ConfigDict(frozen=True)
     step: AgentStep
     call: ToolCall
     options: GenerationOptions
-    messages: list[Message]
+    messages: tuple[Message, ...]
 
 
 class ToolResultContext(BaseModel):
@@ -301,21 +305,26 @@ class ToolResultContext(BaseModel):
 
 
 class StepResult(BaseModel):
+    """Read-only hook input that holds the run's recorded objects."""
+
+    model_config = ConfigDict(frozen=True)
     step: AgentStep
     message: AssistantMessage
-    tool_results: list[ToolResultMessage]
+    tool_results: tuple[ToolResultMessage, ...]
     options: GenerationOptions
 
 
 class StepInput(BaseModel):
-    """Detached callback input; previous references its matching entries in messages."""
+    """Read-only hook input that holds the run's recorded messages, not copies;
+    previous references its matching entries in messages."""
 
-    history: list[Message]
-    input_messages: list[Message]
-    messages: list[Message]
+    model_config = ConfigDict(frozen=True)
+    history: tuple[Message, ...]
+    input_messages: tuple[Message, ...]
+    messages: tuple[Message, ...]
     step: AgentStep
     previous: StepResult | None = None
-    received_inputs: list[UserMessage] = Field(default_factory=list)
+    received_inputs: tuple[UserMessage, ...] = ()
 
 
 class RunResult(BaseModel):

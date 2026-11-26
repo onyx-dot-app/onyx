@@ -709,8 +709,8 @@ def prepare_prompt(
     available_tool_names: set[str] | None = None,
     context_file_citations: Mapping[str, int] | None = None,
 ) -> list[Message]:
-    """Assemble detached prompt messages without modifying borrowed inputs."""
-    # Nested payloads stay read-only until output formatting detaches them.
+    """Assemble prompt messages without changing the input messages."""
+    # Each message is a shallow copy; nested payloads stay shared and read-only.
     history = [message.model_copy() for message in messages]
     _deduplicate_search_passages(history)
     for message in history:
@@ -774,11 +774,11 @@ def prepare_prompt(
             )
         )
     if reminder_message is not None:
-        result.append(reminder_message)
+        result.append(reminder_message.model_copy())
     return (
         prepare_model_messages(result, llm_config, token_counter=token_counter)
         if llm_config
-        else [message.model_copy(deep=True) for message in result]
+        else result
     )
 
 

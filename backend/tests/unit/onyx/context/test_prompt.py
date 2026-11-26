@@ -260,7 +260,7 @@ def test_prompt_preserves_historical_and_current_evidence_after_checkpoint(
 
 
 @pytest.mark.parametrize("with_model", [False, True])
-def test_prompt_output_isolates_history_and_captured_instructions(
+def test_prompt_output_shares_history_without_changing_it(
     with_model: bool,
 ) -> None:
     history: list[Message] = [
@@ -319,27 +319,24 @@ def test_prompt_output_isolates_history_and_captured_instructions(
     assert assistant.thinking_blocks == [
         ThinkingBlock(thinking="Thinking", signature="signed")
     ]
-    assistant.tool_calls[0].arguments["queries"] = ["changed"]
-    thinking = assistant.content[0]
-    assert isinstance(thinking, ThinkingContent) and thinking.blocks
-    block = thinking.blocks[0]
-    assert isinstance(block, ThinkingBlock)
-    block.signature = "changed"
+    # Output messages are new objects that share nested content with the
+    # history; replacing their fields does not change the history.
+    recorded_assistant, recorded_result = history[1], history[2]
+    assert isinstance(recorded_assistant, AssistantMessage)
+    assert isinstance(recorded_result, ToolResultMessage)
+    assert assistant.tool_calls[0] is recorded_assistant.tool_calls[0]
     tool_result = next(
         message for message in result if isinstance(message, ToolResultMessage)
     )
     if with_model:
         assert tool_result.details is None
     else:
-        assert isinstance(tool_result.details, SearchDocsResponse)
-        tool_result.details.citation_mapping[1] = "changed"
+        assert tool_result.details is recorded_result.details
     tool_result.content = "Changed evidence"
     for message in result:
         if isinstance(message, (UserMessage, SystemMessage)):
             message.content = "changed"
-        if isinstance(message.metadata, PromptMetadata):
-            message.metadata.token_count = -1
-            message.metadata.should_cache = False
+        message.metadata = None
     assert inputs == originals
     assert assemble(tuple(history)) == expected
 

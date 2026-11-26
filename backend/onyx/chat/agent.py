@@ -1,5 +1,5 @@
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 
 from pydantic import JsonValue
@@ -512,7 +512,7 @@ class ChatFeature(AgentFeature):
         if self.code_cells is not None:
             self.code_cells.restore(saved.code_cells)
 
-    def _update_tool_context(self, responses: list[ToolResultMessage]) -> None:
+    def _update_tool_context(self, responses: Sequence[ToolResultMessage]) -> None:
         """Apply accepted tool results to the next request's context policy."""
         for response in responses:
             data = response.details
@@ -681,10 +681,13 @@ class ChatFeature(AgentFeature):
         if not self.stages_files:
             return result
         known = {file.file_id for file in self.chat_files if file.file_id is not None}
-        result.details = staged_result_details(
-            result.details, known, build_python_chat_files_from_search_docs
+        return result.model_copy(
+            update={
+                "details": staged_result_details(
+                    result.details, known, build_python_chat_files_from_search_docs
+                )
+            }
         )
-        return result
 
     def _finished_cells(
         self, results: list[ToolResultMessage]

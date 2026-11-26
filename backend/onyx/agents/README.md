@@ -173,7 +173,10 @@ Preserve each input's identity, provenance, and order. The runtime records accep
 Each input needs `InputMessageMetadata`; the runtime rejects untagged input, because compaction keeps the latest untagged user message as the task.
 `InputMessageMetadata.content_metadata` reaches preparation only; accepted history keeps the source and source run.
 Acceptance belongs to `RunOwnership.accept_inputs`; if it declines, the runtime prepares the step again.
-The input is detached from runtime state. `previous` references the matching messages within that input.
+The input holds the run's recorded messages, not copies. A frozen model holds them in tuples.
+A hook that replaces a field or changes a sequence gets an error, and the run fails.
+The messages are not frozen: read them and their nested data, and do not change them.
+`previous` references the matching messages within that input.
 Without this callback, the agent uses its configured instructions, tools, and model options.
 A custom callback supplies the step's instructions and generation options; the runtime does not merge those defaults into it.
 Pass executable tools to `Agent(tools=...)`. Construction snapshots their definitions and fixes their order.
@@ -190,6 +193,7 @@ The LLM adapter handles provider exceptions that require narrower advertised def
 Saved steps retain both advertised declarations and execution permissions. Restoration validates the declarations before using those permissions.
 
 `after_step(StepResult)` processes each completed step, including the last allowed step.
+`StepResult` holds the recorded step under the same rules as `StepInput`.
 Return `True` to continue or `False` to finish. Without this callback, the agent continues after tool calls
 unless all results request termination. It stops after a final answer.
 A continuation request at the step limit produces `LIMIT`; it does not prepare or execute another step.
@@ -208,7 +212,8 @@ Callbacks must use bounded I/O and check cancellation during long operations.
 Cancellation waits for a synchronous callback or model read to return before execution can finish.
 `PreparedStep.assemble_messages` must be pure and repeatable: compaction can call it again with shorter history.
 It borrows a read-only `Sequence[Message]`. Do not modify its messages or nested data; return replacements for changes.
-The sequence is a tuple, but nested objects are not immutable. The SDK detaches the returned messages before model execution.
+The sequence is a tuple, but nested objects are not immutable. The model request shares the returned messages, the tool definitions and the options,
+except a shallow copy of each assistant message with its replayable content; the model adapter does not change them.
 Capture instructions and other step decisions during preparation. Assemble them around the history supplied by the runtime.
 Do not fetch settings, advance feature state, or capture the original history inside the assembler.
 
@@ -256,7 +261,11 @@ Optional tool callbacks cover interception and enrichment:
 | `prepare_tool_result` | Replace a completed result before the run records and streams it. Failure fails the run. An amendment's preparation runs under the run's cancellation signal; when it fails or stops, the amendment applies as the release hook made it. |
 | `unknown_tool_hint` | Give the result of a call of a tool that the agent does not offer; `None` keeps the default result. Chat agents say how to call a code mode function from a program, and name the tool that they offer for another tool family's name. |
 
-Callbacks receive copies, except `prepare_tool_result`. Its `ToolResultContext`, like `ToolInvocation.recorded_results`, references the run's objects, since results can be large: the hook must not change them and returns a new result instead.
+Tool callbacks receive the run's objects, not copies, since history and results can be large. `ToolCallContext` is frozen.
+It holds the recorded call and the step's options. Its history is the step's model-view tuple, which the step's tools also get.
+`after_tool_call` gets a new `ToolResult` whose content and details are the recorded ones. `ToolResultContext`, like
+`ToolInvocation.recorded_results`, references the recorded results. Hooks must not change these objects: they return a
+new result instead, for example with `model_copy(update=...)`.
 `Run.record_tool_results` calls it for every result, one at a time in the order the calls complete, with the results of the step that the run recorded before.
 Its result is what the live `tool_update` event, the saved history and the model get. `ToolResult.full_value` reaches the hook; the recorded `ToolResultMessage` has no such field (both share `ToolResultFields`).
 The amendments of the finish and suspend hooks go through it too, with `amended=True`.
@@ -310,7 +319,8 @@ An `AgentTool` pairs a `ToolDefinition` with a synchronous `execute` function. E
 The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
-- `call_id`, `call_index`, `messages` — the call's identity and logical working history.
+- `call_id`, `call_index`, `messages` — the call's identity and logical working history: one tuple that all calls
+  of the step share, of the run's messages, tool results with their details. Read only.
 - `recorded_results` — every recorded tool result before the call, with details and without
   compaction: earlier steps, then this step's completed results in call order. Read only.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.

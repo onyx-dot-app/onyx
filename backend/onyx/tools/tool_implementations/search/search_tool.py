@@ -898,7 +898,7 @@ class SearchTool(Tool):
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        message_history = tool_message_history(list(invocation.messages))
+        message_history = tool_message_history(invocation.messages)
         original_query = next(
             (
                 message.message

@@ -180,12 +180,10 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
 
     def enrich(_context: ToolCallContext, result: ToolResult) -> ToolResult:
         assert isinstance(result.details, CustomToolCallSummary)
-        assert isinstance(result.details.tool_result, dict)
-        result.details.tool_result["phase"] = "final"
+        details = result.details.model_copy(update={"tool_result": {"phase": "final"}})
         finalizing.set()
         assert release.wait(3)
-        result.content = "final"
-        return result
+        return result.model_copy(update={"content": "final", "details": details})
 
     agent = Agent(
         FakeModelClient(generate),
