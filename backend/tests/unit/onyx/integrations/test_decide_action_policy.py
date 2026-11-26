@@ -285,10 +285,10 @@ def test_an_action_that_always_asks_stays_blocked() -> None:
 
 def test_an_mcp_tool_named_like_the_request_action_follows_its_policy() -> None:
     result = decide_action_policy(
-        WHOLE_DOMAIN_ACTION_TYPE,
+        OTHER_REQUEST_ACTION_KEY,
         None,
         PolicyRows(
-            admin={WHOLE_DOMAIN_ACTION_TYPE: IntegrationActionPolicyValue.ALLOW},
+            admin={OTHER_REQUEST_ACTION_KEY: IntegrationActionPolicyValue.ALLOW},
             user={},
         ),
         kind=IntegrationKind.MCP,
