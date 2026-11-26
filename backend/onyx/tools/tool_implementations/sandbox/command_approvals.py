@@ -227,7 +227,7 @@ class CommandApprovals:
                     chat_session_id=self._chat_session_id,
                     command_id=command_id,
                 )
-                ended = [
+                decided = [
                     row.approval_id
                     for row in pending
                     if action_approval.try_record_decision(
@@ -240,6 +240,7 @@ class CommandApprovals:
                     )
                 ]
                 db.commit()
+                ended = decided
         except Exception:
             logger.exception("command_approvals_end_failed command=%s", command_id)
         if cache is not None:

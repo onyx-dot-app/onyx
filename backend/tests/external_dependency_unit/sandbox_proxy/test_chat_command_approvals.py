@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock
@@ -378,6 +379,40 @@ def test_a_stop_refuses_the_requests_that_wait(
     row = db_session.get(ActionApproval, held.approval_id)
     assert row is not None and row.decided_via == ApprovalDecidedVia.USER
     assert not gate._command_in_foreground(ctx)
+
+
+def test_a_failed_end_commit_sends_no_wake(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, chat: _Chat
+) -> None:
+    """A wake carries only a decision that the database saved."""
+    command_id, reports, approvals = _command(chat)
+    held = _HeldRequest(_gate(), _ctx(chat, command_id), _matched(chat.integration_id))
+    reports.wait_for(lambda: bool(reports.cards()))
+    real_session = command_approvals_tool.get_session_with_tenant
+
+    @contextmanager
+    def failing_commit(**kwargs: Any) -> Generator[Session]:
+        with real_session(**kwargs) as db:
+            monkeypatch.setattr(db, "commit", MagicMock(side_effect=RuntimeError))
+            yield db
+
+    woken: list[list[UUID]] = []
+    send_wakes = approval_cache.send_wakes
+    monkeypatch.setattr(
+        command_approvals_tool, "get_session_with_tenant", failing_commit
+    )
+    monkeypatch.setattr(
+        approval_cache,
+        "send_wakes",
+        lambda ids, *args: woken.append(list(ids)) or send_wakes(ids, *args),
+    )
+
+    approvals.end(cancelled=True)
+
+    assert woken == [[]]
+    monkeypatch.undo()
+    _decide(db_session, chat, held.approval_id, ApprovalChoice.REJECT)
+    assert held.result() == ApprovalDecision.REJECTED
 
 
 def test_the_end_reports_a_decision_that_the_watcher_did_not_read(
