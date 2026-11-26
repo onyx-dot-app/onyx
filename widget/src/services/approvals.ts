@@ -13,7 +13,11 @@ export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 /** `stop_reason` of a stream that stops while the response waits for the user. */
 export const AWAITING_USER_STOP_REASON = "awaiting_user";
 
-export type ApprovalDecision = "approve_once" | "approve_session" | "reject";
+export type ApprovalDecision =
+  | "approve_once"
+  | "approve_session"
+  | "approve_command"
+  | "reject";
 
 export type ApprovalOutcome =
   | "approved"

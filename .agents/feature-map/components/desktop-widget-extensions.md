@@ -131,6 +131,9 @@ send → ApiService                                   services/api-service.ts
   └─ a root question waits (questions.ts:findPendingWait) → no send: the
        text is a typed answer (below)
 decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
+  card (services/approval-card.ts): Approve once, Reject, and "Approve for
+    this command" (approve_command) when can_approve_for_command, else
+    "Approve for this chat" unless can_approve_for_chat is false
 answers  → POST /chat/question-requests/{id}/answers   widget.ts, services/questions.ts
   card: one question per page (Back/Next, page in widget.ts questionPages);
     per question, one option or "Other" with a typed answer in place of an

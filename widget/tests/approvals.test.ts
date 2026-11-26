@@ -300,6 +300,52 @@ describe("approval arguments from the model", () => {
     expect(card()).toContain(last);
   });
 
+  it("offer only the wider approval that the server allows", () => {
+    // Each button's click handler, called with a recording onDecide
+    function decisions(approval: ApprovalEntry): string[] {
+      const sent: string[] = [];
+      const card = renderApprovalCard(approval, "pending", {
+        ...view(new Set()),
+        onDecide: (_request, decision) => sent.push(decision),
+      });
+      const visit = (value: unknown): void => {
+        if (Array.isArray(value)) value.forEach(visit);
+        else if (typeof value === "function") value();
+        else if (typeof value === "object" && value !== null && "values" in value)
+          visit((value as { values: unknown[] }).values);
+      };
+      visit(card);
+      return sent;
+    }
+    const withFlags = (
+      flags: Partial<ToolApprovalRequest>
+    ): ApprovalEntry => ({ request: { ...request("a"), ...flags }, outcome: null });
+
+    expect(decisions(entry("a"))).toEqual([
+      "approve_once",
+      "approve_session",
+      "reject",
+    ]);
+    expect(decisions(withFlags({ can_approve_for_chat: false }))).toEqual([
+      "approve_once",
+      "reject",
+    ]);
+    const command = withFlags({
+      can_approve_for_chat: false,
+      can_approve_for_command: true,
+    });
+    expect(decisions(command)).toEqual([
+      "approve_once",
+      "approve_command",
+      "reject",
+    ]);
+    const shown = shownText(
+      renderApprovalCard(command, "pending", view(new Set()))
+    );
+    expect(shown).toContain("Approve for this command");
+    expect(shown).not.toContain("Approve for this chat");
+  });
+
   it("name the subagent that asks", () => {
     const approval: ApprovalEntry = {
       request: { ...request("c"), agent_name: "Research" },

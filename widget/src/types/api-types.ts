@@ -176,6 +176,11 @@ export interface ToolApprovalRequest {
   arguments: Record<string, unknown>;
   // The subagent that asks; null or absent for the root agent's own requests
   agent_name?: string | null;
+  // False when the card must not offer "Approve for this chat"
+  can_approve_for_chat?: boolean;
+  // An app request of a command: the card offers "Approve for this command"
+  // in place of "Approve for this chat"
+  can_approve_for_command?: boolean;
 }
 
 export interface ToolApprovalResolved {
