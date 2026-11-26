@@ -882,6 +882,29 @@ extend type Query { closedTickets: [Ticket!]! }`;
     );
   });
 
+  test("a GraphQL schema with deep argument nesting counts at once", async () => {
+    const depth = 500_000;
+    const schema = `type Query { a${"(".repeat(depth)}${")".repeat(depth)}: Int b: Int }`;
+    mockFetch({
+      "POST /api/admin/integrations/openapi-import": () => failure(400),
+      "POST /api/admin/integrations/graphql-introspect": {
+        shape: "graphql",
+        endpoint_url: "https://api.example.com/graphql",
+        graphql_schema: schema,
+      },
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Tickets",
+      add.api.url.title,
+      "https://api.example.com/graphql"
+    );
+    expect(
+      await screen.findByText("GraphQL API, 2 queries and 0 mutations")
+    ).toBeInTheDocument();
+  });
+
   test("a schema block without a mutation root counts no mutations", async () => {
     mockFetch({
       "POST /api/admin/integrations/openapi-import": () => failure(400),

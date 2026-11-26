@@ -191,11 +191,14 @@ function blockFieldCount(sdl: string, bodyStart: number): number {
     if (sdl[end] === "{") depth++;
     else if (sdl[end] === "}") depth--;
   }
-  let body = sdl.slice(bodyStart, end - 1);
-  // Arguments hold colons too; drop them, inner pairs first.
-  for (let previous = ""; previous !== body;) {
-    previous = body;
-    body = body.replace(/\([^()]*\)/g, "");
+  // Arguments hold colons too; keep only the text outside parentheses, in one
+  // pass so deep nesting stays linear.
+  let body = "";
+  let parens = 0;
+  for (const char of sdl.slice(bodyStart, end - 1)) {
+    if (char === "(") parens++;
+    else if (char === ")") parens = Math.max(0, parens - 1);
+    else if (parens === 0) body += char;
   }
   return body.match(/[A-Za-z_]\w*\s*:/g)?.length ?? 0;
 }
