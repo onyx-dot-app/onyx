@@ -2,7 +2,7 @@ import json
 import re
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 
 import yaml
 from pydantic import BaseModel, JsonValue
@@ -174,17 +174,20 @@ class MethodSpec(BaseModel):
 
 
 def resolve_ref(openapi_spec: dict[str, Any], value: Any) -> Any:
-    """What the local ``$ref`` (``#/components/...``) of ``value`` points to,
-    else ``value``."""
+    """What the local ``$ref`` (a JSON Pointer in a URI fragment, such as
+    ``#/components/...``) of ``value`` points to, else ``value``."""
     ref = value.get("$ref") if isinstance(value, dict) else None
     if not isinstance(ref, str) or not ref.startswith("#/"):
         return value
     target: Any = openapi_spec
-    for part in ref[2:].split("/"):
+    for part in unquote(ref[2:]).split("/"):
         key = part.replace("~1", "/").replace("~0", "~")
-        if not isinstance(target, dict) or key not in target:
+        if isinstance(target, dict) and key in target:
+            target = target[key]
+        elif isinstance(target, list) and key.isdigit() and int(key) < len(target):
+            target = target[int(key)]
+        else:
             return value
-        target = target[key]
     return target
 
 

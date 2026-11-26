@@ -213,6 +213,61 @@ def test_schema_references_are_inlined_into_the_tool() -> None:
     )
 
 
+def test_pointers_into_lists_and_with_escapes_resolve() -> None:
+    spec = {
+        "openapi": "3.0.3",
+        "info": {"title": "Pets", "version": "1.0"},
+        "servers": [{"url": "https://pets.example.com"}],
+        "components": {
+            "schemas": {
+                "Pet": {
+                    "allOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "kind": {"$ref": "#/components/schemas/a~1b"},
+                                "size": {"$ref": "#/components/schemas/pet%20size"},
+                                "tag": {"$ref": "#/components/schemas/t~0x"},
+                            },
+                        }
+                    ]
+                },
+                "a/b": {"type": "string"},
+                "pet size": {"type": "integer"},
+                "t~x": {"type": "boolean"},
+            }
+        },
+        "paths": {
+            "/pets": {
+                "post": {
+                    "operationId": "addPet",
+                    "summary": "Add a pet",
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/Pet/allOf/0"}
+                            }
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+    (method_spec,) = openapi_to_method_specs(spec)
+
+    assert method_spec.to_tool_definition().parameters["properties"] == {
+        REQUEST_BODY: {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string"},
+                "size": {"type": "integer"},
+                "tag": {"type": "boolean"},
+            },
+        }
+    }
+
+
 def test_a_spec_with_path_parameters_validates_and_builds_tools() -> None:
     spec = _callable_spec()
     validate_openapi_schema(spec)
