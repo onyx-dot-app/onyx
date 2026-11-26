@@ -2,7 +2,7 @@
 
 **Import:** `import { InputTypeInTag, type InputTypeInTagProps, type TagItem } from "@opal/components";`
 
-Free tagging, the Figma `Input/Tags` component: editable `Tag`s rendered inline with a text input on the `.opal-input` chrome. There is nothing to select from. A field that offers a set of options is [InputMultiSelect](../../selects/input-multi-select/README.md), which renders the same chrome over the select family's dropdown.
+Free tagging, the Figma `Input/Tags` component: editable `Tag`s rendered inline with a text input on the `.opal-input` chrome. There is nothing to select from. A field that offers a set of options is [InputMultiSelect](../../dropdowns/input-multi-select/README.md), which renders the same chrome over the select family's dropdown.
 
 Interaction model:
 
