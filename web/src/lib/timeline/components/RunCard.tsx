@@ -125,11 +125,13 @@ function useStepListScroll(isRunning: boolean) {
     if (!list) return;
     // Only a scroll up leaves the end: a growing step can leave the list
     // short of its end between two follow scrolls.
-    if (list.scrollTop < lastTopRef.current) {
+    // A row that closes at the end clamps the scroll down; that is no
+    // scroll up, so the end is checked first.
+    if (distanceFromEnd(list) <= 1) {
+      atEndRef.current = true;
+    } else if (list.scrollTop < lastTopRef.current) {
       atEndRef.current = false;
       revealIdRef.current = null;
-    } else if (distanceFromEnd(list) <= 1) {
-      atEndRef.current = true;
     }
     lastTopRef.current = list.scrollTop;
   }, [list]);
@@ -166,7 +168,14 @@ export function RunCard<S extends RunCardStep>({
   const t = useTranslations("chat.messages.timeline");
   const isRunning =
     isActive ?? steps.some((step) => step.status === "streaming");
-  const [isOpen, setIsOpen] = useState(isRunning && !startFolded);
+  // A card that takes over an open step (AgentTimeline's handover) opens
+  // on it, as if the user had opened it, also after the run settled.
+  const [mountedOnOpenStep] = useState(
+    () => (sharedOpenState?.openIds.size ?? 0) > 0
+  );
+  const [isOpen, setIsOpen] = useState(
+    (isRunning || mountedOnOpenStep) && !startFolded
+  );
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
   const [arrivedLive] = useState(appear && isRunning);
@@ -200,7 +209,7 @@ export function RunCard<S extends RunCardStep>({
     if (initialOpenId !== undefined) reveal(initialOpenId);
   }, [initialOpenId, reveal]);
   // A card the user folded or opened keeps their choice.
-  const userToggled = useRef(false);
+  const userToggled = useRef(mountedOnOpenStep && !startFolded);
   const toggle = () => {
     userToggled.current = true;
     onToggle(!isOpen);
