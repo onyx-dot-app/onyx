@@ -32,15 +32,11 @@ describe("MagicLinkSignIn", () => {
     render(<MagicLinkSignIn nextUrl="/app?q=1" />);
     await requestLink("  Bob@Acme.com ");
 
-    // Announced: the confirmation lands in a status region.
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Check your email"
+    expect(await screen.findByText("Check your email")).toBeInTheDocument();
+    // Announced: the same sentence lands in the hidden status region.
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "We sent a sign-in link to bob@acme.com. It works once and expires in 15 minutes."
     );
-    expect(
-      screen.getByText(
-        "We sent a sign-in link to bob@acme.com. It works once and expires in 15 minutes."
-      )
-    ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/magic-link/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -152,5 +148,13 @@ describe("MagicLinkSignIn", () => {
         )
       ).toBeInTheDocument()
     );
+  });
+
+  test("the empty status region takes no room in the layout", () => {
+    render(<MagicLinkSignIn nextUrl={null} />);
+
+    const region = screen.getByRole("status");
+    expect(region).toBeEmptyDOMElement();
+    expect(region).toHaveClass("sr-only");
   });
 });
