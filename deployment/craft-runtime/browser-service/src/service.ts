@@ -252,6 +252,8 @@ const dialogPending = () =>
     "A browser dialog is pending. Read browser_status and use browser_dialog first.",
   );
 
+class DownloadStarted extends OperationError {}
+
 export class BrowserService {
   private readonly context: BrowserContext;
   private readonly sessionsRoot: string;
@@ -769,7 +771,7 @@ export class BrowserService {
         );
       } catch (cause) {
         // A failed open returns no tab; the download case keeps it so the file saves.
-        if (!(cause instanceof OperationError && cause.message.includes("started a download")))
+        if (!(cause instanceof DownloadStarted))
           this.closeTab(tab);
         throw cause;
       }
@@ -851,7 +853,7 @@ export class BrowserService {
   private navigationError(url: string, cause: unknown, timeout: number) {
     const message = cause instanceof Error ? cause.message : String(cause);
     if (message.includes("Download is starting"))
-      return new OperationError(
+      return new DownloadStarted(
         "failed",
         `${url} started a download instead of a page; a saved download appears in the chat's downloads/ folder.`,
       );
