@@ -1290,7 +1290,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         if is_background_run(run):
             try:
                 owned.stream = BackgroundRunStream(
-                    self.cache, self.tenant_id, run, self._tool_ids
+                    self.cache,
+                    self.tenant_id,
+                    self.chat_session_id,
+                    run,
+                    self._tool_ids,
                 )
             except Exception:
                 # The agent's output still reaches its saved history.

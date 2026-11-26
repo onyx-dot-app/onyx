@@ -75,10 +75,12 @@ class BackgroundRunStream:
         self,
         cache: CacheBackend,
         tenant_id: str,
+        root_session_id: UUID,
         run: Run,
         tool_ids: Mapping[str, int | None],
     ) -> None:
         self._cache = cache
+        self._root_session_id = root_session_id
         self._response_id = int(run.id)
         self._run_id = run.id
         self.stream_id = time.time_ns() // 1_000_000
@@ -104,7 +106,10 @@ class BackgroundRunStream:
         try:
             with get_session_with_tenant(tenant_id=tenant_id) as session:
                 execution, replay = read_suspended_response_replay(
-                    session, self._response_id, claimed=True
+                    session,
+                    self._response_id,
+                    claimed=True,
+                    root_session_id=self._root_session_id,
                 )
             self._presenter.replay(execution.response, replay, execution.presentation)
         except Exception:

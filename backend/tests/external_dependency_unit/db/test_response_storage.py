@@ -78,6 +78,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource, MessageTy
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db import chat_response as chat_response_module
 from onyx.db import chat_subagents
+from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     checkpoint_from_summary,
@@ -120,6 +121,7 @@ from onyx.db.chat_response import (
     read_response_replay_data,
     read_response_status__no_commit,
     read_response_steps,
+    read_suspended_response_replay,
     reserve_child_response__no_commit,
     save_chat_response_to_db,
     save_chat_turn,
@@ -3170,6 +3172,54 @@ def test_session_replay_query_count_does_not_grow_with_tool_turns(
             assert f"Grandchild {index}" in answer
 
     assert query_counts[0] == query_counts[1]
+
+
+def test_a_claimed_agent_response_replays_its_requests_from_the_root_chat(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """A parked agent that resumed is running, and its requests live under
+    the root chat; its live stream still replays them."""
+    root = ChatSession(id=uuid4(), description="response storage root")
+    db_session.add(root)
+    db_session.flush()
+    root_id = root.id
+    try:
+        response = _response(db_session, conversation)
+        record = _record(response)
+        record.steps = _steps(
+            record.run_id,
+            [
+                AssistantMessage(
+                    content=[ToolCall(id="gated", name="acme", arguments={})]
+                )
+            ],
+        )
+        _save(db_session, response, record)
+        # The resume's claim
+        response.response_status = RunStatus.RUNNING
+        create_approval_request__no_commit(
+            db_session,
+            chat_session_id=root_id,
+            chat_message_id=response.id,
+            integration_id=None,
+            action_id="acme",
+            tool_call_id="gated",
+            tool_name="acme",
+            display_name="Acme",
+            arguments={},
+        )
+        db_session.commit()
+        db_session.expire_all()
+
+        _, replay = read_suspended_response_replay(
+            db_session, response.id, claimed=True, root_session_id=root_id
+        )
+
+        assert [key[1] for key in replay.approvals] == ["gated"]
+    finally:
+        db_session.rollback()
+        db_session.execute(delete(ChatSession).where(ChatSession.id == root_id))
+        db_session.commit()
 
 
 def test_public_message_read_does_not_fetch_response_items(
