@@ -433,6 +433,40 @@ def test_a_call_that_begins_during_the_cleanup_marks_after_it(
     assert log[:2] == ["cleaned", "marked"]
 
 
+def test_a_slow_cleanup_does_not_block_another_command(
+    chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cleanup of one command does not hold up a call of another."""
+    _command_id, _reports, first = _command(chat)
+    cleaning = threading.Event()
+    release = threading.Event()
+    end_command = CommandApprovals._end_command
+
+    def blocked_end_command(self: CommandApprovals, *args: Any, **kwargs: Any) -> Any:
+        cleaning.set()
+        release.wait(timeout=_WAIT_S)
+        return end_command(self, *args, **kwargs)
+
+    monkeypatch.setattr(CommandApprovals, "_end_command", blocked_end_command)
+    other = CommandApprovals(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA,
+        chat_session_id=chat.chat_session_id,
+        update=_Reports(),
+    )
+    ending = threading.Thread(target=first.end, kwargs={"cancelled": False})
+    ending.start()
+    try:
+        assert cleaning.wait(_WAIT_S)
+        beginning = threading.Thread(target=other.begin, args=(uuid4(),))
+        beginning.start()
+        beginning.join(timeout=_WAIT_S / 2)
+        assert not beginning.is_alive()
+    finally:
+        release.set()
+        ending.join(timeout=_WAIT_S)
+    other.end(cancelled=False)
+
+
 def _matched_actions(integration_id: int, *action_types: str) -> AllMatchedActions:
     return _matched(integration_id).model_copy(
         update={

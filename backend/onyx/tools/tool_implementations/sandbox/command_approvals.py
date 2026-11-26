@@ -56,8 +56,11 @@ _JOIN_SECONDS = 5.0
 
 # The calls of this process that wait on each command. Parallel write_stdin
 # calls can wait on one command; only the last one to end ends its requests.
+# The lock guards only these dicts: the cleanup IO runs outside it.
 _WAITING_LOCK = threading.Lock()
 _waiting: dict[UUID, int] = {}
+# The commands whose cleanup runs; set when it is done.
+_cleaning: dict[UUID, threading.Event] = {}
 
 
 def _waiting_since() -> datetime:
@@ -125,6 +128,11 @@ class CommandApprovals:
         self._command_id = command_id
         with _WAITING_LOCK:
             _waiting[command_id] = _waiting.get(command_id, 0) + 1
+            cleanup = _cleaning.get(command_id)
+        # A new call of the command marks it and holds its requests only after
+        # the last call's cleanup.
+        if cleanup is not None:
+            cleanup.wait()
         try:
             approval_cache.mark_command_foreground(
                 command_id, self._chat_session_id, self._cache()
@@ -163,13 +171,19 @@ class CommandApprovals:
             return
         decision = ApprovalDecision.REJECTED if cancelled else ApprovalDecision.EXPIRED
         ended: list[UUID] = []
-        # The cleanup runs under the lock, so a new call of the command marks
-        # it and holds its requests only after the cleanup.
+        cleanup: threading.Event | None = None
         with _WAITING_LOCK:
             _waiting[command_id] -= 1
             if _waiting[command_id] == 0:
                 del _waiting[command_id]
+                cleanup = _cleaning[command_id] = threading.Event()
+        if cleanup is not None:
+            try:
                 ended = self._end_command(command_id, decision)
+            finally:
+                with _WAITING_LOCK:
+                    del _cleaning[command_id]
+                cleanup.set()
         # Every card on screen ends with its request's outcome, also one that
         # the user decided after the watcher's last read.
         with self._lock:
