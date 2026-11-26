@@ -118,8 +118,14 @@ function isLinkWithoutText(node: MarkdownAstNode): boolean {
   if (node.type !== "link") return false;
   const label = plainText(node);
   const url = "url" in node && typeof node.url === "string" ? node.url : "";
+  // As the renderer: only a label of plain text is a chip; a formatted one
+  // (`[**[1]**](…)`) shows as an ordinary link.
+  const plainLabel = (node.children ?? []).every(
+    (child) => child.type === "text"
+  );
   return (
-    CITATION_LABEL.test(label) || extractChatImageFileId(url, label) !== null
+    (plainLabel && CITATION_LABEL.test(label)) ||
+    extractChatImageFileId(url, label) !== null
   );
 }
 
