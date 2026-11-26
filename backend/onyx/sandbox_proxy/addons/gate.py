@@ -590,8 +590,11 @@ class GateAddon:
             flow.response = http_403(SandboxProxyError.BODY_TOO_LARGE)
             return None
 
+        tag = self._extract_session_tag(flow)
         try:
-            matched_actions = await asyncio.to_thread(self._evaluate, flow, sandbox)
+            matched_actions = await asyncio.to_thread(
+                self._evaluate, flow, sandbox, tag
+            )
         except Exception:
             logger.exception("request_recognition_failed tenant=%s", sandbox.tenant_id)
             flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
@@ -632,7 +635,7 @@ class GateAddon:
             else "MCP protocol"
         )
         try:
-            session = self._resolve_gated_session(flow, sandbox)
+            session = self._resolve_gated_session(flow, sandbox, tag)
         except Exception:
             logger.exception(
                 "session_lookup_error tenant=%s sandbox=%s host=%s app_name=%r "
@@ -710,10 +713,8 @@ class GateAddon:
         return ctx, matched_actions
 
     def _evaluate(
-        self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
+        self, flow: http.HTTPFlow, sandbox: ResolvedSandbox, tag: str | None
     ) -> AllMatchedActions | McpProtocolRequest | None:
-        # Off-catalog traffic is high volume: no log line for its tag.
-        tag = self._extract_session_tag(flow, log=False)
         try:
             session_tag = UUID(tag) if tag else None
         except ValueError:
@@ -1322,7 +1323,7 @@ class GateAddon:
         return sandbox
 
     def _resolve_gated_session(
-        self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
+        self, flow: http.HTTPFlow, sandbox: ResolvedSandbox, tag: str | None
     ) -> tuple[UUID, bool] | None:
         """Resolves the originating session from the Proxy-Authorization tag:
         the session id, and whether it is a chat (not a Craft session).
@@ -1331,7 +1332,6 @@ class GateAddon:
         doesn't resolve to one of this user's sessions. DB errors propagate to
         the caller, which also fails closed.
         """
-        tag = self._extract_session_tag(flow)
         if tag is None:
             logger.warning(
                 "session_missing tenant=%s sandbox=%s host=%s",
@@ -1378,9 +1378,7 @@ class GateAddon:
         )
         return exact, from_chat
 
-    def _extract_session_tag(
-        self, flow: http.HTTPFlow, *, log: bool = True
-    ) -> str | None:
+    def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
         """The originating session tag, or None.
 
         HTTPS: cached from the CONNECT in `http_connect`. HTTP: read off the
@@ -1388,11 +1386,10 @@ class GateAddon:
         """
         conn_id = getattr(flow.client_conn, "id", None)  # ods: ignore[getattr]
         cached = self._conn_session_tags.get(conn_id) if conn_id else None
-        direct_auth_header = flow.request.headers.get("Proxy-Authorization")
         # The relay moves the proxy-URL userinfo into the hint header; pod
         # sandboxes still send it as basic auth.
         direct = self._session_hint(flow) or _parse_proxy_auth_username(
-            direct_auth_header
+            flow.request.headers.get("Proxy-Authorization")
         )
         # opencode's in-process MCP client can't ride the proxy-userinfo tag
         # (shared process, untagged base proxy), so it carries the session id in a
@@ -1403,20 +1400,7 @@ class GateAddon:
         # nothing (the value is stored in-sandbox in plaintext). Cross-user is
         # still blocked by the src-IP-pinned sandbox identity in resolve_sandbox.
         mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
-        tag = mcp_header or cached or direct
-        if not log:
-            return tag
-        logger.debug(
-            "session_tag_resolved conn=%s host=%s cached=%s direct=%s "
-            "proxy_auth_present=%s session=%s",
-            conn_id or "-",
-            flow.request.host,
-            short_log_id(cached),
-            short_log_id(direct),
-            str(direct_auth_header is not None).lower(),
-            short_log_id(tag),
-        )
-        return tag
+        return mcp_header or cached or direct
 
 
 def _app_tool_hint(matched_actions: AllMatchedActions) -> str:

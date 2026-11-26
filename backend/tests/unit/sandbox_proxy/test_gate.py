@@ -352,7 +352,7 @@ async def test_resolve_and_match_off_catalog_pass_through_is_not_logged(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """High-volume package-manager traffic should forward without producing a
-    proxy event line or extracting the session tag."""
+    proxy event line or resolving the session."""
     resolver = StubResolver(sandbox=make_resolved_sandbox())
     matcher = _StubMatcher(result=None)
     addon = _build(
@@ -369,7 +369,6 @@ async def test_resolve_and_match_off_catalog_pass_through_is_not_logged(
     assert flow.response is None
     messages = [record.getMessage() for record in caplog.records]
     assert not any(message.startswith("egress_") for message in messages)
-    assert not any(message.startswith("session_tag_resolved") for message in messages)
     assert resolver.resolve_session_by_id_calls == []
 
 
