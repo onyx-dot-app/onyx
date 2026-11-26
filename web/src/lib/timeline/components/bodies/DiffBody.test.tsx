@@ -55,3 +55,13 @@ test("line counts are compact in the active locale", () => {
   );
   expect(screen.getByText("+1.2K")).toBeInTheDocument();
 });
+
+test("a long title is a block, so it cuts with an ellipsis before the counts", () => {
+  const path =
+    "src/components/settings/notifications/NotificationPreferences.tsx";
+  render(<DiffBody title={path} oldText="a" newText="b" />);
+  const title = screen.getByText(path);
+  // `truncate` clips only a block box; an inline span would overflow.
+  expect(title.tagName).toBe("P");
+  expect(title).toHaveClass("truncate");
+});

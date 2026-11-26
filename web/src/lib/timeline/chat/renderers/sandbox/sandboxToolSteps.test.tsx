@@ -674,7 +674,7 @@ test("sandbox text is isolated in markup, and paths show without bidi controls",
     }
     await openRun();
     // The patch's file header and the published file's chip.
-    expect(screen.getByText("ab.py", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("ab.py", { selector: "p" })).toBeInTheDocument();
     expect(screen.getByText("notes")).toBeInTheDocument();
     // The patch and the error keep the sandbox's text, inside an isolate.
     expect(screen.getByText("x").closest("[dir]")).toHaveAttribute(
