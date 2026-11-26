@@ -10,6 +10,7 @@ from yaml.composer import ComposerError
 
 from onyx.llm.models import ToolDefinition
 from onyx.tools.tool_name import sanitize_tool_name
+from onyx.utils.unique_key_yaml import UniqueKeySafeLoader
 
 REQUEST_BODY = "requestBody"
 # The operation keys of an OpenAPI path item. Its other keys, such as
@@ -19,11 +20,12 @@ OPENAPI_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "
 TOOL_HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 
 
-class _OpenApiYamlLoader(yaml.SafeLoader):
+class _OpenApiYamlLoader(UniqueKeySafeLoader):
     """Keeps timestamps as text: the parsed spec must stay JSON. As in YAML
     1.2, only true and false are booleans: ``on``, ``off``, ``yes`` and ``no``
     stay text. Refuses aliases: a few nested aliases expand to gigabytes, and
-    OpenAPI reuses parts with ``$ref``."""
+    OpenAPI reuses parts with ``$ref``. Refuses duplicate keys, as JSON
+    Schema and OpenAPI require unique keys."""
 
     def compose_node(self, parent: Any, index: Any) -> Any:
         if self.check_event(yaml.AliasEvent):
@@ -57,20 +59,29 @@ _OpenApiYamlLoader.add_implicit_resolver(
 def parse_openapi_document(document: str) -> dict[str, Any]:
     """An OpenAPI document stored as JSON or YAML text."""
     try:
-        parsed = json.loads(document)
-    except json.JSONDecodeError:
-        try:
-            parsed = yaml.load(document, Loader=_OpenApiYamlLoader)  # noqa: S506
-        except yaml.YAMLError as e:
-            raise ValueError(f"The OpenAPI document is not JSON or YAML: {e}") from e
-        try:
-            json.dumps(parsed)
-        except (TypeError, ValueError) as e:
-            raise ValueError(
-                f"The OpenAPI document has a value that is not JSON: {e}"
-            ) from e
+        parsed = _load_openapi_document(document)
+    except RecursionError as e:
+        raise ValueError("The OpenAPI document is nested too deeply.") from e
     if not isinstance(parsed, dict):
         raise ValueError("The OpenAPI document is not an object.")
+    return parsed
+
+
+def _load_openapi_document(document: str) -> Any:
+    try:
+        return json.loads(document)
+    except json.JSONDecodeError:
+        pass
+    try:
+        parsed = yaml.load(document, Loader=_OpenApiYamlLoader)  # noqa: S506
+    except yaml.YAMLError as e:
+        raise ValueError(f"The OpenAPI document is not JSON or YAML: {e}") from e
+    try:
+        json.dumps(parsed)
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"The OpenAPI document has a value that is not JSON: {e}"
+        ) from e
     return parsed
 
 

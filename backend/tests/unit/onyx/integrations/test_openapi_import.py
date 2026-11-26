@@ -799,3 +799,25 @@ def test_a_yaml_alias_is_refused() -> None:
     with pytest.raises(ValueError, match="aliases"):
         parse_openapi_document(nested)
     assert parse_openapi_document("openapi: 3.0.0\nx: &a 1\n")["x"] == 1
+
+
+@pytest.mark.parametrize(
+    "document", ["[" * 100_000, "x: " + "[" * 100_000], ids=["json", "yaml"]
+)
+def test_a_deeply_nested_document_is_refused(document: str) -> None:
+    with pytest.raises(ValueError, match="nested too deeply"):
+        parse_openapi_document(document)
+
+
+def test_a_yaml_duplicate_key_is_refused() -> None:
+    document = (
+        "openapi: 3.0.0\n"
+        "paths:\n"
+        "  /pets:\n"
+        "    get: {summary: List pets}\n"
+        "  /pets:\n"
+        "    delete: {summary: Delete pets}\n"
+    )
+
+    with pytest.raises(ValueError, match="duplicate key '/pets'"):
+        parse_openapi_document(document)
