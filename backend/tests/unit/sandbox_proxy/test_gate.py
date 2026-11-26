@@ -2487,6 +2487,7 @@ async def test_a_command_grant_does_not_cover_an_action_that_asks_since(
             command_id=_COMMAND,
             decision=ApprovalDecision.APPROVED,
             decided_via=ApprovalDecidedVia.COMMAND_GRANT,
+            actions=inserted[0]["actions"],
         ),
     )
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
@@ -2497,6 +2498,35 @@ async def test_a_command_grant_does_not_cover_an_action_that_asks_since(
     assert inserted[0]["decided_via"] == ApprovalDecidedVia.COMMAND_GRANT
     _assert_403(flow, SandboxProxyError.NOT_AUTHORIZED)
     assert not spy.dispatched
+
+
+@pytest.mark.asyncio
+async def test_a_command_approval_sends_its_request_without_a_saved_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The user approved the card for the command but the cache lost the
+    grant: the approved request still goes out."""
+    addon, _ = _command_gate(monkeypatch)
+    monkeypatch.setattr(
+        gate.action_approval,
+        "get_action_approval",
+        lambda _db, _id: MagicMock(
+            session_id=None,
+            chat_session_id=UUID(_TAG_UUID),
+            command_id=_COMMAND,
+            decision=ApprovalDecision.APPROVED,
+            decided_via=ApprovalDecidedVia.COMMAND_GRANT,
+            actions=[a.model_dump(mode="json") for a in _MATCH.actions],
+        ),
+    )
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert len(spy.persisted) == 1
+    assert len(spy.dispatched) == 1
 
 
 @pytest.mark.asyncio

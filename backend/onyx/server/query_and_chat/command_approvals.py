@@ -13,13 +13,15 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
-from onyx.chat.tool_approvals import action_now_blocked
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db import action_approval
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
+from onyx.db.integration import get_integration_by_id
 from onyx.db.models import ActionApproval
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.models import EffectivePolicy
+from onyx.integrations.policy import resolve_chat_action_policies
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
@@ -41,38 +43,31 @@ def _response(
     )
 
 
-def _wake(
-    approval_ids: list[UUID], decision: ApprovalDecision, cache: CacheBackend
-) -> None:
-    """Wake the parked proxies. A missed wake leaves a proxy to its wait
-    timeout."""
-    for approval_id in approval_ids:
-        try:
-            approval_cache.send_wake(approval_id, decision, cache)
-        except CACHE_TRANSIENT_ERRORS as error:
-            logger.warning(
-                "command_approval_wake_failed approval_id=%s error=%s",
-                approval_id,
-                error,
-            )
-
-
 def _now_blocked(
-    db_session: Session, row: ActionApproval, chat_session_id: UUID, user_id: UUID
+    db_session: Session,
+    row: ActionApproval,
+    integration_id: int,
+    chat_session_id: UUID,
+    user_id: UUID,
 ) -> bool:
-    """True when the current policies block one of the request's actions,
-    as the proxy's final check finds."""
-    return any(
-        action_now_blocked(
-            db_session,
-            integration_id=row.integration_id,
-            action_id=action["action_type"],
-            user_id=user_id,
-            chat_session_id=chat_session_id,
-        )
-        for action in row.actions
-        if isinstance(action.get("action_type"), str)
+    """True when the integration is gone or turned off, or the current
+    policies block one of the request's actions, as the proxy's final check
+    finds."""
+    integration = get_integration_by_id(integration_id, db_session)
+    if integration is None or not integration.enabled:
+        return True
+    policies = resolve_chat_action_policies(
+        db_session,
+        integration=integration,
+        action_keys={
+            action["action_type"]
+            for action in row.actions
+            if isinstance(action.get("action_type"), str)
+        },
+        user_id=user_id,
+        chat_session_id=chat_session_id,
     )
+    return EffectivePolicy.BLOCKED in policies.values()
 
 
 def decide_command_approval(
@@ -86,10 +81,11 @@ def decide_command_approval(
     is a conflict."""
     command_id = row.command_id
     chat_session_id = row.chat_session_id
-    if chat_session_id is None or command_id is None:
+    integration_id = row.integration_id
+    if chat_session_id is None or command_id is None or integration_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
     blocked = choice != ApprovalChoice.REJECT and _now_blocked(
-        db_session, row, chat_session_id, user_id
+        db_session, row, integration_id, chat_session_id, user_id
     )
     if blocked:
         choice = ApprovalChoice.REJECT
@@ -104,7 +100,6 @@ def decide_command_approval(
             OnyxErrorCode.INVALID_INPUT,
             "This request cannot be approved for the rest of the command",
         )
-    integration_id = row.integration_id
     decision = (
         ApprovalDecision.REJECTED
         if choice == ApprovalChoice.REJECT
@@ -130,39 +125,37 @@ def decide_command_approval(
     )
     if decided is None:
         db_session.refresh(row)
-        if row.decision == decision and row.decided_via == decided_via:
-            # A retry also sends a wake that the first call missed.
-            _wake([row.approval_id], decision, cache)
-            return _response(row, decided_via)
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "This request was already decided or is no longer waiting",
-        )
-    if for_command and integration_id is not None:
-        try:
-            # Saved before the commit: the proxy checks the grant of a
-            # COMMAND_GRANT row, and a request that misses the grant in the
-            # cache committed its row before the scan below reads it.
-            approval_cache.grant_command_actions(
-                command_id, chat_session_id, integration_id, granted, cache
+        if row.decision != decision or row.decided_via != decided_via:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "This request was already decided or is no longer waiting",
             )
-        except CACHE_TRANSIENT_ERRORS as error:
-            # The request goes as approved once; later requests of the
-            # command ask again.
-            logger.warning(
-                "command_approval_grant_failed approval_id=%s error=%s",
-                row.approval_id,
-                error,
-            )
-            for_command = False
-            decided_via = decided.decided_via = ApprovalDecidedVia.USER
-    # Commit before the scan below locks other rows of the command, so two
-    # decisions of one command never wait on each other's rows.
-    db_session.commit()
-    _wake([row.approval_id], decision, cache)
+        # A retry repeats the wakes and the scan that the first call may
+        # have missed, and keeps the grant that it saved.
+        decided = row
+    else:
+        # A grant is saved only for a committed approval. The commit also
+        # comes before the scan below locks other rows of the command, so two
+        # decisions of one command never wait on each other's rows.
+        db_session.commit()
+        if for_command:
+            try:
+                # A request that misses the grant committed its row before
+                # the scan below reads it.
+                approval_cache.grant_command_actions(
+                    command_id, chat_session_id, integration_id, granted, cache
+                )
+            except CACHE_TRANSIENT_ERRORS as error:
+                # Later requests of the command ask again.
+                logger.warning(
+                    "command_approval_grant_failed approval_id=%s error=%s",
+                    row.approval_id,
+                    error,
+                )
+    approval_cache.send_wakes([row.approval_id], decision, cache)
 
     covered_ids: list[UUID] = []
-    if for_command and integration_id is not None:
+    if for_command:
         for other in action_approval.list_pending_command_action_approvals(
             db_session,
             chat_session_id=chat_session_id,
@@ -193,7 +186,7 @@ def decide_command_approval(
                 covered_ids.append(other.approval_id)
         # Commit the decisions before the proxy wakes and reads them.
         db_session.commit()
-        _wake(covered_ids, decision, cache)
+        approval_cache.send_wakes(covered_ids, decision, cache)
 
     logger.info(
         "command_approval_decided approval_id=%s command_id=%s decision=%s "

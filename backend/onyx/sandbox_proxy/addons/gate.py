@@ -598,12 +598,20 @@ class GateAddon:
             ):
                 flow.response = http_403(SandboxProxyError.NOT_AUTHORIZED)
                 return None
-            # A grant covers only the actions that asked when it was given.
-            if (
-                approval.decided_via
-                in (ApprovalDecidedVia.SESSION_GRANT, ApprovalDecidedVia.COMMAND_GRANT)
-                and current_actions.governing_action.policy is ActionPolicy.ASK
-                and not self._session_grant(db, ctx, current_actions)
+            # A grant covers only the actions that asked when it was given. A
+            # command approval covers the Ask actions of its own row, so the
+            # request needs no saved grant (the grant serves later requests).
+            if current_actions.governing_action.policy is ActionPolicy.ASK and (
+                (
+                    approval.decided_via is ApprovalDecidedVia.SESSION_GRANT
+                    and not self._session_grant(db, ctx, current_actions)
+                )
+                or (
+                    approval.decided_via is ApprovalDecidedVia.COMMAND_GRANT
+                    and not set(
+                        actions_requiring_approval(current_actions.actions)
+                    ).issubset(actions_requiring_approval(approval.actions))
+                )
             ):
                 flow.response = http_403(SandboxProxyError.NOT_AUTHORIZED)
                 return None
@@ -1213,10 +1221,7 @@ class GateAddon:
                     decision = self._claim_expired_or_read_winner(
                         approval_id, tenant_id
                     )
-                    try:
-                        approval_cache.send_wake(approval_id, decision, cache)
-                    except CACHE_TRANSIENT_ERRORS:
-                        pass
+                    approval_cache.send_wakes([approval_id], decision, cache)
                     if decision == ApprovalDecision.EXPIRED:
                         logger.info(
                             "drain_expired tenant=%s approval=%s approval_id=%s",

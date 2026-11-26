@@ -141,13 +141,14 @@ def chat(
             if not approvals._stop.is_set():
                 approvals.end(cancelled=False)
         cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
-        # Every proxy wait that a test starts ends here; a repeated wake of a
-        # decided request changes nothing.
+        # Every proxy wait that a test starts ends here, and leaves no wake.
         for request in held:
-            approval_cache.send_wake(
-                request.approval_id, ApprovalDecision.EXPIRED, cache
-            )
-            request.result()
+            if request.decision is None:
+                approval_cache.send_wake(
+                    request.approval_id, ApprovalDecision.EXPIRED, cache
+                )
+                request.result()
+            cache.delete(approval_cache._wake_key(request.approval_id))
         for approvals in started:
             if approvals._command_id is not None:
                 approval_cache.drop_command_grants(approvals._command_id, cache)
@@ -716,16 +717,16 @@ def test_a_refused_decision_leaves_the_request_waiting(
         cache.delete_prefix(f"approval:command:{command_id}:")
 
 
-def test_a_command_grant_that_the_cache_cannot_save_approves_only_this_request(
+def test_a_command_grant_that_the_cache_cannot_save_still_sends_this_request(
     db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The proxy sends a COMMAND_GRANT row only while the cache holds the
-    grant, so without it the request is approved once and the command's
-    other requests keep waiting for the user."""
+    """The approval is committed before the grant, so a failed grant keeps
+    the decision and wakes the request; the command's other requests keep
+    waiting for the user."""
     command_id = uuid4()
     gate = _gate()
     ctx = _ctx(chat, command_id)
-    first = gate._persist_approval_row(ctx, _matched(chat.integration_id), {})
+    held = _HeldRequest(gate, ctx, _matched(chat.integration_id))
     second = gate._persist_approval_row(ctx, _matched(chat.integration_id), {})
 
     def fail(*_args: Any) -> None:
@@ -734,18 +735,88 @@ def test_a_command_grant_that_the_cache_cannot_save_approves_only_this_request(
     monkeypatch.setattr(command_approvals.approval_cache, "grant_command_actions", fail)
 
     assert (
-        _decide(db_session, chat, first, ApprovalChoice.APPROVE_COMMAND)
-        == ApprovalDecidedVia.USER
+        _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_COMMAND)
+        == ApprovalDecidedVia.COMMAND_GRANT
     )
+    assert held.result() == ApprovalDecision.APPROVED
     db_session.expire_all()
-    first_row = db_session.get(ActionApproval, first)
+    first_row = db_session.get(ActionApproval, held.approval_id)
     second_row = db_session.get(ActionApproval, second)
     assert first_row is not None
     assert (first_row.decision, first_row.decided_via) == (
         ApprovalDecision.APPROVED,
-        ApprovalDecidedVia.USER,
+        ApprovalDecidedVia.COMMAND_GRANT,
     )
     assert second_row is not None and second_row.decision is None
+
+
+def test_a_command_grant_needs_a_committed_approval(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A decision whose commit fails saves no grant, so no request of the
+    command can use it."""
+    command_id = uuid4()
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, command_id), _matched(chat.integration_id), {}
+    )
+
+    def fail() -> None:
+        raise RuntimeError("commit failed")
+
+    monkeypatch.setattr(db_session, "commit", fail)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    try:
+        with pytest.raises(RuntimeError):
+            _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_COMMAND)
+        assert not approval_cache.command_grants_cover(
+            command_id,
+            chat.chat_session_id,
+            chat.integration_id,
+            ["issues.create"],
+            cache,
+        )
+    finally:
+        monkeypatch.undo()
+        cache.delete_prefix(f"approval:command:{command_id}:")
+
+
+def test_a_retried_command_approval_approves_the_waiting_requests(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A scan that fails after the decision is saved runs again when the
+    client repeats the decision."""
+    command_id = uuid4()
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    first = _HeldRequest(gate, ctx, _matched(chat.integration_id))
+    second = _HeldRequest(gate, ctx, _matched(chat.integration_id))
+    original = command_approvals.action_approval.list_pending_command_action_approvals
+    scans: list[int] = []
+
+    def fail_once(db: Session, **kwargs: Any) -> list[ActionApproval]:
+        scans.append(1)
+        if len(scans) == 1:
+            raise RuntimeError("scan failed")
+        return original(db, **kwargs)
+
+    monkeypatch.setattr(
+        command_approvals.action_approval,
+        "list_pending_command_action_approvals",
+        fail_once,
+    )
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    try:
+        with pytest.raises(RuntimeError):
+            _decide(db_session, chat, first.approval_id, ApprovalChoice.APPROVE_COMMAND)
+        db_session.rollback()
+        assert (
+            _decide(db_session, chat, first.approval_id, ApprovalChoice.APPROVE_COMMAND)
+            == ApprovalDecidedVia.COMMAND_GRANT
+        )
+        assert first.result() == ApprovalDecision.APPROVED
+        assert second.result() == ApprovalDecision.APPROVED
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
 
 
 def test_the_decided_request_wakes_before_the_scan_of_the_others(
