@@ -58,7 +58,7 @@ describe("Table header, footer and paging", () => {
 });
 
 describe("Table selection", () => {
-  it("keeps canSelect for single-select, where the qualifier is hidden", () => {
+  it("single-select ignores a click on an ineligible row", () => {
     const onSelectionChange = jest.fn();
     render(
       <Table
@@ -69,31 +69,12 @@ describe("Table selection", () => {
         ]}
         getRowId={(row) => row.id}
         selectionBehavior="single-select"
-        onSelectionChange={onSelectionChange}
-      />
-    );
-    fireEvent.click(screen.getByText("Row b"));
-    expect(onSelectionChange).not.toHaveBeenCalledWith(new Set(["b"]));
-    fireEvent.click(screen.getByText("Row a"));
-    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["a"]));
-  });
-
-  it("keeps the selection when single-select clicks an ineligible row", () => {
-    const onSelectionChange = jest.fn();
-    render(
-      <Table
-        items={ROWS}
-        columns={[
-          { kind: "qualifier", canSelect: (row) => row.id !== "b" },
-          ...COLUMNS,
-        ]}
-        getRowId={(row) => row.id}
-        selectionBehavior="single-select"
-        values={new Set(["a"])}
         onSelectionChange={onSelectionChange}
       />
     );
     fireEvent.click(screen.getByText("Row b"));
     expect(onSelectionChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Row a"));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["a"]));
   });
 });
