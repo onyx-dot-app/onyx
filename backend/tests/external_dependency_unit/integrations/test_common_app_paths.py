@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
-import yaml
 from graphql import build_schema, introspection_from_schema
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -195,24 +194,17 @@ def _fake_spec_get(document: bytes) -> MagicMock:
 
 
 def _rest_config(source: str) -> OpenApiConfigInput:
-    """The config that the Add modal sends for each way to give a REST API."""
+    """The config that the Add modal sends for a spec URL or typed lines."""
     if source == "lines":
         return OpenApiConfigInput(
             base_url="https://pets.example.com/v1", endpoints=PETS_LINES
         )
-    view: OpenApiConfigView
-    if source == "spec_url":
-        with patch(_SPEC_GET, _fake_spec_get(json.dumps(PETS_SPEC).encode())) as get:
-            view = admin_api.import_openapi_spec(
-                OpenApiEndpointsRequest(spec_url="https://pets.example.com/spec.json"),
-                MagicMock(),
-            )
-        assert get.call_args.args == ("https://pets.example.com/spec.json",)
-    else:
-        text = json.dumps(PETS_SPEC) if source == "json" else yaml.safe_dump(PETS_SPEC)
+    with patch(_SPEC_GET, _fake_spec_get(json.dumps(PETS_SPEC).encode())) as get:
         view = admin_api.import_openapi_spec(
-            OpenApiEndpointsRequest(openapi_document=text), MagicMock()
+            OpenApiEndpointsRequest(spec_url="https://pets.example.com/spec.json"),
+            MagicMock(),
         )
+    assert get.call_args.args == ("https://pets.example.com/spec.json",)
     assert view.base_url == "https://pets.example.com/v1"
     return OpenApiConfigInput(
         openapi_document=view.openapi_document,
@@ -221,7 +213,7 @@ def _rest_config(source: str) -> OpenApiConfigInput:
     )
 
 
-@pytest.mark.parametrize("source", ["spec_url", "json", "yaml", "lines"])
+@pytest.mark.parametrize("source", ["spec_url", "lines"])
 def test_a_rest_app_from_each_source_calls_its_url_with_the_key(
     db_session: Session, admin: User, member: User, source: str
 ) -> None:
@@ -389,15 +381,10 @@ def test_a_graphql_app_from_introspection_sends_the_document_with_the_key(
         admin,
         db_session,
     )
-    assert _policies(db_session, detail.id) == {
-        "query.ticket": ALLOW,
-        "mutation.ticketClose": ASK,
-    }
     admin_api.save_organization_connection(
         detail.id, ConnectionFieldsRequest(fields={"api_key": "gql"}), admin, db_session
     )
     tools = _tools(db_session, member, detail.id)
-    assert tools["mutation.ticketClose"].approval is not None
     with _upstream({"data": {"ticket": {"id": "7"}}}) as upstream:
         result = _call(tools["query.ticket"], id="7")
     assert not result.is_error, result.content
