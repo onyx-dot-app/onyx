@@ -4,6 +4,7 @@
 ARG NODE_IMAGE
 ARG PYTHON_IMAGE
 ARG UV_IMAGE
+ARG GO_IMAGE
 FROM ${NODE_IMAGE} AS node_source
 ARG NPM_VERSION
 RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
@@ -107,3 +108,40 @@ ENV PATH="/opt/onyx/python/bin:${PATH}" \
     PYTHONUNBUFFERED=1
 WORKDIR /workspace
 CMD ["/bin/bash"]
+
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS guest_daemon
+WORKDIR /src
+COPY microvm/go.mod microvm/go.sum ./
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/build_ca_bundle; fi && \
+    go mod download
+COPY microvm/cmd/ ./cmd/
+COPY microvm/internal/ ./internal/
+COPY microvm/proto/ ./proto/
+ARG TARGETARCH
+ARG IMAGE_VERSION
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w -X main.version=${IMAGE_VERSION}" -o /out/guest-daemon ./cmd/guest-daemon
+
+# One sandbox per container (no KVM): the runtime plus the guest daemon,
+# firewall-init.sh (proxy CA + iptables egress lockdown), iptables and
+# setpriv (util-linux). The daemon and commands run as the sandbox user.
+# The programs are root's, so the sandbox user cannot replace what a
+# container restart runs as root.
+FROM runtime AS container
+LABEL org.opencontainers.image.title="Craft Runtime (container)"
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    iptables util-linux && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=guest_daemon /out/guest-daemon /usr/local/bin/guest-daemon
+COPY backend/onyx/server/features/build/sandbox/image/firewall-init.sh /usr/local/bin/firewall-init
+COPY deployment/craft-runtime/container-entrypoint.sh /usr/local/bin/sandbox-entrypoint
+RUN chown root:root /usr/local/bin/guest-daemon /usr/local/bin/firewall-init /usr/local/bin/sandbox-entrypoint && \
+    chmod 0755 /usr/local/bin/guest-daemon /usr/local/bin/firewall-init /usr/local/bin/sandbox-entrypoint && \
+    install -d -m 0755 -o root -g root /var/lib/onyx && \
+    install -d -m 0755 -o sandbox -g sandbox /var/lib/onyx/skills /home/onyx /home/onyx/workspaces && \
+    install -d -m 0755 -o root -g root /etc/ssl/sandbox && \
+    command -v iptables ip6tables setpriv getent update-ca-certificates >/dev/null
+USER 1000:1000
+ENTRYPOINT ["/usr/local/bin/sandbox-entrypoint"]
+CMD []

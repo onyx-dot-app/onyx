@@ -1,7 +1,8 @@
 // Command guest-daemon is the Sandboxd gRPC server inside each Craft
 // micro-VM. It listens on vsock and runs as root. It runs commands as the
 // sandbox user (--command-user), each in its own cgroup. It is not PID 1: the
-// VM init starts it and restarts it.
+// VM init starts it and restarts it. With --container it runs in a sandbox
+// container instead, on TCP with TLS (README).
 package main
 
 import (
@@ -10,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,7 +26,6 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/sysops"
-	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/vsock"
 )
 
 // windowBytes is the HTTP/2 flow-control window of the gRPC server.
@@ -37,7 +36,11 @@ var version = "dev"
 
 func main() {
 	port := flag.Uint("port", 52, "vsock port")
-	listen := flag.String("listen", "", "listen on unix:<path> instead of vsock (tests); there is no TCP listener")
+	listen := flag.String("listen", "", "listen on unix:<path> (tests) or tcp:<host:port> (needs --tls-cert, --tls-key and --key-file) instead of vsock")
+	tlsCert := flag.String("tls-cert", "", "TLS certificate (PEM) of a tcp: listener")
+	tlsKey := flag.String("tls-key", "", "TLS private key (PEM) of a tcp: listener")
+	keyFile := flag.String("key-file", "", "file with the daemon key, set at start; SetKey with another key then fails")
+	container := flag.Bool("container", false, "run in a sandbox container: Init skips the clock and entropy, and the VM-only flags default to off")
 	cgroupRoot := flag.String("cgroup-root", "/sys/fs/cgroup/guestd", "cgroup v2 dir for the executions; empty uses process groups")
 	stateFile := flag.String("state-file", "/run/craft-fc/guest-daemon-init.json", "Init state, kept across daemon restarts; empty keeps it in memory")
 	attachCmd := flag.String("attach-cmd", "/craft-fc/lib/attach", "drive attach script that Init runs; empty to skip")
@@ -75,6 +78,17 @@ func main() {
 	browserBin := flag.String("browser-binary", browser.DefaultBinary, "Chrome that BrowserStart runs; empty turns the browser calls off")
 	cmdUser := flag.String("command-user", files.DefaultOwner, "uid:gid that runs every command (the image's sandbox user); empty: commands run as root")
 	flag.Parse()
+	if *container {
+		if err := applyContainerDefaults(flag.CommandLine); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+	}
+	key, err := readKeyFile(*keyFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "bad --key-file: %v\n", err)
+		os.Exit(2)
+	}
 	var ok bool
 	if ok, fc.ZstdLevel = zstd.EncoderLevelFromString(*zlevel); !ok {
 		fmt.Fprintf(os.Stderr, "bad --capture-zstd-level %q\n", *zlevel)
@@ -105,13 +119,16 @@ func main() {
 		os.Exit(2)
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
-	sys := guestd.System{SetClock: sysops.SetClock, GrowFS: sysops.GrowFS}
-	sys.AddEntropy = func(b []byte) (bool, error) {
-		credited, why, err := sysops.AddEntropy(b)
-		if why != nil {
-			log.Warn("entropy mixed in, not credited", "err", why)
+	sys := guestd.System{GrowFS: sysops.GrowFS}
+	if !*container {
+		sys.SetClock = sysops.SetClock
+		sys.AddEntropy = func(b []byte) (bool, error) {
+			credited, why, err := sysops.AddEntropy(b)
+			if why != nil {
+				log.Warn("entropy mixed in, not credited", "err", why)
+			}
+			return credited, err
 		}
-		return credited, err
 	}
 	if path := *attachCmd; path != "" {
 		sys.Attach = func() error { return sysops.RunAttach(path, 2*time.Minute) }
@@ -162,7 +179,8 @@ func main() {
 			bcfg.Credential = ident.cred
 		}
 	}
-	if err := run(log, sys, managed, reclaimer, fstore, ident, bcfg, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
+	lc := listenConfig{Spec: *listen, Port: *port, TLSCert: *tlsCert, TLSKey: *tlsKey, KeyFile: *keyFile}
+	if err := run(log, sys, managed, reclaimer, fstore, ident, bcfg, lc, key, *cgroupRoot, *stateFile, *growMounts, execs.Config{
 		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, MaxTracked: *maxTracked, Log: log,
 	}); err != nil {
 		log.Error("guest-daemon failed", "err", err)
@@ -212,7 +230,7 @@ func splitList(s string) []string {
 	return out
 }
 
-func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, reclaimer *guestd.Reclaimer, fstore *files.Store, ident *commandIdentity, bcfg *browser.Config, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
+func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, reclaimer *guestd.Reclaimer, fstore *files.Store, ident *commandIdentity, bcfg *browser.Config, lc listenConfig, key, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
 	if cgroupRoot != "" {
 		if err := sysops.EnsureCgroup2(filepath.Dir(cgroupRoot)); err != nil {
 			return fmt.Errorf("mount cgroup2: %w", err)
@@ -258,35 +276,22 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	base := baseEnv(os.Environ(), ident)
 	srv, err := guestd.NewServer(guestd.Config{
 		Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Managed: managed, Browser: br,
-		Reclaimer: reclaimer, Files: fstore, Log: log,
+		Reclaimer: reclaimer, Files: fstore, Key: key, Log: log,
 	}, sys, m)
 	if err != nil {
 		return err
 	}
 
-	// No TCP listener: the API is plaintext with a bearer key, so it is only
-	// served on vsock (reached through the node agent) or, for tests, on a
-	// Unix socket only root can open.
-	var ln net.Listener
-	switch path, isUnix := strings.CutPrefix(listen, "unix:"); {
-	case isUnix && path != "":
-		_ = os.Remove(path)
-		ln, err = net.Listen("unix", path)
-		if err == nil {
-			err = os.Chmod(path, 0o600)
-		}
-	case listen != "":
-		return fmt.Errorf("--listen must be unix:<path>, got %q", listen)
-	default:
-		ln, err = vsock.Listen(uint32(port))
-	}
+	// vsock (through the node agent), a Unix socket only the daemon user can
+	// open (tests), or TCP with TLS and a key file (containers).
+	ln, transport, err := listen(lc)
 	if err != nil {
 		return err
 	}
 	// Large static flow-control windows: vsock has almost no latency, and
 	// session restores and file writes stream hundreds of MiB to the guest.
-	gs := srv.NewGRPCServer(grpc.InitialWindowSize(windowBytes), grpc.InitialConnWindowSize(windowBytes),
-		grpc.ReadBufferSize(1<<20), grpc.WriteBufferSize(1<<20))
+	gs := srv.NewGRPCServer(append(transport, grpc.InitialWindowSize(windowBytes), grpc.InitialConnWindowSize(windowBytes),
+		grpc.ReadBufferSize(1<<20), grpc.WriteBufferSize(1<<20))...)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()

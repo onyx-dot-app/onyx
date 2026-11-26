@@ -85,6 +85,11 @@ new integrated harness. Existing Craft keeps its current sandbox image and
 skills. The new image is an input to `deployment/craft-fc/rootfs/build-rootfs.sh`. It includes execution tools and
 assets, without OpenCode or the current Python sidecar. The existing converter
 adds init, the static Go daemon and relay, overlays, and the rootfs manifest.
+Its `container` target (`craft-runtime:<tag>-container`) adds the guest
+daemon, `firewall-init` and iptables for one sandbox per container where there
+is no KVM. There the daemon runs as uid 1000 in `--container` mode, on TCP with
+TLS and a key from `--key-file` (no node agent, no `SetKey` race); Init skips
+the clock and entropy. No backend uses it yet.
 In a Firecracker VM, managed content mounts on read-only, noexec drives at
 `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the same A/B slot
 mechanism); scripts run through interpreters. Skills go to the guest daemon's
@@ -691,6 +696,9 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   the image and runs the daemon, init, restore, and tool smoke tests on x86
   KVM with the pinned guest kernel. Container smoke and rootfs conversion
   alone do not establish VM tool coverage.
+- Container image: `deployment/craft-runtime/check-container.sh` runs the
+  daemon in the `container` target (as uid 1000, and through `firewall-init`)
+  and calls it over TLS (`microvm/internal/guestd/containertest`).
 - Unit: `backend/tests/unit/onyx/server/features/craft/sandbox/`.
 - Lifecycle, sweep and snapshots with real Postgres and Redis:
   `backend/tests/external_dependency_unit/craft/`.

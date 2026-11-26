@@ -47,9 +47,9 @@ empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty
 `--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
 `--capture-zstd-level`, `--file-owner`; see Files), `--command-user` (`1000:1000`; empty runs commands as
 root; a daemon that is not root refuses a command user), `--listen`
-(`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
-the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
-container fallback (TCP with mTLS) is not in v1.
+(`unix:<path>` instead of vsock, for tests, mode 0600; or `tcp:<host:port>`, see Container mode),
+`--tls-cert`, `--tls-key`, `--key-file`, `--container`, `--log-level`. In a VM the API is plaintext with
+a bearer key, so it is served only on vsock, through the node agent.
 
 The daemon builds its gRPC server itself (`guestd.Server.NewGRPCServer`), with the key check on every
 call except `Health` and `SetKey`. Limits are checked at start: a negative limit, or a default deadline above `--max-deadline`, is an
@@ -61,6 +61,38 @@ Build:
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=<v>" -o guest-daemon ./cmd/guest-daemon
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=<v>" -o egress-relay ./cmd/egress-relay
 ```
+
+### Container mode
+
+Without KVM, one container (a pod, or a Docker container) holds one sandbox. The daemon runs in the
+`onyxdotapp/craft-runtime:<tag>-container` image (`deployment/craft-runtime/README.md`), with the same
+API, client and session archive format as in a VM. So a session saved on a container restores in a VM,
+and the reverse.
+
+| Item | Value |
+|---|---|
+| Start | `sandbox-entrypoint --listen tcp:0.0.0.0:<port> --key-file <f> --tls-cert <f> --tls-key <f>` (the image entrypoint adds `--container`) |
+| Listener | `tcp:` only with `--tls-cert`, `--tls-key` (PEM) and `--key-file`, else the daemon does not start. TLS 1.3, server certificate only. The client pins that certificate. `--tls-*` with any other listener is an error |
+| Key | `--key-file` sets the key at start (white space around it is dropped). `SetKey` with another key fails with `KEY_ALREADY_SET`, so no caller on the network can set a key first. A `--state-file` that holds another key is an error |
+| User | The daemon and commands run as UID 1000 (`--command-user ""`, `--file-owner ""`). A user command can read the key and stop the daemon. The daemon is not a boundary in the sandbox: the container and the network policy of the daemon port are |
+| Supervisor | The container runtime (`restartPolicy`). A daemon restart is a container restart: the records go, and calls on old executions get `EXECUTION_NOT_FOUND` |
+| Init | Skips the clock and entropy (the container shares the host's), so it needs no `CAP_SYS_TIME`. It still checks `host_time` and `entropy`, so one client serves VMs and containers. `clock_step` is 0 and `entropy_credited` false |
+| Egress | `firewall-init` installs the proxy CA and the iptables lockdown first: a Kubernetes init container, or the Docker entrypoint, which then drops to UID 1000 with `setpriv` |
+| Files | Sessions in `/home/onyx/workspaces`, skills in `/var/lib/onyx/skills`; the image makes both, owned by UID 1000. Put the key and TLS files in `/run/craft-fc/daemon/` (read-only): file calls with no session refuse `/run/craft-fc` |
+
+`--container` changes these defaults (a flag on the command line still wins): `--attach-cmd`,
+`--relay-pidfile`, `--grow-fs`, `--managed-mounts`, `--ca-bundle` (the CA install), `--cgroup-root`,
+`--state-file`, `--command-user` and `--file-owner` are empty, `--page-reporting-order` is -1 and
+`--reclaim-idle` is 0.
+
+Gaps against a VM:
+
+- With no writable cgroup v2 (an unprivileged runc container), the daemon uses process groups: a
+  command that calls `setsid` escapes Cancel and deadlines. The container limits and the idle stop
+  contain it. Under gVisor a writable cgroupfs can exist: set `--cgroup-root` there.
+- The daemon does not add the proxy CA to Chrome's NSS database (`--ca-bundle` is empty).
+
+Check: `deployment/craft-runtime/check-container.sh <image>` (Go tests in `internal/guestd/containertest`, build tag `container`).
 
 ### Bring-up sequence (api_server)
 
@@ -290,8 +322,8 @@ Python stubs (track D) come from the same file, for example
 
 ## Tests
 
-- Unit: `go test -race ./internal/guestd/... ./internal/egressrelay/...` (process groups on any Unix;
-  a Unix socket stands in for vsock). The cgroup tests in `internal/guestd/execs` run only as root on
+- Unit: `go test -race ./cmd/guest-daemon/ ./internal/guestd/... ./internal/egressrelay/...` (process groups on any Unix;
+  a Unix socket stands in for vsock; the TCP listener tests use loopback TLS). The cgroup tests in `internal/guestd/execs` run only as root on
   Linux with cgroup v2.
 - KVM: build tag `kvm`. They boot Firecracker directly (no node agent) with the Craft root drive
   (`build-rootfs.sh --daemon-bin`), and call the daemon over `v.sock` (`CONNECT 52`). The egress relay

@@ -3,7 +3,7 @@
 `onyxdotapp/craft-runtime` supplies execution tools and assets for the new integrated Onyx harness.
 Existing Craft does not use this image.
 It includes Python, Node, document tools, Chrome, Xvfb, and command-line tools.
-It contains no agent, guest daemon, VM init, deployment CA, or user data.
+It contains no agent, guest daemon, VM init, deployment CA, or user data. The `container` target adds the guest daemon (see below).
 
 The current pod and Docker backends continue to use `onyxdotapp/sandbox`.
 This change does not change `SANDBOX_RUNTIME`, Helm image settings, or their default values.
@@ -47,6 +47,35 @@ Their npm packages do not ship in the final image.
 New harness skill scripts must read these asset paths directly.
 The `sandbox` user, UID 1000, supplies the browser home and Chromium NSS database.
 Agent commands run as root. The default container command is Bash.
+
+## Container image (no KVM)
+
+The `container` target (`onyxdotapp/craft-runtime:<tag>-container`) runs one sandbox per container
+where there is no KVM: a Kubernetes pod, or a Docker container on Compose.
+It is the runtime image plus these parts, all owned by root:
+
+| Path | Part |
+|---|---|
+| `/usr/local/bin/guest-daemon` | The guest daemon, built from `microvm/cmd/guest-daemon` |
+| `/usr/local/bin/sandbox-entrypoint` | The image entrypoint: makes `/tmp/onyx`, then runs `guest-daemon --container` with its arguments. It refuses to run as root |
+| `/usr/local/bin/firewall-init` | The sandbox image's `firewall-init.sh`: installs the proxy CA and the iptables egress lockdown |
+| `iptables`, `setpriv` | For `firewall-init` (`util-linux` gives `setpriv`) |
+
+The image user is the `sandbox` user, UID 1000. The daemon and commands run as that user.
+The image makes `/home/onyx/workspaces` (sessions) and `/var/lib/onyx/skills` (`InstallSkill`), owned by the sandbox user.
+The daemon contract for containers is in `microvm/cmd/guest-daemon/README.md`.
+
+Build and check it from the repository root. The check needs Docker, OpenSSL and Go:
+
+```bash
+docker buildx bake -f deployment/craft-runtime/docker-bake.hcl --load container
+bash deployment/craft-runtime/check-container.sh onyxdotapp/craft-runtime:dev-container
+```
+
+The check starts the daemon two times and calls it over TLS (`microvm/internal/guestd/containertest`):
+as UID 1000 with no capabilities (the pod shape), and through `firewall-init` in entrypoint mode
+(the Docker shape). Each case checks Init, a command, a file write and a skill install.
+The Docker case also checks that direct egress fails. The image workflows run this check before they publish.
 
 ## Convert the image with the existing rootfs builder
 
