@@ -15,6 +15,8 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI, UploadFile, WebSocket
+from fastapi.dependencies.models import Dependant
+from fastapi.routing import APIWebSocketRoute
 from fastapi.testclient import TestClient
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
@@ -134,7 +136,7 @@ def session_users(
     next item, or the viewer while it is empty."""
     users: queue.Queue[User | None] = queue.Queue()
 
-    async def read_user(websocket: WebSocket, strategy: object) -> User | None:  # noqa: ARG001
+    async def read_user(websocket: WebSocket) -> User | None:  # noqa: ARG001
         try:
             return users.get_nowait()
         except queue.Empty:
@@ -166,7 +168,6 @@ def client(
         yield viewer
 
     app.dependency_overrides[current_user_from_websocket_cookie] = signed_in
-    app.dependency_overrides[auth_backend.get_strategy] = lambda: None
     with TestClient(app) as test_client:
         yield test_client
 
@@ -461,3 +462,22 @@ def test_the_owner_check_and_the_setting_gate_the_browser(
     with pytest.raises(OnyxError) as refused:
         chat_browser._browser_ref(chat_session.id, owner)
     assert refused.value.error_code is OnyxErrorCode.FEATURE_DISABLED
+
+
+def test_the_live_view_holds_no_auth_strategy_for_its_life() -> None:
+    """A strategy dependency lives as long as the websocket, and Postgres
+    auth's strategy holds a DB session; each check builds its own instead."""
+    route = next(
+        r
+        for r in chat_browser.router.routes
+        if isinstance(r, APIWebSocketRoute) and r.path.endswith("/browser/ws")
+    )
+
+    def calls(dependant: Dependant) -> list[object]:
+        found: list[object] = []
+        for sub in dependant.dependencies:
+            found.append(sub.call)
+            found += calls(sub)
+        return found
+
+    assert auth_backend.get_strategy not in calls(route.dependant)

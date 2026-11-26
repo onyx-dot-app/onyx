@@ -25,7 +25,7 @@ from starlette.websockets import WebSocket
 import onyx.auth.users as users_module
 import shared_configs.contextvars as shared_contextvars
 from onyx.auth.session_tokens import build_session_token_value
-from onyx.auth.users import current_user_from_websocket_cookie, get_redis_strategy
+from onyx.auth.users import current_user_from_websocket_cookie
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX, WEB_DOMAIN
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.async_sql_engine import abandon_async_engines
@@ -128,9 +128,7 @@ def test_cookie_websocket_auth_sets_tenant_from_session_token(
         websocket = _fake_websocket(
             origin=WEB_DOMAIN, cookie=f"{FASTAPI_USERS_AUTH_COOKIE_NAME}={token}"
         )
-        dependency = current_user_from_websocket_cookie(
-            websocket=websocket, strategy=get_redis_strategy()
-        )
+        dependency = current_user_from_websocket_cookie(websocket=websocket)
         try:
             resolved = await anext(dependency)
             assert resolved.id == user.id
@@ -169,9 +167,7 @@ def test_cookie_websocket_auth_rejects_expired_session(
         websocket = _fake_websocket(
             origin=WEB_DOMAIN, cookie=f"{FASTAPI_USERS_AUTH_COOKIE_NAME}={token}"
         )
-        dependency = current_user_from_websocket_cookie(
-            websocket=websocket, strategy=get_redis_strategy()
-        )
+        dependency = current_user_from_websocket_cookie(websocket=websocket)
         try:
             with pytest.raises(WebSocketException) as exc_info:
                 await anext(dependency)
@@ -196,8 +192,7 @@ def test_cookie_websocket_auth_rejects_missing_cookie(
 
     async def _run() -> None:
         dependency = current_user_from_websocket_cookie(
-            websocket=_fake_websocket(origin=WEB_DOMAIN, cookie=None),
-            strategy=get_redis_strategy(),
+            websocket=_fake_websocket(origin=WEB_DOMAIN, cookie=None)
         )
         with pytest.raises(WebSocketException) as exc_info:
             await anext(dependency)

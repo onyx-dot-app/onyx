@@ -52,6 +52,7 @@ from fastapi_users.manager import UserManagerDependency
 from fastapi_users.openapi import OpenAPIResponseType
 from fastapi_users.router.common import ErrorCode, ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
 from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
@@ -2839,9 +2840,19 @@ async def current_user_from_websocket(
         CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
 
 
-async def read_websocket_cookie_user(
-    websocket: WebSocket, strategy: Strategy[User, uuid.UUID]
-) -> User | None:
+def _cookie_strategy(db_session: AsyncSession) -> Strategy[User, uuid.UUID]:
+    """The cookie backend's strategy, with Postgres auth's token store on
+    `db_session`."""
+    if AUTH_BACKEND == AuthBackend.POSTGRES:
+        return get_database_strategy(
+            SQLAlchemyAccessTokenDatabase(db_session, AccessToken)
+        )
+    if AUTH_BACKEND == AuthBackend.REDIS:
+        return get_redis_strategy()
+    return get_jwt_strategy()
+
+
+async def read_websocket_cookie_user(websocket: WebSocket) -> User | None:
     """The active user with basic access whose session the websocket's
     cookie holds, read again from the session store and the database; None
     when the session or the user no longer qualifies. Call it in the
@@ -2850,14 +2861,18 @@ async def read_websocket_cookie_user(
     token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
     if not token:
         return None
-    # Build the user manager inside the tenant scope. As a route-level
-    # Depends it would open its DB session before the tenant is set.
+    # Build the user manager and the strategy inside the tenant scope, in a
+    # session that closes after the read. As route-level Depends they would
+    # open a DB session before the tenant is set and hold it for the
+    # websocket's life.
     get_user_db_context = asynccontextmanager(get_user_db)
     get_user_manager_context = asynccontextmanager(get_user_manager)
     async with get_async_session_context_manager() as db_session:
         async with get_user_db_context(db_session) as user_db:
             async with get_user_manager_context(user_db) as user_manager:
-                user = await strategy.read_token(token, user_manager)
+                user = await _cookie_strategy(db_session).read_token(
+                    token, user_manager
+                )
 
     if user is None or not user.is_active:
         return None
@@ -2875,7 +2890,6 @@ async def read_websocket_cookie_user(
 
 async def current_user_from_websocket_cookie(
     websocket: WebSocket,
-    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
 ) -> AsyncGenerator[User, None]:
     """WebSocket authentication dependency using the session cookie.
 
@@ -2908,7 +2922,7 @@ async def current_user_from_websocket_cookie(
 
     tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        user = await read_websocket_cookie_user(websocket, strategy)
+        user = await read_websocket_cookie_user(websocket)
         if user is None:
             raise WebSocketException(code=1008)
 
