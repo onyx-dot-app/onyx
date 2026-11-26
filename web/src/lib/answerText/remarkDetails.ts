@@ -7,6 +7,20 @@ const DETAILS_OPEN = /^<details(\s+open)?\s*>$/i;
 // closing tag must not end an outer disclosure.
 const ANY_DETAILS_OPEN = /^<details\b[^>]*>$/i;
 const SUMMARY = /^<summary>([\s\S]*?)<\/summary>$/i;
+const PARTIAL_SUMMARY = /^<summary>([\s\S]*)$/i;
+const DETAILS_TAGS = ["<details>", "</details>", "<summary>"];
+const NO_SUMMARY: [string, string] = ["", ""];
+
+/** A details tag the stream has not finished, such as `<summ` or `</det`. */
+function isUnfinishedTag(value: string): boolean {
+  const tag = value.toLowerCase();
+  return (
+    tag.startsWith("<") &&
+    DETAILS_TAGS.some(
+      (full) => full.length > tag.length && full.startsWith(tag)
+    )
+  );
+}
 const DETAILS_CLOSE = /^<\/details>$/i;
 // Tags inside these regions are text, so a block that holds one stays whole.
 const RAW_TEXT_REGION = /<(?:pre|script|style|textarea)\b|<!--/i;
@@ -77,8 +91,19 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     if (!node) continue;
+    const last = nodes.length - 1;
+    // A streaming answer can end in a tag: it shows once the tag is whole
+    if (i === last && isUnfinishedTag(htmlValue(node))) continue;
     const open = DETAILS_OPEN.exec(htmlValue(node));
-    const summary = SUMMARY.exec(htmlValue(nodes[i + 1]));
+    const next = htmlValue(nodes[i + 1]);
+    // ...or at the opener, or inside the summary
+    const summary =
+      SUMMARY.exec(next) ??
+      (i + 1 === last
+        ? (PARTIAL_SUMMARY.exec(next) ??
+          (isUnfinishedTag(next) ? NO_SUMMARY : null))
+        : null) ??
+      (i === last ? NO_SUMMARY : null);
     let close = -1;
     if (open && summary) {
       let depth = 1;
@@ -87,14 +112,21 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
         if (ANY_DETAILS_OPEN.test(tag)) depth++;
         else if (DETAILS_CLOSE.test(tag) && --depth === 0) close = j;
       }
+      // Unclosed, it runs to the end of its container, as in HTML, so a
+      // streaming answer shows a disclosure before its closing tag arrives
+      if (close < 0) close = nodes.length;
     }
-    if (!open || !summary || close < 0) {
+    if (!open || !summary) {
       out.push(node);
       continue;
     }
     const title = decodeReferences(
       // Only real tags go; a comparison such as `x < 5 > 3` stays text.
-      (summary[1] ?? "").replace(/<\/?[a-z][^<>]*>/gi, "").trim()
+      (summary[1] ?? "")
+        .replace(/<\/?[a-z][^<>]*>/gi, "")
+        // A closing tag the stream has not finished
+        .replace(/<\/?[a-z]*$/i, "")
+        .trim()
     );
     out.push({
       type: "details",

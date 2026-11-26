@@ -147,3 +147,30 @@ test("a summary keeps comparison text", () => {
     /^Check x < 5 > 3$/
   );
 });
+
+test("a details block shows no raw tags while it streams in", () => {
+  const answer =
+    "Intro.\n\n<details>\n<summary>Show steps</summary>\n\n- one\n- two\n\n</details>\n\nAfter.";
+  // From the end of the opener on, every prefix renders a disclosure
+  const from = answer.indexOf("<details>") + "<details>".length;
+  for (let end = from; end <= answer.length; end++) {
+    const { container, unmount } = render(
+      <AnswerMarkdown content={answer.slice(0, end)} />
+    );
+    expect(container.querySelector("details")).not.toBeNull();
+    expect(container.textContent).not.toMatch(/<\/?(details|summary)/);
+    unmount();
+  }
+});
+
+test("an unclosed details block keeps the rest of the answer inside it", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={"<details>\n<summary>Steps</summary>\n\nStep one\n\nStep two"}
+    />
+  );
+
+  const details = container.querySelector("details");
+  expect(details?.querySelector("summary")).toHaveTextContent(/^Steps$/);
+  expect(details).toHaveTextContent("Step two");
+});

@@ -77,3 +77,32 @@ test("side-by-side columns do not wrap, so their rows stay in line", () => {
   const columns = container.querySelectorAll("[data-nowrap]");
   expect(columns).toHaveLength(2);
 });
+
+test("a narrow panel shows a large replace unified, with no view toggle", () => {
+  const original = global.ResizeObserver;
+  // The panel measures 360px wide, under the 30rem a split view needs
+  global.ResizeObserver = class {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      this.callback(
+        [{ target, contentRect: { width: 360 } } as ResizeObserverEntry],
+        this as unknown as ResizeObserver
+      );
+    }
+    unobserve() {}
+    disconnect() {}
+  };
+  try {
+    const { container } = render(
+      <DiffBody
+        title="a.py"
+        oldText={lines(30)}
+        newText={lines(30).replaceAll("line", "row")}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /Switch to/ })).toBeNull();
+    expect(container.querySelector(".opal-code-panel-columns")).toBeNull();
+  } finally {
+    global.ResizeObserver = original;
+  }
+});
