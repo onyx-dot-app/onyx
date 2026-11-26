@@ -153,7 +153,8 @@ Browser (`internal/guestd/browser`):
 - The profile is `<sessions root>/<profile_session_id>/chrome`. The daemon checks the ID and makes the
   session directory as for the file calls (`INVALID_ARGUMENT` for a bad or empty ID). Chrome makes the
   profile dir (mode 0700, owned by the command user). It stays after `BrowserStop` and after a daemon
-  restart. The api_server passes the sandbox ID, so session saves keep the profile.
+  restart. The caller names the session that holds the profile, so a session save of that session
+  keeps it.
 - When Chrome runs with another profile dir, `BrowserStart` stops it (service first) and starts it again
   with the requested one.
 - The daemon holds the write end of Chrome's `--remote-debugging-pipe`. `BrowserStop` closes it, and

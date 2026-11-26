@@ -64,3 +64,17 @@ func TestBaseEnv(t *testing.T) {
 		t.Fatalf("user env %v", user)
 	}
 }
+
+func TestCheckPorts(t *testing.T) {
+	if err := checkPorts(browserRelayPort, "", "chrome"); err == nil {
+		t.Fatal("API port on the browser relay port: no error")
+	}
+	for _, c := range []struct {
+		port        uint
+		listen, bin string
+	}{{52, "", "chrome"}, {browserRelayPort, "", ""}, {browserRelayPort, "unix:/tmp/s", "chrome"}} {
+		if err := checkPorts(c.port, c.listen, c.bin); err != nil {
+			t.Errorf("%+v: %v", c, err)
+		}
+	}
+}
