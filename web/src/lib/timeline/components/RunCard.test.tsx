@@ -75,6 +75,7 @@ test("a settled card that takes over an open step mounts open, also under text",
       isActive={false}
       autoCollapse
       appear={false}
+      startOpen
       stepOpenState={{ openIds: new Set(["b"]), setOpen: () => {} }}
       renderStep={(step) => (
         <RunStep
