@@ -158,14 +158,14 @@
     },
     {
       "title": "Peak RSS, restarts and OOM kills in the time range — $workload",
-      "description": "Per pod over the selected range: peak RSS (sum of the pod's containers), the count of container restarts, and 1 when a container's last termination was OOMKilled at any time in the range. Needs cAdvisor and kube-state-metrics.",
+      "description": "Per pod over the selected range: peak RSS (the sum of each container's peak, from every scraped sample), the count of container restarts, and 1 when a container's last termination was OOMKilled at any time in the range. Needs cAdvisor and kube-state-metrics.",
       "type": "table",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "targets": [
         {
           "refId": "A",
-          "expr": "max_over_time(sum(container_memory_rss{namespace=\"$namespace\", pod=~\"$workload.*\", container!=\"\"}) by (pod)[$__range:]) / 1024 / 1024",
+          "expr": "sum(max_over_time(container_memory_rss{namespace=\"$namespace\", pod=~\"$workload.*\", container!=\"\"}[$__range])) by (pod) / 1024 / 1024",
           "legendFormat": "peak RSS MiB",
           "instant": true,
           "format": "table"
@@ -189,7 +189,7 @@
     },
     {
       "title": "Workload per finished turn, by scenario",
-      "description": "Code programs, searches and printed program characters per finished turn. Equal values across compared builds show equal workload.",
+      "description": "Code programs, searches and printed program characters per finished turn. The load client adds a turn's counts when it finishes. Equal values across compared builds show equal workload.",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 38 },

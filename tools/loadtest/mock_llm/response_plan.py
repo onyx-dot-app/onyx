@@ -179,6 +179,8 @@ DEFAULT_ITL_MS = int(os.environ.get("MOCK_ITL_MS", "15"))
 DEFAULT_LEN_TOKENS = int(os.environ.get("MOCK_LEN_TOKENS", "150"))
 
 KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx|sections|class|tail)(\d+)")
+# The first line of each code mode program: its position in the turn's plan.
+_PROGRAM_MARK_RE = re.compile(r"# mock program (\d+)\n")
 # Code profile query suffixes, in order; a turn with more searches repeats them.
 _CODE_QUERY_ASPECTS = (
     "overview",
@@ -449,16 +451,31 @@ def _code_mode_step(
 ) -> list[ToolCall]:
     """The next code mode step of the current turn: wait for a cell that the
     latest result left running, else run `program(n)`, where n counts the
-    programs the turn already ran. A None program ends the turn's tool calls."""
+    programs the turn already ran. A None program ends the turn's tool calls.
+
+    Each program's first line marks its position, so n survives history
+    compaction that replaces the turn's earlier run calls with a summary."""
     cell = code_mode.running_cell(turn)
     if cell is not None:
         return [
             _new_call(code_mode.WAIT_TOOLS[run_name], json.dumps({"cell_id": cell}))
         ]
-    code = program(_rounds_called(turn, run_name))
+    ran = 0
+    for message in turn:
+        if message.role != "assistant":
+            continue
+        for call in message.tool_calls or []:
+            if call.function.name != run_name:
+                continue
+            mark = _PROGRAM_MARK_RE.match(
+                json.loads(call.function.arguments).get("code", "")
+            )
+            if mark is not None:
+                ran = int(mark.group(1)) + 1
+    code = program(ran)
     if code is None:
         return []
-    return [_new_call(run_name, json.dumps({"code": code}))]
+    return [_new_call(run_name, json.dumps({"code": f"# mock program {ran}\n{code}"}))]
 
 
 def _pick_tool(

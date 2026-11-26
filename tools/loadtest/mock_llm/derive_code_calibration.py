@@ -18,15 +18,12 @@ Inputs:
         'status', result->'details'->>'status',
         'seconds', (result->'details'->>'duration_seconds')::float,
         'output_chars', length(coalesce(result->'details'->>'stdout', '')),
-        'tools', (SELECT coalesce(json_agg(c->>'tool_name'), '[]')
+        'calls', (SELECT coalesce(json_agg(json_build_array(
+          (c->>'index')::int, c->>'tool_name',
+          CASE WHEN jsonb_typeof(c->'arguments'->'queries') = 'array'
+          THEN jsonb_array_length(c->'arguments'->'queries') END)), '[]')
           FROM jsonb_array_elements(coalesce(result->'details'->'calls',
-          '[]')) c),
-        'queries', (SELECT coalesce(json_agg(jsonb_array_length(
-          c->'arguments'->'queries')), '[]')
-          FROM jsonb_array_elements(coalesce(result->'details'->'calls',
-          '[]')) c
-          WHERE c->>'tool_name' = 'internal_search'
-          AND jsonb_typeof(c->'arguments'->'queries') = 'array'))
+          '[]')) c))
         FROM tool_call WHERE parent_chat_message_id IS NOT NULL
         AND result->'details'->>'type' = 'code_mode_execution'"
 
@@ -34,12 +31,16 @@ Inputs:
   question (`chat_session_id`, `latency_s`, `error`). POOL names the tool
   family whose turns the file adds to: `openai` or `claude`.
 
-A program is a run call's cell. Its wait observations add their output, run
-time, and calls to it, and the last observation gives its status. Output is the
-printed text that the model read (the saved stdout, after the server's output
-limit). Searches are the program's internal_search calls. A program fails
-when its cell ended `failed` or `timed_out`. Questions that ended with an
-error are left out.
+A program is a run call's cell. Its wait observations add their output and
+calls to it. Each observation reports the cell's run time since it started,
+so the last one gives the program's run time, and also its status. Output is
+the printed text that the model read (the saved stdout, after the server's
+output limit). Searches are the program's internal_search calls, each counted
+once by its call index: a call that runs across observations appears in each.
+A pool without searches gets 1 query per search. A program fails when its cell
+ended `failed` or `timed_out`. Questions that ended with an error are left
+out. The derivation fails without a long-tail turn or a near-cap program,
+because the tail plans sample from both.
 
 Runs with the standard library only, so it also runs on the benchmark host.
 """
@@ -49,6 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import mean, median
@@ -67,10 +69,14 @@ FAILED_STATUSES = ("failed", "timed_out")
 @dataclass
 class Program:
     output_chars: int = 0
-    searches: int = 0
     seconds: float = 0.0
     status: str = ""
-    queries: list[int] = field(default_factory=list)
+    # Query counts of the internal_search calls, by call index.
+    search_queries: dict[int, int | None] = field(default_factory=dict)
+
+    @property
+    def searches(self) -> int:
+        return len(self.search_queries)
 
     @property
     def shape(self) -> list[int]:
@@ -107,14 +113,17 @@ def turn_programs(observations: list[dict[str, Any]]) -> tuple[list[Program], in
         else:
             continue
         program.output_chars += row["output_chars"]
-        program.searches += row["tools"].count("internal_search")
-        program.seconds += row["seconds"] or 0.0
+        program.seconds = row["seconds"] or program.seconds
         program.status = row["status"]
-        program.queries += row["queries"]
+        program.search_queries.update(
+            (index, queries)
+            for index, tool, queries in row["calls"]
+            if tool == "internal_search"
+        )
     return programs, waits
 
 
-def quantile(values: list[float], share: float) -> float:
+def quantile(values: Sequence[float], share: float) -> float:
     ordered = sorted(values)
     return ordered[min(len(ordered) - 1, int(share * len(ordered)))]
 
@@ -159,6 +168,11 @@ def derive(
                 tail_counts[len(programs)] += 1
                 tail_searches.update(p.searches for p in programs)
 
+    if not tail_counts or not near_cap:
+        raise ValueError(
+            f"No turn has {TAIL_PROGRAMS} or more programs, or no program printed "
+            f"{NEAR_CAP_CHARS} or more characters; the tail plans need both"
+        )
     result: dict[str, Any] = {
         "description": (
             f"{source}. Per-turn program shapes [output_chars, searches, "
@@ -176,6 +190,9 @@ def derive(
     for name, pool in pools.items():
         outputs = [p.output_chars for p in pool.programs]
         counts = pool.program_counts
+        queries = [
+            q for p in pool.programs for q in p.search_queries.values() if q is not None
+        ]
         result["pools"][name] = {
             "summary": {
                 "turns": len(counts),
@@ -204,9 +221,7 @@ def derive(
                 "latency_s_p95": quantile(pool.latency, 0.95),
                 "latency_s_max": max(pool.latency),
             },
-            "queries_per_search": round(
-                median(q for p in pool.programs for q in p.queries)
-            ),
+            "queries_per_search": round(median(queries)) if queries else 1,
             "model_seconds_per_call": round(median(pool.model_seconds), 2),
             "turns": [
                 {"programs": json.loads(shape), "weight": weight}

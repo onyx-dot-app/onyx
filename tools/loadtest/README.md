@@ -379,13 +379,14 @@ results of the chats' tool calls and the benchmark's answer rows; its
 docstring has the export query, which exports no program code or document
 text. The file holds each recorded turn as its ordered programs, with each
 program's printed characters (as the model read them, after the output limit),
-`internal_search` calls, and failure (`failed` or `timed_out`). It holds no
+`internal_search` calls (each counted once), and failure (`failed` or
+`timed_out`). It holds no
 questions, programs, or document content. Questions that ended with an error
 are left out.
 
 | Pool | Source models | Programs per turn (mean, p50, p95, max) | Turns with 20 or more programs | Program output chars (mean, p50, p95) | Searches per program | Failed programs | Model seconds per call |
 |---|---|---|---:|---|---:|---:|---:|
-| `openai` | gpt-6-luna, deepseek-v4.1-flash | 5.14, 2, 23, 62 | 5.5% | 14,999, 11,256, 40,054 | 1.24 | 5.2% | 3.25 |
+| `openai` | gpt-6-luna, deepseek-v4.1-flash | 5.14, 2, 23, 62 | 5.5% | 14,999, 11,256, 40,054 | 1.24 | 5.2% | 3.26 |
 | `claude` | claude-sonnet-5-5 | 3.89, 3, 8, 13 | 0% | 5,475, 3,948, 17,283 | 0.88 | 24.0% | 2.95 |
 
 - **Turns.** A plan replays one recorded turn of the pool, chosen by its
@@ -539,7 +540,8 @@ Code mode adds `code_programs` (run calls), `code_waits` (wait calls),
 a search that several observations report counts once), `code_failures`,
 `code_planned_failures` (failures that the mock planned), and
 `code_output_chars` (characters that programs printed, as streamed).
-Finished counts include failed setup and interrupted turns; success rates come from Locust request statistics.
+The stream counts of a turn are added when it finishes, so every count is of
+finished turns. Finished counts include failed setup and interrupted turns; success rates come from Locust request statistics.
 Counts reset at test start and survive a Locust statistics reset. Compare interval
 deltas when excluding warmup. Missing workers retain their last cumulative counts
 but contribute no active turns; counts can lag worker reports. Scrape the mock separately from the API pods; tokenizer

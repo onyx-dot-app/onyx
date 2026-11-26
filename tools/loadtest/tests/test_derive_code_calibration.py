@@ -6,7 +6,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from mock_llm.derive_code_calibration import derive, render
+import pytest
+from mock_llm.derive_code_calibration import TAIL_PROGRAMS, derive, render
 
 
 def observation(
@@ -17,8 +18,7 @@ def observation(
     cell: int,
     status: str,
     output_chars: int = 0,
-    tools: list[str] | None = None,
-    queries: list[int] | None = None,
+    calls: list[tuple[int, str, int | None]] | None = None,
     seconds: float = 1.0,
 ) -> dict[str, Any]:
     return {
@@ -29,8 +29,7 @@ def observation(
         "status": status,
         "seconds": seconds,
         "output_chars": output_chars,
-        "tools": tools or [],
-        "queries": queries or [],
+        "calls": calls or [],
     }
 
 
@@ -43,10 +42,12 @@ OBSERVATIONS = [
         cell=1,
         status="completed",
         output_chars=40_053,
-        tools=["internal_search", "postgres_query", "internal_search"],
-        queries=[3, 1],
+        calls=[(0, "internal_search", 3), (1, "postgres_query", None)]
+        + [(2, "internal_search", 1)],
     ),
-    # A program that ran past its yield time, then a wait observation of it.
+    # A program that ran past its yield time with a search still running, then
+    # a wait observation that reports the same search again when it ended.
+    # Run time is cumulative: the program ran 2 seconds in all.
     observation(
         "a",
         2,
@@ -54,31 +55,62 @@ OBSERVATIONS = [
         cell=2,
         status="running",
         output_chars=1_000,
-        tools=["internal_search"],
-        queries=[1],
+        calls=[(0, "internal_search", 1)],
     ),
     observation(
-        "a", 3, run=False, cell=2, status="completed", output_chars=800, seconds=2.0
+        "a",
+        3,
+        run=False,
+        cell=2,
+        status="completed",
+        output_chars=800,
+        calls=[(0, "internal_search", 1)],
+        seconds=2.0,
     ),
     observation("a", 4, run=True, cell=3, status="timed_out", seconds=4.0),
     observation("a", 5, run=True, cell=4, status="failed", seconds=0.0),
-    observation("b", 6, run=True, cell=1, status="completed", tools=["postgres_query"]),
+    observation(
+        "b",
+        6,
+        run=True,
+        cell=1,
+        status="completed",
+        calls=[(0, "postgres_query", None)],
+    ),
     # The session of a question that ended with an error.
     observation("c", 7, run=True, cell=1, status="completed", output_chars=5),
+]
+# A long-tail turn: TAIL_PROGRAMS programs that each search once.
+TAIL = [
+    observation(
+        "d",
+        100 + cell,
+        run=True,
+        cell=cell,
+        status="completed",
+        output_chars=36_000,
+        calls=[(0, "internal_search", 2)],
+        seconds=0.5,
+    )
+    for cell in range(TAIL_PROGRAMS)
 ]
 BENCH = [
     {"chat_session_id": "a", "latency_s": 20.0, "error": None},
     {"chat_session_id": "b", "latency_s": 4.0, "error": None},
     {"chat_session_id": "c", "latency_s": 9.0, "error": "HTTP 500"},
 ]
+TAIL_BENCH = [{"chat_session_id": "d", "latency_s": 31.0, "error": None}]
 
 
 def test_observations_fold_into_programs_of_each_turn() -> None:
-    result = derive(OBSERVATIONS, [("openai", BENCH)], "fixture")
+    result = derive(
+        OBSERVATIONS + TAIL, [("openai", BENCH), ("claude", TAIL_BENCH)], "fixture"
+    )
     pool = result["pools"]["openai"]
     turns = {json.dumps(turn["programs"]): turn["weight"] for turn in pool["turns"]}
-    # Output rounds to 500 characters; the wait adds its output to cell 2;
-    # timed out and failed cells are failures; only internal_search counts.
+    # Output rounds to 500 characters; the wait adds its output to cell 2, and
+    # its search counts once; timed out and failed cells are failures; only
+    # internal_search counts.
     assert turns == {
         json.dumps([[40000, 2, 0], [2000, 1, 0], [0, 0, 1], [0, 0, 1]]): 1,
         json.dumps([[0, 0, 0]]): 1,
@@ -87,13 +119,39 @@ def test_observations_fold_into_programs_of_each_turn() -> None:
     assert (summary["turns"], summary["programs"], summary["waits"]) == (2, 5, 1)
     assert summary["failed_program_share"] == 0.4
     assert pool["queries_per_search"] == 1
-    # (20 - 8 program seconds) / 5 calls and (4 - 1) / 2: median of 2.4 and 1.5.
-    assert pool["model_seconds_per_call"] == 1.95
-    assert result["tail"]["near_cap_output_chars"] == [[40000, 1]]
+    # (20 - 7 program seconds) / 5 calls and (4 - 1) / 2: median of 2.6 and 1.5.
+    assert pool["model_seconds_per_call"] == 2.05
+    assert result["tail"] == {
+        "program_counts": [[TAIL_PROGRAMS, 1]],
+        "searches_per_program": [[1, TAIL_PROGRAMS]],
+        "near_cap_output_chars": [[36000, TAIL_PROGRAMS], [40000, 1]],
+    }
+    claude = result["pools"]["claude"]
+    assert claude["queries_per_search"] == 2
+    assert claude["summary"]["tail_turn_share"] == 1
+
+
+def test_pool_without_searches_gets_one_query_per_search() -> None:
+    bench = [*BENCH, *TAIL_BENCH]
+    rows = [
+        {**row, "calls": [c for c in row["calls"] if c[1] != "internal_search"]}
+        for row in OBSERVATIONS + TAIL
+    ]
+    assert (
+        derive(rows, [("openai", bench)], "fixture")["pools"]["openai"][
+            "queries_per_search"
+        ]
+        == 1
+    )
+
+
+def test_calibration_without_a_long_tail_is_rejected() -> None:
+    with pytest.raises(ValueError, match="tail plans need both"):
+        derive(OBSERVATIONS, [("openai", BENCH)], "fixture")
 
 
 def test_rendered_file_parses_back_with_one_turn_per_line() -> None:
-    result = derive(OBSERVATIONS, [("openai", BENCH)], "fixture")
+    result = derive(OBSERVATIONS + TAIL, [("openai", BENCH + TAIL_BENCH)], "fixture")
     text = render(result)
     assert json.loads(text) == result
     assert text.count('{"programs": ') == len(result["pools"]["openai"]["turns"])

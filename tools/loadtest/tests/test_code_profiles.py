@@ -86,10 +86,15 @@ def next_plan(
 
 
 def run_turn(
-    model: str, tools: list[dict[str, Any]], question: str
+    model: str, tools: list[dict[str, Any]], question: str, *, compact: bool = False
 ) -> tuple[list[dict[str, Any]], str]:
-    """Drive a turn to its answer; each program's result is a completed cell."""
-    messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
+    """Drive a turn to its answer; each program's result is a completed cell.
+
+    With `compact`, every step compacts the history as Onyx does
+    (agents/compaction.py): a summary and the question replace all but the
+    latest tool exchange."""
+    question_message = {"role": "user", "content": question}
+    messages: list[dict[str, Any]] = [question_message]
     calls: list[dict[str, Any]] = []
     for step in range(100):
         plan = next_plan(model, tools, messages)
@@ -105,6 +110,9 @@ def run_turn(
                 "content": observation(step + 1),
             }
         )
+        if compact:
+            summary = {"role": "system", "content": "Conversation summary:\nDone."}
+            messages = [summary, question_message, *messages[-2:]]
     raise AssertionError("turn did not reach an answer")
 
 
@@ -217,6 +225,17 @@ def test_each_family_runs_the_planned_programs_in_its_shape(
             assert f"[:{program.output_chars}])" in code
     assert queries[0] == question
     assert len(set(queries)) == min(len(queries), 9)
+
+
+def test_history_compaction_keeps_the_turn_plan_position() -> None:
+    question = question_with(lambda programs: len(programs) >= 3)
+    tools = [EXEC_TOOL, WAIT_TOOL]
+    calls, _ = run_turn(OPENAI_MODEL, tools, question)
+    compacted, answer = run_turn(OPENAI_MODEL, tools, question, compact=True)
+    assert answer
+    assert [c["function"]["arguments"] for c in compacted] == [
+        c["function"]["arguments"] for c in calls
+    ]
 
 
 @pytest.mark.parametrize(("model", "tools", "run", "wait"), SHAPES)

@@ -18,7 +18,6 @@ see README.md.
 
 from __future__ import annotations
 
-import copy
 import os
 import time
 import uuid
@@ -202,13 +201,22 @@ class OnyxChatUser(HttpUser):
         )
         counts.active += 1
         counts.started += 1
+        # Stream counts are added when the turn ends, so every count is of
+        # finished turns.
+        analyzer = ChatStreamAnalyzer()
         try:
-            self._chat_turn()
+            self._chat_turn(analyzer)
         finally:
             counts.active -= 1
             counts.finished += 1
+            for name in workload_metrics.STREAM_COUNTS:
+                setattr(
+                    counts,
+                    name,
+                    getattr(counts, name) + getattr(analyzer.summary, name),
+                )
 
-    def _chat_turn(self) -> None:
+    def _chat_turn(self, analyzer: ChatStreamAnalyzer) -> None:
         message = self.messages[
             self.message_order[self.turn_index % len(self.messages)]
         ]
@@ -240,7 +248,6 @@ class OnyxChatUser(HttpUser):
             if session_turn is not None:
                 self._fire(f"turn {session_turn}", start, response_length, exception)
 
-        analyzer = ChatStreamAnalyzer()
         disconnect_target = self.disconnect_after_milestone
         disconnected = False
         try:
@@ -268,19 +275,7 @@ class OnyxChatUser(HttpUser):
                     return
 
                 for line in response.iter_lines(decode_unicode=True):
-                    before = copy.copy(analyzer.summary)
-                    milestones = analyzer.feed(line)
-                    after = analyzer.summary
-                    counts = workload_metrics.local[self.scenario_prefix]
-                    for name in workload_metrics.STREAM_COUNTS:
-                        setattr(
-                            counts,
-                            name,
-                            getattr(counts, name)
-                            + getattr(after, name)
-                            - getattr(before, name),
-                        )
-                    for milestone in milestones:
+                    for milestone in analyzer.feed(line):
                         self._fire(milestone, start)
                         if disconnect_target and milestone == disconnect_target:
                             disconnected = True
