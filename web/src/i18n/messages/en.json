@@ -6863,9 +6863,7 @@
         },
         "toasts": {
           "providerEnableFailed": "Failed to enable provider: {message}",
-          "providerEnabled": "Provider enabled successfully!",
           "providerUpdateFailed": "Failed to update provider: {message}",
-          "providerUpdated": "Provider updated successfully!",
           "setDefaultFailed": "Failed to set provider as default",
           "setNewDefaultFailed": "Failed to set new provider as default",
           "testApiKeyFailed": "An error occurred while testing the API key.",

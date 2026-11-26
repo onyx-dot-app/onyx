@@ -6863,9 +6863,7 @@
         },
         "toasts": {
           "providerEnableFailed": "فشل تفعيل الموفر: {message}",
-          "providerEnabled": "تم تفعيل الموفر بنجاح!",
           "providerUpdateFailed": "فشل تحديث الموفر: {message}",
-          "providerUpdated": "تم تحديث الموفر بنجاح!",
           "setDefaultFailed": "فشل تعيين الموفر كافتراضي",
           "setNewDefaultFailed": "فشل تعيين الموفر الجديد كافتراضي",
           "testApiKeyFailed": "حدث خطأ أثناء اختبار مفتاح API.",

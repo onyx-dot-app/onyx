@@ -166,13 +166,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     );
     expect(JSON.parse(createCall![1].body as string).is_auto_mode).toBe(false);
 
-    // Verify success toast
-    await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith(
-        "Provider enabled successfully!"
-      );
-    });
-
     // Verify SWR cache was invalidated
     expect(mockMutate).toHaveBeenCalledWith(
       "/api/admin/llm/provider?page_models=true"
@@ -313,13 +306,6 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       "/api/admin/llm/test",
       expect.any(Object)
     );
-
-    // Verify success message says "updated"
-    await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith(
-        "Provider updated successfully!"
-      );
-    });
   });
 
   test("preserves additional models when updating a provider", async () => {
