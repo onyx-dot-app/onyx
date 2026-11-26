@@ -327,6 +327,33 @@ def openapi_operations(
     ]
 
 
+def malformed_operations(
+    openapi_spec: dict[str, Any],
+) -> list[tuple[str, str | None]]:
+    """Each path item that is not an object, as ``(path, None)``, and each
+    operation of a known method that is not an object, as ``(path, method)``.
+    ``openapi_operations`` skips them."""
+    paths = openapi_spec.get("paths")
+    malformed: list[tuple[str, str | None]] = []
+    for path, path_item in paths.items() if isinstance(paths, dict) else []:
+        if not isinstance(path_item, dict):
+            malformed.append((path, None))
+            continue
+        malformed.extend(
+            (path, method_name)
+            for method_name, method in path_item.items()
+            if str(method_name).lower() in OPENAPI_METHODS
+            and not isinstance(method, dict)
+        )
+    return malformed
+
+
+def malformed_label(path: str, method_name: str | None) -> str:
+    if method_name is None:
+        return f"The path item of {path}"
+    return f"{str(method_name).upper()} {path}"
+
+
 def inline_path_parameters(openapi_spec: dict[str, Any]) -> dict[str, Any]:
     """``openapi_spec`` with each path item cut to its operations, and the
     path item's parameters copied into each operation, with local references
@@ -458,6 +485,8 @@ def validate_openapi_schema(
         raise ValueError("`paths` section is required in OpenAPI schema")
     if not isinstance(schema["paths"], dict):
         raise ValueError("`paths` in OpenAPI schema must be an object")
+    if malformed := malformed_operations(schema):
+        raise ValueError(f"{malformed_label(*malformed[0])} must be an object")
 
     servers = schema.get("servers", [])
     if not isinstance(servers, list) or not all(

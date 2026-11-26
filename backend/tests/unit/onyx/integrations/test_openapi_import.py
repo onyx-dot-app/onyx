@@ -420,6 +420,34 @@ def test_import_of_only_uncallable_operations_gives_no_endpoints() -> None:
     assert [line.split(":")[0] for line in view.skipped] == ["POST /pets/{petId}/photo"]
 
 
+def test_a_save_refuses_an_entry_that_is_not_an_object() -> None:
+    """The parser skips such an entry, so a save would drop its action."""
+    operation = _callable_spec()
+    operation["paths"]["/pets/{petId}"]["get"] = None
+    with pytest.raises(ValueError, match=r"GET /pets/\{petId\} must be an object"):
+        validate_openapi_schema(operation)
+
+    path_item = _callable_spec()
+    path_item["paths"]["/owners"] = "owners"
+    with pytest.raises(ValueError, match="path item of /owners must be an object"):
+        validate_openapi_schema(path_item)
+
+
+def test_import_drops_and_lists_an_entry_that_is_not_an_object() -> None:
+    spec = _callable_spec()
+    spec["paths"]["/pets/{petId}"]["get"] = None
+    spec["paths"]["/owners"] = "owners"
+
+    view = _import(json.dumps(spec))
+
+    assert view.skipped == [
+        "GET /pets/{petId}: it is not an object",
+        "The path item of /owners: it is not an object",
+    ]
+    assert view.endpoints == ["DELETE /pets/{petId}?verbose Delete a pet"]
+    validate_openapi_schema(json.loads(view.openapi_document))
+
+
 def test_import_needs_no_server_url() -> None:
     spec = _callable_spec()
     del spec["servers"]

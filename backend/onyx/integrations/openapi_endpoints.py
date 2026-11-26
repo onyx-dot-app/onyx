@@ -18,6 +18,8 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     TOOL_HTTP_METHODS,
     InlineBudget,
     check_unique_name,
+    malformed_label,
+    malformed_operations,
     openapi_operations,
     openapi_to_method_spec,
     operation_parameters,
@@ -373,6 +375,12 @@ def drop_uncallable_operations(
     skipped: list[str] = []
     seen_names: dict[str, str] = {}
     budget = InlineBudget()
+    for path, method_name in malformed_operations(spec):
+        skipped.append(f"{malformed_label(path, method_name)}: it is not an object")
+        if method_name is None:
+            del spec["paths"][path]
+        else:
+            _remove_operation(spec["paths"], path, method_name)
     for path, path_item, method, operation in openapi_operations(spec):
         try:
             method_spec = openapi_to_method_spec(
