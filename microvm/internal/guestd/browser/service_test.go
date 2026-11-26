@@ -1,8 +1,10 @@
 package browser
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -262,5 +264,28 @@ func TestStopServiceSkipsAnExitedService(t *testing.T) {
 	case <-exited:
 		t.Fatal("stopService killed the process group that reused the PID of an exited service")
 	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func TestExitedServiceIsLogged(t *testing.T) {
+	b, env, profile := newServiceFake(t)
+	var logs bytes.Buffer
+	b.cfg.Log = slog.New(slog.NewTextHandler(&logs, nil))
+	ctx := context.Background()
+	if _, _, err := b.Start(ctx, profile, env); err != nil {
+		t.Fatal(err)
+	}
+	svc := servicePID(b)
+	if err := syscall.Kill(svc, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	for alive(svc) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, _, err := b.Start(ctx, profile, env); err != nil {
+		t.Fatal(err)
+	}
+	if want := `msg="browser service exited" pid=` + strconv.Itoa(svc); !strings.Contains(logs.String(), want) {
+		t.Fatalf("log has no %q:\n%s", want, logs.String())
 	}
 }

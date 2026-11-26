@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -29,6 +30,9 @@ func (b *Browser) ensureService(ctx context.Context, r *running, env []string) e
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if r.svc != nil && r.svc.exited() {
+		b.cfg.Log.Warn("browser service exited", "pid", r.svc.pid, "stderr", strings.TrimSpace(r.svc.stderr.String()))
 	}
 	if err := b.stopService(r); err != nil {
 		b.cfg.Log.Warn("stop the old browser service", "err", err)
