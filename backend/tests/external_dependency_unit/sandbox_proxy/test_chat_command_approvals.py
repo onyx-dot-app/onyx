@@ -514,6 +514,43 @@ def test_a_call_that_begins_during_the_cleanup_marks_after_it(
     assert log[:2] == ["cleaned", "marked"]
 
 
+def test_a_renewal_that_the_end_outwaits_does_not_restore_the_mark(
+    chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The end stops waiting for the watcher while a renewal writes, and
+    clears the mark first. The renewal then lands, but the command does not
+    stay in the foreground."""
+    command_id, _reports, approvals = _command(chat)
+    ctx = _ctx(chat, command_id)
+    writing, cleared = threading.Event(), threading.Event()
+    mark = command_approvals_tool.approval_cache.mark_command_foreground
+    clear = command_approvals_tool.approval_cache.clear_command_foreground
+
+    def slow_mark(*args: Any) -> None:
+        if threading.current_thread() is approvals._thread:
+            writing.set()
+            cleared.wait(timeout=_WAIT_S)
+        mark(*args)
+
+    def logged_clear(*args: Any) -> None:
+        clear(*args)
+        cleared.set()
+
+    monkeypatch.setattr(command_approvals_tool, "_JOIN_SECONDS", 0.1)
+    monkeypatch.setattr(
+        command_approvals_tool.approval_cache, "mark_command_foreground", slow_mark
+    )
+    monkeypatch.setattr(
+        command_approvals_tool.approval_cache, "clear_command_foreground", logged_clear
+    )
+    assert writing.wait(_WAIT_S)
+    approvals.end(cancelled=False)
+    assert approvals._thread is not None
+    approvals._thread.join(timeout=_WAIT_S)
+
+    assert not _gate()._command_in_foreground(ctx)
+
+
 def test_a_slow_cleanup_does_not_block_another_command(
     chat: _Chat, monkeypatch: pytest.MonkeyPatch
 ) -> None:

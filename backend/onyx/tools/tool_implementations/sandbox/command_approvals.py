@@ -254,9 +254,7 @@ class CommandApprovals:
         cache = self._cache()
         while not self._stop.is_set():
             try:
-                approval_cache.mark_command_foreground(
-                    command_id, self._chat_session_id, cache
-                )
+                self._renew(command_id, cache)
                 # An announcement only wakes the watcher early.
                 approval_cache.pop_announcement(command_id, _POLL_SECONDS, cache)
                 self._poll(command_id)
@@ -267,6 +265,19 @@ class CommandApprovals:
                     "command_approvals_watch_failed command=%s", command_id
                 )
                 self._stop.wait(_POLL_SECONDS)
+
+    def _renew(self, command_id: UUID, cache: CacheBackend) -> None:
+        """Renew the foreground mark. A renewal that `end` stops while it
+        writes clears the mark once no call of this process waits on the
+        command: either the cleanup clears after the write, or this sees the
+        cleanup began."""
+        approval_cache.mark_command_foreground(command_id, self._chat_session_id, cache)
+        if not self._stop.is_set():
+            return
+        with _WAITING_LOCK:
+            idle = command_id not in _waiting
+        if idle:
+            approval_cache.clear_command_foreground(command_id, cache)
 
     def _waiting(self, db: Session, command_id: UUID) -> list[ActionApproval]:
         return action_approval.list_pending_command_action_approvals(
