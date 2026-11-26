@@ -18,6 +18,7 @@ on:
       - "microvm/internal/testcerts/**"
       - "microvm/proto/sandboxd/**"
       - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
+      - "backend/onyx/server/features/build/sandbox/image/firewall-init.sh"
       - "tools/ods/internal/audit/**"
       - "tools/ods/internal/auditcmd/**"
       - "backend/onyx/server/features/build/sandbox/image/templates/pptx/**"
@@ -31,6 +32,7 @@ on:
       - "deployment/craft-fc/**"
       - "microvm/**"
       - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
+      - "backend/onyx/server/features/build/sandbox/image/firewall-init.sh"
       - "tools/ods/internal/audit/**"
       - "tools/ods/internal/auditcmd/**"
       - "backend/onyx/server/features/build/sandbox/image/templates/pptx/**"
@@ -67,7 +69,7 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
-      - name: Build runtime
+      - name: Build runtime and container images
         uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b
         env:
           IMAGE_VERSION: ${{ github.sha }}
@@ -75,11 +77,14 @@ jobs:
         with:
           source: .
           files: deployment/craft-runtime/docker-bake.hcl
-          targets: runtime
+          targets: runtime,container
           load: true
           set: |
             runtime.cache-from=type=gha,scope=craft-runtime
             runtime.cache-to=type=gha,scope=craft-runtime,mode=max
+            container.cache-from=type=gha,scope=craft-runtime
+            container.cache-from+=type=gha,scope=craft-runtime-container
+            container.cache-to=type=gha,scope=craft-runtime-container,mode=max
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: tools/ods/go.mod
@@ -99,6 +104,8 @@ jobs:
       - name: Check interrupted command diagnostics
         working-directory: microvm
         run: go test -tags kvm -run '^TestCollectKeepsPartialOutput$' ./internal/guestd/kvmtest
+      - name: Check the container image
+        run: bash deployment/craft-runtime/check-container.sh onyxdotapp/craft-runtime:ci-container
       - name: Install rootfs build tools
         run: |
           sudo apt-get update

@@ -1,4 +1,5 @@
-# Publishes onyxdotapp/craft-runtime on each Onyx tag. On stable, beta and
+# Publishes onyxdotapp/craft-runtime on each Onyx tag, and the container
+# image (the runtime with the guest daemon) as <tag>-container. On stable, beta and
 # nightly tags it also publishes the Craft Firecracker images under the same
 # tag, which the Helm chart defaults to:
 #   onyxdotapp/craft-fc-host-agent:<tag>
@@ -95,7 +96,7 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
-      - name: Build runtime
+      - name: Build runtime and container images
         uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b
         env:
           IMAGE_VERSION: ${{ github.ref_name }}
@@ -103,7 +104,7 @@ jobs:
         with:
           source: .
           files: deployment/craft-runtime/docker-bake.hcl
-          targets: runtime
+          targets: runtime,container
           load: true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
           set: |
@@ -111,6 +112,10 @@ jobs:
             runtime.cache-from=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/craft-runtime:edge
             runtime.cache-from+=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/craft-runtime:latest
             runtime.cache-to=type=inline
+            container.platform=linux/amd64
+            container.cache-from=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/craft-runtime:edge-container
+            container.cache-from+=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/craft-runtime:latest-container
+            container.cache-to=type=inline
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: tools/ods/go.mod
@@ -130,6 +135,8 @@ jobs:
       - name: Check interrupted command diagnostics
         working-directory: microvm
         run: go test -tags kvm -run '^TestCollectKeepsPartialOutput$' ./internal/guestd/kvmtest
+      - name: Check the container image
+        run: bash deployment/craft-runtime/check-container.sh onyxdotapp/craft-runtime:release-check-container
       - name: Install rootfs build tools
         run: |
           sudo apt-get update
@@ -160,6 +167,8 @@ jobs:
         run: uv sync --frozen --no-install-project --only-group ods
       - name: Audit the checked runtime image
         run: uv run --no-sync ods audit image onyxdotapp/craft-runtime:release-check --fail-on=critical --strict
+      - name: Audit the checked container image
+        run: uv run --no-sync ods audit image onyxdotapp/craft-runtime:release-check-container --fail-on=critical --strict
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
@@ -204,6 +213,8 @@ jobs:
           for tag in "${tags[@]}"; do
             docker tag onyxdotapp/craft-runtime:release-check "$tag"
             docker push "$tag"
+            docker tag onyxdotapp/craft-runtime:release-check-container "${tag}-container"
+            docker push "${tag}-container"
           done
 
   publish-craft-fc-host-agent:

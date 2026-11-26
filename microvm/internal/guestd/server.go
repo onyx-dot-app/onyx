@@ -25,7 +25,7 @@ import (
 )
 
 // System holds the guest system calls of Init. Tests replace them. A nil
-// Attach, ResetRelay or InstallCA is skipped.
+// call is skipped; a container daemon has no SetClock or AddEntropy.
 type System struct {
 	SetClock   func(time.Time) error
 	AddEntropy func([]byte) (credited bool, err error)
@@ -62,7 +62,10 @@ type Config struct {
 	// Files serves the file calls and session saves. Nil means a store
 	// with the defaults (files.Config{}).
 	Files *files.Store
-	Log   *slog.Logger
+	// Key is the key set at start (--key-file). SetKey with another key
+	// then fails with KEY_ALREADY_SET. Empty: SetKey sets the first key.
+	Key string
+	Log *slog.Logger
 }
 
 // DefaultBaseEnv is the command env before Init adds to it.
@@ -139,6 +142,15 @@ func NewServer(cfg Config, sys System, m *execs.Manager) (*Server, error) {
 			return nil, err
 		}
 	}
+	if cfg.Key != "" {
+		if err := validateKey(cfg.Key); err != nil {
+			return nil, fmt.Errorf("key file: %w", err)
+		}
+		if s.state.Key != "" && s.state.Key != cfg.Key {
+			return nil, fmt.Errorf("%s holds another key than the key file", cfg.StateFile)
+		}
+		s.state.Key = cfg.Key
+	}
 	return s, nil
 }
 
@@ -202,15 +214,23 @@ func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, e
 	s.initMu.Lock()
 	defer s.initMu.Unlock()
 
-	host := r.GetHostTime().AsTime()
-	before := time.Now()
-	if err := s.sys.SetClock(host); err != nil {
-		return nil, apiError(pb.ErrorReason_INIT_FAILED, "set clock: %v", err)
+	// A container shares the host's clock and CRNG: it has no SetClock or
+	// AddEntropy, and the step stays 0.
+	var step time.Duration
+	if s.sys.SetClock != nil {
+		host := r.GetHostTime().AsTime()
+		before := time.Now()
+		if err := s.sys.SetClock(host); err != nil {
+			return nil, apiError(pb.ErrorReason_INIT_FAILED, "set clock: %v", err)
+		}
+		step = host.Sub(before)
 	}
-	step := host.Sub(before)
-	credited, err := s.sys.AddEntropy(r.GetEntropy())
-	if err != nil {
-		return nil, apiError(pb.ErrorReason_INIT_FAILED, "add entropy: %v", err)
+	var credited bool
+	if s.sys.AddEntropy != nil {
+		var err error
+		if credited, err = s.sys.AddEntropy(r.GetEntropy()); err != nil {
+			return nil, apiError(pb.ErrorReason_INIT_FAILED, "add entropy: %v", err)
+		}
 	}
 	resp := &pb.InitResponse{ClockStep: durationpb.New(step), EntropyCredited: credited, Version: s.cfg.Version}
 	if s.sys.Attach != nil {

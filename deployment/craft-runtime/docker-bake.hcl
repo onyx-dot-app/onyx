@@ -14,6 +14,10 @@ variable "UV_IMAGE" {
   default = "ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85"
 }
 
+variable "GO_IMAGE" {
+  default = "library/golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280"
+}
+
 variable "NPM_VERSION" {
   default = "11.17.0"
 }
@@ -69,6 +73,7 @@ target "runtime" {
     NODE_IMAGE            = "${BASE_IMAGE_REGISTRY}/${NODE_IMAGE}"
     PYTHON_IMAGE          = "${BASE_IMAGE_REGISTRY}/${PYTHON_IMAGE}"
     UV_IMAGE              = UV_IMAGE
+    GO_IMAGE              = "${BASE_IMAGE_REGISTRY}/${GO_IMAGE}"
     NPM_VERSION           = NPM_VERSION
     AGENT_BROWSER_VERSION = AGENT_BROWSER_VERSION
     PPTXGENJS_VERSION      = PPTXGENJS_VERSION
@@ -78,4 +83,12 @@ target "runtime" {
     GH_CLI_VERSION        = GH_CLI_VERSION
     IMAGE_VERSION         = IMAGE_VERSION
   }
+}
+
+# The runtime plus the guest daemon and the egress lockdown, for one sandbox
+# per container where there is no KVM.
+target "container" {
+  inherits = ["runtime"]
+  target   = "container"
+  tags     = ["${REGISTRY_IMAGE}:${TAG}-container"]
 }
