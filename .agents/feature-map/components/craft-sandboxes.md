@@ -369,16 +369,24 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   daemon confines to its onyx root with no session: the call wakes the VM but
   restores no session, and session saves never include the path. They refuse
   every other path outside the session directory. A publish (`library_create_library_file`) reads
-  through `read_file`. `render_first_page` draws a JPEG of the first page of a
-  `.pdf`, `.pptx` or `.docx` at a path that `read_file` accepts (a
-  session path or one under `ONYX_VM_FILES_ROOT`, through `_file_target`)
-  with the root drive's poppler and LibreOffice, as typed argv execs
+  through `read_file`. `render_preview` converts a `.pptx` or `.docx` to a
+  PDF with the root drive's LibreOffice and, when the caller asks for the
+  first page, draws a JPEG of it (also of a `.pdf`) with poppler. The
+  source is a path that `read_file` accepts (a session path or one under
+  `ONYX_VM_FILES_ROOT`, through `_file_target`), or file bytes, which it
+  writes into its scratch directory and which need no chat session (a
+  `HarnessSandboxKey`, not a `HarnessSandboxRef`). It runs typed argv execs
   (`daemon.run`, no shell) in a scratch directory under
-  `ONYX_VM_FILES_ROOT/renders` that it deletes, by the caller's deadline
-  (a publish gives all renders of a call one 30 s budget, which starts
-  once the call has its sandbox). It returns
-  None on any failure; a cancel, or a step that ends without a result (a
-  broken stream), kills the running step before the delete. LibreOffice runs
+  `ONYX_VM_FILES_ROOT/renders` that it deletes, within the caller's budget,
+  which starts once the VM runs (a publish gives all renders of a call one
+  30 s budget from its first read; a chat file preview gets 30 s). It
+  returns None only when the converter rejects the file (a step fails, or
+  LibreOffice makes no PDF); an output that is too large, or a first page
+  that poppler cannot draw from a converted PDF, is None in the result. It
+  raises `RenderBudgetSpentError` when the budget runs out, and the
+  sandbox's own errors when the sandbox cannot be reached, after which a
+  retry can succeed. A cancel, or a broken stream, kills the running step
+  before the delete. LibreOffice runs
   without the AF_UNIX shim of
   `backend/onyx/skills/builtin/pptx/scripts/office/soffice.py`: the guest
   allows AF_UNIX sockets, and `deployment/craft-runtime/check-kvm.sh` runs

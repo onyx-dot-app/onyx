@@ -96,7 +96,6 @@ packages:
   src/lib/outputPanel: 100
   src/lib/permissions: 100
   src/lib/plugins: 100
-  src/lib/pptx: 100
   src/lib/projects: 99.7
   src/lib/sandbox: 100
   src/lib/scheduledTasks: 100

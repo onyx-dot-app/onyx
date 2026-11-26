@@ -573,17 +573,26 @@ class SandboxDaemonClient:
     # session_id="" they are absolute VM paths (not upload or saves).
 
     def read_file(
-        self, *, session_id: str, path: str, offset: int = 0, length: int = 0
+        self,
+        *,
+        session_id: str,
+        path: str,
+        offset: int = 0,
+        length: int = 0,
+        timeout_seconds: float | None = None,
     ) -> tuple[FileEntry, Iterator[bytes]]:
         """The file's info and its bytes from `offset` (length 0 = to the
         end), in chunks of at most 64 KiB. FILE_NOT_FOUND raises here.
-        Closing or dropping the chunk iterator cancels the stream."""
+        Closing or dropping the chunk iterator cancels the stream.
+        `timeout_seconds` replaces the transfer timeout."""
         call: _ResponseStream[sandboxd_pb2.ReadFileResponse] = self._stub.ReadFile(
             sandboxd_pb2.ReadFileRequest(
                 session_id=session_id, path=path, offset=offset, length=length
             ),
             metadata=self._authed(),
-            timeout=_TRANSFER_TIMEOUT_SECONDS,
+            timeout=_TRANSFER_TIMEOUT_SECONDS
+            if timeout_seconds is None
+            else timeout_seconds,
         )
         try:
             first: sandboxd_pb2.ReadFileResponse = next(call)

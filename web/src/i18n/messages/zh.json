@@ -13081,9 +13081,6 @@
       "lineCount": {
         "label": "{count, plural, one {# 行} other {# 行}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# 个字} other {# 个字}}"
-      },
       "copyButton": {
         "tooltip": "复制内容"
       },
@@ -13107,6 +13104,13 @@
       "renderError": {
         "title": "无法预览此文件",
         "description": "无法在此处显示该文件。请下载文件后打开。"
+      },
+      "unavailable": {
+        "title": "此文件没有预览",
+        "description": "无法为此文件生成预览。请下载文件后打开。"
+      },
+      "preparing": {
+        "status": "正在准备预览，这可能需要一点时间。"
       },
       "unsupported": {
         "title": "暂不支持预览此文件类型",
@@ -13155,30 +13159,6 @@
         },
         "error": {
           "description": "无法加载该 PDF 文件。"
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "演示文稿控件"
-        },
-        "thumbnails": {
-          "toggle": "显示或隐藏幻灯片缩略图",
-          "resize": "调整幻灯片缩略图宽度"
-        },
-        "slides": {
-          "label": "幻灯片"
-        },
-        "previous": {
-          "label": "上一张幻灯片"
-        },
-        "next": {
-          "label": "下一张幻灯片"
-        },
-        "slide": {
-          "counter": "幻灯片 {current} / {total}"
-        },
-        "empty": {
-          "label": "此演示文稿中没有幻灯片"
         }
       }
     },
