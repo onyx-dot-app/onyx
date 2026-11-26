@@ -111,7 +111,7 @@ class Response:
         self.recorded.append(
             ToolResultMessage(
                 tool_call_id=invocation.call_id,
-                tool_name="exec",
+                tool_name="execute_code",
                 content=result.content,
                 details=result.details,
                 is_error=result.is_error,
@@ -327,7 +327,7 @@ def test_unknown_and_earlier_cell_ids() -> None:
     assert stopped.is_error
     assert stopped.content == (
         "Cell 1 stopped when its response ended or its run paused. Start a new "
-        "exec call."
+        "execute_code call."
     )
     missing = later.wait(9)
     assert missing.content == "Cell 9 does not exist."
@@ -581,7 +581,7 @@ def test_closing_record_lists_what_ran_after_the_last_observation() -> None:
         history=[
             ToolResultMessage(
                 tool_call_id="call_1",
-                tool_name="exec",
+                tool_name="execute_code",
                 content=amended.content,
                 details=amended.details,
             )
@@ -791,7 +791,7 @@ def test_restored_running_observation_is_amended_as_interrupted() -> None:
     history: list[Message] = [
         ToolResultMessage(
             tool_call_id="old",
-            tool_name="exec",
+            tool_name="execute_code",
             content="Execution running",
             details=saved,
         )
@@ -799,7 +799,7 @@ def test_restored_running_observation_is_amended_as_interrupted() -> None:
     response = Response(history=history)
     assert response.wait(3).content == (
         "Cell 3 stopped when its response ended or its run paused. Start a new "
-        "exec call."
+        "execute_code call."
     )
     amended = response.finish()["old"]
     closing = _details(amended).closing

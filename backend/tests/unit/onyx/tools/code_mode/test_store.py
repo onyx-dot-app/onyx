@@ -37,7 +37,7 @@ def _execution(
 ) -> ToolResultMessage:
     return ToolResultMessage(
         tool_call_id=call_id,
-        tool_name="exec",
+        tool_name="execute_code",
         content="",
         details=CodeModeExecutionResult(
             cell_id=1, code="", status=status, commit=commit
@@ -77,7 +77,7 @@ def test_stored_values_reads_commit_records_and_closing_records() -> None:
         _execution("1", StoreCommit(ordinal=1, follows=0, writes={"a": 1})),
         _execution("2", None, status="failed"),
         ToolResultMessage(
-            tool_call_id="3", tool_name="exec", content="", details=closed
+            tool_call_id="3", tool_name="execute_code", content="", details=closed
         ),
     ]
     assert stored_values(messages) == {"a": 1, "b": 2}
@@ -145,7 +145,7 @@ def test_dropped_commits_are_listed_until_an_observation_reports_them() -> None:
     # Nor are commits that a saved observation reported.
     report = ToolResultMessage(
         tool_call_id="3",
-        tool_name="exec",
+        tool_name="execute_code",
         content="",
         details=CodeModeExecutionResult(
             cell_id=2, code="", status="completed", lost_store_writes=lost
