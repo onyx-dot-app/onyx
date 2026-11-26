@@ -7,6 +7,7 @@
  * Copyright (c) 2026 T3 Tools Inc. Licensed under the MIT License.
  */
 import { stripBidiControls } from "@opal/utils";
+import { isJsonObject, type JsonObject, type JsonValue } from "@/lib/json";
 import { PacketType } from "@/app/app/services/streamingModels";
 import type {
   BrowserDialog,
@@ -133,26 +134,24 @@ export function reconnectDelayMs(failures: number): number {
 // Message parsing
 // ---------------------------------------------------------------------------
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
+function isFiniteNumber(value: JsonValue | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isDialog(value: unknown): value is BrowserDialog | null {
+function isDialog(
+  value: JsonValue | undefined
+): value is (JsonObject & BrowserDialog) | null {
   return (
     value === null ||
-    (isRecord(value) &&
+    (isJsonObject(value) &&
       typeof value.type === "string" &&
       typeof value.message === "string")
   );
 }
 
-function isBrowserPage(value: unknown): value is BrowserTab {
+function isBrowserPage(value: JsonValue): value is JsonObject & BrowserTab {
   return (
-    isRecord(value) &&
+    isJsonObject(value) &&
     typeof value.id === "string" &&
     typeof value.url === "string" &&
     typeof value.title === "string" &&
@@ -161,7 +160,9 @@ function isBrowserPage(value: unknown): value is BrowserTab {
   );
 }
 
-function isViewerControl(value: unknown): value is BrowserViewerControl {
+function isViewerControl(
+  value: JsonValue | undefined
+): value is BrowserViewerControl {
   return (
     value === "agent" ||
     value === "you" ||
@@ -174,13 +175,13 @@ function isViewerControl(value: unknown): value is BrowserViewerControl {
 export function parseBrowserServerMessage(
   data: string
 ): BrowserServerMessage | null {
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
     parsed = JSON.parse(data);
   } catch {
     return null;
   }
-  if (!isRecord(parsed)) return null;
+  if (!isJsonObject(parsed)) return null;
   const m = parsed;
   switch (m.type) {
     case "starting":
