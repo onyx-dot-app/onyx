@@ -6863,9 +6863,7 @@
         },
         "toasts": {
           "providerEnableFailed": "プロバイダーを有効にできませんでした：{message}",
-          "providerEnabled": "プロバイダーを有効にしました。",
           "providerUpdateFailed": "プロバイダーを更新できませんでした：{message}",
-          "providerUpdated": "プロバイダーを更新しました。",
           "setDefaultFailed": "プロバイダーをデフォルトに設定できませんでした",
           "setNewDefaultFailed": "新しいプロバイダーをデフォルトに設定できませんでした",
           "testApiKeyFailed": "API キーのテスト中にエラーが発生しました。",

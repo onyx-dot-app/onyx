@@ -6863,9 +6863,7 @@
         },
         "toasts": {
           "providerEnableFailed": "启用提供商失败：{message}",
-          "providerEnabled": "提供商已成功启用！",
           "providerUpdateFailed": "更新提供商失败：{message}",
-          "providerUpdated": "提供商已成功更新！",
           "setDefaultFailed": "无法将提供商设为默认",
           "setNewDefaultFailed": "无法将新提供商设为默认",
           "testApiKeyFailed": "测试 API 密钥时出错。",

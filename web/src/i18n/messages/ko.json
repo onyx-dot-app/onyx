@@ -6863,9 +6863,7 @@
         },
         "toasts": {
           "providerEnableFailed": "제공자를 활성화하지 못했습니다: {message}",
-          "providerEnabled": "제공자를 활성화했습니다!",
           "providerUpdateFailed": "제공자를 업데이트하지 못했습니다: {message}",
-          "providerUpdated": "제공자를 업데이트했습니다!",
           "setDefaultFailed": "제공자를 기본으로 설정하지 못했습니다",
           "setNewDefaultFailed": "새 제공자를 기본으로 설정하지 못했습니다",
           "testApiKeyFailed": "API 키를 테스트하는 중 오류가 발생했습니다.",

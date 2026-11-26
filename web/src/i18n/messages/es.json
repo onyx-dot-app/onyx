@@ -6863,9 +6863,7 @@
         },
         "toasts": {
           "providerEnableFailed": "No se pudo activar el proveedor: {message}",
-          "providerEnabled": "¡Proveedor activado correctamente!",
           "providerUpdateFailed": "No se pudo actualizar el proveedor: {message}",
-          "providerUpdated": "¡Proveedor actualizado correctamente!",
           "setDefaultFailed": "No se pudo establecer el proveedor como predeterminado",
           "setNewDefaultFailed": "No se pudo establecer el nuevo proveedor como predeterminado",
           "testApiKeyFailed": "Ocurrió un error al probar la clave de API.",

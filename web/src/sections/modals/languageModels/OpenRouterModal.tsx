@@ -150,11 +150,6 @@ export default function OpenRouterModal({
               await onSuccess();
             } else {
               await refreshLlmProviderCaches(mutate);
-              toast.success(
-                existingLlmProvider
-                  ? t("toasts.providerUpdated")
-                  : t("toasts.providerEnabled")
-              );
             }
           },
         });
