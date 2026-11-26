@@ -922,6 +922,9 @@ describe("Custom API", () => {
     const { user } = open({ kind: "api" });
     await user.upload(screen.getByLabelText(add.api.upload.label), pending);
     expect(screen.getByRole("button", { name: add.continue })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: add.api.upload.label })
+    ).toBeDisabled();
     finishRead("{}");
     await waitFor(() =>
       expect(screen.getByRole("button", { name: add.continue })).toBeEnabled()

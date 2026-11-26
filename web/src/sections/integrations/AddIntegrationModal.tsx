@@ -627,6 +627,7 @@ export default function AddIntegrationModal({
                 prominence="tertiary"
                 icon={SvgUploadCloud}
                 multiple={false}
+                disabled={readingFile}
                 inputLabel={t("api.upload.label")}
                 onFiles={(files) => {
                   const picked = files[0];
