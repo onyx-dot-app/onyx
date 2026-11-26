@@ -111,7 +111,7 @@ class MockUpstream:
         response.is_redirect = False
         response.status_code = 200
         response.headers = {"Content-Type": "application/json"}
-        response.iter_content.return_value = [self.body]
+        response.raw.read1.side_effect = [self.body, b""]
         return response
 
 
@@ -187,7 +187,8 @@ def _policies(db_session: Session, integration_id: int) -> dict[str, Any]:
 def _fake_spec_get(document: bytes) -> MagicMock:
     response = MagicMock()
     response.status_code = 200
-    response.iter_content.return_value = [document]
+    response.headers = {}
+    response.raw.read1.side_effect = [document, b""]
     get = MagicMock()
     get.return_value.__enter__.return_value = response
     return get

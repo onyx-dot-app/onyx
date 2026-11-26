@@ -1,8 +1,10 @@
 import ipaddress
 import socket
+import threading
 import unicodedata
 from collections.abc import Iterator
-from typing import Any, Literal
+from enum import Enum
+from typing import Any, Literal, NamedTuple
 from urllib.parse import (
     parse_qs,
     parse_qsl,
@@ -14,6 +16,7 @@ from urllib.parse import (
 )
 
 import requests
+import urllib3
 from requests.adapters import HTTPAdapter
 
 from onyx.utils.logger import setup_logger
@@ -591,6 +594,87 @@ def ssrf_safe_get(
         raise
 
     return response
+
+
+_BODY_CHUNK_BYTES = 64 * 1024
+
+
+class BodyReadFailure(str, Enum):
+    TOO_LARGE = "too_large"
+    DEADLINE = "deadline"
+
+
+class BodyReadError(Exception):
+    def __init__(self, failure: BodyReadFailure) -> None:
+        super().__init__(failure.value)
+        self.failure = failure
+
+
+class BoundedBody(NamedTuple):
+    content: bytes
+    # The body is longer than the limit; ``content`` holds the first part.
+    truncated: bool
+
+
+def read_bounded_body(
+    response: requests.Response,
+    *,
+    max_bytes: int | None,
+    deadline_seconds: float,
+    truncate: bool = False,
+) -> BoundedBody:
+    """Read the decoded body of a streamed response. A per-read socket timeout
+    lets a server that sends a few bytes at a time hold the call open, so the
+    read also ends at a wall-clock deadline. A body over ``max_bytes`` raises,
+    or with ``truncate`` returns its first ``max_bytes``. Raises
+    ``BodyReadError`` and the read errors of urllib3."""
+    declared = response.headers.get("Content-Length")
+    if (
+        not truncate
+        and max_bytes is not None
+        and declared is not None
+        and declared.isdigit()
+        and int(declared) > max_bytes
+    ):
+        raise BodyReadError(BodyReadFailure.TOO_LARGE)
+
+    deadline_hit = threading.Event()
+
+    def _on_deadline() -> None:
+        deadline_hit.set()
+        # Shutting down the read side ends a read blocked on a stalled server.
+        try:
+            response.raw.shutdown()
+        except Exception:
+            pass
+
+    timer = threading.Timer(deadline_seconds, _on_deadline)
+    timer.daemon = True
+    timer.start()
+    chunks: list[bytes] = []
+    total = 0
+    truncated = False
+    try:
+        # read1 returns what is available; urllib3 bounds decoded output.
+        while chunk := response.raw.read1(_BODY_CHUNK_BYTES, decode_content=True):
+            if deadline_hit.is_set():
+                break
+            if max_bytes is not None and total + len(chunk) > max_bytes:
+                if not truncate:
+                    raise BodyReadError(BodyReadFailure.TOO_LARGE)
+                chunks.append(chunk[: max_bytes - total])
+                truncated = True
+                break
+            total += len(chunk)
+            chunks.append(chunk)
+    except urllib3.exceptions.HTTPError:
+        if not deadline_hit.is_set():
+            raise
+    finally:
+        timer.cancel()
+    if deadline_hit.is_set():
+        raise BodyReadError(BodyReadFailure.DEADLINE)
+    return BoundedBody(b"".join(chunks), truncated)
 
 
 def normalize_url(url: str) -> str:

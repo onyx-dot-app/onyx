@@ -71,7 +71,7 @@ def _response(body: bytes = b'{"ok": true}', status: int = 200) -> MagicMock:
     response.is_redirect = False
     response.status_code = status
     response.headers = {"Content-Type": "application/json"}
-    response.iter_content.return_value = [body]
+    response.raw.read1.side_effect = [body, b""]
     return response
 
 

@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 import requests
+import urllib3
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from onyx.integrations.call_credentials import (
@@ -22,14 +23,18 @@ from onyx.server.security.models import OutboundSSRFParams, SSRFProtectionLevel
 from onyx.server.security.store import get_security_settings
 from onyx.tools.models import CustomToolCallSummary, CustomToolErrorInfo
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException, ssrf_safe_request
+from onyx.utils.url import (
+    BodyReadError,
+    SSRFException,
+    read_bounded_body,
+    ssrf_safe_request,
+)
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 # (connect, read) seconds
 TOOL_REQUEST_TIMEOUT: tuple[float, float] = (10, 120)
-_READ_CHUNK_BYTES = 64 * 1024
 
 
 def tool_request_ssrf_params() -> OutboundSSRFParams:
@@ -155,8 +160,8 @@ def send_tool_request(
     trust_env: bool = True,
 ) -> ToolResponse:
     """Send one request with the SSRF checks of ``ssrf``. A redirect is
-    refused, so a credential header never goes to a second host. Raises
-    ``ToolRequestError``."""
+    refused, so a credential header never goes to a second host. The read
+    timeout also bounds the whole body read. Raises ``ToolRequestError``."""
     body: dict[str, Any] = {} if json_body is None else {"json": json_body}
     try:
         response = ssrf_safe_request(
@@ -180,28 +185,25 @@ def send_tool_request(
     try:
         if response.is_redirect:
             raise ToolRequestError(ToolRequestFailure.REDIRECT, response.status_code)
-        chunks: list[bytes] = []
-        size = 0
-        truncated = False
-        for chunk in response.iter_content(chunk_size=_READ_CHUNK_BYTES):
-            room = (
-                len(chunk) if max_response_bytes is None else max_response_bytes - size
-            )
-            if len(chunk) > room:
-                chunks.append(chunk[:room])
-                truncated = True
-                break
-            chunks.append(chunk)
-            size += len(chunk)
+        bounded = read_bounded_body(
+            response,
+            max_bytes=max_response_bytes,
+            deadline_seconds=timeout[1] if isinstance(timeout, tuple) else timeout,
+            truncate=True,
+        )
         return ToolResponse(
             status_code=response.status_code,
             content_type=response.headers.get("Content-Type", ""),
-            body=b"".join(chunks),
-            truncated=truncated,
+            body=bounded.content,
+            truncated=bounded.truncated,
         )
-    except requests.exceptions.Timeout as e:
+    except (
+        BodyReadError,
+        requests.exceptions.Timeout,
+        urllib3.exceptions.TimeoutError,
+    ) as e:
         raise ToolRequestError(ToolRequestFailure.TIMEOUT) from e
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, urllib3.exceptions.HTTPError) as e:
         raise ToolRequestError(ToolRequestFailure.UNREACHABLE) from e
     finally:
         response.close()

@@ -473,7 +473,7 @@ def test_a_rest_tool_that_gets_401_marks_its_connection(
     rejected.is_redirect = False
     rejected.status_code = 401
     rejected.headers = {"Content-Type": "application/json"}
-    rejected.iter_content.return_value = [b"{}"]
+    rejected.raw.read1.side_effect = [b"{}", b""]
 
     with patch(
         "onyx.tools.tool_implementations.http_request.ssrf_safe_request",

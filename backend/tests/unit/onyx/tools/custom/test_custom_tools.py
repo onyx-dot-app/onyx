@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest.mock
 import uuid
 from typing import Any
@@ -32,6 +33,8 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 )
 from onyx.tools.tool_implementations.http_request import (
     TOOL_REQUEST_TIMEOUT,
+    ToolRequestError,
+    ToolRequestFailure,
     ToolResponse,
 )
 from onyx.tools.tool_name import sanitize_tool_name
@@ -77,8 +80,9 @@ def _response(
     response.is_redirect = False
     response.status_code = status
     response.headers = {"Content-Type": content_type}
-    response.iter_content.return_value = [
-        body if isinstance(body, bytes) else json.dumps(body).encode()
+    response.raw.read1.side_effect = [
+        body if isinstance(body, bytes) else json.dumps(body).encode(),
+        b"",
     ]
     return response
 
@@ -1222,3 +1226,69 @@ def test_a_bad_introspection_result_is_an_invalid_input(data: object) -> None:
                 GraphQLIntrospectRequest(endpoint_url="https://api.example.com/graphql")
             )
     assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
+class _DripStream:
+    """A server that sends one byte every 10 ms for one second. Closing the
+    read side ends the stream at once."""
+
+    def __init__(self) -> None:
+        self._left = 100
+        self._shut = threading.Event()
+
+    def _next(self) -> bytes:
+        if self._left == 0 or self._shut.wait(0.01):
+            return b""
+        self._left -= 1
+        return b"x"
+
+    def read1(self, _amt: int = -1, decode_content: bool = True) -> bytes:  # noqa: ARG002
+        return self._next()
+
+    def read(self, _amt: int | None = None, decode_content: bool = True) -> bytes:  # noqa: ARG002
+        return self._next()
+
+    def shutdown(self) -> None:
+        self._shut.set()
+
+    def close(self) -> None:
+        self._shut.set()
+
+
+def _drip_response() -> requests.Response:
+    response = requests.Response()
+    response.status_code = 200
+    response.headers["Content-Type"] = "application/json"
+    response.raw = _DripStream()
+    return response
+
+
+def test_a_slow_tool_response_body_is_a_timeout() -> None:
+    """The read timeout bounds the whole body, not only each read."""
+    with patch.object(http_request, "ssrf_safe_request", return_value=_drip_response()):
+        with pytest.raises(ToolRequestError) as error:
+            http_request.send_tool_request(
+                "GET",
+                "https://api.example.com/slow",
+                headers={},
+                ssrf=http_request.tool_request_ssrf_params(),
+                timeout=(1, 0.2),
+            )
+    assert error.value.failure is ToolRequestFailure.TIMEOUT
+
+
+def test_a_slow_spec_body_is_a_bad_gateway(monkeypatch: pytest.MonkeyPatch) -> None:
+    from onyx.error_handling.error_codes import OnyxErrorCode
+    from onyx.integrations import service
+    from onyx.server.features.integrations.models import OpenApiEndpointsRequest
+
+    monkeypatch.setattr(service, "_SPEC_FETCH_TIMEOUT_SECONDS", 0.2)
+    with (
+        patch.object(service, "get_security_settings"),
+        patch.object(service, "ssrf_safe_get", return_value=_drip_response()),
+        pytest.raises(OnyxError) as error,
+    ):
+        service.import_openapi_document(
+            OpenApiEndpointsRequest(spec_url="https://api.example.com/spec.json")
+        )
+    assert error.value.error_code is OnyxErrorCode.BAD_GATEWAY

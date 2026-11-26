@@ -466,8 +466,8 @@ def test_a_pasted_spec_has_the_size_limit_of_a_spec_url() -> None:
 def test_a_fetched_spec_with_a_query_in_its_server_url_is_refused() -> None:
     spec = _callable_spec()
     spec["servers"] = [{"url": "https://pets.example.com/api?key=1"}]
-    response = MagicMock(status_code=200)
-    response.iter_content.return_value = [json.dumps(spec).encode()]
+    response = MagicMock(status_code=200, headers={})
+    response.raw.read1.side_effect = [json.dumps(spec).encode(), b""]
     fetch = MagicMock()
     fetch.return_value.__enter__.return_value = response
 

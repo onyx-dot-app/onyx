@@ -434,7 +434,9 @@ Protection level. `MCP_SERVER_ALLOW_PRIVATE_NETWORK` and
 `tools/tool_implementations/http_request.py:tool_request_ssrf_params`:
 self-hosted allows private targets at every level and loopback only at
 `DISABLED`, cloud blocks all internal targets, and `ssrf_safe_request` does not
-follow redirects.
+follow redirects. `send_tool_request` also ends the body read at the read
+timeout through `utils/url.py:read_bounded_body`, which open_url shares, so a
+server that sends a few bytes at a time gives a timeout failure.
 
 **Action policies.** `PUT /admin/integrations/{id}/actions` writes the admin
 rows through `backend/onyx/db/integration.py:set_policy_rows__no_commit` under

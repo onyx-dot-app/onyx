@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 import requests
+import urllib3
 from graphql import get_introspection_query
 from sqlalchemy.orm import Session
 
@@ -192,7 +193,13 @@ from onyx.tools.tool_implementations.http_request import (
 )
 from onyx.utils.encryption import is_masked_credential, mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException, ssrf_safe_get
+from onyx.utils.url import (
+    BodyReadError,
+    BodyReadFailure,
+    SSRFException,
+    read_bounded_body,
+    ssrf_safe_get,
+)
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -552,7 +559,6 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
         raise RuntimeError("Bug: the model requires the spec text or a URL.")
     spec_url = request.spec_url.strip()
     policy = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
-    body = bytearray()
     try:
         with ssrf_safe_get(
             spec_url,
@@ -568,19 +574,25 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
                     OnyxErrorCode.BAD_GATEWAY,
                     f"The spec URL answered with HTTP {response.status_code}.",
                 )
-            for chunk in response.iter_content(chunk_size=64 * 1024):
-                body.extend(chunk)
-                if len(body) > _MAX_SPEC_BYTES:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                        "The spec is larger than 5 MB.",
-                    )
+            body = read_bounded_body(
+                response,
+                max_bytes=_MAX_SPEC_BYTES,
+                deadline_seconds=_SPEC_FETCH_TIMEOUT_SECONDS,
+            ).content
+    except BodyReadError as e:
+        if e.failure is BodyReadFailure.TOO_LARGE:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE, "The spec is larger than 5 MB."
+            ) from e
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, "The spec URL did not answer in time."
+        ) from e
     except (SSRFException, ValueError) as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             f"Onyx cannot fetch the spec: {e}{ssrf_error_hint(spec_url, e)}",
         ) from e
-    except requests.RequestException as e:
+    except (requests.RequestException, urllib3.exceptions.HTTPError) as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY, f"Onyx could not fetch the spec: {e}"
         ) from e
