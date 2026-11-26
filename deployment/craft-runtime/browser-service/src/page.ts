@@ -214,14 +214,14 @@ const DOTTED_SCRIPT = `(() => {
 // Masks the page's password values in its title, as a snapshot does, without sending the values out.
 const PAGE_STATE_SCRIPT = `(() => {
   const rawTitle = document.title.slice(0, ${TITLE_LIMIT});
-  let title = rawTitle;
-  const values = ${DOTTED_SCRIPT}.filter((value) => value.length <= rawTitle.length);
+  let title = document.title;
+  const values = ${DOTTED_SCRIPT}.filter((value) => value.length <= title.length);
   for (const value of values.sort((a, b) => b.length - a.length)) {
     const literal = value.replace(/[.*+?^\${}()|[\\]\\\\]/g, "\\\\$&");
     const source = value.length < 4 ? "(?<![\\\\p{L}\\\\p{N}_])" + literal + "(?![\\\\p{L}\\\\p{N}_])" : literal;
     title = title.replace(new RegExp(source, "gu"), ${JSON.stringify(MASKED_VALUE)});
   }
-  return { url: location.href, title, rawTitle };
+  return { url: location.href, title: title.slice(0, ${TITLE_LIMIT}), rawTitle };
 })()`;
 
 const pageChanged = () =>

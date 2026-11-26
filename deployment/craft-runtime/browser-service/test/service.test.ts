@@ -939,6 +939,9 @@ describe("browser service", () => {
     const snap = await ok(service.socketPath, chat, "snapshot");
     assert.equal((snap.tab as TabJson).title, "Login ••••••••");
     assert.doesNotMatch(JSON.stringify(snap), /hunter22/);
+    await ok(service.socketPath, chat, "evaluate", { expression: `document.title = "x".repeat(508) + "hunter22"; 1` });
+    const cut = await ok(service.socketPath, chat, "status");
+    assert.doesNotMatch((cut.tabs as Array<TabJson>)[0]?.title ?? "", /hunt$/);
   });
 
   test("a write refused by human control does not change the current tab", async () => {
