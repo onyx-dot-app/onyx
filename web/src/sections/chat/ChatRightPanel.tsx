@@ -22,7 +22,7 @@ import {
   SvgSearchMenu,
   SvgSidebar,
 } from "@opal/icons";
-import { cn, richNodes } from "@opal/utils";
+import { cn, richNodes, stripBidiControls } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
   useChatSessionStore,
@@ -164,13 +164,15 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   );
   const onDownload = useCallback(
     ({ fileName }: BrowserDownload, downloadSessionId: string) => {
-      toast.info(tb("download.saved", { fileName }), {
+      // The page names the file, so bidi controls must not disguise it
+      const shownName = stripBidiControls(fileName);
+      toast.info(tb("download.saved", { fileName: shownName }), {
         action: {
           icon: SvgDownload,
           label: tb("download.action"),
           // An attachment link starts the download without leaving the page
           onClick: () =>
-            downloadFile(fileName, {
+            downloadFile(shownName, {
               url: browserDownloadUrl(downloadSessionId, fileName),
             }),
         },

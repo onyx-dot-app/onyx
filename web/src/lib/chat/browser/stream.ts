@@ -6,6 +6,7 @@
  * and apps/web/src/browser/ServerBrowserSurface.tsx).
  * Copyright (c) 2026 T3 Tools Inc. Licensed under the MIT License.
  */
+import { stripBidiControls } from "@opal/utils";
 import { PacketType } from "@/app/app/services/streamingModels";
 import type {
   BrowserDialog,
@@ -44,7 +45,7 @@ export function browserUrlFromInput(input: string): string | null {
 export function browserPageTitle(
   page: Pick<BrowserTab, "title" | "url">
 ): string | null {
-  const title = page.title.trim();
+  const title = stripBidiControls(page.title).trim();
   if (title) return title;
   try {
     return new URL(page.url).host || null;

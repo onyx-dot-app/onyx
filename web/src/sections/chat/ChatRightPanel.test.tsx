@@ -1580,6 +1580,29 @@ describe("the chat's browser", () => {
     expect(clicked[0]!.download).toBe("a b.csv");
   });
 
+  test("a download's toast shows and saves its name without bidi controls", () => {
+    const toastInfo = jest.spyOn(toast, "info");
+    const clicked: HTMLAnchorElement[] = [];
+    jest
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        clicked.push(this);
+      });
+    renderChat([[REPORT]]);
+    act(() => openBrowserInChat("session"));
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    receive({ type: "download", fileName: "invoice\u202Efdp.exe" });
+    const [message, options] = toastInfo.mock.calls[0]!;
+    expect(message).toBe("The browser downloaded invoicefdp.exe");
+    act(() => options?.action?.onClick());
+    expect(clicked[0]!.download).toBe("invoicefdp.exe");
+    // The service stores the file under the name that it sent
+    expect(clicked[0]!.getAttribute("href")).toBe(
+      "/api/chat/sessions/session/browser/downloads/invoice%E2%80%AEfdp.exe"
+    );
+  });
+
   test("a new page asked for before the connection does not go to another chat's browser", async () => {
     renderChat([[REPORT]]);
     update({ type: "showTab", tabId: "files" });
