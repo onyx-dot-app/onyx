@@ -323,7 +323,9 @@ def _construct_tools_impl(
             # Handle Web Search Tool
             elif tool_cls.__name__ == WebSearchTool.__name__:
                 try:
-                    tools.append(WebSearchTool(tool_id=db_tool_model.id))
+                    tools.append(
+                        WebSearchTool(tool_id=db_tool_model.id, db_session=db_session)
+                    )
                 except ValueError as e:
                     logger.error("Failed to initialize Internet Search Tool: %s", e)
                     raise ValueError(
@@ -348,6 +350,7 @@ def _construct_tools_impl(
                             user=user,
                             web_fetch_disabled=open_url_web_fetch_disabled,
                             shape=OPEN_URL_SHAPES[llm.config.tool_family],
+                            db_session=db_session,
                         )
                     )
                 except RuntimeError as e:

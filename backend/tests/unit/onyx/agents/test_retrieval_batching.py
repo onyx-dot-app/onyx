@@ -393,7 +393,7 @@ def test_real_retrieval_bindings_merge_their_public_argument(
         module = "onyx.tools.tool_implementations.web_search.web_search_tool"
         provider = MagicMock(provider_type="brave", config={})
         with (
-            patch(f"{module}.get_session_with_current_tenant"),
+            patch(f"{module}.get_session_with_current_tenant_if_none"),
             patch(f"{module}.fetch_active_web_search_provider", return_value=provider),
             patch(f"{module}.build_search_provider_from_config"),
         ):
