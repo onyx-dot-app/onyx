@@ -101,18 +101,10 @@ type Detection =
   | { shape: "preset"; preset: IntegrationPreset }
   | DetectedApi;
 
-/** The URL that Onyx calls for a detected API; null for no API. */
-function apiUrlOf(api: Detection | null): string | null {
-  switch (api?.shape) {
-    case "openapi":
-      return api.view.base_url;
-    case "rest":
-      return api.baseUrl;
-    case "graphql":
-      return api.config.endpoint_url;
-    default:
-      return null;
-  }
+/** The URL and spec file that a detection checked. */
+interface DetectionInputs {
+  url: string | null;
+  file: SpecFile | null;
 }
 
 const TRANSPORTS: readonly McpTransport[] = ["STREAMABLE_HTTP", "SSE"];
@@ -221,6 +213,8 @@ export default function AddIntegrationModal({
   const [busy, setBusy] = useState(false);
   // Each detection gets a new run; Back and close drop the run in flight.
   const run = useRef<AbortController | null>(null);
+  // Continue with these inputs again returns to the setup step as it was.
+  const detectedFrom = useRef<DetectionInputs | null>(null);
 
   useEffect(() => {
     if (prefill && !badPrefillUrl) {
@@ -249,7 +243,12 @@ export default function AddIntegrationModal({
     return run.current;
   }
 
-  function enterSetup(next: Detection, signInDraft: SignInDraft) {
+  function enterSetup(
+    next: Detection,
+    signInDraft: SignInDraft,
+    inputs: DetectionInputs | null
+  ) {
+    detectedFrom.current = inputs;
     setDetection(next);
     setSignIn(signInDraft);
     setShowErrors(false);
@@ -291,7 +290,10 @@ export default function AddIntegrationModal({
           ? prefill.transport
           : "STREAMABLE_HTTP")
     );
-    enterSetup({ shape: "mcp_server", probe }, mcpSignIn(probe));
+    enterSetup({ shape: "mcp_server", probe }, mcpSignIn(probe), {
+      url: normalizedUrl(serverUrl),
+      file: null,
+    });
   }
 
   async function detectCustomApi(apiUrl: string | null) {
@@ -317,37 +319,38 @@ export default function AddIntegrationModal({
       return;
     }
     if (detected.shape === "openapi") setBaseUrl(detected.view.base_url);
-    // Endpoint lines and sign-in set for one API must not be saved against
-    // another.
-    const sameApi =
-      detection?.shape === detected.shape &&
-      apiUrlOf(detection) === apiUrlOf(detected);
-    if (detected.shape === "rest" && !sameApi) setEndpoints("");
+    setEndpoints("");
     // Most APIs take a key; the method is ready for a later choice of sign-in.
     enterSetup(
       detected,
-      sameApi ? signIn : { ...DEFAULT_SIGN_IN, authMethod: "api_key" }
+      { ...DEFAULT_SIGN_IN, authMethod: "api_key" },
+      { url: apiUrl, file }
     );
   }
 
   function pickPreset(preset: IntegrationPreset) {
     setName(preset.name);
     setOrgCredentials({});
-    enterSetup({ shape: "preset", preset }, presetSignIn(preset));
+    enterSetup({ shape: "preset", preset }, presetSignIn(preset), null);
   }
 
   function next() {
     setShowErrors(true);
     setDetectError(null);
     if (!name.trim()) return;
-    if (flow === "mcp_server") {
-      const serverUrl = normalizedUrl(url);
-      if (serverUrl) void probeMcp(name, serverUrl);
+    const target = normalizedUrl(url);
+    const last = detectedFrom.current;
+    if (last && last.url === target && last.file === file) {
+      setShowErrors(false);
+      setStep("setup");
       return;
     }
-    const apiUrl = normalizedUrl(url);
-    if (url.trim() ? !apiUrl : !file) return;
-    void detectCustomApi(apiUrl);
+    if (flow === "mcp_server") {
+      if (target) void probeMcp(name, target);
+      return;
+    }
+    if (url.trim() ? !target : !file) return;
+    void detectCustomApi(target);
   }
 
   function back() {

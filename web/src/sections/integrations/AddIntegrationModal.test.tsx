@@ -196,8 +196,8 @@ describe("MCP server", () => {
     );
   });
 
-  test("a prefilled server keeps its transport after Back", async () => {
-    mockProbe.mockResolvedValueOnce(OAUTH_PROBE).mockResolvedValueOnce({
+  test("a prefilled server keeps its transport when the check finds none", async () => {
+    mockProbe.mockResolvedValue({
       kind: "unreachable",
       reason: "connection_failed",
     });
@@ -215,9 +215,6 @@ describe("MCP server", () => {
         returnTo: "/app/customize/plugins/7?tab=integrations",
       },
     });
-    await screen.findByText(add.mcp.probe.oauth);
-    await user.click(screen.getByRole("button", { name: add.back }));
-    await user.click(screen.getByRole("button", { name: add.continue }));
     await screen.findByText(add.mcp.probe.unreachable);
     await submit(user);
 
@@ -226,6 +223,58 @@ describe("MCP server", () => {
         requestBody(fetchMock, "POST", "/api/admin/integrations")
       ).toMatchObject({ config: { transport: "SSE" } })
     );
+  });
+
+  test("Back to rename keeps the sign-in and transport", async () => {
+    mockProbe.mockResolvedValue(OAUTH_PROBE);
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations": makeDetail({ id: 12 }),
+      "/api/admin/integrations": [],
+    });
+    const { user } = open({ kind: "mcp_server" });
+    await fillConnect(
+      user,
+      "Docs",
+      add.mcp.url.title,
+      "https://mcp.example.com/sse"
+    );
+    await screen.findByText(add.mcp.probe.oauth);
+    await user.click(
+      screen.getByRole("combobox", { name: copy.signIn.mode.title })
+    );
+    await user.click(
+      await screen.findByRole("option", { name: copy.signIn.mode.none })
+    );
+    await user.click(
+      screen.getByRole("button", { name: `Expand ${add.advanced}` })
+    );
+    await user.click(
+      screen.getByRole("combobox", { name: add.mcp.transport.title })
+    );
+    await user.click(
+      await screen.findByRole("option", {
+        name: add.mcp.transport.streamableHttp,
+      })
+    );
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.type(
+      screen.getByRole("textbox", { name: add.name.title }),
+      " Server"
+    );
+    await user.click(screen.getByRole("button", { name: add.continue }));
+    await submit(user);
+
+    await waitFor(() =>
+      expect(
+        requestBody(fetchMock, "POST", "/api/admin/integrations")
+      ).toMatchObject({
+        name: "Docs Server",
+        auth_mode: "none",
+        config: { transport: "STREAMABLE_HTTP" },
+      })
+    );
+    expect(mockProbe).toHaveBeenCalledTimes(1);
   });
 
   test("asks for a name and a URL before the check", async () => {
@@ -578,6 +627,42 @@ describe("Custom API", () => {
     }
   );
 
+  test("Back to rename keeps an edited base URL", async () => {
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": {
+        shape: "openapi",
+        openapi_document: "{}",
+        base_url: "",
+        endpoints: ["GET /pets List pets"],
+        skipped: [],
+      },
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Pets",
+      add.api.url.title,
+      "https://pets.example.com/specs/openapi.json"
+    );
+    const baseUrl = await screen.findByRole("textbox", {
+      name: add.rest.baseUrl.title,
+    });
+    await user.clear(baseUrl);
+    await user.type(baseUrl, "https://staging.pets.example.com");
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.type(
+      screen.getByRole("textbox", { name: add.name.title }),
+      " API"
+    );
+    await user.click(screen.getByRole("button", { name: add.continue }));
+
+    expect(
+      await screen.findByRole("textbox", { name: add.rest.baseUrl.title })
+    ).toHaveValue("https://staging.pets.example.com");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   test("a spec with several servers asks which base URL to call", async () => {
     const fetchMock = mockFetch({
       "POST /api/admin/integrations/openapi-import": {
@@ -724,48 +809,40 @@ describe("Custom API", () => {
     );
   });
 
-  test("keeps the REST endpoints and sign-in after Back only for the same base URL", async () => {
-    mockFetch({
-      "POST /api/admin/integrations/openapi-import": () => failure(400),
-      "POST /api/admin/integrations/graphql-introspect": () => failure(400),
+  test("a new URL checks again and starts the setup over", async () => {
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": {
+        shape: "openapi",
+        openapi_document: "{}",
+        base_url: "https://pets.example.com",
+        endpoints: ["GET /pets List pets"],
+        skipped: [],
+      },
     });
     const { user } = open({ kind: "api" });
     await fillConnect(
       user,
-      "Billing",
+      "Pets",
       add.api.url.title,
-      "https://billing.example.com"
+      "https://pets.example.com/v1/openapi.json"
     );
-    const lines = await screen.findByRole("textbox", {
-      name: add.rest.endpoints.title,
-    });
-    await user.type(lines, "GET /invoices List invoices");
     await user.click(
-      screen.getByRole("combobox", { name: copy.signIn.mode.title })
+      await screen.findByRole("combobox", { name: copy.signIn.mode.title })
     );
     await user.click(
       await screen.findByRole("option", { name: copy.signIn.mode.individual })
     );
 
-    await user.click(screen.getByRole("button", { name: add.back }));
-    await user.click(screen.getByRole("button", { name: add.continue }));
-    expect(
-      await screen.findByRole("textbox", { name: add.rest.endpoints.title })
-    ).toHaveValue("GET /invoices List invoices");
-    expect(
-      screen.getByRole("combobox", { name: copy.signIn.mode.title })
-    ).toHaveValue(copy.signIn.mode.individual);
-
+    // The new spec calls the same server, but it is a new detection.
     await user.click(screen.getByRole("button", { name: add.back }));
     const url = screen.getByRole("textbox", { name: add.api.url.title });
     await user.clear(url);
-    await user.type(url, "https://payroll.example.com");
+    await user.type(url, "https://pets.example.com/v2/openapi.json");
     await user.click(screen.getByRole("button", { name: add.continue }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(
-      await screen.findByRole("textbox", { name: add.rest.endpoints.title })
-    ).toHaveValue("");
-    expect(
-      screen.getByRole("combobox", { name: copy.signIn.mode.title })
+      await screen.findByRole("combobox", { name: copy.signIn.mode.title })
     ).toHaveValue(copy.signIn.mode.none);
   });
 
