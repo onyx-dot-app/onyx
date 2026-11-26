@@ -31,11 +31,11 @@ type ModalRootProps = React.ComponentProps<typeof DialogPrimitive.Root>;
  */
 function ModalRoot({ open, ...props }: ModalRootProps) {
   const owner = useModalOwner();
+  const isOpen = owner && !owner.isOpen ? false : open;
   return (
-    <DialogPrimitive.Root
-      open={owner && !owner.isOpen ? false : open}
-      {...props}
-    />
+    <ModalOpenContext.Provider value={isOpen ?? false}>
+      <DialogPrimitive.Root open={isOpen} {...props} />
+    </ModalOpenContext.Provider>
   );
 }
 
@@ -47,22 +47,21 @@ function ModalExitSignal() {
   return null;
 }
 
-/**
- * How many modal cards enclose this point of the React tree. A modal opened
- * from inside another sits one layer above it, so its overlay covers and
- * blurs the modal below.
- */
-const ModalDepthContext = React.createContext(0);
+/** Whether the enclosing modal is open, so a nested modal knows when it
+ *  starts to close. */
+const ModalOpenContext = React.createContext(false);
 
-/** The stacking data for a modal layer `depth` levels deep. */
-function nestedLayer(depth: number) {
-  return depth > 0
-    ? {
-        "data-nested": "",
-        style: { "--opal-modal-depth": depth } as React.CSSProperties,
-      }
-    : {};
+/**
+ * The modal card that encloses this point of the React tree, if any. A modal
+ * opened from inside another covers it: the one below slides out to the
+ * start side, the new one slides in from the end side, and Back reverses it.
+ */
+interface ModalStackValue {
+  depth: number;
+  setCovered: (covered: boolean) => void;
 }
+
+const ModalStackContext = React.createContext<ModalStackValue | null>(null);
 
 interface ModalOverlayProps extends WithoutStyles<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -71,12 +70,10 @@ interface ModalOverlayProps extends WithoutStyles<
 }
 
 function ModalOverlay({ ref, ...props }: ModalOverlayProps) {
-  const depth = React.useContext(ModalDepthContext);
   return (
     <DialogPrimitive.Overlay
       ref={ref}
       className="opal-modal-overlay"
-      {...nestedLayer(depth)}
       {...props}
     />
   );
@@ -168,7 +165,19 @@ function ModalContent({
   ...props
 }: ModalContentProps) {
   const closeButtonRef = React.useRef<HTMLDivElement>(null);
-  const depth = React.useContext(ModalDepthContext);
+  const parent = React.useContext(ModalStackContext);
+  const isOpen = React.useContext(ModalOpenContext);
+  const depth = parent ? parent.depth + 1 : 0;
+  // Covered by a modal opened from this one.
+  const [covered, setCovered] = React.useState(false);
+  const stack = React.useMemo(() => ({ depth, setCovered }), [depth]);
+  // A nested modal covers its parent while open; it uncovers it as soon as it
+  // starts to close, so both cards slide at once.
+  React.useEffect(() => {
+    if (!parent) return;
+    parent.setCovered(isOpen);
+    return () => parent.setCovered(false);
+  }, [parent, isOpen]);
   const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
   const [hasDescription, setHasDescription] = React.useState(false);
   const hasUserTypedRef = React.useRef(false);
@@ -265,7 +274,10 @@ function ModalContent({
       } as React.CSSProperties)
     : undefined;
 
-  const layerStyle = nestedLayer(depth).style;
+  const layerStyle =
+    depth > 0
+      ? ({ "--opal-modal-depth": depth } as React.CSSProperties)
+      : undefined;
   const positionerStyle =
     maxHeight || layerStyle
       ? {
@@ -280,6 +292,7 @@ function ModalContent({
   const positionerData = {
     "data-width": width,
     ...(depth > 0 && { "data-nested": "" }),
+    ...(covered && { "data-covered": "" }),
     ...(!hasContainerCenter && { "data-viewport-centered": "" }),
   };
 
@@ -341,12 +354,10 @@ function ModalContent({
         setHasDescription,
       }}
     >
-      <ModalDepthContext.Provider value={depth + 1}>
+      <ModalStackContext.Provider value={stack}>
         <DialogPrimitive.Portal>
-          {/* The overlay sits at this modal's own depth, under its card. */}
-          <ModalDepthContext.Provider value={depth}>
-            {!skipOverlay && <ModalOverlay />}
-          </ModalDepthContext.Provider>
+          {/* A nested modal shares the backdrop of the modal below. */}
+          {!skipOverlay && !parent && <ModalOverlay />}
           {bottomSlot ? (
             <DialogPrimitive.Content
               asChild
@@ -384,7 +395,7 @@ function ModalContent({
             </DialogPrimitive.Content>
           )}
         </DialogPrimitive.Portal>
-      </ModalDepthContext.Provider>
+      </ModalStackContext.Provider>
     </ModalContext.Provider>
   );
 }

@@ -6723,6 +6723,10 @@
             "description": "Sélectionnez les modèles autorisés dans toute l'application.",
             "title": "Modèles"
           },
+          "search": {
+            "empty": "Aucun modèle ne correspond à votre recherche.",
+            "placeholder": "Rechercher des modèles"
+          },
           "refetch": {
             "label": "Actualiser les modèles",
             "errorToast": "Échec de la récupération des modèles"
@@ -6992,37 +6996,22 @@
         }
       },
       "defaultChanges": {
+        "back": "Retour",
         "title": "Choisir de nouveaux modèles par défaut",
         "description": "Cette modification retire des modèles utilisés par défaut. Choisissez un modèle pour remplacer chacun.",
         "deleteDescription": "Ce fournisseur porte des modèles par défaut. Choisissez un modèle pour remplacer chacun.",
-        "current": "Actuellement {model}",
         "placeholder": "Choisissez un modèle",
         "confirm": "Continuer",
         "cleared": "Aucun autre modèle ne peut le remplacer. Le modèle par défaut est retiré.",
         "flows": {
           "chat": {
-            "title": "Modèle de chat par défaut",
             "lost": "Aucun autre modèle de chat n'est sélectionné. Le chat est désactivé."
           },
           "image": {
-            "title": "Modèle d'image par défaut",
             "lost": "Aucun autre modèle d'image n'est connecté. La génération d'images est désactivée."
           },
-          "vision": {
-            "title": "Modèle de traitement des images"
-          },
-          "chatNaming": {
-            "title": "Modèle de nommage des chats"
-          },
-          "searchSelection": {
-            "title": "Modèle de décision de recherche"
-          },
           "decision": {
-            "title": "Modèle de décision",
             "lost": "Aucun autre modèle de décision n'est sélectionné. Les décisions sont désactivées."
-          },
-          "craft": {
-            "title": "Modèle par défaut de Craft"
           }
         }
       },
@@ -15595,7 +15584,6 @@
       "otherOptions": "Autres options"
     },
     "common": {
-      "back": "Retour",
       "clear": "Effacer",
       "clearFilter": "Effacer le filtre",
       "close": "Fermer",

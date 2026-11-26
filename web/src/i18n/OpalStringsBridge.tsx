@@ -20,7 +20,6 @@ export default function OpalStringsBridge({
     // Counts such as "1234~1250" are identifiers, so no grouping separators.
     const digits = new Intl.NumberFormat(locale, { useGrouping: false });
     return {
-      back: t("common.back"),
       close: t("common.close"),
       loading: t("common.loading"),
       settingsHeaderCancel: t("settingsHeader.cancel"),

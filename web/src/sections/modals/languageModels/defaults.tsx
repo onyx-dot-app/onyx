@@ -219,26 +219,55 @@ export function choicesComplete(
   );
 }
 
-/** A default's row title and what happens when no model can take it over. */
-function useRoleCopy(): Record<DefaultRole, { title: string; lost: string }> {
+/**
+ * A role's row copy: the exact title and description of the setting that
+ * picks its model, and what happens when no model can take it over.
+ */
+function useRoleCopy(): Record<
+  DefaultRole,
+  { title: string; description?: string; lost: string }
+> {
   const t = useTranslations("admin.languageModels.defaultChanges");
+  const languageModels = useTranslations("admin.languageModels");
+  const chatPreferences = useTranslations("admin.chatPreferences");
+  const decisionModels = useTranslations("admin.decisionModels");
+  const indexSettings = useTranslations("admin.indexSettings");
+  const craftPreferences = useTranslations("admin.craftPreferences");
   return {
-    chat: { title: t("flows.chat.title"), lost: t("flows.chat.lost") },
+    chat: {
+      title: languageModels("defaultModel.title"),
+      description: languageModels("defaultModel.description"),
+      lost: t("flows.chat.lost"),
+    },
     image_generation: {
-      title: t("flows.image.title"),
+      title: languageModels("imageGeneration.defaultModel.title"),
+      description: languageModels("imageGeneration.defaultModel.description"),
       lost: t("flows.image.lost"),
     },
-    image_processing: { title: t("flows.vision.title"), lost: t("cleared") },
-    chat_naming: { title: t("flows.chatNaming.title"), lost: t("cleared") },
+    image_processing: {
+      title: indexSettings("imageProcessing.title"),
+      description: indexSettings("imageProcessing.description"),
+      lost: t("cleared"),
+    },
+    chat_naming: {
+      title: chatPreferences("chatNaming.title"),
+      description: chatPreferences("chatNaming.description"),
+      lost: t("cleared"),
+    },
     search_selection: {
-      title: t("flows.searchSelection.title"),
+      title: chatPreferences("searchDecisionModel.title"),
+      description: chatPreferences("searchDecisionModel.description"),
       lost: t("cleared"),
     },
     decision: {
-      title: t("flows.decision.title"),
+      title: decisionModels("decisionModel.title"),
+      description: decisionModels("decisionModel.description"),
       lost: t("flows.decision.lost"),
     },
-    craft: { title: t("flows.craft.title"), lost: t("cleared") },
+    craft: {
+      title: craftPreferences("defaultModel.label"),
+      lost: t("cleared"),
+    },
   };
 }
 
@@ -265,15 +294,17 @@ export function DefaultChoiceRows({
   const t = useTranslations("admin.languageModels.defaultChanges");
   const copy = useRoleCopy();
   return (
-    <Section alignItems="stretch" gap={1} height="fit">
+    <Section alignItems="stretch" gap={4} height="fit">
       {affected.map((current) => {
         const options = candidates(current.role);
         return (
           <InputHorizontal
             key={current.role}
             title={copy[current.role].title}
-            description={t("current", { model: current.modelName })}
+            description={copy[current.role].description}
             center
+            withLabel
+            fillInput
           >
             {options.length > 0 ? (
               <SimpleModelSelector

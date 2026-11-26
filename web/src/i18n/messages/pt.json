@@ -6723,6 +6723,10 @@
             "description": "Selecione os modelos que podem ser usados em todo o app.",
             "title": "Modelos"
           },
+          "search": {
+            "empty": "Nenhum modelo corresponde à sua pesquisa.",
+            "placeholder": "Pesquisar modelos"
+          },
           "refetch": {
             "label": "Atualizar modelos",
             "errorToast": "Falha ao buscar os modelos"
@@ -6992,37 +6996,22 @@
         }
       },
       "defaultChanges": {
+        "back": "Voltar",
         "title": "Escolha novos padrões",
         "description": "Esta alteração remove modelos que são padrão. Escolha um modelo para substituir cada um.",
         "deleteDescription": "Este provedor tem modelos padrão. Escolha um modelo para substituir cada um.",
-        "current": "Atualmente {model}",
         "placeholder": "Escolha um modelo",
         "confirm": "Continuar",
         "cleared": "Nenhum outro modelo pode substituí-lo. O padrão é removido.",
         "flows": {
           "chat": {
-            "title": "Modelo de chat padrão",
             "lost": "Nenhum outro modelo de chat está selecionado. O chat é desativado."
           },
           "image": {
-            "title": "Modelo de imagem padrão",
             "lost": "Nenhum outro modelo de imagem está conectado. A geração de imagens é desativada."
           },
-          "vision": {
-            "title": "Modelo de processamento de imagens"
-          },
-          "chatNaming": {
-            "title": "Modelo de nomeação de chats"
-          },
-          "searchSelection": {
-            "title": "Modelo de decisão de pesquisa"
-          },
           "decision": {
-            "title": "Modelo de decisão",
             "lost": "Nenhum outro modelo de decisão está selecionado. As decisões são desativadas."
-          },
-          "craft": {
-            "title": "Modelo padrão do Craft"
           }
         }
       },
@@ -15595,7 +15584,6 @@
       "otherOptions": "Outras opções"
     },
     "common": {
-      "back": "Voltar",
       "clear": "Limpar",
       "clearFilter": "Limpar filtro",
       "close": "Fechar",

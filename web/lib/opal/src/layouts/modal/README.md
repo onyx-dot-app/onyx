@@ -18,7 +18,6 @@ It renders open, so mount it inside the `Provider` from `useCreateModal`. When `
 | `children`    | `ReactNode`             | —              | Body content. Plain strings render as `text-03` body copy     |
 | `hideCancel`  | `boolean`               | `false`        | Hides the Cancel button (leaves only `submit`)                |
 | `onClose`     | `() => void`            | —              | Closes the modal; it must close the owner itself. `undefined` blocks closing; omitted, the owner closes it |
-| `onBack`      | `() => void`            | —              | Shows a Back button at the start of the footer, for a confirmation opened from another modal: Back returns to it, while Cancel and the X close both |
 | `twoTone`     | `boolean`               | `true`         | Gray body background separating it from the header and footer |
 
 ## Usage

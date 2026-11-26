@@ -6723,6 +6723,10 @@
             "description": "Select models to allow for usage throughout the app.",
             "title": "Models"
           },
+          "search": {
+            "empty": "No models match your search.",
+            "placeholder": "Search models"
+          },
           "refetch": {
             "label": "Refresh models",
             "errorToast": "Failed to fetch models"
@@ -6992,37 +6996,22 @@
         }
       },
       "defaultChanges": {
+        "back": "Back",
         "title": "Choose New Defaults",
         "description": "This change removes models that hold defaults. Choose a model to take over each one.",
         "deleteDescription": "This provider holds defaults. Choose a model to take over each one.",
-        "current": "Currently {model}",
         "placeholder": "Choose a model",
         "confirm": "Continue",
         "cleared": "No other model can take this over. The default is cleared.",
         "flows": {
           "chat": {
-            "title": "Default Chat Model",
             "lost": "No other chat model is selected. Chat turns off."
           },
           "image": {
-            "title": "Default Image Model",
             "lost": "No other image model is connected. Image generation turns off."
           },
-          "vision": {
-            "title": "Image Processing Model"
-          },
-          "chatNaming": {
-            "title": "Chat Naming Model"
-          },
-          "searchSelection": {
-            "title": "Search Decision Model"
-          },
           "decision": {
-            "title": "Decision Model",
             "lost": "No other decision model is selected. Decisions turn off."
-          },
-          "craft": {
-            "title": "Craft Default Model"
           }
         }
       },
@@ -15595,7 +15584,6 @@
       "otherOptions": "Other options"
     },
     "common": {
-      "back": "Back",
       "clear": "Clear",
       "clearFilter": "Clear filter",
       "close": "Close",

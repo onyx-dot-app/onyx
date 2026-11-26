@@ -6723,6 +6723,10 @@
             "description": "앱 전체에서 사용할 수 있는 모델을 선택하세요.",
             "title": "모델"
           },
+          "search": {
+            "empty": "검색과 일치하는 모델이 없습니다.",
+            "placeholder": "모델 검색"
+          },
           "refetch": {
             "label": "모델 새로고침",
             "errorToast": "모델을 가져오지 못했습니다"
@@ -6992,37 +6996,22 @@
         }
       },
       "defaultChanges": {
+        "back": "뒤로",
         "title": "새 기본값 선택",
         "description": "이 변경으로 기본값인 모델이 빠집니다. 각각을 대신할 모델을 선택하세요.",
         "deleteDescription": "이 제공자에 기본값인 모델이 있습니다. 각각을 대신할 모델을 선택하세요.",
-        "current": "현재 {model}",
         "placeholder": "모델 선택",
         "confirm": "계속",
         "cleared": "대신할 모델이 없습니다. 기본값이 해제됩니다.",
         "flows": {
           "chat": {
-            "title": "기본 채팅 모델",
             "lost": "선택된 다른 채팅 모델이 없습니다. 채팅이 꺼집니다."
           },
           "image": {
-            "title": "기본 이미지 모델",
             "lost": "연결된 다른 이미지 모델이 없습니다. 이미지 생성이 꺼집니다."
           },
-          "vision": {
-            "title": "이미지 처리 모델"
-          },
-          "chatNaming": {
-            "title": "채팅 이름 지정 모델"
-          },
-          "searchSelection": {
-            "title": "검색 결정 모델"
-          },
           "decision": {
-            "title": "결정 모델",
             "lost": "선택된 다른 결정 모델이 없습니다. 결정 기능이 꺼집니다."
-          },
-          "craft": {
-            "title": "Craft 기본 모델"
           }
         }
       },
@@ -15595,7 +15584,6 @@
       "otherOptions": "기타 옵션"
     },
     "common": {
-      "back": "뒤로",
       "clear": "지우기",
       "clearFilter": "필터 지우기",
       "close": "닫기",

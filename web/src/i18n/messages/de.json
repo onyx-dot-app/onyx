@@ -6723,6 +6723,10 @@
             "description": "Wählen Sie die Modelle aus, die in der gesamten App verwendet werden dürfen.",
             "title": "Modelle"
           },
+          "search": {
+            "empty": "Keine Modelle entsprechen Ihrer Suche.",
+            "placeholder": "Modelle durchsuchen"
+          },
           "refetch": {
             "label": "Modelle aktualisieren",
             "errorToast": "Die Modelle konnten nicht abgerufen werden"
@@ -6992,37 +6996,22 @@
         }
       },
       "defaultChanges": {
+        "back": "Zurück",
         "title": "Neue Standards wählen",
         "description": "Diese Änderung entfernt Modelle, die Standards halten. Wählen Sie für jeden ein Ersatzmodell.",
         "deleteDescription": "Dieser Anbieter hält Standards. Wählen Sie für jeden ein Ersatzmodell.",
-        "current": "Aktuell {model}",
         "placeholder": "Modell wählen",
         "confirm": "Weiter",
         "cleared": "Kein anderes Modell kann dies übernehmen. Der Standard wird entfernt.",
         "flows": {
           "chat": {
-            "title": "Standard-Chatmodell",
             "lost": "Kein anderes Chatmodell ist ausgewählt. Der Chat wird deaktiviert."
           },
           "image": {
-            "title": "Standard-Bildmodell",
             "lost": "Kein anderes Bildmodell ist verbunden. Die Bildgenerierung wird deaktiviert."
           },
-          "vision": {
-            "title": "Modell für Bildverarbeitung"
-          },
-          "chatNaming": {
-            "title": "Modell für Chat-Benennung"
-          },
-          "searchSelection": {
-            "title": "Modell für Suchentscheidungen"
-          },
           "decision": {
-            "title": "Entscheidungsmodell",
             "lost": "Kein anderes Entscheidungsmodell ist ausgewählt. Entscheidungen werden deaktiviert."
-          },
-          "craft": {
-            "title": "Craft-Standardmodell"
           }
         }
       },
@@ -15595,7 +15584,6 @@
       "otherOptions": "Weitere Optionen"
     },
     "common": {
-      "back": "Zurück",
       "clear": "Leeren",
       "clearFilter": "Filter zurücksetzen",
       "close": "Schließen",

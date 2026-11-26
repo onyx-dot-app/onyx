@@ -48,7 +48,6 @@ import { Text } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import {
-  ConfirmationModalLayout,
   Content,
   ContentIndent,
   InputDivider,
@@ -68,6 +67,7 @@ import { useModelDisplayName } from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import {
   SvgArrowExchange,
+  SvgChevronLeft,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
@@ -553,6 +553,20 @@ function inherentOrder(models: ModelConfiguration[]): string[] {
     .map((m) => m.name);
 }
 
+/** Whether a model's id or display name contains the search text. */
+function matchesModelQuery(
+  query: string,
+  name: string,
+  displayName: string | null | undefined
+): boolean {
+  const needle = query.trim().toLowerCase();
+  return (
+    needle === "" ||
+    name.toLowerCase().includes(needle) ||
+    (displayName ?? "").toLowerCase().includes(needle)
+  );
+}
+
 interface ModelListLayout {
   order: string[];
   sortedByName: boolean;
@@ -692,7 +706,7 @@ function ModelRow({
     >
       <Interactive.Stateful
         variant="select-heavy"
-        state={isSelected ? "filled" : "empty"}
+        state={isSelected ? "selected" : "empty"}
         onPointerDownCapture={(e: React.PointerEvent) => {
           // Scoped to the title row: the checkbox also owns a hidden input.
           renamingAtPointerDown.current =
@@ -807,7 +821,7 @@ function ImageModelRow({
     <Hoverable.Root group="image-model-row" data-model-name={model.name}>
       <Interactive.Stateful
         variant="select-heavy"
-        state={checked ? "filled" : "empty"}
+        state={checked ? "selected" : "empty"}
         onPointerDownCapture={(e: React.PointerEvent) => {
           renamingAtPointerDown.current =
             e.currentTarget.querySelector(".opal-content-title-row input") !=
@@ -1007,6 +1021,7 @@ export function ModelSelectionField({
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const resolveDisplayName = useModelDisplayName();
   const [newModelName, setNewModelName] = useState("");
+  const [query, setQuery] = useState("");
   const models = formikProps.values.model_configurations;
   const [layout, setLayout] = useState<ModelListLayout | null>(null);
   // Models the admin types in stay where they appear; a refetch re-sorts.
@@ -1108,6 +1123,16 @@ export function ModelSelectionField({
             </Section>
           </InputHorizontal>
 
+          {hasAnyModel && (
+            <InputTypeIn
+              icon="search"
+              clearButton
+              placeholder={t("models.search.placeholder")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
+
           {!hasAnyModel ? (
             <EmptyMessageCard
               title={emptyMessage ?? t("models.empty.title")}
@@ -1131,7 +1156,12 @@ export function ModelSelectionField({
                   // Models added since the last re-sort, e.g. a custom model.
                   const known = new Set(order);
                   const added = models.filter((m) => !known.has(m.name));
-                  const shownModels = [...ordered, ...added];
+                  const shownModels = [...ordered, ...added].filter((m) =>
+                    matchesModelQuery(query, m.name, resolveDisplayName(m))
+                  );
+                  const shownImageModels = imageModels.filter((m) =>
+                    matchesModelQuery(query, m.name, m.display_name)
+                  );
                   return (
                     <>
                       {shownModels.map((model) => (
@@ -1150,7 +1180,14 @@ export function ModelSelectionField({
                           defaultRoles={rolesOf(model.name, false)}
                         />
                       ))}
-                      <ImageModelRows models={imageModels} />
+                      <ImageModelRows models={shownImageModels} />
+                      {shownModels.length === 0 &&
+                        shownImageModels.length === 0 && (
+                          <EmptyMessageCard
+                            title={t("models.search.empty")}
+                            padding={2}
+                          />
+                        )}
                     </>
                   );
                 })()}
@@ -1305,7 +1342,7 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
     return onSubmit(values, helpers);
   };
 
-  /** Back on the confirmation returns to the provider modal, as it was. */
+  /** Closing the confirmation returns to the provider modal, as it was. */
   function closeConfirmation() {
     confirmModal.toggle(false);
     setPending(null);
@@ -1350,43 +1387,56 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
           onClose={onClose}
           modelConfigurations={initialValues.model_configurations}
           description={description}
-          // Opened from inside the provider modal, the confirmation stacks
-          // above it and blurs it.
+          // Opened from inside the provider modal, the confirmation slides
+          // in over it, and Cancel slides back to it.
           nested={
             <confirmModal.Provider>
-              <ConfirmationModalLayout
-                icon={SvgArrowExchange}
-                title={t("defaultChanges.title")}
-                description={t("defaultChanges.description")}
-                onBack={closeConfirmation}
-                onClose={() => {
-                  closeConfirmation();
-                  onClose();
-                }}
-                submit={
-                  <Button
-                    disabled={
-                      isConfirming ||
-                      !pending ||
-                      !choicesComplete(pending.affected, candidates, choices)
-                    }
-                    onClick={() => void handleConfirm()}
-                  >
-                    {t("defaultChanges.confirm")}
-                  </Button>
-                }
+              <Modal
+                open
+                // Cancel, the X and Escape return to the provider modal, as
+                // it was.
+                onOpenChange={(open) => !open && closeConfirmation()}
               >
-                {pending && (
-                  <DefaultChoiceRows
-                    affected={pending.affected}
-                    candidates={candidates}
-                    choices={choices}
-                    onChange={(role, id) =>
-                      setChoices((prev) => ({ ...prev, [role]: id }))
-                    }
+                <Modal.Content width="md">
+                  <Modal.Header
+                    icon={SvgArrowExchange}
+                    title={t("defaultChanges.title")}
+                    description={t("defaultChanges.description")}
+                    onClose={closeConfirmation}
                   />
-                )}
-              </ConfirmationModalLayout>
+                  <Modal.Body alignItems="stretch">
+                    {pending && (
+                      <DefaultChoiceRows
+                        affected={pending.affected}
+                        candidates={candidates}
+                        choices={choices}
+                        onChange={(role, id) =>
+                          setChoices((prev) => ({ ...prev, [role]: id }))
+                        }
+                      />
+                    )}
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      prominence="secondary"
+                      icon={SvgChevronLeft}
+                      onClick={closeConfirmation}
+                    >
+                      {t("defaultChanges.back")}
+                    </Button>
+                    <Button
+                      disabled={
+                        isConfirming ||
+                        !pending ||
+                        !choicesComplete(pending.affected, candidates, choices)
+                      }
+                      onClick={() => void handleConfirm()}
+                    >
+                      {t("defaultChanges.confirm")}
+                    </Button>
+                  </Modal.Footer>
+                </Modal.Content>
+              </Modal>
             </confirmModal.Provider>
           }
         >

@@ -6723,6 +6723,10 @@
             "description": "Selecciona los modelos que se pueden usar en toda la aplicación.",
             "title": "Modelos"
           },
+          "search": {
+            "empty": "Ningún modelo coincide con tu búsqueda.",
+            "placeholder": "Buscar modelos"
+          },
           "refetch": {
             "label": "Actualizar modelos",
             "errorToast": "No se pudieron obtener los modelos"
@@ -6992,37 +6996,22 @@
         }
       },
       "defaultChanges": {
+        "back": "Atrás",
         "title": "Elige nuevos valores predeterminados",
         "description": "Este cambio quita modelos que son predeterminados. Elige un modelo que sustituya a cada uno.",
         "deleteDescription": "Este proveedor tiene modelos predeterminados. Elige un modelo que sustituya a cada uno.",
-        "current": "Actualmente {model}",
         "placeholder": "Elige un modelo",
         "confirm": "Continuar",
         "cleared": "Ningún otro modelo puede sustituirlo. Se quita el valor predeterminado.",
         "flows": {
           "chat": {
-            "title": "Modelo de chat predeterminado",
             "lost": "No hay otro modelo de chat seleccionado. El chat se desactiva."
           },
           "image": {
-            "title": "Modelo de imagen predeterminado",
             "lost": "No hay otro modelo de imagen conectado. La generación de imágenes se desactiva."
           },
-          "vision": {
-            "title": "Modelo de procesamiento de imágenes"
-          },
-          "chatNaming": {
-            "title": "Modelo para nombrar chats"
-          },
-          "searchSelection": {
-            "title": "Modelo de decisión de búsqueda"
-          },
           "decision": {
-            "title": "Modelo de decisión",
             "lost": "No hay otro modelo de decisión seleccionado. Las decisiones se desactivan."
-          },
-          "craft": {
-            "title": "Modelo predeterminado de Craft"
           }
         }
       },
@@ -15595,7 +15584,6 @@
       "otherOptions": "Otras opciones"
     },
     "common": {
-      "back": "Atrás",
       "clear": "Borrar",
       "clearFilter": "Quitar filtro",
       "close": "Cerrar",

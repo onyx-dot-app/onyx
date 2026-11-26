@@ -10,8 +10,6 @@ import {
  * Labels Opal renders itself. Hosts translate them via `OpalStringsProvider`.
  */
 export type OpalStrings = {
-  /** A modal's Back action, e.g. `ConfirmationModalLayout`'s `onBack`. */
-  back: string;
   close: string;
   loading: string;
   loadingPage: string;
@@ -164,7 +162,6 @@ export type OpalStrings = {
 };
 
 export const defaultOpalStrings: OpalStrings = {
-  back: "Back",
   close: "Close",
   loading: "Loading",
   loadingPage: "Loading …",
