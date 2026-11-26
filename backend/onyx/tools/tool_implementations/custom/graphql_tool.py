@@ -100,6 +100,9 @@ def _input_schema(
     if isinstance(type_, GraphQLList):
         return {"type": "array", "items": _input_schema(type_.of_type, depth, budget)}
     if isinstance(type_, GraphQLEnumType):
+        budget.remaining -= len(type_.values)
+        if budget.remaining < 0:
+            return {"type": "string"}
         return {"type": "string", "enum": list(type_.values)}
     if isinstance(type_, GraphQLInputObjectType):
         # Shared input types expand at each use, which can grow exponentially.
@@ -156,21 +159,15 @@ def graphql_tool_parameters(
 ) -> dict[str, JsonValue]:
     """The field's arguments, and ``selection`` when it returns an object and
     has no argument of that name. Past ``budget``, an input object takes any
-    object."""
+    object, an enum any string, and ``selection`` names no default."""
     selection = default_selection(field)
-    extra: dict[str, JsonValue] = (
-        {
-            SELECTION: {
-                "type": "string",
-                "description": (
-                    "The fields to return, as a GraphQL selection set. "
-                    f"Default: {selection}"
-                ),
-            }
-        }
-        if selection and SELECTION not in field.args
-        else {}
-    )
+    extra: dict[str, JsonValue] = {}
+    if selection and SELECTION not in field.args:
+        budget.remaining -= len(selection.split())
+        description = "The fields to return, as a GraphQL selection set."
+        if budget.remaining >= 0:
+            description += f" Default: {selection}"
+        extra[SELECTION] = {"type": "string", "description": description}
     return _object_schema(field.args, 0, budget, extra)
 
 

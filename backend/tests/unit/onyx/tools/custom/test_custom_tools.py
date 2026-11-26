@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 import unittest.mock
 import uuid
@@ -29,6 +30,7 @@ from onyx.tools.tool_implementations.custom.graphql_tool import (
     parse_graphql_schema,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    _MAX_INLINED_NODES,
     openapi_to_method_specs,
     validate_openapi_schema,
 )
@@ -1085,6 +1087,34 @@ def test_a_path_parameter_cannot_leave_the_server_url(
     assert isinstance(response, ToolResult)
     assert response.is_error
     pinned.assert_not_called()
+
+
+def test_graphql_parameters_count_enum_values_and_default_selections() -> None:
+    """A large enum or return type used by many fields is copied into each
+    field's parameters, so the shared budget counts what is copied."""
+    names = [f"v{i}" for i in range(1000)]
+    fields = "\n".join(f"f{i}(e: Big): Wide" for i in range(300))
+    schema = parse_graphql_schema(
+        f"enum Big {{ {' '.join(names)} }}\n"
+        f"type Wide {{ {' '.join(f'{name}: Int' for name in names)} }}\n"
+        f"type Query {{ {fields} }}"
+    )
+
+    text = json.dumps(graphql_action_parameters(schema))
+
+    # Each copy of an enum value or a selected field is one '"vN"' or ' vN'.
+    copies = len(re.findall(r'[" ]v\d+\b', text))
+    assert copies <= _MAX_INLINED_NODES
+    small = parse_graphql_schema(
+        "enum E { A B }\ntype T { a: Int }\ntype Query { f(e: E): T }"
+    )
+    assert graphql_action_parameters(small)["query.f"]["properties"] == {
+        "e": {"type": "string", "enum": ["A", "B"]},
+        "selection": {
+            "type": "string",
+            "description": "The fields to return, as a GraphQL selection set. Default: { a }",
+        },
+    }
 
 
 @pytest.mark.parametrize("url", ["http://169.254.169.254/graphql", _LOOPBACK_URL])
