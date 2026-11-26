@@ -76,7 +76,8 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 - Both listeners serve the same API.
 
 `Dial(sandbox_id, guest_port, generation)` is a bidirectional stream of byte frames to a vsock port of a
-running VM, for example the app preview (3010). Only the ports in `--dial-ports` (default `3010`) are
+running VM: the app preview (3010) or the browser service relay of the guest daemon (3011, see
+`cmd/guest-daemon/README.md`). Only the ports in `--dial-ports` (default `3010,3011`) are
 allowed (`PORT_NOT_ALLOWED`). Dial always refuses the guest daemon port (`--daemon-port`) with
 `PORT_NOT_ALLOWED`, also if `--dial-ports` names it: use the pass-through. The agent does not start with
 an empty `--dial-ports`. If nothing in the VM accepts the connection, the call fails with
@@ -85,7 +86,8 @@ an empty `--dial-ports`. If nothing in the VM accepts the connection, the call f
 have at most `--dial-max-streams` open Dial streams (default 64); more fail with `DIAL_LIMIT`
 (`RESOURCE_EXHAUSTED`). A failed write to the guest also ends the call with `GUEST_UNREACHABLE`. When the
 client ends its send side, the agent keeps reading until the guest closes, because Firecracker turns a
-host half-close into a full close.
+host half-close into a full close. Dial has no idle timeout: a browser viewer stream can be quiet for
+minutes.
 
 ### Guest daemon pass-through
 

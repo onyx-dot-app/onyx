@@ -12,8 +12,9 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// DefaultDialPorts are the guest ports Dial allows: the app preview (3010).
-var DefaultDialPorts = []uint32{3010}
+// DefaultDialPorts are the guest ports Dial allows: the app preview (3010)
+// and the browser service relay (3011).
+var DefaultDialPorts = []uint32{3010, 3011}
 
 // DefaultMaxDialsPerVM is the default cap on open Dial streams per VM.
 const DefaultMaxDialsPerVM = 64
