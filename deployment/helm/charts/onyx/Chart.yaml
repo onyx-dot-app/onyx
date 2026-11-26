@@ -22,9 +22,13 @@ annotations:
   artifacthub.io/changes: |
     - kind: changed
       description: craft.sandboxRuntime defaults to "auto" and also takes
-        "off". With a pinned release tag and auth.sandboxNodeRegistration,
-        "auto" renders the Firecracker host agent, sandbox-proxy and their
-        certificates without ENABLE_CRAFT. The chart sets SANDBOX_RUNTIME.
+        "off". With a pinned release tag, "auto" renders the Firecracker
+        host agent, sandbox-proxy and their certificates without ENABLE_CRAFT.
+        The chart sets SANDBOX_RUNTIME.
+    - kind: added
+      description: auth.sandboxNodeRegistration is on by default. With no
+        value and no existingSecret, the chart makes a random value on
+        install and keeps it on upgrade.
     - kind: changed
       description: The Firecracker image tags fall back to a pinned chart
         appVersion when global.version is latest, edge or beta.
