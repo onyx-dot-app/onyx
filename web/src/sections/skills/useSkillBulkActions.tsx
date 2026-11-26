@@ -119,7 +119,17 @@ export function useSkillBulkActions({
           ? { action, skill_ids, sharing: sharing ?? {} }
           : { action, skill_ids }
       );
-      setSelectedIds(new Set(result.failed.map((failure) => failure.skill_id)));
+      if (action === "delete") {
+        // A row delete may target a skill outside the selection.
+        const deleted = new Set(result.succeeded);
+        setSelectedIds(
+          (current) => new Set([...current].filter((id) => !deleted.has(id)))
+        );
+      } else {
+        setSelectedIds(
+          new Set(result.failed.map((failure) => failure.skill_id))
+        );
+      }
       // Names come from the request targets: a skill deleted elsewhere in the
       // meantime is gone from the refreshed list but must still be reported.
       setFailures(

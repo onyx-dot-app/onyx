@@ -36,6 +36,7 @@ function Harness({ items }: { items: CustomSkill[] }) {
       <button onClick={() => bulk.confirmDelete([target])}>
         delete target
       </button>
+      <p data-testid="selection">{[...bulk.selectedIds].join(",")}</p>
       {bulk.modals}
     </>
   );
@@ -59,4 +60,23 @@ test("a pending toggle of a selected plugin does not block deleting another", as
       skill_ids: [target.id],
     })
   );
+});
+
+test("a row delete keeps the selection of other plugins", async () => {
+  mockBulkUpdateSkills.mockResolvedValue({
+    succeeded: [target.id],
+    failed: [],
+  });
+  const user = setupUser();
+  render(<Harness items={[toggling, target]} />);
+
+  await user.click(screen.getByRole("button", { name: "select toggling" }));
+  await user.click(screen.getByRole("button", { name: "delete target" }));
+  await user.click(await screen.findByRole("button", { name: "Delete" }));
+
+  await waitFor(() => expect(mockBulkUpdateSkills).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull()
+  );
+  expect(screen.getByTestId("selection")).toHaveTextContent(toggling.id);
 });
