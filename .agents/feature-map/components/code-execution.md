@@ -326,13 +326,22 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         a chat grant survives a model switch); a turn whose
                                         ApprovalMode is RUN_WITHOUT_ASKING (evals) builds
                                         them with no scope
-  prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
-                                        (sandbox_tools.py:sandbox_guidance): one use per
-                                        SandboxTool that the turn offers, in tool order, named
-                                        as the model calls it (CodeModeTool.called_name in
-                                        code mode), except tools whose USE is None
-                                        (the artifact tools of both families); the tool
-                                        descriptions describe only the tools. In code mode
+  prompt_utils.py:build_system_prompt   the `# Environment` section ends the prompt with
+                                        the VM's facts (prompts/sandbox_tools.py:
+                                        ENVIRONMENT_SECTION): the working directory
+                                        (SandboxTurn.workdir), the shell, what a save
+                                        keeps, what an idle stop loses, the chat files'
+                                        layout in attachments/ and that long results go
+                                        to a file. It is the only text that names one
+                                        chat. `# Tools` has the file tools' line
+                                        (FILE_EDIT_GUIDANCE) and, with the shell, the
+                                        separator rule. Each tool's own usage, such as the shell's
+                                        stateless `bash -c` calls, is in its description
+                                        (SandboxTool.describe_in), which names no chat and
+                                        holds nothing of its files, so tool definitions
+                                        are the same in every chat. The
+                                        token estimate counts each family's sandbox tool
+                                        descriptions at their longest. In code mode
                                         every artifact function is deferred, so only the
                                         deferred-groups note names its group (`library`,
                                         or `artifact` for Claude models), with the line
@@ -975,10 +984,10 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         research has no sandbox. The module docstring
                                         has the rules; its FileCopyPool holds the pod's
                                         threads, shared by the chats of each VM, and
-                                        main.py stops it at API shutdown. In a chat
-                                        with chat files, the exec_command description
-                                        gives the layout (CHAT_FILES_LAYOUT), in
-                                        agent-host turns too; edits to
+                                        main.py stops it at API shutdown. The
+                                        `# Environment` section gives the layout
+                                        (CHAT_FILES_LAYOUT), in agent-host turns
+                                        too; edits to
                                         attachments/ get ATTACHMENTS_NOT_SAVED_NOTE
                                         (sandbox_tools.py), and session saves skip it
   TurnSearchFiles (sandbox/file_copies) SandboxTurn.search_files: the turn's copies

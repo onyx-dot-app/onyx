@@ -390,6 +390,10 @@ def test_output_is_cut_to_the_character_budget_in_the_middle() -> None:
     assert "Execution completed" in content
     assert content.rstrip().endswith("line 499")
     assert len(content) < 1_000
+    assert (
+        "Output over the limit is cut in the middle, and the result gives the "
+        "original character count."
+    ) in _make_tool().tool_definition().description
 
 
 def test_a_requested_budget_over_the_maximum_is_capped(
