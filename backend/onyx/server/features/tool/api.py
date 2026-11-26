@@ -134,6 +134,18 @@ def _auth_settings(
     )
 
 
+def _method_specs(definition: dict[str, Any]) -> list[MethodSpec]:
+    """The operations of ``definition``. A custom tool needs at least one,
+    unlike a REST integration."""
+    validate_openapi_definition(definition)
+    methods = openapi_to_method_specs(definition)
+    if not methods:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, "No methods found in OpenAPI schema"
+        )
+    return methods
+
+
 def _refuse_oauth_config(oauth_config_id: int | None) -> None:
     if oauth_config_id is not None:
         raise OnyxError(
@@ -298,6 +310,7 @@ def create_custom_tool(
 ) -> ToolSnapshot:
     _check_default_chat_permission(tool_data.default_chat_enabled, user)
     _refuse_oauth_config(tool_data.oauth_config_id)
+    _method_specs(tool_data.definition)
     auth = _auth_settings(tool_data.custom_headers or [], tool_data.passthrough_auth)
     integration = create_integration__no_commit(
         user,
@@ -346,6 +359,7 @@ def update_custom_tool(
     if tool_data.description is not None:
         update.description = tool_data.description
     if tool_data.definition is not None:
+        _method_specs(tool_data.definition)
         update.config = OpenApiConfigInput(
             openapi_document=json.dumps(tool_data.definition)
         )
@@ -419,8 +433,7 @@ def validate_tool(
     tool_data: ValidateToolRequest,
     _: User = Depends(require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)),
 ) -> ValidateToolResponse:
-    validate_openapi_definition(tool_data.definition)
-    return ValidateToolResponse(methods=openapi_to_method_specs(tool_data.definition))
+    return ValidateToolResponse(methods=_method_specs(tool_data.definition))
 
 
 def _openapi_snapshots(

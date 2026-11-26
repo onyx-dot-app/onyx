@@ -12,6 +12,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.service import validate_openapi_definition
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
+from onyx.server.features.tool.api import ValidateToolRequest, validate_tool
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo, ToolContext
 from onyx.tools.tool_implementations import http_request
@@ -875,6 +876,15 @@ def test_save_rejects_invalid_server_url(servers: list[dict[str, Any]] | None) -
     with pytest.raises(OnyxError) as exc_info:
         validate_openapi_definition(schema)
     assert exc_info.value.status_code == 400
+
+
+def test_custom_tool_route_rejects_a_spec_with_no_operations() -> None:
+    """A REST integration may have no endpoints; a custom tool may not."""
+    schema = {**_schema("https://api.example.com"), "paths": {}}
+    validate_openapi_definition(schema)
+    with pytest.raises(OnyxError) as exc_info:
+        validate_tool(ValidateToolRequest(definition=schema), unittest.mock.MagicMock())
+    assert "No methods found" in exc_info.value.detail
 
 
 def _run_ping(server_url: str) -> ToolResult:

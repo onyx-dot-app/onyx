@@ -374,9 +374,6 @@ def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
         check_unique_name(method_spec, seen_names)
         method_specs.append(method_spec)
 
-    if not method_specs:
-        raise ValueError("No methods found in OpenAPI schema")
-
     return method_specs
 
 

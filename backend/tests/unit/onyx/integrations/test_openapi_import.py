@@ -400,6 +400,16 @@ def test_import_keeps_the_text_when_it_drops_nothing() -> None:
     assert view.skipped == []
 
 
+def test_import_of_only_uncallable_operations_gives_no_endpoints() -> None:
+    spec = copy.deepcopy(SPEC)
+    spec["paths"] = {"/pets/{petId}/photo": SPEC["paths"]["/pets/{petId}/photo"]}
+
+    view = _import(json.dumps(spec))
+
+    assert view.endpoints == []
+    assert [line.split(":")[0] for line in view.skipped] == ["POST /pets/{petId}/photo"]
+
+
 def test_import_needs_no_server_url() -> None:
     spec = _callable_spec()
     del spec["servers"]
@@ -430,12 +440,6 @@ def test_import_refuses_servers_of_the_wrong_shape(servers: Any) -> None:
         (
             lambda spec: spec.update(swagger=spec.pop("openapi")),
             "Swagger 3.0.3 is not supported",
-        ),
-        (
-            lambda spec: spec.update(
-                paths={"/pets/{petId}/photo": SPEC["paths"]["/pets/{petId}/photo"]}
-            ),
-            "No methods found",
         ),
     ],
 )

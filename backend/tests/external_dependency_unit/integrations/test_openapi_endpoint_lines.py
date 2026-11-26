@@ -17,11 +17,14 @@ from onyx.db.integration import (
     get_api_app_for_integration,
     get_openapi_tool_for_integration,
 )
-from onyx.db.models import User
+from onyx.db.models import Integration, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.integrations.kinds.api import ApiKindHandler
 from onyx.integrations.models import EffectivePolicy
 from onyx.integrations.openapi_endpoints import EndpointLineError
+from onyx.sandbox_proxy.usable_integrations import load_match_targets
 from onyx.server.features.integrations import admin_api
 from onyx.server.features.integrations.models import (
     IntegrationActionsUpdate,
@@ -467,3 +470,59 @@ def test_a_replaced_endpoint_does_not_take_the_policy_of_the_old_one(
     (new_key,) = actions
     assert new_key != old_key
     assert actions[new_key].admin_policy is None
+
+
+def _matched_keys(
+    db_session: Session, integration_id: int, url: str
+) -> list[str] | None:
+    integration = db_session.get(Integration, integration_id)
+    assert integration is not None
+    (target,) = load_match_targets(db_session, integration_id)
+    match = ApiKindHandler().match_request(
+        integration,
+        target,
+        ProxiedRequest(
+            method="POST", path=url.removeprefix("https://tickets.example.com"), url=url
+        ),
+        db_session,
+    )
+    return None if match is None else [action.action_key for action in match.actions]
+
+
+def test_a_rest_app_with_no_endpoints_saves_and_matches_any_request(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    """A base URL with no endpoints, as the URL-pattern migration writes: VM
+    scripts reach it through the proxy as the other-request action."""
+    integration_id = _create(
+        db_session, admin, created, OpenApiConfigInput(base_url=BASE_URL, endpoints=[])
+    )
+    assert _view(db_session, admin, integration_id).endpoints == []
+
+    admin_api.update_integration(
+        integration_id,
+        IntegrationUpdate(
+            name="Renamed tickets",
+            config=OpenApiConfigInput(base_url=BASE_URL, endpoints=[]),
+        ),
+        admin,
+        db_session,
+    )
+    assert (
+        admin_api.refresh_integration_actions(integration_id, admin, db_session).actions
+        == []
+    )
+    admin_api.set_integration_actions(
+        integration_id,
+        IntegrationActionsUpdate(default_policy=EffectivePolicy.BLOCKED),
+        admin,
+        db_session,
+    )
+
+    assert _matched_keys(db_session, integration_id, f"{BASE_URL}/tickets/7/close") == [
+        "unspecified"
+    ]
+    assert (
+        _matched_keys(db_session, integration_id, "https://tickets.example.com/other")
+        is None
+    )
