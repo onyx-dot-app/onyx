@@ -114,3 +114,22 @@ test.each([
     await waitFor(() => expect(box()?.style.width).toBe("170px"));
   }
 );
+
+test("a longer title under the same key widens the box though the observer stays quiet", () => {
+  mockTitleWidths();
+  const view = render(
+    <Presence.Swap swapKey="working" axis="inline">
+      <span>Searching</span>
+    </Presence.Swap>
+  );
+  const box = () =>
+    view.container.querySelector<HTMLElement>(".opal-presence-swap");
+  expect(box()?.style.width).toBe("90px");
+
+  view.rerender(
+    <Presence.Swap swapKey="working" axis="inline">
+      <span>Searching the web for flowers</span>
+    </Presence.Swap>
+  );
+  expect(box()?.style.width).toBe("290px");
+});
