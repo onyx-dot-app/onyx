@@ -10492,6 +10492,7 @@
           "skippedTitle": "Endpoints ignorados",
           "rest": "API REST sem especificação. Adicione os endpoints abaixo.",
           "restUnreachable": "O Onyx não consegue acessar a URL: {detail} Você ainda pode adicioná-la como uma API REST sem especificação. Adicione os endpoints abaixo.",
+          "restTooLarge": "O Onyx não consegue verificar se a URL tem uma especificação: {detail} Você ainda pode adicioná-la como uma API REST sem especificação ou enviar um arquivo de especificação menor. Adicione os endpoints abaixo.",
           "graphql": "API GraphQL, {queries, plural, one {# consulta} other {# consultas}} e {mutations, plural, one {# mutação} other {# mutações}}",
           "preset": "App integrado. O Onyx chama a API dele."
         },

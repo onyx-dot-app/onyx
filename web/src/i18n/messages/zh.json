@@ -10492,6 +10492,7 @@
           "skippedTitle": "已跳过的端点",
           "rest": "没有规范的 REST API。请在下方添加端点。",
           "restUnreachable": "Onyx 无法访问该 URL：{detail} 你仍然可以将其添加为没有规范的 REST API。请在下方添加端点。",
+          "restTooLarge": "Onyx 无法检查该 URL 是否有规范：{detail} 你仍然可以将其添加为没有规范的 REST API，或上传更小的规范文件。请在下方添加端点。",
           "graphql": "GraphQL API，{queries, plural, other {# 个查询}}和{mutations, plural, other {# 个变更}}",
           "preset": "内置应用。Onyx 调用其 API。"
         },

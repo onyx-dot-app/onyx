@@ -10492,6 +10492,7 @@
           "skippedTitle": "Übersprungene Endpunkte",
           "rest": "REST-API ohne Spezifikation. Fügen Sie unten die Endpunkte hinzu.",
           "restUnreachable": "Onyx kann die URL nicht erreichen: {detail} Sie können sie trotzdem als REST-API ohne Spezifikation hinzufügen. Fügen Sie unten die Endpunkte hinzu.",
+          "restTooLarge": "Onyx kann die URL nicht auf eine Spezifikation prüfen: {detail} Sie können sie trotzdem als REST-API ohne Spezifikation hinzufügen oder eine kleinere Spezifikationsdatei hochladen. Fügen Sie unten die Endpunkte hinzu.",
           "graphql": "GraphQL-API, {queries, plural, one {# Query} other {# Queries}} und {mutations, plural, one {# Mutation} other {# Mutationen}}",
           "preset": "Integrierte App. Onyx ruft ihre API auf."
         },

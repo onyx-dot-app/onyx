@@ -18,9 +18,9 @@ export type DetectedApi =
   | {
       shape: "rest";
       baseUrl: string;
-      /** Why Onyx could not check the URL, from the server. Null when the URL
-       * answered and is not a spec or a GraphQL endpoint. */
-      unreachable: string | null;
+      /** Why Onyx could not check the URL, with the server's detail. Null
+       * when the URL answered and is not a spec or a GraphQL endpoint. */
+      warning: { reason: "unreachable" | "tooLarge"; detail: string } | null;
     }
   | {
       shape: "graphql";
@@ -50,8 +50,8 @@ function isGraphQLFile(name: string): boolean {
  * Finds the kind of API. An uploaded `.graphql` file is a GraphQL schema for
  * the URL; another file is an OpenAPI spec. With only a URL: an OpenAPI spec
  * at the URL, else a GraphQL endpoint that answers introspection, else a REST
- * base URL with no spec. A URL that Onyx cannot reach is a REST base URL
- * with the reason. Null when the API needs a URL that is missing. Throws when
+ * base URL with no spec. A URL that Onyx cannot reach, or whose answer is
+ * over the spec size limit, is a REST base URL with the reason. Null when the API needs a URL that is missing. Throws when
  * the file is not a spec that Onyx can add, the URL is a spec that Onyx
  * cannot add, or a check fails with no answer.
  */
@@ -82,7 +82,14 @@ export async function detectApi(
     );
     if (result) return result;
   } catch (error) {
-    if (isUnreachable(error)) return restResult(url, error.message);
+    if (isUnreachable(error)) {
+      return restResult(url, { reason: "unreachable", detail: error.message });
+    }
+    // Onyx stops reading at the size limit, before it knows if the answer is
+    // a spec, so a REST base URL with a large answer stays possible.
+    if (error instanceof FetchError && error.status === 413) {
+      return restResult(url, { reason: "tooLarge", detail: error.message });
+    }
     // A spec that Onyx cannot add, or a failed check, stops here. Else it is
     // not a spec; try GraphQL next.
     if (!isNotThisKind(error) || isSpecError(error)) throw error;
@@ -90,14 +97,19 @@ export async function detectApi(
   try {
     return graphqlResult(await introspectGraphQL(url));
   } catch (error) {
-    if (isUnreachable(error)) return restResult(url, error.message);
+    if (isUnreachable(error)) {
+      return restResult(url, { reason: "unreachable", detail: error.message });
+    }
     if (!isNotThisKind(error)) throw error;
     return restResult(url, null);
   }
 }
 
-function restResult(url: string, unreachable: string | null): DetectedApi {
-  return { shape: "rest", baseUrl: apiBaseUrl(url), unreachable };
+function restResult(
+  url: string,
+  warning: Extract<DetectedApi, { shape: "rest" }>["warning"]
+): DetectedApi {
+  return { shape: "rest", baseUrl: apiBaseUrl(url), warning };
 }
 
 /** The URL is blocked, timed out, failed to connect or gave a non-2xx

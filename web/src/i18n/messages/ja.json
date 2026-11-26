@@ -10492,6 +10492,7 @@
           "skippedTitle": "スキップしたエンドポイント",
           "rest": "仕様のない REST API です。下にエンドポイントを追加してください。",
           "restUnreachable": "Onyx は URL に接続できません: {detail} 仕様のない REST API として追加することはできます。下にエンドポイントを追加してください。",
+          "restTooLarge": "Onyx は URL の仕様を確認できません: {detail} 仕様のない REST API として追加するか、より小さい仕様ファイルをアップロードしてください。下にエンドポイントを追加してください。",
           "graphql": "GraphQL API、{queries, plural, other {# 個のクエリ}}と{mutations, plural, other {# 個のミューテーション}}",
           "preset": "組み込みアプリ。Onyx がその API を呼び出します。"
         },

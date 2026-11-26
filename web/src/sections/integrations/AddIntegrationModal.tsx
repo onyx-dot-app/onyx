@@ -488,9 +488,10 @@ export default function AddIntegrationModal({
             })
           : t("detected.openapi", { count: found.view.endpoints.length });
       case "rest":
-        return found.unreachable === null
-          ? t("detected.rest")
-          : t("detected.restUnreachable", { detail: found.unreachable });
+        if (found.warning === null) return t("detected.rest");
+        return found.warning.reason === "tooLarge"
+          ? t("detected.restTooLarge", { detail: found.warning.detail })
+          : t("detected.restUnreachable", { detail: found.warning.detail });
       case "graphql":
         return t("detected.graphql", {
           queries: found.queries,

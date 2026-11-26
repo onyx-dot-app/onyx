@@ -10492,6 +10492,7 @@
           "skippedTitle": "건너뛴 엔드포인트",
           "rest": "사양이 없는 REST API입니다. 아래에 엔드포인트를 추가하세요.",
           "restUnreachable": "Onyx가 URL에 연결할 수 없습니다: {detail} 사양이 없는 REST API로 추가할 수는 있습니다. 아래에 엔드포인트를 추가하세요.",
+          "restTooLarge": "Onyx가 URL의 사양을 확인할 수 없습니다: {detail} 사양이 없는 REST API로 추가하거나 더 작은 사양 파일을 업로드할 수 있습니다. 아래에 엔드포인트를 추가하세요.",
           "graphql": "GraphQL API, {queries, plural, other {쿼리 #개}} 및 {mutations, plural, other {뮤테이션 #개}}",
           "preset": "기본 제공 앱. Onyx가 해당 API를 호출합니다."
         },

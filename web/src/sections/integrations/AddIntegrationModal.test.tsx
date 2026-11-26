@@ -896,6 +896,34 @@ describe("Custom API", () => {
     );
   });
 
+  test("a URL whose answer is over the spec size limit warns and is a REST base URL", async () => {
+    const detail = "The spec is larger than 5 MB.";
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": () =>
+        new Response(
+          JSON.stringify({ error_code: "PAYLOAD_TOO_LARGE", detail }),
+          { status: 413 }
+        ),
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Billing",
+      add.api.url.title,
+      "https://billing.example.com/"
+    );
+
+    expect(
+      await screen.findByText(
+        add.detected.restTooLarge.replace("{detail}", detail)
+      )
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("textbox", { name: add.rest.endpoints.title })
+    ).toBeInTheDocument();
+  });
+
   test("an endpoint that Onyx cannot introspect warns and is a REST base URL", async () => {
     const detail = "The URL did not answer in time.";
     const fetchMock = mockFetch({
