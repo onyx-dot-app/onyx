@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from datetime import datetime
 from functools import partial
+from io import BytesIO
 from itertools import chain, count, zip_longest
 from uuid import UUID
 
@@ -56,15 +57,19 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.features.build.sandbox.harness_base import (
     ARTIFACT_FILES_DIR,
     CHAT_FILES_DIR,
-    RENDER_FIRST_PAGE_BUDGET_SECONDS,
-    RENDER_FIRST_PAGE_MAX_INPUT_BYTES,
-    RENDER_FIRST_PAGE_SUFFIXES,
+    RENDER_PREVIEW_BUDGET_SECONDS,
+    RENDER_PREVIEW_MAX_INPUT_BYTES,
+    RENDER_PREVIEW_SUFFIXES,
     SandboxPathError,
     chat_file_name,
     safe_file_name,
     session_relative_path,
 )
-from onyx.server.features.build.sandbox.models import session_workspace
+from onyx.server.features.build.sandbox.models import (
+    RenderedPreview,
+    RenderSessionFile,
+    session_workspace,
+)
 from onyx.tools.models import ToolApprovalDetails, ToolCallException
 from onyx.tools.tool_implementations.sandbox import file_copies
 from onyx.tools.tool_implementations.sandbox.artifact_text import (
@@ -275,8 +280,11 @@ def publish(
     artifact's chat deletes them, saved or not
     (`db/chat.py:delete_messages_and_files_from_chat_session`). A PDF,
     PowerPoint or Word file also gets a thumbnail of its first page, drawn
-    in the VM, when it renders within the call's render budget. A call
-    publishes all of its files or none."""
+    in the VM, and a PowerPoint or Word file the PDF of the same render,
+    which the preview shows. The renders of a call share one budget
+    (RENDER_PREVIEW_BUDGET_SECONDS); a file whose render fails or comes
+    after the budget publishes without them. A call publishes all of its
+    files or none."""
     sandbox = turn.sandbox
     published: list[PublishedFile] = []
     try:
@@ -284,14 +292,15 @@ def publish(
             # The turn's chat session is the root chat's, whose readers
             # may download the files; subagent runs share it.
             ref = turn.start_call()
-            # The budget starts once the call has its sandbox, so a wake
-            # or a skills sync does not spend it.
-            render_until = time.monotonic() + RENDER_FIRST_PAGE_BUDGET_SECONDS
+            # The budget starts once the first read has woken the VM.
+            render_until: float | None = None
             for requested in files:
                 cancellation.check()
                 data = sandbox.read_file(
                     ref, requested.path, max_bytes=PUBLISH_FILES_MAX_BYTES
                 )
+                if render_until is None:
+                    render_until = time.monotonic() + RENDER_PREVIEW_BUDGET_SECONDS
                 path = posixpath.normpath(
                     posixpath.join(session_workspace(ref.session_id), requested.path)
                 )
@@ -303,22 +312,36 @@ def publish(
                     if artifact is not None and requested.title is None
                     else _short_text(requested.title, PUBLISH_FILES_MAX_TITLE_CHARS)
                 )
-                # A file with no thumbnail still publishes. Once the
-                # budget is spent, no render looks up its file or logs.
-                thumbnail = (
-                    sandbox.render_first_page(ref, path, until=render_until)
-                    if posixpath.splitext(path)[1].lower() in RENDER_FIRST_PAGE_SUFFIXES
-                    and len(data) <= RENDER_FIRST_PAGE_MAX_INPUT_BYTES
+                # A file with no render still publishes. Once the budget is
+                # spent, no render looks up its file or logs.
+                rendered: RenderedPreview | None = None
+                if (
+                    posixpath.splitext(path)[1].lower() in RENDER_PREVIEW_SUFFIXES
+                    and len(data) <= RENDER_PREVIEW_MAX_INPUT_BYTES
                     and time.monotonic() < render_until
-                    else None
-                )
+                ):
+                    try:
+                        rendered = sandbox.render_preview(
+                            RenderSessionFile(ref=ref, path=path),
+                            first_page=True,
+                            budget_seconds=render_until - time.monotonic(),
+                        )
+                    except Exception:
+                        logger.warning(
+                            "artifact_publish_render_failed path=%r",
+                            path,
+                            exc_info=True,
+                        )
                 published.append(
                     save_chat_artifact(
                         data,
                         name=name,
                         mime_type=chat_output_file_type(name),
                         title=title,
-                        thumbnail=thumbnail,
+                        thumbnail=None if rendered is None else rendered.first_page,
+                        preview_pdf=None
+                        if rendered is None or rendered.pdf is None
+                        else BytesIO(rendered.pdf),
                         target=ArtifactAtPath(chat_session_id=ref.session_id, path=path)
                         if artifact is None
                         else ArtifactById(artifact_id=artifact.library_file_id),

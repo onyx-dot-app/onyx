@@ -237,6 +237,15 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.drain_state = hostagent_pb2.DRAIN_STATE_ACTIVE
         # Seconds each guest daemon Init waits before it runs.
         self.init_delay_seconds = 0.0
+        # How soffice ends: (completion, exit code). Any end but (EXITED, 0)
+        # writes no PDF.
+        self.soffice_end: tuple[sandboxd_pb2.Completion, int] = (
+            sandboxd_pb2.EXITED,
+            0,
+        )
+        # False: soffice cannot load the source, so it writes no PDF and
+        # still ends as soffice_end says.
+        self.soffice_loads = True
         # Like grpc-go, the agent resets a stream with CANCELLED at its
         # deadline; this many seconds early models a reset that wins the race.
         self.stream_reset_lead_seconds: float | None = None
@@ -945,12 +954,18 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             # Like LibreOffice: exit 0 even when the source does not load.
             outdir = argv[argv.index("--outdir") + 1]
             source = self.agent.files.get(_vm_file_key(sandbox_id, argv[-1]))
-            if source is not None:
+            if (
+                source is not None
+                and self.agent.soffice_loads
+                and self.agent.soffice_end == (sandboxd_pb2.EXITED, 0)
+            ):
                 stem = posixpath.splitext(posixpath.basename(argv[-1]))[0]
                 self.agent.files[(sandbox_id, "", f"{outdir}/{stem}.pdf")] = (
                     b"%PDF-" + source
                 )
-            execution.end(sandboxd_pb2.EXITED, 0)
+            else:
+                execution.stderr = b"Error: source file could not be loaded\n"
+            execution.end(*self.agent.soffice_end)
         elif argv[0] == "pdftoppm":
             source = self.agent.files.get(_vm_file_key(sandbox_id, argv[-2]))
             if source is None or not source.startswith(b"%PDF"):
