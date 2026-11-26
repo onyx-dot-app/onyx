@@ -57,12 +57,15 @@ It is the runtime image plus these parts, all owned by root:
 | Path | Part |
 |---|---|
 | `/usr/local/bin/guest-daemon` | The guest daemon, built from `microvm/cmd/guest-daemon` |
-| `/usr/local/bin/sandbox-entrypoint` | The image entrypoint: makes `/tmp/onyx`, then runs `guest-daemon --container` with its arguments. It refuses to run as root |
+| `/usr/local/bin/sandbox-entrypoint` | The image entrypoint: makes `/tmp/onyx`, then runs `guest-daemon --container` with its arguments under `tini` (PID 1, reaps orphaned command children). It refuses to run as root |
 | `/usr/local/bin/firewall-init` | The sandbox image's `firewall-init.sh`: installs the proxy CA and the iptables egress lockdown |
 | `iptables`, `setpriv` | For `firewall-init` (`util-linux` gives `setpriv`) |
+| `tini` | PID 1 |
 
 The image user is the `sandbox` user, UID 1000. The daemon and commands run as that user.
 The image makes `/home/onyx/workspaces` (sessions) and `/var/lib/onyx/skills` (`InstallSkill`), owned by the sandbox user.
+`/workspace` is root's in this target: a Docker restart runs `firewall-init` as root again, and it changes
+the owner of `/workspace/sessions`. So the sandbox user must not be able to replace that entry.
 The daemon contract for containers is in `microvm/cmd/guest-daemon/README.md`.
 
 Build and check it from the repository root. The check needs Docker, OpenSSL and Go:
@@ -74,8 +77,9 @@ bash deployment/craft-runtime/check-container.sh onyxdotapp/craft-runtime:dev-co
 
 The check starts the daemon two times and calls it over TLS (`microvm/internal/guestd/containertest`):
 as UID 1000 with no capabilities (the pod shape), and through `firewall-init` in entrypoint mode
-(the Docker shape). Each case checks Init, a command, a file write and a skill install.
-The Docker case also checks that direct egress fails. The image workflows run this check before they publish.
+(the Docker shape). Each case checks Init, a command, a file write, a skill install, the root-owned
+programs, and that PID 1 reaps orphaned children. A server next to the sandboxes checks egress: the pod
+case reaches it, and the lockdown in the Docker case rejects it. The image workflows run this check before they publish.
 
 ## Convert the image with the existing rootfs builder
 

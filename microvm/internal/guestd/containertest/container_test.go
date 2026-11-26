@@ -150,13 +150,35 @@ func TestContainerDaemon(t *testing.T) {
 		t.Fatalf("skill: %q %v", out, res)
 	}
 
-	// The proxy port is closed in the check, so with the lockdown every
-	// direct connection fails at once.
-	if os.Getenv("SANDBOXD_LOCKDOWN") == "1" {
-		out, res = run(kctx, t, c, bash("", `curl -sS --noproxy '*' --max-time 5 https://1.1.1.1 2>&1; echo "exit=$?"`))
-		if strings.Contains(out, "exit=0") {
-			t.Fatalf("direct egress worked under the lockdown: %q %v", out, res)
+	// The programs that a restart runs as root stay out of the sandbox
+	// user's reach.
+	out, res = run(kctx, t, c, bash("", `for p in /workspace /usr/local/bin /usr/local/bin/firewall-init /usr/local/bin/guest-daemon; do [ -w "$p" ] && echo "writable $p"; done; cat /proc/1/comm`))
+	if res.GetExitCode() != 0 || out != "tini\n" {
+		t.Fatalf("root-owned paths and PID 1: %q %v", out, res)
+	}
+
+	// PID 1 reaps the children that commands leave behind.
+	for range 5 {
+		if _, res := run(kctx, t, c, bash("", `sleep 60 & exit 0`)); res.GetExitCode() != 0 {
+			t.Fatalf("background command: %v", res)
 		}
+	}
+	out, res = run(kctx, t, c, bash("", `for i in $(seq 50); do z=$(ps -eo stat= | grep -c '^Z'); [ "$z" = 0 ] && break; sleep 0.1; done; echo "$z"`))
+	if strings.TrimSpace(out) != "0" {
+		t.Fatalf("zombies after background commands: %q %v", out, res)
+	}
+
+	// SANDBOXD_EGRESS_URL is a server that the check starts next to the
+	// sandbox: it answers without the lockdown, and the lockdown rejects it.
+	url := env(t, "SANDBOXD_EGRESS_URL")
+	out, _ = run(kctx, t, c, &pb.Command{Argv: []string{"bash", "-c", `curl -sS -o /dev/null --noproxy '*' --max-time 10 "$1" 2>&1; echo "exit=$?"`, "_", url}})
+	want := "exit=0"
+	if os.Getenv("SANDBOXD_LOCKDOWN") == "1" {
+		// 7: connection refused (the REJECT rule), not a timeout or DNS error.
+		want = "exit=7"
+	}
+	if !strings.HasSuffix(strings.TrimSpace(out), want) {
+		t.Fatalf("egress to %s: %q, want %s", url, out, want)
 	}
 }
 

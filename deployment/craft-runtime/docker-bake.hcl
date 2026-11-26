@@ -73,6 +73,7 @@ target "runtime" {
     NODE_IMAGE            = "${BASE_IMAGE_REGISTRY}/${NODE_IMAGE}"
     PYTHON_IMAGE          = "${BASE_IMAGE_REGISTRY}/${PYTHON_IMAGE}"
     UV_IMAGE              = UV_IMAGE
+    GO_IMAGE              = "${BASE_IMAGE_REGISTRY}/${GO_IMAGE}"
     NPM_VERSION           = NPM_VERSION
     AGENT_BROWSER_VERSION = AGENT_BROWSER_VERSION
     PPTXGENJS_VERSION      = PPTXGENJS_VERSION
@@ -90,8 +91,4 @@ target "container" {
   inherits = ["runtime"]
   target   = "container"
   tags     = ["${REGISTRY_IMAGE}:${TAG}-container"]
-
-  args = {
-    GO_IMAGE = "${BASE_IMAGE_REGISTRY}/${GO_IMAGE}"
-  }
 }

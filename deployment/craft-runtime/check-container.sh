@@ -14,8 +14,10 @@ image=${1:?usage: check-container.sh <image>}
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
 containers=()
+network="craft-runtime-check-$$"
 cleanup() {
   for c in "${containers[@]}"; do docker rm -f "${c}" >/dev/null 2>&1 || true; done
+  docker network rm "${network}" >/dev/null 2>&1 || true
   rm -rf "${work}"
 }
 trap cleanup EXIT
@@ -35,7 +37,17 @@ chmod 0644 "${work}"/daemon/* "${work}/ca/ca.crt"
 
 daemon_args=(--listen tcp:0.0.0.0:8052 --key-file /run/craft-fc/daemon/key
   --tls-cert /run/craft-fc/daemon/tls.crt --tls-key /run/craft-fc/daemon/tls.key)
-common=(--detach --publish 127.0.0.1::8052 --cap-drop ALL --security-opt no-new-privileges
+# A server next to the sandboxes: the pod case must reach it, the
+# locked-down Docker case must not.
+docker network create "${network}" >/dev/null
+target=$(docker run --detach --network "${network}" --user 1000:1000 --entrypoint python "${image}" \
+  -m http.server 8080 --bind 0.0.0.0 --directory /tmp)
+containers+=("${target}")
+target_ip=$(docker inspect -f "{{(index .NetworkSettings.Networks \"${network}\").IPAddress}}" "${target}")
+egress_url="http://${target_ip}:8080/"
+log "egress target ${egress_url}"
+
+common=(--detach --network "${network}" --publish 127.0.0.1::8052 --cap-drop ALL --security-opt no-new-privileges
   --shm-size 256m --tmpfs "/tmp:rw,nosuid,nodev,mode=1777"
   --volume "${work}/daemon:/run/craft-fc/daemon:ro")
 
@@ -48,7 +60,7 @@ check() {
   port=$(docker port "${cid}" 8052/tcp | head -n 1 | awk -F: '{print $NF}')
   log "${name}: daemon on 127.0.0.1:${port}"
   if ! (cd "${repo}/microvm" && SANDBOXD_ADDR="127.0.0.1:${port}" SANDBOXD_CA="${work}/daemon/tls.crt" \
-    SANDBOXD_KEY="${work}/daemon/key" SANDBOXD_LOCKDOWN="${lockdown}" \
+    SANDBOXD_KEY="${work}/daemon/key" SANDBOXD_LOCKDOWN="${lockdown}" SANDBOXD_EGRESS_URL="${egress_url}" \
     go test -tags container -count=1 -v ./internal/guestd/containertest); then
     docker logs "${cid}" >&2 || true
     exit 1

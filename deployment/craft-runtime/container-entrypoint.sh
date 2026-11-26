@@ -9,4 +9,6 @@ if [ "$(id -u)" = 0 ]; then
   exit 1
 fi
 mkdir -p /tmp/onyx/tool-results /tmp/onyx/artifacts
-exec /usr/local/bin/guest-daemon --container "$@"
+# tini (PID 1) reaps orphaned command children; the daemon waits only for
+# its own children.
+exec /usr/bin/tini -s -- /usr/local/bin/guest-daemon --container "$@"

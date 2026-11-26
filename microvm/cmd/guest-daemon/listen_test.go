@@ -113,7 +113,9 @@ func TestListenTCPServesTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = old.Close() }()
-	if _, err := pb.NewSandboxdClient(old).Health(pctx, &pb.HealthRequest{}); err == nil {
+	tctx, tcancel := context.WithTimeout(ctx, 2*time.Second)
+	defer tcancel()
+	if _, err := pb.NewSandboxdClient(old).Health(tctx, &pb.HealthRequest{}); err == nil {
 		t.Fatal("TLS 1.2 Health succeeded")
 	}
 
