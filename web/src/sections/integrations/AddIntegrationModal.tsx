@@ -438,9 +438,8 @@ export default function AddIntegrationModal({
         navigation.go(prefill.returnTo);
         return;
       }
-      // The detail page reads the new integration from the list.
       if (from === "admin") {
-        await mutate(SWR_KEYS.adminIntegrations);
+        void mutate(SWR_KEYS.adminIntegrations);
         navigation.go(
           integrationDetailHref(
             created.id,
@@ -448,6 +447,7 @@ export default function AddIntegrationModal({
           )
         );
       } else {
+        // The member page reads the new integration from the list.
         await mutate(SWR_KEYS.integrations);
         navigation.go(integrationHref(created.id, "configuration"));
       }
