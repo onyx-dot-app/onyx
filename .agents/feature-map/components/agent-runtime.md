@@ -321,6 +321,11 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    LiteLLM's Vertex AI route changes a schema in place. Read them, and build a
    replacement with `model_copy(update=...)` for a change. Changing one in
    place changes the saved history, later requests and other readers.
+   Published events follow the same rule: `EventDispatcher` gives every
+   listener the published object, so a producer never changes an event or
+   its payload after publishing it. A tool sends a new `ToolProgress` value
+   for each update (`tools/tool_implementations/search/search_tool.py:SearchTool`
+   builds a new `SearchDocsResponse` for each one).
 
 ---
 

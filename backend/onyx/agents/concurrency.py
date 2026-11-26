@@ -7,10 +7,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from contextvars import copy_context
 
-from onyx.agents.events import (
-    AgentEvent,
-    is_shareable_delta,
-)
+from onyx.agents.events import AgentEvent
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
@@ -172,6 +169,10 @@ class ExecutionWork:
 class EventDispatcher:
     """Deliver queued agent events to listeners on one shared worker.
 
+    Events and their payloads are immutable once published: the producer does
+    not change them afterwards, and listeners only read them, so every
+    listener gets the published object.
+
     The optional flush callback batches listener output on that same worker. It
     receives True after close drains all accepted events, for final output cleanup.
     Events remain pending until their listener output has been flushed.
@@ -210,12 +211,9 @@ class EventDispatcher:
                     return
                 if self._closed:
                     raise RuntimeError("Agent event dispatcher is closed")
-                owned_event = (
-                    event if is_shareable_delta(event) else event.model_copy(deep=True)
-                )
                 self.start()
                 self._pending_event_count += 1
-                self._queue.append((tuple(channels), owned_event))
+                self._queue.append((tuple(channels), event))
                 self._condition.notify()
                 channels = []
         except Exception:
@@ -253,12 +251,8 @@ class EventDispatcher:
             if item is not None:
                 channels, event = item
                 try:
-                    for index, channel in enumerate(channels):
-                        channel._context.run(
-                            channel._send,
-                            event,
-                            owns_event=index == len(channels) - 1,
-                        )
+                    for channel in channels:
+                        channel._context.run(channel._send, event)
                 finally:
                     delivered_event_count += 1
                     channel_event_counts.update(channels)
@@ -368,21 +362,15 @@ class EventDelivery:
     def is_dispatch_thread(self) -> bool:
         return self.dispatcher.is_dispatch_thread
 
-    def _send(self, event: AgentEvent, *, owns_event: bool) -> None:
-        shareable = is_shareable_delta(event)
+    def _send(self, event: AgentEvent) -> None:
         with self._lock:
             listeners = tuple(self._listeners)
-        for index, listener in enumerate(listeners):
+        for listener in listeners:
             with self._lock:
                 if listener not in self._listeners:
                     continue
             try:
-                # Mutable snapshots belong exclusively to the final listener.
-                listener(
-                    event
-                    if shareable or owns_event and index == len(listeners) - 1
-                    else event.model_copy(deep=True)
-                )
+                listener(event)
             except AgentCancelled:
                 self.failed.set()
                 logger.debug("Agent observer cancelled")

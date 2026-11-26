@@ -233,8 +233,8 @@ class NestedCallGate(Protocol):
 class ToolInvocation:
     """Tool inputs and runtime services.
 
-    The update callback captures progress before returning; tools may then mutate
-    their local data. Callbacks that retain updates must take an isolated copy.
+    The update callback publishes the progress object itself: the tool must not
+    change it, or an object inside it, afterwards; it sends a new value instead.
     """
 
     def __init__(

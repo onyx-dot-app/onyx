@@ -326,6 +326,7 @@ The `ToolInvocation` argument provides everything the tool needs:
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
+  The run publishes the object as is: do not change it after the call, and send a new one for each update.
 - `agents` — the subagent coordinator (next section).
 - `run_work` — the run's work. A tool that starts work which outlives the call, such as a code mode
   program's driver, adds it with `run_work.track_operation(future)`, which holds the tool phase and
@@ -506,10 +507,10 @@ Observers must not wait for their own run to become idle.
 Delivery is best-effort. Chat shares one dispatcher across a turn. Each event enters its queue once.
 Foreground child events reach both child and ancestor listeners. Background runs have separate delivery.
 Each run tracks its accepted events until delivery finishes. Listener failures affect that subscription channel, not execution or storage.
-Text, thinking-text, and tool-argument deltas are shared between listeners when they contain no mutable attachments.
-Other events are copied before publication returns and remain isolated between listeners.
-Request settings, thinking blocks, and custom event subclasses use this snapshot path.
-Producers may change their local data after publishing it.
+Published events are immutable. Every listener gets the published object, with no copy.
+A producer must not change an event or its payload after it publishes it: a tool sends a new `ToolProgress` value for each update.
+Events can hold the run's recorded objects, such as the message of `message_end` and the tool call of tool events.
+Listeners only read events and must not change them.
 
 The event queue is unbounded. Slow listeners or replay writes can increase retained memory.
 Pending-event tracking includes queued events, active delivery, and buffered output awaiting its flush.
@@ -552,7 +553,7 @@ Changing this list does not add or remove recorded messages. Its message objects
 Use `run.snapshot()` to inspect an isolated copy while execution continues.
 `AgentStep` supplies the current index and limit to callbacks; `StepRecord` stores what happened during that step.
 
-Message content and execution status change under the run lock. Event listeners cannot change recorded data.
+Message content and execution status change under the run lock. Events hold recorded objects: listeners must not change them.
 Child records are collected when the parent finishes; a parent snapshot is not a live view of every child.
 Chat saves the same step structure in a detached `ResponseRecord`.
 It removes transient metadata and stores search documents through database relations.
