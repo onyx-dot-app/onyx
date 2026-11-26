@@ -147,21 +147,25 @@ function graphqlResult(config: GraphQLConfig): DetectedApi {
   };
 }
 
+/** The root type of an operation. The default name applies only when the SDL
+ * has no `schema { ... }` block; with one, an undeclared operation has none. */
 function rootTypeName(
   sdl: string,
   operation: "query" | "mutation",
   fallback: string
-): string {
-  const schema = /\bschema\b[^{]*\{([^}]*)\}/.exec(sdl)?.[1];
-  const match = schema
-    ? new RegExp(`\\b${operation}\\s*:\\s*([A-Za-z_]\\w*)`).exec(schema)
-    : null;
-  return match?.[1] ?? fallback;
+): string | null {
+  const schema = /\bschema\s*(?:@[^{]*)?\{([^}]*)\}/.exec(sdl)?.[1];
+  if (schema === undefined) return fallback;
+  return (
+    new RegExp(`\\b${operation}\\s*:\\s*([A-Za-z_]\\w*)`).exec(schema)?.[1] ??
+    null
+  );
 }
 
 /** The number of fields of an object type in SDL, its extensions included;
  * 0 when it is missing. */
-function rootFieldCount(sdl: string, typeName: string): number {
+function rootFieldCount(sdl: string, typeName: string | null): number {
+  if (typeName === null) return 0;
   const blocks = new RegExp(`\\btype\\s+${typeName}\\b[^{]*\\{`, "g");
   let count = 0;
   for (const start of sdl.matchAll(blocks)) {

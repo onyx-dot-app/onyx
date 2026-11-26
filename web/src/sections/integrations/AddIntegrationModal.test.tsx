@@ -820,6 +820,30 @@ extend type Query { closedTickets: [Ticket!]! }`;
     );
   });
 
+  test("a schema block without a mutation root counts no mutations", async () => {
+    mockFetch({
+      "POST /api/admin/integrations/openapi-import": () => failure(400),
+      "POST /api/admin/integrations/graphql-introspect": {
+        shape: "graphql",
+        endpoint_url: "https://api.example.com/graphql",
+        graphql_schema: `schema { query: Root }
+type Root { ticket: Ticket }
+type Mutation { ticketClose(id: ID!): Ticket }
+type Ticket { id: ID! }`,
+      },
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Tickets",
+      add.api.url.title,
+      "https://api.example.com/graphql"
+    );
+    expect(
+      await screen.findByText("GraphQL API, 1 query and 0 mutations")
+    ).toBeInTheDocument();
+  });
+
   test("asks for a URL or a spec", async () => {
     const fetchMock = mockFetch({});
     const { user } = open({ kind: "api" });
