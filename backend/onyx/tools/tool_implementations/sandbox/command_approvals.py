@@ -78,6 +78,9 @@ def _outcome(row: ActionApproval) -> CommandApprovalOutcome:
             else "approved"
         )
     if row.decision == ApprovalDecision.REJECTED:
+        # An approval of an action that the policies now block.
+        if row.decided_via == ApprovalDecidedVia.POLICY:
+            return "disabled"
         return "rejected"
     return "cancelled"
 

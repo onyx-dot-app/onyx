@@ -698,6 +698,29 @@ def test_approving_a_request_that_the_policies_now_block_saves_a_rejection(
         cache.delete_prefix(f"approval:command:{command_id}:")
 
 
+def test_the_card_of_a_request_that_the_policies_now_block_ends_disabled(
+    db_session: Session, chat: _Chat
+) -> None:
+    """An admin blocks the action while its card is open: the approval is a
+    rejection by the policy, and the card shows the action as disabled."""
+    command_id, reports, approvals = _command(chat)
+    held = _HeldRequest(_gate(), _ctx(chat, command_id), _matched(chat.integration_id))
+    reports.wait_for(lambda: bool(reports.cards()))
+    set_policy(
+        db_session,
+        chat.integration_id,
+        "issues.create",
+        IntegrationActionPolicyValue.BLOCKED,
+    )
+
+    _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_ONCE)
+
+    assert held.result() == ApprovalDecision.REJECTED
+    reports.wait_for(lambda: str(held.approval_id) in reports.outcomes())
+    assert reports.outcomes()[str(held.approval_id)] == "disabled"
+    approvals.end(cancelled=False)
+
+
 @pytest.mark.parametrize(
     ("case", "error_code"),
     [

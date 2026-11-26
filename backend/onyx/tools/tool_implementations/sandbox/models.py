@@ -157,7 +157,7 @@ class CommandApprovalRequest(BaseModel):
 
 
 CommandApprovalOutcome = Literal[
-    "approved", "approved_for_command", "rejected", "cancelled"
+    "approved", "approved_for_command", "rejected", "disabled", "cancelled"
 ]
 
 
