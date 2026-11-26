@@ -333,10 +333,13 @@ admin value is not Ask.
   the agent uses for the user. Share and publish refuse an integration that
   is not private with 400.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
-  kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
-  preset or URL patterns), then the `integration` row with exactly one of
-  `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client
-  and the actions. It writes no plugin row. An OpenAPI integration also gets
+  kind row (`mcp_server`, the OpenAPI `tool` row, the GraphQL `api_app` row,
+  or the preset `external_app`), then the `integration` row with exactly one
+  of `mcp_server_id`, `tool_id`, `api_app_id` or `external_app_id`, the OAuth
+  client and the actions. It writes no plugin row. Users cannot create a
+  URL-pattern app (a CUSTOM `external_app`). Only legacy ones exist: migration
+  `933a21d46472` made each one with a single `https://host/path/*` pattern a
+  REST app and kept the others. An OpenAPI integration also gets
   an `api_app` row (`integration.api_app_id`) with the spec as JSON text and
   its server URL. For one release each create and spec change writes both
   the `tool` row and the `api_app` row
