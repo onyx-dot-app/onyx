@@ -159,6 +159,7 @@ from onyx.db.incognito import (
     mark_incognito_user_files_deleting,
 )
 from onyx.db.models import (
+    ChatMessage,
     ChatSessionSharedStatus,
     FileRecord,
     Persona,
@@ -1766,6 +1767,16 @@ def _authorized_agent(session_id: UUID, agent_id: UUID, user: User) -> None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Agent not found")
 
 
+def _live_response_id(latest: ChatMessage | None) -> int | None:
+    """The response whose stream an agent tab may follow: one that has not
+    ended. A worker that died leaves its pointer behind after recovery saves
+    the failure, as the agents list knows."""
+    if latest is None:
+        return None
+    status = latest.response_status
+    return latest.id if status is None or not status.is_terminal else None
+
+
 @router.get("/chat-session/{session_id}/agents/{agent_id}/history")
 def get_chat_subagent_history(
     session_id: UUID,
@@ -1785,11 +1796,12 @@ def get_chat_subagent_history(
             return ChatSubagentHistory(messages=[], packets=[], stream=None)
         latest = latest_agent_response(db_session, branch, str(agent_id))
         response_id = latest.id if latest is not None else None
+        live_id = _live_response_id(latest)
         # Read the stream before the messages: a run releases its stream
         # after its terminal save, so a missing stream means saved output.
         pointer = (
-            read_agent_stream_pointer(get_cache_backend(), response_id)
-            if response_id is not None
+            read_agent_stream_pointer(get_cache_backend(), live_id)
+            if live_id is not None
             else None
         )
         messages, packets = _session_messages_and_packets(
@@ -1830,7 +1842,7 @@ def stream_chat_subagent(
             if selected is not None
             else None
         )
-        response_id = latest.id if latest is not None else None
+        response_id = _live_response_id(latest)
     cache = get_cache_backend()
 
     def live() -> bool:

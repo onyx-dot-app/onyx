@@ -27,9 +27,15 @@ from onyx.agents.models import (
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution
+from onyx.chat.agent_stream import _pointer_key
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
-from onyx.chat.models import CreateChatSessionID, PendingChatMessage, ResponseOwner
+from onyx.chat.models import (
+    AgentStreamPointer,
+    CreateChatSessionID,
+    PendingChatMessage,
+    ResponseOwner,
+)
 from onyx.chat.presentation import replay_response
 from onyx.chat.process_message import (
     dispatch_pending_chat_messages,
@@ -2909,6 +2915,23 @@ def test_a_background_agent_streams_live_and_its_history_and_activity_show(
     }
     assert any(
         "Worker result" in message["message"] for message in finished.json()["messages"]
+    )
+
+    # A worker that dies leaves its pointer behind; the ended run's tab does
+    # not follow it.
+    get_cache_backend().set(
+        _pointer_key(int(agent["latest_run_id"])),
+        AgentStreamPointer(stream_id=999).model_dump_json(),
+        ex=60,
+    )
+    stale = client.get(f"/chat/chat-session/{chat.id}/agents/{agent['id']}/history")
+    assert stale.json()["stream"] is None
+    assert (
+        client.get(
+            f"/chat/chat-session/{chat.id}/agents/{agent['id']}/stream",
+            params={"stream_id": 999, "cursor": 0},
+        ).status_code
+        == 404
     )
 
 
