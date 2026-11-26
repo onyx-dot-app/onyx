@@ -23,6 +23,7 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 )
 from onyx.tools.tool_implementations.custom.graphql_tool import (
     GraphQLTool,
+    graphql_root_fields,
     parse_graphql_schema,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
@@ -600,14 +601,14 @@ def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> No
 def test_a_graphql_response_with_errors_is_an_error(
     body: dict[str, Any], is_error: bool
 ) -> None:
+    schema = parse_graphql_schema(
+        "type T { id: ID! }\ntype Query { t: T }\ntype Mutation { close(id: ID!): T }"
+    )
     tool = GraphQLTool(
         integration_id=1,
         action_key="mutation.close",
-        schema=parse_graphql_schema(
-            "type T { id: ID! }\n"
-            "type Query { t: T }\n"
-            "type Mutation { close(id: ID!): T }"
-        ),
+        schema=schema,
+        field=dict(graphql_root_fields(schema))["mutation.close"],
         endpoint_url="https://example.com/graphql",
         headers={},
         approval=None,

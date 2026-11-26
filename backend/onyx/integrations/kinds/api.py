@@ -332,12 +332,13 @@ class ApiKindHandler(IntegrationKindHandler):
             and config.base_url is not None
         ):
             schema = parse_graphql_schema(config.graphql_schema)
-            keys = {key for key, _ in graphql_root_fields(schema)}
+            fields = dict(graphql_root_fields(schema))
             return [
                 GraphQLTool(
                     integration_id=integration.id,
                     action_key=action.key,
                     schema=schema,
+                    field=fields[action.key],
                     endpoint_url=config.base_url,
                     headers=ctx.additional_headers,
                     approval=ctx.approval_for(action.key),
@@ -345,7 +346,7 @@ class ApiKindHandler(IntegrationKindHandler):
                     acting_user_id=ctx.user_id,
                 )
                 for action in actions
-                if action.key in keys
+                if action.key in fields
             ]
         if config.shape is not ApiShape.OPENAPI or config.openapi_spec is None:
             return []

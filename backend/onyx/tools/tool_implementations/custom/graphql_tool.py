@@ -218,6 +218,7 @@ class GraphQLTool(ApiTool):
         integration_id: int,
         action_key: str,
         schema: GraphQLSchema,
+        field: GraphQLField,
         endpoint_url: str,
         headers: dict[str, str],
         approval: ToolApprovalScope | None,
@@ -225,7 +226,6 @@ class GraphQLTool(ApiTool):
         acting_user_id: UUID | None = None,
     ) -> None:
         operation, field_name = action_key.split(".", 1)
-        field = dict(graphql_root_fields(schema))[action_key]
         super().__init__(
             integration_id=integration_id,
             action_key=action_key,
