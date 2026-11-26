@@ -459,11 +459,14 @@ def test_prepared_request_shares_history_without_changing_it(
     found = ToolResultMessage(tool_call_id="call", tool_name="lookup", content="found")
     messages: list[Message] = [original, found]
     instructions = SystemMessage(content="Use sources", metadata=ExtraData())
+    assembled_from: list[Sequence[Message]] = []
+
+    def assemble(history: Sequence[Message]) -> list[Message]:
+        assembled_from.append(history)
+        return [instructions, *history]
 
     request = PreparedStep(
-        assemble_messages=(lambda history: [instructions, *history])
-        if with_assembly
-        else None
+        assemble_messages=assemble if with_assembly else None
     ).generation_request(messages)
 
     shared = request.messages[1:] if with_assembly else request.messages
@@ -477,6 +480,8 @@ def test_prepared_request_shares_history_without_changing_it(
     assert shared[1] is found
     if with_assembly:
         assert request.messages[0] is instructions
+        # The assembler borrows a read-only tuple, like every hook input.
+        assert isinstance(assembled_from[0], tuple)
     request.messages.clear()
     assert messages == [original, found]
 

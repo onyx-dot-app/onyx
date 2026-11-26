@@ -246,7 +246,7 @@ class PreparedStep(BaseModel):
         them."""
         history = messages
         if self.assemble_messages is not None:
-            history = self.assemble_messages(messages)
+            history = self.assemble_messages(tuple(messages))
         return GenerationRequest(
             messages=messages_for_model(history),
             system_prompt=self.system_prompt,
