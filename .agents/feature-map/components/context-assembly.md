@@ -167,7 +167,9 @@ preamble and growing history.
 `{{CURRENT_DATETIME}}`, `{{CITATION_GUIDANCE}}` and `{{REMINDER_TAG_DESCRIPTION}}`
 tags, adds the shared user-information framing and company context, then adds
 a `# Tools` section with the guidance that spans tools: the search guidance,
-open a URL after a web search, code mode and the sandbox. Each built-in tool's
+open a URL after a web search, the sandbox tools and code mode. With sandbox
+tools, a `# Environment` section with the VM's facts ends the prompt; it is the
+only text that names one chat. Each built-in tool's
 own guidance is in its description (`prompts/tool_prompts.py`, for example
 `MEMORY_DESCRIPTION`), so it reaches code mode stubs too. `build_chat_prompt` calls it with
 `include_user_info=False` and without `should_cite_documents`. The per-user
@@ -384,7 +386,7 @@ counts what is sent, not the stored token counts.
   message get one more message with a line for each image
   (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
   alone (`chat/files.py:place_chat_files`), so a message keeps its lines
-  and the prefix stays cacheable. The system prompt's `## Sandbox` section
+  and the prefix stays cacheable. The system prompt's `# Environment` section
   gives the layout of `attachments/` in every sandbox turn, so no tool
   definition changes when the chat gets its first file.
   Only user attachments enter the prompt as text, so turn preparation

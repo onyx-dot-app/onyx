@@ -136,10 +136,10 @@ tools. `ChatAgent` sorts its offered tools with it once, when it is built
 (new, restored and child agents). The code mode description lists its
 functions and deferred namespaces in this order
 (`tools/tool_implementations/code_mode/stubs.py:build_tool_stubs`), and
-`chat/prompt_utils.py:build_system_prompt` orders the `# Tools` guidance
-sections by the rank of their tools, and the sandbox section's tools, in the
-token estimate too. The search guidance, which covers every search tool and has
-no heading, opens the tools section, followed by URL reading after a web search.
+`chat/prompt_utils.py:build_system_prompt` builds the `# Tools` guidance, in
+the token estimate too. The search guidance, which covers every search tool and has
+no heading, opens the tools section, followed by URL reading after a web search,
+the sandbox tools' lines and the code mode section.
 A new tool class must set `rank`;
 `backend/tests/unit/onyx/tools/test_tool_ranks.py` fails for a tool class
 without one.

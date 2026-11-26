@@ -144,13 +144,10 @@ def code_mode_description(stubs: ToolStubs, limits: SandboxLimits) -> str:
 - The program runs in Monty, a sandboxed Python interpreter, not CPython. The program is for calling and combining the tools below. It has no files, processes or network of its own; anything outside the program comes from a tool.
 - Each tool is an async Python function of the `{TOOLS_NAMESPACE}` namespace, which every program has. Call it as `{TOOLS_NAMESPACE}.<name>` with keyword arguments only and `await` the result, for example `result = await {TOOLS_NAMESPACE}.tool_name(argument=value)`. These functions exist only inside programs: you cannot call them as tools yourself. Top-level `await` works; do not call `asyncio.run()`.
 - Await every call; calls that are not awaited are cancelled when the program ends.
-- Run independent calls in parallel with `asyncio.gather`, for example `a, b = await asyncio.gather({TOOLS_NAMESPACE}.f(x=1), {TOOLS_NAMESPACE}.g(y=2))`. Make a call that needs an earlier result after that result is available.
-- `asyncio.gather` takes no keyword arguments, so `return_exceptions=True` is not available, and one failed call fails the whole gather. To keep the other results, wrap each call:
-  `async def attempt(call):`
-  `    try: return await call`
-  `    except Exception as e: return {{"error": str(e)}}`
-  `results = await asyncio.gather(*(attempt({TOOLS_NAMESPACE}.f(x=v)) for v in values))`
+- Run independent calls in parallel with `asyncio.gather`. Make a call that needs an earlier result after that result is available.
+- `asyncio.gather` takes no keyword arguments, so `return_exceptions=True` is not available, and one failed call fails the whole gather. To keep the other results, wrap each call in `try`/`except` inside an async function and gather those functions.
 - Only text that the program prints and the value of the last expression come back to you; that value must be JSON data ({JSON_TYPES_TEXT}). Tool results stay inside the program until you print them. Print only the fields you need, such as titles, document numbers, URLs, and short excerpts. Do not print whole results.
+- Output over the limit is cut in the middle, and the result gives the original character count.
 - A tool error raises an exception in the program. To continue after an error, use `try:` / `except Exception as e:`. An uncaught exception stops the program and returns its traceback with the output printed before it.
 - Stored values stay available in all later `{run}` calls of this chat, also in later messages. Store only JSON values ({JSON_TYPES_TEXT}). Storing None deletes the key, and `load` returns None for a missing key. `store`, `load` and `yield_control` are plain functions: do not `await` them. A program saves its writes when it ends by itself: it completes, or stops at an uncaught exception. Later programs see them from then on. The writes of a program that is terminated or times out are discarded. Each value can be up to {MAX_STORED_VALUE_BYTES // 1024} KB as JSON, and the whole store up to {MAX_STORE_BYTES // (1024 * 1024)} MB. Store values that you plan to reuse, such as IDs, totals, or filtered results, instead of calling the tools again.
 - Each program is limited to {_limits_text(limits)}.

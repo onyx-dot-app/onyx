@@ -4,12 +4,14 @@
 # `{materialize}` and `{replace}`.
 
 from onyx.file_store.constants import ARTIFACT_TEXT_MAX_FILE_BYTES
+from onyx.server.features.build.sandbox.exec_output import EXEC_CALL_OUTPUT_MAX_BYTES
 from onyx.server.features.build.sandbox.harness_base import (
     AGENT_FILES_DIR,
     ARTIFACT_FILES_DIR,
     CHAT_FILES_DIR,
     ONYX_VM_FILES_ROOT,
     PROJECT_FILES_DIR,
+    SEARCH_FILES_DIR,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_TEXT_MAX_ITEMS,
@@ -29,29 +31,40 @@ CHAT_FILES_LAYOUT = (
     f"{CHAT_FILES_DIR}/ has copies of the chat's files: the user's uploads, "
     f"the project's files in {PROJECT_FILES_DIR}/ and the agent's files in "
     f"{AGENT_FILES_DIR}/. Each name starts with a short file ID. Onyx can "
-    "put back the original files at any turn, so write a changed file to a "
-    f"path outside {CHAT_FILES_DIR}/."
+    f"put back the original files at any turn, so changes in {CHAT_FILES_DIR}/ "
+    f"can be lost. Files from search results are in {SEARCH_FILES_DIR}/."
 )
 
-# The chat system prompt's section about the sandbox, when the turn offers
-# sandbox tools: the VM facts that every tool shares, then `shell_line`:
-# SANDBOX_SHELL_LINE when the turn offers the command tool, else empty.
-SANDBOX_GUIDANCE = f"""
-## Sandbox
-You have a private Linux VM for this chat. Your working directory is {{workdir}}. Its files are saved and come back in later turns, except dependency and cache folders such as node_modules and .venv. The VM stops after a while without use; running commands, installed packages and files outside the working directory are then lost.
-{CHAT_FILES_LAYOUT}{{shell_line}}
-""".lstrip()
-SANDBOX_SHELL_LINE = '\nDo not chain commands with `echo "===="` separators.'
+# The system prompt's last section when the turn offers sandbox tools: facts
+# about the VM, with the chat's working directory. It is the only part of the
+# prompt and the tool definitions that names one chat, so it comes last.
+ENVIRONMENT_SECTION = f"""
+# Environment
+- Machine: a private Linux VM for this chat. The shell is bash.
+- Working directory: {{workdir}}
+- Saved across turns: the files in the working directory, except dependency and cache folders such as node_modules and .venv.
+- Lost when the VM stops after a while without use: running commands, installed packages and files outside the working directory.
+- Chat files: {CHAT_FILES_LAYOUT}
+- Long tool results: the result shows part of the text and the path of a file in the VM that holds the text.
+""".strip()
+
+# The tools section's lines for the sandbox tools that the turn offers.
+# `{edit_tools}` names the file tools; FILE_EDIT_SHELL_USE follows when the
+# turn offers the command tool `{shell}`, then SHELL_SEPARATOR_GUIDANCE.
+FILE_EDIT_GUIDANCE = "Change files with {edit_tools}."
+FILE_EDIT_SHELL_USE = " Use {shell} for generated or bulk changes."
+SHELL_SEPARATOR_GUIDANCE = 'Do not chain commands with `echo "===="` separators.'
 
 # The command tool's description. `{start_rule}` is the shape's rule for
-# another directory (EXEC_WORKDIR_RULE or EXEC_CD_RULE). The sandbox section
-# gives the working directory's path, so tool definitions name no chat.
-EXEC_COMMAND_DESCRIPTION = """Runs a command with bash, returning output or a session ID for ongoing interaction. Each call starts in your working directory; `cd` and environment changes do not carry over to the next call. {start_rule}
+# another directory (EXEC_WORKDIR_RULE or EXEC_CD_RULE). The environment
+# section gives the working directory's path, so tool definitions name no
+# chat.
+EXEC_COMMAND_DESCRIPTION = f"""Runs a command with bash, returning output or a session ID for ongoing interaction. Each call starts in your working directory; `cd` and environment changes do not carry over to the next call. {{start_rule}}
 
 Usage:
 - The command runs without a PTY: stdin, stdout and stderr are plain pipes.
-- A command that is still running when the wait ends returns a session ID. It keeps running, also across turns, until it ends, reaches its time limit or the VM stops. Poll it with an empty {write_stdin} call and a long wait, or interrupt it.
-- Output over the limit is cut in the middle. To read part of a long output, filter it with rg, head or tail."""
+- A command that is still running when the wait ends returns a session ID. It keeps running, also across turns, until it ends, reaches its time limit or the VM stops. Poll it with an empty {{write_stdin}} call and a long wait, or interrupt it.
+- Each call keeps the first and last {EXEC_CALL_OUTPUT_MAX_BYTES // 2 // 1024} KB of the command's output. Output over the limit is cut in the middle, and the result gives the original character count. To read a long output, filter it with rg, head or tail, or redirect it to a file and read parts of the file."""
 EXEC_WORKDIR_RULE = "Pass `workdir` when the command needs another directory."
 EXEC_CD_RULE = "Start the command with `cd <dir> &&` when it needs another directory."
 # A search result whose original file the chat's sandbox gets
@@ -77,7 +90,8 @@ WRITE_STDIN_DESCRIPTION = """Writes characters to the stdin of a command that {s
 Usage:
 - Poll a running command with empty chars and a long wait.
 - Interrupt commands that you no longer need with "\\u0003".
-- A session ID stops working when its command ends or the VM stops."""
+- A session ID stops working when its command ends or the VM stops.
+- Output has the same limits as {shell}."""
 
 # Code mode keeps at most 2,000 characters of a tool description
 # (code_mode/stubs.py MAX_TOOL_DESCRIPTION_CHARS); this one fits whole.

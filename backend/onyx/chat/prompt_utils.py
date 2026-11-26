@@ -60,7 +60,12 @@ from onyx.prompts.prompt_utils import (
     get_company_context,
     substitute_user_placeholders,
 )
-from onyx.prompts.sandbox_tools import SANDBOX_GUIDANCE, SANDBOX_SHELL_LINE
+from onyx.prompts.sandbox_tools import (
+    ENVIRONMENT_SECTION,
+    FILE_EDIT_GUIDANCE,
+    FILE_EDIT_SHELL_USE,
+    SHELL_SEPARATOR_GUIDANCE,
+)
 from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
     OPEN_URL_AFTER_WEB_SEARCH_GUIDANCE,
@@ -87,6 +92,7 @@ from onyx.tools.constants import (
 from onyx.tools.interface import Tool
 from onyx.tools.models import LlmPythonExecutionResult, ToolPreference
 from onyx.tools.ordering import ToolRank, tool_order
+from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 from onyx.tools.tool_implementations.code_mode.shapes import CODE_MODE_SHAPES
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -532,7 +538,7 @@ def build_system_prompt(
     code mode applies. With `all_guidance_family`, the prompt is a token
     estimate: it has every piece of that guidance, with tools named as that
     tool family names them, and with `all_guidance_sandbox` the family's
-    sandbox section.
+    environment section and sandbox tools' lines.
 
     With include_user_info=False the per-user block is left out so the result is
     byte-identical across users; emit it separately via build_user_information_prompt.
@@ -559,10 +565,14 @@ def build_system_prompt(
     # Guidance that spans tools; each tool's own guidance is in its
     # description. The search guidance covers every search tool, so it has no
     # heading and opens the tools section, followed by URL reading after a web
-    # search. The other sections have the rank of their tools and follow the
-    # tool order (onyx/tools/ordering.py).
+    # search, the sandbox tools' lines and the code mode section. The
+    # environment section, the only text that names one chat, ends the prompt.
     leading: list[str] = []
-    sections: list[tuple[ToolRank, str]] = []
+    # The sandbox tools' names as the prompt calls them: the file tools, in
+    # the tool order, and the command tool; and the chat's working directory.
+    edit_names: list[str] = []
+    shell_name: str | None = None
+    workdir: str | None = None
     if all_guidance_family is not None:
         code_mode_run_name = CODE_MODE_SHAPES[all_guidance_family].run_name
         leading = [
@@ -573,16 +583,15 @@ def build_system_prompt(
         ]
         if all_guidance_sandbox:
             sandbox = SANDBOX_TOOLS[all_guidance_family]
-            sections.append(
-                (
-                    min(tool.rank for tool in sandbox.tools),
-                    SANDBOX_GUIDANCE.format(
-                        # A working directory as long as every chat's.
-                        workdir=session_workspace(UUID(int=0)),
-                        shell_line=SANDBOX_SHELL_LINE,
-                    ),
-                )
-            )
+            # Program function names, the longer ones.
+            edit_names = [
+                f"`{TOOLS_NAMESPACE}.{tool.tool_name(sandbox.shell)}`"
+                for tool in sandbox.tools
+                if tool.rank is ToolRank.FILE_EDIT
+            ]
+            shell_name = f"`{TOOLS_NAMESPACE}.{sandbox.shell.name}`"
+            # A working directory as long as every chat's.
+            workdir = session_workspace(UUID(int=0))
     elif tools:
         # Inner tools are functions of a code mode program, not direct tools.
         tools = callable_tools(tools)
@@ -600,30 +609,43 @@ def build_system_prompt(
         sandbox_tools = sorted(
             (tool for tool in tools if isinstance(tool, SandboxTool)), key=tool_order
         )
+        edit_names = [
+            f"`{called_name(tool.name)}`"
+            for tool in sandbox_tools
+            if tool.rank is ToolRank.FILE_EDIT
+        ]
+        shell_name = next(
+            (
+                f"`{called_name(tool.name)}`"
+                for tool in sandbox_tools
+                if isinstance(tool, ExecCommandTool)
+            ),
+            None,
+        )
         # The sandbox tools of an agent share one turn.
         if sandbox_tools:
-            sections.append(
-                (
-                    sandbox_tools[0].rank,
-                    SANDBOX_GUIDANCE.format(
-                        workdir=sandbox_tools[0].turn.workdir,
-                        shell_line=SANDBOX_SHELL_LINE
-                        if any(isinstance(tool, ExecCommandTool) for tool in tools)
-                        else "",
-                    ),
-                )
+            workdir = sandbox_tools[0].turn.workdir
+    if edit_names:
+        leading.append(
+            FILE_EDIT_GUIDANCE.format(edit_tools=" and ".join(edit_names))
+            + (
+                ""
+                if shell_name is None
+                else FILE_EDIT_SHELL_USE.format(shell=shell_name)
             )
-    if code_mode_run_name is not None:
-        sections.append(
-            (ToolRank.CODE_MODE_RUN, CODE_MODE_GUIDANCE.format(name=code_mode_run_name))
+            + "\n"
         )
+    if shell_name is not None:
+        leading.append(SHELL_SEPARATOR_GUIDANCE + "\n")
+    if code_mode_run_name is not None:
+        leading.append(CODE_MODE_GUIDANCE.format(name=code_mode_run_name))
 
-    if leading or sections:
-        system_prompt += TOOL_SECTION_HEADER + "\n".join(
-            [
-                *leading,
-                *(section for _, section in sorted(sections, key=lambda item: item[0])),
-            ]
+    if leading:
+        system_prompt += TOOL_SECTION_HEADER + "\n".join(leading)
+    if workdir is not None:
+        system_prompt = (
+            f"{system_prompt.rstrip()}\n\n"
+            f"{ENVIRONMENT_SECTION.format(workdir=workdir)}\n"
         )
     return system_prompt
 

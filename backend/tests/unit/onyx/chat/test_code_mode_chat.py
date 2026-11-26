@@ -41,10 +41,10 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.prompts.sandbox_tools import (
+    ENVIRONMENT_SECTION,
     EXEC_CD_RULE,
     EXEC_WORKDIR_RULE,
-    SANDBOX_GUIDANCE,
-    SANDBOX_SHELL_LINE,
+    SHELL_SEPARATOR_GUIDANCE,
 )
 from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
@@ -431,6 +431,24 @@ def test_code_mode_names_python_and_a_fresh_interpreter_first(
     ) in run_line
 
 
+@pytest.mark.parametrize("family", list(ToolFamily))
+def test_the_run_tool_s_description_has_one_example_call(family: ToolFamily) -> None:
+    """One example call, in the line about the `tools` namespace; the other
+    lines give facts in words and call forms such as `await tools.<name>(...)`."""
+    offered = with_code_mode(
+        [MemoryTool(tool_id=1, llm=MagicMock())], CODE_MODE_SHAPES[family]
+    )[0]
+    [code_tool] = [tool for tool in offered if isinstance(tool, CodeModeTool)]
+    # The text before the function stubs.
+    description = code_tool.tool_definition().description.split("\nFunctions (", 1)[0]
+    example = "`result = await tools.tool_name(argument=value)`"
+    assert description.count("= await ") == 1
+    [example_line] = [line for line in description.splitlines() if example in line]
+    assert example_line.startswith("- Each tool is an async Python function")
+    assert "asyncio.gather(" not in description
+    assert "async def " not in description
+
+
 def _unused(*_: object) -> ToolResult:
     return ToolResult(content="")
 
@@ -523,27 +541,16 @@ def test_url_reading_after_web_search_names_the_tool_as_the_model_calls_it(
     assert "after a web search" not in _code_mode_prompt(tools[1:])
 
 
-def _sandbox_section(prompt: str) -> str:
-    """The sandbox section of `prompt`, up to the next section."""
-    section = prompt.split("## Sandbox\n", 1)[1]
-    return "## Sandbox\n" + section.split("\n## ", 1)[0].rstrip("\n") + "\n"
-
-
 @pytest.mark.parametrize("family", list(ToolFamily))
 @pytest.mark.parametrize("code_mode", [False, True])
-def test_the_sandbox_section_has_the_vm_facts_and_the_offered_tools_lines(
+def test_the_environment_section_ends_the_prompt_with_the_vm_facts(
     family: ToolFamily, code_mode: bool
 ) -> None:
+    """The environment section holds only facts, the same for every set of
+    sandbox tools; it is the prompt's last section, and only a turn with
+    sandbox tools has it."""
     sandbox = SANDBOX_TOOLS[family]
-    chat_session_id = uuid4()
-    turn = SandboxTurn(
-        tenant_id="t",
-        user_id=uuid4(),
-        chat_session_id=chat_session_id,
-        vm_chat_files=[],
-        copy_vm_chat_files=False,
-        shell=sandbox.shell,
-    )
+    turn = _sandbox_turn(family)
     shape = CODE_MODE_SHAPES[family]
 
     def prompt(tool_types: list[type[SandboxTool]]) -> str:
@@ -551,18 +558,55 @@ def test_the_sandbox_section_has_the_vm_facts_and_the_offered_tools_lines(
         offered = with_code_mode(tools, shape)[0] if code_mode else tools
         return _code_mode_prompt(offered)
 
-    facts = SANDBOX_GUIDANCE.format(
-        workdir=f"/home/onyx/workspaces/{chat_session_id}", shell_line=""
-    )
+    environment = ENVIRONMENT_SECTION.format(workdir=turn.workdir)
+    assert "# Environment" not in _code_mode_prompt([EchoTool()])
+    for tool_types in (
+        list(sandbox.tools),
+        [tool for tool in sandbox.tools if tool is not ExecCommandTool],
+    ):
+        assert prompt(tool_types).endswith(f"\n\n{environment}\n")
+    assert f"Working directory: {turn.workdir}\n" in environment
+    assert "Do not" not in environment
 
-    assert "## Sandbox" not in _code_mode_prompt([EchoTool()])
-    # The VM facts, and the shell's line when the turn offers the shell.
-    assert _sandbox_section(prompt(list(sandbox.tools))) == (
-        f"{facts.rstrip()}{SANDBOX_SHELL_LINE}\n"
+
+@pytest.mark.parametrize("family", list(ToolFamily))
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_the_tools_section_has_the_edit_and_shell_lines_of_the_offered_tools(
+    family: ToolFamily, code_mode: bool
+) -> None:
+    sandbox = SANDBOX_TOOLS[family]
+    turn = _sandbox_turn(family)
+    shape = CODE_MODE_SHAPES[family]
+    prefix = "tools." if code_mode else ""
+
+    def tools_section(tool_types: list[type[SandboxTool]]) -> str:
+        tools: list[Tool] = [tool(turn) for tool in tool_types]
+        offered = with_code_mode(tools, shape)[0] if code_mode else tools
+        return _code_mode_prompt(offered).split(TOOL_SECTION_HEADER, 1)[1]
+
+    edit_tools = (
+        f"`{prefix}edit` and `{prefix}write`"
+        if family is ToolFamily.CLAUDE
+        else f"`{prefix}apply_patch`"
     )
-    assert _sandbox_section(
-        prompt([tool for tool in sandbox.tools if tool is not ExecCommandTool])
-    ) == (facts)
+    edit_line = f"Change files with {edit_tools}."
+    shell_use = f" Use `{prefix}{sandbox.shell.name}` for generated or bulk changes."
+    file_tools = {ApplyPatchTool, EditTool, WriteTool}
+
+    every = tools_section(list(sandbox.tools))
+    assert f"{edit_line}{shell_use}\n\n{SHELL_SEPARATOR_GUIDANCE}\n" in every
+    without_shell = tools_section(
+        [tool for tool in sandbox.tools if tool is not ExecCommandTool]
+    )
+    assert f"{edit_line}\n" in without_shell
+    assert [
+        text for text in (shell_use, SHELL_SEPARATOR_GUIDANCE) if text in without_shell
+    ] == []
+    without_edit_tools = tools_section(
+        [tool for tool in sandbox.tools if tool not in file_tools]
+    )
+    assert "Change files with" not in without_edit_tools
+    assert SHELL_SEPARATOR_GUIDANCE in without_edit_tools
 
 
 @pytest.mark.parametrize("family", list(ToolFamily))
@@ -594,7 +638,7 @@ def test_each_sandbox_tool_s_guidance_is_in_its_description_and_stub(
         ExecCommandTool: [
             "Each call starts in your working directory; `cd` and environment changes "
             f"do not carry over to the next call. {start_rule}",
-            "Output over the limit is cut in the middle.",
+            "Output over the limit is cut in the middle",
         ],
         WriteStdinTool: [
             "Poll a running command with empty chars and a long wait.",
@@ -609,9 +653,9 @@ def test_each_sandbox_tool_s_guidance_is_in_its_description_and_stub(
             assert text in tool.tool_definition().description
             assert text in stubs
             assert [prompt for prompt in prompts if text in prompt] == []
-    # The section's line is in no description.
+    # The tools section's line is in no description.
     assert [
-        tool for tool in tools if SANDBOX_SHELL_LINE.strip() in tool.description
+        tool for tool in tools if SHELL_SEPARATOR_GUIDANCE in tool.description
     ] == []
 
 
@@ -634,8 +678,8 @@ def test_sandbox_tool_definitions_are_the_same_in_every_chat(
     family: ToolFamily, code_mode: bool
 ) -> None:
     """Tool definitions open the cached prefix, so they hold nothing of one
-    chat, also when only one chat has files; only the sandbox section names
-    the chat's working directory."""
+    chat, also when only one chat has files; only the environment section
+    names the chat's working directory."""
 
     def definitions(turn: SandboxTurn) -> list[str]:
         tools: list[Tool] = [tool(turn) for tool in SANDBOX_TOOLS[family].tools]
@@ -687,7 +731,7 @@ def test_the_token_reservation_counts_code_mode_guidance(
         all_guidance_sandbox=include_sandbox,
     )
     assert CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME) in reserved
-    assert ("## Sandbox" in reserved) is include_sandbox
+    assert ("# Environment" in reserved) is include_sandbox
 
 
 def _guided(tool_type: type[Tool], name: str) -> MagicMock:
@@ -736,7 +780,7 @@ def test_tool_guidance_follows_the_tool_order_in_both_prompt_variants() -> None:
     ]
     # The search guidance opens the section, followed by URL reading after
     # a web search; the other sections follow the tool order.
-    expected = ["search", "open url", EXEC_TOOL_NAME, "Sandbox"]
+    expected = ["search", "open url", EXEC_TOOL_NAME]
 
     offered_prompt = _code_mode_prompt(offered)
     estimate_prompt = build_system_prompt(
