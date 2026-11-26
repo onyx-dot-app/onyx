@@ -23,7 +23,6 @@ import {
 import { Section } from "@opal/layouts";
 import {
   DocumentToolbar,
-  listArrowStep,
   PreviewSidebar,
 } from "@/sections/file-preview/PreviewControls";
 import { useThumbnailColumn } from "@/lib/filePreview/hooks";
@@ -45,6 +44,8 @@ type Zoom = "width" | "page" | number;
 interface PdfThumbnailProps {
   page: number;
   width: number;
+  // Width over height, until the page loads its own: the first page's
+  defaultAspectRatio: number;
   active: boolean;
   // The thumbnail column, which scrolls
   column: RefObject<HTMLDivElement | null>;
@@ -54,11 +55,14 @@ interface PdfThumbnailProps {
 /**
  * A page's thumbnail, drawn once it nears the column's view and dropped when
  * it scrolls far out of it, so a long document keeps few pages drawn. A
- * hidden column, as in a hidden tab, keeps the thumbnails it has drawn.
+ * hidden column, as in a hidden tab, keeps the thumbnails it has drawn. Its
+ * box takes the page's shape once the page loads, and keeps it when the
+ * drawing is dropped.
  */
 const PdfThumbnail = memo(function PdfThumbnail({
   page,
   width,
+  defaultAspectRatio,
   active,
   column,
   onSelect,
@@ -69,6 +73,7 @@ const PdfThumbnail = memo(function PdfThumbnail({
   const near = useInView(ref, { root: column, margin: "400px 0px" }) || active;
   const [drawn, setDrawn] = useState(near);
   if (near && !drawn) setDrawn(true);
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
     // A hidden column reports every thumbnail out of view
@@ -97,10 +102,9 @@ const PdfThumbnail = memo(function PdfThumbnail({
       onClick={() => onSelect(page)}
     >
       <Section gap={1} height="auto">
-        <Section
-          height="auto"
-          gap={0}
-          className="aspect-[3/4] overflow-hidden bg-background-neutral-00"
+        <div
+          className="w-full overflow-hidden bg-background-neutral-00"
+          style={{ aspectRatio: aspectRatio ?? defaultAspectRatio }}
         >
           {drawn && (
             <Page
@@ -110,11 +114,16 @@ const PdfThumbnail = memo(function PdfThumbnail({
               renderTextLayer={false}
               renderAnnotationLayer={false}
               devicePixelRatio={1}
+              onLoadSuccess={(loaded) => {
+                // The viewport applies the page's rotation
+                const viewport = loaded.getViewport({ scale: 1 });
+                setAspectRatio(viewport.width / viewport.height);
+              }}
               loading={null}
               error={null}
             />
           )}
-        </Section>
+        </div>
         <Text as="p" font="secondary-body" color="text-03">
           {format.number(page)}
         </Text>
@@ -139,6 +148,9 @@ export default function PdfViewer({ blob, onError }: PdfViewerProps) {
   const format = useFormatter();
   const rtl = useDirection() === "rtl";
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
+  // The first page's width over height, the shape of a thumbnail whose page
+  // has not loaded
+  const [firstPageAspectRatio, setFirstPageAspectRatio] = useState(1);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState({ width: 612, height: 792 });
   const [zoom, setZoom] = useState<Zoom>("width");
@@ -214,7 +226,17 @@ export default function PdfViewer({ blob, onError }: PdfViewerProps) {
       file={blob}
       options={PDF_DOCUMENT_OPTIONS}
       suspense={false}
-      onLoadSuccess={(document) => setPdf(document)}
+      onLoadSuccess={async (document) => {
+        try {
+          const viewport = (await document.getPage(1)).getViewport({
+            scale: 1,
+          });
+          setFirstPageAspectRatio(viewport.width / viewport.height);
+          setPdf(document);
+        } catch {
+          onError();
+        }
+      }}
       onLoadError={onError}
       onSourceError={onError}
       onPassword={onError}
@@ -227,7 +249,10 @@ export default function PdfViewer({ blob, onError }: PdfViewerProps) {
       loading={loader}
       error={null}
     >
-      {pageCount > 0 && (
+      {/* The loader stays until the first page's shape loads too */}
+      {pageCount === 0 ? (
+        loader
+      ) : (
         <>
           <DocumentToolbar
             label={t("pdf.controls.label")}
@@ -316,7 +341,16 @@ export default function PdfViewer({ blob, onError }: PdfViewerProps) {
                   className="h-full overflow-y-auto overscroll-contain p-2"
                   aria-label={t("pdf.thumbnails.label")}
                   onKeyDown={(event) => {
-                    const step = listArrowStep(event.key, rtl);
+                    // Up and the reading direction's back arrow go back one
+                    // page; Down and its forward arrow go on one
+                    const back = rtl ? "ArrowRight" : "ArrowLeft";
+                    const forward = rtl ? "ArrowLeft" : "ArrowRight";
+                    const step =
+                      event.key === "ArrowUp" || event.key === back
+                        ? -1
+                        : event.key === "ArrowDown" || event.key === forward
+                          ? 1
+                          : 0;
                     if (event.defaultPrevented || step === 0) return;
                     event.preventDefault();
                     selectPage(pageNumber + step);
@@ -328,6 +362,7 @@ export default function PdfViewer({ blob, onError }: PdfViewerProps) {
                         key={index + 1}
                         page={index + 1}
                         width={Math.max(40, width - THUMBNAIL_INSET)}
+                        defaultAspectRatio={firstPageAspectRatio}
                         active={pageNumber === index + 1}
                         column={thumbnailColumn}
                         onSelect={selectPage}

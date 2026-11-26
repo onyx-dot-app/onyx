@@ -49,19 +49,11 @@ export class FilePreviewModalPage {
     ).toBeVisible();
   }
 
-  /**
-   * Checks that the Word document's pages render, and contain `text` when
-   * given, with neither the load nor the render error. The pages render in a
-   * shadow root, which Playwright's locators pierce.
-   */
-  async expectDocxPages(text?: string): Promise<void> {
-    const pages = this.modal.locator("section.docx");
-    await expect(pages.first()).toBeVisible({ timeout: 10000 });
-    if (text) await expect(pages).toContainText([text]);
-    await expect(this.modal.getByText("Unable to load preview")).toHaveCount(0);
-    await expect(this.modal.getByText("Cannot preview this file")).toHaveCount(
-      0
-    );
+  /** Checks the card for a file that the server cannot preview. */
+  async expectNoPreview(): Promise<void> {
+    await expect(this.modal.getByText("No preview for this file")).toBeVisible({
+      timeout: 10000,
+    });
   }
 
   /** Checks that the PDF shows `page` of `pageCount` and draws that page. */

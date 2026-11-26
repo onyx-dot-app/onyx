@@ -1,4 +1,5 @@
 import { fetchChatFile } from "@/lib/chat/svc";
+import { FetchError } from "@/lib/fetcher";
 import { loadChatFilePreview } from "@/lib/filePreview/loadChatFilePreview";
 
 jest.mock("@/lib/chat/svc", () => ({
@@ -57,7 +58,7 @@ test("a text file reads its body; the response names the file and its type", asy
 
   const data = await loadChatFilePreview("file-1", "shown name", signal);
 
-  expect(fetchChatFile).toHaveBeenCalledWith("file-1", false, signal);
+  expect(fetchChatFile).toHaveBeenCalledWith("file-1", "original", signal);
   expect(data).toEqual({
     name: "stored.py",
     mimeType: "text/x-python",
@@ -90,7 +91,7 @@ test("a spreadsheet name loads only the parsed sheets", async () => {
   const data = await loadChatFilePreview("file-1", "book.xlsx", signal);
 
   expect(fetchChatFile).toHaveBeenCalledTimes(1);
-  expect(fetchChatFile).toHaveBeenCalledWith("file-1", true, signal);
+  expect(fetchChatFile).toHaveBeenCalledWith("file-1", "parsed", signal);
   expect(data).toMatchObject({ kind: "spreadsheet", sheets: SHEETS.sheets });
 });
 
@@ -112,8 +113,101 @@ test("a spreadsheet type drops the workbook and loads the parsed sheets", async 
   const data = await loadChatFilePreview("file-1", "renamed", signal);
 
   expect(workbook.cancelled()).toBe(true);
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-1", true, signal);
+  expect(fetchChatFile).toHaveBeenLastCalledWith("file-1", "parsed", signal);
   expect(data).toMatchObject({ kind: "spreadsheet", name: "renamed.xlsx" });
+});
+
+const PPTX_TYPE =
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+test("a Word or PowerPoint name with a stored PDF loads only that PDF", async () => {
+  jest
+    .mocked(fetchChatFile)
+    .mockResolvedValue(
+      fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
+    );
+
+  const data = await loadChatFilePreview("file-1", "deck.pptx", signal);
+
+  expect(fetchChatFile).toHaveBeenCalledTimes(1);
+  expect(fetchChatFile).toHaveBeenCalledWith("file-1", "pdf", signal);
+  if (data.kind !== "pdf") throw new Error(`Expected a PDF, got ${data.kind}`);
+  expect(data.name).toBe("deck.pptx");
+  expect(data.mimeType).toBe(PPTX_TYPE);
+  expect(data.blob.type).toBe("application/pdf");
+});
+
+test("a PowerPoint type drops the original and loads the server's PDF", async () => {
+  const original = trackedBody([new Uint8Array(10)]);
+  jest
+    .mocked(fetchChatFile)
+    .mockResolvedValueOnce(fileResponse(original.stream, PPTX_TYPE, "renamed"))
+    .mockResolvedValueOnce(
+      fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
+    );
+
+  const data = await loadChatFilePreview("file-1", "renamed", signal);
+
+  expect(original.cancelled()).toBe(true);
+  expect(fetchChatFile).toHaveBeenLastCalledWith("file-1", "pdf", signal);
+  expect(data).toMatchObject({ kind: "pdf", name: "renamed.pptx" });
+});
+
+const NOT_READY = new FetchError("Failed to load document.", 409, {
+  error_code: "PREVIEW_NOT_READY",
+  detail: "No stored preview",
+});
+
+test("a file without a stored PDF has the server convert it, then shows that PDF", async () => {
+  jest
+    .mocked(fetchChatFile)
+    .mockRejectedValueOnce(NOT_READY)
+    .mockResolvedValueOnce(
+      fileResponse("%PDF-1.4", "application/pdf", "preview.pdf")
+    );
+
+  const data = await loadChatFilePreview("file-1", "deck.pptx", signal);
+
+  expect(jest.mocked(fetchChatFile).mock.calls).toEqual([
+    ["file-1", "pdf", signal],
+    ["file-1", "convertPdf", signal],
+  ]);
+  if (data.kind !== "pdf") throw new Error(`Expected a PDF, got ${data.kind}`);
+  expect(await data.blob.text()).toBe("%PDF-1.4");
+});
+
+test("a conversion that cannot make a PDF shows that there is no preview", async () => {
+  jest
+    .mocked(fetchChatFile)
+    .mockRejectedValueOnce(NOT_READY)
+    .mockRejectedValueOnce(
+      new FetchError("Failed to load document.", 422, {
+        error_code: "PREVIEW_UNAVAILABLE",
+        detail: "No preview",
+      })
+    );
+
+  const data = await loadChatFilePreview("file-1", "deck.pptx", signal);
+
+  expect(data).toMatchObject({ kind: "unavailable", name: "deck.pptx" });
+});
+
+test("a conversion that fails for another reason fails the load, for a retry", async () => {
+  jest
+    .mocked(fetchChatFile)
+    .mockRejectedValueOnce(NOT_READY)
+    .mockRejectedValueOnce(
+      new FetchError("Failed to load document.", 503, null)
+    );
+
+  await expect(
+    loadChatFilePreview("file-1", "deck.pptx", signal)
+  ).rejects.toThrow("Failed to load document.");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-1",
+    "convertPdf",
+    signal
+  );
 });
 
 test("a malformed sheets payload fails the load", async () => {
@@ -162,6 +256,18 @@ test("a declared length over the limit reads nothing", async () => {
   jest.mocked(fetchChatFile).mockResolvedValue(response);
 
   const data = await loadChatFilePreview("file-1", "big.pdf", signal);
+
+  expect(data).toMatchObject({ kind: "tooLarge", limitMB: 100 });
+  expect(body.cancelled()).toBe(true);
+});
+
+test("a server PDF over the PDF limit reads nothing", async () => {
+  const body = trackedBody([new Uint8Array(10)]);
+  const response = fileResponse(body.stream, "application/pdf", "preview.pdf");
+  response.headers.set("Content-Length", String(200 * MB));
+  jest.mocked(fetchChatFile).mockResolvedValue(response);
+
+  const data = await loadChatFilePreview("file-1", "deck.pptx", signal);
 
   expect(data).toMatchObject({ kind: "tooLarge", limitMB: 100 });
   expect(body.cancelled()).toBe(true);
