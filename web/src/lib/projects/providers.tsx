@@ -403,6 +403,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       }
       const upload = trackUpload(tempIds);
       let settledFiles: ProjectFile[] = [];
+      // The cleanup of cancelled files; the refresh waits for it, so it does
+      // not list a file that is still linked.
+      let cleanup: Promise<unknown> = Promise.resolve();
       svcUploadFiles(
         validFiles,
         projectId,
@@ -429,19 +432,23 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
           );
           const isCancelled = (f: ProjectFile) =>
             Boolean(f.temp_id && cancelledTempIds.has(f.temp_id));
-          for (const f of (uploaded.user_files || []).filter(isCancelled)) {
-            void (async () => {
-              // The delete keeps a file that a project links, so a project
-              // upload is unlinked first.
-              if (projectId) await svcUnlinkFileFromProject(projectId, f.id);
-              const result = await svcDeleteUserFile(f.id);
-              if (result.has_associations) {
-                throw new Error("The cancelled upload is still linked");
-              }
-            })().catch((error: unknown) =>
-              console.error("Failed to delete a cancelled upload:", error)
-            );
-          }
+          cleanup = Promise.all(
+            (uploaded.user_files || []).filter(isCancelled).map((f) =>
+              (async () => {
+                // The delete keeps a file that a project links, so a project
+                // upload is unlinked first.
+                if (projectId) {
+                  await svcUnlinkFileFromProject(projectId, f.id);
+                }
+                const result = await svcDeleteUserFile(f.id);
+                if (result.has_associations) {
+                  throw new Error("The cancelled upload is still linked");
+                }
+              })().catch((error: unknown) =>
+                console.error("Failed to delete a cancelled upload:", error)
+              )
+            )
+          );
           if (cancelledTempIds.size > 0) {
             removeOptimisticFilesByTempIds(cancelledTempIds, projectId);
           }
@@ -535,10 +542,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         })
         .finally(() => {
           upload.finish(settledFiles);
-          if (projectId && currentProjectId === projectId) {
-            refreshCurrentProjectDetails();
-          }
-          refreshRecentFiles();
+          void cleanup.then(() => {
+            if (projectId && currentProjectId === projectId) {
+              refreshCurrentProjectDetails();
+            }
+            refreshRecentFiles();
+          });
         });
       return optimisticFiles;
     },

@@ -169,7 +169,7 @@ function SpreadsheetContent({
     const fetchSheets = async () => {
       setIsFetching(true);
       try {
-        const response = await fetchChatFile(cacheKey, true);
+        const response = await fetchChatFile(cacheKey, "parsed");
         const contentType = response.headers.get("Content-Type") ?? "";
 
         let fetchedSheets: SpreadsheetSheet[];

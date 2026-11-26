@@ -2,13 +2,19 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+import grpc
 import pytest
 
 from onyx.agents.tools import ToolInvocation
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.model_capabilities import ToolFamily
+from onyx.microvm.agent_client import HostAgentError
 from onyx.server.features.build.sandbox.harness_base import HarnessSandboxError
-from onyx.server.features.build.sandbox.models import HarnessSandboxRef
+from onyx.server.features.build.sandbox.models import (
+    HarnessSandboxRef,
+    RenderedPreview,
+    RenderSessionFile,
+)
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.sandbox import artifact_operations
 from onyx.tools.tool_implementations.sandbox.models import (
@@ -89,6 +95,8 @@ def test_a_title_is_stored_trimmed_without_nul_and_within_its_limit(
 def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A file whose render fails or raises still publishes, without a
+    thumbnail."""
     thumbnails: dict[str, bytes | None] = {}
 
     def save(
@@ -110,8 +118,15 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
             thumbnail_file_id=None if thumbnail is None else f"{name}-thumbnail",
         )
 
+    def render(source: RenderSessionFile, **_: object) -> RenderedPreview | None:
+        if source.path.endswith(".docx"):
+            return None
+        if source.path.endswith("e.pptx"):
+            raise HostAgentError(grpc.StatusCode.UNAVAILABLE, "connection lost", None)
+        return RenderedPreview(first_page=b"jpeg", pdf=None)
+
     monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
-    monkeypatch.setattr(artifact_operations, "RENDER_FIRST_PAGE_MAX_INPUT_BYTES", 4)
+    monkeypatch.setattr(artifact_operations, "RENDER_PREVIEW_MAX_INPUT_BYTES", 4)
     turn = MagicMock(spec=SandboxTurn)
     turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
     turn.start_call.return_value = HarnessSandboxRef(
@@ -120,15 +135,14 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
     turn.sandbox.read_file.side_effect = lambda _ref, path, **_: (
         b"large" if path == "big.pdf" else b"data"
     )
-    # The Word file does not render.
-    turn.sandbox.render_first_page.side_effect = lambda _ref, path, **_: (
-        None if path.endswith(".docx") else b"jpeg"
-    )
+    turn.sandbox.render_preview.side_effect = render
 
     result = LibraryCreateLibraryFileTool(turn)._run(
         ToolInvocation(
             call_id="publish",
-            arguments={"files": ["a.pdf", "b.PPTX", "c.docx", "d.md", "big.pdf"]},
+            arguments={
+                "files": ["a.pdf", "b.PPTX", "c.docx", "d.md", "big.pdf", "e.pptx"]
+            },
             cancellation=CancellationSignal(),
             update=lambda _progress: None,
         ),
@@ -141,13 +155,16 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
         "c.docx": None,
         "d.md": None,
         "big.pdf": None,
+        "e.pptx": None,
     }
-    rendered = [call.args[1] for call in turn.sandbox.render_first_page.call_args_list]
-    assert [path.rsplit("/", 1)[-1] for path in rendered] == [
+    renders = turn.sandbox.render_preview.call_args_list
+    assert [call.args[0].path.rsplit("/", 1)[-1] for call in renders] == [
         "a.pdf",
         "b.PPTX",
         "c.docx",
+        "e.pptx",
     ]
+    assert all(call.kwargs["first_page"] for call in renders)
     assert isinstance(result.details, PublishedFiles)
     assert [file.thumbnail_file_id for file in result.details.files] == [
         "a.pdf-thumbnail",
@@ -155,19 +172,55 @@ def test_a_pdf_or_office_file_is_saved_with_its_rendered_first_page(
         None,
         None,
         None,
+        None,
     ]
+
+
+def test_a_stop_during_a_render_stops_the_publish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: list[str] = []
+
+    def save(_content: bytes, *, name: str, **_: object) -> PublishedFile:
+        saved.append(name)
+        raise AssertionError("a stopped publish saves nothing")
+
+    def render(_source: RenderSessionFile, **_: object) -> RenderedPreview:
+        raise AgentCancelled("user")
+
+    monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
+    turn = MagicMock(spec=SandboxTurn)
+    turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
+    turn.start_call.return_value = HarnessSandboxRef(
+        tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
+    )
+    turn.sandbox.read_file.return_value = b"data"
+    turn.sandbox.render_preview.side_effect = render
+
+    with pytest.raises(AgentCancelled):
+        LibraryCreateLibraryFileTool(turn)._run(
+            ToolInvocation(
+                call_id="publish",
+                arguments={"files": ["a.pptx"]},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            MagicMock(),
+        )
+
+    assert saved == []
 
 
 def test_the_renders_of_a_call_share_one_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Every render gets the call's deadline, counted once the call has its
-    sandbox, and the files after it publish without a render."""
+    """The renders of a call share one budget, counted from the first read,
+    which wakes the VM; the files after it publish without a render."""
     now = [100.0]
     monkeypatch.setattr(
         artifact_operations, "time", SimpleNamespace(monotonic=lambda: now[0])
     )
-    monkeypatch.setattr(artifact_operations, "RENDER_FIRST_PAGE_BUDGET_SECONDS", 10.0)
+    monkeypatch.setattr(artifact_operations, "RENDER_PREVIEW_BUDGET_SECONDS", 10.0)
 
     def save(
         content: bytes,
@@ -185,23 +238,26 @@ def test_the_renders_of_a_call_share_one_budget(
             mime_type=mime_type,
         )
 
-    def render(_ref: HarnessSandboxRef, _path: str, **_: object) -> bytes:
+    def render(_source: RenderSessionFile, **_: object) -> RenderedPreview:
         now[0] += 6.0
-        return b"jpeg"
+        return RenderedPreview(first_page=b"jpeg", pdf=None)
 
     monkeypatch.setattr(artifact_operations, "save_chat_artifact", save)
     ref = HarnessSandboxRef(tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4())
+    reads: list[str] = []
 
-    def start_call() -> HarnessSandboxRef:
-        # A wake and a skills sync take time before the call has its sandbox
-        now[0] += 25.0
-        return ref
+    def read_file(_ref: HarnessSandboxRef, path: str, **_: object) -> bytes:
+        if not reads:
+            # The first read wakes the VM.
+            now[0] += 25.0
+        reads.append(path)
+        return b"data"
 
     turn = MagicMock(spec=SandboxTurn)
     turn.shell = SHELL_SHAPES[ToolFamily.OPENAI]
-    turn.start_call.side_effect = start_call
-    turn.sandbox.read_file.return_value = b"data"
-    turn.sandbox.render_first_page.side_effect = render
+    turn.start_call.return_value = ref
+    turn.sandbox.read_file.side_effect = read_file
+    turn.sandbox.render_preview.side_effect = render
 
     LibraryCreateLibraryFileTool(turn)._run(
         ToolInvocation(
@@ -213,12 +269,12 @@ def test_the_renders_of_a_call_share_one_budget(
         MagicMock(),
     )
 
-    renders = turn.sandbox.render_first_page.call_args_list
-    assert [call.args[1].rsplit("/", 1)[-1] for call in renders] == [
+    renders = turn.sandbox.render_preview.call_args_list
+    assert [call.args[0].path.rsplit("/", 1)[-1] for call in renders] == [
         "a.pdf",
         "b.pptx",
     ]
-    assert [call.kwargs["until"] for call in renders] == [135.0, 135.0]
+    assert [call.kwargs["budget_seconds"] for call in renders] == [10.0, 4.0]
 
 
 @pytest.mark.parametrize("stopped", [True, False])

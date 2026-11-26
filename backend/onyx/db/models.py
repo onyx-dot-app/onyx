@@ -5830,6 +5830,16 @@ class ChatArtifactVersion(Base):
         nullable=True,
         unique=True,
     )
+    # The PDF of a PowerPoint or Word file (FileOrigin.CHAT_FILE_PREVIEW),
+    # from the render of its thumbnail or of its first conversion, with the
+    # version's deletes. Served only through the file's own preview requests
+    # (`GET /chat/file/{file_id}?preview=pdf`, `POST .../preview`).
+    preview_file_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -7492,6 +7502,16 @@ class UserFile(Base):
 
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The PDF of a PowerPoint or Word file (FileOrigin.CHAT_FILE_PREVIEW),
+    # from its first conversion, with the user file's deletes. Served only
+    # through the file's own preview requests
+    # (`GET /chat/file/{file_id}?preview=pdf`, `POST .../preview`).
+    preview_file_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
 
     projects: Mapped[list["UserProject"]] = relationship(
         "UserProject",
@@ -7522,6 +7542,9 @@ class UserFile(Base):
             "user_id",
             postgresql_where=text("status = 'COMPLETED'"),
         ),
+        # Backs the lookup of a chat file's user file (several can share one
+        # file), as for its preview (db/chat.py:get_chat_file_preview_row).
+        Index("ix_user_file_file_id", "file_id"),
     )
 
 

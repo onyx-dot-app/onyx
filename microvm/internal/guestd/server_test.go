@@ -592,7 +592,10 @@ func TestErrors(t *testing.T) {
 		t.Fatalf("unknown id: %v", err)
 	}
 	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{}); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("reserved call: %v", err)
+		t.Fatalf("browser start with no browser: %v", err)
+	}
+	if _, err := c.BrowserStop(ctx, &pb.BrowserStopRequest{}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("browser stop with no browser: %v", err)
 	}
 }
 
