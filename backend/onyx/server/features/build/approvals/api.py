@@ -72,7 +72,9 @@ class ApprovalView(BaseModel):
         ):
             return False
         # Same rule as the gate's session grant check.
-        return not any(always_asks(a.action_type) for a in self.actions)
+        return not any(
+            always_asks(self.integration_kind, a.action_type) for a in self.actions
+        )
 
     @computed_field
     @property
@@ -245,6 +247,11 @@ def submit_decision(
     approved_ids = [approval_id]
     grant_source_rows: list[ActionApproval] = []
     if target is not None:
+        kind = (
+            current.integration.kind
+            if current.integration is not None
+            else IntegrationKind.API
+        )
         grant_source_rows = action_approval.list_session_grant_action_approvals(
             db_session,
             session_id=current.session_id,
@@ -255,7 +262,7 @@ def submit_decision(
             action
             for row in grant_source_rows
             for action in actions_requiring_approval(row.actions)
-            if not always_asks(action)
+            if not always_asks(kind, action)
         }
         pending_rows = action_approval.list_session_pending_action_approvals(
             db_session, current.session_id, created_after=cutoff, load_target=True
