@@ -227,7 +227,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    connection opened" as "the request was sent".
 3. `source-ip-is-identity` **The source IP or the relay-signed token is the
    identity boundary; the session tag is not.** The signed path exists only with
-   `SANDBOX_RUNTIME=firecracker`; with the default `pod` the proxy ignores
+   `SANDBOX_RUNTIME=firecracker` or `auto`; with the default `pod` the proxy ignores
    `Bearer` headers. Firecracker VMs share the host relay's IP, so the relay
    stamps an EdDSA token per connection (`sandbox_proxy/sandbox_identity/signed.py`).
    The proxy holds node public keys only and checks the cache placement record

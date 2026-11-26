@@ -87,10 +87,13 @@ def _ns_selector(namespace: str) -> dict[str, Any]:
     return {"matchLabels": {"kubernetes.io/metadata.name": namespace}}
 
 
-def test_pod_runtime_renders_nothing_new() -> None:
-    assert _render([]) == []
-    assert "SANDBOX_RUNTIME" not in _configmap_data([])
-    assert _proxy_ingress_sources([]) == [
+@pytest.mark.parametrize("runtime", [[], ["--set", "craft.sandboxRuntime=pod"]])
+def test_no_firecracker_without_its_inputs(runtime: list[str]) -> None:
+    """Default "auto" with global.version=latest and no node registration
+    renders no agent, like "pod"."""
+    assert _render(runtime) == []
+    assert _configmap_data(runtime)["SANDBOX_RUNTIME"] == ("pod" if runtime else "auto")
+    assert _proxy_ingress_sources(runtime) == [
         {"namespaceSelector": _ns_selector("onyx-sandboxes")}
     ]
 
@@ -678,7 +681,7 @@ def test_only_agent_clients_reach_agent_listener() -> None:
             ["--set-string", "craft.hostAgent.sliceMemoryPercent=0100"],
             "sliceMemoryPercent",
         ),
-        (["--set-string", "configMap.ENABLE_CRAFT=false"], "ENABLE_CRAFT"),
+        (["--set-string", "global.version=latest"], "needs a pinned"),
         (
             ["--set-string", "craft.hostAgent.namespace=onyx"],
             "craft.hostAgent.namespace",

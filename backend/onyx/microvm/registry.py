@@ -9,6 +9,9 @@ No schema change. State model: microvm/README.md, "Sandbox state model".
 - Last report time (shared cache, NO TTL): set on each accepted node state
   report, and deleted when the node's registration ends or starts again. Placement counts a node as dead when its last report is older than
   `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`.
+- Node info (shared cache, key TTL): the agent's `NodeInfo` as a report pass
+  read it, for the sandbox tools check and the admin status. Deleted with the
+  last report time.
 - Placement record (tenant cache, NO TTL): the VM instance of a sandbox
   (node, attempt, generation) and its last activity. Only Stop, a discard,
   or a reconcile that confirms the VM is gone removes it. Writes from a
@@ -33,7 +36,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
 
 from onyx.cache.interface import (
     TTL_NO_EXPIRY,
@@ -42,7 +45,7 @@ from onyx.cache.interface import (
     CacheLockAcquisitionError,
 )
 from onyx.microvm.configs import SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS
-from onyx.microvm.models import IndexedPlacement, RegisteredNode
+from onyx.microvm.models import IndexedPlacement, NodeInfo, RegisteredNode
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.logger import setup_logger
 
@@ -61,6 +64,7 @@ _NODE_PLACEMENTS_PREFIX = "sandbox_fc:node_placements:"
 _DAEMON_KEY_PREFIX = "sandbox_fc:daemon_key:"
 _RESERVATION_PREFIX = "sandbox_fc:reservation:"
 _NODE_LAST_REPORT_PREFIX = "sandbox_fc:node_last_report:"
+_NODE_INFO_PREFIX = "sandbox_fc:node_info:"
 _MAX_NODES = 10_000
 _MAX_NODE_PLACEMENTS = 100_000
 _LOCK_WAIT_SECONDS = 10.0
@@ -370,6 +374,7 @@ def set_node_agent_address(
             # A node that comes back starts without the report time of its
             # earlier life.
             shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
+            shared_cache.delete(_NODE_INFO_PREFIX + node_id)
         shared_cache.set(
             _NODE_ADDRESS_PREFIX + node_id, address, ex=NODE_SIGNING_KEY_TTL_SECONDS
         )
@@ -390,6 +395,7 @@ def clear_node_agent_address(shared_cache: CacheBackend, *, node_id: str) -> Non
         shared_cache.delete(_NODE_ADDRESS_PREFIX + node_id)
         shared_cache.delete(_NODE_ADDRESS_KEY_PREFIX + node_id)
         shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
+        shared_cache.delete(_NODE_INFO_PREFIX + node_id)
         shared_cache.set_remove(_NODES_KEY, node_id)
 
 
@@ -407,6 +413,7 @@ def deregister_node(shared_cache: CacheBackend, *, node_id: str, key_id: str) ->
         shared_cache.delete(_NODE_ADDRESS_PREFIX + node_id)
         shared_cache.delete(_NODE_ADDRESS_KEY_PREFIX + node_id)
         shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
+        shared_cache.delete(_NODE_INFO_PREFIX + node_id)
         shared_cache.set_remove(_NODES_KEY, node_id)
         return True
 
@@ -438,20 +445,49 @@ def record_node_report(shared_cache: CacheBackend, node_id: str, now: int) -> No
     shared_cache.set(_NODE_LAST_REPORT_PREFIX + node_id, str(now))
 
 
+def get_node_last_report(shared_cache: CacheBackend, node_id: str) -> int | None:
+    """The time of the node's last accepted state report, if any."""
+    raw = shared_cache.get(_NODE_LAST_REPORT_PREFIX + node_id)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        logger.error("sandbox_fc_bad_node_report_time node=%s value=%r", node_id, raw)
+        return None
+
+
 def node_reports_stopped(shared_cache: CacheBackend, node_id: str, now: int) -> bool:
     """True when the node reported before, but not within
     `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`."""
     if SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS <= 0:
         return False
-    raw = shared_cache.get(_NODE_LAST_REPORT_PREFIX + node_id)
-    if raw is None:
-        return False
-    try:
-        last = int(raw)
-    except ValueError:
-        logger.error("sandbox_fc_bad_node_report_time node=%s value=%r", node_id, raw)
+    last = get_node_last_report(shared_cache, node_id)
+    if last is None:
         return False
     return now - last > SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS
+
+
+def record_node_info(shared_cache: CacheBackend, node_id: str, info: NodeInfo) -> None:
+    """Keep the node's `NodeInfo` from its last report pass. Expires with the
+    node's keys."""
+    shared_cache.set(
+        _NODE_INFO_PREFIX + node_id,
+        info.model_dump_json(),
+        ex=NODE_SIGNING_KEY_TTL_SECONDS,
+    )
+
+
+def get_node_info(shared_cache: CacheBackend, node_id: str) -> NodeInfo | None:
+    """The `NodeInfo` of the node's last report pass that read it, if any."""
+    raw = shared_cache.get(_NODE_INFO_PREFIX + node_id)
+    if raw is None:
+        return None
+    try:
+        return NodeInfo.model_validate_json(raw)
+    except ValidationError:
+        logger.error("sandbox_fc_bad_node_info node=%s", node_id)
+        return None
 
 
 def get_live_node(
@@ -498,6 +534,7 @@ def _prune_node(shared_cache: CacheBackend, node_id: str) -> None:
         with _node_lock(shared_cache, node_id):
             if not shared_cache.exists(_NODE_ADDRESS_PREFIX + node_id):
                 shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
+                shared_cache.delete(_NODE_INFO_PREFIX + node_id)
                 shared_cache.set_remove(_NODES_KEY, node_id)
     except CacheLockAcquisitionError:
         # A registration holds the lock; the next list prunes if still expired.

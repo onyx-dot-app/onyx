@@ -1,5 +1,7 @@
 {{/*
-Opt-in check that sandbox nodes can run Craft Firecracker. Render tests in
+Check that the Firecracker nodes can run Craft Firecracker. On by default
+with craft.sandboxRuntime auto or firecracker, also when the chart renders
+no host agent. Render tests in
 backend/tests/external_dependency_unit/craft_helm/test_craft_fc_preflight.py.
 
 - A DaemonSet, not a Job: a Job cannot place one pod on each node, and a
@@ -7,10 +9,10 @@ backend/tests/external_dependency_unit/craft_helm/test_craft_fc_preflight.py.
   start, then idles so the log stays readable.
 - No readiness probe tied to the result. A failing node must not make
   `helm upgrade --wait` hang. Read the RESULT line in the pod log.
-- Scheduling follows sandboxPod.nodeSelector and tolerations, plus the
-  onyx.app/kvm toleration. With craft.sandboxRuntime=firecracker it also
-  selects onyx.app/kvm=true, so a pod sandbox group next to the Firecracker
-  group is not checked. It never uses sandboxPod.runtimeClassName: gVisor or
+- Scheduling follows sandboxPod.nodeSelector and tolerations, plus
+  onyx.app/kvm=true and its toleration. So a cluster without KVM nodes has
+  no preflight pods, and a pod sandbox group next to the Firecracker group
+  is not checked. It never uses sandboxPod.runtimeClassName: gVisor or
   Kata hides the host /dev/kvm.
 - Lives in the release namespace, not the sandbox namespace, so the
   privileged pod is not next to user sandboxes and a Pod Security label on the
@@ -24,16 +26,14 @@ backend/tests/external_dependency_unit/craft_helm/test_craft_fc_preflight.py.
   are visible from inside the container.
 */}}
 {{- $preflight := (.Values.craft | default dict).firecrackerPreflight | default dict }}
-{{- if $preflight.enabled }}
+{{- if and (ne (toString $preflight.enabled) "false") (has (include "onyx.craftSandboxRuntime" .) (list "auto" "firecracker")) }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
 {{- $name := include "onyx.resourceName" (list . "craft-fc-preflight") }}
 {{- $image := $preflight.image | default (include "onyx.sandboxImage" .) }}
 {{- $scratchHostPath := $preflight.scratchHostPath | default (dig "hostAgent" "dataDir" "" (.Values.craft | default dict)) | default "/var/lib/craft-fc" }}
 {{- $kvmResource := $preflight.kvmDeviceResource }}
 {{- $nodeSelector := deepCopy (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) }}
-{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
 {{- $_ := set $nodeSelector "onyx.app/kvm" "true" }}
-{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

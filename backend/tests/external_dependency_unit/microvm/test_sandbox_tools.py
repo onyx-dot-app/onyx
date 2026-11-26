@@ -358,7 +358,7 @@ def sandbox(
     )
     monkeypatch.setattr(harness_factory, "HARNESS_SANDBOX_ENABLED", True)
     monkeypatch.setattr(harness_factory, "_instance", instance)
-    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", True)
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: True)
     return instance
 
 
@@ -2148,7 +2148,7 @@ def test_every_agent_gets_the_sandbox_tools_when_harness_sandboxes_run(
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
     enabled: bool,
 ) -> None:
-    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", enabled)
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: enabled)
     built: list[tuple[Agent, ChatFeature | DeepResearchFeature]] = []
     create_chat_agent = execution.create_chat_agent
 
@@ -4139,7 +4139,7 @@ def test_a_chat_without_a_sandbox_keeps_a_large_result_whole(
     node: RunningFakeAgent,
     chat: SandboxChat,
 ) -> None:
-    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", False)
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: False)
     _offer_mcp_tool(monkeypatch, "fetch_report", _big)
     llm = ChatLLM([tool_step("fetch_report", "big", {}), Delta(content="Done.")])
     chat.send(llm)
@@ -5626,7 +5626,7 @@ def test_open_url_without_a_sandbox_keeps_its_page_excerpts(
     db_session: Session,
     chat: SandboxChat,
 ) -> None:
-    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", False)
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: False)
     pages = [_web_page(index, 40_000) for index in range(1, 4)]
     llm = _search_and_open(pages, "Done.")
     _send_with_pages(chat, db_session, monkeypatch, pages, llm)

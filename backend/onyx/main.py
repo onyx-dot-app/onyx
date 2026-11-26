@@ -87,7 +87,7 @@ from onyx.server.documents.targeted_reindex import router as targeted_reindex_ro
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
-from onyx.server.features.build.configs import SANDBOX_RUNTIME, SandboxRuntime
+from onyx.server.features.build.configs import SANDBOX_RUNTIME
 from onyx.server.features.build.scheduled_tasks.api import (
     router as scheduled_tasks_router,
 )
@@ -118,6 +118,9 @@ from onyx.server.features.integrations.connections_api import (
 )
 from onyx.server.features.mcp.api import admin_router as mcp_admin_router
 from onyx.server.features.mcp.api import router as mcp_router
+from onyx.server.features.microvm.admin_api import (
+    admin_router as sandbox_admin_router,
+)
 from onyx.server.features.microvm.api import router as microvm_router
 from onyx.server.features.notifications.api import router as notification_router
 from onyx.server.features.password.api import router as password_router
@@ -635,8 +638,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             application, suggested_questions_router
         )
     include_router_with_global_prefix_prepended(application, public_build_router)
-    if SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER:
+    if SANDBOX_RUNTIME.uses_firecracker:
         include_router_with_global_prefix_prepended(application, microvm_router)
+    include_router_with_global_prefix_prepended(application, sandbox_admin_router)
     include_router_with_global_prefix_prepended(application, static_preview_router)
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, build_admin_router)

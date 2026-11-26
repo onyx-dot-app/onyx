@@ -5,13 +5,15 @@ metadata:
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
-  {{- $craftEnabled := eq (include "onyx.craftEnabled" .) "true" }}
-  {{- if $craftEnabled }}
+  {{- $sandboxProxy := eq (include "onyx.sandboxProxyEnabled" .) "true" }}
+  {{- if $sandboxProxy }}
   ONYX_SERVER_URL: {{ include "onyx.sandboxApiUrl" . | quote }}
   {{- end }}
-  {{- $firecracker := eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
-  {{- if $firecracker }}
-  SANDBOX_RUNTIME: "firecracker"
+  {{- $sandboxRuntime := include "onyx.craftSandboxRuntimeEnv" . }}
+  {{- if $sandboxRuntime }}
+  SANDBOX_RUNTIME: {{ $sandboxRuntime | quote }}
+  {{- end }}
+  {{- if include "onyx.craftFcEnabled" . }}
   {{- if not (index .Values.configMap "SANDBOX_FC_TEMPLATE") }}
   SANDBOX_FC_TEMPLATE: {{ include "onyx.craftFcRootfsVersion" . | quote }}
   {{- end }}
@@ -43,12 +45,12 @@ data:
   DISABLE_VECTOR_DB: "true"
   {{- end }}
 {{- range $key, $value := .Values.configMap }}
-{{- $skipCraftProxyKey := and $craftEnabled (or (eq $key "SANDBOX_PROXY_HOST") (eq $key "SANDBOX_PROXY_PORT")) }}
+{{- $skipCraftProxyKey := and $sandboxProxy (or (eq $key "SANDBOX_PROXY_HOST") (eq $key "SANDBOX_PROXY_PORT")) }}
 {{- $skipPostgresTlsKey := and (eq (include "onyx.postgresTls.enabled" $) "true") (or (eq $key "POSTGRES_SSLMODE") (eq $key "POSTGRES_SSLROOTCERT")) }}
 {{- $skipRedisTlsKey := and (eq (include "onyx.redisTls.enabled" $) "true") (or (eq $key "REDIS_SSL") (eq $key "REDIS_SSL_CERT_REQS") (eq $key "REDIS_SSL_CA_CERTS") (eq $key "REDIS_SSL_CHECK_HOSTNAME")) }}
 {{- $skipBundledS3Key := and (or (eq (include "onyx.objectStore.enabled" $) "true") $.Values.minio.enabled) (or (eq $key "S3_ENDPOINT_URL") (eq $key "S3_LEGACY_ENDPOINT_URL")) }}
-{{- $skipCraftApiKey := and $craftEnabled (eq $key "ONYX_SERVER_URL") }}
-{{- $skipSandboxRuntimeKey := and $firecracker (eq $key "SANDBOX_RUNTIME") }}
+{{- $skipCraftApiKey := and $sandboxProxy (eq $key "ONYX_SERVER_URL") }}
+{{- $skipSandboxRuntimeKey := and $sandboxRuntime (eq $key "SANDBOX_RUNTIME") }}
 {{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) (not $skipRedisTlsKey) (not $skipBundledS3Key) (not $skipCraftApiKey) (not $skipSandboxRuntimeKey) }}
   {{ $key }}: "{{ $value }}"
 {{- end }}
@@ -77,7 +79,7 @@ data:
   {{- if .Values.codeInterpreter.enabled }}
   CODE_INTERPRETER_BASE_URL: "http://{{ .Release.Name }}-code-interpreter:{{ .Values.codeInterpreter.service.port }}"
   {{- end }}
-  {{- if $craftEnabled }}
+  {{- if $sandboxProxy }}
   SANDBOX_PROXY_HOST: "{{ include "onyx.sandboxProxyHost" . }}"
   SANDBOX_PROXY_PORT: "{{ include "onyx.sandboxProxyPort" . }}"
   {{- end }}

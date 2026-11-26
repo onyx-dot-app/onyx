@@ -32,10 +32,23 @@ An operator deploys sandboxes on Kubernetes (the default) or Docker Compose.
 When the pod template, RBAC or network setup is wrong, provisioning fails and
 the user sees Craft fail to start.
 
-A third runtime is in development: Firecracker micro-VMs on KVM nodes, opt-in
-with `SANDBOX_RUNTIME=firecracker` (default `pod`). It is not wired to the API
-server yet, so users and operators do not see it. The Kubernetes and Docker
-paths do not change.
+A third runtime is in development: Firecracker micro-VMs on KVM nodes. The
+Helm value `craft.sandboxRuntime` (`auto` default, `firecracker`, `pod`, `off`)
+sets `SANDBOX_RUNTIME` (backend default `pod`; `off` acts as `pod`). It serves
+chat sandbox tools, not Craft build sessions. With `auto`, the chart renders the host agent,
+sandbox-proxy and their certificates (without `ENABLE_CRAFT`) only when it has a
+A third runtime is in development: Firecracker micro-VMs on KVM nodes. The
+Helm value `craft.sandboxRuntime` (`auto` default, `firecracker`, `pod`, `off`)
+sets `SANDBOX_RUNTIME` (backend default `pod`; `off` acts as `pod`). It serves
+chat sandbox tools, not Craft build sessions. With `auto`, the chart renders the host agent,
+sandbox-proxy and their certificates (without `ENABLE_CRAFT`) only when it has a
+pinned release tag (`onyx.craftFcEnabled`); the chart makes the node
+registration value when none is set and keeps it on upgrade
+(`onyx.sandboxNodeRegistrationValue`); before v6 `auto` acts as `pod`. With `auto`, chats get the tools only while a
+live registered node reports the template (`backend/onyx/microvm/availability.py`).
+Admins see the runtime, the nodes and why tools are off at
+`GET /admin/sandbox/status` (`backend/onyx/server/features/microvm/admin_api.py`,
+single tenant only). The Kubernetes and Docker paths do not change.
 
 In this document "session workspace" is the directory of one session under
 `/workspace/sessions`. "Workspace" alone, as in "workspace policy", means the
@@ -113,10 +126,10 @@ Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` conv
 `onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
 it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
 The chart takes `<version>` from `craft.hostAgent.rootfs.version` (default: the
-`global.version` release tag) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
+pinned `global.version`, else the pinned chart `appVersion`) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
 and the template tag move together (`onyx.craftFcRootfsVersion`). An explicit
 `craft.hostAgent.rootfs.image.tag` needs an explicit `configMap.SANDBOX_FC_TEMPLATE`
-(the chart fails without it); the operator keeps those two aligned. Without
+(without it, `firecracker` fails the render and `auto` renders no Firecracker parts); the operator keeps those two aligned. Without
 `existingSecret` values, the chart makes the agent mTLS CA and certificates and
 keeps them on upgrade with `lookup` (`deployment/helm/charts/onyx/templates/craft-fc-host-agent.yaml`).
 The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with
@@ -282,7 +295,7 @@ sandbox it re-mints only when `has_active_craft_pat` is false, for example
 after a password change revoked it ([[auth-and-identity]]). The proxy reads
 the stored token on each request, so a new token takes effect at once.
 
-**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` only).**
+**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` or `auto` only).**
 `backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
 - `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
   agent, with session saves (capture, upload, discard, restore) and the
@@ -468,7 +481,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   the container. `.../sandbox/harness_factory.py:get_container_harness_sandbox` builds
   it; no harness call selects it yet.
 - `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
-  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`
+  `SANDBOX_RUNTIME=firecracker` or `auto`, and `SANDBOX_FC_TEMPLATE`
   (`backend/onyx/microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the source image
   tag of the root drive. Each node names its templates
   `<tag>-<key hash[:12]>` and the hash differs per node, so

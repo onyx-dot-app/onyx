@@ -1,9 +1,10 @@
-"""Node state reports (`SANDBOX_RUNTIME=firecracker`).
+"""Node state reports (`SANDBOX_RUNTIME=firecracker|auto`).
 
 Each host agent pushes its full state to `POST /microvm/node/state` every
 `--state-report-interval` (default 20 s): its VM list and the VM instances
 that ended within its `--ended-retention`. The api_server then reconciles that
-node (`reconcile_node`). Onyx has no scheduler inside the api_server, so the
+node (`reconcile_node`), and keeps the agent's `NodeInfo` for the sandbox
+tools check and the admin status. Onyx has no scheduler inside the api_server, so the
 agent pushes the list instead of the api_server polling it (microvm/README.md,
 "Sandbox state model"). Correctness never depends on reports: placement asks
 the agent directly.
@@ -26,12 +27,13 @@ from onyx.microvm.agent_client import (
     HostAgentConfigError,
     HostAgentError,
 )
-from onyx.microvm.models import NodeStateReport, NodeStateReportResult
+from onyx.microvm.models import NodeInfo, NodeStateReport, NodeStateReportResult
 from onyx.microvm.reconcile import reconcile_node
 from onyx.microvm.registry import (
     claim_node_report_token,
     get_registered_node,
     node_report_lease,
+    record_node_info,
     record_node_report,
     set_node_draining,
 )
@@ -147,23 +149,23 @@ def _check_lease(lease: CacheLock, deadline: float) -> None:
     lease.extend(_LEASE_SECONDS)
 
 
-def _node_draining(
+def _read_node_info(
     shared_cache: CacheBackend,
     client_factory: HostAgentClientFactory,
     node_id: str,
     address: str,
-) -> bool:
-    """The node's drain state from its agent, recorded for background
-    stops. A failed read counts as not draining and keeps the last record."""
+) -> NodeInfo | None:
+    """The node's `NodeInfo` from its agent, recorded for the sandbox tools
+    check. None when the read fails; the last record then stays."""
     try:
-        draining = client_factory.client(address).node_info().draining
+        info = client_factory.client(address).node_info()
     except HostAgentConfigError:
         raise
     except HostAgentError as e:
-        logger.warning("sandbox_fc_node_drain_read_failed node=%s error=%s", node_id, e)
-        return False
-    set_node_draining(shared_cache, node_id, draining)
-    return draining
+        logger.warning("sandbox_fc_node_info_read_failed node=%s error=%s", node_id, e)
+        return None
+    record_node_info(shared_cache, node_id, info)
+    return info
 
 
 def reconcile_node_report(
@@ -196,9 +198,12 @@ def reconcile_node_report(
         return NodeStateReportResult(reconciled=False)
     deadline = time.monotonic() + NODE_REPORT_DEADLINE_SECONDS
     try:
-        draining = checkpointer.supported and _node_draining(
-            shared_cache, client_factory, node.node_id, node.address
-        )
+        info = _read_node_info(shared_cache, client_factory, node.node_id, node.address)
+        # The drain state is recorded for background stops. A failed read
+        # counts as not draining and keeps the last record.
+        draining = checkpointer.supported and info is not None and info.draining
+        if checkpointer.supported and info is not None:
+            set_node_draining(shared_cache, node.node_id, info.draining)
         result = reconcile_node(
             shared_cache,
             client_factory,
