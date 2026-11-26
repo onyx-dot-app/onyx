@@ -49,6 +49,7 @@ function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
       );
     return (
       <RunStep
+        id={entry.id}
         // Thinking keeps its own icon while it streams.
         status={entry.status === "streaming" ? "done" : entry.status}
         icon={STEP_ICONS.thinking}
@@ -80,6 +81,7 @@ function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
 
   return (
     <RunStep
+      id={entry.id}
       status={entry.status}
       icon={getToolCallIcon(toolCall)}
       title={renderToolCallHeader(toolCall)}
@@ -120,11 +122,7 @@ export default function CraftTimeline({
       workingText={t("working.label")}
       autoCollapse={autoCollapse}
       isActive={isActive || entries.some((e) => e.status === "streaming")}
-      renderStep={(entry) => (
-        // Every step starts closed. The card drops its steps when it
-        // closes, so reopening it closes them all again.
-        <CraftTimelineStep entry={entry} />
-      )}
+      renderStep={(entry) => <CraftTimelineStep entry={entry} />}
     />
   );
 }

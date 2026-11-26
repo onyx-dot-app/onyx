@@ -1,16 +1,29 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { IconFunctionComponent } from "@opal/types";
 import { Line, Presence, Text } from "@opal/components";
 import { SvgSparkle } from "@opal/icons";
 import { formatDurationSeconds } from "@opal/time";
+import { cn } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
 import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
+import {
+  findRunStepRow,
+  RunStepOpenContext,
+  type RunStepOpenState,
+  useRunStepOpenState,
+} from "@/lib/timeline/components/RunStep";
 import type {
   TimelineEntryStatus,
   TimelineStepPosition,
@@ -55,7 +68,99 @@ export interface RunCardProps<S extends RunCardStep> {
   appear?: boolean;
   /** Mount folded, even while the run works. */
   startFolded?: boolean;
+  /**
+   * Mount open, as the user's choice: it starts open even when the run
+   * settled, and the fold under text leaves it open.
+   */
+  startOpen?: boolean;
   summary?: RunCardSummary;
+  /** The run's open step ids, when the run also shows its steps elsewhere
+   * (AgentTimeline's hoisted step cards). Defaults to the card's own. */
+  stepOpenState?: RunStepOpenState;
+}
+
+/** The open card's step list scrolls inside this height. */
+export const RUN_STEP_LIST_MAX_HEIGHT_CLASS = "max-h-[min(18rem,50dvh)]";
+
+function distanceFromEnd(element: HTMLElement): number {
+  return element.scrollHeight - element.clientHeight - element.scrollTop;
+}
+
+/**
+ * Scrolls the step list as its content grows. While the run works and the
+ * user is at the end, the list stays at the end. Otherwise it keeps the step
+ * the user last opened in view. A scroll up stops both.
+ */
+function useStepListScroll(isRunning: boolean) {
+  const [list, setList] = useState<HTMLDivElement | null>(null);
+  const runningRef = useRef(isRunning);
+  useEffect(() => {
+    runningRef.current = isRunning;
+  }, [isRunning]);
+  const atEndRef = useRef(true);
+  const lastTopRef = useRef(0);
+  const revealIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!list) return;
+    lastTopRef.current = list.scrollTop;
+    const content = list.firstElementChild;
+    if (!content) return;
+    const observer = new ResizeObserver(() => {
+      if (runningRef.current && atEndRef.current) {
+        list.scrollTop = list.scrollHeight;
+        // Recorded now, so a user scroll before the scroll event still reads
+        // as a scroll up.
+        lastTopRef.current = list.scrollTop;
+        return;
+      }
+      const row =
+        revealIdRef.current === null
+          ? null
+          : findRunStepRow(list, revealIdRef.current);
+      if (!row) return;
+      const rowBox = row.getBoundingClientRect();
+      const listBox = list.getBoundingClientRect();
+      const delta = Math.min(
+        rowBox.bottom - listBox.bottom,
+        rowBox.top - listBox.top
+      );
+      if (delta > 0) {
+        list.scrollTop += delta;
+        lastTopRef.current = list.scrollTop;
+      }
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [list]);
+
+  const onScroll = useCallback(() => {
+    if (!list) return;
+    // Only a scroll up leaves the end: a growing step can leave the list
+    // short of its end between two follow scrolls.
+    // A row that closes at the end clamps the scroll down; that is no
+    // scroll up, so the end is checked first.
+    if (distanceFromEnd(list) <= 1) {
+      atEndRef.current = true;
+    } else if (list.scrollTop < lastTopRef.current) {
+      atEndRef.current = false;
+      revealIdRef.current = null;
+    }
+    lastTopRef.current = list.scrollTop;
+  }, [list]);
+
+  // Opening a step stops the follow until the user scrolls back to the end.
+  // Closing one at the end follows again: no scroll happens to say so.
+  const reveal = useCallback(
+    (id: string | null) => {
+      revealIdRef.current = id;
+      if (id !== null) atEndRef.current = false;
+      else if (list && distanceFromEnd(list) <= 1) atEndRef.current = true;
+    },
+    [list]
+  );
+
+  return { listRef: setList, onScroll, reveal };
 }
 
 /**
@@ -75,12 +180,16 @@ export function RunCard<S extends RunCardStep>({
   icon = SvgSparkle,
   appear = true,
   startFolded = false,
+  startOpen = false,
   summary,
+  stepOpenState: sharedOpenState,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
   const isRunning =
     isActive ?? steps.some((step) => step.status === "streaming");
-  const [isOpen, setIsOpen] = useState(isRunning && !startFolded);
+  const [isOpen, setIsOpen] = useState(
+    startOpen || (isRunning && !startFolded)
+  );
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
   const [arrivedLive] = useState(appear && isRunning);
@@ -89,9 +198,32 @@ export function RunCard<S extends RunCardStep>({
   const [initialStepIds] = useState(
     () => new Set(steps.map((step) => step.id))
   );
-  // A card the user folded or opened keeps their choice.
-  const userToggled = useRef(false);
+  const { listRef, onScroll, reveal } = useStepListScroll(isRunning);
   const { rowRef, onToggle } = useRevealOnOpen();
+  // Kept here, so each step's open state survives a fold of the card.
+  const ownOpenState = useRunStepOpenState();
+  const { openIds, setOpen } = sharedOpenState ?? ownOpenState;
+  const stepOpenState = useMemo<RunStepOpenState>(
+    () => ({
+      openIds,
+      contained: true,
+      setOpen: (id, open) => {
+        // The list keeps an opened step in view, and the chat the card.
+        reveal(open ? id : null);
+        onToggle(open);
+        setOpen(id, open);
+      },
+    }),
+    [openIds, setOpen, reveal, onToggle]
+  );
+  // A card that mounts with an open step (a handover) keeps the latest one
+  // in view.
+  const [initialOpenId] = useState(() => Array.from(openIds).at(-1));
+  useEffect(() => {
+    if (initialOpenId !== undefined) reveal(initialOpenId);
+  }, [initialOpenId, reveal]);
+  // A card the user folded or opened keeps their choice.
+  const userToggled = useRef(startOpen);
   const toggle = () => {
     userToggled.current = true;
     onToggle(!isOpen);
@@ -211,23 +343,31 @@ export function RunCard<S extends RunCardStep>({
             // The steps, 4px apart. A step card
             // inside has no padding of its own, so its title lines up with
             // the card's own title.
-            <Section alignItems="stretch" gap={1} height="auto">
-              {steps.map((step, index) => (
-                // A step that streams in rises in, after the card opens room
-                // for it. Steps already there when the card mounts (a saved
-                // run) appear at once.
-                <Presence
-                  key={step.id}
-                  appear={isRunning && !initialStepIds.has(step.id)}
-                  grow
-                >
-                  {renderStep(step, {
-                    isFirst: index === 0,
-                    isLast: index === steps.length - 1,
-                  })}
-                </Presence>
-              ))}
-            </Section>
+            <div
+              ref={listRef}
+              onScroll={onScroll}
+              className={cn(RUN_STEP_LIST_MAX_HEIGHT_CLASS, "overflow-y-auto")}
+            >
+              <RunStepOpenContext.Provider value={stepOpenState}>
+                <Section alignItems="stretch" gap={1} height="auto">
+                  {steps.map((step, index) => (
+                    // A step that streams in rises in, after the card opens
+                    // room for it. Steps already there when the card mounts
+                    // (a saved run) appear at once.
+                    <Presence
+                      key={step.id}
+                      appear={isRunning && !initialStepIds.has(step.id)}
+                      grow
+                    >
+                      {renderStep(step, {
+                        isFirst: index === 0,
+                        isLast: index === steps.length - 1,
+                      })}
+                    </Presence>
+                  ))}
+                </Section>
+              </RunStepOpenContext.Provider>
+            </div>
           }
           // The card's own title, the same header a hoisted run card has.
           // It swaps when the run's state changes (working, done);
