@@ -12,10 +12,11 @@ import { formatDurationSeconds } from "@opal/time";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { useChatSubagents } from "@/lib/chat/hooks";
 import {
+  isLiveSubagent,
   SubagentPathContext,
+  subagentStartedAt,
   useSubagentTranscript,
 } from "@/lib/chat/subagents";
-import type { ChatSubagent } from "@/lib/chat/types";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { PanelUrlBar } from "@/sections/output-panel/PanelUrlBar";
 import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
@@ -25,16 +26,6 @@ import { ErrorBanner } from "@/lib/timeline/chat/message/Resubmit";
 
 function FilledSquare(props: IconProps) {
   return <SvgSquare {...props} fill="currentColor" />;
-}
-
-/** Whether the agent's latest run still works or waits. */
-export function isLiveSubagent(agent: ChatSubagent): boolean {
-  return (
-    !agent.stopped_by_user &&
-    (agent.status === null ||
-      agent.status === "running" ||
-      agent.status === "suspended")
-  );
 }
 
 interface SubagentBarProps {
@@ -51,8 +42,8 @@ export function SubagentBar({ sessionId, agentId }: SubagentBarProps) {
   const { agents, stopAgent } = useChatSubagents(sessionId, false);
   const agent = agents.find((candidate) => candidate.id === agentId);
   const live = agent !== undefined && isLiveSubagent(agent);
-  const parsed = agent?.started_at ? Date.parse(agent.started_at) : NaN;
-  const startedAt = live && !Number.isNaN(parsed) ? parsed : undefined;
+  const startedAt =
+    live && agent ? (subagentStartedAt(agent) ?? undefined) : undefined;
   const elapsedSeconds = useStreamingDuration(live, startedAt);
   const name = agent ? agent.path.replace(/^\/root\//, "") : "";
   return (

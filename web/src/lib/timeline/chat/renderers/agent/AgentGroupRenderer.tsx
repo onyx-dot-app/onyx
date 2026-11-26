@@ -10,24 +10,15 @@ import { formatDurationSeconds } from "@opal/time";
 import type { CustomToolPacket } from "@/app/app/services/streamingModels";
 import type { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { openSubagent, useSpawnedSubagents } from "@/lib/chat/subagents";
+import {
+  isLiveSubagent,
+  openSubagent,
+  subagentStartedAt,
+  useSpawnedSubagents,
+} from "@/lib/chat/subagents";
 import type { ChatSubagent } from "@/lib/chat/types";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";
-
-function isLive(agent: ChatSubagent): boolean {
-  return (
-    !agent.stopped_by_user &&
-    (agent.status === null ||
-      agent.status === "running" ||
-      agent.status === "suspended")
-  );
-}
-
-function startOf(agent: ChatSubagent | undefined): number | undefined {
-  const parsed = agent?.started_at ? Date.parse(agent.started_at) : NaN;
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
 
 /** A live agent: the agent glyph with a small blue dot. */
 function LiveAgentIcon(props: IconProps) {
@@ -62,7 +53,7 @@ interface SpawnedRowProps {
 /** One spawned agent: what it does now, its run time, and its transcript. */
 function SpawnedRow({ name, task, agent }: SpawnedRowProps) {
   const t = useTranslations("chat.messages.timeline.agentGroup");
-  const live = agent !== undefined && isLive(agent);
+  const live = agent !== undefined && isLiveSubagent(agent);
   const activity =
     live && agent.activity_tool
       ? t("activity", { tool: agent.activity_tool })
@@ -88,7 +79,14 @@ function SpawnedRow({ name, task, agent }: SpawnedRowProps) {
               {t("running")}
             </Text>
           )}
-          {live && <Elapsed live startedAt={startOf(agent)} />}
+          {live && (
+            <Elapsed
+              live
+              startedAt={
+                agent ? (subagentStartedAt(agent) ?? undefined) : undefined
+              }
+            />
+          )}
           {agent && <SvgChevronRight className="size-4 text-text-03" />}
         </Section>
       }
@@ -118,7 +116,8 @@ export function AgentGroupRenderer({
   }, [isComplete, onComplete]);
 
   const working = agents.filter(
-    (agent): agent is ChatSubagent => agent !== undefined && isLive(agent)
+    (agent): agent is ChatSubagent =>
+      agent !== undefined && isLiveSubagent(agent)
   );
   const failed = calls.filter(
     (call, index) =>
@@ -132,8 +131,8 @@ export function AgentGroupRenderer({
   ).length;
   const busy = working.length + starting;
   const starts = working
-    .map(startOf)
-    .filter((start): start is number => start !== undefined);
+    .map(subagentStartedAt)
+    .filter((start): start is number => start !== null);
   const groupStart = starts.length > 0 ? Math.min(...starts) : undefined;
   const title = t("title", { count: calls.length });
 

@@ -28,6 +28,22 @@ export function subagentName(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
 }
 
+/** Whether the agent's latest run still works or waits. */
+export function isLiveSubagent(agent: ChatSubagent): boolean {
+  return (
+    !agent.stopped_by_user &&
+    (agent.status === null ||
+      agent.status === "running" ||
+      agent.status === "suspended")
+  );
+}
+
+/** When the agent's latest run started, in epoch milliseconds, if known. */
+export function subagentStartedAt(agent: ChatSubagent): number | null {
+  const parsed = agent.started_at ? Date.parse(agent.started_at) : NaN;
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 /**
  * The path of the agent whose conversation renders: the root in the chat, a
  * subagent in its tab. A spawn names its agent relative to it.
