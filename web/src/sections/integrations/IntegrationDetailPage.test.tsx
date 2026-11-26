@@ -453,6 +453,38 @@ test("sends the stored lines unchanged when only the Base URL changes", async ()
   );
 });
 
+test("refuses a Base URL that is not a URL", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const baseUrl = await view.findByRole("textbox", {
+    name: copy.add.rest.baseUrl.title,
+  });
+  await u.clear(baseUrl);
+  await u.type(baseUrl, "reports.example.com");
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+
+  expect(
+    await view.findByText(copy.add.rest.baseUrl.required)
+  ).toBeInTheDocument();
+  expect(
+    fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")
+  ).toBe(false);
+});
+
 test("keeps the Base URL when an uploaded spec has a relative server", async () => {
   mockFetch({
     [URL_DETAIL]: makeDetail({

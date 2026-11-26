@@ -57,9 +57,9 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { Permission } from "@/lib/types";
 import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
 import {
-  apiBaseUrl,
   detectApi,
   isNotThisKind,
+  restBaseUrl,
   SPEC_MAX_SIZE_KB,
   type DetectedApi,
   type SpecFile,
@@ -332,12 +332,12 @@ export default function AddIntegrationModal({
           : null;
       }
       case "openapi": {
-        const base = normalizedUrl(baseUrl) && baseUrl.trim();
+        const base = restBaseUrl(baseUrl);
         if (!base) return null;
         return {
           shape: "openapi",
           openapi_document: detection.view.openapi_document,
-          base_url: apiBaseUrl(base),
+          base_url: base,
           endpoints: detection.view.endpoints,
         };
       }
@@ -640,7 +640,7 @@ export default function AddIntegrationModal({
           <InputVertical
             title={t("rest.baseUrl.title")}
             error={
-              showErrors && !normalizedUrl(baseUrl)
+              showErrors && !restBaseUrl(baseUrl)
                 ? t("rest.baseUrl.required")
                 : undefined
             }

@@ -112,8 +112,14 @@ export function specBaseUrl(
 }
 
 /** The tool appends paths that start with "/", so drop a trailing one. */
-export function apiBaseUrl(url: string): string {
+function apiBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
+}
+
+/** A REST base URL to save: a valid http(s) URL with no trailing slash, or
+ * null when the value is not one. */
+export function restBaseUrl(value: string): string | null {
+  return normalizedUrl(value) ? apiBaseUrl(value.trim()) : null;
 }
 
 /** `fallback` (the URL entered with an upload) when given, else the spec's

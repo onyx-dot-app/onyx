@@ -18,6 +18,7 @@ import type {
 } from "@/lib/integrations/types";
 import {
   SPEC_MAX_SIZE_KB,
+  restBaseUrl,
   specTextTooLarge,
   specBaseUrl,
 } from "@/sections/integrations/detectApi";
@@ -145,7 +146,7 @@ export default function RestEndpointFields({
       <InputVertical
         title={t("baseUrl.title")}
         error={
-          showErrors && !draft.baseUrl.trim()
+          showErrors && !restBaseUrl(draft.baseUrl)
             ? t("baseUrl.required")
             : undefined
         }

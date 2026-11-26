@@ -44,7 +44,7 @@ import { integrationDetailHref } from "@/lib/integrations/utils";
 import IntegrationSignInFields from "@/sections/integrations/IntegrationSignInFields";
 import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
 import GraphQLFields from "@/sections/integrations/GraphQLFields";
-import { apiBaseUrl } from "@/sections/integrations/detectApi";
+import { restBaseUrl } from "@/sections/integrations/detectApi";
 import RestEndpointFields, {
   restDraftFrom,
   type RestDraft,
@@ -134,11 +134,12 @@ export default function IntegrationConfigurationTab({
     }
     if (config.shape === "openapi") {
       if (isEqual(rest, savedRest)) return undefined;
-      if (!rest.baseUrl.trim()) return null;
+      const base = restBaseUrl(rest.baseUrl);
+      if (!base) return null;
       return {
         shape: "openapi",
         openapi_document: rest.document,
-        base_url: apiBaseUrl(rest.baseUrl.trim()),
+        base_url: base,
         endpoints: rest.endpoints.split("\n"),
       };
     }
