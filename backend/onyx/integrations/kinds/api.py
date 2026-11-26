@@ -335,8 +335,6 @@ class ApiKindHandler(IntegrationKindHandler):
             if isinstance(ctx.config, ApiConfig)
             else self.load_config(integration, db_session)
         )
-        if not config.shape.has_chat_tools:
-            return []
         if config.shape is ApiShape.PRESET:
             return self._preset_tools(integration, actions, config, ctx)
         if (
