@@ -16,6 +16,9 @@ export type ErrorCode =
 export const HUMAN_CONTROL_MESSAGE =
   "A human controls this tab. Open a new tab with browser_open(new_tab=true) to keep working, or ask the user to release control.";
 
+export const isTimeout = (cause: unknown): cause is Error =>
+  cause instanceof Error && cause.name === "TimeoutError";
+
 export class OperationError extends Error {
   readonly code: ErrorCode;
 
@@ -50,7 +53,7 @@ export const toOperationError = (cause: unknown): OperationError => {
   }
   const message = cause instanceof Error ? cause.message : String(cause);
   const firstLine = message.split("\n")[0] ?? message;
-  if (cause instanceof Error && cause.name === "TimeoutError") {
+  if (isTimeout(cause)) {
     return new OperationError("timeout", withActionabilityReason(firstLine, cause));
   }
   if (/while parsing selector|Unknown engine|Unexpected token/i.test(message)) {

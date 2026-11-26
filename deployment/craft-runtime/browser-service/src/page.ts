@@ -2,7 +2,7 @@
 
 import * as NodeCrypto from "node:crypto";
 import type { CDPSession, Frame, Locator, Page } from "playwright-core";
-import { OperationError, withActionabilityReason } from "./errors.ts";
+import { isTimeout, OperationError, withActionabilityReason } from "./errors.ts";
 
 const noop = () => {};
 
@@ -223,7 +223,6 @@ const frameUnanswered = () =>
     `A frame on the page didn't answer within ${FRAME_ANSWER_MS}ms, so its content couldn't be checked for hidden values. Try the snapshot again.`,
   );
 
-const isTimeout = (cause: unknown) => cause instanceof Error && cause.name === "TimeoutError";
 
 const VALUE_TOO_LONG = "A password field holds a value too long to hide, so no snapshot was taken.";
 
@@ -504,7 +503,7 @@ export const click = async (
  * after the timeout, not what the click did.
  */
 const namedTargetTimeout = async (locator: Locator, input: Target, cause: unknown) => {
-  if (!(cause instanceof Error && cause.name === "TimeoutError")) return cause;
+  if (!isTimeout(cause)) return cause;
   const selector = describeTarget(input);
   const target =
     selector.length > MAX_TARGET_CHARS ? `${selector.slice(0, MAX_TARGET_CHARS)}...` : selector;

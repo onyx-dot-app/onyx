@@ -14,7 +14,7 @@ import type {
   FileChooser,
   Page,
 } from "playwright-core";
-import { HUMAN_CONTROL_MESSAGE, OperationError, toOperationError } from "./errors.ts";
+import { HUMAN_CONTROL_MESSAGE, isTimeout, OperationError, toOperationError } from "./errors.ts";
 import { encodeFrame, encodeJson, KIND_JPEG, KIND_JSON, readMessages } from "./framing.ts";
 import type { Message } from "./framing.ts";
 import * as BrowserPage from "./page.ts";
@@ -858,7 +858,7 @@ export class BrowserService {
     // Once the target commits, a stalled subresource only delays readiness; report the loading tab.
     const ready = () =>
       tab.page.waitForLoadState(readiness, { timeout: remaining() }).catch((cause: unknown) => {
-        if (!(cause instanceof Error && cause.name === "TimeoutError")) throw cause;
+        if (!isTimeout(cause)) throw cause;
       });
     await navigation.then(ready).catch((cause: unknown) => {
       throw this.navigationError("url" in target ? target.url : tab.page.url(), cause, timeout);
