@@ -61,6 +61,14 @@ describe("answerFindSegments", () => {
     ]);
   });
 
+  it("searches a formatted link label, which renders as a link, not a chip", () => {
+    expect(
+      answerFindSegments(
+        "[**[1]**](https://example.com) then [[1]](https://a.b)"
+      )
+    ).toEqual(["[1] then "]);
+  });
+
   it("keeps a details summary and drops a callout marker", () => {
     expect(
       answerFindSegments(
