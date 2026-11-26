@@ -13737,16 +13737,20 @@
       },
       "dialog": {
         "label": "ページのダイアログ",
+        "from": "{origin} の内容",
         "response": "ダイアログへの応答",
         "responsePlaceholder": "応答を入力",
         "dismiss": "閉じる",
         "accept": "承諾",
-        "takeControl": "応答するには操作を引き継いでください。"
+        "takeControl": "応答するには操作を引き継いでください。",
+        "sendError": "ページに応答できませんでした。もう一度お試しください。"
       },
       "fileChooser": {
         "label": "ページに渡すファイルを選択",
         "askOne": "ページがファイルを求めています。",
         "askMany": "ページが複数のファイルを求めています。",
+        "askOneFrom": "{origin} がファイルを求めています。",
+        "askManyFrom": "{origin} が複数のファイルを求めています。",
         "cancel": "キャンセル",
         "chooseOne": "ファイルを選択",
         "chooseMany": "ファイルを選択",

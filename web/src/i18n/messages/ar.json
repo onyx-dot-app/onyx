@@ -13737,16 +13737,20 @@
       },
       "dialog": {
         "label": "مربع حوار الصفحة",
+        "from": "رسالة من {origin}",
         "response": "رد مربع الحوار",
         "responsePlaceholder": "اكتب ردًا",
         "dismiss": "تجاهل",
         "accept": "قبول",
-        "takeControl": "تولَّ التحكم للرد."
+        "takeControl": "تولَّ التحكم للرد.",
+        "sendError": "تعذّر الرد على الصفحة. حاول مرة أخرى."
       },
       "fileChooser": {
         "label": "اختر ملفات للصفحة",
         "askOne": "تطلب الصفحة ملفًا.",
         "askMany": "تطلب الصفحة ملفات.",
+        "askOneFrom": "يطلب {origin} ملفًا.",
+        "askManyFrom": "يطلب {origin} ملفات.",
         "cancel": "إلغاء",
         "chooseOne": "اختر ملفًا",
         "chooseMany": "اختر ملفات",

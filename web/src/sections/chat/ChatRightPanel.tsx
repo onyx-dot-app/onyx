@@ -326,6 +326,16 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     // opens, leaves focus where it is
     if (open && previous.open && previous.browser && browser.shown) {
       returnFocusRef.current = null;
+      // The tab that stands for the browser goes when the pages come; the
+      // focus it had goes to the shown page's tab
+      if (
+        previous.shown === RIGHT_PANEL_BROWSER_TAB &&
+        shown !== RIGHT_PANEL_BROWSER_TAB &&
+        document.activeElement === document.body
+      )
+        document
+          .getElementById(panelTabDomId(shown))
+          ?.focus({ preventScroll: true });
       return;
     }
     // The tile to go back to only counts when the Files list comes next

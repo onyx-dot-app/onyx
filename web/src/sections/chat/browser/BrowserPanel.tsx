@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -27,6 +33,7 @@ import { IconLoader } from "@opal/loaders";
 import { clearBrowserData, uploadBrowserFiles } from "@/lib/chat/browser/api";
 import type { BrowserStream } from "@/lib/chat/browser/hooks";
 import {
+  browserOriginLabel,
   browserUrlFromInput,
   isBlankBrowserPage,
 } from "@/lib/chat/browser/stream";
@@ -211,7 +218,11 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
           inputRef={surfaceInputRef}
           dropInputRef={stream.dropInputRef}
         />
-        {!live || selectedTab === null || isBlankBrowserPage(selectedTab) ? (
+        {!live ||
+        selectedTab === null ||
+        (isBlankBrowserPage(selectedTab) &&
+          !selectedTab.dialog &&
+          !fileChooser) ? (
           <BrowserStatus
             status={live && selectedTab !== null ? "blank" : connection}
             onRetry={stream.retry}
@@ -242,7 +253,7 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
                     };
                     if (promptText !== undefined)
                       answer.promptText = promptText;
-                    send(answer);
+                    if (!send(answer)) toast.error(t("dialog.sendError"));
                   }}
                 />
               )}
@@ -251,6 +262,8 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
                   key={fileChooser.id}
                   sessionId={sessionId}
                   multiple={fileChooser.multiple}
+                  origin={fileChooser.origin}
+                  onClosed={focusPage}
                   onAnswer={(paths) => answerFileChooser(fileChooser.id, paths)}
                 />
               )}
@@ -429,14 +442,7 @@ function DialogPrompt({
   const cardRef = useRef<HTMLDivElement | null>(null);
   // The controller answers at once: focus goes to the answer field, else
   // to Accept
-  useEffect(() => {
-    if (!controlling) return;
-    cardRef.current
-      ?.querySelector<HTMLElement>("input, [data-dialog-accept]")
-      ?.focus();
-  }, [controlling]);
-  const closed = useEffectEvent(onClosed);
-  useEffect(() => () => closed(), []);
+  usePromptFocus(cardRef, "input, [data-prompt-focus]", controlling, onClosed);
   return (
     <Card
       ref={cardRef}
@@ -445,6 +451,16 @@ function DialogPrompt({
       aria-label={t("dialog.label")}
     >
       <Section alignItems="stretch" gap={2} height="auto">
+        {dialog.origin !== null && (
+          <Text
+            as="p"
+            font="main-ui-action"
+            color="text-05"
+            wordWrap="wrap-anywhere"
+          >
+            {t("dialog.from", { origin: browserOriginLabel(dialog.origin) })}
+          </Text>
+        )}
         <Text
           as="p"
           font="main-ui-body"
@@ -473,7 +489,7 @@ function DialogPrompt({
               </Button>
               <Button
                 size="sm"
-                data-dialog-accept
+                data-prompt-focus
                 onClick={() =>
                   onAnswer(true, isPrompt ? promptText : undefined)
                 }
@@ -495,18 +511,26 @@ function DialogPrompt({
 interface FileChooserPromptProps {
   sessionId: string;
   multiple: boolean;
+  // The asking frame's origin; null when unknown
+  origin: string | null;
   // False when the answer was not sent
   onAnswer: (paths: string[]) => boolean;
+  // Runs when the chooser goes, to give the focus back to the page
+  onClosed: () => void;
 }
 
 /** The page asks for files: upload the picked ones into the chat's VM. */
 function FileChooserPrompt({
   sessionId,
   multiple,
+  origin,
   onAnswer,
+  onClosed,
 }: FileChooserPromptProps) {
   const t = useTranslations("chat.browser");
   const [uploading, setUploading] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  usePromptFocus(cardRef, "[data-prompt-focus]", true, onClosed);
   // The chooser closes, or the user loses control, while the upload runs
   const shownRef = useRef(false);
   useEffect(() => {
@@ -529,15 +553,35 @@ function FileChooserPrompt({
         sessionId,
         error,
       });
+      if (!shownRef.current) return;
       toast.error(t("fileChooser.error"));
       setUploading(false);
     }
   };
   return (
-    <Card padding={2} role="dialog" aria-label={t("fileChooser.label")}>
+    <Card
+      ref={cardRef}
+      padding={2}
+      role="dialog"
+      aria-label={t("fileChooser.label")}
+    >
       <Section alignItems="stretch" gap={2} height="auto">
-        <Text as="p" font="main-ui-body" color="text-04">
-          {multiple ? t("fileChooser.askMany") : t("fileChooser.askOne")}
+        <Text
+          as="p"
+          font="main-ui-body"
+          color="text-04"
+          wordWrap="wrap-anywhere"
+        >
+          {origin === null
+            ? multiple
+              ? t("fileChooser.askMany")
+              : t("fileChooser.askOne")
+            : t(
+                multiple ? "fileChooser.askManyFrom" : "fileChooser.askOneFrom",
+                {
+                  origin: browserOriginLabel(origin),
+                }
+              )}
         </Text>
         <Section flexDirection="row" justifyContent="end" gap={2}>
           <Button
@@ -549,6 +593,7 @@ function FileChooserPrompt({
             {t("fileChooser.cancel")}
           </Button>
           <FilePickerButton
+            data-prompt-focus
             size="sm"
             icon={uploading ? IconLoader : undefined}
             disabled={uploading}
@@ -564,4 +609,30 @@ function FileChooserPrompt({
       </Section>
     </Card>
   );
+}
+
+/**
+ * Moves focus into a page prompt for its controller, and gives it back to
+ * the page when the prompt goes while it still holds the focus.
+ */
+function usePromptFocus(
+  cardRef: RefObject<HTMLElement | null>,
+  selector: string,
+  controlling: boolean,
+  onClosed: () => void
+) {
+  useEffect(() => {
+    if (!controlling) return;
+    cardRef.current?.querySelector<HTMLElement>(selector)?.focus();
+  }, [cardRef, selector, controlling]);
+  const closed = useEffectEvent(onClosed);
+  useEffect(() => {
+    const card = cardRef.current;
+    return () => {
+      // The removed prompt leaves the focus on the body
+      const active = document.activeElement;
+      if (active === null || active === document.body || card?.contains(active))
+        closed();
+    };
+  }, [cardRef]);
 }

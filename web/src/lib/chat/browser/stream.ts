@@ -55,6 +55,16 @@ export function browserPageTitle(
   }
 }
 
+/**
+ * A page origin as a prompt names it, as Chrome's "example.com says": an
+ * https origin without its scheme, any other origin in full.
+ */
+export function browserOriginLabel(origin: string): string {
+  return origin.startsWith("https://")
+    ? origin.slice("https://".length)
+    : origin;
+}
+
 /** Whether a page shows nothing yet, as a new tab before its first URL. A
  * blank page with a title has content (a popup the opener wrote). */
 export function isBlankBrowserPage(
@@ -138,25 +148,43 @@ function isFiniteNumber(value: JsonValue | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+// An origin the viewer cannot read counts as unknown
+function originOf(value: JsonValue | undefined): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
 function isDialog(
   value: JsonValue | undefined
-): value is (JsonObject & BrowserDialog) | null {
+): value is JsonObject & { type: string; message: string } {
   return (
-    value === null ||
-    (isJsonObject(value) &&
-      typeof value.type === "string" &&
-      typeof value.message === "string")
+    isJsonObject(value) &&
+    typeof value.type === "string" &&
+    typeof value.message === "string"
   );
 }
 
-function isBrowserPage(value: JsonValue): value is JsonObject & BrowserTab {
+function dialogOf(value: JsonValue | undefined): BrowserDialog | null {
+  return isDialog(value)
+    ? {
+        type: value.type,
+        message: value.message,
+        origin: originOf(value.origin),
+      }
+    : null;
+}
+
+function isBrowserPage(
+  value: JsonValue
+): value is JsonObject & Omit<BrowserTab, "dialog"> {
   return (
     isJsonObject(value) &&
     typeof value.id === "string" &&
     typeof value.url === "string" &&
     typeof value.title === "string" &&
     typeof value.loading === "boolean" &&
-    isDialog(value.dialog ?? null)
+    (value.dialog === undefined ||
+      value.dialog === null ||
+      isDialog(value.dialog))
   );
 }
 
@@ -194,7 +222,7 @@ export function parseBrowserServerMessage(
           url: tab.url,
           title: tab.title,
           loading: tab.loading,
-          dialog: tab.dialog ?? null,
+          dialog: dialogOf(tab.dialog),
         })
       );
       const selected = typeof m.selected === "string" ? m.selected : null;
@@ -223,7 +251,12 @@ export function parseBrowserServerMessage(
         : null;
     case "fileChooser":
       return typeof m.id === "string" && typeof m.multiple === "boolean"
-        ? { type: "fileChooser", id: m.id, multiple: m.multiple }
+        ? {
+            type: "fileChooser",
+            id: m.id,
+            multiple: m.multiple,
+            origin: originOf(m.origin),
+          }
         : null;
     case "fileChooserClosed":
       return typeof m.id === "string"

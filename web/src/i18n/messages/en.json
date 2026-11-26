@@ -13737,16 +13737,20 @@
       },
       "dialog": {
         "label": "Page dialog",
+        "from": "{origin} says",
         "response": "Dialog response",
         "responsePlaceholder": "Type a response",
         "dismiss": "Dismiss",
         "accept": "Accept",
-        "takeControl": "Take control to respond."
+        "takeControl": "Take control to respond.",
+        "sendError": "Could not answer the page. Try again."
       },
       "fileChooser": {
         "label": "Choose files for the page",
         "askOne": "The page asks for a file.",
         "askMany": "The page asks for files.",
+        "askOneFrom": "{origin} asks for a file.",
+        "askManyFrom": "{origin} asks for files.",
         "cancel": "Cancel",
         "chooseOne": "Choose file",
         "chooseMany": "Choose files",

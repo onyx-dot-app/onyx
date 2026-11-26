@@ -13737,16 +13737,20 @@
       },
       "dialog": {
         "label": "Seitendialog",
+        "from": "{origin} meldet",
         "response": "Antwort im Dialog",
         "responsePlaceholder": "Antwort eingeben",
         "dismiss": "Schließen",
         "accept": "Annehmen",
-        "takeControl": "Übernehmen Sie die Steuerung, um zu antworten."
+        "takeControl": "Übernehmen Sie die Steuerung, um zu antworten.",
+        "sendError": "Die Antwort an die Seite ist fehlgeschlagen. Versuchen Sie es erneut."
       },
       "fileChooser": {
         "label": "Dateien für die Seite auswählen",
         "askOne": "Die Seite fordert eine Datei an.",
         "askMany": "Die Seite fordert Dateien an.",
+        "askOneFrom": "{origin} fordert eine Datei an.",
+        "askManyFrom": "{origin} fordert Dateien an.",
         "cancel": "Abbrechen",
         "chooseOne": "Datei auswählen",
         "chooseMany": "Dateien auswählen",

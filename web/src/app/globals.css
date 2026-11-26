@@ -355,9 +355,11 @@
   animation: agent-cursor-ripple 1s cubic-bezier(0, 0, 0.2, 1) forwards;
 }
 
+/* Without the animation, the ripple would stay; hide it */
 @media (prefers-reduced-motion: reduce) {
   .animate-agent-cursor-ripple {
     animation: none;
+    visibility: hidden;
   }
 }
 

@@ -141,7 +141,11 @@ function browserViewReducer(
         case "fileChooser":
           return {
             ...state,
-            fileChooser: { id: message.id, multiple: message.multiple },
+            fileChooser: {
+              id: message.id,
+              multiple: message.multiple,
+              origin: message.origin,
+            },
           };
         case "fileChooserClosed":
           return state.fileChooser?.id === message.id
@@ -217,7 +221,11 @@ export function useBrowserStream({
     dispatch({ type: "clear" });
   }
   const [generation, setGeneration] = useState(0);
-  const clientRef = useRef<BrowserStreamClient | null>(null);
+  // The connection, with the chat whose browser it views
+  const clientRef = useRef<{
+    sessionId: string;
+    client: BrowserStreamClient;
+  } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dropInputRef = useRef<(() => void) | null>(null);
 
@@ -256,20 +264,28 @@ export function useBrowserStream({
         },
       },
     });
-    clientRef.current = client;
+    const connection = { sessionId, client };
+    clientRef.current = connection;
     return () => {
       painter.stop();
       client.stop();
-      if (clientRef.current === client) clientRef.current = null;
+      if (clientRef.current === connection) clientRef.current = null;
       setHasFrame(false);
       dispatch({ type: "reset" });
     };
   }, [active, sessionId, generation]);
 
-  const send = useCallback((message: BrowserViewerMessage) => {
-    if (message.type === "selectTab") dropInputRef.current?.();
-    return clientRef.current?.send(message) ?? false;
-  }, []);
+  // Another chat's connection, before its effect stops it, takes nothing
+  const send = useCallback(
+    (message: BrowserViewerMessage) => {
+      const connection = clientRef.current;
+      if (connection === null || connection.sessionId !== sessionId)
+        return false;
+      if (message.type === "selectTab") dropInputRef.current?.();
+      return connection.client.send(message);
+    },
+    [sessionId]
+  );
   const retry = useCallback(() => setGeneration((value) => value + 1), []);
   const answerFileChooser = useCallback(
     (id: string, paths: string[]) => {
@@ -324,7 +340,7 @@ export interface ChatBrowserTabs {
   tabs: ChatBrowserTab[];
   // False when `tabId` is not a page of the browser
   selectTab: (tabId: string) => boolean;
-  // False when the panel closes the tab itself
+  // False when the tab is not the browser's, for the panel to close itself
   closeTab: (tabId: string) => boolean;
   // As T3 Code's "+" menu: each opening adds a new page and shows it
   openPage: () => void;
@@ -420,8 +436,18 @@ export function useChatBrowserTabs({
     }
     const pending = newTabPendingRef.current;
     newTabPendingRef.current = null;
-    if (pending !== null && pending.sessionId === browserSessionId)
-      for (let i = 0; i < pending.count; i++) send({ type: "newTab" });
+    if (pending !== null && pending.sessionId === browserSessionId) {
+      // A socket that closed since the render keeps its openings for the
+      // next live render
+      let unsent = 0;
+      for (let i = 0; i < pending.count; i++)
+        if (!send({ type: "newTab" })) unsent++;
+      if (unsent > 0)
+        newTabPendingRef.current = {
+          sessionId: pending.sessionId,
+          count: unsent,
+        };
+    }
     const hadPages = hadPagesRef.current;
     hadPagesRef.current = pageCount > 0;
     if (hadPages && pageCount === 0) {
@@ -440,14 +466,15 @@ export function useChatBrowserTabs({
     dispatch({ type: "openBrowser" });
   };
   const closeTab = (id: string) => {
-    // The browser closes the page; its tab goes when the page list drops it
+    // The browser closes the page; its tab goes when the page list drops it.
+    // Without a connection, the panel closes the browser and its pages.
     const page = pageOfTab(id);
-    if (page !== undefined) {
-      send({ type: "closeTab", tab: page.id });
+    if (page !== undefined && send({ type: "closeTab", tab: page.id }))
       return true;
-    }
-    if (id === RIGHT_PANEL_BROWSER_TAB) newTabPendingRef.current = null;
-    return false;
+    if (page === undefined && id !== RIGHT_PANEL_BROWSER_TAB) return false;
+    newTabPendingRef.current = null;
+    dispatch({ type: "closeTab", tabId: RIGHT_PANEL_BROWSER_TAB });
+    return true;
   };
 
   return {

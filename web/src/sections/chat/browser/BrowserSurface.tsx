@@ -18,6 +18,7 @@ import {
   useEffectEvent,
   useId,
   useRef,
+  useState,
 } from "react";
 import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
@@ -129,11 +130,16 @@ export function BrowserSurface({
       inputFrameRef.current = requestAnimationFrame(flushInput);
   };
 
+  // Also forgets the page's held buttons, touch and click history, so the
+  // next page gets no stray release or double click
   const dropInput = useCallback(() => {
     if (inputFrameRef.current !== null)
       cancelAnimationFrame(inputFrameRef.current);
     inputFrameRef.current = null;
     pendingMoveRef.current = pendingWheelRef.current = null;
+    mouseButtonsRef.current = 0;
+    lastClickRef.current = null;
+    touchRef.current = null;
   }, []);
 
   const queueWheel = (
@@ -193,9 +199,6 @@ export function BrowserSurface({
   useEffect(() => {
     if (controlling) return;
     dropInput();
-    mouseButtonsRef.current = 0;
-    lastClickRef.current = null;
-    touchRef.current = null;
     keySentRef.current = false;
     heldKeysRef.current.clear();
     inputRef.current?.blur();
@@ -208,6 +211,22 @@ export function BrowserSurface({
       dropInput();
     };
   }, [dropInputRef, dropInput]);
+
+  // The canvas's laid-out size places the agent's cursor, also after a resize
+  const [canvasBox, setCanvasBox] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const measure = () =>
+      setCanvasBox({ width: canvas.clientWidth, height: canvas.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [canvasRef]);
 
   // Native, as React's wheel listener is passive and cannot stop the panel
   // from scrolling
@@ -245,7 +264,7 @@ export function BrowserSurface({
     if (event.pointerType === "touch" && !cancelled) {
       const point = pagePoint(clientX, clientY, type === "pointermove");
       if (type === "pointerdown") {
-        if (!event.isPrimary) return;
+        if (!event.isPrimary || !point) return;
         touchRef.current = {
           pointerId,
           startX: clientX,
@@ -446,39 +465,45 @@ export function BrowserSurface({
     // Windows reports AltGr as Ctrl+Alt, but AltGr types a character
     const altGraph = event.getModifierState("AltGraph");
     const shortcut = !altGraph && (event.ctrlKey || event.metaKey);
-    // Paste arrives as text through onPaste
-    if (shortcut && event.key.toLowerCase() === "v") return;
-    if (event.shiftKey && event.key === "Insert") return;
-    // Enter carries "\r", so forms submit and text areas break lines
-    const text = shortcut
-      ? undefined
-      : [...event.key].length === 1
-        ? event.key
-        : event.key === "Enter"
-          ? "\r"
-          : undefined;
+    const modifiers = altGraph
+      ? browserModifiers(event) & ~(ALT | CTRL)
+      : browserModifiers(event);
+    const held = event.code || event.key;
     const key: KeyMessage = {
       type: "key",
       action,
       key: event.key,
       code: event.code,
       keyCode: event.keyCode,
-      modifiers: altGraph
-        ? browserModifiers(event) & ~(ALT | CTRL)
-        : browserModifiers(event),
+      modifiers,
     };
-    if (action === "down" && text !== undefined) key.text = text;
-    send(key);
-    if (action === "down")
-      heldKeysRef.current.set(event.code || event.key, key);
-    else heldKeysRef.current.delete(event.code || event.key);
-    // Some Android keyboards edit the field even when keydown is prevented
-    keySentRef.current =
-      action === "down" &&
-      !shortcut &&
-      (text !== undefined ||
-        event.key === "Backspace" ||
-        event.key === "Delete");
+    if (action === "up") {
+      // A key goes up on the page only when its press went there, also
+      // when the modifiers changed in between
+      if (!heldKeysRef.current.delete(held)) return;
+      send(key);
+    } else {
+      // Paste arrives as text through onPaste
+      if (shortcut && event.key.toLowerCase() === "v") return;
+      if (event.shiftKey && event.key === "Insert") return;
+      // Enter carries "\r", so forms submit and text areas break lines
+      const text = shortcut
+        ? undefined
+        : [...event.key].length === 1
+          ? event.key
+          : event.key === "Enter"
+            ? "\r"
+            : undefined;
+      if (text !== undefined) key.text = text;
+      send(key);
+      heldKeysRef.current.set(held, key);
+      // Some Android keyboards edit the field even when keydown is prevented
+      keySentRef.current =
+        !shortcut &&
+        (text !== undefined ||
+          event.key === "Backspace" ||
+          event.key === "Delete");
+    }
     // The page runs the key, so the app does not: Ctrl+R reloads the page,
     // not Onyx, and Ctrl+C copies on the page
     event.preventDefault();
@@ -518,10 +543,10 @@ export function BrowserSurface({
 
   const canvas = canvasRef.current;
   const cursor =
-    agentPointer && !controlling && canvas && viewport
+    agentPointer && !controlling && hasFrame && canvas && canvasBox && viewport
       ? agentCursorPosition(
           agentPointer,
-          { width: canvas.clientWidth, height: canvas.clientHeight },
+          canvasBox,
           { width: canvas.width, height: canvas.height },
           viewport
         )

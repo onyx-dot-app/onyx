@@ -8,6 +8,9 @@ export interface BrowserDialog {
   // "alert", "confirm", "prompt" or "beforeunload"
   type: string;
   message: string;
+  // The asking frame's origin, such as "https://example.com"; null when
+  // unknown or opaque
+  origin: string | null;
 }
 
 /** One of the chat's browser tabs. */
@@ -40,6 +43,8 @@ export interface BrowserPointer {
 export interface BrowserFileChooser {
   id: string;
   multiple: boolean;
+  // The asking frame's origin; null when unknown or opaque
+  origin: string | null;
 }
 
 /** A download the service saved to the sandbox's downloads/ dir. */

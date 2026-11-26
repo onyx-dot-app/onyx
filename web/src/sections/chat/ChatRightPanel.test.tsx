@@ -1631,4 +1631,39 @@ describe("the chat's browser", () => {
     receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
     expect(socket().sent).toEqual([]);
   });
+
+  test("a page's close button closes the browser when the connection is down", () => {
+    jest.useFakeTimers();
+    try {
+      renderChat([[REPORT]]);
+      act(() => openBrowserInChat("session"));
+      act(() => socket().open());
+      receive({ type: "tabs", tabs: [PAGE, DOCS_PAGE], selected: "t1" });
+      act(() => {
+        socket().readyState = 3;
+        socket().dispatchEvent(
+          Object.assign(new Event("close"), { code: 1006 })
+        );
+      });
+      act(() =>
+        screen.getByRole("button", { name: "Close docs.example.org" }).click()
+      );
+      expect(panel().browserOpen).toBe(false);
+      expect(
+        screen.queryByRole("tab", { name: "Example Domain" })
+      ).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("the focus on the tab that stands for the browser goes to the page's tab", () => {
+    renderChat([[REPORT]]);
+    act(() => openBrowserInChat("session"));
+    const browserTab = screen.getByRole("tab", { name: "Browser" });
+    act(() => browserTab.focus());
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    expect(screen.getByRole("tab", { name: "Example Domain" })).toHaveFocus();
+  });
 });

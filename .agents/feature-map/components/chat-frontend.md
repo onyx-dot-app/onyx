@@ -279,8 +279,10 @@
   browser until the stream lists its pages). The browser service owns the
   page list and each viewer's selection: the `tabs` message's `selected`
   marks the active page tab, and a tab click sends `selectTab`, close sends
-  `closeTab`. The browser opens by itself when a live stream starts the
-  agent's `browser_open` tool in the open chat (not on reload or replay),
+  `closeTab` (without a connection, close shuts the whole browser in the
+  panel). The browser opens by itself when a live stream starts the
+  agent's `browser_open` tool in the open chat, also on a followed
+  continuation (`followChatSession`), but not on reload or replay,
   and from the strip's "+" menu (shown when
   `settings.chat_browser_available`), which sends `newTab`. It closes when
   the last page of a live browser closes. `ChatRightPanel` gets the stream
@@ -290,7 +292,8 @@
   while the panel and the chat's browser are open. One view
   (`sections/chat/browser/`, ported from T3 Code) serves all page tabs; only
   the viewer that controls the tab can send input or navigate, and the
-  service adds a missing URL scheme. Close code 4403 shows the browser as
+  service adds a missing URL scheme. Page dialogs and file choosers name
+  the asking frame's origin when the service knows it. Close code 4403 shows the browser as
   off, 4404 and 4503 as unavailable with a retry; other drops reconnect,
   and six connects in a row that do not open stop with a retry. A
   page's download goes to the sandbox's `downloads/`, not to Files: its toast

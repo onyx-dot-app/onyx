@@ -1,6 +1,7 @@
 import {
   agentCursorPosition,
   browserModifiers,
+  browserOriginLabel,
   browserPageTitle,
   browserStreamUrl,
   browserUrlFromInput,
@@ -47,7 +48,21 @@ describe("parseBrowserServerMessage", () => {
       ],
       [
         { type: "fileChooser", id: "f1", multiple: true, accept: ".pdf" },
-        { type: "fileChooser", id: "f1", multiple: true },
+        { type: "fileChooser", id: "f1", multiple: true, origin: null },
+      ],
+      [
+        {
+          type: "fileChooser",
+          id: "f2",
+          multiple: false,
+          origin: "https://example.com",
+        },
+        {
+          type: "fileChooser",
+          id: "f2",
+          multiple: false,
+          origin: "https://example.com",
+        },
       ],
       [
         { type: "fileChooserClosed", id: "f1" },
@@ -84,20 +99,42 @@ describe("parseBrowserServerMessage", () => {
     expect(message).toEqual({ type: "tabs", tabs: [TAB], selected: null });
   });
 
-  test("reads a tab's dialog", () => {
-    const dialog = { type: "prompt", message: "Name?" };
+  test("reads a tab's dialog and its origin, null when unknown", () => {
+    const dialog = {
+      type: "prompt",
+      message: "Name?",
+      origin: "http://example.com",
+    };
     const message = parseBrowserServerMessage(
       JSON.stringify({
         type: "tabs",
-        tabs: [{ ...TAB, dialog }],
+        tabs: [
+          { ...TAB, dialog },
+          { ...TAB, id: "t2", dialog: { type: "alert", message: "Hi" } },
+        ],
         selected: "t1",
       })
     );
     expect(message).toEqual({
       type: "tabs",
-      tabs: [{ ...TAB, dialog }],
+      tabs: [
+        { ...TAB, dialog },
+        {
+          ...TAB,
+          id: "t2",
+          dialog: { type: "alert", message: "Hi", origin: null },
+        },
+      ],
       selected: "t1",
     });
+  });
+
+  test("names an https origin by its host and any other in full", () => {
+    expect(browserOriginLabel("https://example.com")).toBe("example.com");
+    expect(browserOriginLabel("https://example.com:8443")).toBe(
+      "example.com:8443"
+    );
+    expect(browserOriginLabel("http://example.com")).toBe("http://example.com");
   });
 
   test("gives null for unknown or broken messages", () => {

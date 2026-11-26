@@ -13737,16 +13737,20 @@
       },
       "dialog": {
         "label": "Boîte de dialogue de la page",
+        "from": "{origin} indique",
         "response": "Réponse à la boîte de dialogue",
         "responsePlaceholder": "Saisissez une réponse",
         "dismiss": "Ignorer",
         "accept": "Accepter",
-        "takeControl": "Prenez le contrôle pour répondre."
+        "takeControl": "Prenez le contrôle pour répondre.",
+        "sendError": "Impossible de répondre à la page. Réessayez."
       },
       "fileChooser": {
         "label": "Choisir des fichiers pour la page",
         "askOne": "La page demande un fichier.",
         "askMany": "La page demande des fichiers.",
+        "askOneFrom": "{origin} demande un fichier.",
+        "askManyFrom": "{origin} demande des fichiers.",
         "cancel": "Annuler",
         "chooseOne": "Choisir un fichier",
         "chooseMany": "Choisir des fichiers",

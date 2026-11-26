@@ -13737,16 +13737,20 @@
       },
       "dialog": {
         "label": "页面对话框",
+        "from": "{origin} 显示",
         "response": "对话框回复",
         "responsePlaceholder": "输入回复",
         "dismiss": "关闭",
         "accept": "接受",
-        "takeControl": "接管控制以进行回复。"
+        "takeControl": "接管控制以进行回复。",
+        "sendError": "无法响应该页面。请重试。"
       },
       "fileChooser": {
         "label": "为页面选择文件",
         "askOne": "页面请求一个文件。",
         "askMany": "页面请求多个文件。",
+        "askOneFrom": "{origin} 请求一个文件。",
+        "askManyFrom": "{origin} 请求多个文件。",
         "cancel": "取消",
         "chooseOne": "选择文件",
         "chooseMany": "选择多个文件",

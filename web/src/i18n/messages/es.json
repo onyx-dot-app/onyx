@@ -13737,16 +13737,20 @@
       },
       "dialog": {
         "label": "Diálogo de la página",
+        "from": "{origin} dice",
         "response": "Respuesta del diálogo",
         "responsePlaceholder": "Escribe una respuesta",
         "dismiss": "Descartar",
         "accept": "Aceptar",
-        "takeControl": "Toma el control para responder."
+        "takeControl": "Toma el control para responder.",
+        "sendError": "No se pudo responder a la página. Inténtalo de nuevo."
       },
       "fileChooser": {
         "label": "Elegir archivos para la página",
         "askOne": "La página pide un archivo.",
         "askMany": "La página pide archivos.",
+        "askOneFrom": "{origin} pide un archivo.",
+        "askManyFrom": "{origin} pide archivos.",
         "cancel": "Cancelar",
         "chooseOne": "Elegir archivo",
         "chooseMany": "Elegir archivos",
