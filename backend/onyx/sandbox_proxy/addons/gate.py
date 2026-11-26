@@ -207,9 +207,8 @@ class GateAddon:
         self._proxy_instance_id = proxy_instance_id
         self._credential_dispatcher = credential_dispatcher
         self._stream_responses = stream_responses
-        # Invariant: `_persist_approval_row` is the only writer;
-        # `_await_decision`'s finally and the post-persist grant recheck are the
-        # only removers.
+        # Invariant: `_persist_approval_row` is the only writer; the `finally`
+        # after it in `request` is the only remover.
         self._parked = ParkedApprovals()
         # client connection id -> session tag, captured from the CONNECT's
         # Proxy-Authorization (only place it's visible for MITM'd HTTPS).
@@ -460,20 +459,18 @@ class GateAddon:
                             )
                             is not None
                         ):
-                            self._parked.remove(ctx.tenant_id, approval_id)
                             decision = ApprovalDecision.APPROVED
                         elif ctx.chat_command_id is not None and not (
                             await asyncio.to_thread(self._command_in_foreground, ctx)
                         ):
                             # The command's call ended during persistence, so no
                             # card can show this request.
-                            self._parked.remove(ctx.tenant_id, approval_id)
                             decision = await asyncio.to_thread(
                                 self._claim_expired_or_read_winner,
                                 approval_id,
                                 ctx.tenant_id,
                             )
-                            if decision is not ApprovalDecision.APPROVED:
+                            if decision is ApprovalDecision.EXPIRED:
                                 flow.response = _approval_needs_tool(matched_actions)
                                 return
                         else:
@@ -481,11 +478,22 @@ class GateAddon:
                                 approval_id, ctx, matched_actions
                             )
                     except asyncio.CancelledError:
-                        # Cancelled before the wait took the row over (the
-                        # wait cleans up itself; a repeat changes nothing).
-                        self._parked.remove(ctx.tenant_id, approval_id)
-                        self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
+                        # The sandbox closed the socket: end the row, then
+                        # re-raise so mitmproxy releases the flow.
+                        try:
+                            self._claim_expired_or_read_winner(
+                                approval_id, ctx.tenant_id
+                            )
+                        except Exception:
+                            logger.exception(
+                                "approval_cancel_claim_error approval=%s "
+                                "approval_id=%s",
+                                short_log_id(approval_id),
+                                full_log_id(approval_id),
+                            )
                         raise
+                    finally:
+                        self._parked.remove(ctx.tenant_id, approval_id)
                     self._write_response_for_decision(flow, decision)
                     if decision is not ApprovalDecision.APPROVED:
                         return
@@ -1052,49 +1060,39 @@ class GateAddon:
         ctx: SessionContext,
         matched_actions: AllMatchedActions,
     ) -> ApprovalDecision:
-        """Parks on the wake channel; claims EXPIRED on timeout / cancel.
-
-        Owns removal of the parked-approvals entry in the `finally` block.
-        """
+        """Parks on the wake channel; claims EXPIRED on timeout. `request`
+        ends the row on a cancel and removes the parked entry."""
         cache = self._cache_factory(ctx.tenant_id)
-        try:
-            decision = await approval_cache.wait_for_wake(
-                approval_id, SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS, cache
-            )
-            if decision is not None:
-                logger.info(
-                    "approval_decided " + APPROVAL_DECIDED_FIELDS,
-                    *approval_decided_args(
-                        ctx,
-                        approval_id,
-                        matched_actions,
-                        decision=decision.value,
-                        wake="received",
-                        source="wake",
-                    ),
-                )
-                return decision
-            resolved = self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
-            source = "timeout" if resolved == ApprovalDecision.EXPIRED else "db_winner"
+        decision = await approval_cache.wait_for_wake(
+            approval_id, SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS, cache
+        )
+        if decision is not None:
             logger.info(
                 "approval_decided " + APPROVAL_DECIDED_FIELDS,
                 *approval_decided_args(
                     ctx,
                     approval_id,
                     matched_actions,
-                    decision=resolved.value,
-                    wake="missed",
-                    source=source,
+                    decision=decision.value,
+                    wake="received",
+                    source="wake",
                 ),
             )
-            return resolved
-        except asyncio.CancelledError:
-            # Sandbox socket closed mid-wait. Terminalize the audit row, then
-            # re-raise so mitmproxy releases the flow.
-            self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
-            raise
-        finally:
-            self._parked.remove(ctx.tenant_id, approval_id)
+            return decision
+        resolved = self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
+        source = "timeout" if resolved == ApprovalDecision.EXPIRED else "db_winner"
+        logger.info(
+            "approval_decided " + APPROVAL_DECIDED_FIELDS,
+            *approval_decided_args(
+                ctx,
+                approval_id,
+                matched_actions,
+                decision=resolved.value,
+                wake="missed",
+                source=source,
+            ),
+        )
+        return resolved
 
     def _claim_expired_or_read_winner(
         self, approval_id: UUID, tenant_id: str

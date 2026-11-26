@@ -1423,7 +1423,7 @@ def test_parked_approvals_remove_last_cleans_tenant_entry() -> None:
 async def test_await_decision_wake_received_returns_decision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Wake before timeout returns its decision; parked entry cleared."""
+    """Wake before timeout returns its decision."""
     approval_id = uuid4()
     ctx = _ctx(tenant_id="tenant-1")
 
@@ -1441,12 +1441,10 @@ async def test_await_decision_wake_received_returns_decision(
         matcher=_StubMatcher(),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
-    addon._parked.add(ctx.tenant_id, approval_id)
 
     decision = await addon._await_decision(approval_id, ctx, _MATCH)
 
     assert decision == ApprovalDecision.APPROVED
-    assert addon._parked.snapshot() == []
 
 
 @pytest.mark.asyncio
@@ -1470,7 +1468,6 @@ async def test_await_decision_timeout_claims_expired(
         matcher=_StubMatcher(),
         cache_factory=lambda tenant_id: cache,  # noqa: ARG005
     )
-    addon._parked.add(ctx.tenant_id, approval_id)
 
     claim_calls: list[tuple[UUID, str]] = []
 
@@ -1484,45 +1481,49 @@ async def test_await_decision_timeout_claims_expired(
 
     assert decision == ApprovalDecision.EXPIRED
     assert claim_calls == [(approval_id, ctx.tenant_id)]
-    assert addon._parked.snapshot() == []
 
 
+@pytest.mark.parametrize("claim_fails", [False, True])
 @pytest.mark.asyncio
-async def test_await_decision_cancelled_claims_expired_and_reraises(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_a_request_cancelled_during_the_wait_ends_the_row_and_reraises(
+    monkeypatch: pytest.MonkeyPatch, claim_fails: bool
 ) -> None:
-    """Socket closed mid-wait: claim EXPIRED (terminal audit row) and
-    re-raise so mitmproxy releases the flow."""
+    """Socket closed mid-wait: claim EXPIRED (terminal audit row), drop the
+    parked entry and re-raise so mitmproxy releases the flow, also when the
+    claim fails."""
+    addon = _build(
+        resolver=StubResolver(
+            sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
+        ),
+        matcher=_StubMatcher(result=_MATCH),
+        cache_factory=lambda _tenant_id: MagicMock(spec=CacheBackend),
+    )
     approval_id = uuid4()
-    ctx = _ctx(tenant_id="tenant-1")
 
-    async def _fake_wait_for_wake(
-        _approval_id: UUID, _timeout: int, _cache: Any
-    ) -> ApprovalDecision | None:
+    def persist(ctx: SessionContext, *_args: Any) -> UUID:
+        addon._parked.add(ctx.tenant_id, approval_id)
+        return approval_id
+
+    async def cancelled_wait(*_args: Any) -> ApprovalDecision | None:
         raise asyncio.CancelledError()
 
-    monkeypatch.setattr(gate.approval_cache, "wait_for_wake", _fake_wait_for_wake)
+    claims: list[UUID] = []
 
-    cache = MagicMock(spec=CacheBackend)
-    addon = _build(
-        resolver=StubResolver(),
-        matcher=_StubMatcher(),
-        cache_factory=lambda tenant_id: cache,  # noqa: ARG005
-    )
-    addon._parked.add(ctx.tenant_id, approval_id)
-
-    claim_calls: list[tuple[UUID, str]] = []
-
-    def _fake_claim(aid: UUID, tid: str) -> ApprovalDecision:
-        claim_calls.append((aid, tid))
+    def claim(aid: UUID, _tenant_id: str) -> ApprovalDecision:
+        claims.append(aid)
+        if claim_fails:
+            raise RuntimeError("db down")
         return ApprovalDecision.EXPIRED
 
-    monkeypatch.setattr(addon, "_claim_expired_or_read_winner", _fake_claim)
+    monkeypatch.setattr(addon, "_persist_approval_row", persist)
+    monkeypatch.setattr(addon, "_apply_session_grant", lambda *_a, **_k: None)
+    monkeypatch.setattr(gate.approval_cache, "wait_for_wake", cancelled_wait)
+    monkeypatch.setattr(addon, "_claim_expired_or_read_winner", claim)
 
     with pytest.raises(asyncio.CancelledError):
-        await addon._await_decision(approval_id, ctx, _MATCH)
+        await addon.request(make_flow(proxy_auth=_basic_auth(_TAG_UUID)))
 
-    assert claim_calls == [(approval_id, ctx.tenant_id)]
+    assert claims == [approval_id]
     assert addon._parked.snapshot() == []
 
 
@@ -1536,8 +1537,8 @@ async def test_drain_inflight_walks_parked_per_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Drain wakes every parked approval on its own tenant's cache, never
-    cross-tenant, and leaves `_parked` untouched (removal is owned by
-    `_await_decision.finally`)."""
+    cross-tenant, and leaves `_parked` untouched (the request that parked
+    an approval removes it)."""
     cache_t1 = MagicMock(spec=CacheBackend)
     cache_t2 = MagicMock(spec=CacheBackend)
     per_tenant_caches: dict[str, CacheBackend] = {
@@ -1585,7 +1586,7 @@ async def test_drain_inflight_walks_parked_per_tenant(
         else:
             assert cache is cache_t2, "tenant-2 approval waked on wrong cache"
 
-    # Drain must not remove from `_parked` (owned by _await_decision.finally).
+    # Drain must not remove from `_parked`: the parked request removes it.
     assert dict(addon._parked.snapshot()) == parked_before
 
 
@@ -2550,12 +2551,22 @@ async def test_a_saved_always_allow_passes_a_command(
     assert len(spy.dispatched) == 1
 
 
+@pytest.mark.parametrize(
+    ("winner", "expected"),
+    [
+        (ApprovalDecision.EXPIRED, SandboxProxyError.APPROVAL_NEEDS_TOOL),
+        # The user denied the card before the call ended.
+        (ApprovalDecision.REJECTED, SandboxProxyError.USER_REJECTED),
+    ],
+)
 @pytest.mark.asyncio
 async def test_a_call_that_ends_during_persistence_refuses_the_request(
     monkeypatch: pytest.MonkeyPatch,
+    winner: ApprovalDecision,
+    expected: SandboxProxyError,
 ) -> None:
     """No card can show a row written after the call ended, so the gate
-    expires it instead of waiting."""
+    expires it instead of waiting. A recorded denial stays a denial."""
     addon, cache = _command_gate(monkeypatch)
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     original_persist = addon._persist_approval_row
@@ -2569,15 +2580,13 @@ async def test_a_call_that_ends_during_persistence_refuses_the_request(
     monkeypatch.setattr(
         addon,
         "_claim_expired_or_read_winner",
-        lambda approval_id, _tenant: (
-            claimed.append(approval_id) or ApprovalDecision.EXPIRED
-        ),
+        lambda approval_id, _tenant: claimed.append(approval_id) or winner,
     )
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
     await addon.request(flow)
 
-    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
+    _assert_403(flow, expected)
     assert len(claimed) == 1
     assert not spy.awaited and not spy.dispatched
 
