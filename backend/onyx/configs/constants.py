@@ -507,6 +507,9 @@ class FileOrigin(str, Enum):
     CHAT_ARTIFACT = "chat_artifact"
     # A JPEG of a published file's first page (ChatArtifactVersion).
     CHAT_ARTIFACT_THUMBNAIL = "chat_artifact_thumbnail"
+    # The PDF of a PowerPoint or Word chat file, for its preview
+    # (ChatArtifactVersion.preview_file_id, UserFile.preview_file_id).
+    CHAT_FILE_PREVIEW = "chat_file_preview"
     CONNECTOR = "connector"
     CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"

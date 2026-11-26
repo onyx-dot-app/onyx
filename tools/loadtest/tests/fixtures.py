@@ -62,3 +62,34 @@ WAIT_TOOL = {
         },
     },
 }
+
+# The Claude shapes of the same operations (backend code_mode/shapes.py).
+REPL_TOOL = {
+    "type": "function",
+    "function": {
+        **EXEC_TOOL["function"],
+        "name": "repl",
+        "parameters": {
+            "type": "object",
+            "properties": {"code": {"type": "string"}, "timeout": {"type": "integer"}},
+            "required": ["code"],
+        },
+    },
+}
+
+POLL_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "poll",
+        "description": "Polls a running `repl` cell.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cell_id": {"type": "integer"},
+                "timeout": {"type": "integer"},
+                "terminate": {"type": "boolean"},
+            },
+            "required": ["cell_id"],
+        },
+    },
+}

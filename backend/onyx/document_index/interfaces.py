@@ -1,9 +1,10 @@
 import abc
 from collections.abc import Iterable
 from datetime import datetime
+from enum import Enum
 from typing import Self
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource
@@ -36,6 +37,7 @@ __all__ = [
     "IdRetrievalCapable",
     "HybridCapable",
     "RandomCapable",
+    "ContentMatchCapable",
 ]
 
 
@@ -68,6 +70,57 @@ class KeywordTermCounts(BaseModel):
 
     total: int
     distinct: int
+
+
+class ContentMatchDateField(str, Enum):
+    """The document date that orders a content listing."""
+
+    UPDATED = "updated"
+    CREATED = "created"
+
+
+class ContentMatchRequest(BaseModel):
+    """Documents with a chunk whose content contains any of the phrases.
+
+    Content is the indexed chunk text, which also holds the title, the
+    document summary and the metadata values, so a phrase found only in the
+    title matches.
+    """
+
+    phrases: list[str]
+    filters: IndexFilters
+    # When set, only these documents can match. Unlike
+    # `filters.attached_document_ids`, which widens the knowledge scope, this
+    # narrows the result.
+    document_ids: list[str] | None = None
+    # A strict window on the updated date: undated documents never match.
+    # `filters.updated_at_range` instead follows search's looser rules
+    # (FILTER_SEMANTICS.md). Index dates are whole seconds, so both bounds
+    # also admit documents in their boundary second; check exact bounds in
+    # Postgres.
+    updated_after: datetime | None = None
+    updated_before: datetime | None = None
+    # Documents of these sources match only through one of the cc-pairs in
+    # `restricted_source_cc_pair_ids`, such as a source that censors records
+    # at read time except under a public connector.
+    restricted_sources: list[DocumentSource] = Field(default_factory=list)
+    restricted_source_cc_pair_ids: list[int] = Field(default_factory=list)
+
+
+class ContentMatchKey(BaseModel):
+    """A matching document and its place in a content listing."""
+
+    model_config = {"frozen": True}
+
+    document_id: str
+    # The ordering date, to the second. None sorts last in either direction.
+    date: datetime | None
+
+
+class ContentMatchCount(BaseModel):
+    count: int
+    # False when counting stopped at its limit: `count` is then a lower bound.
+    is_complete: bool
 
 
 class DocumentInsertionRecord(BaseModel):
@@ -522,6 +575,64 @@ class RandomCapable(abc.ABC):
         raise NotImplementedError
 
 
+class ContentMatchCapable(abc.ABC):
+    """
+    Class must implement exhaustive, paged matching of documents by content.
+    """
+
+    @abc.abstractmethod
+    def match_documents_by_content(
+        self,
+        request: ContentMatchRequest,
+        date_field: ContentMatchDateField,
+        descending: bool,
+        after: ContentMatchKey | None,
+        limit: int,
+    ) -> list[ContentMatchKey]:
+        """Returns one page of the documents that match, each once.
+
+        Documents come in `date_field` order, then document ID in the same
+        direction. Documents without the date come last. Each page reads the
+        live index, like a keyset listing in Postgres: a document whose date
+        changes between pages can be skipped or listed twice.
+
+        Args:
+            request: The phrases, filters and optional document IDs.
+            date_field: The date that orders the documents.
+            descending: Whether the newest documents come first.
+            after: The last document of the previous page, or None for the
+                first page.
+            limit: The most documents to return.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def count_documents_by_content(
+        self,
+        request: ContentMatchRequest,
+        max_count: int,
+        deadline: float | None = None,
+    ) -> ContentMatchCount:
+        """Counts the distinct documents that match, up to about `max_count`.
+
+        Args:
+            request: The phrases, filters and optional document IDs.
+            max_count: Counting stops once it reaches this many documents.
+            deadline: A `time.monotonic()` value. Counting stops after the
+                first page that ends past it.
+
+        A search timeout after the first page ends the count early with the
+        pages already counted.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def count_phrase_terms(self, phrase: str) -> int:
+        """The number of terms a content match searches for this phrase: 0
+        when the index analyzer drops every word, such as common words."""
+        raise NotImplementedError
+
+
 class DocumentIndex(
     SchemaVerifiable,
     Indexable,
@@ -530,6 +641,7 @@ class DocumentIndex(
     HybridCapable,
     IdRetrievalCapable,
     RandomCapable,
+    ContentMatchCapable,
     abc.ABC,
 ):
     """
@@ -544,4 +656,5 @@ class DocumentIndex(
     - Run hybrid search
     - Retrieve document or sections of documents based on document id
     - Retrieve sets of random documents
+    - Match documents by content, exhaustively
     """
