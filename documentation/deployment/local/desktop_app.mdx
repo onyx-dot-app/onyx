@@ -1,0 +1,248 @@
+---
+title: "Desktop App"
+description: "Install, deploy, and troubleshoot the Onyx desktop app on macOS, Windows, and Linux"
+icon: "desktop"
+---
+
+The Onyx Desktop App is a native app for macOS, Windows, and Linux.
+It shows the web app of your Onyx server in a native window. It also has native sign-in,
+and a launcher that opens on a global shortcut from any app.
+
+This page is for IT admins who install the app on company devices.
+To set up the app in advance with your device management tool,
+see [Desktop App Managed Policy](/deployment/local/desktop_app_policy).
+
+<img className="rounded-image" src="/assets/deployment/onyx_desktop_app.webp" alt="Onyx Desktop App"/>
+
+<Info>
+  The desktop app connects to an Onyx server. Users need the URL of their Onyx server.
+  It cannot connect directly to a local inference backend.
+</Info>
+
+## Download
+
+<CardGroup cols={3}>
+  <Card title="Windows" icon="windows" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_x64.exe">
+    Download for Windows (.exe)
+  </Card>
+
+  <Card title="macOS" icon="apple" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_universal.dmg">
+    Download for macOS (.dmg)
+  </Card>
+
+  <Card title="Linux" icon="linux" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_amd64.deb">
+    Download for Linux (.deb)
+  </Card>
+</CardGroup>
+
+Each Onyx release on the [GitHub Releases page](https://github.com/onyx-dot-app/onyx/releases/latest) has these files:
+
+| Platform | Files |
+| --- | --- |
+| macOS (Apple silicon and Intel) | `Onyx_universal.dmg` |
+| Windows x64 | `Onyx_x64.exe` (setup program), `Onyx_x64.msi` |
+| Windows ARM64 | `Onyx_arm64.exe` (setup program) |
+| Linux x64 | `Onyx_amd64.deb`, `Onyx_x86_64.rpm`, `Onyx_amd64.AppImage` |
+| Linux ARM64 | `Onyx_arm64.deb`, `Onyx_aarch64.rpm` |
+
+## Requirements
+
+- An Onyx server that the device can reach over `https://`. The app checks the server with `GET /api/version`.
+- **macOS**: macOS 13 or later.
+- **Windows**: administrator rights to install. The installers include the WebView2 runtime, so they also install on
+  a device with no internet access.
+- **Linux**: glibc 2.35 or later and WebKitGTK 4.1 (`webkit2gtk-4.1`), as on Ubuntu 22.04, Debian 12, Fedora, and later.
+  RHEL 9 and its rebuilds do not ship WebKitGTK 4.1, so the `.rpm` does not install there.
+  The app also needs these desktop services:
+  - A **Secret Service** provider, such as GNOME Keyring or KWallet, that runs and is unlocked in the user's session.
+    The app keeps the session token there. Without it, sign-in fails with a message that names the Secret Service.
+    Minimal window managers, VDI sessions, and SSH sessions often have no provider.
+  - A tray host for the tray icon (`libayatana-appindicator3-1`). Stock GNOME needs the AppIndicator extension
+    (`gnome-shell-extension-appindicator`). Ubuntu turns it on by default.
+  - `xdg-mime`, so the app can register `onyx://` sign-in links.
+
+## Install
+
+<Tabs>
+  <Tab title="macOS">
+    Open the `.dmg` file and drag **Onyx** to the **Applications** folder.
+  </Tab>
+
+  <Tab title="Windows">
+    Run the setup program (`.exe`) or the MSI installer (`.msi`). Use one installer type on a device, not both.
+    Both installers install the app for all users in `Program Files\Onyx`,
+    and register `onyx://` sign-in links for all users.
+
+    For a silent install with Intune or another deployment tool, run the MSI with administrator rights:
+
+    ```powershell
+    msiexec /i "<path to the .msi file>" /qn
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    Install the `.deb` or `.rpm` package, or run the AppImage (x64 only):
+
+    ```bash
+    sudo apt install ./Onyx_amd64.deb
+    # or
+    sudo dnf install ./Onyx_x86_64.rpm
+    ```
+
+    The packages register `onyx://` sign-in links. The AppImage registers them each time it starts.
+
+    The AppImage uses the graphics libraries of the system. On a minimal install or in a container,
+    install `libgles2` (Debian and Ubuntu) or `libglvnd-gles` (Fedora)
+    if the AppImage stops with `Couldn't open libGLESv2.so.2`.
+
+    Keep the AppImage in a folder whose path has no spaces.
+    Otherwise some systems cannot pass `onyx://` sign-in links to it.
+  </Tab>
+</Tabs>
+
+## Upgrade from the previous desktop app
+
+This app replaces the previous Onyx desktop app. It has the same name and app ID (`app.onyx.desktop`),
+so you install it over the previous app. You do not uninstall the previous app first. On Windows,
+use the same installer type as before: the MSI over an MSI install, and the setup program (`.exe`)
+over a setup program install. To change the installer type, uninstall the previous app first.
+
+- **macOS**: the new `Onyx.app` replaces the previous one in **Applications**.
+- **Windows**: the new MSI upgrades a previous MSI install. The new setup program (`.exe`) installs for all users.
+  The previous setup program installed for the current user only. At each user's first launch,
+  the new app removes that user's previous install: its entry in **Settings > Apps** and **Programs and Features**,
+  its shortcuts, and its program files. Do not remove the previous app with its own uninstaller:
+  its **Delete the application data** option also deletes the new app's settings and sign-in.
+  If the previous app is still running, the new app removes the rest of its files at a later launch.
+  The new app also takes over `onyx://` sign-in links.
+- **Linux**: the new `.deb` and `.rpm` packages have the same package name (`onyx`), so `apt` and `dnf` upgrade
+  the previous package.
+
+At its first launch, the app reads the `config.json` file of the previous app one time:
+
+| OS | Previous `config.json` |
+| --- | --- |
+| macOS | `~/Library/Application Support/app.onyx.onyx-desktop/config.json` |
+| Windows | `%APPDATA%\onyx\onyx-desktop\config\config.json` |
+| Linux | `$XDG_CONFIG_HOME/onyx-desktop/config.json` (default: `~/.config/onyx-desktop/config.json`) |
+
+On Linux,
+the new app's settings folder follows `$XDG_CONFIG_HOME` too (see [Where the app keeps its
+files](#where-the-app-keeps-its-files)).
+
+- The app uses `server_url` as the saved server, so the user goes directly to sign-in.
+  The app keeps only the scheme, host, and port, so Onyx must run at the server root.
+  A server URL with `http://` is not imported, unless the server is on the same device.
+- The app uses a `summon_shortcut` that the user changed as its launcher shortcut.
+  The previous app's shortcut opened the main window. The new shortcut opens the launcher.
+- The app ignores the other keys (`window_title`, `show_menu_bar`, `hide_window_decorations`,
+  `summon_opens_new_chat`).
+- After the import, the app renames the file to `config.json.imported`. It keeps the file as a backup and does
+  not import it again.
+
+Each user signs in one time after the upgrade,
+because the new app keeps the session in the credential store of the operating system.
+
+If you preset the server with a `config.json` file for the previous app, that file still works for a first launch.
+The user can change that server. To set a server that users cannot change,
+use `ServerURL` and `LockServerURL` in a [managed policy](/deployment/local/desktop_app_policy).
+
+## First launch and sign-in
+
+<Steps>
+  <Step title="Enter the server URL">
+    On first launch, the app asks for the URL of your Onyx server, for example `https://onyx.example.com`.
+    A URL without a scheme gets `https://`. The app accepts `http://` only for a server on the same device.
+
+    If a managed policy sets `ServerURL`, the app skips this step.
+    See [Desktop App Managed Policy](/deployment/local/desktop_app_policy).
+  </Step>
+
+  <Step title="Sign in">
+    Sign in with email and password in the **Sign in to Onyx** window,
+    or select one of the SSO buttons that the server offers.
+
+    - Google and OIDC sign-in can continue in the system browser, where the user is often signed in to the
+    identity provider already. When the browser sign-in is complete,
+    the browser opens an `onyx://` link and the app opens Onyx. The identity provider needs no new redirect URI.
+    - SAML, Onyx Cloud, and servers without browser sign-in use the server's login page in an app window.
+    - If the browser sign-in does not return to the app, select **Not working? Sign in in an Onyx window instead**.
+  </Step>
+</Steps>
+
+The app keeps the session token in the credential store of the operating system: the macOS keychain,
+the Windows Credential Manager, or the Linux Secret Service. The app renews the session at launch and every 12 hours.
+
+To change the server or sign out, open **Preferences**.
+**Change server** and **Sign out** end the session in the app and delete the saved session token.
+If Onyx cannot delete the token, it shows a warning. The token can then remain in the device's credential store,
+but Onyx does not use it again and tries to delete it at the next launch.
+
+## Where the app keeps its files
+
+| Item | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| User settings (`config.json`) | `~/Library/Application Support/app.onyx.desktop/` | `%APPDATA%\app.onyx.desktop\` | `$XDG_CONFIG_HOME/app.onyx.desktop/` (default: `~/.config/app.onyx.desktop/`) |
+| Log files | `~/Library/Logs/app.onyx.desktop/` | `%LOCALAPPDATA%\app.onyx.desktop\logs\` | `~/.local/share/app.onyx.desktop/logs/` |
+| Session token | Keychain, service `app.onyx.desktop`, one item per server | Credential Manager, **Windows Credentials**, one entry per server | Secret Service, service `app.onyx.desktop`, one item per server |
+| Launch at login item | LaunchAgent for the current user | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | `~/.config/autostart/app.onyx.desktop.desktop` |
+
+The app writes `config.json` itself. To set up devices in advance,
+use a [managed policy](/deployment/local/desktop_app_policy), not `config.json`.
+
+## Troubleshooting
+
+### Collect the log
+
+The app writes its log to `onyx.log` in the log folder in the table above. On Linux,
+the log folder is in `$XDG_DATA_HOME` if that variable is set. Send this file to your Onyx support contact.
+
+- Times in the log are UTC.
+- At 1 MB, the app renames the file to `onyx_<date>.log` and starts a new `onyx.log`. It keeps the four newest
+  renamed files.
+- The log does not contain passwords, session tokens, cookies, or sign-in codes. URLs in the log have no query or
+  fragment.
+
+### The app says "Can't reach" the server
+
+The app shows this window when the server does not answer at launch,
+or when a page does not load and the server then fails two health checks. The window shows the reason: no network, DNS,
+TLS certificate, timeout, connection refused, or a server error.
+The app checks again on a schedule and when you select **Retry**. When the server answers, the app loads the page again.
+
+For a TLS certificate error, a company proxy that inspects secure traffic,
+or a company root certificate that the device does not trust, is a common cause.
+
+### The app cannot reach the server through a proxy
+
+The main window follows the proxy settings of the operating system. The app's own requests (health check, sign-in,
+launcher) read the `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, and `NO_PROXY` environment variables,
+and the fixed proxy settings of macOS and Windows. They do not read PAC files, WPAD,
+or the Linux desktop proxy settings. Behind such a proxy, set `HTTPS_PROXY` for the app.
+
+### Sign-in links open the wrong app
+
+Uninstall the preview build **Onyx v2** if it is on the device. It also registers `onyx://` links. On Windows,
+start the new app one time: it removes a per-user `onyx://` entry that the previous app wrote.
+
+### Sign-in fails on Linux with a Secret Service message
+
+Start GNOME Keyring or KWallet (or another Secret Service provider) in the user's session, unlock it, and sign in again.
+
+### The launcher shortcut does not work on Linux
+
+The launcher shortcut uses X11 key grabs. In a Wayland session, the shortcut works only while an X11 (XWayland)
+app has focus. **Preferences** shows a notice when the shortcut cannot work, or when another app holds it.
+Open the launcher from the tray icon instead.
+
+### Preferences says the policy is invalid
+
+The app found a managed policy that it cannot read, or a value that is not valid. Some settings are then locked.
+See [Invalid policy](/deployment/local/desktop_app_policy#invalid-policy)
+and the log file for the key that is not valid.
+
+## Updates
+
+On macOS, the app checks for updates and downloads them in the background.
+**Check for Updates…** changes to **Restart to Update** when an update is ready. On Windows and Linux,
+the app does not check for updates. Install a new version with the installer.

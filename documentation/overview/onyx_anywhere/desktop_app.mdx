@@ -1,0 +1,93 @@
+---
+title: "Desktop App"
+description: "Accessing Onyx via the desktop application"
+icon: "desktop"
+---
+
+Features include:
+
+- A launcher that opens on a global shortcut from any app. Ask a question or search without leaving your work.
+- Native sign-in, with SSO in your browser
+- Quick launch from the menu bar or system tray
+- A notification when a launcher answer is ready
+
+<img className="rounded-image" src="/assets/overview/onyx_anywhere/desktop_app.webp" alt="Onyx Desktop App"/>
+
+<Note>
+  The desktop app shows the web app of your Onyx server in a native window. It is available on all editions.
+</Note>
+
+## Download
+
+<CardGroup cols={3}>
+  <Card title="Windows" icon="windows" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_x64.exe">
+    Download .exe
+  </Card>
+
+  <Card title="macOS" icon="apple" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_universal.dmg">
+    Download .dmg
+  </Card>
+
+  <Card title="Linux" icon="linux" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_amd64.deb">
+    Download .deb
+  </Card>
+</CardGroup>
+
+<Tip>
+  Other formats and architectures are on the [GitHub Releases
+  page](https://github.com/onyx-dot-app/onyx/releases/latest): `.msi` and ARM64 `.exe` for Windows, `.rpm`, `.AppImage`,
+  and ARM64 `.deb` and `.rpm` for Linux. To install the app on company devices,
+  see [Desktop App](/deployment/local/desktop_app).
+</Tip>
+
+## Getting Started
+
+<Steps>
+  <Step title="Enter your server">
+    On first launch, enter the URL of your Onyx server, for example `https://onyx.example.com`. For Onyx Cloud,
+    enter `https://cloud.onyx.app`. If your organization set the server for you, the app skips this step.
+  </Step>
+
+  <Step title="Sign in">
+    Sign in with your email and password, or select an SSO button. SSO can continue in your browser.
+    When the browser sign-in is complete, the browser opens Onyx again.
+  </Step>
+</Steps>
+
+To change the server or sign out, open **Preferences** (`Cmd+,` on macOS, `Ctrl+,` on Windows and Linux).
+
+<Note>
+  If you used the previous Onyx desktop app, the new app uses your server from it. Sign in one time after the upgrade.
+</Note>
+
+## The launcher
+
+Press the launcher shortcut from any app:
+
+- **macOS**: `Cmd+Shift+Space`
+- **Windows and Linux**: `Ctrl+Alt+Space`
+
+Type a question and press `Enter` for an answer. Press `Tab` to switch to search. To change the shortcut,
+open **Preferences**.
+
+- Type `@` at the start, or press `Cmd+K` (`Ctrl+K` on Windows and Linux), to pick an agent.
+- Paste or drop files into the launcher to attach them to the question.
+- Press `Cmd+Enter` (`Ctrl+Enter` on Windows and Linux) to open the chat in the main window.
+- Press `Cmd+N` (`Ctrl+N` on Windows and Linux) for a new chat, and `Esc` to close the launcher.
+
+## Keyboard Shortcuts
+
+| Shortcut (macOS / Windows and Linux) | Action |
+| --- | --- |
+| `Cmd+N` / `Ctrl+N` | New Chat |
+| `Cmd+,` / `Ctrl+,` | Preferences |
+| `Cmd+R` / `Ctrl+R` | Reload |
+| `Cmd+[` / `Alt+Left` | Back |
+| `Cmd+]` / `Alt+Right` | Forward |
+| `Cmd+=`, `Cmd+-`, `Cmd+0` / `Ctrl+=`, `Ctrl+-`, `Ctrl+0` | Zoom in, zoom out, actual size |
+| `Ctrl+Cmd+F` / `F11` | Full Screen |
+| `Cmd+W` / `Ctrl+W` | Close Window |
+| `Cmd+Q` / `Ctrl+Q` | Quit |
+
+Closing the main window keeps the app running in the menu bar or the system tray. Select the tray icon,
+or open the app again, to show the window.
