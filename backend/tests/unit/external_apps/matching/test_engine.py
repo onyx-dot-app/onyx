@@ -7,12 +7,12 @@ from pydantic import ValidationError
 
 from onyx.db.enums import ActionPolicy, ExternalAppType, IntegrationKind
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     AllMatchedActions,
     GatedTarget,
     recognize_actions,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 
 
 def test_rejects_empty_actions() -> None:
@@ -30,7 +30,7 @@ def test_rejects_empty_actions() -> None:
     [
         ("/api/conversations.list", "slack.channels.read", ActionPolicy.ALWAYS),
         ("/api/chat.postMessage", "slack.messages.write", ActionPolicy.ASK),
-        ("/api/unknown", WHOLE_DOMAIN_ACTION_TYPE, ActionPolicy.ASK),
+        ("/api/unknown", OTHER_REQUEST_ACTION_KEY, ActionPolicy.ASK),
     ],
 )
 def test_recognition_preserves_action_identity_and_catalog_default(
@@ -43,11 +43,11 @@ def test_recognition_preserves_action_identity_and_catalog_default(
     assert matched[0].policy == default
 
 
-def test_custom_app_unknown_action_is_the_whole_domain_action() -> None:
+def test_custom_app_unknown_action_is_the_other_request_action() -> None:
     matched = recognize_actions(
         ExternalAppType.CUSTOM, ProxiedRequest(method="POST", path="/anything")
     )
-    assert matched[0].action_type == WHOLE_DOMAIN_ACTION_TYPE
+    assert matched[0].action_type == OTHER_REQUEST_ACTION_KEY
     assert matched[0].policy == ActionPolicy.ASK
 
 
@@ -86,7 +86,7 @@ def _linear_actions(body: object) -> list[str]:
 )
 def test_unknown_graphql_field_next_to_a_known_one_asks(body: object) -> None:
     actions = _linear_actions(body)
-    assert actions[0] == WHOLE_DOMAIN_ACTION_TYPE
+    assert actions[0] == OTHER_REQUEST_ACTION_KEY
     assert "linear.viewer.read" in actions
 
 

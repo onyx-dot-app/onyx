@@ -30,7 +30,6 @@ from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import (
     ActionSettings,
     ApiConfig,
-    ApiShape,
     EffectivePolicy,
     IntegrationConfig,
     PolicyRows,
@@ -94,7 +93,7 @@ def _integration_tools(
         if (
             acting_user is None
             or not isinstance(config, ApiConfig)
-            or config.shape is ApiShape.CUSTOM
+            or not config.shape.has_chat_tools
             or not offered
         ):
             return []

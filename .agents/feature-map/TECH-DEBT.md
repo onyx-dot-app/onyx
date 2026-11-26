@@ -43,9 +43,9 @@ link here from **Known issues** and do not restate the entry.
   `api_app_id`, and make `_shapes` read `api_app.api_type`.
 - **Owner:** rohoswagger. **Added:** 2026-11-24.
 
-## URL-pattern custom apps
+## URL-pattern apps
 
-- **What:** An old URL-pattern custom app (a CUSTOM `external_app`) keeps
+- **What:** An old URL-pattern app (a CUSTOM `external_app`) keeps
   its URL patterns: an admin can change its name and sign-in, or delete it.
   Create refuses the shape, and chat offers no tool for it.
 - **Why:** Existing rows must keep loading until their admins delete them.
@@ -56,7 +56,7 @@ link here from **Known issues** and do not restate the entry.
   `backend/onyx/integrations/kinds/api.py`,
   `backend/onyx/integrations/models.py:ApiShape`.
 - **Ends when:** No URL-pattern app remains. Then remove their runtime
-  handling in these files and `ApiShape.CUSTOM`.
+  handling in these files and `ApiShape.URL_PATTERN`.
 - **Owner:** rohoswagger. **Added:** 2026-11-24.
 
 ## Usage-limit counters accept only `CALENDAR_WEEK`

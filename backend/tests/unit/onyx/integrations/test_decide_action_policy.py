@@ -11,7 +11,7 @@ from onyx.db.enums import (
     IntegrationKind,
 )
 from onyx.db.models import IntegrationAction
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.integrations.models import (
     ActionSettings,
     ApprovalMode,
@@ -251,15 +251,15 @@ def test_an_action_that_always_asks_never_runs_with_no_question(
 ) -> None:
     """A link Allow, a saved Always allow and a chat grant do not apply."""
     result = decide_action_policy(
-        WHOLE_DOMAIN_ACTION_TYPE,
+        OTHER_REQUEST_ACTION_KEY,
         None,
         PolicyRows(
             admin={},
-            user={WHOLE_DOMAIN_ACTION_TYPE: IntegrationActionPolicyValue.ALLOW},
+            user={OTHER_REQUEST_ACTION_KEY: IntegrationActionPolicyValue.ALLOW},
         ),
         kind=IntegrationKind.API,
         users_can_save_always_allow=True,
-        link=ActionSettings(actions={WHOLE_DOMAIN_ACTION_TYPE: LinkValue.ALLOW}),
+        link=ActionSettings(actions={OTHER_REQUEST_ACTION_KEY: LinkValue.ALLOW}),
         granted=True,
         approval_mode=mode,
     )
@@ -268,10 +268,10 @@ def test_an_action_that_always_asks_never_runs_with_no_question(
 
 def test_an_action_that_always_asks_stays_blocked() -> None:
     result = decide_action_policy(
-        WHOLE_DOMAIN_ACTION_TYPE,
+        OTHER_REQUEST_ACTION_KEY,
         None,
         PolicyRows(
-            admin={WHOLE_DOMAIN_ACTION_TYPE: IntegrationActionPolicyValue.BLOCKED},
+            admin={OTHER_REQUEST_ACTION_KEY: IntegrationActionPolicyValue.BLOCKED},
             user={},
         ),
         kind=IntegrationKind.API,

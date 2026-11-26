@@ -122,7 +122,7 @@ def test_sends_the_request_of_its_action_with_the_credential() -> None:
             {"method": "POST", "url": "https://api.github.com/repos/o/r/issues"},
             "app__7__github_issues_create",
         ),
-        # A request that is no catalog action goes to the request tool.
+        # A request that is no catalog action goes to the other-request tool.
         (
             {"method": "DELETE", "url": "https://api.github.com/repos/o/r"},
             "app__7__request",

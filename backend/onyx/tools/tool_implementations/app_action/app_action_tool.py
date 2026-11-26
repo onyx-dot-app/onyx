@@ -16,12 +16,12 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     recognize_actions,
     url_matches_patterns,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.matching.rules import graphql_endpoint_matches
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.external_apps.providers.actions import GraphQLOp, MatchRule
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.connection_models import ConnectionState
@@ -51,7 +51,7 @@ from onyx.tools.tool_implementations.http_request import (
     send_tool_request,
     tool_request_ssrf_params,
 )
-from onyx.tools.tool_name import app_action_tool_name
+from onyx.tools.tool_name import connect_tool_name, preset_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -125,7 +125,8 @@ def _path_problem(path: str) -> str | None:
 
 class AppActionTool(Tool):
     """One action of a preset app. The action ``unspecified`` is
-    the request tool: each request in the URL scope that is no other action."""
+    the other-request action: each request in the URL scope that is no other
+    action."""
 
     rank = ToolRank.INTEGRATION
 
@@ -147,9 +148,9 @@ class AppActionTool(Tool):
         self._credentials = settings.credentials
         self._action_key = action_key
         self._display_name = display_name
-        self._name = app_action_tool_name(settings.integration_id, action_key)
+        self._name = preset_tool_name(settings.integration_id, action_key)
         scope = ", ".join(_shown_url_scope(regex) for regex in settings.url_regexes)
-        if action_key == WHOLE_DOMAIN_ACTION_TYPE:
+        if action_key == OTHER_REQUEST_ACTION_KEY:
             accepts = (
                 "Accepts a request that no other tool of "
                 f"{settings.integration_name} covers."
@@ -234,7 +235,7 @@ class AppActionTool(Tool):
         """Which tools the request is for. An action with no tool is not
         available in this chat."""
         tools = [
-            app_action_tool_name(self._settings.integration_id, key)
+            preset_tool_name(self._settings.integration_id, key)
             if key in self._settings.offered_keys
             else "a tool that is not available"
             for key in sorted(matched)
@@ -381,7 +382,7 @@ class AppConnectTool(Tool):
             not shared and problem.code is not ConnectionState.NOT_SET_UP
         )
         self._reason = problem.reason
-        self._name = app_action_tool_name(integration_id, "connect")
+        self._name = connect_tool_name(integration_id)
 
     @property
     def id(self) -> int | None:

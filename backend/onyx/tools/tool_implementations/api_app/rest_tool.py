@@ -51,7 +51,7 @@ from onyx.tools.tool_implementations.http_request import (
     send_tool_request,
     tool_request_ssrf_params,
 )
-from onyx.tools.tool_name import custom_tool_name
+from onyx.tools.tool_name import api_app_tool_name
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import validate_outbound_http_url
 
@@ -305,7 +305,7 @@ class RestTool(ApiTool):
         super().__init__(
             integration_id=integration_id,
             action_key=action_key,
-            name=custom_tool_name(integration_id, method_spec.raw_name),
+            name=api_app_tool_name(integration_id, method_spec.raw_name),
             display_name=method_spec.display_name,
             description=method_spec.summary,
             parameters=method_spec.to_tool_definition().parameters,

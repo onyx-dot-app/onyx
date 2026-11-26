@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import (
     ActionPolicy,
     ApiAppType,
-    ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
 )
@@ -25,7 +24,6 @@ from onyx.db.models import ApiApp, ExternalApp, Integration, IntegrationAction
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     recognize_actions,
     url_matches_patterns,
 )
@@ -34,6 +32,7 @@ from onyx.external_apps.matching.graphql_parsing import (
     request_queries,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.kinds.base import IntegrationKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
@@ -185,13 +184,13 @@ def _matched_action(
     )
 
 
-def _whole_domain_action(
+def _other_request_action(
     integration_id: int, description: str
 ) -> MatchedIntegrationAction:
     return MatchedIntegrationAction(
         integration_id=integration_id,
-        action_key=WHOLE_DOMAIN_ACTION_TYPE,
-        display_name="Perform action",
+        action_key=OTHER_REQUEST_ACTION_KEY,
+        display_name="Any other request",
         description=description,
         default_policy=IntegrationActionPolicyValue.ASK,
     )
@@ -201,9 +200,9 @@ class ApiKindHandler(IntegrationKindHandler):
     """An HTTP API. The kind row decides the shape: a REST ``api_app`` row
     (each OpenAPI operation is an action), a GraphQL ``api_app`` row (each
     query or mutation root field is an action), an ``external_app`` with a preset (the
-    catalog of the preset gives the actions, plus one action for each other
-    request), or a CUSTOM ``external_app`` (one action for all of its URLs, and
-    no chat tools)."""
+    catalog of the preset gives the actions, plus the other-request action),
+    or a URL-pattern ``external_app`` (one action for all of its URLs, and no
+    chat tools)."""
 
     @staticmethod
     def config_from_api_app(app: ApiApp) -> ApiConfig | None:
@@ -244,11 +243,7 @@ class ApiKindHandler(IntegrationKindHandler):
     @staticmethod
     def config_from_external_app(app: ExternalApp) -> ApiConfig:
         return ApiConfig(
-            shape=(
-                ApiShape.CUSTOM
-                if app.app_type == ExternalAppType.CUSTOM
-                else ApiShape.PRESET
-            ),
+            shape=ApiShape.of_external_app(app.app_type),
             app_type=app.app_type,
             url_regexes=tuple(app.upstream_url_regexes),
         )
@@ -280,22 +275,22 @@ class ApiKindHandler(IntegrationKindHandler):
         if config.shape is ApiShape.GRAPHQL and config.graphql_schema is not None:
             return graphql_action_specs(config.graphql_schema)
         other_requests = IntegrationActionSpec(
-            key=WHOLE_DOMAIN_ACTION_TYPE,
+            key=OTHER_REQUEST_ACTION_KEY,
             source=IntegrationActionSource.EXTERNAL_APP,
             display_name=(
                 integration.name
-                if config.shape is ApiShape.CUSTOM
+                if config.shape is ApiShape.URL_PATTERN
                 else "Any other request"
             ),
             description=(
                 f"Any request to {integration.name}."
-                if config.shape is ApiShape.CUSTOM
+                if config.shape is ApiShape.URL_PATTERN
                 else f"A request to {integration.name} that is no other action."
             ),
             read_only=None,
             default_policy=IntegrationActionPolicyValue.ASK,
         )
-        if config.shape is ApiShape.CUSTOM or config.app_type is None:
+        if config.shape is ApiShape.URL_PATTERN or config.app_type is None:
             return [other_requests]
         return [
             IntegrationActionSpec(
@@ -317,7 +312,7 @@ class ApiKindHandler(IntegrationKindHandler):
         db_session: Session,
     ) -> list[Tool]:
         """An OpenAPI tool for each operation, a GraphQL tool for each root
-        field, or an app action tool for each action of a preset."""
+        field, or a preset tool for each action of a preset."""
         if not actions:
             return []
         config = (
@@ -325,8 +320,10 @@ class ApiKindHandler(IntegrationKindHandler):
             if isinstance(ctx.config, ApiConfig)
             else self.load_config(integration, db_session)
         )
+        if not config.shape.has_chat_tools:
+            return []
         if config.shape is ApiShape.PRESET:
-            return self._app_action_tools(integration, actions, config, ctx)
+            return self._preset_tools(integration, actions, config, ctx)
         if (
             config.shape is ApiShape.GRAPHQL
             and config.graphql_schema is not None
@@ -376,7 +373,7 @@ class ApiKindHandler(IntegrationKindHandler):
         ]
 
     @staticmethod
-    def _app_action_tools(
+    def _preset_tools(
         integration: Integration,
         actions: Sequence[IntegrationAction],
         config: ApiConfig,
@@ -392,7 +389,7 @@ class ApiKindHandler(IntegrationKindHandler):
         offered = [
             action
             for action in actions
-            if action.key in rules or action.key == WHOLE_DOMAIN_ACTION_TYPE
+            if action.key in rules or action.key == OTHER_REQUEST_ACTION_KEY
         ]
         settings = AppActionSettings(
             integration_id=integration.id,
@@ -490,7 +487,7 @@ class ApiKindHandler(IntegrationKindHandler):
         matched = [_matched_action(integration_id, action) for action in winners]
         return RequestMatch(
             actions=matched
-            or [_whole_domain_action(integration_id, f"{method} {path}")],
+            or [_other_request_action(integration_id, f"{method} {path}")],
             path_prefix_length=len(target.path_prefix),
         )
 
@@ -505,7 +502,7 @@ class ApiKindHandler(IntegrationKindHandler):
         """A request to the endpoint URL calls the action of each root field
         in its body and in the ``query`` of its URL (the GET form). A request
         with no root field, with a document that names none, or with a root
-        field that is no action, also calls the request action, which asks. A request to another path under the
+        field that is no action, also calls the other-request action, which asks. A request to another path under the
         endpoint is no match."""
         proxied = http.Request.make(request.method, url)
         if match_request((target,), proxied) is None or normalized_request_path(
@@ -535,7 +532,7 @@ class ApiKindHandler(IntegrationKindHandler):
         # A document that names no root field could run any operation.
         if not invoked or not all(documents) or len(matched) < len(invoked):
             matched.append(
-                _whole_domain_action(
+                _other_request_action(
                     integration_id, f"{request.method.upper()} {request.path}"
                 )
             )

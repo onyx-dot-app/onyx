@@ -89,7 +89,7 @@ from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
 )
-from onyx.tools.tool_name import app_action_tool_name, custom_tool_name
+from onyx.tools.tool_name import api_app_tool_name, preset_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -1649,7 +1649,7 @@ def _app_tool_hint(matched_actions: AllMatchedActions) -> str:
     target = matched_actions.target
     if target.kind is not IntegrationKind.API:
         return f"Use the tool of {target.app_name} for this action."
-    tool_name = custom_tool_name if target.api_app else app_action_tool_name
+    tool_name = api_app_tool_name if target.api_app else preset_tool_name
     tools = [
         tool_name(target.integration_id, action.action_type)
         for action in matched_actions.actions
@@ -1662,7 +1662,7 @@ def _app_tool_hint(matched_actions: AllMatchedActions) -> str:
     # Chat offers only the connect tool while the user has no sign-in.
     connect = (
         f" If {target.app_name} is not connected, call "
-        f"{app_action_tool_name(target.integration_id, 'connect')} instead."
+        f"{preset_tool_name(target.integration_id, 'connect')} instead."
     )
     if len(tools) == 1:
         return f"For {target.app_name}, call: {tools[0]}.{connect}"

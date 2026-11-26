@@ -8,11 +8,9 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.db.models import ExternalApp, User
-from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
-    recognize_actions,
-)
+from onyx.external_apps.matching.engine import recognize_actions
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from tests.external_dependency_unit.craft.db_helpers import (
     make_external_app,
     make_skill,
@@ -136,5 +134,5 @@ def test_match_action_off_catalog_requires_approval(
     request = ProxiedRequest(method="POST", path="/api/some.unknownMethod")
     assert (
         recognize_actions(app.app_type, request)[0].action_type
-        == WHOLE_DOMAIN_ACTION_TYPE
+        == OTHER_REQUEST_ACTION_KEY
     )

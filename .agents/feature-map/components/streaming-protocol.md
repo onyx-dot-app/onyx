@@ -174,7 +174,7 @@ and on replay (`db/chat_response.py`), so the card reads "{action} in {app}".
 A shared view clears it (`backend/onyx/server/query_and_chat/chat_backend.py:get_chat_session`): the viewer may
 not have access to the integration.
 `can_approve_for_chat` is false for an action that asks each time, the
-request tool of an app (`integrations/policy.py:always_asks`): the
+other-request action of an app (`integrations/policy.py:always_asks`): the
 card offers no approval for the chat, no saved grant skips its card, and the
 decision route saves such an approval as a single one. An exec_command or
 write_stdin call also sends both packets, from its progress, for an app

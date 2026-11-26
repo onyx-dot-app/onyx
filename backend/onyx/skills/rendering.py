@@ -31,7 +31,7 @@ from onyx.server.features.build.configs import (
 )
 from onyx.skills.built_in import iter_builtin_skill_files
 from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
-from onyx.tools.tool_name import app_action_tool_name
+from onyx.tools.tool_name import preset_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -153,7 +153,7 @@ def build_app_tools_section(integration_id: int) -> str:
     """How the commands of the skill and the chat tools of the app divide the
     work. A chat has one tool for each action of the app. A tool, and a
     command that exec_command waits on, can ask the user for approval."""
-    prefix = app_action_tool_name(integration_id, "")
+    prefix = preset_tool_name(integration_id, "")
     client_timeout = (
         SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
     )

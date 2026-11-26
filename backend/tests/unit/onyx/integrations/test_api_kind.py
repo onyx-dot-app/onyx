@@ -19,8 +19,8 @@ from onyx.db.enums import (
 from onyx.db.models import ApiApp, ExternalApp, Integration, IntegrationAction
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.kinds import api as api_kind
 from onyx.integrations.kinds.api import ApiKindHandler
@@ -203,7 +203,7 @@ def test_openapi_operation_cannot_take_a_builtin_action_key(
         ("post", "https://api.orders.example.com/v1/orders/", ["createOrder"]),
         ("GET", "https://api.orders.example.com/v1/orders/42?x=1", ["getOrder"]),
         ("DELETE", "https://api.orders.example.com/v1/orders/42", ["deleteOrder"]),
-        # On the server, but no operation: one whole-domain action that asks.
+        # On the server, but no operation: the other-request action, which asks.
         ("PUT", "https://api.orders.example.com/v1/orders/42", ["unspecified"]),
         ("GET", "https://api.orders.example.com/v1/orders/42/x", ["unspecified"]),
     ],
@@ -217,7 +217,7 @@ def test_openapi_match_method_and_path_template(
 
     assert matched is not None
     assert [m.action_key for m in matched.actions] == expected
-    if expected == [WHOLE_DOMAIN_ACTION_TYPE]:
+    if expected == [OTHER_REQUEST_ACTION_KEY]:
         assert matched.actions[0].default_policy is IntegrationActionPolicyValue.ASK
 
 
@@ -317,7 +317,7 @@ METHODS_SPEC: dict[str, Any] = {
         ("GET", "/files/42", ["getFile"]),
         ("POST", "/files/mine", ["uploadMine"]),
         # The concrete path wins first. It has no GET, so the request asks.
-        ("GET", "/files/mine", [WHOLE_DOMAIN_ACTION_TYPE]),
+        ("GET", "/files/mine", [OTHER_REQUEST_ACTION_KEY]),
     ],
 )
 def test_openapi_match_picks_the_path_before_the_method_under_an_encoded_server_path(
@@ -334,7 +334,7 @@ def test_openapi_match_picks_the_path_before_the_method_under_an_encoded_server_
 
     assert matched is not None
     assert [m.action_key for m in matched.actions] == expected
-    if expected == [WHOLE_DOMAIN_ACTION_TYPE]:
+    if expected == [OTHER_REQUEST_ACTION_KEY]:
         assert matched.actions[0].default_policy is IntegrationActionPolicyValue.ASK
 
 
@@ -598,10 +598,10 @@ def test_custom_match_whole_domain(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert matched is not None
     assert [(m.action_key, m.default_policy) for m in matched.actions] == [
-        (WHOLE_DOMAIN_ACTION_TYPE, IntegrationActionPolicyValue.ASK)
+        (OTHER_REQUEST_ACTION_KEY, IntegrationActionPolicyValue.ASK)
     ]
     assert other is None
-    assert HANDLER.load_config(integration, DB).shape is ApiShape.CUSTOM
+    assert HANDLER.load_config(integration, DB).shape is ApiShape.URL_PATTERN
 
 
 def test_custom_build_chat_tools_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:

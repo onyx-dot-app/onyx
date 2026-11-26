@@ -332,7 +332,7 @@ only the configuration of a chat that does not exist yet.
    (`user_integration_preference`).
    Craft does not read `enabled_in_craft`: the sandbox proxy and the Craft
    MCP config use the integrations that are on for the user
-   (`integrations/craft.py:list_runnable_integrations`).
+   (`integrations/craft.py:list_turned_on_integrations`).
 5. `openapi-enabled-default-chat-only` **OpenAPI tools use `Tool.enabled` only
    for Default Chat.** `server/features/tool/models.py:CustomToolCreate`
    rejects `enabled=false`. A row stored with `enabled=false`

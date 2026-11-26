@@ -283,8 +283,8 @@ then picks the integrations
   sign-in.
 - An integration that is Required for the user stays when the tool options
   leave its id out.
-- Only integrations with `enabled = true`. An old URL-glob custom app (a CUSTOM
-  `external_app`) gives no chat tool. An agent has one link for each integration.
+- Only integrations with `enabled = true`. An old URL-pattern app (a CUSTOM
+  `external_app`; `ApiShape.has_chat_tools` is false) gives no chat tool. An agent has one link for each integration.
 
 For each integration, `integrations/call_credentials.py:resolve_call_credentials`
 calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
@@ -1063,7 +1063,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   no integration, so chat offers none of its actions.
 - The temporary shapes of API apps are in the tech debt register:
   [the dual write to `tool`](../TECH-DEBT.md#dual-write-of-openapi-apps-to-tool) and
-  [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps).
+  [URL-pattern apps](../TECH-DEBT.md#url-pattern-apps).
 
 - Schema placeholders are a plain string replace.
   `build_custom_tools_from_openapi_schema_and_headers` replaces

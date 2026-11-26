@@ -56,7 +56,7 @@ from onyx.db.models import (
 from onyx.db.persona import upsert_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.integrations.connection_models import (
     ConnectionSecret,
     ConnectionState,
@@ -436,7 +436,7 @@ def test_action_views_flag_the_custom_app_action_that_always_asks(
         custom_id, admin, db_session
     ).actions
     assert [(a.key, a.always_asks) for a in custom_actions] == [
-        (WHOLE_DOMAIN_ACTION_TYPE, True)
+        (OTHER_REQUEST_ACTION_KEY, True)
     ]
     member_actions = api.get_integration_for_member(custom_id, admin, db_session)
     assert [a.always_asks for a in member_actions.actions] == [True]
@@ -1338,7 +1338,7 @@ def test_member_cannot_save_always_allow_for_an_action_that_always_asks(
     with pytest.raises(OnyxError) as error:
         api.save_action_grants(
             custom_id,
-            ActionGrantsUpdate(actions={WHOLE_DOMAIN_ACTION_TYPE: "allow"}),
+            ActionGrantsUpdate(actions={OTHER_REQUEST_ACTION_KEY: "allow"}),
             member,
             db_session,
         )

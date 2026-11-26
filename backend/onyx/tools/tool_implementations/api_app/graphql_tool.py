@@ -40,7 +40,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.api_app.openapi_parsing import InlineBudget
 from onyx.tools.tool_implementations.api_app.rest_tool import ApiTool
-from onyx.tools.tool_name import custom_tool_name
+from onyx.tools.tool_name import api_app_tool_name
 
 SELECTION = "selection"
 # An input object deeper than this takes any object, so a recursive filter
@@ -246,7 +246,7 @@ class GraphQLTool(ApiTool):
         super().__init__(
             integration_id=integration_id,
             action_key=action_key,
-            name=custom_tool_name(integration_id, action_key),
+            name=api_app_tool_name(integration_id, action_key),
             display_name=field_name,
             description=field.description or f"The GraphQL {operation} {field_name}.",
             parameters=parameters,

@@ -578,7 +578,7 @@ def test_a_preset_app_gives_a_tool_for_each_action_and_a_request_tool(
 
     assert interactive[read].approval is None
     assert interactive[create].approval is None
-    # No setting makes the request tool run with no question.
+    # No setting makes the other-request action run with no question.
     assert interactive[request].approval == ToolApprovalScope(
         integration_id=app.id, action_id="unspecified"
     )

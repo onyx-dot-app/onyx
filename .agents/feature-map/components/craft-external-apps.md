@@ -141,7 +141,7 @@ over an MCP server on a shared host, and the lowest id wins between API
 integrations. For an external app, `external_apps/matching/engine.py:url_matches_patterns`
 full-matches the URL against the app's patterns and `recognize_actions` maps
 the request to catalog actions. A request that matches no catalog action gets
-one synthetic `unspecified` action. A GraphQL request that also invokes a root
+the other-request action (`unspecified`). A GraphQL request that also invokes a root
 field no matched action covers gets `unspecified` next to the matched actions,
 so an unknown mutation cannot ride on a known read's Allow. A custom GraphQL
 app matches the same way under its endpoint URL
@@ -205,7 +205,7 @@ request and stashes the context to answer it in the cache
 permission on the sandbox: allow for connected, reject for declined.
 
 **Craft catalog.** Craft uses the integrations that are on for the user
-(`integrations/craft.py:list_runnable_integrations`).
+(`integrations/craft.py:list_turned_on_integrations`).
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
@@ -459,7 +459,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   integration row until the integration routes replace them, so the proxy does
   not match it.
 - The tech debt register holds
-  [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps) and the
+  [URL-pattern apps](../TECH-DEBT.md#url-pattern-apps) and the
   [Linear and Notion presets hidden from the catalog](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog).
 
 ---
