@@ -1813,12 +1813,12 @@ auth:
     values:
       private_key: ""
   # Shared credential that Craft Firecracker host agents send to register
-  # their node signing key (craft.sandboxRuntime auto or firecracker). The
-  # api_server rejects every registration while it is unset. With "auto",
-  # the chart renders Firecracker only when this is enabled. An inline value
-  # must be at least 32 characters (the chart fails otherwise).
+  # their node signing key (craft.sandboxRuntime auto or firecracker). With
+  # no value and no existingSecret, the chart makes a random value on install
+  # and keeps it on upgrade. An inline value must be at least 32 characters
+  # (the chart fails otherwise).
   sandboxNodeRegistration:
-    enabled: false
+    enabled: true
     allPods: false  # Restricted: only the API server checks it (plus the other restricted pods)
     secretName: 'onyx-sandbox-node-registration'
     existingSecret: ""

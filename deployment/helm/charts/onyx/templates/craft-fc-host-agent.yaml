@@ -83,7 +83,7 @@ Agent flags and node requirements: microvm/README.md.
 {{- /* The key the api_server reads (auth.sandboxNodeRegistration.secretKeys); the agent copy uses the same key. */}}
 {{- $regKey := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg }}
 {{- $regSecret := $agent.registrationExistingSecret }}
-{{- $regValue := dig "values" $regKey "" $reg }}
+{{- $regValue := include "onyx.sandboxNodeRegistrationValue" . }}
 {{- if and (not $regSecret) (or $reg.existingSecret (not $regValue)) }}
 {{- fail "craft.hostAgent.registrationExistingSecret is required when auth.sandboxNodeRegistration uses existingSecret or has no value" }}
 {{- end }}
