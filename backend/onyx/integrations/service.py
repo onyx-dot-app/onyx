@@ -1121,6 +1121,11 @@ def _updated_header_template(
     return integration.header_template
 
 
+_SIGN_IN_FIELDS = frozenset(
+    {"auth_mode", "auth_method", "header_template", "credential_fields", "oauth_client"}
+)
+
+
 def update_integration__no_commit(
     user: User,
     integration_id: int,
@@ -1182,15 +1187,19 @@ def update_integration__no_commit(
         "header_template",
     }:
         _check_onyx_login(user, auth_method)
-    _validate_sign_in(
-        shape=shape,
-        preset=preset,
-        auth_mode=auth_mode,
-        auth_method=auth_method,
-        header_template=header_template,
-        oauth_client=request.oauth_client if "oauth_client" in fields else None,
-        has_stored_client=stored_client is not None,
-    )
+    # A save that changes no sign-in setting keeps the stored one. A migrated
+    # API key integration has no header template: its headers are in its
+    # legacy connection.
+    if fields & _SIGN_IN_FIELDS:
+        _validate_sign_in(
+            shape=shape,
+            preset=preset,
+            auth_mode=auth_mode,
+            auth_method=auth_method,
+            header_template=header_template,
+            oauth_client=request.oauth_client if "oauth_client" in fields else None,
+            has_stored_client=stored_client is not None,
+        )
     integration.auth_mode = auth_mode
     integration.auth_method = auth_method
     integration.header_template = header_template

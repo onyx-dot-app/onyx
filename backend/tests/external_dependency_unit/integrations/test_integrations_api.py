@@ -1724,6 +1724,47 @@ def test_saving_a_legacy_oauth_client_keeps_its_credentials(
     assert credentials.client_secret == "legacy-secret"
 
 
+def test_a_migrated_api_key_integration_saves_without_a_header_template(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    """The integration tables migration copies a shared API key integration
+    with its headers in the connection and no header template. A save that
+    changes no sign-in setting keeps the connection."""
+    from onyx.db.integration_connection import upsert_connection__no_commit
+
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    integration.header_template = None
+    integration.credential_fields = None
+    upsert_connection__no_commit(
+        db_session,
+        integration_id=detail.id,
+        user_id=None,
+        secret=ConnectionSecret(headers={"X-Api-Key": "key"}).model_dump(mode="json"),
+        expires_at=None,
+        granted_scopes=None,
+    )
+    db_session.commit()
+
+    for update in (
+        IntegrationUpdate(description="Edited"),
+        IntegrationUpdate(enabled=False),
+        IntegrationUpdate(users_can_save_always_allow=False),
+    ):
+        admin_api.update_integration(detail.id, update, admin, db_session)
+
+    db_session.expire_all()
+    connection = get_connection(db_session, detail.id, None)
+    assert connection is not None
+    assert connection.status is IntegrationConnectionStatus.CONNECTED
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    assert integration.description == "Edited"
+    assert integration.header_template is None
+
+
 def test_turning_default_chat_off_makes_the_plugin_available(
     db_session: Session, admin: User, created: Created
 ) -> None:
