@@ -237,6 +237,14 @@ port of the user, so a restored session can get a different port
   multi-tenant deployments it deletes the resources of tenants that no longer
   exist, after the same grace period; single-tenant deployments retain
   resources labelled with another tenant.
+- Craft resource listing omits harness sandboxes, which carry
+  `onyx.app/sandbox-kind=harness`
+  (`backend/onyx/server/features/build/sandbox/labels.py:is_harness_resource`). They keep the
+  component labels, so the egress proxy still identifies them. If a listed
+  resource has the harness label when `delete_resource` reads it again, the call
+  raises "Resource ownership changed" and the sweep records a retry.
+  `terminate` deletes by the Craft name (`sandbox-<id8>`), so it does not reach
+  harness resources, which use other names.
 
 **Managed content.** Provisioning and a live push build the skills and user
 library payload with the same code
@@ -534,7 +542,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
    `_require_container` raises a version-skew error when the template lacks an
    expected container.
 4. `pods-watch-rbac` **`pods:watch` is required.**
-   `server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py:KubernetesSandboxManager._wait_for_pod_ready` uses
+   `server/features/build/sandbox/kubernetes/pods.py:SandboxPodOps._wait_for_pod_ready` uses
    `kubernetes.watch.Watch()`. Python never names the verb, so a search for
    RBAC needs misses it. Without it, provisioning fails whenever the pod is not
    ready at the first read, with no polling fallback. Only a real cluster test
