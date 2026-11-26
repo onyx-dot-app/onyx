@@ -91,4 +91,22 @@ describe("Table selection", () => {
       screen.getByRole("checkbox", { name: "Select all" })
     ).toHaveAttribute("aria-disabled", "true");
   });
+
+  it("disables Select all when the search hides every row that can be selected", () => {
+    render(
+      <Table
+        items={ROWS}
+        columns={[
+          { kind: "qualifier", canSelect: (row: Row) => row.id === "a" },
+          ...COLUMNS,
+        ]}
+        getRowId={(row) => row.id}
+        selectionBehavior="multi-select"
+        query="Row b"
+      />
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select all" })
+    ).toHaveAttribute("aria-disabled", "true");
+  });
 });

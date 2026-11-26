@@ -419,7 +419,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                                 disabled={
                                   selectedCount === 0 &&
                                   !table
-                                    .getPreFilteredRowModel()
+                                    .getFilteredRowModel()
                                     .flatRows.some((row) => row.getCanSelect())
                                 }
                                 checked={isAllRowsSelected}
