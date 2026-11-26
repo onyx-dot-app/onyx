@@ -5,7 +5,7 @@ import { detailFixture } from "@/sections/marketplaces/__fixtures__/marketplace"
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
-    "@tests/setup/mocks/nextNavigation",
+    "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
   usePathname: () => window.location.pathname,
   useSearchParams: () => new URLSearchParams(window.location.search),
@@ -53,7 +53,7 @@ async function addFromMenu(): Promise<void> {
   const user = setupUser();
   await user.click(await screen.findByRole("button", { name: "Add" }));
   await user.click(
-    await screen.findByRole("menuitem", { name: "Add marketplace" }),
+    await screen.findByRole("menuitem", { name: "Add marketplace" })
   );
   await user.click(screen.getByRole("button", { name: "Finish add" }));
 }
@@ -61,7 +61,7 @@ async function addFromMenu(): Promise<void> {
 async function addFromEmptyState(): Promise<void> {
   const user = setupUser();
   await user.click(
-    await screen.findByRole("button", { name: "Add marketplace" }),
+    await screen.findByRole("button", { name: "Add marketplace" })
   );
   await user.click(screen.getByRole("button", { name: "Finish add" }));
 }
@@ -78,10 +78,10 @@ test.each([
     await addFromMenu();
 
     await waitFor(() =>
-      expect(window.location.pathname + window.location.hash).toBe(target),
+      expect(window.location.pathname + window.location.hash).toBe(target)
     );
     await waitFor(() => expect(mockRefreshSkillLists).toHaveBeenCalled());
-  },
+  }
 );
 
 test("a marketplace added from the empty state refreshes the plugin list", async () => {
