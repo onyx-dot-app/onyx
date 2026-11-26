@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import type { GrammarState } from "shiki/core";
 import type { CodeHighlighter } from "@/lib/codeHighlight/highlighter";
 
+/** Longer text shows without highlighting, which would take seconds. */
+export const MAX_HIGHLIGHTED_CHARACTERS = 100_000;
+
 /** Lines highlighted per task, so a long file never blocks input for long. */
 const LINES_PER_TASK = 400;
 

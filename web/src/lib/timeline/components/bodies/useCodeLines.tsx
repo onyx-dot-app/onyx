@@ -6,7 +6,10 @@ import { useMemo } from "react";
 import type { CodePanelLine } from "@opal/components";
 import type { GrammarState } from "shiki/core";
 import type { CodeHighlighter } from "@/lib/codeHighlight/highlighter";
-import { useCodeHighlighter } from "@/lib/codeHighlight/hooks";
+import {
+  MAX_HIGHLIGHTED_CHARACTERS,
+  useCodeHighlighter,
+} from "@/lib/codeHighlight/hooks";
 
 interface UseCodeLinesOptions {
   /** The code still grows: its last line shows plain until it completes. */
@@ -56,14 +59,17 @@ function createIncrementalHighlighter(
 
 /**
  * Code as numbered `CodePanel` lines. Plain text paints first; Shiki tokens
- * replace it once the grammar loads. Unknown languages stay plain.
+ * replace it once the grammar loads. Unknown languages stay plain, and so
+ * does finished code above `MAX_HIGHLIGHTED_CHARACTERS`.
  */
 export function useCodeLines(
   code: string,
   language: string | undefined,
   { streaming = false }: UseCodeLinesOptions = {}
 ): CodePanelLine[] {
-  const highlighter = useCodeHighlighter(code ? language : undefined);
+  const highlightable =
+    code.length > 0 && (streaming || code.length <= MAX_HIGHLIGHTED_CHARACTERS);
+  const highlighter = useCodeHighlighter(highlightable ? language : undefined);
   const incremental = useMemo(
     () =>
       highlighter ? createIncrementalHighlighter(highlighter, language) : null,
