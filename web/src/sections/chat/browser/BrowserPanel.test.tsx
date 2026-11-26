@@ -82,6 +82,10 @@ function renderPanel(active = true) {
 }
 
 const originalWebSocket = globalThis.WebSocket;
+const originalImageBitmap = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "createImageBitmap"
+);
 
 beforeEach(() => {
   FakeSocket.instances = [];
@@ -99,6 +103,9 @@ afterEach(() => {
     writable: true,
     value: originalWebSocket,
   });
+  if (originalImageBitmap)
+    Object.defineProperty(globalThis, "createImageBitmap", originalImageBitmap);
+  else Reflect.deleteProperty(globalThis, "createImageBitmap");
   jest.restoreAllMocks();
 });
 
