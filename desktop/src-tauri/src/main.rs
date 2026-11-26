@@ -550,6 +550,7 @@ fn main() {
             commands::set_notify_answers,
             commands::discard_answer,
             commands::change_server,
+            commands::release_window,
             commands::sign_out,
             commands::ask,
             commands::search,

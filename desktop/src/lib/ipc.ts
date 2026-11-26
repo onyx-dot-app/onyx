@@ -62,8 +62,18 @@ export type AskEvent =
 export const checkServer = (url: string): Promise<ServerInfo> =>
   invoke("check_server", { url });
 
+/** Runs a command that may hide this window, then lets it close: the window
+ * is destroyed only after the page has the reply (`release_window`). */
+async function thenRelease<T>(call: Promise<T>): Promise<T> {
+  try {
+    return await call;
+  } finally {
+    void invoke("release_window").catch(() => undefined);
+  }
+}
+
 export const saveServer = (url: string): Promise<void> =>
-  invoke("save_server", { url });
+  thenRelease(invoke("save_server", { url }));
 
 export interface ServerSetup {
   // Why managed policy stops the user from setting the server, or null.
@@ -101,7 +111,7 @@ export const signInWithSso = (
 ): Promise<"browser" | "window"> => invoke("sign_in_with_sso", { browser, provider });
 
 export const login = (email: string, password: string): Promise<void> =>
-  invoke("login", { email, password });
+  thenRelease(invoke("login", { email, password }));
 
 export const getPrefs = (): Promise<Prefs> => invoke("get_prefs");
 
@@ -113,9 +123,9 @@ export const setLaunchAtLogin = (enabled: boolean): Promise<void> =>
 export const setNotifyAnswers = (enabled: boolean): Promise<void> =>
   invoke("set_notify_answers", { enabled });
 
-export const changeServer = (): Promise<void> => invoke("change_server");
+export const changeServer = (): Promise<void> => thenRelease(invoke("change_server"));
 
-export const signOut = (): Promise<void> => invoke("sign_out");
+export const signOut = (): Promise<void> => thenRelease(invoke("sign_out"));
 
 // The server's built-in default agent.
 export const DEFAULT_AGENT_ID = 0;

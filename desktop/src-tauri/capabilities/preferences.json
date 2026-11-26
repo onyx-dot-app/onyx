@@ -5,6 +5,7 @@
   "local": true,
   "windows": ["preferences"],
   "permissions": [
+    "allow-release-window",
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
     "allow-fit-window",

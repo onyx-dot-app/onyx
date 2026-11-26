@@ -5,6 +5,7 @@
   "local": true,
   "windows": ["login"],
   "permissions": [
+    "allow-release-window",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-start-dragging",

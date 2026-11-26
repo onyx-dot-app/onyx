@@ -13,6 +13,7 @@ const COMMANDS: &[&str] = &[
     "set_notify_answers",
     "discard_answer",
     "change_server",
+    "release_window",
     "sign_out",
     "ask",
     "search",

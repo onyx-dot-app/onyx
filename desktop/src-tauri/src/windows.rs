@@ -55,6 +55,11 @@ fn local_window(
     title: &str,
     size: (f64, f64),
 ) -> Result<WebviewWindow, String> {
+    // A hidden window that waits for `release_window` is not reused: its page
+    // is from the finished command. Its reply has gone by now.
+    if retiring().contains(label) {
+        close(app, label);
+    }
     if let Some(window) = app.get_webview_window(label) {
         bring_forward(app, &window);
         return Ok(window);
@@ -260,7 +265,7 @@ pub(crate) fn window_failed(app: &AppHandle, window: FailedWindow, error: &str) 
                             // its own dialog from `open_local`.
                             if let Some(reason) = crate::commands::server_lock_now(app) {
                                 notify(app, "Server locked", reason);
-                            } else if let Err(e) = crate::commands::open_change_server(app) {
+                            } else if let Err(e) = crate::commands::open_change_server(app, None) {
                                 log::warn!("could not open Change server: {e}");
                             }
                         }
@@ -448,7 +453,62 @@ pub fn fit_to_content(window: &WebviewWindow, content_height: f64) -> Result<(),
     Ok(())
 }
 
+/// Local windows that a command hid instead of destroying: the command was
+/// called from that window, and its reply was still on its way.
+static RETIRING: std::sync::Mutex<std::collections::BTreeSet<String>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+fn retiring() -> std::sync::MutexGuard<'static, std::collections::BTreeSet<String>> {
+    RETIRING.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// Whether a command must not destroy `label` now: the command was called
+/// from that window. The IPC reply goes to the window's web view after the
+/// command returns, on another thread; destroying the web view first can
+/// crash the app on macOS (the reply touches a freed WKURLSchemeTask).
+pub(crate) fn defers_close(label: &str, caller: Option<&str>) -> bool {
+    caller == Some(label)
+}
+
+/// Closes `label` from a command called by the window `caller`. The
+/// caller's own window is only hidden; the page calls `release_window`
+/// once it has the reply, and then it is destroyed.
+pub fn close_from(app: &AppHandle, label: &str, caller: Option<&str>) {
+    if !defers_close(label, caller) {
+        close(app, label);
+        return;
+    }
+    if let Some(window) = app.get_webview_window(label) {
+        retiring().insert(label.to_string());
+        let _ = window.hide();
+    }
+}
+
+/// The page of `label` has the reply of the command that hid it: destroy it
+/// now. The destroy is queued from another thread, so it runs on a later
+/// turn of the main loop, after this call's own reply.
+pub fn release(app: &AppHandle, label: &str) {
+    if !retiring().remove(label) {
+        return;
+    }
+    let app = app.clone();
+    let label = label.to_string();
+    tauri::async_runtime::spawn(async move {
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            // Shown again meanwhile (opened by another flow): keep it.
+            let hidden = handle
+                .get_webview_window(&label)
+                .is_some_and(|w| !w.is_visible().unwrap_or(true));
+            if hidden {
+                close(&handle, &label);
+            }
+        });
+    });
+}
+
 pub fn close(app: &AppHandle, label: &str) {
+    retiring().remove(label);
     if let Some(window) = app.get_webview_window(label) {
         // Closes the WebView2 page first: a destroyed window can leave it
         // running.
@@ -652,7 +712,11 @@ pub fn show_primary(app: &AppHandle) {
 /// Like `show_primary`, but never brings `closing` forward: a window that is
 /// being closed can still be found for a moment.
 pub fn show_primary_except(app: &AppHandle, closing: &str) {
-    for label in PRIMARY.into_iter().filter(|label| *label != closing) {
+    let hidden = retiring().clone();
+    for label in PRIMARY
+        .into_iter()
+        .filter(|label| *label != closing && !hidden.contains(*label))
+    {
         if let Some(window) = app.get_webview_window(label) {
             bring_forward(app, &window);
             return;
@@ -664,6 +728,14 @@ pub fn show_primary_except(app: &AppHandle, closing: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_command_hides_its_own_window_and_closes_others() {
+        assert!(super::defers_close(LOGIN, Some(LOGIN)));
+        assert!(super::defers_close(PREFERENCES, Some(PREFERENCES)));
+        assert!(!super::defers_close(LOGIN, Some(PREFERENCES)));
+        assert!(!super::defers_close(LOGIN, None));
+    }
 
     #[test]
     fn a_window_failure_retries_that_window() {

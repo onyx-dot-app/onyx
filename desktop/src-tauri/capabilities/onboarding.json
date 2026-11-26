@@ -5,6 +5,7 @@
   "local": true,
   "windows": ["onboarding"],
   "permissions": [
+    "allow-release-window",
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
     "allow-fit-window",

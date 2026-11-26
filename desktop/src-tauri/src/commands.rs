@@ -166,8 +166,10 @@ pub async fn check_server(url: String, state: State<'_, AppState>) -> Result<Ser
 pub async fn save_server(
     url: String,
     app: AppHandle,
+    window: tauri::WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let caller = Some(window.label());
     let _saving = SAVING_SERVER.lock().await;
     server_locked(&state)?;
     let current = state.server().ok();
@@ -175,7 +177,7 @@ pub async fn save_server(
     let logged = main_window::log_safe(&server);
     // The same server keeps the session and its windows.
     if same {
-        windows::close(&app, windows::ONBOARDING);
+        windows::close_from(&app, windows::ONBOARDING, caller);
         windows::show_primary_except(&app, windows::ONBOARDING);
         return Ok(());
     }
@@ -196,7 +198,7 @@ pub async fn save_server(
         AfterSignOut::StayInOnboarding => return lock,
     }
     windows::open_login(&app)?;
-    windows::close(&app, windows::ONBOARDING);
+    windows::close_from(&app, windows::ONBOARDING, caller);
     lock
 }
 
@@ -249,6 +251,7 @@ pub async fn login(
     email: String,
     password: String,
     app: AppHandle,
+    window: tauri::WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let server = state.server()?;
@@ -266,7 +269,7 @@ pub async fn login(
     // A pending SSO sign-in (possibly another account) must not replace this one.
     crate::sso::cancel(&app);
     main_window::open(&app, &server, &token, "/app").await?;
-    windows::close(&app, windows::LOGIN);
+    windows::close_from(&app, windows::LOGIN, Some(window.label()));
     Ok(())
 }
 
@@ -397,18 +400,25 @@ fn sign_out_notice(revoked: bool, cleared: bool) -> Option<&'static str> {
 }
 
 #[tauri::command]
-pub async fn sign_out(app: AppHandle) -> Result<(), String> {
+pub async fn sign_out(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
     end_session(&app).await?;
     windows::open_login(&app)?;
-    windows::close(&app, windows::PREFERENCES);
+    windows::close_from(&app, windows::PREFERENCES, Some(window.label()));
     Ok(())
 }
 
 /// Opens onboarding. The session ends only when onboarding saves another
 /// server (`save_server`).
 #[tauri::command]
-pub async fn change_server(app: AppHandle) -> Result<(), String> {
-    open_change_server(&app)
+pub async fn change_server(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    open_change_server(&app, Some(window.label()))
+}
+
+/// The page calls this once it has the reply of a command that hid its
+/// window (`windows::close_from`).
+#[tauri::command]
+pub fn release_window(app: AppHandle, window: tauri::WebviewWindow) {
+    windows::release(&app, window.label());
 }
 
 /// Why the server cannot change now, if it is locked.
@@ -418,11 +428,12 @@ pub(crate) fn server_lock_now(app: &AppHandle) -> Option<&'static str> {
 }
 
 /// The Change server path, also for Try Again after onboarding did not open.
-pub(crate) fn open_change_server(app: &AppHandle) -> Result<(), String> {
+/// `caller`: the window the command came from, which is only hidden.
+pub(crate) fn open_change_server(app: &AppHandle, caller: Option<&str>) -> Result<(), String> {
     server_locked(&app.state::<AppState>())?;
     windows::open_onboarding(app)?;
-    windows::close(app, windows::LOGIN);
-    windows::close(app, windows::PREFERENCES);
+    windows::close_from(app, windows::LOGIN, caller);
+    windows::close_from(app, windows::PREFERENCES, caller);
     Ok(())
 }
 
@@ -886,6 +897,7 @@ mod tests {
         "main_window::open(",
         "main_window::open_url",
         "offline::show",
+        "open_change_server(",
     ];
 
     /// Each command in `source`: its signature line and body.

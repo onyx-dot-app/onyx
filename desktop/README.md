@@ -431,6 +431,11 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
 - Local windows never call the server. All HTTP goes through Rust with the bearer token. The
   Rust client follows a redirect only on the server's origin (scheme, host and port), so a
   password or an SSO code never goes to another host or over plain HTTP.
+- A command never destroys the window it was called from (sign-in, save server, Change server,
+  sign-out). It hides that window (`windows::close_from`); the page calls `release_window` once
+  it has the reply, and the window is destroyed on a later turn of the main loop. The reply goes
+  to the web view from another thread after the command returns, and on macOS a reply to a
+  destroyed web view can crash the app (tauri-apps/tauri#5519).
 
 ## Run it
 
