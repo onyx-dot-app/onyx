@@ -2123,6 +2123,8 @@ def reserve_chat_response_ids(
     """Reserve assistant responses and select the last response as the active branch.
 
     Pending sends without a target were submitted while this turn prepared.
+    The parent must exist: it is read from the session when the session holds
+    it, with no new read that would show a delete by another transaction.
     """
     if not model_display_names:
         raise ValueError("At least one response model is required")
