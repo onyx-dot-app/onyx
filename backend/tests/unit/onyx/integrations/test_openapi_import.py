@@ -12,6 +12,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.openapi_endpoints import (
     EndpointLinesError,
+    _new_operation_id,
     apply_endpoint_lines,
     endpoint_lines,
 )
@@ -391,6 +392,22 @@ def test_a_line_with_a_fragment_in_its_path_is_refused() -> None:
         _apply(_callable_spec(), ["POST /tickets#archive Archive tickets"])
     added = _apply(_callable_spec(), ["POST /tickets%23archive Archive tickets"])
     assert "post" in added["paths"]["/tickets%23archive"]
+
+
+def test_a_new_line_does_not_take_the_key_of_a_removed_operation() -> None:
+    """The key of a removed operation keeps its stored policies."""
+    spec = _callable_spec()
+    spec["paths"] = {
+        "/safe": {
+            "get": {
+                "operationId": _new_operation_id("DELETE", "/everything"),
+                "summary": "Read safely",
+            }
+        }
+    }
+
+    with pytest.raises(EndpointLinesError, match="already has the action key"):
+        _apply(spec, ["DELETE /everything Delete everything"])
 
 
 def test_imported_lines_with_any_query_name_save_again() -> None:
