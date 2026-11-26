@@ -1062,7 +1062,7 @@ describe("Custom API", () => {
     expect(await screen.findByText(add.api.failed)).toBeInTheDocument();
   });
 
-  test("does not read a spec file over the size limit", async () => {
+  test("a spec file over the size limit blocks Continue until discarded", async () => {
     const read = jest.fn(() => Promise.resolve("{}"));
     const big = new File(["{}"], "openapi.json", { type: "application/json" });
     Object.defineProperties(big, {
@@ -1070,13 +1070,21 @@ describe("Custom API", () => {
       text: { value: read },
     });
     const { user } = open({ kind: "api" });
+    await user.type(
+      screen.getByRole("textbox", { name: add.api.url.title }),
+      "https://api.example.com"
+    );
     await user.upload(screen.getByLabelText(add.api.upload.label), big);
 
     expect(await screen.findByText(add.api.tooLarge)).toBeInTheDocument();
     expect(read).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("button", { name: add.api.upload.remove })
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: add.continue })).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("button", { name: add.api.upload.remove })
+    );
+    expect(screen.queryByText(add.api.tooLarge)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: add.continue })).toBeEnabled();
   });
 
   test("a GraphQL endpoint counts its queries and mutations", async () => {

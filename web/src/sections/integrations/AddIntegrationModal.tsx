@@ -610,23 +610,12 @@ export default function AddIntegrationModal({
             gap={1}
             height="auto"
           >
-            {file ? (
-              <>
-                <Text font="secondary-body" color="text-03">
-                  {t("api.upload.chosen", { file: file.name })}
-                </Text>
-                <Button
-                  size="sm"
-                  prominence="tertiary"
-                  icon={SvgX}
-                  aria-label={t("api.upload.remove")}
-                  onClick={() => {
-                    setFile(null);
-                    setDetectError(null);
-                  }}
-                />
-              </>
-            ) : (
+            {file && (
+              <Text font="secondary-body" color="text-03">
+                {t("api.upload.chosen", { file: file.name })}
+              </Text>
+            )}
+            {!file && (
               <FilePickerButton
                 size="sm"
                 prominence="tertiary"
@@ -655,6 +644,19 @@ export default function AddIntegrationModal({
               >
                 {t("api.upload.label")}
               </FilePickerButton>
+            )}
+            {(file || fileError) && (
+              <Button
+                size="sm"
+                prominence="tertiary"
+                icon={SvgX}
+                aria-label={t("api.upload.remove")}
+                onClick={() => {
+                  setFile(null);
+                  setFileError(null);
+                  setDetectError(null);
+                }}
+              />
             )}
           </Section>
         )}
@@ -901,7 +903,11 @@ export default function AddIntegrationModal({
                   </Button>
                 ) : (
                   <Button
-                    disabled={step === "detecting" || readingFile}
+                    disabled={
+                      step === "detecting" ||
+                      readingFile ||
+                      (flow === "api" && fileError !== null)
+                    }
                     onClick={next}
                   >
                     {t("continue")}
