@@ -1296,7 +1296,7 @@ test("input that ends the command with a failure names it in a red title", async
   }
 });
 
-test("a deleted file's panel says the file was deleted", async () => {
+test("a deleted file's panel names the operation", async () => {
   const applied = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([
@@ -1317,8 +1317,35 @@ test("a deleted file's panel says the file was deleted", async () => {
   try {
     await expandTimeline();
     expect(screen.getByText("gone.py")).toBeInTheDocument();
-    expect(screen.getByText("File deleted")).toBeInTheDocument();
+    expect(screen.getByText("Delete file")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/D gone\.py/);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("an empty new file's panel says it is empty", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "*** Begin Patch\n*** Add File: empty.txt\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [{ path: "empty.txt", change: "add", move_path: null }],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("empty.txt")).toBeInTheDocument();
+    expect(screen.getByText("Empty file")).toBeInTheDocument();
   } finally {
     view.unmount();
   }

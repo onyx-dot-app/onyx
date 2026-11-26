@@ -1,5 +1,7 @@
-"""FirecrackerHarnessSandbox.render_first_page runs poppler and LibreOffice as
-typed commands in a scratch directory, and returns None when a step fails."""
+"""FirecrackerHarnessSandbox.render_preview runs poppler and LibreOffice as
+typed commands in a scratch directory. Against a mock daemon: the commands,
+the budget clock, and the kill and the scratch delete after a Stop, a broken
+stream or a failed clean-up."""
 
 from collections.abc import Callable, Iterator
 from types import SimpleNamespace
@@ -30,11 +32,18 @@ from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
 )
 from onyx.server.features.build.sandbox.harness_base import (
     ONYX_VM_FILES_ROOT,
-    RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES,
-    RENDER_FIRST_PAGE_ROOT,
+    RENDER_PREVIEW_MAX_OUTPUT_BYTES,
+    RENDER_PREVIEW_MAX_PDF_BYTES,
+    RENDER_PREVIEW_ROOT,
+    RenderBudgetSpentError,
+    SandboxPathError,
 )
 from onyx.server.features.build.sandbox.models import (
+    HarnessSandboxKey,
     HarnessSandboxRef,
+    RenderedPreview,
+    RenderFileBytes,
+    RenderSessionFile,
     session_workspace,
 )
 
@@ -60,8 +69,8 @@ def _events(exit_code: int, output: bytes = b"") -> Iterator[ExecEvent]:
 
 class _Render:
     """A render against a mock daemon. `steps` scripts the events of a
-    command by its program; others exit 0. Each command takes `step_seconds`
-    on the render's clock."""
+    command by its program; others exit 0. Each command and read takes
+    `step_seconds` on the render's clock. A read raises `read_error`."""
 
     def __init__(
         self,
@@ -69,9 +78,11 @@ class _Render:
         exit_codes: dict[str, int] | None = None,
         steps: dict[str, Callable[[], Iterator[ExecEvent]]] | None = None,
         step_seconds: float = 0.0,
+        read_error: Exception | None = None,
     ) -> None:
         self.commands: list[ExecCommand] = []
         self.reads: list[tuple[str, int]] = []
+        self.read_timeouts: list[float | None] = []
         self.now = 100.0
         self.ref = HarnessSandboxRef(
             tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()
@@ -86,9 +97,21 @@ class _Render:
                 return steps[program]()
             return _events((exit_codes or {}).get(program, 0), b"bad file")
 
-        def read_file(_ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
-            self.reads.append((path, max_bytes))
-            return b"jpeg"
+        def read(
+            _daemon: object,
+            _session_id: str,
+            target: str,
+            *,
+            max_bytes: int,
+            timeout_seconds: float | None = None,
+            **_: object,
+        ) -> bytes:
+            self.reads.append((target, max_bytes))
+            self.read_timeouts.append(timeout_seconds)
+            self.now += step_seconds
+            if read_error is not None:
+                raise read_error
+            return b"pdf" if target.endswith(".pdf") else b"jpeg"
 
         self.daemon.run.side_effect = run
         self.sandbox = FirecrackerHarnessSandbox(
@@ -100,13 +123,24 @@ class _Render:
         monkeypatch.setattr(
             harness_sandbox, "sandbox_daemon", lambda _factory, _placed: self.daemon
         )
-        monkeypatch.setattr(self.sandbox, "read_file", read_file)
+        monkeypatch.setattr(harness_sandbox, "_read", read)
         monkeypatch.setattr(
             harness_sandbox, "time", SimpleNamespace(monotonic=lambda: self.now)
         )
 
-    def render(self, path: str, budget: float = 30.0) -> bytes | None:
-        return self.sandbox.render_first_page(self.ref, path, until=self.now + budget)
+    def render(
+        self,
+        path: str | RenderFileBytes,
+        budget: float = 30.0,
+        first_page: bool = True,
+    ) -> RenderedPreview | None:
+        return self.sandbox.render_preview(
+            RenderSessionFile(ref=self.ref, path=path)
+            if isinstance(path, str)
+            else path,
+            first_page=first_page,
+            budget_seconds=budget,
+        )
 
     @property
     def scratch(self) -> str:
@@ -121,10 +155,12 @@ class _Render:
 def test_a_pdf_renders_with_pdftoppm(monkeypatch: pytest.MonkeyPatch) -> None:
     render = _Render(monkeypatch)
 
-    assert render.render("out/Q3 report.pdf", budget=20.0) == b"jpeg"
+    assert render.render("out/Q3 report.pdf", budget=20.0) == RenderedPreview(
+        first_page=b"jpeg", pdf=None
+    )
 
     scratch = render.scratch
-    assert scratch.startswith(f"{RENDER_FIRST_PAGE_ROOT}/")
+    assert scratch.startswith(f"{RENDER_PREVIEW_ROOT}/")
     assert [command.argv for command in render.commands] == [
         ["mkdir", "-p", scratch],
         [
@@ -146,17 +182,17 @@ def test_a_pdf_renders_with_pdftoppm(monkeypatch: pytest.MonkeyPatch) -> None:
         and command.deadline_seconds == 20.0
         for command in render.commands
     )
-    assert render.reads == [(f"{scratch}/page.jpg", RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES)]
+    assert render.reads == [(f"{scratch}/page.jpg", RENDER_PREVIEW_MAX_OUTPUT_BYTES)]
     render.assert_scratch_deleted()
 
 
-def test_a_deck_converts_to_a_pdf_with_libreoffice_first(
+def test_a_deck_converts_to_a_pdf_with_libreoffice_and_returns_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     render = _Render(monkeypatch)
     path = f"{session_workspace(render.ref.session_id)}/q3.final.PPTX"
 
-    assert render.render(path) == b"jpeg"
+    assert render.render(path) == RenderedPreview(first_page=b"jpeg", pdf=b"pdf")
 
     scratch = render.scratch
     _, soffice, pdftoppm = render.commands
@@ -172,6 +208,11 @@ def test_a_deck_converts_to_a_pdf_with_libreoffice_first(
     ]
     assert soffice.env == {"SAL_USE_VCLPLUGIN": "svp"}
     assert pdftoppm.argv[-2:] == [f"{scratch}/q3.final.pdf", f"{scratch}/page"]
+    assert render.reads == [
+        (f"{scratch}/q3.final.pdf", RENDER_PREVIEW_MAX_PDF_BYTES),
+        (f"{scratch}/page.jpg", RENDER_PREVIEW_MAX_OUTPUT_BYTES),
+    ]
+    render.assert_scratch_deleted()
 
 
 def test_a_file_under_the_onyx_directory_renders_without_a_session(
@@ -180,7 +221,7 @@ def test_a_file_under_the_onyx_directory_renders_without_a_session(
     render = _Render(monkeypatch)
     path = f"{ONYX_VM_FILES_ROOT}/decks/q3.pptx"
 
-    assert render.render(path) == b"jpeg"
+    assert render.render(path) is not None
 
     _, soffice, _ = render.commands
     assert soffice.argv[-1] == path
@@ -188,55 +229,134 @@ def test_a_file_under_the_onyx_directory_renders_without_a_session(
     render.session_vm.assert_not_called()
 
 
-@pytest.mark.parametrize("failing", ["mkdir", "soffice", "pdftoppm"])
-def test_a_failed_step_returns_none_and_deletes_the_scratch_directory(
-    monkeypatch: pytest.MonkeyPatch, failing: str
+def test_a_first_page_that_fails_keeps_the_pdf(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    render = _Render(monkeypatch, {failing: 1})
+    render = _Render(monkeypatch, {"pdftoppm": 1})
 
-    assert render.render("memo.docx") is None
+    assert render.render("memo.docx") == RenderedPreview(first_page=None, pdf=b"pdf")
 
-    assert render.commands[-1].argv[0] == failing
-    assert render.reads == []
     render.assert_scratch_deleted()
 
 
-def test_a_file_of_another_type_or_outside_the_session_does_not_render(
+def test_a_file_of_another_type_does_not_render(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     render = _Render(monkeypatch)
 
     assert render.render("notes.md") is None
-    assert render.render("/etc/report.pdf") is None
 
     assert render.commands == []
 
 
-def test_a_spent_budget_runs_no_further_step(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+def test_a_file_outside_the_session_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    render = _Render(monkeypatch)
+
+    with pytest.raises(SandboxPathError):
+        render.render("/etc/report.pdf")
+
+    assert render.commands == []
+
+
+def test_a_spent_budget_raises_and_runs_no_further_step(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Each step gets what is left of the budget, and none starts after it."""
     render = _Render(monkeypatch, step_seconds=6.0)
 
-    assert render.render("memo.docx", budget=10.0) is None
+    with pytest.raises(RenderBudgetSpentError):
+        render.render("memo.docx", budget=10.0)
 
-    assert "the render budget is spent" in caplog.text
     assert [command.argv[0] for command in render.commands] == ["mkdir", "soffice"]
     assert [command.deadline_seconds for command in render.commands] == [10.0, 4.0]
-    assert render.reads == []
     render.assert_scratch_deleted()
+
+
+def test_each_output_read_gets_what_is_left_of_the_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stalled transfer of the PDF or the first page stops with the
+    budget."""
+    render = _Render(monkeypatch, step_seconds=3.0)
+
+    assert render.render("deck.pptx", budget=30.0) is not None
+
+    assert [command.deadline_seconds for command in render.commands] == [
+        30.0,
+        27.0,
+        21.0,
+    ]
+    assert render.read_timeouts == [24.0, 18.0]
+
+
+@pytest.mark.parametrize("case", ["read_past_the_budget", "no_time_left"])
+def test_an_output_read_without_budget_raises_the_spent_budget(
+    monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    """A read that the budget's deadline stops, or a read with no time left
+    after LibreOffice, raises the spent budget, not a sandbox fault."""
+    if case == "read_past_the_budget":
+        render = _Render(
+            monkeypatch,
+            read_error=HostAgentError(
+                grpc.StatusCode.DEADLINE_EXCEEDED, "deadline", None
+            ),
+        )
+    else:
+
+        def until_the_budget_ends() -> Iterator[ExecEvent]:
+            render.now += 30.0
+            yield from _events(0)
+
+        render = _Render(monkeypatch, steps={"soffice": until_the_budget_ends})
+
+    with pytest.raises(RenderBudgetSpentError):
+        render.render("deck.pptx", budget=30.0)
+
+    assert len(render.reads) == (1 if case == "read_past_the_budget" else 0)
+    render.assert_scratch_deleted()
+
+
+@pytest.mark.parametrize("source", ["session", "bytes"])
+def test_the_budget_starts_once_the_vm_runs(
+    monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    """A wake of the VM does not spend the render budget."""
+    render = _Render(monkeypatch)
+
+    def wake(*_: object) -> object:
+        render.now += 50.0
+        return MagicMock() if source == "bytes" else (MagicMock(), render.daemon)
+
+    if source == "bytes":
+        monkeypatch.setattr(render.sandbox, "_place", wake)
+        path: str | RenderFileBytes = RenderFileBytes(
+            sandbox=HarnessSandboxKey(tenant_id="tenant", sandbox_id=uuid4()),
+            suffix=".pptx",
+            data=b"deck",
+        )
+    else:
+        render.session_vm.side_effect = wake
+        path = "deck.pptx"
+
+    assert render.render(path, budget=30.0) is not None
+
+    assert render.commands[0].deadline_seconds == 30.0
 
 
 def test_a_broken_stream_kills_the_step_before_the_scratch_directory_goes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A sandbox fault raises, so the caller can retry."""
+
     def broken() -> Iterator[ExecEvent]:
         yield _STARTED
         raise HostAgentError(grpc.StatusCode.UNAVAILABLE, "connection lost", None)
 
     render = _Render(monkeypatch, steps={"soffice": broken})
 
-    assert render.render("memo.docx") is None
+    with pytest.raises(HostAgentError):
+        render.render("memo.docx")
 
     assert render.daemon.mock_calls[-2:] == [
         call.cancel("exec"),

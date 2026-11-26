@@ -146,6 +146,19 @@ test("closing an inactive tab restores focus to the selected tab", async () => {
   expect(screen.getByRole("tab", { name: "All Files" })).toHaveFocus();
 });
 
+// After a drag ends, dnd-kit stops document clicks for 50ms. The fake clock
+// ends that window here, so it cannot swallow a later click in this test or
+// the next one.
+function endDrag(end: () => void) {
+  jest.useFakeTimers();
+  try {
+    end();
+    act(() => jest.advanceTimersByTime(50));
+  } finally {
+    jest.useRealTimers();
+  }
+}
+
 function renderDraggableTabs(
   direction: "ltr" | "rtl" = "ltr",
   fileWidth = 100
@@ -224,10 +237,13 @@ function renderDraggableTabs(
     });
   }
   function mouse(type: string, target: HTMLElement, clientX: number) {
-    fireEvent(
-      target,
-      new MouseEvent(type, { bubbles: true, clientX, button: 0 })
-    );
+    const fire = () =>
+      fireEvent(
+        target,
+        new MouseEvent(type, { bubbles: true, clientX, button: 0 })
+      );
+    if (type === "mouseup") endDrag(fire);
+    else fire();
   }
   return { list, mouse, ...callbacks };
 }
@@ -296,6 +312,7 @@ test("successive closes leave no sorting transforms on remaining tabs", async ()
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close notes.md" }));
   await user.click(screen.getByRole("button", { name: "Close Apps" }));
+  expect(screen.getAllByRole("tab")).toHaveLength(1);
   const remaining = screen
     .getByRole("tab", { name: "All Files" })
     .closest<HTMLDivElement>(".group");
@@ -310,7 +327,7 @@ test("cancelling a drag clears its preview and keeps the original order", async 
   mouse("mousemove", list, 57);
   mouse("mousemove", list, 110);
   await act(async () => {});
-  fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+  endDrag(() => fireEvent.keyDown(document, { key: "Escape", code: "Escape" }));
   expect(onReorder).not.toHaveBeenCalled();
   expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
     "All Files",
@@ -357,6 +374,7 @@ test("sorting across unequal widths never scales the dragged pill or its neighbo
   expect(onReorder).toHaveBeenCalledWith("files", 1);
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close notes.md" }));
+  expect(screen.queryByRole("tab", { name: "notes.md" })).toBeNull();
   for (const tab of screen.getAllByRole("tab")) {
     expect(tab.closest<HTMLDivElement>(".group")?.style.transform).toBe("");
   }

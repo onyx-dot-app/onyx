@@ -496,6 +496,7 @@ def test_search_helper_responses_match_across_transports() -> None:
             previous_cycles="",
             valid_sources="file\nslack",
             last_user_query="Which launch decisions changed?",
+            searched_sources="none",
         ),
         _production_prompt("TIME_SCOPE_DECISION_PROMPT", "filter_extration.py").format(
             conversation_history="",

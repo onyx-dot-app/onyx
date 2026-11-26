@@ -17,7 +17,7 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb
 
 # Node.js source. The final image is Python-based, but the sandbox still needs
 # Node/npm/npx for MCP commands and skill-runtime packages.
-FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:af02d57b57719b9657a45199a79264a9437940cd55b3c7b3fc99615654f124a0 AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:4d00acb4bcc42c454c4eb801526f7ad7f772ea3bd4fd168c5cc2e384abcbb9d4 AS node_source
 ARG NPM_VERSION=11.17.0
 RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
     if [ -f /run/secrets/build_ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; fi && \

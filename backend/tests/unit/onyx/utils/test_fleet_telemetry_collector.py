@@ -3,15 +3,15 @@
 import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexingStatus
-from onyx.db.fleet_telemetry import StandardUserCounts
+from onyx.db.fleet_telemetry import SetupCounts, StandardUserCounts, UsageWeek
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.utils import fleet_telemetry as fleet
 from onyx.utils import fleet_telemetry_collector as collector
@@ -821,3 +821,202 @@ def test_deployment_snapshot_reports_type_and_indexed_connectors_each_pass(
             **({"deployment_type": deployment_type.value} if service == "api" else {}),
             "has_indexed_connectors": indexed,
         }
+
+
+class _UsageSource:
+    """The usage reads that `collect_usage` makes, served from fixed values."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.first_question: datetime | None = datetime(
+            2025, 12, 3, 9, tzinfo=timezone.utc
+        )
+        self.week_reads: list[tuple[date, date]] = []
+        self.cache: FakeCache = FakeCache()
+
+        @contextmanager
+        def session(tenant_id: str) -> Iterator[MagicMock]:
+            assert tenant_id == "public"
+            yield MagicMock()
+
+        def weeks(_session: Any, start: date, end: date) -> list[UsageWeek]:
+            self.week_reads.append((start, end))
+            return [UsageWeek(start, queries=7, sessions=3, active_users=2)]
+
+        monkeypatch.setattr(collector, "get_session_with_tenant", session)
+        monkeypatch.setattr(collector, "limit_statement_time", Mock())
+        monkeypatch.setattr(
+            collector, "first_question_at", lambda _session: self.first_question
+        )
+        monkeypatch.setattr(collector, "usage_week_rows", weeks)
+        monkeypatch.setattr(
+            collector, "usage_counts", lambda _session, _now: {"active_users_7d": 2}
+        )
+        monkeypatch.setattr(
+            collector,
+            "setup_counts",
+            lambda _session: SetupCounts(
+                counts={"agents": 1, "sso_providers": 0},
+                llm_providers=[("openai", 1), ("PRIVATE gateway", 2)],
+            ),
+        )
+        monkeypatch.setattr(collector, "_jitter", lambda _low, high: high)
+
+    def due(self, now: datetime, **state: Any) -> None:
+        past: float = now.timestamp() - 1
+        self.cache.set(collector._USAGE_DUE_KEY, str(past))
+        self.cache.set(
+            collector._HISTORY_KEY,
+            json.dumps(
+                {"next_week": None, "cycle_started_at": past, "due_at": past, **state}
+            ),
+        )
+
+
+@pytest.fixture
+def usage_source(monkeypatch: pytest.MonkeyPatch) -> _UsageSource:
+    return _UsageSource(monkeypatch)
+
+
+def _types(sender: fleet.BoundedTelemetry) -> list[str]:
+    return [event["event_type"] for event in sender._take_batch()]
+
+
+def test_usage_waits_a_random_part_of_the_hour_on_first_sight(
+    usage_source: _UsageSource,
+) -> None:
+    sender: fleet.BoundedTelemetry = make_sender(capacity=64)
+    collector.collect_usage(sender, usage_source.cache, "public", _NOW)
+    assert _types(sender) == []
+    due_at: float = float(usage_source.cache.store[collector._USAGE_DUE_KEY])
+    assert due_at == _NOW.timestamp() + collector._USAGE_SECONDS
+    later: datetime = _NOW + timedelta(seconds=collector._USAGE_SECONDS)
+    collector.collect_usage(sender, usage_source.cache, "public", later)
+    assert _types(sender)[:2] == ["usage", "setup"]
+
+
+def test_history_goes_out_a_few_weeks_per_read_from_the_first_question(
+    usage_source: _UsageSource,
+) -> None:
+    sender: fleet.BoundedTelemetry = make_sender(capacity=64)
+    usage_source.due(_NOW)
+    collector.collect_usage(sender, usage_source.cache, "public", _NOW)
+    events: list[dict[str, Any]] = sender._take_batch()
+    weeks: list[dict[str, Any]] = [
+        event["data"] for event in events if event["event_type"] == "usage_week"
+    ]
+    # The first question was on Wednesday 2025-12-03; _NOW is Thursday 2026-01-01.
+    assert [week["week_start"] for week in weeks] == [
+        "2025-12-01",
+        "2025-12-08",
+        "2025-12-15",
+        "2025-12-22",
+    ]
+    # A week without a row from the read is sent as zero.
+    assert weeks[0] == {
+        "week_start": "2025-12-01",
+        "queries": 7,
+        "sessions": 3,
+        "active_users": 2,
+    }
+    assert weeks[1]["queries"] == 0
+    setup: dict[str, Any] = next(e for e in events if e["event_type"] == "setup")
+    assert setup["data"]["llm_providers"] == {"openai": 1, "custom": 2}
+    assert "PRIVATE" not in json.dumps(events)
+    # The current week, which starts 2025-12-29, is not complete: later passes
+    # read no history until it is.
+    later: datetime = _NOW + timedelta(seconds=collector._HISTORY_GAP_SECONDS[1])
+    collector.collect_usage(sender, usage_source.cache, "public", later)
+    assert usage_source.week_reads == [(date(2025, 12, 1), date(2025, 12, 29))]
+    stored: dict[str, Any] = json.loads(
+        usage_source.cache.store[collector._HISTORY_KEY]
+    )
+    assert stored["next_week"] == "2025-12-29"
+    next_monday: datetime = datetime(2026, 1, 5, 1, tzinfo=timezone.utc)
+    collector.collect_usage(sender, usage_source.cache, "public", next_monday)
+    assert usage_source.week_reads[-1] == (date(2025, 12, 29), date(2026, 1, 5))
+
+
+def test_history_starts_again_from_the_first_week_every_30_days(
+    usage_source: _UsageSource,
+) -> None:
+    sender: fleet.BoundedTelemetry = make_sender(capacity=64)
+    old: float = (_NOW - timedelta(days=31)).timestamp()
+    usage_source.due(_NOW, next_week="2025-12-29", cycle_started_at=old)
+    collector.collect_usage(sender, usage_source.cache, "public", _NOW)
+    assert usage_source.week_reads == [(date(2025, 12, 1), date(2025, 12, 29))]
+
+
+def test_a_full_queue_resumes_history_at_the_first_unsent_week(
+    usage_source: _UsageSource,
+) -> None:
+    sender: fleet.BoundedTelemetry = make_sender(capacity=4)
+    usage_source.due(_NOW)
+    collector.collect_usage(sender, usage_source.cache, "public", _NOW)
+    # usage, setup and two weeks fill the queue.
+    assert _types(sender).count("usage_week") == 2
+    stored: dict[str, Any] = json.loads(
+        usage_source.cache.store[collector._HISTORY_KEY]
+    )
+    assert stored["next_week"] == "2025-12-15"
+
+
+def test_a_failed_usage_read_counts_an_error_and_the_snapshot_pass_goes_on(
+    monkeypatch: pytest.MonkeyPatch, source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    monkeypatch.setattr(
+        collector, "collect_usage", Mock(side_effect=RuntimeError("PRIVATE SQL"))
+    )
+    collector.collect_snapshots("public")
+    assert sender.health["usage_errors"] == 1
+    assert sender.health["source_consecutive_errors"] == 0
+    assert collector._CURSOR_KEY in source.cache.store
+
+
+@pytest.mark.parametrize("multi_tenant,configured", [(False, True), (True, False)])
+def test_google_login_by_environment_counts_as_sso_outside_cloud(
+    monkeypatch: pytest.MonkeyPatch, multi_tenant: bool, configured: bool
+) -> None:
+    monkeypatch.setattr(collector, "OAUTH_ENABLED", True)
+    monkeypatch.setattr(collector, "MULTI_TENANT", multi_tenant)
+    data: dict[str, Any] = collector.setup_data({"sso_providers": 0}, [])
+    assert data["sso_configured"] is configured
+
+
+def test_history_state_outlives_a_caught_up_cycle(
+    usage_source: _UsageSource,
+) -> None:
+    sender: fleet.BoundedTelemetry = make_sender(capacity=64)
+    usage_source.due(_NOW)
+    collector.collect_usage(sender, usage_source.cache, "public", _NOW)
+    # Caught up: the state is saved again only when the next week completes,
+    # so it must not expire before the 30-day refresh.
+    expiry: int = usage_source.cache.expiries[collector._HISTORY_KEY]
+    assert expiry > collector._HISTORY_REFRESH.total_seconds()
+
+
+def test_a_refresh_starts_at_the_earliest_week_ever_sent(
+    usage_source: _UsageSource,
+) -> None:
+    sender: fleet.BoundedTelemetry = make_sender(capacity=64)
+    usage_source.due(_NOW)
+    collector.collect_usage(sender, usage_source.cache, "public", _NOW)
+    assert usage_source.week_reads[0][0] == date(2025, 12, 1)
+    # Retention deleted the early chats: the first question left is weeks later.
+    usage_source.first_question = datetime(2025, 12, 24, 9, tzinfo=timezone.utc)
+    refresh: datetime = _NOW + timedelta(days=31)
+    stored: dict[str, Any] = json.loads(
+        usage_source.cache.store[collector._HISTORY_KEY]
+    )
+    stored["due_at"] = refresh.timestamp() - 1
+    usage_source.cache.set(collector._HISTORY_KEY, json.dumps(stored))
+    collector.collect_usage(sender, usage_source.cache, "public", refresh)
+    # The emptied weeks go out again, so the service replaces them with zero.
+    assert usage_source.week_reads[-1][0] == date(2025, 12, 1)
+    # Even with no question left at all.
+    usage_source.first_question = None
+    later: datetime = refresh + timedelta(days=31)
+    stored = json.loads(usage_source.cache.store[collector._HISTORY_KEY])
+    stored["due_at"] = later.timestamp() - 1
+    usage_source.cache.set(collector._HISTORY_KEY, json.dumps(stored))
+    collector.collect_usage(sender, usage_source.cache, "public", later)
+    assert usage_source.week_reads[-1][0] == date(2025, 12, 1)

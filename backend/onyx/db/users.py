@@ -56,6 +56,7 @@ from onyx.db.sandbox import (
 from onyx.db.utils import is_check_violation, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.constants import ARTIFACT_TEXT_FILE_PREFIX
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes_in_background,
@@ -1023,7 +1024,9 @@ def delete_user_from_db__no_commit(
     """Removes the user's personal marketplaces too, and queues their profile
     photo for deletion. The caller runs `finish_user_delete` after the
     commit."""
-    # onyx.db.plugin imports this module through onyx.db.user_group.
+    # onyx.db.plugin imports this module through onyx.db.user_group, and
+    # onyx.db.chat through onyx.db.connector_alerts.
+    from onyx.db.chat import lock_chat_artifact_version_files
     from onyx.db.marketplace import delete_github_marketplace__no_commit
     from onyx.db.plugin import private_plugins_blocking_user_delete
 
@@ -1044,14 +1047,33 @@ def delete_user_from_db__no_commit(
                 ],
             },
         )
+    # Lock order, as in every artifact delete: the artifact rows, then their
+    # version rows (db/chat.py:delete_chat_artifact). The cascade removes them
+    # in this transaction, which keeps them locked until then; the files go
+    # after the commit.
     cleanup = UserDeleteCleanup(
-        # Before the cascade from the user removes the rows.
         chat_artifact_ids=list(
             db_session.scalars(
-                select(ChatArtifact.id).where(ChatArtifact.user_id == user_to_delete.id)
+                select(ChatArtifact.id)
+                .where(ChatArtifact.user_id == user_to_delete.id)
+                .order_by(ChatArtifact.id)
+                .with_for_update()
             )
         )
     )
+    for file_id, thumbnail_file_id, preview_file_id in lock_chat_artifact_version_files(
+        db_session, ChatArtifact.user_id == user_to_delete.id
+    ):
+        cleanup.file_ids.extend(
+            version_file_id
+            for version_file_id in (
+                thumbnail_file_id,
+                preview_file_id,
+                f"{ARTIFACT_TEXT_FILE_PREFIX}{file_id}",
+                file_id,
+            )
+            if version_file_id is not None
+        )
     if user_to_delete.profile_image_file_id:
         cleanup.file_ids.append(user_to_delete.profile_image_file_id)
     # A personal marketplace holds only copies of its repository.

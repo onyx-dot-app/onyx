@@ -244,6 +244,7 @@ def _publish(chat_session_id: UUID, name: str, data: bytes) -> str:
         ),
         title=None,
         thumbnail=None,
+        preview_pdf=None,
     ).file_id
 
 
@@ -2370,6 +2371,7 @@ def test_a_replace_from_another_chat_versions_its_artifact_in_both_families(
         mime_type="text/markdown",
         title="Report",
         thumbnail=None,
+        preview_pdf=None,
         target=ArtifactAtPath(
             chat_session_id=chat_a, path=f"{session_workspace(chat_a)}/report.md"
         ),
@@ -2627,6 +2629,7 @@ def _report(chat_session_id: UUID, data: bytes) -> PublishedFile:
         mime_type="application/pdf",
         title=None,
         thumbnail=b"thumb-" + data,
+        preview_pdf=None,
         target=ArtifactAtPath(
             chat_session_id=chat_session_id,
             path=f"{session_workspace(chat_session_id)}/report.pdf",
@@ -2817,7 +2820,9 @@ def test_a_publish_during_a_delete_makes_a_new_file(
     published_before_the_delete: list[bool] = []
     real_delete_files = chat_db.delete_chat_artifact_files
 
-    def publish_meanwhile(versions: Sequence[tuple[str, str | None]]) -> None:
+    def publish_meanwhile(
+        file_ids: Sequence[str],
+    ) -> None:
         # The publish starts while the versions still exist, so only the
         # delete's row lock can keep it from adding a version to the artifact.
         if not publishes:
@@ -2828,7 +2833,7 @@ def test_a_publish_during_a_delete_makes_a_new_file(
             publishes.append(publish)
             _wait_until(lambda: bool(published) or _waits_on_a_lock())
             published_before_the_delete.append(bool(published))
-        real_delete_files(versions)
+        real_delete_files(file_ids)
 
     monkeypatch.setattr(chat_db, "delete_chat_artifact_files", publish_meanwhile)
     try:
@@ -2909,6 +2914,7 @@ def test_the_delete_card_tells_apart_same_name_files_by_their_folders(
             ),
             title=None,
             thumbnail=None,
+            preview_pdf=None,
         ).artifact_id
         for folder in ("q3", "q4")
     ]
@@ -3043,6 +3049,7 @@ def test_the_delete_card_cuts_a_long_path_and_chat_title_as_the_list_does(
             ),
             title=None,
             thumbnail=None,
+            preview_pdf=None,
         ).artifact_id
         for name in ("report.md", "notes.md")
     ]
@@ -3175,11 +3182,14 @@ def test_a_failed_delete_keeps_the_newest_version_and_its_number(
     real_delete_file = store_type.delete_file
 
     def fail_on_the_first_version(
-        store: FileStore, file_id: str, error_on_missing: bool = True
+        store: FileStore,
+        file_id: str,
+        error_on_missing: bool = True,
+        db_session: Session | None = None,
     ) -> None:
         if file_id == first:
             raise RuntimeError("The store is down")
-        real_delete_file(store, file_id, error_on_missing)
+        real_delete_file(store, file_id, error_on_missing, db_session)
 
     monkeypatch.setattr(store_type, "delete_file", fail_on_the_first_version)
     with pytest.raises(RuntimeError):
@@ -3208,8 +3218,10 @@ def test_a_delete_that_stopped_after_its_files_never_lends_its_id_to_a_publish(
     artifact_id = _artifact_id(_publish(source, "a.md", b"v1"))
     real_delete_files = chat_db.delete_chat_artifact_files
 
-    def delete_then_stop(versions: Sequence[tuple[str, str | None]]) -> None:
-        real_delete_files(versions)
+    def delete_then_stop(
+        file_ids: Sequence[str],
+    ) -> None:
+        real_delete_files(file_ids)
         raise RuntimeError("The pod stopped")
 
     monkeypatch.setattr(chat_db, "delete_chat_artifact_files", delete_then_stop)
@@ -3226,6 +3238,7 @@ def test_a_delete_that_stopped_after_its_files_never_lends_its_id_to_a_publish(
             mime_type="text/plain",
             title=None,
             thumbnail=None,
+            preview_pdf=None,
             target=ArtifactById(artifact_id=artifact_id),
         )
     republished = _publish(source, "a.md", b"new")
@@ -3647,6 +3660,7 @@ def test_a_restore_and_an_update_copy_a_version_and_its_thumbnail(
         mime_type="text/markdown",
         title="First",
         thumbnail=b"thumb-1",
+        preview_pdf=None,
         target=ArtifactAtPath(
             chat_session_id=chat_a,
             path=path,
@@ -3658,6 +3672,7 @@ def test_a_restore_and_an_update_copy_a_version_and_its_thumbnail(
         mime_type="text/markdown",
         title="Second",
         thumbnail=None,
+        preview_pdf=None,
         target=ArtifactAtPath(
             chat_session_id=chat_a,
             path=path,
@@ -3804,6 +3819,7 @@ def test_a_stale_or_foreign_update_writes_nothing(
         mime_type="text/markdown",
         title=None,
         thumbnail=b"thumb-1",
+        preview_pdf=None,
         target=ArtifactAtPath(
             chat_session_id=source,
             path=f"{session_workspace(source)}/report.md",
