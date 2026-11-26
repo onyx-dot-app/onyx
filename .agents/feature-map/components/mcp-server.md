@@ -286,7 +286,8 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
   `_ACCESS_ROUTES` if OAuth clients may use it
   ([[#oauth-token-route-allowlist]]). Give it a `title` and the read-only
   annotations, and raise `_tool_error` for a failure
-  ([[#errors-are-tool-errors]]). Add a
+  ([[#errors-are-tool-errors]]). Put an output model in
+  `mcp_server/models.py`. Add a
   `server/metrics/mcp_server.py:MCPServerToolName` value for a tool, and update
   `backend/onyx/mcp_server/README.md`.
 - `run-mcp-server-locally` **Run and probe the server locally.** Run `python -m onyx.mcp_server_main`
