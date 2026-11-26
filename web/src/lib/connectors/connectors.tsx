@@ -659,6 +659,14 @@ export const connectorConfigs: Record<
         description: "connectors.gitlab.fields.include_issues.description",
         default: true,
       },
+      {
+        type: "list",
+        label: "connectors.gitlab.fields.excluded_paths.label",
+        name: "excluded_paths",
+        optional: true,
+        default: [],
+        description: "connectors.gitlab.fields.excluded_paths.description",
+      },
     ],
   },
   bitbucket: {

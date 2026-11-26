@@ -7,7 +7,6 @@ Assembling the final ``Document`` stays with each connector, because the source,
 the permission lookup and the metadata are the connector's identity.
 """
 
-import fnmatch
 import io
 import re
 import time
@@ -180,20 +179,6 @@ def drive_item_in_time_window(
         return True
 
     return timestamp_in_window(max(timestamps), start, end)
-
-
-def is_path_excluded(item_path: str, excluded_path_patterns: list[str]) -> bool:
-    """Check if a drive item path matches any of the exclusion glob patterns.
-
-    item_path is the relative path within a drive, e.g. "Engineering/API/report.docx".
-    Matches are attempted against the full path and the filename alone so that
-    patterns like "*.tmp" match files at any depth.
-    """
-    filename = item_path.rsplit("/", 1)[-1] if "/" in item_path else item_path
-    for pattern in excluded_path_patterns:
-        if fnmatch.fnmatch(item_path, pattern) or fnmatch.fnmatch(filename, pattern):
-            return True
-    return False
 
 
 def build_item_relative_path(parent_reference_path: str | None, item_name: str) -> str:

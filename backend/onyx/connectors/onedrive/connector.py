@@ -8,6 +8,7 @@ from typing_extensions import override
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.cross_connector_utils.path_exclusion import is_path_excluded
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
@@ -36,7 +37,6 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
     build_item_relative_path,
     drive_item_in_time_window,
-    is_path_excluded,
 )
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import (

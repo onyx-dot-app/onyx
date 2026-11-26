@@ -1586,6 +1586,22 @@ GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
     os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
 )
 
+# Comma-separated globs that replace the GitLab connector's built-in excluded
+# paths. Unset or empty keeps the built-ins (Helm and env files render unset
+# values as empty strings).
+_GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS_RAW = os.environ.get(
+    "GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS", ""
+).strip()
+GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS: list[str] | None = (
+    None
+    if not _GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS_RAW
+    else [
+        pattern
+        for raw in _GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS_RAW.split(",")
+        if (pattern := raw.strip().rstrip("/"))
+    ]
+)
+
 # Typically set to http://localhost:3000 for OAuth connector development
 CONNECTOR_LOCALHOST_OVERRIDE = os.getenv("CONNECTOR_LOCALHOST_OVERRIDE")
 

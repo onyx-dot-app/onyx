@@ -25,6 +25,7 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+  excluded_paths?: string[];
 }
 
 export interface LumAppsConfig {

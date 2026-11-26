@@ -76,3 +76,34 @@ Self-hosted deployments can also index the text files in the project.
 Set the `GITLAB_CONNECTOR_INCLUDE_CODE_FILES` environment variable to `true` and restart Onyx.
 See [Configuration](/deployment/configuration/configuration).
 The setting applies to every GitLab connector in the deployment.
+
+### Excluding paths
+
+Under **Advanced Options**, **Excluded Paths** lists more files and folders that Onyx skips when it indexes code files.
+It does not apply to merge requests or issues.
+
+Onyx always skips these built-in paths:
+
+- `.github`
+- `.gitlab`
+- `logs`
+- `.pre-commit-config.yaml`
+
+Your patterns are added to the built-in paths. If you leave the list empty, Onyx skips only the built-in paths.
+
+Self-hosted deployments can replace the built-in paths for every GitLab connector.
+Set `GITLAB_CONNECTOR_DEFAULT_EXCLUDED_PATHS` to a comma-separated list of patterns,
+for example `.github,logs,*.svg,*.mp4`, and restart Onyx. If the variable is empty or not set,
+Onyx uses the built-in paths.
+
+Each entry is a glob pattern.
+Onyx tests the pattern against the full path from the project root and against the file or folder name.
+A trailing `/` is ignored.
+
+| Pattern | What it skips |
+| --- | --- |
+| `*.lock` | Files that end in `.lock`, at any depth |
+| `docs/*` | Everything under the `docs` folder |
+| `logs` | Any file or folder named `logs` |
+
+Onyx skips the whole content of an excluded folder.

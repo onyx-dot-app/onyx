@@ -25,6 +25,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.cross_connector_utils.path_exclusion import is_path_excluded
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -57,7 +58,6 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
     build_item_relative_path,
     extract_folder_path_from_parent_reference,
-    is_path_excluded,
     iter_delta_page_files,
     parse_graph_datetime,
     timestamp_in_window,
