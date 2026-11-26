@@ -19,6 +19,7 @@ import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot"
 import { MemoryTagWithTooltip } from "@/lib/timeline/components/headers/MemoryTagWithTooltip";
 import { useRevealOnOpen } from "@/lib/chatScroll/hooks";
 import {
+  findRunStepRow,
   RunStepOpenContext,
   type RunStepOpenState,
   useRunStepOpenState,
@@ -67,6 +68,11 @@ export interface RunCardProps<S extends RunCardStep> {
   appear?: boolean;
   /** Mount folded, even while the run works. */
   startFolded?: boolean;
+  /**
+   * Mount open, as the user's choice: it starts open even when the run
+   * settled, and the fold under text leaves it open.
+   */
+  startOpen?: boolean;
   summary?: RunCardSummary;
   /** The run's open step ids, when the run also shows its steps elsewhere
    * (AgentTimeline's hoisted step cards). Defaults to the card's own. */
@@ -105,9 +111,10 @@ function useStepListScroll(isRunning: boolean) {
         list.scrollTop = list.scrollHeight;
         return;
       }
-      const row = Array.from(
-        list.querySelectorAll<HTMLElement>("[data-run-step-id]")
-      ).find((element) => element.dataset.runStepId === revealIdRef.current);
+      const row =
+        revealIdRef.current === null
+          ? null
+          : findRunStepRow(list, revealIdRef.current);
       if (!row) return;
       const rowBox = row.getBoundingClientRect();
       const listBox = list.getBoundingClientRect();
@@ -162,19 +169,15 @@ export function RunCard<S extends RunCardStep>({
   icon = SvgSparkle,
   appear = true,
   startFolded = false,
+  startOpen = false,
   summary,
   stepOpenState: sharedOpenState,
 }: RunCardProps<S>) {
   const t = useTranslations("chat.messages.timeline");
   const isRunning =
     isActive ?? steps.some((step) => step.status === "streaming");
-  // A card that takes over an open step (AgentTimeline's handover) opens
-  // on it, as if the user had opened it, also after the run settled.
-  const [mountedOnOpenStep] = useState(
-    () => (sharedOpenState?.openIds.size ?? 0) > 0
-  );
   const [isOpen, setIsOpen] = useState(
-    (isRunning || mountedOnOpenStep) && !startFolded
+    startOpen || (isRunning && !startFolded)
   );
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
@@ -209,7 +212,7 @@ export function RunCard<S extends RunCardStep>({
     if (initialOpenId !== undefined) reveal(initialOpenId);
   }, [initialOpenId, reveal]);
   // A card the user folded or opened keeps their choice.
-  const userToggled = useRef(mountedOnOpenStep && !startFolded);
+  const userToggled = useRef(startOpen);
   const toggle = () => {
     userToggled.current = true;
     onToggle(!isOpen);
