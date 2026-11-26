@@ -364,8 +364,8 @@ def _dump_like(document: str, spec: dict[str, Any]) -> str:
     except json.JSONDecodeError:
         return yaml.safe_dump(spec, sort_keys=False, allow_unicode=True)
     if "\n" not in document.strip():
-        return json.dumps(spec, separators=(",", ":"))
-    return json.dumps(spec, indent=2)
+        return json.dumps(spec, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(spec, indent=2, ensure_ascii=False)
 
 
 def drop_uncallable_operations(

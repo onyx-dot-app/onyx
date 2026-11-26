@@ -553,12 +553,13 @@ def test_lines_that_grow_the_stored_spec_over_5_mb_are_refused() -> None:
     assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
 
 
-def test_removing_a_line_from_a_compact_spec_near_5_mb_saves() -> None:
+@pytest.mark.parametrize("char", ["x", "é"])
+def test_removing_a_line_from_a_compact_spec_near_5_mb_saves(char: str) -> None:
     spec = _callable_spec()
     spec["info"]["description"] = ""
     room = 5 * 1024 * 1024 - len(json.dumps(spec, separators=(",", ":")))
-    spec["info"]["description"] = "x" * (room - 10)
-    stored = json.dumps(spec, separators=(",", ":"))
+    spec["info"]["description"] = char * ((room - 10) // len(char.encode()))
+    stored = json.dumps(spec, separators=(",", ":"), ensure_ascii=False)
     lines = [line for line in endpoint_lines(spec) if "DELETE" not in line]
 
     document, saved = _openapi_document(
