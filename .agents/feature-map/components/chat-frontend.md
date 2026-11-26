@@ -104,9 +104,10 @@
   composer shows no subagent status. The input stays usable. While
   subagents run, status polling finds automatic follow-up responses in an idle
   chat and loads them through the normal refresh and replay path. Internal
-  agent results do not become user message bubbles. A "Subagent results received" divider shows above each
-  automatic follow-up response. That response shows its model label but
-  cannot be regenerated.
+  agent results do not become user message bubbles. An automatic follow-up
+  response continues the turn that spawned the agents, as T3 Code shows it: no
+  divider, and the turn's actions show once, under its last answer. That
+  response shows its model label but cannot be regenerated.
 - **A tool call needs approval.** An approval card shows the payload that
   the tool gives for the call (`ToolApprovalRequest.arguments`), or the call's arguments
   when the tool gives none. Every card that waits for a decision shows in one region after
@@ -534,8 +535,9 @@ session's `uncaughtError`, a `SessionError` with the error code and details.
 The reader returns a rejected send’s error when it finishes. Completion and
 Stop both read that result before releasing the input.
 An automatic follow-up response has a hidden `agent_results` question node as
-its parent. `ChatUI` and the shared chat view render that node with
-`web/src/lib/timeline/chat/message/AgentResultsDivider.tsx`, with no message controls. Checks that
+its parent. `ChatUI` keeps that node as an empty row, which takes no room but
+stays the scroll anchor while the follow-up streams. The shared chat view and
+the subagent view skip it. The answer before it hides its footer. Checks that
 look for the last `user` node skip it, and export omits it. A multi-model turn
 is unresolved only while the chain tip's parent is its user message
 (`web/src/lib/timeline/chat/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not

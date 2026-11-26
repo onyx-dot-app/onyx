@@ -12210,9 +12210,6 @@
           "text": "응답이 시간 제한에 도달하여 중지되었습니다."
         }
       },
-      "agentResults": {
-        "received": "하위 에이전트 결과를 받았습니다"
-      },
       "callout": {
         "note": {
           "title": "참고"

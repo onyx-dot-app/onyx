@@ -26,7 +26,6 @@ import type { ChatSubagent } from "@/lib/chat/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
-import AgentResultsDivider from "@/lib/timeline/chat/message/AgentResultsDivider";
 import AgentMessage from "@/lib/timeline/chat/message/messageComponents/AgentMessage";
 import { ErrorBanner } from "@/lib/timeline/chat/message/Resubmit";
 
@@ -164,8 +163,6 @@ export function SubagentView({
                           nodeId={message.nodeId}
                         />
                       );
-                    if (message.type === "agent_results")
-                      return <AgentResultsDivider key={message.nodeId} />;
                     if (
                       message.type === "assistant" ||
                       message.type === "error"

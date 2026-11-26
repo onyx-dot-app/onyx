@@ -46,7 +46,7 @@ export class ChatPage {
   readonly humanMessages: Locator;
   readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
-  readonly agentResultsDividers: Locator;
+  readonly agentResultsFollowUps: Locator;
   /** The chat's activity card, which opens when agents start. */
   readonly activityPanel: Locator;
   /** One Stop button per live agent in the activity card. */
@@ -89,9 +89,8 @@ export class ChatPage {
     this.humanMessages = page.locator("#onyx-human-message");
     this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
-    this.agentResultsDividers = this.scrollContainer.getByText(
-      "Subagent results received",
-      { exact: true }
+    this.agentResultsFollowUps = this.scrollContainer.locator(
+      "[data-agent-results]"
     );
     this.activityPanel = page.getByRole("region", { name: "Activity" });
     this.stopAgentButtons = this.activityPanel.getByRole("button", {

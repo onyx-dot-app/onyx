@@ -12210,9 +12210,6 @@
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
         }
       },
-      "agentResults": {
-        "received": "Résultats des sous-agents reçus"
-      },
       "callout": {
         "note": {
           "title": "Remarque"

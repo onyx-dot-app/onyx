@@ -12210,9 +12210,6 @@
           "text": "回复已达到时间限制，因此已停止。"
         }
       },
-      "agentResults": {
-        "received": "已收到子代理结果"
-      },
       "callout": {
         "note": {
           "title": "备注"

@@ -12210,9 +12210,6 @@
           "text": "La respuesta se detuvo porque alcanzó su límite de tiempo."
         }
       },
-      "agentResults": {
-        "received": "Resultados de subagentes recibidos"
-      },
       "callout": {
         "note": {
           "title": "Nota"

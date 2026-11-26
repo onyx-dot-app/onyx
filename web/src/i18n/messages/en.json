@@ -12210,9 +12210,6 @@
           "text": "The response stopped because it reached its time limit."
         }
       },
-      "agentResults": {
-        "received": "Subagent results received"
-      },
       "callout": {
         "note": {
           "title": "Note"
