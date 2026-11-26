@@ -182,7 +182,8 @@ a command request with the **Ask** policy shows an approval card on the command.
 and body of the request, or only the size of a large body or a body that is not JSON. The user can approve once,
 approve for the rest of the command, or reject. A command that runs in the background, or a chat without a live answer,
 gets no card. Onyx refuses the request, and the agent calls the tool of the action instead.
-The tool shows the approval card. A [custom App](/admins/plugins/craft_apps#custom-apps) has no tools in Chat,
+The tool shows the approval card. If the user approved the action for the rest of the command,
+the request runs without a card. A [custom App](/admins/plugins/craft_apps#custom-apps) has no tools in Chat,
 so a refused request of a custom App cannot run.
 
 | Policy | Effect |
