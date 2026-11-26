@@ -35,9 +35,11 @@ import {
 } from "@opal/components";
 import { toast } from "@opal/layouts";
 import {
+  bulkUpdateSkills,
   isSkillNameConflict,
   setSkillEnabled,
   skillNameConflictNames,
+  type SkillShareUpdatePayload,
 } from "@/lib/skills/api";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -51,8 +53,10 @@ import {
   type InheritOption,
 } from "@/lib/skills/installationPolicy";
 import { skillLimitOf } from "@/lib/skills/limits";
+import { canShareSkill } from "@/lib/skills/sharing";
 import type {
   ChatSkill,
+  CustomSkill,
   Skill,
   SkillInstallationPolicy,
   SkillsList,
@@ -585,5 +589,187 @@ export function useRefreshSkillLists(): () => void {
     void refreshSkillListsChecked(mutate, cache).then((ok) => {
       if (!ok) toast.error(t("page.toasts.listRefreshFailed"));
     });
+  };
+}
+
+/** What the selected rows are: the copy names them. */
+export type BulkSkillNoun = "skill" | "plugin";
+
+export type BulkSkillAction = "share" | "enable" | "disable" | "delete";
+
+export interface SkillBulkFailure {
+  name: string;
+  detail: string;
+}
+
+interface SkillBulkSelectionOptions {
+  items: readonly CustomSkill[];
+  enablement: Pick<SkillEnablement, "isPending" | "enabledOf">;
+  noun: BulkSkillNoun;
+}
+
+export interface SkillBulkSelection {
+  selectedIds: ReadonlySet<string>;
+  select: (ids: ReadonlySet<string>) => void;
+  /** The selected skills, with the enabled state to show. */
+  selectedItems: CustomSkill[];
+  /** The skills the delete confirm lists. */
+  deleteTargets: CustomSkill[];
+  toggleableItems: CustomSkill[];
+  canShareSelected: boolean;
+  busy: boolean;
+  /** A bulk action or a row toggle of the selection is in flight. */
+  locked: boolean;
+  /** A bulk action or a row toggle of the delete targets is in flight. */
+  deleteLocked: boolean;
+  failures: SkillBulkFailure[];
+  sharingOpen: boolean;
+  setSharingOpen: (open: boolean) => void;
+  deleteModal: ModalCreationInterface;
+  /** Opens the delete confirm for exactly these skills. */
+  confirmDelete: (items: CustomSkill[]) => void;
+  run: (
+    action: BulkSkillAction,
+    sharing?: SkillShareUpdatePayload
+  ) => Promise<void>;
+  /** Clears the selection and the failure report, as a filter change must. */
+  reset: () => void;
+}
+
+/** Selection plus bulk share, enable, disable and delete requests for an
+ * admin table of skills or plugins. */
+export function useSkillBulkSelection({
+  items,
+  enablement,
+  noun,
+}: SkillBulkSelectionOptions): SkillBulkSelection {
+  const bulkCopy = useTranslations("skills.bulk");
+  const pluginNounCopy = useTranslations("plugins.bulk");
+  // The strings that name the rows say "plugin" or "skill".
+  const nounCopy = noun === "plugin" ? pluginNounCopy : bulkCopy;
+  const listCopy = useTranslations("skills");
+  const { mutate, cache } = useSWRConfig();
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
+    new Set()
+  );
+  const [busy, setBusy] = useState(false);
+  const [sharingOpen, setSharingOpen] = useState(false);
+  const deleteModal = useCreateModal();
+  const [failures, setFailures] = useState<SkillBulkFailure[]>([]);
+
+  const selectedItems = items
+    .filter((item) => selectedIds.has(item.id))
+    .map((item) => ({ ...item, enabled: enablement.enabledOf(item) }));
+  // Snapshotted on open: the selection clears when the delete lands, while
+  // the card still fades out.
+  const [deleteTargets, setDeleteTargets] = useState<CustomSkill[]>([]);
+  const canShareSelected =
+    selectedItems.length > 0 && selectedItems.every(canShareSkill);
+  const toggleableItems = selectedItems.filter((item) => item.can_toggle);
+  // A row toggle still in flight must settle before a bulk action may race it.
+  const locked =
+    busy || selectedItems.some((item) => enablement.isPending(item.id));
+  // Delete races only a toggle of the skills it deletes, not of the selection.
+  const deleteLocked =
+    busy || deleteTargets.some((item) => enablement.isPending(item.id));
+
+  async function run(
+    action: BulkSkillAction,
+    sharing?: SkillShareUpdatePayload
+  ) {
+    // Delete acts on exactly the skills its confirm listed.
+    const targets =
+      action === "delete"
+        ? deleteTargets
+        : action === "share"
+          ? selectedItems
+          : toggleableItems;
+    if ((action === "delete" ? deleteLocked : locked) || targets.length === 0)
+      return;
+    setBusy(true);
+    setFailures([]);
+    try {
+      const skill_ids = targets.map((item) => item.id);
+      const result = await bulkUpdateSkills(
+        action === "share"
+          ? { action, skill_ids, sharing: sharing ?? {} }
+          : { action, skill_ids }
+      );
+      if (action === "delete") {
+        // A row delete may target a skill outside the selection.
+        const deleted = new Set(result.succeeded);
+        setSelectedIds(
+          (current) => new Set([...current].filter((id) => !deleted.has(id)))
+        );
+        // Drop the deleted skills now, so a failed refresh does not show them.
+        await mutate<SkillsList>(
+          SWR_KEYS.userSkills,
+          (current) =>
+            current && {
+              ...current,
+              customs: current.customs.filter(
+                (skill) => !deleted.has(skill.id)
+              ),
+            },
+          { revalidate: false }
+        );
+      } else {
+        setSelectedIds(
+          new Set(result.failed.map((failure) => failure.skill_id))
+        );
+      }
+      // Names come from the request targets: a skill deleted elsewhere in the
+      // meantime is gone from the refreshed list but must still be reported.
+      setFailures(
+        result.failed.map((failure) => ({
+          name:
+            targets.find((item) => item.id === failure.skill_id)?.name ??
+            failure.skill_id,
+          detail: failure.detail,
+        }))
+      );
+      if (result.succeeded.length)
+        toast.success(nounCopy("updated", { count: result.succeeded.length }));
+      // The report sits at the top of the list, out of view of a row menu.
+      if (result.failed.length)
+        toast.error(
+          nounCopy("partialFailure", { count: result.failed.length })
+        );
+      setSharingOpen(false);
+      deleteModal.toggle(false);
+      if (!(await refreshSkillListsChecked(mutate, cache)))
+        toast.error(listCopy("page.toasts.listRefreshFailed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : nounCopy("failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function confirmDelete(targets: CustomSkill[]) {
+    setDeleteTargets(targets);
+    deleteModal.toggle(true);
+  }
+
+  return {
+    selectedIds,
+    select: setSelectedIds,
+    selectedItems,
+    deleteTargets,
+    toggleableItems,
+    canShareSelected,
+    busy,
+    locked,
+    deleteLocked,
+    failures,
+    sharingOpen,
+    setSharingOpen,
+    deleteModal,
+    confirmDelete,
+    run,
+    reset: () => {
+      setSelectedIds(new Set());
+      setFailures([]);
+    },
   };
 }

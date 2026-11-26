@@ -1,22 +1,15 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { useSWRConfig } from "swr";
 import {
   Button,
   Dropdown,
   MessageCard,
   Text,
-  useCreateModal,
   type DropdownMenuRow,
 } from "@opal/components";
-import {
-  ConfirmationModalLayout,
-  Content,
-  Section,
-  toast,
-} from "@opal/layouts";
+import { ConfirmationModalLayout, Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,
@@ -26,21 +19,13 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 import {
-  bulkUpdateSkills,
-  type SkillShareUpdatePayload,
-} from "@/lib/skills/api";
-import { refreshSkillListsChecked } from "@/lib/skills/cache";
-import type { SkillEnablement } from "@/lib/skills/hooks";
-import { canShareSkill } from "@/lib/skills/sharing";
-import type { CustomSkill, SkillsList } from "@/lib/skills/types";
-import { SWR_KEYS } from "@/lib/swr-keys";
+  useSkillBulkSelection,
+  type BulkSkillNoun,
+  type SkillEnablement,
+} from "@/lib/skills/hooks";
+import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
-
-/** What the selected rows are: the copy names them. */
-export type BulkSkillNoun = "skill" | "plugin";
-
-type BulkAction = "share" | "enable" | "disable" | "delete";
 
 interface SkillBulkActionsOptions {
   items: readonly CustomSkill[];
@@ -63,7 +48,7 @@ export interface SkillBulkActions {
   modals: ReactNode;
 }
 
-/** Selection plus bulk share, enable, disable and delete for an admin table
+/** The bulk toolbar actions, failure report and dialogs for an admin table
  * of skills or plugins. */
 export function useSkillBulkActions({
   items,
@@ -74,108 +59,24 @@ export function useSkillBulkActions({
   const pluginNounCopy = useTranslations("plugins.bulk");
   // The strings that name the rows say "plugin" or "skill".
   const nounCopy = noun === "plugin" ? pluginNounCopy : bulkCopy;
-  const listCopy = useTranslations("skills");
-  const { mutate, cache } = useSWRConfig();
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
-    new Set()
-  );
-  const [busy, setBusy] = useState(false);
-  const [sharingOpen, setSharingOpen] = useState(false);
-  const deleteModal = useCreateModal();
-  const [failures, setFailures] = useState<{ name: string; detail: string }[]>(
-    []
-  );
-
-  const selectedItems = items
-    .filter((item) => selectedIds.has(item.id))
-    .map((item) => ({ ...item, enabled: enablement.enabledOf(item) }));
-  // The skills the delete confirm lists. Snapshotted on open: the selection
-  // clears when the delete lands, while the card still fades out.
-  const [deleteTargets, setDeleteTargets] = useState<CustomSkill[]>([]);
-  const canShareSelected =
-    selectedItems.length > 0 && selectedItems.every(canShareSkill);
-  const toggleableItems = selectedItems.filter((item) => item.can_toggle);
-  // A row toggle still in flight must settle before a bulk action may race it.
-  const locked =
-    busy || selectedItems.some((item) => enablement.isPending(item.id));
-  // Delete races only a toggle of the skills it deletes, not of the selection.
-  const deleteLocked =
-    busy || deleteTargets.some((item) => enablement.isPending(item.id));
-
-  async function run(action: BulkAction, sharing?: SkillShareUpdatePayload) {
-    // Delete acts on exactly the skills its confirm listed.
-    const targets =
-      action === "delete"
-        ? deleteTargets
-        : action === "share"
-          ? selectedItems
-          : toggleableItems;
-    if ((action === "delete" ? deleteLocked : locked) || targets.length === 0)
-      return;
-    setBusy(true);
-    setFailures([]);
-    try {
-      const skill_ids = targets.map((item) => item.id);
-      const result = await bulkUpdateSkills(
-        action === "share"
-          ? { action, skill_ids, sharing: sharing ?? {} }
-          : { action, skill_ids }
-      );
-      if (action === "delete") {
-        // A row delete may target a skill outside the selection.
-        const deleted = new Set(result.succeeded);
-        setSelectedIds(
-          (current) => new Set([...current].filter((id) => !deleted.has(id)))
-        );
-        // Drop the deleted skills now, so a failed refresh does not show them.
-        await mutate<SkillsList>(
-          SWR_KEYS.userSkills,
-          (current) =>
-            current && {
-              ...current,
-              customs: current.customs.filter(
-                (skill) => !deleted.has(skill.id)
-              ),
-            },
-          { revalidate: false }
-        );
-      } else {
-        setSelectedIds(
-          new Set(result.failed.map((failure) => failure.skill_id))
-        );
-      }
-      // Names come from the request targets: a skill deleted elsewhere in the
-      // meantime is gone from the refreshed list but must still be reported.
-      setFailures(
-        result.failed.map((failure) => ({
-          name:
-            targets.find((item) => item.id === failure.skill_id)?.name ??
-            failure.skill_id,
-          detail: failure.detail,
-        }))
-      );
-      if (result.succeeded.length)
-        toast.success(nounCopy("updated", { count: result.succeeded.length }));
-      // The report sits at the top of the list, out of view of a row menu.
-      if (result.failed.length)
-        toast.error(
-          nounCopy("partialFailure", { count: result.failed.length })
-        );
-      setSharingOpen(false);
-      deleteModal.toggle(false);
-      if (!(await refreshSkillListsChecked(mutate, cache)))
-        toast.error(listCopy("page.toasts.listRefreshFailed"));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : nounCopy("failed"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function confirmDelete(targets: CustomSkill[]) {
-    setDeleteTargets(targets);
-    deleteModal.toggle(true);
-  }
+  const {
+    selectedIds,
+    select,
+    selectedItems,
+    deleteTargets,
+    toggleableItems,
+    canShareSelected,
+    busy,
+    locked,
+    deleteLocked,
+    failures,
+    sharingOpen,
+    setSharingOpen,
+    deleteModal,
+    confirmDelete,
+    run,
+    reset,
+  } = useSkillBulkSelection({ items, enablement, noun });
 
   const toggleActions: DropdownMenuRow[] = [];
   if (selectedItems.some((item) => !item.enabled)) {
@@ -321,12 +222,9 @@ export function useSkillBulkActions({
 
   return {
     selectedIds,
-    select: setSelectedIds,
+    select,
     busy,
-    reset: () => {
-      setSelectedIds(new Set());
-      setFailures([]);
-    },
+    reset,
     confirmDelete,
     toolbarActions,
     failures: failureReport,
