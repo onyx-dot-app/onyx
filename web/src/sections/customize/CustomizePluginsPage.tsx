@@ -474,7 +474,8 @@ export default function CustomizePluginsPage() {
               />
             }
             filters={[statusFilter]}
-            actions={bulk.toolbarActions}
+            // A failed list hides the rows, so it hides their bulk actions.
+            actions={skills.error ? undefined : bulk.toolbarActions}
           />
           {list}
           {marketplaces}

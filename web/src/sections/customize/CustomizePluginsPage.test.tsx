@@ -389,6 +389,48 @@ describe("admin page", () => {
     );
   });
 
+  test("a failed list refresh hides the bulk actions of the selection", async () => {
+    window.history.replaceState(null, "", "/admin/plugins");
+    let listCalls = 0;
+    mockFetch({
+      "/api/skills": () =>
+        ++listCalls === 1
+          ? {
+              builtins: [],
+              customs: [plugin("a", "alpha-kit", { user_permission: "OWNER" })],
+            }
+          : new Response(null, { status: 500 }),
+      "/api/marketplaces": { marketplaces: [] },
+      "POST /api/skills/bulk": {
+        succeeded: [],
+        failed: [{ skill_id: "a", detail: "in use" }],
+      },
+    });
+    render(<CustomizePluginsPage />);
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Select alpha-kit" })
+    );
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Delete/ }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Delete",
+      })
+    );
+
+    expect(
+      await screen.findByText("Could not load your plugins.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Share" })
+    ).not.toBeInTheDocument();
+  });
+
   test("a plugin the admin cannot manage cannot be selected", async () => {
     window.history.replaceState(null, "", "/admin/plugins");
     mockFetch({
