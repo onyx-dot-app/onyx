@@ -2,6 +2,8 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import { OperationError } from "./errors.ts";
 
+const MAX_ECHO_CHARS = 200;
+
 export const CHAT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const LOOPBACK = /^(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(?:[:/?#]|$)/i;
@@ -18,7 +20,7 @@ export const normalizeUrl = (raw: string): string => {
   try {
     parsed = new URL(candidate);
   } catch {
-    throw new OperationError("invalid_argument", `Not a valid URL: ${trimmed.slice(0, 200)}`);
+    throw new OperationError("invalid_argument", `Not a valid URL: ${trimmed.slice(0, MAX_ECHO_CHARS)}`);
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
     throw new OperationError("invalid_argument", "Only http and https URLs can be opened.");
@@ -28,7 +30,7 @@ export const normalizeUrl = (raw: string): string => {
 export const chatDir = (root: string, chat: string) => NodePath.resolve(root, chat);
 
 const outside = (relative: string) =>
-  new OperationError("invalid_argument", `The path ${relative.slice(0, 200)} is outside the chat session directory.`);
+  new OperationError("invalid_argument", `The path ${relative.slice(0, MAX_ECHO_CHARS)} is outside the chat session directory.`);
 
 const isWithin = (base: string, path: string) => path === base || path.startsWith(base + NodePath.sep);
 
