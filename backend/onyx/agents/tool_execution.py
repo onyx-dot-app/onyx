@@ -3,6 +3,7 @@
 import threading
 from collections.abc import Sequence
 from concurrent.futures import Future
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
@@ -364,7 +365,7 @@ class ToolBatch:
             invocation = ToolInvocation(
                 call_id=call.id,
                 call_index=self.call_indices.get(call.id, 0),
-                arguments=call.model_copy(deep=True).arguments,
+                arguments=deepcopy(call.arguments),
                 cancellation=self.run.cancellation_signal,
                 # Nothing observes the call, which already returned.
                 update=lambda _progress: None,
@@ -408,7 +409,7 @@ class ToolBatch:
             self._start([call])
             return
         group = [call]
-        arguments = call.model_copy(deep=True).arguments
+        arguments = deepcopy(call.arguments)
         for candidate in self.calls[index + 1 :]:
             if candidate.name != call.name:
                 continue
@@ -423,9 +424,7 @@ class ToolBatch:
                 if tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
                     break
                 continue
-            merged = tool.merge_arguments(
-                arguments, candidate.model_copy(deep=True).arguments
-            )
+            merged = tool.merge_arguments(arguments, deepcopy(candidate.arguments))
             if merged is None:
                 if tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
                     break
@@ -517,7 +516,7 @@ class ToolBatch:
             call_index=self.call_indices[call.id],
             arguments=merged_arguments
             if merged_arguments is not None
-            else call.model_copy(deep=True).arguments,
+            else deepcopy(call.arguments),
             cancellation=cancellation_signal,
             update=update,
             messages=self.context_messages,

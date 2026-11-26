@@ -147,10 +147,11 @@ without one.
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
 such as arguments, `call_index`, the cancellation signal and the progress
-callback, comes in `agents/tools.py:ToolInvocation`. `invocation.messages` is
-the model's view after compaction: one tuple of the run's message objects
-that all calls of the step share (`agents/tool_execution.py:ToolBatch`).
-Tools only read it, and read result details from `recorded_results`.
+callback, comes in `agents/tools.py:ToolInvocation`. `invocation.arguments` is
+the tool's own copy. `invocation.messages` is the model's view after
+compaction: one tuple of the run's message objects, tool results with their
+details, that all calls of the step share (`agents/tool_execution.py:ToolBatch`).
+Tools only read it.
 `invocation.recorded_results` holds
 every recorded tool result before the call, with details and without
 compaction: earlier steps, then this step's completed results. Tools only read
