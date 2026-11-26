@@ -1407,14 +1407,15 @@ export class BrowserService {
     const chat = viewer.chat;
     switch (message.type) {
       case "selectTab": {
-        const id = typeof message.tab === "string" ? message.tab : "";
+        const id = optString(message, "tab") ?? "";
         const tab = chat.tabs.get(id);
         if (!tab) throw new OperationError("tab_not_found", "That tab is not open in this chat.");
         await this.selectTab(viewer, tab);
         return;
       }
       case "newTab": {
-        const url = typeof message.url === "string" && message.url.trim() !== "" ? normalizeUrl(message.url) : undefined;
+        const raw = optString(message, "url");
+        const url = raw !== undefined && raw.trim() !== "" ? normalizeUrl(raw) : undefined;
         const tab = await this.createTab(chat, false);
         // A viewer that left meanwhile was already released; it must not take the new tab.
         if (viewer.closed) return;
@@ -1426,7 +1427,7 @@ export class BrowserService {
         return;
       }
       case "closeTab": {
-        const id = typeof message.tab === "string" ? message.tab : "";
+        const id = optString(message, "tab") ?? "";
         const tab = chat.tabs.get(id);
         if (!tab) throw new OperationError("tab_not_found", "That tab is not open in this chat.");
         const owner = tab.control.controller;
@@ -1459,19 +1460,15 @@ export class BrowserService {
       case "dialog": {
         if (tab.control.controller !== viewer.id)
           throw new OperationError("human_control", "Take control of this tab first.");
-        if (typeof message.accept !== "boolean") throw invalid("accept must be true or false.");
-        await this.resolveDialog(
-          tab,
-          message.accept,
-          typeof message.promptText === "string" ? message.promptText : undefined,
-        );
+        const accept = optBoolean(message, "accept");
+        if (accept === undefined) throw invalid("accept must be true or false.");
+        await this.resolveDialog(tab, accept, optString(message, "promptText"));
         return;
       }
       case "fileChooser": {
         const open = tab.fileChooser;
-        const paths = Array.isArray(message.paths) ? message.paths : null;
-        if (paths === null || paths.some((path) => typeof path !== "string"))
-          throw invalid("paths must be a list of strings.");
+        const paths = optStrings(message, "paths");
+        if (paths === undefined) throw invalid("paths must be a list of strings.");
         // Checked again after the path checks: control can change meanwhile.
         const offered = () =>
           open !== null &&
@@ -1481,7 +1478,7 @@ export class BrowserService {
           tab.control.controller === viewer.id;
         if (!offered()) throw new OperationError("failed", "That file picker is no longer open.");
         const files = await Promise.all(
-          (paths as Array<string>).map((path) => resolveInChat(this.sessionsRoot, chat.id, path)),
+          paths.map((path) => resolveInChat(this.sessionsRoot, chat.id, path)),
         );
         if (!open || !offered()) throw new OperationError("failed", "That file picker is no longer open.");
         if (files.length > 0)
@@ -1570,9 +1567,9 @@ export class BrowserService {
         });
         return;
       case "key": {
-        const key = typeof message.key === "string" ? message.key : "";
-        const code = typeof message.code === "string" ? message.code : "";
-        const text = typeof message.text === "string" ? message.text : undefined;
+        const key = optString(message, "key") ?? "";
+        const code = optString(message, "code") ?? "";
+        const text = optString(message, "text");
         if (message.action === "up") {
           await session.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, modifiers });
           viewer.pressedKeys.delete(code || key);
@@ -1594,19 +1591,21 @@ export class BrowserService {
         viewer.pressedKeys.set(code || key, { key, code });
         return;
       }
-      case "text":
-        if (typeof message.text === "string" && message.text.length > 0) {
-          await session.send("Input.insertText", { text: message.text.slice(0, 10_000) });
-        }
+      case "text": {
+        const text = optString(message, "text");
+        if (text) await session.send("Input.insertText", { text: text.slice(0, 10_000) });
         return;
+      }
       // A stalled navigation must not block a corrected URL or further viewer input.
-      case "navigate":
-        if (typeof message.url === "string") {
-          const url = normalizeUrl(message.url);
+      case "navigate": {
+        const raw = optString(message, "url");
+        if (raw !== undefined) {
+          const url = normalizeUrl(raw);
           await this.leaveBusyPage(tab, session);
           this.trackViewerNavigation(tab, viewer, tab.page.goto(url, VIEWER_NAVIGATION_OPTIONS), url);
         }
         return;
+      }
       case "history":
         await this.leaveBusyPage(tab, session);
         this.trackViewerNavigation(
