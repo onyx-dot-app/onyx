@@ -868,6 +868,7 @@ def delete_user_file_impl(
         document_index: DocumentIndex | None = None
         chunk_count_from_db: int | None = None
         file_id: str = ""
+        preview_file_id: str | None = None
 
         # Phase 1: short read session — extract everything needed for slow I/O
         with get_session_with_current_tenant() as db_session:
@@ -879,6 +880,7 @@ def delete_user_file_impl(
                 return
 
             file_id = user_file.file_id
+            preview_file_id = user_file.preview_file_id
             chunk_count_from_db = user_file.chunk_count
 
             if not DISABLE_VECTOR_DB:
@@ -919,6 +921,8 @@ def delete_user_file_impl(
         file_store = get_default_file_store()
         blob_deleted = True
         try:
+            if preview_file_id is not None:
+                file_store.delete_file(preview_file_id, error_on_missing=False)
             file_store.delete_file(file_id, error_on_missing=False)
             file_store.delete_file(
                 user_file_id_to_plaintext_file_name(_as_uuid(user_file_id)),

@@ -13101,9 +13101,6 @@
       "lineCount": {
         "label": "{count, plural, one {# línea} other {# líneas}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# palabra} other {# palabras}}"
-      },
       "copyButton": {
         "tooltip": "Copiar el contenido"
       },
@@ -13127,6 +13124,13 @@
       "renderError": {
         "title": "No se puede previsualizar este archivo",
         "description": "El archivo no se puede mostrar aquí. Descarga el archivo para abrirlo."
+      },
+      "unavailable": {
+        "title": "No hay vista previa para este archivo",
+        "description": "No se puede crear una vista previa de este archivo. Descarga el archivo para abrirlo."
+      },
+      "preparing": {
+        "status": "Preparando la vista previa. Esto puede tardar un poco."
       },
       "unsupported": {
         "title": "La vista previa de este tipo de archivo no está disponible actualmente",
@@ -13175,30 +13179,6 @@
         },
         "error": {
           "description": "No se pudo cargar el archivo PDF."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Controles de presentación"
-        },
-        "thumbnails": {
-          "toggle": "Mostrar u ocultar miniaturas de diapositivas",
-          "resize": "Cambiar el tamaño de las miniaturas"
-        },
-        "slides": {
-          "label": "Diapositivas"
-        },
-        "previous": {
-          "label": "Diapositiva anterior"
-        },
-        "next": {
-          "label": "Diapositiva siguiente"
-        },
-        "slide": {
-          "counter": "Diapositiva {current} de {total}"
-        },
-        "empty": {
-          "label": "Esta presentación no tiene diapositivas"
         }
       }
     },

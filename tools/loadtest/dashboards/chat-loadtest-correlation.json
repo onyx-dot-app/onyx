@@ -140,6 +140,77 @@
           "legendFormat": "{{name}}"
         }
       ]
+    },
+    {
+      "title": "Server RSS (MiB) — $workload",
+      "description": "Resident memory of each pod. Working set includes page cache; RSS does not.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "fieldConfig": { "defaults": { "unit": "mbytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(container_memory_rss{namespace=\"$namespace\", pod=~\"$workload.*\", container!=\"\"}) by (pod) / 1024 / 1024",
+          "legendFormat": "{{pod}}"
+        }
+      ]
+    },
+    {
+      "title": "Peak RSS, restarts and OOM kills in the time range — $workload",
+      "description": "Per pod over the selected range: peak RSS (the sum of each container's peak, from every scraped sample; a restarted container counts once), the count of container restarts, and 1 when a container's last termination was OOMKilled at any time in the range. Needs cAdvisor and kube-state-metrics.",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(max(max_over_time(container_memory_rss{namespace=\"$namespace\", pod=~\"$workload.*\", container!=\"\"}[$__range])) by (pod, container)) by (pod) / 1024 / 1024",
+          "legendFormat": "peak RSS MiB",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", pod=~\"$workload.*\"}[$__range])) by (pod)",
+          "legendFormat": "restart count",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "refId": "C",
+          "expr": "max(max_over_time(kube_pod_container_status_last_terminated_reason{namespace=\"$namespace\", pod=~\"$workload.*\", reason=\"OOMKilled\"}[$__range])) by (pod)",
+          "legendFormat": "last termination OOMKilled, seen in range",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [{ "id": "merge" }]
+    },
+    {
+      "title": "Workload per finished turn, by scenario",
+      "description": "Code programs, searches and printed program characters per finished turn. The load client adds a turn's counts when it finishes. Equal values across compared builds show equal workload.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 38 },
+      "fieldConfig": { "defaults": { "unit": "none", "custom": { "drawStyle": "line", "fillOpacity": 5 } } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "onyx_loadtest_code_programs / clamp_min(onyx_loadtest_finished, 1)",
+          "legendFormat": "{{scenario}} programs"
+        },
+        {
+          "refId": "B",
+          "expr": "onyx_loadtest_search_calls / clamp_min(onyx_loadtest_finished, 1)",
+          "legendFormat": "{{scenario}} searches"
+        },
+        {
+          "refId": "C",
+          "expr": "onyx_loadtest_code_output_chars / clamp_min(onyx_loadtest_finished, 1) / 1000",
+          "legendFormat": "{{scenario}} program output (thousand chars)"
+        }
+      ]
     }
   ]
 }

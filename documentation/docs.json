@@ -461,6 +461,7 @@
                   "developers/api_reference/chat/get_chat_session",
                   "developers/api_reference/chat/get_user_chat_sessions",
                   "developers/api_reference/chat/fetch_chat_file",
+                  "developers/api_reference/chat/make_chat_file_preview",
                   "developers/api_reference/chat/delete_chat_session_by_id",
                   "developers/api_reference/chat/delete_all_chat_sessions",
                   "developers/api_reference/chat/end_incognito_session"

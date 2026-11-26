@@ -13101,9 +13101,6 @@
       "lineCount": {
         "label": "{count, plural, one {# Zeile} other {# Zeilen}}"
       },
-      "wordCount": {
-        "label": "{count, plural, one {# Wort} other {# Wörter}}"
-      },
       "copyButton": {
         "tooltip": "Inhalt kopieren"
       },
@@ -13127,6 +13124,13 @@
       "renderError": {
         "title": "Für diese Datei ist keine Vorschau möglich",
         "description": "Die Datei kann hier nicht angezeigt werden. Laden Sie die Datei herunter, um sie zu öffnen."
+      },
+      "unavailable": {
+        "title": "Keine Vorschau für diese Datei",
+        "description": "Für diese Datei kann keine Vorschau erstellt werden. Laden Sie die Datei herunter, um sie zu öffnen."
+      },
+      "preparing": {
+        "status": "Die Vorschau wird vorbereitet. Dies kann einen Moment dauern."
       },
       "unsupported": {
         "title": "Die Vorschau für diesen Dateityp wird derzeit nicht unterstützt",
@@ -13175,30 +13179,6 @@
         },
         "error": {
           "description": "Die PDF-Datei konnte nicht geladen werden."
-        }
-      },
-      "pptx": {
-        "controls": {
-          "label": "Präsentationssteuerung"
-        },
-        "thumbnails": {
-          "toggle": "Folienminiaturen ein-/ausblenden",
-          "resize": "Folienminiaturen skalieren"
-        },
-        "slides": {
-          "label": "Folien"
-        },
-        "previous": {
-          "label": "Vorherige Folie"
-        },
-        "next": {
-          "label": "Nächste Folie"
-        },
-        "slide": {
-          "counter": "Folie {current} von {total}"
-        },
-        "empty": {
-          "label": "Keine Folien in dieser Präsentation"
         }
       }
     },
