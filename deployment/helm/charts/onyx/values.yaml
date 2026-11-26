@@ -2428,6 +2428,50 @@ sandboxPod:
       value: sandbox
       effect: NoSchedule
 
+# -- Harness sandbox pods: the container backend of chat sandbox tools, for
+# clusters without KVM nodes. One pod per user sandbox, from the
+# harness-sandbox-pod PodTemplate, running the craft-runtime container image.
+# Renders with craft.sandboxRuntime auto or pod (not firecracker or off), on
+# Onyx v6 and later. Does not need ENABLE_CRAFT. With auto, a sandbox starts on
+# Firecracker while a KVM node serves the template, else on a pod. A running
+# sandbox stays on its backend until it stops.
+harnessSandbox:
+  enabled: true
+  image:
+    repository: onyxdotapp/craft-runtime
+    # Empty: "<global.version or appVersion>-container".
+    tag: ""
+    # Empty: global.pullPolicy.
+    pullPolicy: ""
+  # Optional, cluster-provided RuntimeClass, for example "gvisor" (GKE
+  # Sandbox). gVisor has partial iptables support: set
+  # sandboxPod.netAdminLockdown=false and use a CNI that enforces
+  # NetworkPolicy (for example Dataplane V2). Add the RuntimeClass overhead
+  # to the node memory budget.
+  runtimeClassName: ""
+  # The guest daemon's TLS port in each pod.
+  daemonPort: 8052
+  # Scheduling. No nodeSelector by default, so the pods run on any node; the
+  # default affinity prefers a dedicated sandbox pool (onyx.app/workload=sandbox).
+  nodeSelector: {}
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: onyx.app/workload
+                operator: In
+                values: ["sandbox"]
+  # Empty: sandboxPod.tolerations.
+  tolerations: []
+  volumes:
+    tmpSizeLimit: 5Gi
+    skillsSizeLimit: 2Gi
+    shmSizeLimit: 1Gi
+  # More NetworkPolicy peers (`from` entries) that may reach the daemon port.
+  extraDaemonClients: []
+
 # -- Pre-pull the sandbox image onto the sandbox node pool (DaemonSet), so a
 # user's first sandbox on a node doesn't pay the image pull (~31s measured).
 # Image and pull policy are shared with the sandbox-pod PodTemplate; scheduling

@@ -13,6 +13,11 @@ data:
   {{- if $sandboxRuntime }}
   SANDBOX_RUNTIME: {{ $sandboxRuntime | quote }}
   {{- end }}
+  {{- if include "onyx.harnessSandboxEnabled" . }}
+  SANDBOX_CONTAINER_HARNESS: "true"
+  SANDBOX_HARNESS_IMAGE: {{ include "onyx.harnessSandboxImage" . | quote }}
+  SANDBOX_HARNESS_DAEMON_PORT: {{ include "onyx.harnessSandboxDaemonPort" . | quote }}
+  {{- end }}
   {{- if include "onyx.craftFcEnabled" . }}
   {{- if not (index .Values.configMap "SANDBOX_FC_TEMPLATE") }}
   SANDBOX_FC_TEMPLATE: {{ include "onyx.craftFcRootfsVersion" . | quote }}
@@ -51,7 +56,8 @@ data:
 {{- $skipBundledS3Key := and (or (eq (include "onyx.objectStore.enabled" $) "true") $.Values.minio.enabled) (or (eq $key "S3_ENDPOINT_URL") (eq $key "S3_LEGACY_ENDPOINT_URL")) }}
 {{- $skipCraftApiKey := and $sandboxProxy (eq $key "ONYX_SERVER_URL") }}
 {{- $skipSandboxRuntimeKey := and $sandboxRuntime (eq $key "SANDBOX_RUNTIME") }}
-{{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) (not $skipRedisTlsKey) (not $skipBundledS3Key) (not $skipCraftApiKey) (not $skipSandboxRuntimeKey) }}
+{{- $skipHarnessKey := and (include "onyx.harnessSandboxEnabled" $) (has $key (list "SANDBOX_CONTAINER_HARNESS" "SANDBOX_HARNESS_IMAGE" "SANDBOX_HARNESS_DAEMON_PORT")) }}
+{{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) (not $skipRedisTlsKey) (not $skipBundledS3Key) (not $skipCraftApiKey) (not $skipSandboxRuntimeKey) (not $skipHarnessKey) }}
   {{ $key }}: "{{ $value }}"
 {{- end }}
 {{- end }}

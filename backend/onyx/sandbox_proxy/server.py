@@ -49,6 +49,7 @@ from onyx.sandbox_proxy.sandbox_identity.signed_lookups import (
 from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
+    SANDBOX_FIRECRACKER_ENABLED,
     SANDBOX_NAMESPACE,
     SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS,
     SANDBOX_PROXY_HEALTHZ_PORT,
@@ -61,7 +62,6 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_RELAY_TLS_KEY_PATH,
     SANDBOX_PROXY_RELAY_TLS_PORT,
     SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
-    SANDBOX_RUNTIME,
 )
 from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.logger import setup_logger
@@ -280,7 +280,7 @@ def _build_destination_policy() -> DestinationPolicyConfig:
 def _relay_tls_config() -> RelayTLSConfig | None:
     if not SANDBOX_PROXY_RELAY_TLS_PORT:
         return None
-    if not SANDBOX_RUNTIME.uses_firecracker:
+    if not SANDBOX_FIRECRACKER_ENABLED:
         raise ValueError(
             "SANDBOX_PROXY_RELAY_TLS_PORT needs SANDBOX_RUNTIME=firecracker or auto"
         )
@@ -380,7 +380,7 @@ def main() -> int:
                 placement=CacheSandboxPlacementLookup(cache_factory),
                 replay_guard=CacheReplayGuard(cache_factory),
             )
-            if SANDBOX_RUNTIME.uses_firecracker
+            if SANDBOX_FIRECRACKER_ENABLED
             else None
         )
         gate = GateAddon(

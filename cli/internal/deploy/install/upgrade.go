@@ -110,6 +110,8 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel)))
 	in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 		in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+	in.sandbox = !in.lite && (manifest.IncludeSandbox ||
+		in.overlayOnDisk(filepath.Base(deployfiles.SandboxOverlay.DestRel)))
 	in.dev = !in.prod && (in.opts.Dev || manifest.Dev ||
 		in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel)))
 	in.resolveProject(manifest)
@@ -160,6 +162,9 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		if in.craft {
 			craftNote = ", Craft: true"
 		}
+		if in.sandbox {
+			craftNote += ", Sandbox containers: true"
+		}
 		if in.dev {
 			craftNote += ", Dev overlay: true"
 		}
@@ -202,12 +207,12 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.infof("Refreshing config files to match %s...", configRef)
 	}
 	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
+	if err := in.materializeFiles(ctx, configRef, in.managedFileSet(), manifest, fetcher); err != nil {
 		return err
 	}
 	in.noteComposeOverride()
 
-	if in.craft {
+	if in.craft || in.sandbox {
 		in.ensureCraftResources(ctx)
 	}
 
@@ -275,6 +280,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	}
 	in.recordProject(manifest)
 	manifest.IncludeCraft = in.craft
+	manifest.IncludeSandbox = in.sandbox
 	manifest.Dev = in.dev
 	if !hadManifest || manifest.InstalledAt.IsZero() {
 		manifest.InstalledAt = now

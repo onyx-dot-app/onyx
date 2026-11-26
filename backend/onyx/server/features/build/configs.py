@@ -59,17 +59,20 @@ if _env_sandbox_backend:
 
 
 class SandboxRuntime(str, Enum):
-    """How sandboxes run on a Kubernetes backend. Mirrors Helm `craft.sandboxRuntime`."""
+    """How harness sandboxes run. Mirrors Helm `craft.sandboxRuntime`; the
+    backend choice per sandbox is `sandbox.harness_factory.harness_backend_for`."""
 
+    # The container backend only (with SANDBOX_CONTAINER_HARNESS=true).
     POD = "pod"
     # Adds relay-signed VM identity in the egress proxy and host-node key
     # registration; pod sandboxes keep working beside it. Chat sandbox tools
-    # are always offered.
+    # are always offered, on Firecracker only.
     FIRECRACKER = "firecracker"
-    # Firecracker wiring as above, but chat sandbox tools are offered only
-    # while a live registered node has the template (microvm/availability.py).
+    # Firecracker while a live registered node has the template
+    # (microvm/availability.py), else the container backend when it is on.
+    # With SANDBOX_BACKEND=docker: the container backend only.
     AUTO = "auto"
-    # No sandbox parts are deployed. The backend behaves as with `pod`.
+    # No sandbox parts are deployed: no harness sandboxes.
     OFF = "off"
 
     @property
@@ -88,12 +91,17 @@ if _env_sandbox_runtime:
             f"{', '.join(r.value for r in SandboxRuntime)}."
         )
 if (
-    SANDBOX_RUNTIME.uses_firecracker
+    SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER
     and SANDBOX_BACKEND is not SandboxBackend.KUBERNETES
 ):
     raise ValueError(
         f"SANDBOX_RUNTIME={SANDBOX_RUNTIME.value} requires SANDBOX_BACKEND=kubernetes."
     )
+# Firecracker runs only on Kubernetes: `auto` with SANDBOX_BACKEND=docker
+# (Compose) never uses it.
+SANDBOX_FIRECRACKER_ENABLED = (
+    SANDBOX_RUNTIME.uses_firecracker and SANDBOX_BACKEND is SandboxBackend.KUBERNETES
+)
 
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [
@@ -302,6 +310,11 @@ SANDBOX_DOCKER_RUNTIME = os.environ.get("SANDBOX_DOCKER_RUNTIME", "").strip()
 # Docker containers with SANDBOX_BACKEND=docker).
 SANDBOX_CONTAINER_HARNESS = (
     os.environ.get("SANDBOX_CONTAINER_HARNESS", "false").lower() == "true"
+)
+# `firecracker` and `off` never use the container backend.
+CONTAINER_HARNESS_ENABLED = SANDBOX_CONTAINER_HARNESS and SANDBOX_RUNTIME in (
+    SandboxRuntime.AUTO,
+    SandboxRuntime.POD,
 )
 # The craft-runtime `container` image: the harness userspace plus the guest
 # daemon.

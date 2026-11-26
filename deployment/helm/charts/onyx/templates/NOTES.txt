@@ -40,3 +40,10 @@ Firecracker:
 
   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=craft-fc-preflight
 {{- end }}
+{{- if include "onyx.harnessSandboxEnabled" . }}
+
+Chat sandbox tools can run in harness sandbox pods (harnessSandbox) in
+namespace {{ .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}{{ if eq (include "onyx.craftSandboxRuntime" .) "auto" }}, when no KVM node serves Firecracker{{ end }}.
+Each user sandbox is one pod from the craft-runtime container image. Set
+harnessSandbox.enabled=false to turn them off.
+{{- end }}

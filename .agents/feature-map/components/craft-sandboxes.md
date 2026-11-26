@@ -475,15 +475,30 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   attempt (`RunningInstance.files_identity`), so they outlive the restart.
   An unusable container is replaced by the next attempt. Saves stream CaptureSession into the file store and back
   (`.../container/transfer.py:FileStoreSessionTransfer`). The Celery sweep
-  (`SWEEP_HARNESS_CONTAINERS`, beat only with `SANDBOX_CONTAINER_HARNESS`)
-  deletes containers without a record after the resource grace time and
-  sends `STOP_IDLE_HARNESS_CONTAINER`, which saves every session and deletes
-  the container. `.../sandbox/harness_factory.py:get_container_harness_sandbox` builds
-  it; no harness call selects it yet.
-- `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
-  `SANDBOX_RUNTIME=firecracker` or `auto`, and `SANDBOX_FC_TEMPLATE`
-  (`backend/onyx/microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the source image
-  tag of the root drive. Each node names its templates
+  (`SWEEP_HARNESS_CONTAINERS`, beat only with
+  `backend/onyx/server/features/build/configs.py:CONTAINER_HARNESS_ENABLED`) deletes containers without a
+  record after the resource grace time and sends
+  `STOP_IDLE_HARNESS_CONTAINER`, which saves every session and deletes the
+  container. `.../sandbox/harness_factory.py:get_container_harness_sandbox`
+  builds it. On Kubernetes the pods start from
+  `deployment/helm/charts/onyx/templates/harness-sandbox-podtemplate.yaml`
+  (`harnessSandbox` values; daemon port ingress in
+  `deployment/helm/charts/onyx/templates/network-policy-harness-sandbox-daemon.yaml`);
+  on Compose the `deployment/docker_compose/docker-compose.sandbox.yml` overlay (`onyx-cli deploy install
+  --include-sandbox`) turns it on.
+- `.../sandbox/harness_factory.py:get_harness_sandbox` picks the backend.
+  `CONTAINER_HARNESS_ENABLED` is `SANDBOX_CONTAINER_HARNESS=true` with
+  `SANDBOX_RUNTIME` `auto` or `pod`. Firecracker
+  (`backend/onyx/microvm/configs.py:HARNESS_SANDBOX_ENABLED`) needs
+  `firecracker` or `auto` on Kubernetes (`SANDBOX_FIRECRACKER_ENABLED`:
+  `auto` with `SANDBOX_BACKEND=docker` never uses it) and `SANDBOX_FC_TEMPLATE`.
+  With both on, `.../sandbox/harness_selection.py:SelectingHarnessSandbox`
+  sends each call to its sandbox's backend: a container record or (while a
+  live node serves) a placement keeps the sandbox where it runs; else a new
+  start goes to Firecracker when `availability.firecracker_available`, else
+  to a container, with a short choice mark so API pods agree. A Firecracker
+  capacity error does not fall back. Purges run on both. `SANDBOX_FC_TEMPLATE`
+  is the source image tag of the root drive. Each node names its templates
   `<tag>-<key hash[:12]>` and the hash differs per node, so
   `backend/onyx/microvm/models.py:NodeInfo.template` takes an exact version or that node's newest
   compatible template of the tag. Opencode sessions keep

@@ -22,6 +22,8 @@ on:
       - "backend/tests/external_dependency_unit/sandbox_proxy/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.craft.yml"
+      - "deployment/docker_compose/docker-compose.sandbox.yml"
+      - "backend/tests/unit/onyx/server/features/craft/sandbox/test_harness_compose_overlay.py"
       - "deployment/docker_compose/env.template"
       - "deployment/docker_compose/install.sh"
       - ".github/workflows/pr-craft-compose-tests.yml"
@@ -78,6 +80,18 @@ jobs:
           echo "$rendered" | grep -q "sandbox-proxy:"
           echo "$rendered" | grep -A1 "sandbox_proxy_ca:" | grep -q "name: sandbox_proxy_ca"
           echo "$rendered" | grep -A1 "onyx_craft_sandbox:" | grep -q "name: onyx_craft_sandbox"
+          # The chat sandbox overlay, alone and layered with Craft.
+          for craft in "" "-f docker-compose.craft.yml"; do
+            # shellcheck disable=SC2086 # $craft is zero or two words.
+            sandbox=$(docker compose \
+              -f docker-compose.yml \
+              $craft \
+              -f docker-compose.sandbox.yml \
+              --env-file env.template config)
+            echo "$sandbox" | grep -q "SANDBOX_CONTAINER_HARNESS: \"true\""
+            echo "$sandbox" | grep -q "SANDBOX_RUNTIME: auto"
+            echo "$sandbox" | grep -q "image: onyxdotapp/craft-runtime:.*-container"
+          done
 
       # Pins the contract install.sh --include-craft's `inspect`-guarded block
       # relies on: after `create`, `inspect` exits 0 for both network and
@@ -104,6 +118,7 @@ jobs:
             --durations=8 \
             backend/tests/unit/sandbox_proxy/ \
             backend/tests/unit/onyx/server/features/craft/sandbox/test_docker_manager_config.py \
+            backend/tests/unit/onyx/server/features/craft/sandbox/test_harness_compose_overlay.py \
             backend/tests/unit/onyx/server/features/craft/sandbox/test_opencode_config.py
 
       - name: Run DockerEventsLookup external-dep tests

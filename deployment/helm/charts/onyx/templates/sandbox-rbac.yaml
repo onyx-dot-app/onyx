@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- if eq (include "onyx.sandboxPodsEnabled" .) "true" }}
 {{- $craft := .Values.craft | default dict }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $saName := (index .Values.configMap "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}

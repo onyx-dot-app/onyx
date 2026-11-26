@@ -30,6 +30,7 @@ every prompt, including Lite mode).`,
 		Example: `  onyx-cli deploy install
   onyx-cli deploy install --lite --no-prompt
   onyx-cli deploy install --include-craft
+  onyx-cli deploy install --include-sandbox
   onyx-cli deploy install --dev
   onyx-cli deploy install --tag v4.4.6
   onyx-cli deploy install --dry-run`,
@@ -54,6 +55,8 @@ every prompt, including Lite mode).`,
 	// Flag names match install.sh so bootstrap passthrough keeps working.
 	cmd.Flags().BoolVar(&opts.Lite, "lite", false, "Deploy Onyx Lite (no OpenSearch, Redis, or model servers)")
 	cmd.Flags().BoolVar(&opts.IncludeCraft, "include-craft", false, "Enable Onyx Craft (AI-powered web app building)")
+	cmd.Flags().BoolVar(&opts.IncludeSandbox, "include-sandbox", false, "Run chat sandboxes as Docker containers (mounts the Docker socket on api_server and background; trusted hosts only)")
+	cmd.Flags().StringVar(&opts.SandboxDockerRuntime, "sandbox-docker-runtime", "", "OCI runtime of the chat sandbox containers, for example runsc (gVisor, not yet supported); needs --include-sandbox")
 	cmd.Flags().BoolVar(&opts.Prod, "prod", false, "Restart an existing prod deployment (the standalone docker-compose.prod.yml); fresh prod installs are not created here")
 	cmd.Flags().BoolVar(&opts.Dev, "dev", false, "Stack docker-compose.dev.yml on the deployment: publish the API, Postgres, Redis, OpenSearch, object store and model server ports on this host (development and testing)")
 	cmd.Flags().StringVar(&opts.Project, "project", "", `Docker compose project name (default: recorded in the manifest, else "onyx")`)

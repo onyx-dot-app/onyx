@@ -21,8 +21,8 @@ from onyx.document_index.opensearch.constants import (
     RESOURCE_CHECK_INTERVAL_SECONDS,
 )
 from onyx.server.features.build.configs import (
+    CONTAINER_HARNESS_ENABLED,
     ENABLE_CRAFT,
-    SANDBOX_CONTAINER_HARNESS,
     SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
 )
 from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
@@ -612,7 +612,7 @@ if ENABLE_CRAFT:
         tasks_to_schedule.append(_sandbox_reconcile_task)
 
 
-if SANDBOX_CONTAINER_HARNESS:
+if CONTAINER_HARNESS_ENABLED:
     # Cluster-wide: one runtime listing covers every tenant's containers.
     _harness_sweep_interval = timedelta(minutes=1)
     _harness_sweep_task: dict[str, Any] = {

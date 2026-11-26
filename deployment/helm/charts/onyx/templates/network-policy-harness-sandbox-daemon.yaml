@@ -1,0 +1,41 @@
+{{- if eq (include "onyx.harnessSandboxEnabled" .) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $harness := .Values.harnessSandbox | default dict }}
+# Only the Onyx pods that call harness sandboxes reach the guest daemon port.
+# The daemon also checks TLS and a per-sandbox key; this policy keeps other
+# pods (and other sandboxes) off the port. Enforced only where the CNI honors
+# NetworkPolicy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.resourceName" (list . "harness-sandbox-daemon") }}
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+      onyx.app/sandbox-kind: harness
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- /* api-server: chat tools and purges. heavy: the sandbox queue
+        (idle stop, orphan sweep). light: chat retention purges.
+        scheduled-tasks: scheduled task runs. */}}
+        {{- range $app := list "api-server" "celery-worker-heavy" "celery-worker-light" "celery-worker-scheduled-tasks" }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: {{ $app }}
+        {{- end }}
+        {{- range $harness.extraDaemonClients | default list }}
+        - {{- toYaml . | nindent 10 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.harnessSandboxDaemonPort" . }}
+{{- end }}

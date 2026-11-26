@@ -79,6 +79,7 @@ func RunInstall(ctx context.Context, deps Deps, opts Options) error {
 	in.cancel = cancel
 	in.lite = opts.Lite
 	in.craft = opts.IncludeCraft
+	in.sandbox = opts.IncludeSandbox
 	in.prod = opts.Prod
 	in.dev = opts.Dev
 	err := in.runInstall(ctx)
@@ -92,6 +93,14 @@ func (in *installer) runInstall(ctx context.Context) error {
 	if in.opts.Lite && in.opts.IncludeCraft {
 		return exitcodes.New(exitcodes.BadRequest,
 			"--lite and --include-craft cannot be used together: Craft requires services (OpenSearch, Redis, background workers) that lite mode disables")
+	}
+	if in.opts.Lite && in.opts.IncludeSandbox {
+		return exitcodes.New(exitcodes.BadRequest,
+			"--lite and --include-sandbox cannot be used together: chat sandboxes need the background workers that lite mode disables")
+	}
+	if in.opts.SandboxDockerRuntime != "" && !in.opts.IncludeSandbox {
+		return exitcodes.New(exitcodes.BadRequest,
+			"--sandbox-docker-runtime needs --include-sandbox")
 	}
 	if in.opts.Prod && in.opts.Lite {
 		return exitcodes.New(exitcodes.BadRequest,
@@ -229,9 +238,12 @@ func (in *installer) runInstall(ctx context.Context) error {
 		}
 		in.wasLite = manifest.Mode == state.ModeLite ||
 			in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))
-		in.lite = !in.prod && (in.opts.Lite || (!in.opts.IncludeCraft && in.wasLite))
+		in.lite = !in.prod && (in.opts.Lite ||
+			(!in.opts.IncludeCraft && !in.opts.IncludeSandbox && in.wasLite))
 		in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 			in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+		in.sandbox = !in.lite && (in.opts.IncludeSandbox || manifest.IncludeSandbox ||
+			in.overlayOnDisk(filepath.Base(deployfiles.SandboxOverlay.DestRel)))
 		in.dev = !in.prod && (in.opts.Dev || manifest.Dev ||
 			in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel)))
 
@@ -354,7 +366,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		initialRef = release.ConfigRef(initialTag)
 	}
 	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, initialRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
+	if err := in.materializeFiles(ctx, initialRef, in.managedFileSet(), manifest, fetcher); err != nil {
 		return err
 	}
 	if !in.lite {
@@ -364,6 +376,11 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 	if !in.craft {
 		if err := in.removeOverlayIfPresent(deployfiles.CraftOverlay, manifest, "Craft disabled this run"); err != nil {
+			return err
+		}
+	}
+	if !in.sandbox {
+		if err := in.removeOverlayIfPresent(deployfiles.SandboxOverlay, manifest, "chat sandbox containers not requested this run"); err != nil {
 			return err
 		}
 	}
@@ -400,7 +417,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	configRef := release.ConfigRef(effectiveTag)
 	if !in.localFiles() && configRef != initialRef {
 		in.infof("Fetching config files matching %s...", configRef)
-		if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
+		if err := in.materializeFiles(ctx, configRef, in.managedFileSet(), manifest, fetcher); err != nil {
 			// .env already names this version and nothing has been deployed
 			// yet, so it is put back for the same reason a failed pull does:
 			// a version that never ran must not be left recorded as the
@@ -415,7 +432,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		return err
 	}
 
-	if in.craft {
+	if in.craft || in.sandbox {
 		in.ensureCraftResources(ctx)
 	}
 
@@ -450,6 +467,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 	in.recordProject(manifest)
 	manifest.IncludeCraft = in.craft
+	manifest.IncludeSandbox = in.sandbox
 	manifest.Dev = in.dev
 	if !hadManifest || manifest.InstalledAt.IsZero() {
 		manifest.InstalledAt = now
@@ -610,8 +628,8 @@ func (in *installer) askModeQuestion() error {
 		in.infof("Deployment mode: Lite (set via --lite flag)")
 		return nil
 	}
-	if in.opts.IncludeCraft {
-		return nil // craft implies standard; the conflict was rejected earlier
+	if in.opts.IncludeCraft || in.opts.IncludeSandbox {
+		return nil // craft and sandbox imply standard; the conflict was rejected earlier
 	}
 	choice, err := in.selectOne("Deployment mode",
 		[]ui.Option{
@@ -874,6 +892,8 @@ func (in *installer) createFreshEnv(envPath, tag string) (string, int, error) {
 		}
 	}
 
+	env = in.applySandboxEnv(env, tag)
+
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return "", 0, fmt.Errorf("failed to write .env: %w", err)
 	}
@@ -987,6 +1007,7 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 		env = SetVarUncomment(env, "SANDBOX_BACKEND", backend)
 		in.successf("Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=%s, image tag: %s)", backend, effectiveTag)
 	}
+	env = in.applySandboxEnv(env, effectiveTag)
 
 	// Lite mode drops only the s3-filestore entry so object-store doesn't start.
 	// Every other profile in the list was turned on by the user.
@@ -1708,10 +1729,14 @@ func (in *installer) noteComposeOverride() {
 func (in *installer) managedComposeFiles(autoDetect bool) []string {
 	prodName := filepath.Base(deployfiles.ProdCompose.DestRel)
 	craftName := filepath.Base(deployfiles.CraftOverlay.DestRel)
+	sandboxName := filepath.Base(deployfiles.SandboxOverlay.DestRel)
 	if in.prod || (autoDetect && in.overlayOnDisk(prodName)) {
 		files := []string{prodName}
 		if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
 			files = append(files, craftName)
+		}
+		if in.sandbox || (autoDetect && in.overlayOnDisk(sandboxName)) {
+			files = append(files, sandboxName)
 		}
 		return files
 	}
@@ -1722,6 +1747,9 @@ func (in *installer) managedComposeFiles(autoDetect bool) []string {
 	}
 	if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
 		files = append(files, craftName)
+	}
+	if in.sandbox || (autoDetect && in.overlayOnDisk(sandboxName)) {
+		files = append(files, sandboxName)
 	}
 	// Last of the managed files, so the ports and build targets it publishes
 	// are the ones that survive the merge — that is the whole point of the

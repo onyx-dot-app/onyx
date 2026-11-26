@@ -371,9 +371,37 @@ in .Values, so every template of one render uses the same value.
 {{- end -}}
 {{- end }}
 
-{{/* "true" when sandbox-proxy and the sandbox namespace render: for Craft pod sandboxes or for Firecracker. */}}
+{{/* "true" when sandbox-proxy and the sandbox namespace render: for Craft pod sandboxes, for Firecracker or for harness sandbox pods. */}}
 {{- define "onyx.sandboxProxyEnabled" -}}
-{{- if or (include "onyx.craftEnabled" .) (include "onyx.craftFcEnabled" .) -}}true{{- end -}}
+{{- if or (include "onyx.craftEnabled" .) (include "onyx.craftFcEnabled" .) (include "onyx.harnessSandboxEnabled" .) -}}true{{- end -}}
+{{- end }}
+
+{{/*
+"true" when the container backend of harness sandboxes renders (one pod per
+user sandbox, chat sandbox tools without KVM): craft.sandboxRuntime auto or
+pod, harnessSandbox.enabled, and an Onyx release from v6 on. Does not need
+ENABLE_CRAFT. With auto, the backend uses Firecracker while a node serves the
+template, and these pods otherwise.
+*/}}
+{{- define "onyx.harnessSandboxEnabled" -}}
+{{- $runtime := include "onyx.craftSandboxRuntime" . -}}
+{{- $harness := .Values.harnessSandbox | default dict -}}
+{{- if and (has $runtime (list "auto" "pod")) (ne (toString $harness.enabled) "false") (not (include "onyx.craftPreV6App" .)) -}}true{{- end -}}
+{{- end }}
+
+{{/* "true" when the sandbox namespace gets the sandbox-manager RBAC: for Craft pod sandboxes or for harness sandbox pods. */}}
+{{- define "onyx.sandboxPodsEnabled" -}}
+{{- if or (include "onyx.craftEnabled" .) (include "onyx.harnessSandboxEnabled" .) -}}true{{- end -}}
+{{- end }}
+
+{{/* The craft-runtime container image of harness sandbox pods. Releases publish it as <Onyx tag>-container. */}}
+{{- define "onyx.harnessSandboxImage" -}}
+{{- $image := (.Values.harnessSandbox | default dict).image | default dict -}}
+{{- printf "%s:%s" ($image.repository | default "onyxdotapp/craft-runtime") ($image.tag | default (printf "%s-container" (toString (.Values.global.version | default .Chart.AppVersion)))) -}}
+{{- end }}
+
+{{- define "onyx.harnessSandboxDaemonPort" -}}
+{{- (.Values.harnessSandbox | default dict).daemonPort | default 8052 | int -}}
 {{- end }}
 
 {{/* Tolerations (default: the sandbox tolerations) plus the onyx.app/kvm taint

@@ -64,6 +64,8 @@ show_help() {
     echo "Common options (forwarded to the CLI):"
     echo "  --lite           Deploy Onyx Lite (no OpenSearch, Redis, or model servers)"
     echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
+    echo "  --include-sandbox  Run chat sandboxes as Docker containers (mounts the"
+    echo "                   Docker socket on api_server; trusted hosts only)"
     echo "  --tag <tag>      Image tag to deploy (default: the latest Onyx release)"
     echo "  --local          Use existing config files instead of downloading them"
     echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"

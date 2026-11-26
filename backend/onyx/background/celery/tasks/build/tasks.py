@@ -27,8 +27,8 @@ from onyx.db.sandbox import (
 )
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import (
+    CONTAINER_HARNESS_ENABLED,
     ENABLE_CRAFT,
-    SANDBOX_CONTAINER_HARNESS,
     SANDBOX_IDLE_TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -148,7 +148,7 @@ def sweep_harness_containers_task(
     """Delete harness sandbox containers that no record names, and send an
     idle stop for each idle one. Cluster-wide: one runtime listing covers
     every tenant."""
-    if not SANDBOX_CONTAINER_HARNESS:
+    if not CONTAINER_HARNESS_ENABLED:
         return
     sandbox = get_container_harness_sandbox()
     for key in sandbox.sweep(time.monotonic() + TIMEOUT_SECONDS):
@@ -176,7 +176,7 @@ def stop_idle_harness_container_task(
 ) -> None:
     """Save the sessions of one idle harness sandbox container, then delete
     it, while it stays idle."""
-    if not SANDBOX_CONTAINER_HARNESS:
+    if not CONTAINER_HARNESS_ENABLED:
         return
     outcome = get_container_harness_sandbox().stop_if_idle(tenant_id, UUID(sandbox_id))
     task_logger.info("Harness sandbox %s idle stop: %s", sandbox_id, outcome.value)

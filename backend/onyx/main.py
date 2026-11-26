@@ -87,7 +87,7 @@ from onyx.server.documents.targeted_reindex import router as targeted_reindex_ro
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
-from onyx.server.features.build.configs import SANDBOX_RUNTIME
+from onyx.server.features.build.configs import SANDBOX_FIRECRACKER_ENABLED
 from onyx.server.features.build.scheduled_tasks.api import (
     router as scheduled_tasks_router,
 )
@@ -638,7 +638,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             application, suggested_questions_router
         )
     include_router_with_global_prefix_prepended(application, public_build_router)
-    if SANDBOX_RUNTIME.uses_firecracker:
+    if SANDBOX_FIRECRACKER_ENABLED:
         include_router_with_global_prefix_prepended(application, microvm_router)
     include_router_with_global_prefix_prepended(application, sandbox_admin_router)
     include_router_with_global_prefix_prepended(application, static_preview_router)

@@ -38,6 +38,10 @@ SetRuntime = Callable[..., None]
 def set_runtime(monkeypatch: pytest.MonkeyPatch) -> Generator[SetRuntime, None, None]:
     def set_(runtime: SandboxRuntime, template: str = SOURCE_TAG) -> None:
         monkeypatch.setattr(availability, "SANDBOX_RUNTIME", runtime)
+        monkeypatch.setattr(
+            availability, "SANDBOX_FIRECRACKER_ENABLED", runtime.uses_firecracker
+        )
+        monkeypatch.setattr(availability, "CONTAINER_HARNESS_ENABLED", False)
         monkeypatch.setattr(availability, "SANDBOX_FC_TEMPLATE", template)
         monkeypatch.setattr(
             availability,

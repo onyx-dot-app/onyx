@@ -2304,7 +2304,7 @@ def test_a_chat_delete_purges_the_session_directory_hard_or_soft(
     node: RunningFakeAgent,
     make_tools: MakeTools,
 ) -> None:
-    monkeypatch.setattr(purge, "HARNESS_SANDBOX_ENABLED", True)
+    monkeypatch.setattr(purge, "HARNESS_SANDBOX_CONFIGURED", True)
     refs: dict[str, HarnessSandboxRef] = {}
     for name in ("hard", "soft", "bulk"):
         chat_session = create_chat_session(db_session, name, user.id, persona_id=0)
@@ -4222,7 +4222,7 @@ def test_a_chat_purge_deletes_only_its_own_spilled_results(
     user: User,
     steps: list[Delta],
 ) -> None:
-    monkeypatch.setattr(purge, "HARNESS_SANDBOX_ENABLED", True)
+    monkeypatch.setattr(purge, "HARNESS_SANDBOX_CONFIGURED", True)
     _offer_mcp_tool(monkeypatch, "fetch_report", _big)
     chats = [
         SandboxChat(

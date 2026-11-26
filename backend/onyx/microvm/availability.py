@@ -1,11 +1,14 @@
 """Whether chats get sandbox tools, and the sandbox status for admins.
 
-With `SANDBOX_RUNTIME=firecracker` the tools follow the configuration alone
-(`HARNESS_SANDBOX_ENABLED`); placement fails when no node serves. With
-`auto` they need a live registered node whose last report pass found a
-compatible template for `SANDBOX_FC_TEMPLATE`. The check reads only the
-shared cache (no agent call), and each process reuses its answer for
-`SANDBOX_FC_AVAILABILITY_CACHE_SECONDS`.
+Tools are offered while a harness backend can serve a new sandbox:
+- The container backend (`CONTAINER_HARNESS_ENABLED`) always can.
+- Firecracker with `SANDBOX_RUNTIME=firecracker` follows the configuration
+  alone (`HARNESS_SANDBOX_ENABLED`); placement fails when no node serves.
+  With `auto` it needs a live registered node whose last report pass found
+  a compatible template for `SANDBOX_FC_TEMPLATE`. The check reads only the
+  shared cache (no agent call), and each process reuses its answer for
+  `SANDBOX_FC_AVAILABILITY_CACHE_SECONDS`.
+The backend of each sandbox is `harness_factory.harness_backend_for`.
 """
 
 import threading
@@ -19,6 +22,7 @@ from onyx.microvm.configs import (
     SANDBOX_FC_TEMPLATE,
 )
 from onyx.microvm.models import (
+    HarnessBackend,
     NodeInfo,
     SandboxNodeStatus,
     SandboxStatus,
@@ -31,7 +35,12 @@ from onyx.microvm.registry import (
     list_registered_nodes,
     node_reports_stopped,
 )
-from onyx.server.features.build.configs import SANDBOX_RUNTIME, SandboxRuntime
+from onyx.server.features.build.configs import (
+    CONTAINER_HARNESS_ENABLED,
+    SANDBOX_FIRECRACKER_ENABLED,
+    SANDBOX_RUNTIME,
+    SandboxRuntime,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -71,9 +80,10 @@ def _serving(node: SandboxNodeStatus) -> bool:
     return node.live and node.has_template
 
 
-# Why tools are off from the configuration alone; None when nodes decide.
+# Why Firecracker serves no sandbox from the configuration alone; None when
+# nodes decide.
 STATIC_OFF_REASON: SandboxToolsOffReason | None = None
-if not SANDBOX_RUNTIME.uses_firecracker:
+if not SANDBOX_FIRECRACKER_ENABLED:
     STATIC_OFF_REASON = SandboxToolsOffReason.RUNTIME_WITHOUT_FIRECRACKER
 elif not HARNESS_SANDBOX_ENABLED:
     STATIC_OFF_REASON = SandboxToolsOffReason.TEMPLATE_NOT_CONFIGURED
@@ -86,7 +96,7 @@ def get_sandbox_status(
     now = int(time.time()) if now is None else now
     reason = STATIC_OFF_REASON
     nodes: list[SandboxNodeStatus] = []
-    if SANDBOX_RUNTIME.uses_firecracker:
+    if SANDBOX_FIRECRACKER_ENABLED:
         cache = shared_cache or get_shared_cache_backend()
         try:
             nodes = [
@@ -102,11 +112,19 @@ def get_sandbox_status(
             reason = SandboxToolsOffReason.NO_REGISTERED_NODE
         elif not any(_serving(n) for n in nodes):
             reason = SandboxToolsOffReason.NO_LIVE_NODE_WITH_TEMPLATE
+    backend: HarnessBackend | None = None
+    if reason is None:
+        backend = HarnessBackend.FIRECRACKER
+    elif CONTAINER_HARNESS_ENABLED:
+        backend = HarnessBackend.CONTAINER
     return SandboxStatus(
         runtime=SANDBOX_RUNTIME,
         template=SANDBOX_FC_TEMPLATE,
-        tools_offered=reason is None,
-        tools_off_reason=reason,
+        tools_offered=backend is not None,
+        tools_off_reason=None if backend is not None else reason,
+        container_backend=CONTAINER_HARNESS_ENABLED,
+        new_sandbox_backend=backend,
+        firecracker_off_reason=reason,
         nodes=nodes,
     )
 
@@ -156,10 +174,16 @@ def _check_live_node() -> bool:
         return False
 
 
-def sandbox_tools_available() -> bool:
-    """Whether this deployment offers chat sandbox tools now."""
+def firecracker_available() -> bool:
+    """Whether Firecracker can serve a new sandbox now."""
     if STATIC_OFF_REASON is not None:
         return False
     if SANDBOX_RUNTIME is not SandboxRuntime.AUTO:
         return True
     return _availability.get(_check_live_node)
+
+
+def sandbox_tools_available() -> bool:
+    """Whether this deployment offers chat sandbox tools now, on either
+    backend."""
+    return CONTAINER_HARNESS_ENABLED or firecracker_available()

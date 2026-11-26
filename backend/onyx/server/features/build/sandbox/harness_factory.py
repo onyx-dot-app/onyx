@@ -1,8 +1,13 @@
 """Picks the sandbox for sessions on the new agent harness.
 
 Only the new harness calls this; opencode sessions keep `get_sandbox_manager`
-(pod or Docker, chosen by `SANDBOX_BACKEND`). The harness gets Firecracker
-sandboxes with `SANDBOX_RUNTIME=firecracker` or `auto`.
+(pod or Docker, chosen by `SANDBOX_BACKEND`). The harness gets:
+- Firecracker with `SANDBOX_RUNTIME=firecracker`, or with `auto` and no
+  container backend.
+- The container backend (`SANDBOX_CONTAINER_HARNESS=true`) with `pod`, or
+  with `auto` and `SANDBOX_BACKEND=docker` (Compose never uses Firecracker).
+- Both with `auto` on Kubernetes and the container backend on: each sandbox
+  gets one backend (`harness_selection`).
 """
 
 import threading
@@ -16,8 +21,8 @@ from onyx.microvm.lifecycle import (
     UnknownActivity,
 )
 from onyx.server.features.build.configs import (
+    CONTAINER_HARNESS_ENABLED,
     SANDBOX_BACKEND,
-    SANDBOX_CONTAINER_HARNESS,
     SandboxBackend,
 )
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
@@ -30,12 +35,16 @@ if TYPE_CHECKING:
     from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
         FirecrackerHarnessSandbox,
     )
+    from onyx.server.features.build.sandbox.harness_selection import (
+        SelectingHarnessSandbox,
+    )
 
 logger = setup_logger()
 
 _lock = threading.Lock()
 _instance: "FirecrackerHarnessSandbox | None" = None
 _container_instance: "ContainerHarnessSandbox | None" = None
+_selecting_instance: "SelectingHarnessSandbox | None" = None
 _eviction_error_logged = False
 
 
@@ -69,9 +78,10 @@ def get_container_harness_sandbox() -> "ContainerHarnessSandbox":
     """The container backend: pods with SANDBOX_BACKEND=kubernetes, Docker
     containers with SANDBOX_BACKEND=docker."""
     global _container_instance
-    if not SANDBOX_CONTAINER_HARNESS:
+    if not CONTAINER_HARNESS_ENABLED:
         raise HarnessSandboxUnavailableError(
-            "Container harness sandboxes need SANDBOX_CONTAINER_HARNESS=true"
+            "Container harness sandboxes need SANDBOX_CONTAINER_HARNESS=true "
+            "and SANDBOX_RUNTIME=auto or pod"
         )
     with _lock:
         if _container_instance is None:
@@ -105,7 +115,32 @@ def get_container_harness_sandbox() -> "ContainerHarnessSandbox":
     return _container_instance
 
 
+def _selecting_sandbox() -> "SelectingHarnessSandbox":
+    global _selecting_instance
+    firecracker = _firecracker_sandbox()
+    container = get_container_harness_sandbox()
+    with _lock:
+        if _selecting_instance is None:
+            from onyx.microvm.availability import firecracker_available
+            from onyx.server.features.build.sandbox.harness_selection import (
+                SelectingHarnessSandbox,
+            )
+
+            _selecting_instance = SelectingHarnessSandbox(
+                firecracker=firecracker,
+                container=container,
+                firecracker_available=firecracker_available,
+            )
+    return _selecting_instance
+
+
 def get_harness_sandbox() -> HarnessSandbox:
+    """The harness sandbox of this deployment. Raises
+    HarnessSandboxUnavailableError when no backend is on."""
+    if HARNESS_SANDBOX_ENABLED and CONTAINER_HARNESS_ENABLED:
+        return _selecting_sandbox()
+    if CONTAINER_HARNESS_ENABLED:
+        return get_container_harness_sandbox()
     return _firecracker_sandbox()
 
 

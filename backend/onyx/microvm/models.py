@@ -667,8 +667,16 @@ class ManagedSwapResult(BaseModel):
 # Admin sandbox status (`microvm/availability.py`).
 
 
+class HarnessBackend(str, Enum):
+    """Where a harness sandbox runs."""
+
+    FIRECRACKER = "firecracker"
+    # A pod (SANDBOX_BACKEND=kubernetes) or a Docker container (docker).
+    CONTAINER = "container"
+
+
 class SandboxToolsOffReason(str, Enum):
-    # SANDBOX_RUNTIME is pod or off.
+    # SANDBOX_RUNTIME is pod or off, or auto with SANDBOX_BACKEND=docker.
     RUNTIME_WITHOUT_FIRECRACKER = "RUNTIME_WITHOUT_FIRECRACKER"
     TEMPLATE_NOT_CONFIGURED = "TEMPLATE_NOT_CONFIGURED"
     NO_REGISTERED_NODE = "NO_REGISTERED_NODE"
@@ -696,5 +704,13 @@ class SandboxStatus(BaseModel):
     runtime: SandboxRuntime
     template: str
     tools_offered: bool
+    # None while tools are offered.
     tools_off_reason: SandboxToolsOffReason | None
+    # The container backend is on (SANDBOX_CONTAINER_HARNESS).
+    container_backend: bool
+    # Where a sandbox that starts now runs; None when tools are off. A
+    # running sandbox stays on its backend until it stops.
+    new_sandbox_backend: HarnessBackend | None
+    # Why Firecracker serves no new sandbox; None when it does.
+    firecracker_off_reason: SandboxToolsOffReason | None
     nodes: list[SandboxNodeStatus]

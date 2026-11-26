@@ -57,6 +57,16 @@ func managedFiles(prod, lite, craft, dev bool) []deployfiles.File {
 	return files
 }
 
+// managedFileSet is managedFiles for this run's mode, plus the sandbox
+// overlay when it is on.
+func (in *installer) managedFileSet() []deployfiles.File {
+	files := managedFiles(in.prod, in.lite, in.craft, in.dev)
+	if in.sandbox {
+		files = append(files, deployfiles.SandboxOverlay)
+	}
+	return files
+}
+
 // fileFetcher sources managed-file content for a ref, falling back to the
 // embedded copies. Once the network itself fails it stops trying (each fetch
 // retries with delays; offline, every remaining file would pay that).

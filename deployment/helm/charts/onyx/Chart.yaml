@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.10.0
+version: 0.10.2
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,6 +20,12 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: added
+      description: harnessSandbox renders the container backend of chat
+        sandbox tools (the harness-sandbox-pod PodTemplate, a daemon-port
+        ingress NetworkPolicy, sandbox-proxy and the sandbox RBAC) with
+        craft.sandboxRuntime auto or pod, without ENABLE_CRAFT. On by
+        default. harnessSandbox.runtimeClassName opts in to gVisor.
     - kind: changed
       description: craft.sandboxRuntime defaults to "auto" and also takes
         "off". With a pinned release tag, "auto" renders the Firecracker

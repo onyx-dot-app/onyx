@@ -6,7 +6,10 @@ error and uses the default, so it cannot break imports on other runtimes.
 
 import os
 
-from onyx.server.features.build.configs import SANDBOX_RUNTIME
+from onyx.server.features.build.configs import (
+    CONTAINER_HARNESS_ENABLED,
+    SANDBOX_FIRECRACKER_ENABLED,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,7 +39,7 @@ def _fc_env_int(name: str, default: int, minimum: int | None = None) -> int:
     return value if minimum is None else max(minimum, value)
 
 
-FIRECRACKER_ENABLED = SANDBOX_RUNTIME.uses_firecracker
+FIRECRACKER_ENABLED = SANDBOX_FIRECRACKER_ENABLED
 
 # mTLS to the host agent listener (D2). PEM files, mounted by the deployment.
 SANDBOX_FC_AGENT_CLIENT_CERT_PATH = os.environ.get(
@@ -109,7 +112,9 @@ SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS = _fc_env_int(
 # "<tag>-<key hash>"; placement takes that node's newest template of the tag.
 # Harness sandboxes need it.
 SANDBOX_FC_TEMPLATE = os.environ.get("SANDBOX_FC_TEMPLATE", "").strip()
-# Harness sandboxes can run in this deployment: their factory, purges and
-# retention work. Whether chats get sandbox tools is
-# `microvm.availability.sandbox_tools_available`.
+# Firecracker harness sandboxes can run in this deployment. Whether chats get
+# sandbox tools is `microvm.availability.sandbox_tools_available`.
 HARNESS_SANDBOX_ENABLED = FIRECRACKER_ENABLED and bool(SANDBOX_FC_TEMPLATE)
+# A harness backend (Firecracker or containers) can run: purges and
+# retention work.
+HARNESS_SANDBOX_CONFIGURED = HARNESS_SANDBOX_ENABLED or CONTAINER_HARNESS_ENABLED

@@ -763,7 +763,7 @@ def test_a_chat_delete_purges_its_search_files(
     internal: SearchPipelineController,
     idle: Idle,
 ) -> None:
-    monkeypatch.setattr(purge, "HARNESS_SANDBOX_ENABLED", True)
+    monkeypatch.setattr(purge, "HARNESS_SANDBOX_CONFIGURED", True)
     file = make_file(b"gone soon")
     internal.add_search_results(QUERY, [file.result()])
     chat.send(

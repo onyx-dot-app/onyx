@@ -1,0 +1,146 @@
+# Chat sandbox overlay: the Docker container backend of the harness sandbox.
+# Layer on top of docker-compose.yml (or docker-compose.prod.yml). It is
+# opt-in: `onyx-cli deploy install --include-sandbox` wires it in.
+#
+# Each user sandbox is a Docker container of the craft-runtime `container`
+# image on the onyx_craft_sandbox bridge. Its firewall sends all egress
+# through sandbox-proxy. Compose never uses Firecracker.
+#
+# Trust boundary: api_server, background, and sandbox-proxy bind-mount
+# /var/run/docker.sock (root-equivalent on the host). Only run it on hosts
+# that you fully control.
+#
+# Optional gVisor: set SANDBOX_DOCKER_RUNTIME=runsc in .env. You must install
+# runsc and register it with Docker first. The in-container iptables lockdown
+# is not yet validated under runsc, so this setting is unsupported for now.
+#
+# Layering docker-compose.craft.yml too is safe: the shared parts below are
+# the same as in that file, and Compose merges them.
+services:
+  api_server:
+    environment:
+      - SANDBOX_BACKEND=docker
+      - SANDBOX_RUNTIME=${SANDBOX_RUNTIME:-auto}
+      - SANDBOX_CONTAINER_HARNESS=true
+      - SANDBOX_HARNESS_IMAGE=${SANDBOX_HARNESS_IMAGE:-onyxdotapp/craft-runtime:${IMAGE_TAG:-latest}-container}
+      - SANDBOX_DOCKER_RUNTIME=${SANDBOX_DOCKER_RUNTIME:-}
+      - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
+      - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
+      - SANDBOX_DOCKER_PIDS_LIMIT=${SANDBOX_DOCKER_PIDS_LIMIT:-2048}
+      - ONYX_SERVER_URL=${ONYX_SERVER_URL:-http://onyx-craft-api:8080}
+      # Pinned: Must match the compose `networks:` block below.
+      - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
+      # Pinned: Container-side bind target.
+      - SANDBOX_DOCKER_SOCKET=/var/run/docker.sock
+      # The proxy is the only way out of a sandbox; an empty value fails the
+      # first sandbox start.
+      - SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}
+      - SANDBOX_PROXY_PORT=${SANDBOX_PROXY_PORT:-8080}
+    volumes:
+      - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+      default:
+      onyx_craft_sandbox:
+        aliases:
+          - onyx-craft-api
+    depends_on:
+      sandbox-proxy:
+        condition: service_healthy
+
+  background:
+    environment:
+      # Must match api_server: the idle stop and orphan sweep run here.
+      - SANDBOX_BACKEND=docker
+      - SANDBOX_RUNTIME=${SANDBOX_RUNTIME:-auto}
+      - SANDBOX_CONTAINER_HARNESS=true
+      - SANDBOX_HARNESS_IMAGE=${SANDBOX_HARNESS_IMAGE:-onyxdotapp/craft-runtime:${IMAGE_TAG:-latest}-container}
+      - SANDBOX_DOCKER_RUNTIME=${SANDBOX_DOCKER_RUNTIME:-}
+      - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
+      - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
+      - SANDBOX_DOCKER_PIDS_LIMIT=${SANDBOX_DOCKER_PIDS_LIMIT:-2048}
+      - ONYX_SERVER_URL=${ONYX_SERVER_URL:-http://onyx-craft-api:8080}
+      - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
+      - SANDBOX_DOCKER_SOCKET=/var/run/docker.sock
+      - SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}
+      - SANDBOX_PROXY_PORT=${SANDBOX_PROXY_PORT:-8080}
+    volumes:
+      - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+      - default
+      - onyx_craft_sandbox
+    depends_on:
+      sandbox-proxy:
+        condition: service_healthy
+
+  # Egress proxy: the same service as in docker-compose.craft.yml.
+  sandbox-proxy:
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    command: ["python", "-m", "onyx.sandbox_proxy.server"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - SANDBOX_BACKEND=docker
+      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
+      - REDIS_HOST=${REDIS_HOST:-cache}
+      - SANDBOX_DOCKER_SOCKET=/var/run/docker.sock
+      - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
+      - SANDBOX_PROXY_LISTEN_PORT=${SANDBOX_PROXY_PORT:-8080}
+      - SANDBOX_PROXY_HEALTHZ_PORT=8081
+      - SANDBOX_PROXY_LISTEN_HOST=${SANDBOX_PROXY_LISTEN_HOST:-0.0.0.0}
+      - SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS=${SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS:-false}
+      - SANDBOX_PROXY_INTERNAL_CIDRS=${SANDBOX_PROXY_INTERNAL_CIDRS:-}
+      - ONYX_SERVER_URL=${ONYX_SERVER_URL:-http://onyx-craft-api:8080}
+    volumes:
+      - sandbox_proxy_ca:/var/lib/sandbox-proxy/ca
+      # RO: the proxy only inspects (events watcher + initial sync).
+      - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    depends_on:
+      relational_db:
+        condition: service_started
+      cache:
+        condition: service_started
+    networks:
+      - default
+      - onyx_craft_sandbox
+    restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8081/healthz')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+  # Declared only so `docker compose pull` fetches the sandbox image before the
+  # first sandbox start. replicas: 0 and /bin/true: it never runs.
+  sandbox-harness-image-prepull:
+    # Must match SANDBOX_HARNESS_IMAGE above.
+    image: ${SANDBOX_HARNESS_IMAGE:-onyxdotapp/craft-runtime:${IMAGE_TAG:-latest}-container}
+    deploy:
+      replicas: 0
+    entrypoint: ["/bin/true"]
+
+networks:
+  # Pre-created by the installer.
+  onyx_craft_sandbox:
+    name: onyx_craft_sandbox
+    external: true
+
+volumes:
+  # Pre-created by the installer. The name has no project prefix, so the
+  # api_server can mount it into the sandbox containers it creates.
+  sandbox_proxy_ca:
+    name: sandbox_proxy_ca
+    external: true

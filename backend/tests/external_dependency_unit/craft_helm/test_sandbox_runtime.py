@@ -81,8 +81,11 @@ def _firecracker_parts(docs: list[dict[str, Any]]) -> dict[str, bool]:
     }
 
 
+_NO_HARNESS = ["--set", "harnessSandbox.enabled=false"]
+
+
 def test_default_install_without_craft_renders_no_firecracker() -> None:
-    docs = _render(_NO_CRAFT)
+    docs = _render(_NO_CRAFT + _NO_HARNESS)
     data = _configmap(docs)
 
     assert data["SANDBOX_RUNTIME"] == "auto"
