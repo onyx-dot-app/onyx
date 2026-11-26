@@ -141,7 +141,6 @@ from onyx.db.chat_response import (
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.chat_subagents import (
     latest_agent_response,
-    load_run_start_times,
     load_session_agent_metadata,
     selected_agent_message_ids,
 )
@@ -1716,9 +1715,6 @@ def get_chat_session_agents(
         # `spawn_agent` children; Deep Research workers run in the foreground
         if isinstance(agent.restoration_config, ChatConfiguration)
     ]
-    started = load_run_start_times(
-        [int(agent.latest_run_id) for agent in agents if agent.latest_run_id]
-    )
     cache = get_cache_backend()
     subagents: list[ChatSubagent] = []
     for agent in agents:
@@ -1737,7 +1733,7 @@ def get_chat_session_agents(
                 path=agent.path,
                 status=agent.status,
                 stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
-                started_at=started.get(run_id) if run_id is not None else None,
+                started_at=agent.latest_run_started_at,
                 stream_id=pointer.stream_id if pointer else None,
                 activity_tool=pointer.activity_tool if pointer else None,
             )

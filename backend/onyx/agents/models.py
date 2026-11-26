@@ -178,6 +178,8 @@ class AgentInfo(BaseModel):
     description: str
     restoration_config: SerializeAsAny[BaseModel] | None
     latest_run_id: str | None = None
+    # When the latest run started.
+    latest_run_started_at: datetime | None = None
     status: RunStatus | None = None
     # Why the latest run failed or was stopped, when it records a reason.
     failure_kind: RunFailureKind | None = None

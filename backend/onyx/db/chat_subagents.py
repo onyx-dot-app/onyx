@@ -199,6 +199,7 @@ def latest_agent_responses(
                 ChatMessage.chat_session_id,
                 ChatMessage.response_status,
                 ChatMessage.response_failure,
+                ChatMessage.time_sent,
             )
         )
     )
@@ -557,6 +558,7 @@ def agent_metadata(
     status: RunStatus | None,
     failure: RunFailure | None = None,
     current_turn: bool = False,
+    started_at: datetime | None = None,
 ) -> AgentInfo:
     parent_id = ancestors[agent.id].parent_id
     return AgentInfo(
@@ -568,6 +570,7 @@ def agent_metadata(
         latest_run_id=str(latest_response_id)
         if latest_response_id is not None
         else None,
+        latest_run_started_at=started_at,
         status=status,
         failure_kind=failure.kind if failure is not None else None,
         current_turn=current_turn,
@@ -587,19 +590,6 @@ def selected_agent_message_ids(
     ids = {row.id for row in rows}
     ids.update(row.parent_message_id for row in rows if row.parent_message_id)
     return ids
-
-
-def load_run_start_times(run_ids: Collection[int]) -> dict[int, datetime]:
-    """Each run's start time, by response id."""
-    if not run_ids:
-        return {}
-    with get_session_with_current_tenant() as db_session:
-        rows = db_session.execute(
-            select(ChatMessage.id, ChatMessage.time_sent).where(
-                ChatMessage.id.in_(run_ids)
-            )
-        ).all()
-    return {row.id: row.time_sent for row in rows}
 
 
 def load_session_agent_metadata(
@@ -682,11 +672,13 @@ def load_session_agent_metadata(
                     latest_root if latest_root is not None else (None, None)
                 )
                 failure = None
+                started_at = None
             else:
                 latest = latest_by_agent.get(str(agent.id))
                 latest_id = latest.id if latest else None
                 status = latest.response_status if latest else None
                 failure = latest.response_failure if latest else None
+                started_at = latest.time_sent if latest else None
             metadata.append(
                 agent_metadata(
                     agent,
@@ -700,6 +692,7 @@ def load_session_agent_metadata(
                         and latest_user_message is not None
                         and latest_id > latest_user_message
                     ),
+                    started_at=started_at,
                 )
             )
         return metadata
