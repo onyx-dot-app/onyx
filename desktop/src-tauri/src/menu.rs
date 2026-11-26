@@ -1,584 +1,682 @@
-use crate::config::ConfigState;
-use crate::debug_log::{log_backend_error, MENU_OPEN_DEBUG_LOG_ID, MENU_TOGGLE_DEVTOOLS_ID};
-use crate::shortcuts::SummonShortcut;
-use crate::window::{focus_main_window, focused_webview_window, open_chat_window};
+use std::collections::BTreeMap;
+use std::sync::Mutex;
+
 use tauri::image::Image;
-use tauri::menu::{
-    AboutMetadataBuilder, CheckMenuItem, Menu, MenuBuilder, MenuItem, PredefinedMenuItem, Submenu,
-    SubmenuBuilder, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
-};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+#[cfg(any(not(target_os = "macos"), test))]
+use tauri::menu::AboutMetadata;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::tray::TrayIconBuilder;
+#[cfg(any(windows, test))]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{AppHandle, Manager, Wry};
 
-const TRAY_ID: &str = "onyx-tray";
-const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
-// GTK's AboutDialog renders the logo at the image's native size (muda does no
-// scaling), so embed the 128px asset rather than the 256px @2x one.
+use crate::main_window;
+use crate::state::AppState;
+use crate::updater;
+use crate::windows;
+
+pub const PREFERENCES: &str = "preferences";
+const NEW_CHAT: &str = "new_chat";
+pub const LAUNCHER: &str = "launcher";
+const RELOAD: &str = "reload";
+const ZOOM_RESET: &str = "zoom_reset";
+const ZOOM_IN: &str = "zoom_in";
+const ZOOM_OUT: &str = "zoom_out";
+const BACK: &str = "back";
+const FORWARD: &str = "forward";
+const ZOOM_STEPS: [f64; 9] = [0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75];
+const OPEN: &str = "open";
+const QUIT: &str = "quit";
+#[cfg(any(not(target_os = "macos"), test))]
+const CLOSE_WINDOW: &str = "close_window";
+#[cfg(any(not(target_os = "macos"), test))]
+const FULLSCREEN: &str = "fullscreen";
+
+/// The main window's menu accelerators on Windows and Linux. WebView2 keeps
+/// key presses from the menu while the page has focus, so `key_action` maps
+/// them to the same items.
+#[cfg(any(not(target_os = "macos"), test))]
+const WINDOW_ACCELERATORS: [(&str, &str); 11] = [
+    (NEW_CHAT, "Ctrl+N"),
+    (PREFERENCES, "Ctrl+,"),
+    (CLOSE_WINDOW, "Ctrl+W"),
+    (QUIT, "Ctrl+Q"),
+    (RELOAD, "Ctrl+R"),
+    (BACK, "Alt+Left"),
+    (FORWARD, "Alt+Right"),
+    (ZOOM_RESET, "Ctrl+0"),
+    (ZOOM_IN, "Ctrl+="),
+    (ZOOM_OUT, "Ctrl+-"),
+    (FULLSCREEN, "F11"),
+];
+
 #[cfg(not(target_os = "macos"))]
-const ABOUT_ICON_BYTES: &[u8] = include_bytes!("../icons/128x128.png");
-const TRAY_MENU_OPEN_APP_ID: &str = "tray_open_app";
-const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
-const TRAY_MENU_SUMMON_NEW_CHAT_ID: &str = "tray_summon_new_chat";
-const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
-const TRAY_MENU_QUIT_ID: &str = "tray_quit";
-pub const MENU_SHOW_MENU_BAR_ID: &str = "show_menu_bar";
-#[cfg(target_os = "linux")]
-pub const MENU_HIDE_DECORATIONS_ID: &str = "hide_window_decorations";
-pub const MENU_NEW_CHAT_ID: &str = "new_chat";
-pub const MENU_NEW_WINDOW_ID: &str = "new_window";
-pub const MENU_OPEN_SETTINGS_ID: &str = "open_settings";
-pub const MENU_OPEN_DOCS_ID: &str = "open_docs";
-pub const MENU_RELOAD_ID: &str = "reload_page";
-pub const MENU_GO_BACK_ID: &str = "go_back";
-pub const MENU_GO_FORWARD_ID: &str = "go_forward";
-#[cfg(not(target_os = "macos"))]
-pub const MENU_QUIT_ID: &str = "quit_app";
-// macOS keeps Quit in the app menu that `Menu::default` builds.
-#[cfg(target_os = "windows")]
-const QUIT_LABEL: &str = "Exit Onyx";
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-const QUIT_LABEL: &str = "Quit Onyx";
-const ABOUT_NAME: &str = "Onyx Desktop";
-
-/// The submenu that holds the About item, kept so the item can be rebuilt
-/// when the server URL changes.
-struct AboutMenu(Submenu<Wry>);
-
-/// Handles to the checkable menu items, populated once in `setup_app_menu`.
-/// Toggling reaches for these directly instead of re-walking the whole menu
-/// tree by string ID every time -- a menu-structure change could otherwise
-/// desync a checkbox from the actual config value without any error.
-#[cfg(not(target_os = "macos"))]
-pub struct MenuHandles {
-    pub show_menu_bar: CheckMenuItem<Wry>,
-    #[cfg(target_os = "linux")]
-    pub hide_decorations: CheckMenuItem<Wry>,
-}
-
-fn build_file_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
-    let new_chat_item =
-        MenuItem::with_id(app, MENU_NEW_CHAT_ID, "New Chat", true, Some("CmdOrCtrl+N"))?;
-    let new_window_item = MenuItem::with_id(
-        app,
-        MENU_NEW_WINDOW_ID,
-        "New Window",
-        true,
-        Some("CmdOrCtrl+Shift+N"),
-    )?;
-    let settings_item = MenuItem::with_id(
-        app,
-        MENU_OPEN_SETTINGS_ID,
-        "Settings...",
-        true,
-        Some("CmdOrCtrl+Comma"),
-    )?;
-    // The only Close Window item: `rebuild_window_menu` drops the Window copy.
-    let close_window_item = PredefinedMenuItem::close_window(app, Some("Close Window"))?;
-    // muda does not show a predefined Quit on Linux, so use a plain item.
-    #[cfg(not(target_os = "macos"))]
-    let quit_item = MenuItem::with_id(app, MENU_QUIT_ID, QUIT_LABEL, true, None::<&str>)?;
-
-    let builder = SubmenuBuilder::new(app, "File")
-        .items(&[&new_chat_item, &new_window_item])
-        .separator()
-        .item(&settings_item)
-        .separator()
-        .item(&close_window_item);
-    #[cfg(not(target_os = "macos"))]
-    let builder = builder.item(&quit_item);
-    let file_menu = builder.build()?;
-
-    // Replace the File menu `Menu::default` builds (it has no File on Linux).
-    let items = menu.items()?;
-    if let Some(idx) = items
+fn accelerator(id: &str) -> Option<&'static str> {
+    WINDOW_ACCELERATORS
         .iter()
-        .position(|item| item.as_submenu().and_then(|s| s.text().ok()).as_deref() == Some("File"))
-    {
-        menu.remove_at(idx)?;
-        menu.insert(&file_menu, idx)?;
-    } else {
-        menu.prepend(&file_menu)?;
-    }
-
-    Ok(())
+        .find(|(item, _)| *item == id)
+        .map(|(_, accelerator)| *accelerator)
 }
 
-/// Keep only Minimize and Maximize in the Window menu. `Menu::default` also
-/// puts Close Window there, which repeats the File menu item.
-fn rebuild_window_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
-    let Some(window_menu) = menu
-        .get(WINDOW_SUBMENU_ID)
-        .and_then(|item| item.as_submenu().cloned())
-    else {
-        return Ok(());
-    };
-    for _ in 0..window_menu.items()?.len() {
-        window_menu.remove_at(0)?;
-    }
-    window_menu.append_items(&[
-        &PredefinedMenuItem::minimize(app, None)?,
-        &PredefinedMenuItem::maximize(app, None)?,
-    ])
+/// Modifier keys held with a key press.
+#[cfg(any(windows, test))]
+#[derive(Clone, Copy, Default)]
+pub struct Modifiers {
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
 }
 
-/// Reload/Back/Forward as View-menu accelerators. These are the chords the
-/// removed global-shortcut set (#7914) wrongly registered system-wide; as
-/// menu accelerators they only fire while an Onyx window has focus.
-fn build_view_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
-    let reload_item = MenuItem::with_id(app, MENU_RELOAD_ID, "Reload", true, Some("CmdOrCtrl+R"))?;
+/// The Windows virtual-key codes of a key in an accelerator. Digits, `=` and
+/// `-` also match the numeric keypad.
+#[cfg(any(windows, test))]
+fn virtual_keys(key: &str) -> Vec<u32> {
+    match key {
+        "," => vec![0xBC],
+        "=" => vec![0xBB, 0x6B],
+        "-" => vec![0xBD, 0x6D],
+        "Left" => vec![0x25],
+        "Right" => vec![0x27],
+        "F11" => vec![0x7A],
+        _ => match key.as_bytes() {
+            [c @ b'A'..=b'Z'] => vec![u32::from(*c)],
+            [d @ b'0'..=b'9'] => vec![u32::from(*d), 0x60 + u32::from(d - b'0')],
+            _ => Vec::new(),
+        },
+    }
+}
 
-    // Browser-convention history chords: Cmd+[ / Cmd+] on macOS, Alt+arrows elsewhere.
-    let (back_accel, forward_accel) = if cfg!(target_os = "macos") {
-        ("CmdOrCtrl+BracketLeft", "CmdOrCtrl+BracketRight")
-    } else {
-        ("Alt+ArrowLeft", "Alt+ArrowRight")
-    };
-    let back_item = MenuItem::with_id(app, MENU_GO_BACK_ID, "Back", true, Some(back_accel))?;
-    let forward_item = MenuItem::with_id(
+/// The main window menu item for a key press (a Windows virtual-key code).
+#[cfg(any(windows, test))]
+pub fn key_action(virtual_key: u32, held: Modifiers) -> Option<&'static str> {
+    WINDOW_ACCELERATORS.iter().find_map(|(id, accelerator)| {
+        let mut parts: Vec<&str> = accelerator.split('+').collect();
+        let key = parts.pop()?;
+        let wants = |m: &str| parts.contains(&m);
+        let matches = wants("Ctrl") == held.ctrl
+            && wants("Alt") == held.alt
+            && wants("Shift") == held.shift
+            && virtual_keys(key).contains(&virtual_key);
+        matches.then_some(*id)
+    })
+}
+
+/// The macOS app menu bar.
+#[cfg(target_os = "macos")]
+pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    let separator = || PredefinedMenuItem::separator(app);
+
+    let app_menu = Submenu::with_items(
         app,
-        MENU_GO_FORWARD_ID,
-        "Forward",
+        "Onyx",
         true,
-        Some(forward_accel),
+        &[
+            &PredefinedMenuItem::about(app, Some("About Onyx"), None)?,
+            &updates_item(app)?,
+            &separator()?,
+            &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, Some("CmdOrCtrl+,"))?,
+            &separator()?,
+            &PredefinedMenuItem::services(app, None)?,
+            &separator()?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::show_all(app, None)?,
+            &separator()?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
     )?;
-
-    if let Some(view_menu) = menu
-        .items()?
-        .into_iter()
-        .filter_map(|item| item.as_submenu().cloned())
-        .find(|submenu| submenu.text().ok().as_deref() == Some("View"))
-    {
-        view_menu.insert_items(&[&reload_item, &back_item, &forward_item], 0)?;
-        view_menu.insert(&PredefinedMenuItem::separator(app)?, 3)?;
-    } else {
-        let view_menu = SubmenuBuilder::new(app, "View")
-            .items(&[&reload_item, &back_item, &forward_item])
-            .build()?;
-        let items = menu.items()?;
-        let insert_idx = items
-            .iter()
-            .position(|item| {
-                let text = item.as_submenu().and_then(|submenu| submenu.text().ok());
-                matches!(text.as_deref(), Some("Window" | "Help"))
-            })
-            .unwrap_or(items.len());
-        menu.insert(&view_menu, insert_idx)?;
-    }
-
-    Ok(())
+    let file = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, Some("CmdOrCtrl+N"))?,
+            &launcher_item(app, "app")?,
+            &separator()?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+    let edit = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &separator()?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+    let view = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[
+            &MenuItem::with_id(app, RELOAD, "Reload", true, Some("CmdOrCtrl+R"))?,
+            &MenuItem::with_id(app, BACK, "Back", true, Some("CmdOrCtrl+["))?,
+            &MenuItem::with_id(app, FORWARD, "Forward", true, Some("CmdOrCtrl+]"))?,
+            &separator()?,
+            &MenuItem::with_id(app, ZOOM_RESET, "Actual Size", true, Some("CmdOrCtrl+0"))?,
+            &MenuItem::with_id(app, ZOOM_IN, "Zoom In", true, Some("CmdOrCtrl+="))?,
+            &MenuItem::with_id(app, ZOOM_OUT, "Zoom Out", true, Some("CmdOrCtrl+-"))?,
+            &separator()?,
+            &PredefinedMenuItem::fullscreen(app, None)?,
+        ],
+    )?;
+    let window = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+        ],
+    )?;
+    Menu::with_items(app, &[&app_menu, &file, &edit, &view, &window])
 }
 
-pub fn handle_reload(app: &AppHandle) {
-    if let Some(window) = focused_webview_window(app) {
-        crate::commands::reload_page(window);
-    }
-}
-
-pub fn handle_go_back(app: &AppHandle) {
-    if let Some(window) = focused_webview_window(app) {
-        crate::commands::go_back(window);
-    }
-}
-
-pub fn handle_go_forward(app: &AppHandle) {
-    if let Some(window) = focused_webview_window(app) {
-        crate::commands::go_forward(window);
-    }
-}
-
+/// The main window's menu bar on Windows and Linux. They have no app menu,
+/// and an app-wide menu would also show in the launcher and other windows.
+/// Copy and paste need no Edit menu there: the web view handles them.
 #[cfg(not(target_os = "macos"))]
-fn build_window_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
-    let config = app.state::<ConfigState>().config();
-
-    let show_menu_bar_item = CheckMenuItem::with_id(
+pub fn build_window_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    let separator = || PredefinedMenuItem::separator(app);
+    let file = Submenu::with_items(
         app,
-        MENU_SHOW_MENU_BAR_ID,
-        "Show Menu Bar",
+        "File",
         true,
-        config.show_menu_bar,
-        None::<&str>,
+        &[
+            &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, accelerator(NEW_CHAT))?,
+            &launcher_item(app, "window")?,
+            &separator()?,
+            &MenuItem::with_id(
+                app,
+                PREFERENCES,
+                "Preferences…",
+                true,
+                accelerator(PREFERENCES),
+            )?,
+            &separator()?,
+            &MenuItem::with_id(
+                app,
+                CLOSE_WINDOW,
+                "Close Window",
+                true,
+                accelerator(CLOSE_WINDOW),
+            )?,
+            &MenuItem::with_id(app, QUIT, "Quit Onyx", true, accelerator(QUIT))?,
+        ],
     )?;
-
-    #[cfg(target_os = "linux")]
-    let hide_decorations_item = CheckMenuItem::with_id(
+    let view = Submenu::with_items(
         app,
-        MENU_HIDE_DECORATIONS_ID,
-        "Hide Window Decorations",
+        "View",
         true,
-        config.hide_window_decorations,
-        None::<&str>,
+        &[
+            &MenuItem::with_id(app, RELOAD, "Reload", true, accelerator(RELOAD))?,
+            &MenuItem::with_id(app, BACK, "Back", true, accelerator(BACK))?,
+            &MenuItem::with_id(app, FORWARD, "Forward", true, accelerator(FORWARD))?,
+            &separator()?,
+            &MenuItem::with_id(
+                app,
+                ZOOM_RESET,
+                "Actual Size",
+                true,
+                accelerator(ZOOM_RESET),
+            )?,
+            &MenuItem::with_id(app, ZOOM_IN, "Zoom In", true, accelerator(ZOOM_IN))?,
+            &MenuItem::with_id(app, ZOOM_OUT, "Zoom Out", true, accelerator(ZOOM_OUT))?,
+            &separator()?,
+            &MenuItem::with_id(
+                app,
+                FULLSCREEN,
+                "Full Screen",
+                true,
+                accelerator(FULLSCREEN),
+            )?,
+        ],
     )?;
+    let help = Submenu::with_items(
+        app,
+        "Help",
+        true,
+        &[&PredefinedMenuItem::about(
+            app,
+            Some("About Onyx"),
+            Some(about_metadata(
+                &app.package_info().version.to_string(),
+                app.default_window_icon().cloned(),
+            )),
+        )?],
+    )?;
+    Menu::with_items(app, &[&file, &view, &help])
+}
 
-    app.manage(MenuHandles {
-        show_menu_bar: show_menu_bar_item.clone(),
-        #[cfg(target_os = "linux")]
-        hide_decorations: hide_decorations_item.clone(),
-    });
+/// The newest "Open Launcher" item of each menu, so policy can turn them off.
+static LAUNCHER_ITEMS: Mutex<BTreeMap<&str, MenuItem<Wry>>> = Mutex::new(BTreeMap::new());
 
-    if let Some(window_menu) = menu
-        .items()?
-        .into_iter()
-        .filter_map(|item| item.as_submenu().cloned())
-        .find(|submenu| submenu.text().ok().as_deref() == Some("Window"))
-    {
-        window_menu.append(&show_menu_bar_item)?;
-        #[cfg(target_os = "linux")]
-        window_menu.append(&hide_decorations_item)?;
-    } else {
-        #[allow(unused_mut)]
-        let mut window_menu_builder = SubmenuBuilder::new(app, "Window").item(&show_menu_bar_item);
-        #[cfg(target_os = "linux")]
-        {
-            window_menu_builder = window_menu_builder.item(&hide_decorations_item);
+fn launcher_item(app: &AppHandle, menu: &'static str) -> tauri::Result<MenuItem<Wry>> {
+    let enabled = !app.state::<AppState>().policy().disable_launcher;
+    let item = MenuItem::with_id(app, LAUNCHER, "Open Launcher", enabled, None::<&str>)?;
+    LAUNCHER_ITEMS
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(menu, item.clone());
+    // A policy refresh during the build may have missed this item.
+    sync_launcher_items(app);
+    Ok(item)
+}
+
+/// Sets every "Open Launcher" item to the policy at the time it runs. Queued
+/// on the main thread without waiting, like `updater::set_menu_label`.
+pub fn sync_launcher_items(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let enabled = !handle.state::<AppState>().policy().disable_launcher;
+        let items: Vec<MenuItem<Wry>> = LAUNCHER_ITEMS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .values()
+            .cloned()
+            .collect();
+        for item in &items {
+            let _ = item.set_enabled(enabled);
         }
-        let window_menu = window_menu_builder.build()?;
-
-        let items = menu.items()?;
-        let help_idx = items
-            .iter()
-            .position(|item| {
-                item.as_submenu().and_then(|s| s.text().ok()).as_deref() == Some("Help")
-            })
-            .unwrap_or(items.len());
-        menu.insert(&window_menu, help_idx)?;
-    }
-
-    Ok(())
+    });
 }
 
-fn build_help_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
-    let docs_item = MenuItem::with_id(
+/// Windows shows the About dialog only for an item with metadata.
+#[cfg(any(not(target_os = "macos"), test))]
+fn about_metadata<'a>(version: &str, icon: Option<Image<'a>>) -> AboutMetadata<'a> {
+    AboutMetadata {
+        name: Some("Onyx".into()),
+        version: Some(version.into()),
+        // Linux shows a missing image without one.
+        icon,
+        ..Default::default()
+    }
+}
+
+fn updates_item(app: &AppHandle) -> tauri::Result<MenuItem<Wry>> {
+    let item = MenuItem::with_id(
         app,
-        MENU_OPEN_DOCS_ID,
-        "Onyx Documentation",
+        updater::CHECK_ID,
+        "Check for Updates…",
         true,
         None::<&str>,
     )?;
+    updater::register_menu_item(item.clone());
+    Ok(item)
+}
 
-    let help_menu = if let Some(help_menu) = menu
-        .get(HELP_SUBMENU_ID)
-        .and_then(|item| item.as_submenu().cloned())
-    {
-        help_menu
+/// The tray icon. Only macOS tints a template glyph to match the menu bar. A
+/// black glyph is invisible on a dark taskbar or top bar, so Windows and Linux
+/// use the app icon (a black glyph on a white disc).
+fn tray_icon_png(template: bool) -> &'static [u8] {
+    if template {
+        include_bytes!("../icons/tray-icon.png")
+    } else if cfg!(windows) {
+        include_bytes!("../icons/32x32.png")
     } else {
-        let help_menu = SubmenuBuilder::with_id(app, HELP_SUBMENU_ID, "Help").build()?;
-        menu.append(&help_menu)?;
-        help_menu
-    };
-    help_menu.append(&docs_item)?;
-
-    // `Menu::default` puts About first in the app menu on macOS and first in
-    // Help elsewhere.
-    #[cfg(target_os = "macos")]
-    let about_menu = menu
-        .items()?
-        .into_iter()
-        .find_map(|item| item.as_submenu().cloned());
-    #[cfg(not(target_os = "macos"))]
-    let about_menu = Some(help_menu);
-    if let Some(about_menu) = about_menu {
-        replace_about_item(app, &about_menu)?;
-        app.manage(AboutMenu(about_menu));
+        include_bytes!("../icons/128x128.png")
     }
+}
 
+pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = Menu::with_items(
+        app,
+        &[
+            &MenuItem::with_id(app, OPEN, "Open Onyx", true, None::<&str>)?,
+            &launcher_item(app, "tray")?,
+            &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, None::<&str>)?,
+        ],
+    )?;
+    if updater::SUPPORTED {
+        menu.append(&updates_item(app)?)?;
+    }
+    menu.append_items(&[
+        &PredefinedMenuItem::separator(app)?,
+        &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
+    ])?;
+    let builder = TrayIconBuilder::with_id("onyx-tray")
+        .icon(Image::from_bytes(tray_icon_png(cfg!(target_os = "macos")))?)
+        .icon_as_template(true)
+        .tooltip("Onyx")
+        .menu(&menu)
+        // Windows convention: a left click opens the app, a right click the menu.
+        .show_menu_on_left_click(!cfg!(windows));
+    #[cfg(windows)]
+    let builder = builder.on_tray_icon_event(|tray, event| {
+        if opens_app(&event) {
+            handle(tray.app_handle(), OPEN);
+        }
+    });
+    // Linux writes the icon to a file before the tray shows.
+    #[cfg(target_os = "linux")]
+    let builder = {
+        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR");
+        match tray_icon_dir(
+            runtime_dir.as_deref().map(std::path::Path::new),
+            app.path().app_cache_dir().ok(),
+        ) {
+            Some(dir) => builder.temp_dir_path(dir),
+            None => builder,
+        }
+    };
+    // No tray `on_menu_event`: Tauri delivers every menu event, tray items
+    // included, to the app-level handler in main.rs. A second listener here
+    // ran each menu action twice.
+    builder.build(app)?;
     Ok(())
 }
 
-/// About shows the Desktop app version (not the server version) and the
-/// configured server URL. It reads only local state, so it cannot hang.
-fn build_about_item(app: &AppHandle) -> tauri::Result<PredefinedMenuItem<Wry>> {
-    let pkg_info = app.package_info();
-    let config = app.config();
-    let server = format!("Server: {}", app.state::<ConfigState>().config().server_url);
-    let builder = AboutMetadataBuilder::new()
-        .name(Some(ABOUT_NAME))
-        .version(Some(pkg_info.version.to_string()))
-        .copyright(config.bundle.copyright.clone())
-        .authors(config.bundle.publisher.clone().map(|p| vec![p]));
-    // The macOS About panel shows `credits`; Windows and Linux show `comments`.
-    #[cfg(target_os = "macos")]
-    let builder = builder.credits(Some(server));
-    // GTK and Windows show no logo unless the metadata carries one.
-    #[cfg(not(target_os = "macos"))]
-    let builder = builder
-        .comments(Some(server))
-        .icon(Image::from_bytes(ABOUT_ICON_BYTES).ok());
-    PredefinedMenuItem::about(
-        app,
-        Some(&format!("About {ABOUT_NAME}")),
-        Some(builder.build()),
+/// The directory for the Linux tray icon file, or `None` for the library
+/// default (`$XDG_RUNTIME_DIR/tray-icon`). Without a usable runtime directory
+/// (unset, relative, missing or read-only) it is the per-user cache directory:
+/// the library would fall back to `/tmp/tray-icon`, which only its first user
+/// can write to, or fail.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn tray_icon_dir(
+    runtime_dir: Option<&std::path::Path>,
+    cache_dir: Option<std::path::PathBuf>,
+) -> Option<std::path::PathBuf> {
+    if runtime_dir.is_some_and(|dir| dir.is_absolute() && can_write_in(&dir.join("tray-icon"))) {
+        return None;
+    }
+    cache_dir.map(|dir| dir.join("tray-icon"))
+}
+
+/// Whether `dir` exists or can be made, and takes new files.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn can_write_in(dir: &std::path::Path) -> bool {
+    if std::fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    // `create_new` does not follow a file or link that is already there.
+    let probe = dir.join(format!(".probe-{}", std::process::id()));
+    let created = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .is_ok();
+    if created {
+        let _ = std::fs::remove_file(&probe);
+    }
+    created
+}
+
+/// A left click on the tray icon (on release, as Windows menus open).
+#[cfg(any(windows, test))]
+fn opens_app(event: &TrayIconEvent) -> bool {
+    matches!(
+        event,
+        TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        }
     )
 }
 
-fn replace_about_item(app: &AppHandle, about_menu: &Submenu<Wry>) -> tauri::Result<()> {
-    let item = build_about_item(app)?;
-    let has_about = about_menu
-        .items()?
-        .first()
-        .is_some_and(|first| first.as_predefined_menuitem().is_some());
-    if has_about {
-        about_menu.remove_at(0)?;
-    }
-    about_menu.insert(&item, 0)
-}
-
-/// Rebuild About so it shows the current server URL.
-pub fn refresh_about_item(app: &AppHandle) {
-    let Some(about_menu) = app.try_state::<AboutMenu>() else {
-        return;
-    };
-    if let Err(e) = replace_about_item(app, &about_menu.0) {
-        log_backend_error(app, &format!("Failed to refresh About menu item: {e}"));
-    }
-}
-
-fn build_debug_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
-    if !app.state::<ConfigState>().debug_mode {
-        return Ok(());
-    }
-
-    let toggle_devtools_item = MenuItem::with_id(
-        app,
-        MENU_TOGGLE_DEVTOOLS_ID,
-        "Toggle DevTools",
-        true,
-        Some("F12"),
-    )?;
-    let open_log_item = MenuItem::with_id(
-        app,
-        MENU_OPEN_DEBUG_LOG_ID,
-        "Open Debug Log",
-        true,
-        None::<&str>,
-    )?;
-
-    let debug_menu = SubmenuBuilder::new(app, "Debug")
-        .item(&toggle_devtools_item)
-        .item(&open_log_item)
-        .build()?;
-    menu.append(&debug_menu)?;
-
-    Ok(())
-}
-
-pub fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
-    let menu = app.menu().unwrap_or(Menu::default(app)?);
-
-    build_file_menu(app, &menu)?;
-    rebuild_window_menu(app, &menu)?;
-    build_view_menu(app, &menu)?;
-    #[cfg(not(target_os = "macos"))]
-    build_window_menu(app, &menu)?;
-    build_help_menu(app, &menu)?;
-    build_debug_menu(app, &menu)?;
-
-    app.set_menu(menu)?;
-    Ok(())
-}
-
-/// Toggle `show_menu_bar`, persist it, apply it to every open window, and
-/// sync the "Show Menu Bar" checkbox -- the single entry point used by both
-/// a direct menu click and the native Alt-key toggle (see `alt_menu.rs`), so
-/// the checkbox can't drift out of sync with whichever path triggered it.
-pub fn handle_menu_bar_toggle(app: &AppHandle) {
-    if cfg!(target_os = "macos") {
-        return;
-    }
-    let state = app.state::<ConfigState>();
-    let show = match state.update_and_persist(|c| c.show_menu_bar = !c.show_menu_bar) {
-        Ok(config) => config.show_menu_bar,
-        Err(e) => {
-            log_backend_error(app, &format!("Failed to save config: {e}"));
-            state.config().show_menu_bar
+pub fn handle(app: &AppHandle, id: &str) {
+    match id {
+        PREFERENCES => {
+            let _ = windows::open_preferences(app);
         }
-    };
-
-    for (_, window) in app.webview_windows() {
-        let result = if show {
-            window.show_menu()
-        } else {
-            window.hide_menu()
-        };
-        if let Err(e) = result {
-            log_backend_error(app, &format!("Failed to toggle menu-bar visibility: {e}"));
+        LAUNCHER => windows::toggle_launcher(app),
+        crate::aonyx::HIDE => crate::aonyx::hide(app),
+        OPEN => windows::show_primary(app),
+        QUIT => app.exit(0),
+        NEW_CHAT => {
+            let state = app.state::<AppState>();
+            let epoch = state.epoch();
+            let Ok((server, token)) = state.session() else {
+                windows::route(app);
+                return;
+            };
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                // A sign-out between the menu click and this task wins.
+                if app.state::<AppState>().epoch() != epoch {
+                    return;
+                }
+                if let Err(e) = main_window::open(&app, &server, &token, "/app").await {
+                    log::warn!("could not open a new chat: {e}");
+                }
+            });
         }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    if let Some(handles) = app.try_state::<MenuHandles>() {
-        if let Err(e) = handles.show_menu_bar.set_checked(show) {
-            log_backend_error(app, &format!("Failed to sync menu-bar checkbox: {e}"));
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-pub fn handle_decorations_toggle(app: &AppHandle) {
-    let state = app.state::<ConfigState>();
-    let hide = match state
-        .update_and_persist(|c| c.hide_window_decorations = !c.hide_window_decorations)
-    {
-        Ok(config) => config.hide_window_decorations,
-        Err(e) => {
-            log_backend_error(app, &format!("Failed to save config: {e}"));
-            state.config().hide_window_decorations
-        }
-    };
-
-    for (_, window) in app.webview_windows() {
-        if let Err(e) = window.set_decorations(!hide) {
-            log_backend_error(app, &format!("Failed to toggle window decorations: {e}"));
-        }
-    }
-
-    if let Some(handles) = app.try_state::<MenuHandles>() {
-        if let Err(e) = handles.hide_decorations.set_checked(hide) {
-            log_backend_error(app, &format!("Failed to sync decorations checkbox: {e}"));
-        }
-    }
-}
-
-fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
-    let summon_chord = app
-        .try_state::<SummonShortcut>()
-        .map(|shortcut| shortcut.chord.clone());
-    let summon_opens_new_chat = app.state::<ConfigState>().config().summon_opens_new_chat;
-
-    // Surface the summon chord on whichever tray action it actually triggers.
-    // Tray accelerators are display-only hints here; the real binding is the
-    // global shortcut registered in `shortcuts.rs`.
-    let (open_app_chord, open_chat_chord) = if summon_opens_new_chat {
-        (None, summon_chord.clone())
-    } else {
-        (summon_chord.clone(), None)
-    };
-
-    let open_app = MenuItem::with_id(
-        app,
-        TRAY_MENU_OPEN_APP_ID,
-        "Open Onyx",
-        true,
-        open_app_chord.as_deref(),
-    )?;
-    let open_chat = MenuItem::with_id(
-        app,
-        TRAY_MENU_OPEN_CHAT_ID,
-        "Open Chat Window",
-        true,
-        open_chat_chord.as_deref(),
-    )?;
-    // Only meaningful while a summon shortcut is registered.
-    let summon_new_chat = if summon_chord.is_some() {
-        Some(CheckMenuItem::with_id(
-            app,
-            TRAY_MENU_SUMMON_NEW_CHAT_ID,
-            "New Chat on Summon",
-            true,
-            summon_opens_new_chat,
-            None::<&str>,
-        )?)
-    } else {
-        None
-    };
-    let show_in_menu_bar = CheckMenuItem::with_id(
-        app,
-        TRAY_MENU_SHOW_IN_BAR_ID,
-        "Show in Menu Bar",
-        true,
-        true,
-        None::<&str>,
-    )?;
-    // Keep it visible/pinned without letting users uncheck (avoids orphaning the tray)
-    show_in_menu_bar.set_enabled(false)?;
-    let quit = PredefinedMenuItem::quit(app, Some("Quit Onyx"))?;
-
-    let mut builder = MenuBuilder::new(app).item(&open_app).item(&open_chat);
-    if let Some(item) = summon_new_chat.as_ref() {
-        builder = builder.separator().item(item);
-    }
-    builder
-        .separator()
-        .item(&show_in_menu_bar)
-        .separator()
-        .item(&quit)
-        .build()
-}
-
-/// Toggle whether the global summon shortcut opens a new chat or just focuses
-/// the window, then rebuild the tray menu so the accelerator hint follows the
-/// action it actually triggers.
-fn handle_summon_new_chat_toggle(app: &AppHandle) {
-    let state = app.state::<ConfigState>();
-    if let Err(e) = state.update_and_persist(|c| c.summon_opens_new_chat = !c.summon_opens_new_chat)
-    {
-        log_backend_error(app, &format!("Failed to save config: {e}"));
-    }
-    refresh_tray_menu(app);
-}
-
-fn refresh_tray_menu(app: &AppHandle) {
-    let Some(tray) = app.tray_by_id(TRAY_ID) else {
-        return;
-    };
-    match build_tray_menu(app) {
-        Ok(menu) => {
-            if let Err(e) = tray.set_menu(Some(menu)) {
-                log_backend_error(app, &format!("Failed to refresh tray menu: {e}"));
+        RELOAD => {
+            if let Some(window) = app.get_webview_window(main_window::LABEL) {
+                if let Err(e) = window.reload() {
+                    log::warn!("could not reload: {e}");
+                }
             }
         }
-        Err(e) => log_backend_error(app, &format!("Failed to rebuild tray menu: {e}")),
-    }
-}
-
-// `TRAY_MENU_SHOW_IN_BAR_ID`'s arm is intentionally kept distinct from the
-// wildcard even though its body is identical -- it documents that the ID is
-// deliberately unhandled (the item stays checked/disabled to indicate it's
-// pinned), not just unrecognized.
-#[allow(clippy::match_same_arms)]
-fn handle_tray_menu_event(app: &AppHandle, id: &str) {
-    match id {
-        TRAY_MENU_OPEN_APP_ID => {
-            focus_main_window(app);
+        BACK | FORWARD => {
+            if let Some(window) = app.get_webview_window(main_window::LABEL) {
+                let script = if id == BACK {
+                    "history.back()"
+                } else {
+                    "history.forward()"
+                };
+                if let Err(e) = window.eval(script) {
+                    log::warn!("could not go back or forward: {e}");
+                }
+            }
         }
-        TRAY_MENU_OPEN_CHAT_ID => {
-            open_chat_window(app);
+        ZOOM_RESET | ZOOM_IN | ZOOM_OUT => set_zoom(app, id),
+        #[cfg(not(target_os = "macos"))]
+        CLOSE_WINDOW => {
+            if let Some(window) = app.get_webview_window(main_window::LABEL) {
+                let _ = window.close();
+            }
         }
-        TRAY_MENU_QUIT_ID => {
-            app.exit(0);
+        #[cfg(not(target_os = "macos"))]
+        FULLSCREEN => {
+            if let Some(window) = app.get_webview_window(main_window::LABEL) {
+                let fullscreen = window.is_fullscreen().unwrap_or(false);
+                let _ = window.set_fullscreen(!fullscreen);
+            }
         }
-        TRAY_MENU_SUMMON_NEW_CHAT_ID => handle_summon_new_chat_toggle(app),
-        TRAY_MENU_SHOW_IN_BAR_ID => {}
+        updater::CHECK_ID => updater::on_menu(app),
         _ => {}
     }
 }
 
-pub fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
-    let mut builder = TrayIconBuilder::with_id(TRAY_ID).tooltip("Onyx");
+/// Steps the main window's zoom like a browser and remembers it.
+fn set_zoom(app: &AppHandle, id: &str) {
+    let state = app.state::<AppState>();
+    let current = state.config.get().zoom();
+    let index = ZOOM_STEPS
+        .iter()
+        .position(|z| (z - current).abs() < 0.01)
+        .unwrap_or(4);
+    let next = match id {
+        ZOOM_IN => ZOOM_STEPS[(index + 1).min(ZOOM_STEPS.len() - 1)],
+        ZOOM_OUT => ZOOM_STEPS[index.saturating_sub(1)],
+        _ => 1.0,
+    };
+    // The page's chrome and the next step both read the saved zoom, so an
+    // unsaved zoom is not applied.
+    if let Err(e) = state.config.update(|c| c.zoom = Some(next)) {
+        log::warn!("could not save the zoom level: {e}");
+        return;
+    }
+    if let Some(window) = app.get_webview_window(main_window::LABEL) {
+        if let Err(e) = window.set_zoom(next) {
+            log::warn!("could not apply the zoom level: {e}");
+        }
+    }
+    main_window::sync_chrome(app);
+}
 
-    let tray_icon = Image::from_bytes(TRAY_ICON_BYTES)
-        .ok()
-        .or_else(|| app.default_window_icon().cloned());
+// Unix paths: "/run/user/1000" is not absolute on Windows.
+#[cfg(all(test, unix))]
+mod tray_dir_tests {
+    use super::{can_write_in, tray_icon_dir};
+    use std::path::{Path, PathBuf};
 
-    if let Some(icon) = tray_icon {
-        builder = builder.icon(icon);
+    #[test]
+    fn tray_icon_dir_keeps_a_usable_runtime_dir() {
+        let runtime = temp_dir("runtime");
+        let cache = Some(PathBuf::from("/home/a/.cache/app"));
+        assert_eq!(tray_icon_dir(Some(&runtime), cache), None);
+        std::fs::remove_dir_all(&runtime).unwrap();
+    }
 
-        #[cfg(target_os = "macos")]
-        {
-            builder = builder.icon_as_template(true);
+    #[test]
+    fn tray_icon_dir_is_per_user_without_a_runtime_dir() {
+        let cache = PathBuf::from("/home/a/.cache/app");
+        let expected = Some(cache.join("tray-icon"));
+        assert_eq!(tray_icon_dir(None, Some(cache.clone())), expected);
+        // dirs::runtime_dir ignores a relative XDG_RUNTIME_DIR.
+        assert_eq!(tray_icon_dir(Some(Path::new("run")), Some(cache)), expected);
+    }
+
+    #[test]
+    fn tray_icon_dir_is_per_user_when_the_runtime_dir_is_unusable() {
+        let base = temp_dir("unusable");
+        // A file where the directory should be: no directory can be made under it.
+        let not_a_dir = base.join("runtime");
+        std::fs::write(&not_a_dir, b"").unwrap();
+        let cache = base.join("cache");
+        let expected = Some(cache.join("tray-icon"));
+        assert_eq!(
+            tray_icon_dir(Some(&not_a_dir), Some(cache.clone())),
+            expected
+        );
+        assert_eq!(
+            tray_icon_dir(Some(&not_a_dir.join("missing")), Some(cache)),
+            expected
+        );
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_write_probe_does_not_follow_a_planted_link() {
+        let dir = temp_dir("probe-link");
+        let target = dir.join("target");
+        std::fs::write(&target, b"keep").unwrap();
+        let probe = dir.join(format!(".probe-{}", std::process::id()));
+        std::os::unix::fs::symlink(&target, &probe).unwrap();
+        assert!(!can_write_in(&dir));
+        assert_eq!(std::fs::read(&target).unwrap(), b"keep");
+        assert!(probe.symlink_metadata().is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("onyx-tray-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn tray_icon_dir_falls_back_to_the_default_without_a_cache_dir() {
+        assert_eq!(tray_icon_dir(None, None), None);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+
+    use super::*;
+
+    #[test]
+    fn the_untinted_tray_icon_shows_on_light_and_dark_bars() {
+        let icon = Image::from_bytes(tray_icon_png(false)).unwrap();
+        let opaque = || icon.rgba().chunks(4).filter(|px| px[3] == 255);
+        let light = opaque().any(|px| px[..3].iter().all(|&c| c > 200));
+        let dark = opaque().any(|px| px[..3].iter().all(|&c| c < 50));
+        assert!(light && dark);
+        // The macOS template stays the black glyph.
+        assert_eq!(
+            tray_icon_png(true),
+            include_bytes!("../icons/tray-icon.png").as_slice()
+        );
+    }
+
+    fn ctrl() -> Modifiers {
+        Modifiers {
+            ctrl: true,
+            ..Modifiers::default()
         }
     }
 
-    let menu = build_tray_menu(app)?;
-    builder = builder.menu(&menu);
+    #[test]
+    fn menu_keys_map_to_their_items() {
+        assert_eq!(key_action(0xBC, ctrl()), Some(PREFERENCES));
+        assert_eq!(key_action(u32::from(b'N'), ctrl()), Some(NEW_CHAT));
+        assert_eq!(key_action(u32::from(b'W'), ctrl()), Some(CLOSE_WINDOW));
+        assert_eq!(key_action(u32::from(b'Q'), ctrl()), Some(QUIT));
+        assert_eq!(key_action(u32::from(b'R'), ctrl()), Some(RELOAD));
+        assert_eq!(key_action(0xBB, ctrl()), Some(ZOOM_IN));
+        assert_eq!(key_action(0x6B, ctrl()), Some(ZOOM_IN));
+        assert_eq!(key_action(0xBD, ctrl()), Some(ZOOM_OUT));
+        assert_eq!(key_action(0x30, ctrl()), Some(ZOOM_RESET));
+        assert_eq!(key_action(0x60, ctrl()), Some(ZOOM_RESET));
+        assert_eq!(key_action(0x7A, Modifiers::default()), Some(FULLSCREEN));
+        let alt = Modifiers {
+            alt: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(key_action(0x25, alt), Some(BACK));
+        assert_eq!(key_action(0x27, alt), Some(FORWARD));
+    }
 
-    builder
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { .. } = event {
-                focus_main_window(tray.app_handle());
-            }
-        })
-        .on_menu_event(|app, event| handle_tray_menu_event(app, event.id().as_ref()))
-        .build(app)?;
+    #[test]
+    fn other_keys_reach_the_page() {
+        // Ctrl+K and plain typing are the page's.
+        assert_eq!(key_action(u32::from(b'K'), ctrl()), None);
+        assert_eq!(key_action(u32::from(b'N'), Modifiers::default()), None);
+        assert_eq!(key_action(0x25, Modifiers::default()), None);
+        let ctrl_shift = Modifiers {
+            ctrl: true,
+            shift: true,
+            alt: false,
+        };
+        assert_eq!(key_action(u32::from(b'N'), ctrl_shift), None);
+    }
 
-    Ok(())
+    #[test]
+    fn every_menu_accelerator_has_a_key() {
+        for (id, accelerator) in WINDOW_ACCELERATORS {
+            let key = accelerator.rsplit('+').next().unwrap_or_default();
+            assert!(!virtual_keys(key).is_empty(), "{id}: {accelerator}");
+        }
+    }
+
+    #[test]
+    fn the_about_item_has_the_name_and_version() {
+        let icon = Image::new_owned(vec![0; 4], 1, 1);
+        let metadata = about_metadata("1.2.3", Some(icon));
+        assert_eq!(metadata.name.as_deref(), Some("Onyx"));
+        assert_eq!(metadata.version.as_deref(), Some("1.2.3"));
+        assert!(metadata.icon.is_some());
+    }
+
+    fn click(button: MouseButton, button_state: MouseButtonState) -> TrayIconEvent {
+        TrayIconEvent::Click {
+            id: "onyx-tray".into(),
+            position: tauri::PhysicalPosition::new(0.0, 0.0),
+            rect: tauri::Rect::default(),
+            button,
+            button_state,
+        }
+    }
+
+    #[test]
+    fn a_left_click_on_the_tray_icon_opens_the_app() {
+        assert!(opens_app(&click(MouseButton::Left, MouseButtonState::Up)));
+        assert!(!opens_app(&click(
+            MouseButton::Left,
+            MouseButtonState::Down
+        )));
+        assert!(!opens_app(&click(MouseButton::Right, MouseButtonState::Up)));
+    }
 }
