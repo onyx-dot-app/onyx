@@ -234,5 +234,4 @@ test("the streamed packets replace the running response's saved ones while it st
       result.current.messages.find((item) => item.messageId === 11)?.packets
     ).toEqual([text("Live answer")])
   );
-  expect(result.current.liveResponseId).toBe(11);
 });

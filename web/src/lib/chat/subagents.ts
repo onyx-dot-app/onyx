@@ -95,8 +95,6 @@ const RECONNECT_DELAY_MS = 1000;
 interface SubagentTranscript {
   /** The conversation's messages, oldest first. */
   messages: Message[];
-  /** The response that streams live, if any. */
-  liveResponseId: number | null;
   loading: boolean;
   failed: boolean;
 }
@@ -212,7 +210,6 @@ export function useSubagentTranscript(
 
   return {
     messages,
-    liveResponseId,
     loading: isLoading,
     failed: error !== undefined,
   };
