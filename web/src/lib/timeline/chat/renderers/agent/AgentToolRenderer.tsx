@@ -6,11 +6,8 @@ import { codeSpan, markdown } from "@opal/utils";
 import type { CustomToolPacket } from "@/app/app/services/streamingModels";
 import type { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import {
-  openSubagent,
-  SubagentTabsContext,
-  useSpawnedSubagents,
-} from "@/lib/chat/subagents";
+import { openSubagent, SubagentTabsContext } from "@/lib/chat/subagents";
+import { useSpawnedSubagents } from "@/lib/chat/hooks";
 import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";
 
 /**

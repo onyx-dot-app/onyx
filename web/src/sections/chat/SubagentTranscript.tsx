@@ -10,12 +10,11 @@ import { SvgSquare } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { formatDurationSeconds } from "@opal/time";
 import { useActiveAgent } from "@/lib/agents/hooks";
-import { useChatSubagents } from "@/lib/chat/hooks";
+import { useChatSubagents, useSubagentTranscript } from "@/lib/chat/hooks";
 import {
   isLiveSubagent,
   SubagentPathContext,
   subagentStartedAt,
-  useSubagentTranscript,
 } from "@/lib/chat/subagents";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { PanelUrlBar } from "@/sections/output-panel/PanelUrlBar";

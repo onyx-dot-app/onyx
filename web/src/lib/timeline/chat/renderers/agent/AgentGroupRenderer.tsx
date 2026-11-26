@@ -15,8 +15,8 @@ import {
   openSubagent,
   subagentStartedAt,
   SubagentTabsContext,
-  useSpawnedSubagents,
 } from "@/lib/chat/subagents";
+import { useSpawnedSubagents } from "@/lib/chat/hooks";
 import type { ChatSubagent } from "@/lib/chat/types";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { agentToolCalls } from "@/lib/timeline/chat/renderers/agent/agentTools";

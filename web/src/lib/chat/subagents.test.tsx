@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from "@tests/setup/test-utils";
 import type { BackendMessage } from "@/app/app/types";
 import { StopReason, type Packet } from "@/app/app/services/streamingModels";
-import { useSubagentTranscript } from "@/lib/chat/subagents";
+import { useSubagentTranscript } from "@/lib/chat/hooks";
 
 function message(
   id: number,
