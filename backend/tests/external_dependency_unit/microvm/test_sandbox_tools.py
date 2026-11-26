@@ -360,6 +360,7 @@ def sandbox(
     monkeypatch.setattr(harness_factory, "HARNESS_SANDBOX_ENABLED", True)
     monkeypatch.setattr(harness_factory, "_instance", instance)
     monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: True)
+    monkeypatch.setattr(process_message, "sandbox_tools_configured", lambda: True)
     return instance
 
 
@@ -757,6 +758,9 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     ref = chat.ref(db_session)
     assert _stops(parts) == [packets.AWAITING_USER]
     assert ended == [ref]
+    # With `auto`, the node can stop serving during the park; the resumed root
+    # keeps its sandbox tools.
+    monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: False)
 
     # The approval resumes the root from its saved state with new agent and
     # tool objects, as another API pod does; its release ends the turn again.

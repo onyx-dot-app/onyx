@@ -156,6 +156,13 @@ def _check_live_node() -> bool:
         return False
 
 
+def sandbox_tools_configured() -> bool:
+    """Whether the configuration alone offers chat sandbox tools. A resumed
+    parked run uses this, so its saved sandbox calls keep their tools; with
+    no serving node they fail at placement."""
+    return STATIC_OFF_REASON is None
+
+
 def sandbox_tools_available() -> bool:
     """Whether this deployment offers chat sandbox tools now."""
     if STATIC_OFF_REASON is not None:

@@ -126,7 +126,10 @@ from onyx.llm.factory import (
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.override_models import LLMOverride
-from onyx.microvm.availability import sandbox_tools_available
+from onyx.microvm.availability import (
+    sandbox_tools_available,
+    sandbox_tools_configured,
+)
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
@@ -554,8 +557,14 @@ def prepare_chat_turn(
                 and chat_session.incognito_record_mode is None
                 and len(selected_models) == 1
                 and not new_msg_req.deep_research
-                # Last: with `auto` it reads the node registry (cached).
-                and sandbox_tools_available()
+                # Last: with `auto` it reads the node registry (cached). A
+                # resumed run skips the node check, so its saved sandbox calls
+                # keep their tools.
+                and (
+                    sandbox_tools_configured()
+                    if parked_response_id is not None
+                    else sandbox_tools_available()
+                )
             )
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn

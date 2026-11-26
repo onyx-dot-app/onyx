@@ -139,6 +139,7 @@ def sandbox(
     monkeypatch.setattr(harness_factory, "HARNESS_SANDBOX_ENABLED", True)
     monkeypatch.setattr(harness_factory, "_instance", instance)
     monkeypatch.setattr(process_message, "sandbox_tools_available", lambda: True)
+    monkeypatch.setattr(process_message, "sandbox_tools_configured", lambda: True)
     monkeypatch.setattr(file_copies, "RETRY_PAUSE_SECONDS", 0.0)
     # The fake VM and the database share the host's clock.
     monkeypatch.setattr(file_copies, "SEARCH_COPY_CLOCK_SKEW", timedelta(0))
