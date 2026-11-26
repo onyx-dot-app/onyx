@@ -50,11 +50,16 @@ export function browserPageTitle(
   }
 }
 
-/** Whether a page shows nothing yet, as a new tab before its first URL. */
+/** Whether a page shows nothing yet, as a new tab before its first URL. A
+ * blank page with a title has content (a popup the opener wrote). */
 export function isBlankBrowserPage(
-  page: Pick<BrowserTab, "url" | "loading">
+  page: Pick<BrowserTab, "url" | "loading" | "title">
 ): boolean {
-  return !page.loading && (page.url === "" || page.url === "about:blank");
+  return (
+    !page.loading &&
+    page.title.trim() === "" &&
+    (page.url === "" || page.url === "about:blank")
+  );
 }
 
 /** Whether a stream packet's object starts the `browser_open` tool. */

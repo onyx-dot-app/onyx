@@ -411,13 +411,16 @@ describe("browser page tabs", () => {
   });
 
   test("a page is blank until it loads its first URL", () => {
-    expect(isBlankBrowserPage({ url: "about:blank", loading: false })).toBe(
-      true
-    );
-    expect(isBlankBrowserPage({ url: "", loading: false })).toBe(true);
-    expect(isBlankBrowserPage({ url: "about:blank", loading: true })).toBe(
-      false
-    );
+    const blank = { url: "about:blank", loading: false, title: "" };
+    expect(isBlankBrowserPage(blank)).toBe(true);
+    expect(isBlankBrowserPage({ ...blank, url: "" })).toBe(true);
+    expect(isBlankBrowserPage({ ...blank, loading: true })).toBe(false);
     expect(isBlankBrowserPage(TAB)).toBe(false);
+  });
+
+  test("a blank page that the opener wrote a title into is not blank", () => {
+    expect(
+      isBlankBrowserPage({ url: "about:blank", loading: false, title: "Print" })
+    ).toBe(false);
   });
 });
