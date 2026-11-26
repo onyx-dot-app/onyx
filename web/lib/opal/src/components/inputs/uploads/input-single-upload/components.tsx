@@ -66,6 +66,8 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
   // The last value this control reported. A different one from outside (a
   // form reset) forgets where the old value came from.
   const reportedRef = useRef<string | undefined>(undefined);
+  // Bumped by each report and each new read, so a superseded read is ignored.
+  const readIdRef = useRef(0);
   const outsideText = props.mode !== "file" ? props.value : undefined;
   useEffect(() => {
     if (outsideText !== undefined && outsideText !== reportedRef.current) {
@@ -98,6 +100,7 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
   function reportText(text: string) {
     if (props.mode === "file") return;
     reportedRef.current = text;
+    readIdRef.current += 1;
     if (props.value === undefined) setOwnText(text);
     props.setValue(text);
   }
@@ -120,15 +123,17 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
       return;
     }
     const onReadingChange = props.onReadingChange;
+    const readId = ++readIdRef.current;
     const reader = new FileReader();
     reader.onload = () => {
       onReadingChange?.(false);
+      if (readId !== readIdRef.current) return;
       setSource({ kind: "file", name: file.name });
       reportText(typeof reader.result === "string" ? reader.result : "");
     };
     reader.onerror = () => {
       onReadingChange?.(false);
-      clear();
+      if (readId === readIdRef.current) clear();
     };
     onReadingChange?.(true);
     reader.readAsText(file);
