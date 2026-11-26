@@ -1,10 +1,12 @@
-"""Session saves and restores for Firecracker harness sandboxes.
+"""Session saves and restores for harness sandboxes.
 
-Save: the guest daemon archives the session directory without dependencies
-and caches (CaptureSession), the node agent uploads the archive through a
-presigned PUT, the file store checks it, and the new save is committed in
-the cache before the old file is deleted. Restore: before a session's first
-use on a new VM instance, its last save comes back through a presigned GET.
+Save: the guest daemon lists the session directory, a `SessionTransfer`
+archives it without dependencies and caches and stores the archive, and the
+new save is committed in the cache before the old file is deleted. Restore:
+before a session's first use on a new sandbox instance, its last save comes
+back through the transfer. On Firecracker (`AgentSessionTransfer`) the guest
+daemon captures the archive (CaptureSession), and the node agent moves it
+through presigned URLs.
 
 A stop saves every session of the VM first (`SessionSaveCheckpointer`) and
 keeps a busy VM. The node-report idle evictor runs the save and the stop in
@@ -26,7 +28,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AbstractContextManager, contextmanager
 from uuid import UUID
 
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -127,7 +129,48 @@ class SessionPurgedError(SessionSaveError):
     """The session or its sandbox was deleted; nothing is saved."""
 
 
-class SessionArchiveStore(abc.ABC):
+class ArchiveStorage(abc.ABC):
+    """Where session archives live. A purge deletes them without a running
+    sandbox."""
+
+    @abc.abstractmethod
+    def delete(self, file_id: str) -> None:
+        pass
+
+
+class CapturedArchive(BaseModel):
+    """A session archive that a transfer captured and stored."""
+
+    file_id: str
+    size_bytes: int
+    sha256: str
+    # Top-level directories and files in the archive.
+    roots: list[str]
+
+
+class SessionTransfer(abc.ABC):
+    """Moves session archives between one running sandbox instance and
+    archive storage."""
+
+    @abc.abstractmethod
+    def capture(
+        self,
+        *,
+        session_id: UUID,
+        roots: list[str],
+        cancelled: Callable[[], bool] | None,
+    ) -> CapturedArchive:
+        """Archive `roots` of the session directory and store the archive.
+        Raises SessionSaveCancelledError when `cancelled` turns true while it
+        runs, and keeps nothing then."""
+
+    @abc.abstractmethod
+    def restore(self, *, session_id: UUID, save: SessionSave) -> None:
+        """Replace the save's roots in the session directory with the
+        archive of `save` (it has a file ID)."""
+
+
+class SessionArchiveStore(ArchiveStorage):
     """Object storage for session archives, reached by the node agent
     through presigned URLs."""
 
@@ -141,10 +184,6 @@ class SessionArchiveStore(abc.ABC):
 
     @abc.abstractmethod
     def presign_download(self, file_id: str) -> PresignedRequest:
-        pass
-
-    @abc.abstractmethod
-    def delete(self, file_id: str) -> None:
         pass
 
 
@@ -236,20 +275,79 @@ def session_save_lock(
     return held()
 
 
+class AgentSessionTransfer(SessionTransfer):
+    """Firecracker: the guest daemon captures and restores the archive, and
+    the node agent moves it through presigned URLs."""
+
+    def __init__(
+        self, agent: HostAgentClient, store: SessionArchiveStore, instance: VmInstance
+    ) -> None:
+        self._agent = agent
+        self._store = store
+        self._instance = instance
+
+    def capture(
+        self,
+        *,
+        session_id: UUID,
+        roots: list[str],
+        cancelled: Callable[[], bool] | None,
+    ) -> CapturedArchive:
+        """An upload that fails leaves the capture on the node until it
+        expires."""
+        try:
+            capture = self._agent.capture_session(
+                self._instance,
+                session_id=str(session_id),
+                roots=roots,
+                cancelled=cancelled,
+            )
+        except HostAgentCallCancelledError as e:
+            raise SessionSaveCancelledError(f"save of {session_id} cancelled") from e
+        try:
+            if cancelled is not None and cancelled():
+                raise HostAgentCallCancelledError()
+            pending_id, request = self._store.presign_upload(
+                size=capture.size_bytes, sha256=capture.sha256
+            )
+            self._agent.upload_capture(
+                capture_id=capture.capture_id, request=request, cancelled=cancelled
+            )
+        except HostAgentCallCancelledError as e:
+            _discard_capture(self._agent, capture.capture_id)
+            raise SessionSaveCancelledError(f"save of {session_id} cancelled") from e
+        return CapturedArchive(
+            file_id=self._store.finalize(pending_id),
+            size_bytes=capture.size_bytes,
+            sha256=capture.sha256,
+            roots=capture.roots,
+        )
+
+    def restore(self, *, session_id: UUID, save: SessionSave) -> None:
+        if save.file_id is None:
+            raise RuntimeError("Bug: a restore of a save without an archive")
+        self._agent.restore_session(
+            self._instance,
+            session_id=str(session_id),
+            request=self._store.presign_download(save.file_id),
+            size_bytes=save.size_bytes,
+            sha256=save.sha256,
+            roots=save.roots,
+        )
+
+
 def save_session(
     cache: CacheBackend,
-    agent: HostAgentClient,
     daemon: SandboxDaemonClient,
-    store: SessionArchiveStore,
-    instance: VmInstance,
+    transfer: SessionTransfer,
+    store: ArchiveStorage,
     sandbox_id: UUID,
     session_id: UUID,
     cancelled: Callable[[], bool] | None = None,
 ) -> SessionSave:
-    """Capture, upload and commit one session, then delete the old archive.
+    """Capture, store and commit one session, then delete the old archive.
     Hold `session_save_lock`. Raises on any failure; the old save stays
-    committed. An upload that fails leaves the capture on the node until it
-    expires. `cancelled` is checked while the capture and the upload run
+    committed. `cancelled` is checked while the capture and the upload run
     (SessionSaveCancelledError). A purged session raises SessionPurgedError
     and keeps no new archive."""
     if is_purged(cache, sandbox_id, session_id):
@@ -288,30 +386,15 @@ def save_session(
         file_id=None, size_bytes=0, sha256="", roots=[], saved_at=time.time()
     )
     if roots:
-        try:
-            capture = agent.capture_session(
-                instance, session_id=str(session_id), roots=roots, cancelled=cancelled
-            )
-        except HostAgentCallCancelledError as e:
-            raise SessionSaveCancelledError(f"save of {session_id} cancelled") from e
-        try:
-            if cancelled is not None and cancelled():
-                raise HostAgentCallCancelledError()
-            pending_id, request = store.presign_upload(
-                size=capture.size_bytes, sha256=capture.sha256
-            )
-            agent.upload_capture(
-                capture_id=capture.capture_id, request=request, cancelled=cancelled
-            )
-        except HostAgentCallCancelledError as e:
-            _discard_capture(agent, capture.capture_id)
-            raise SessionSaveCancelledError(f"save of {session_id} cancelled") from e
+        captured = transfer.capture(
+            session_id=session_id, roots=roots, cancelled=cancelled
+        )
         save = save.model_copy(
             update={
-                "file_id": store.finalize(pending_id),
-                "size_bytes": capture.size_bytes,
-                "sha256": capture.sha256,
-                "roots": capture.roots,
+                "file_id": captured.file_id,
+                "size_bytes": captured.size_bytes,
+                "sha256": captured.sha256,
+                "roots": captured.roots,
             }
         )
     set_session_save(cache, session_id, save)
@@ -334,7 +417,7 @@ def save_session(
 
 def _drop_purged_save(
     cache: CacheBackend,
-    store: SessionArchiveStore,
+    store: ArchiveStorage,
     sandbox_id: UUID,
     session_id: UUID,
     save: SessionSave,
@@ -372,7 +455,7 @@ def _discard_capture(agent: HostAgentClient, capture_id: str) -> None:
         logger.warning("sandbox_fc_capture_discard_failed capture=%s", capture_id)
 
 
-def _delete_archive(store: SessionArchiveStore, file_id: str, session_id: UUID) -> None:
+def _delete_archive(store: ArchiveStorage, file_id: str, session_id: UUID) -> None:
     try:
         store.delete(file_id)
     except Exception:
@@ -384,7 +467,7 @@ def _delete_archive(store: SessionArchiveStore, file_id: str, session_id: UUID) 
 
 def delete_session_archives(
     cache: CacheBackend,
-    store: SessionArchiveStore | None,
+    store: ArchiveStorage | None,
     sandbox_id: UUID,
     session_id: UUID,
 ) -> None:
@@ -405,24 +488,14 @@ def delete_session_archives(
 
 
 def restore_session(
-    cache: CacheBackend,
-    agent: HostAgentClient,
-    store: SessionArchiveStore,
-    instance: VmInstance,
-    session_id: UUID,
+    cache: CacheBackend, transfer: SessionTransfer, session_id: UUID
 ) -> None:
-    """Restore a session's last save into a VM instance, if it has one."""
+    """Restore a session's last save into the transfer's instance, if it has
+    one."""
     save = get_session_save(cache, session_id)
     if save is None or save.file_id is None:
         return
-    agent.restore_session(
-        instance,
-        session_id=str(session_id),
-        request=store.presign_download(save.file_id),
-        size_bytes=save.size_bytes,
-        sha256=save.sha256,
-        roots=save.roots,
-    )
+    transfer.restore(session_id=session_id, save=save)
     logger.info(
         "sandbox_fc_session_restored session=%s bytes=%d", session_id, save.size_bytes
     )
@@ -482,6 +555,7 @@ class SessionSaveCheckpointer(SandboxCheckpointer):
         daemon = SandboxDaemonClient(
             agent.channel, sandbox_id=vm.sandbox_id, sandboxd_key=key
         )
+        transfer = AgentSessionTransfer(agent, self._store, instance)
         sessions = sessions_on_instance(
             tenant_cache, sandbox_id, (vm.attempt, vm.generation)
         )
@@ -496,10 +570,9 @@ class SessionSaveCheckpointer(SandboxCheckpointer):
                             return False
                         save_session(
                             tenant_cache,
-                            agent,
                             daemon,
+                            transfer,
                             self._store,
-                            instance,
                             sandbox_id,
                             session_id,
                             cancelled,

@@ -145,11 +145,10 @@ from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
 from onyx.prompts.sandbox_tools import ATTACHMENTS_NOT_SAVED_NOTE, CHAT_FILES_LAYOUT
 from onyx.server.features.action_policies.models import ApprovalChoice
-from onyx.server.features.build.sandbox import harness_factory
+from onyx.server.features.build.sandbox import daemon_harness, harness_factory
 from onyx.server.features.build.sandbox.exec_output import EXEC_CALL_OUTPUT_MAX_BYTES
 from onyx.server.features.build.sandbox.file_copy_state import copy_generation_key
 from onyx.server.features.build.sandbox.firecracker import (
-    harness_sandbox,
     harness_state,
     purge,
 )
@@ -1126,7 +1125,7 @@ def test_an_anonymous_turn_offers_no_sandbox(
 def test_a_running_command_takes_input_polls_and_stops_through_write_stdin(
     monkeypatch: pytest.MonkeyPatch, make_tools: MakeTools
 ) -> None:
-    monkeypatch.setattr(harness_sandbox, "POLL_MIN_YIELD_MS", 250)
+    monkeypatch.setattr(daemon_harness, "POLL_MIN_YIELD_MS", 250)
     tools = make_tools()
     started, _ = _run(tools.exec_command, {"cmd": "cat", "yield_time_ms": 250})
     running = started.details
@@ -1191,7 +1190,7 @@ def test_the_claude_shell_runs_commands_by_its_own_arguments(
     `run_in_background` returns at once with the session ID while the
     command runs. write_stdin takes its wait as `timeout` too, and
     `description` changes nothing."""
-    monkeypatch.setattr(harness_sandbox, "POLL_MIN_YIELD_MS", 250)
+    monkeypatch.setattr(daemon_harness, "POLL_MIN_YIELD_MS", 250)
     tools = make_tools()
     assert tools.bash.name == "bash"
     bash = tools.bash.tool_definition().parameters["properties"]
@@ -2763,7 +2762,7 @@ def test_a_deck_whose_pdf_is_too_large_publishes_with_its_thumbnail(
     sandbox: FirecrackerHarnessSandbox,
     make_tools: MakeTools,
 ) -> None:
-    monkeypatch.setattr(harness_sandbox, "RENDER_PREVIEW_MAX_PDF_BYTES", 3)
+    monkeypatch.setattr(daemon_harness, "RENDER_PREVIEW_MAX_PDF_BYTES", 3)
     tools = make_tools(
         create_chat_session(
             db_session, "large deck", user.id, persona_id=DEFAULT_PERSONA_ID

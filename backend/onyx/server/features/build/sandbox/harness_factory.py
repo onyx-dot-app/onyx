@@ -61,7 +61,8 @@ def get_harness_sandbox() -> HarnessSandbox:
 
 
 def get_firecracker_sandbox() -> "FirecrackerHarnessSandbox":
-    """The Firecracker sandbox itself, for its purge calls (delete hooks)."""
+    """The Firecracker sandbox itself, for its node-report calls (idle
+    eviction) and the smoke script."""
     return _firecracker_sandbox()
 
 

@@ -26,6 +26,7 @@ from onyx.microvm.models import (
     ExecStarted,
     OutputStream,
 )
+from onyx.server.features.build.sandbox import daemon_harness
 from onyx.server.features.build.sandbox.firecracker import harness_sandbox
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
@@ -123,9 +124,9 @@ class _Render:
         monkeypatch.setattr(
             harness_sandbox, "sandbox_daemon", lambda _factory, _placed: self.daemon
         )
-        monkeypatch.setattr(harness_sandbox, "_read", read)
+        monkeypatch.setattr(daemon_harness, "_read", read)
         monkeypatch.setattr(
-            harness_sandbox, "time", SimpleNamespace(monotonic=lambda: self.now)
+            daemon_harness, "time", SimpleNamespace(monotonic=lambda: self.now)
         )
 
     def render(

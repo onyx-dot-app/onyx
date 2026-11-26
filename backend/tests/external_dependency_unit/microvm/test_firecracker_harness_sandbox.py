@@ -39,7 +39,11 @@ from onyx.microvm.models import (
 )
 from onyx.microvm.models import ExecEvent as DaemonExecEvent
 from onyx.microvm.registry import get_sandbox_placement
-from onyx.server.features.build.sandbox import harness_base, harness_factory
+from onyx.server.features.build.sandbox import (
+    daemon_harness,
+    harness_base,
+    harness_factory,
+)
 from onyx.server.features.build.sandbox.exec_output import (
     ExecOutputBuffer,
 )
@@ -394,7 +398,7 @@ def test_an_empty_write_polls_until_the_command_ends(
     node: RunningFakeAgent,
     new_ref: NewRef,
 ) -> None:
-    monkeypatch.setattr(harness_sandbox, "POLL_MIN_YIELD_MS", 300)
+    monkeypatch.setattr(daemon_harness, "POLL_MIN_YIELD_MS", 300)
     ref = new_ref()
     _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
     session = result.session_id
@@ -446,7 +450,7 @@ def test_a_character_split_between_polls_is_kept(
     node: RunningFakeAgent,
     new_ref: NewRef,
 ) -> None:
-    monkeypatch.setattr(harness_sandbox, "POLL_MIN_YIELD_MS", 250)
+    monkeypatch.setattr(daemon_harness, "POLL_MIN_YIELD_MS", 250)
     ref = new_ref()
     _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
     session = result.session_id
@@ -1047,7 +1051,7 @@ def test_a_failed_record_lookup_still_runs_every_purge_step(
     def lookup_fails(*_args: object) -> bool:
         raise RuntimeError("cache down")
 
-    monkeypatch.setattr(harness_sandbox, "has_session_records", lookup_fails)
+    monkeypatch.setattr(daemon_harness, "has_session_records", lookup_fails)
 
     with pytest.raises(RuntimeError, match="cache down"):
         sandbox.purge_session(
@@ -1198,7 +1202,7 @@ def test_a_failed_registration_stops_the_started_command(
     def fail(*_args: object, **_kwargs: object) -> None:
         raise harness_state.StateContentionError("contention")
 
-    monkeypatch.setattr(harness_sandbox, "put_exec_session", fail)
+    monkeypatch.setattr(daemon_harness, "put_exec_session", fail)
     with pytest.raises(harness_state.StateContentionError):
         _run(sandbox.exec_command(ref, "sleep 60", yield_time_ms=250))
     [command] = [
