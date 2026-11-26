@@ -48,7 +48,10 @@
   `awaiting_user`, and the response waits, saved, with no server holding
   it and no time limit. The user picks Approve once, Approve for this chat, or
   Reject. Approve once runs the exact call. Approve for this chat also runs
-  later calls of that tool in the chat session with no card. Reject gives the
+  later calls of that tool in the chat session with no card. An action that
+  always asks (`integrations/policy.py:always_asks`) has no Approve for this
+  chat, no saved grant skips its card, and `decide_approval` saves such an
+  approval as a single one. Reject gives the
   model a "did not run" result. Once no request of the response waits, the
   response continues in a new stream, on any server, and the answer continues.
   A policy change applies from the next message.
