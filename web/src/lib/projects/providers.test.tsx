@@ -548,7 +548,7 @@ describe("ProjectsContext beginUpload cancel", () => {
     expect(mockToastError).not.toHaveBeenCalled();
   });
 
-  it("unlinks a cancelled project upload before it deletes it", async () => {
+  it("unlinks a cancelled project upload, deletes it, then refreshes", async () => {
     let finishUpload: (value: unknown) => void = () => {};
     let uploadOptions: UploadFilesOptions = {};
     mockUploadFiles.mockImplementation(
@@ -566,9 +566,16 @@ describe("ProjectsContext beginUpload cancel", () => {
     );
     const calls: string[] = [];
     mockUnlinkFileFromProject.mockReset();
-    mockUnlinkFileFromProject.mockImplementation(async () => {
-      calls.push("unlink");
-    });
+    let finishUnlink: () => void = () => {};
+    mockUnlinkFileFromProject.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishUnlink = () => {
+            calls.push("unlink");
+            resolve();
+          };
+        })
+    );
     mockDeleteUserFile.mockReset();
     mockDeleteUserFile.mockImplementation(async () => {
       calls.push("delete");
@@ -584,6 +591,14 @@ describe("ProjectsContext beginUpload cancel", () => {
       );
     });
     const tempId = optimisticFiles[0]?.temp_id ?? "";
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).includes("/api/user/files/recent")) {
+          calls.push("refresh");
+        }
+        return new Response("[]", { status: 200 });
+      });
     act(() => uploadOptions.onProgress?.(1));
     act(() => cancelUpload(tempId));
 
@@ -602,11 +617,14 @@ describe("ProjectsContext beginUpload cancel", () => {
       });
     });
 
+    // The refresh waits while the unlink is still running.
     await waitFor(() =>
-      expect(mockDeleteUserFile).toHaveBeenCalledWith("user-sent")
+      expect(mockUnlinkFileFromProject).toHaveBeenCalledWith(7, "user-sent")
     );
-    expect(mockUnlinkFileFromProject).toHaveBeenCalledWith(7, "user-sent");
-    expect(calls).toEqual(["unlink", "delete"]);
+    expect(calls).toEqual([]);
+    await act(async () => finishUnlink());
+    await waitFor(() => expect(calls).toEqual(["unlink", "delete", "refresh"]));
+    fetchSpy.mockRestore();
     expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
       tempId
     );
