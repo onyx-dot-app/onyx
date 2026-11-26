@@ -1521,6 +1521,10 @@
           "description": "웹에서 실시간 정보와 최신 결과를 검색합니다.",
           "title": "웹 검색"
         }
+      },
+      "browser": {
+        "title": "브라우저",
+        "description": "에이전트가 샌드박스에서 웹 브라우저를 사용하도록 허용합니다. 사용자는 채팅 패널에서 이를 지켜보고 제어권을 가져올 수 있습니다."
       }
     },
     "codeInterpreter": {
@@ -13570,6 +13574,9 @@
       },
       "resizeHandle": {
         "label": "패널 크기 조정"
+      },
+      "browserTab": {
+        "label": "브라우저"
       }
     },
     "export": {
@@ -13658,6 +13665,88 @@
         "openParent": "상위 열기",
         "announcement": "{model} 서브에이전트: {status}",
         "announcementUnnamed": "서브에이전트: {status}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "브라우저 페이지",
+        "inputDescription": "브라우저 페이지에서 나가려면 Shift+Esc를 누르세요."
+      },
+      "download": {
+        "saved": "{fileName}을(를) 이 채팅의 파일로 다운로드했습니다",
+        "showFiles": "파일 보기"
+      },
+      "clearData": {
+        "action": "브라우저 데이터 지우기",
+        "title": "브라우저 데이터를 지울까요?",
+        "description": "브라우저의 모든 사이트에서 로그아웃되고, 모든 채팅에서 쿠키, 기록, 저장된 데이터가 삭제됩니다.",
+        "confirm": "데이터 지우기",
+        "done": "브라우저 데이터를 지웠습니다",
+        "error": "브라우저 데이터를 지우지 못했습니다. 다시 시도하세요."
+      },
+      "urlBar": {
+        "back": "뒤로",
+        "forward": "앞으로",
+        "reload": "새로고침",
+        "label": "주소",
+        "placeholder": "URL 입력"
+      },
+      "moreMenu": {
+        "label": "기타 브라우저 작업"
+      },
+      "tabs": {
+        "new": "새 탭"
+      },
+      "control": {
+        "you": "이 탭은 내가 제어하고 있습니다",
+        "agent": "이 탭은 에이전트가 제어하고 있습니다",
+        "anotherViewer": "다른 창에서 이 탭을 제어하고 있습니다",
+        "none": "이 탭을 제어하는 사람이 없습니다",
+        "take": "제어권 가져오기",
+        "release": "제어권 반환"
+      },
+      "status": {
+        "connecting": "브라우저에 연결하는 중",
+        "starting": "브라우저를 시작하는 중",
+        "blank": {
+          "title": "아직 페이지가 없습니다",
+          "description": "위에 URL을 입력하여 페이지를 여세요."
+        },
+        "noTabs": {
+          "title": "열린 페이지가 없습니다",
+          "description": "에이전트가 연 페이지가 여기에 표시됩니다. 새 탭을 열 수도 있습니다."
+        },
+        "disconnected": {
+          "title": "브라우저 연결이 끊어졌습니다",
+          "description": "다시 연결하는 중입니다."
+        },
+        "disabled": {
+          "title": "브라우저가 꺼져 있습니다",
+          "description": "관리자가 브라우저를 껐거나 이 채팅의 브라우저를 볼 수 없습니다."
+        },
+        "error": {
+          "title": "브라우저를 사용할 수 없습니다",
+          "description": "채팅의 샌드박스를 시작하지 못했습니다. 나중에 다시 시도하세요."
+        },
+        "retry": "다시 시도"
+      },
+      "dialog": {
+        "label": "페이지 대화상자",
+        "response": "대화상자 응답",
+        "responsePlaceholder": "응답 입력",
+        "dismiss": "닫기",
+        "accept": "수락",
+        "takeControl": "응답하려면 제어권을 가져오세요."
+      },
+      "fileChooser": {
+        "label": "페이지에 사용할 파일 선택",
+        "askOne": "페이지에서 파일을 요청합니다.",
+        "askMany": "페이지에서 파일들을 요청합니다.",
+        "cancel": "취소",
+        "chooseOne": "파일 선택",
+        "chooseMany": "파일 선택",
+        "inputLabel": "페이지용 파일",
+        "error": "파일을 업로드하지 못했습니다. 다시 시도하세요."
       }
     }
   },

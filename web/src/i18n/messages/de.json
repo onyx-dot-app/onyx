@@ -1521,6 +1521,10 @@
           "description": "Das Web nach Echtzeitinformationen und aktuellen Ergebnissen durchsuchen.",
           "title": "Websuche"
         }
+      },
+      "browser": {
+        "title": "Browser",
+        "description": "Erlauben Sie dem Agenten, in seiner Sandbox einen Webbrowser zu verwenden. Benutzer können ihn im Chatbereich beobachten und die Steuerung übernehmen."
       }
     },
     "codeInterpreter": {
@@ -13570,6 +13574,9 @@
       },
       "resizeHandle": {
         "label": "Bereichsgröße ändern"
+      },
+      "browserTab": {
+        "label": "Browser"
       }
     },
     "export": {
@@ -13658,6 +13665,88 @@
         "openParent": "Übergeordneten öffnen",
         "announcement": "{model}-Subagent: {status}",
         "announcementUnnamed": "Subagent: {status}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "Browserseite",
+        "inputDescription": "Drücken Sie Umschalt+Esc, um die Browserseite zu verlassen."
+      },
+      "download": {
+        "saved": "{fileName} wurde in die Dateien dieses Chats heruntergeladen",
+        "showFiles": "Dateien anzeigen"
+      },
+      "clearData": {
+        "action": "Browserdaten löschen",
+        "title": "Browserdaten löschen?",
+        "description": "Dadurch werden Sie im Browser von allen Websites abgemeldet, und Cookies, Verlauf und gespeicherte Daten werden für alle Ihre Chats gelöscht.",
+        "confirm": "Daten löschen",
+        "done": "Browserdaten gelöscht",
+        "error": "Die Browserdaten konnten nicht gelöscht werden. Versuchen Sie es erneut."
+      },
+      "urlBar": {
+        "back": "Zurück",
+        "forward": "Vorwärts",
+        "reload": "Neu laden",
+        "label": "Adresse",
+        "placeholder": "URL eingeben"
+      },
+      "moreMenu": {
+        "label": "Weitere Browseraktionen"
+      },
+      "tabs": {
+        "new": "Neuer Tab"
+      },
+      "control": {
+        "you": "Sie steuern diesen Tab",
+        "agent": "Der Agent steuert diesen Tab",
+        "anotherViewer": "Ein anderes Fenster steuert diesen Tab",
+        "none": "Niemand steuert diesen Tab",
+        "take": "Steuerung übernehmen",
+        "release": "Steuerung abgeben"
+      },
+      "status": {
+        "connecting": "Verbindung zum Browser wird hergestellt",
+        "starting": "Browser wird gestartet",
+        "blank": {
+          "title": "Noch keine Seite",
+          "description": "Geben Sie oben eine URL ein, um eine Seite zu öffnen."
+        },
+        "noTabs": {
+          "title": "Keine Seite geöffnet",
+          "description": "Seiten, die der Agent öffnet, erscheinen hier. Sie können auch einen neuen Tab öffnen."
+        },
+        "disconnected": {
+          "title": "Die Verbindung zum Browser wurde getrennt",
+          "description": "Es wird erneut versucht, eine Verbindung herzustellen."
+        },
+        "disabled": {
+          "title": "Der Browser ist ausgeschaltet",
+          "description": "Ein Administrator hat den Browser ausgeschaltet, oder Sie können den Browser dieses Chats nicht ansehen."
+        },
+        "error": {
+          "title": "Der Browser ist nicht verfügbar",
+          "description": "Die Sandbox des Chats konnte nicht starten. Versuchen Sie es später erneut."
+        },
+        "retry": "Erneut versuchen"
+      },
+      "dialog": {
+        "label": "Seitendialog",
+        "response": "Antwort im Dialog",
+        "responsePlaceholder": "Antwort eingeben",
+        "dismiss": "Schließen",
+        "accept": "Annehmen",
+        "takeControl": "Übernehmen Sie die Steuerung, um zu antworten."
+      },
+      "fileChooser": {
+        "label": "Dateien für die Seite auswählen",
+        "askOne": "Die Seite fordert eine Datei an.",
+        "askMany": "Die Seite fordert Dateien an.",
+        "cancel": "Abbrechen",
+        "chooseOne": "Datei auswählen",
+        "chooseMany": "Dateien auswählen",
+        "inputLabel": "Dateien für die Seite",
+        "error": "Die Dateien konnten nicht hochgeladen werden. Versuchen Sie es erneut."
       }
     }
   },
