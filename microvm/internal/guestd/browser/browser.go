@@ -108,7 +108,7 @@ type running struct {
 	start   time.Time
 	pipe    *os.File // write end of Chrome's --remote-debugging-pipe input
 	// svc is the service. Setsid makes it the leader of its own process
-	// group in Chrome's group. Nil: no service.
+	// group, in Chrome's cgroup. Nil: no service.
 	svc *proc
 }
 

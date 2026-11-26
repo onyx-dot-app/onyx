@@ -872,7 +872,7 @@ message BrowserStartRequest {
 }
 
 message BrowserStartResponse {
-  // The CDP port and a started flag, which no client read.
+  // Was cdp_port and started; do not reuse.
   reserved 1, 2;
   reserved "cdp_port", "started";
 }

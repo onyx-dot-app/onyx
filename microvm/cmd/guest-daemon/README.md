@@ -177,11 +177,17 @@ Browser service:
   If the service exits first or does not accept in time, the call fails with `BROWSER_START_FAILED`,
   with the end of its stderr. Chrome stays up.
 - If the service exits, or its socket stops accepting connections, while Chrome still answers, the next
-  `BrowserStart` starts the service again and keeps Chrome.
+  `BrowserStart` starts the service again and keeps Chrome. It first logs the PID and the end of the stderr
+  of a service that exited.
 - `BrowserStop` kills the service process group, then closes Chrome.
 - The daemon listens on vsock 3011 and relays each connection to the socket, with
   the egress relay code (`internal/egressrelay`) and no idle timeout: a viewer can get no bytes for
   minutes. If no service runs, the connection closes. There is no relay with `--listen`.
+- The daemon uses the socket only when its listener runs as the command user (`SO_PEERCRED`). The command
+  user owns `/run/onyx-browser`, so a command can replace the socket with a link to another socket.
+- The per-chat tabs of the service are not a security boundary. Commands run as the same user as Chrome
+  and the service, so a command can connect to the socket or to Chrome's DevTools port and use the tabs of
+  every chat. All chats in the VM belong to one user and share one profile.
 - The wire format (length-prefixed JSON and JPEG frames) is the service's: see
   `deployment/craft-runtime/browser-service/`.
 - A VM stop kills the VM, so Chrome gets no clean close and loses the cookies it has not written yet.
