@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@tests/setup/test-utils";
+import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import {
   RUN_STEP_LIST_MAX_HEIGHT_CLASS,
@@ -64,4 +64,76 @@ test("the open run card's step list scrolls inside a capped height", async () =>
   expect(step.closest(".overflow-y-auto")).toHaveClass(
     RUN_STEP_LIST_MAX_HEIGHT_CLASS
   );
+});
+
+test("a settled card that takes over an open step mounts open, also under text", async () => {
+  render(
+    <RunCard
+      steps={steps}
+      workingText="Working"
+      durationSeconds={3}
+      isActive={false}
+      autoCollapse
+      appear={false}
+      stepOpenState={{ openIds: new Set(["b"]), setOpen: () => {} }}
+      renderStep={(step) => (
+        <RunStep
+          id={step.id}
+          status={step.status}
+          title={`Step ${step.id}`}
+          body={<p>{`Body ${step.id}`}</p>}
+        />
+      )}
+    />
+  );
+  expect(await screen.findByText("Body b")).toBeInTheDocument();
+});
+
+test("a scroll that the browser clamps at the end keeps the list following", async () => {
+  // jsdom never resizes: the test calls the list's observer itself.
+  let resized = () => {};
+  jest.spyOn(global, "ResizeObserver").mockImplementation((callback) => {
+    resized = () => callback([], {} as ResizeObserver);
+    return {
+      observe: () => {},
+      unobserve: () => {},
+      disconnect: () => {},
+    } as unknown as ResizeObserver;
+  });
+  try {
+    render(
+      <RunCard
+        steps={steps}
+        workingText="Working"
+        isActive
+        renderStep={(step) => (
+          <RunStep
+            id={step.id}
+            status={step.status}
+            title={`Step ${step.id}`}
+          />
+        )}
+      />
+    );
+    const list = (await screen.findByText("Step a")).closest(
+      ".overflow-y-auto"
+    );
+    if (!(list instanceof HTMLElement)) throw new Error("no step list");
+    let scrollHeight = 500;
+    Object.defineProperty(list, "clientHeight", { value: 100 });
+    Object.defineProperty(list, "scrollHeight", { get: () => scrollHeight });
+    // At the end; then a row closes and the browser clamps the scroll down.
+    list.scrollTop = 400;
+    fireEvent.scroll(list);
+    scrollHeight = 300;
+    list.scrollTop = 200;
+    fireEvent.scroll(list);
+
+    // The content grows: the list follows it to the end.
+    scrollHeight = 600;
+    resized();
+    expect(list.scrollTop).toBe(600);
+  } finally {
+    jest.restoreAllMocks();
+  }
 });
