@@ -91,7 +91,7 @@ def test_k8s_inventory_skips_harness_pods() -> None:
         *core_api.list_namespaced_pod.call_args_list,
         *core_api.list_namespaced_secret.call_args_list,
     ):
-        assert NOT_HARNESS_SELECTOR in list_call.kwargs["label_selector"]
+        assert NOT_HARNESS_SELECTOR in list_call.kwargs["label_selector"].split(",")
 
 
 def test_k8s_tenant_listing_skips_harness_pods() -> None:
@@ -107,7 +107,7 @@ def test_k8s_tenant_listing_skips_harness_pods() -> None:
 
     assert manager.list_resource_tenant_ids(time.monotonic() + 10) == {"tenant-craft"}
     selector = core_api.list_namespaced_pod.call_args.kwargs["label_selector"]
-    assert NOT_HARNESS_SELECTOR in selector
+    assert NOT_HARNESS_SELECTOR in selector.split(",")
 
 
 def test_k8s_delete_refuses_harness_pod() -> None:

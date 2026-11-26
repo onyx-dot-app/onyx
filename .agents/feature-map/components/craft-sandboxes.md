@@ -232,10 +232,14 @@ port of the user, so a restored session can get a different port
   multi-tenant deployments it deletes the resources of tenants that no longer
   exist, after the same grace period; single-tenant deployments retain
   resources labelled with another tenant.
-- Craft listing and deletion skip harness sandboxes, which carry
+- Craft resource listing omits harness sandboxes, which carry
   `onyx.app/sandbox-kind=harness`
   (`backend/onyx/server/features/build/sandbox/labels.py:is_harness_resource`). They keep the
-  component labels, so the egress proxy still identifies them.
+  component labels, so the egress proxy still identifies them. If a listed
+  resource has the harness label when `delete_resource` reads it again, the call
+  raises "Resource ownership changed" and the sweep records a retry.
+  `terminate` deletes by the Craft name (`sandbox-<id8>`), so it does not reach
+  harness resources, which use other names.
 
 **Managed content.** Provisioning and a live push build the skills and user
 library payload with the same code
