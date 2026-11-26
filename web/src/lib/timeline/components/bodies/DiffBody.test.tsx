@@ -65,3 +65,15 @@ test("a long title is a block, so it cuts with an ellipsis before the counts", (
   expect(title.tagName).toBe("P");
   expect(title).toHaveClass("truncate");
 });
+
+test("side-by-side columns do not wrap, so their rows stay in line", () => {
+  const { container } = render(
+    <DiffBody
+      title="a.py"
+      oldText={lines(30)}
+      newText={lines(30).replaceAll("line", "row")}
+    />
+  );
+  const columns = container.querySelectorAll("[data-nowrap]");
+  expect(columns).toHaveLength(2);
+});
