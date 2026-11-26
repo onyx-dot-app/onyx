@@ -226,6 +226,7 @@ The packet has these fields:
 | `can_approve_for_chat` | `false` when the action asks each time, such as a request to an app that matches no action. Then hide the option to approve for the chat session: `approve_session` approves only this call. |
 | `can_approve_for_command` | `true` when the request comes from a command in the chat's VM and `approve_command` applies to it. See [Approvals of VM commands](#approvals-of-vm-commands). |
 | `app_name` | The app of a VM command's request, or `null`. |
+| `expires_at` | The time when a VM command's request expires, or `null`. |
 
 A request waits until the user decides. Other calls of the answer can continue while it waits.
 Onyx saves approval requests only when no other part of the answer runs.
@@ -290,6 +291,7 @@ and the stream sends a `tool_approval_request` packet at the call of the command
 It also has the `body` when the body is JSON or form data of 64 KB or less. For a different body, such as an upload,
 it has `body_bytes`, the size of the body, in place of `body`. A request with no body has neither field.
 The call does not return while a request of its command waits.
+The request expires at `expires_at` if the user does not decide.
 
 - `approve_once` sends the request.
 - `approve_command` sends the request, and the later requests of the same action from the same command,

@@ -609,6 +609,8 @@ class ToolApprovalRequest(BaseObj):
     can_approve_for_command: bool = False
     # The app of such a request.
     app_name: str | None = None
+    # When such a request expires.
+    expires_at: datetime | None = None
 
 
 # How a tool approval request ended: the user's decision, an approval of the

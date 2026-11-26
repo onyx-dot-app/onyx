@@ -154,6 +154,8 @@ class CommandApprovalRequest(BaseModel):
     # Method, path and body of the request.
     arguments: dict[str, JsonValue]
     can_approve_for_command: bool
+    # When the proxy stops waiting and the request expires.
+    expires_at: datetime
 
 
 CommandApprovalOutcome = Literal[

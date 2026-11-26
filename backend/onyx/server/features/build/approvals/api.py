@@ -88,9 +88,7 @@ class ApprovalView(BaseModel):
     @property
     def expires_at(self) -> datetime:
         """Display cutoff for the existing proxy wait; no stored approval deadline."""
-        return self.created_at + timedelta(
-            seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-        )
+        return action_approval.wait_deadline(self.created_at)
 
     @computed_field
     @property

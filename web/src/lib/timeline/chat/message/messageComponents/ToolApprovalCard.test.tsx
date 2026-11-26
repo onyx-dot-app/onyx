@@ -557,6 +557,23 @@ describe("A command's app request", () => {
     );
   });
 
+  it("shows when the request expires", () => {
+    render(
+      <ToolApprovalCard
+        approval={{
+          ...approval,
+          request: { ...commandRequest, expires_at: "2099-01-01T00:00:00Z" },
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /^Approval requested: Create issue in GitHub/,
+      })
+    ).toHaveTextContent(/Approve by \d{1,2}:\d{2}\s?[AP]M$/);
+  });
+
   it("offers no wider approval for a request that asks each time", () => {
     render(
       <ToolApprovalCard

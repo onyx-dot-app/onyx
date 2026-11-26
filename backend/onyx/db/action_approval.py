@@ -31,6 +31,11 @@ def waiting_cutoff() -> datetime:
     )
 
 
+def wait_deadline(created_at: datetime) -> datetime:
+    """When the proxy stops waiting on a pending row created at `created_at`."""
+    return created_at + timedelta(seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS)
+
+
 def insert_action_approval(
     db_session: Session,
     *,

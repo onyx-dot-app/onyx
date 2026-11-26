@@ -28,6 +28,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.db import action_approval
 from onyx.db.chat import create_chat_session, delete_chat_session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
@@ -323,6 +324,11 @@ def test_a_held_request_shows_a_card_and_the_decision_wakes_the_gate(
         assert card.display_name == "Create an issue"
         assert card.arguments == {"method": "POST", "path": "/issues"}
         assert card.can_approve_for_command
+        row = action_approval.get_action_approval(db_session, held.approval_id)
+        assert row is not None
+        assert card.expires_at == row.created_at + timedelta(
+            seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+        )
         assert approvals.holds()
 
         _decide(db_session, chat, held.approval_id, choice)

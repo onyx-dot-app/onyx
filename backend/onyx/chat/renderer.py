@@ -1022,6 +1022,7 @@ class ToolRenderer:
                         can_approve_for_chat=False,
                         can_approve_for_command=details.can_approve_for_command,
                         app_name=details.app_name,
+                        expires_at=details.expires_at,
                     ),
                 )
             ]

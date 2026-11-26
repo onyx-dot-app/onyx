@@ -3,6 +3,7 @@
 import threading
 import time
 from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -272,6 +273,7 @@ def test_an_approval_card_between_observations_is_kept_past_the_progress_cap() -
         display_name="Create an issue",
         arguments={},
         can_approve_for_command=True,
+        expires_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
     def noisy(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:

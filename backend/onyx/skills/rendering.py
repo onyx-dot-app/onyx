@@ -25,6 +25,10 @@ from onyx.external_apps.providers.registry import (
 )
 from onyx.integrations.connections import preset_organization_values
 from onyx.integrations.policy import admin_blocked_actions
+from onyx.server.features.build.configs import (
+    SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.skills.built_in import iter_builtin_skill_files
 from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
 from onyx.tools.tool_name import app_action_tool_name
@@ -150,6 +154,9 @@ def build_app_tools_section(integration_id: int) -> str:
     work. A chat has one tool for each action of the app. A tool, and a
     command that exec_command waits on, can ask the user for approval."""
     prefix = app_action_tool_name(integration_id, "")
+    client_timeout = (
+        SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
+    )
     return "\n".join(
         [
             f"When you have tools whose names start with `{prefix}`, each one "
@@ -160,7 +167,10 @@ def build_app_tools_section(integration_id: int) -> str:
             "- Use the commands below in a script for work with many calls. "
             "When a request of the script needs approval, the user sees an "
             "approval card while exec_command waits on the script, and the "
-            "request waits for the decision. A rejected or expired request "
+            "request waits for the decision for up to "
+            f"**{SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds**. Set a client "
+            f"timeout of **at least {client_timeout} seconds** so you don't "
+            "give up before the user decides. A rejected or expired request "
             "fails with a 403.",
             "- A request that needs approval from a background process fails "
             "with `approval_needs_tool`. Do not retry it in the background. "

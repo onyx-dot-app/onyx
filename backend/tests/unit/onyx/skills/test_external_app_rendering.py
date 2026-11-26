@@ -265,6 +265,14 @@ def test_each_app_skill_tells_the_model_when_to_use_the_app_tools() -> None:
 
         assert "`app__12__`" in with_tools
         assert "approval_needs_tool" in with_tools
+        assert (
+            f"up to **{SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds**" in with_tools
+        )
+        assert (
+            "client timeout of **at least "
+            f"{SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS}"
+            " seconds**"
+        ) in with_tools
         assert "app__" not in without
 
 

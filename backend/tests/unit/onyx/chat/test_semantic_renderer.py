@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Mapping
+from datetime import datetime, timezone
 
 import pytest
 from pydantic import BaseModel, JsonValue
@@ -94,6 +95,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ReasoningDelta,
     SearchToolStart,
     SectionEnd,
+    ToolApprovalRequest,
     ToolApprovalResolved,
     ToolCallArgumentDelta,
 )
@@ -1326,6 +1328,30 @@ def test_stop_reason_is_the_same_live_and_on_replay(
         assert [stop.stop_reason for stop in stops] == [reason]
 
 
+def test_a_command_approval_card_carries_its_deadline() -> None:
+    """The card shows when the proxy stops waiting on the request."""
+    renderer = ToolRenderer(
+        ToolCall(id="call", name="exec_command", arguments={"cmd": "x"}),
+        Placement(turn_index=0),
+    )
+    expires_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    output = renderer.update(
+        CommandApprovalRequest(
+            approval_id="a1",
+            app_name="Tracker",
+            action_type="issues.create",
+            display_name="Create an issue",
+            arguments={},
+            can_approve_for_command=True,
+            expires_at=expires_at,
+        )
+    )
+
+    requests = [p.obj for p in output if isinstance(p.obj, ToolApprovalRequest)]
+    assert [r.expires_at for r in requests] == [expires_at]
+
+
 def test_a_completed_call_closes_its_open_command_approval_cards() -> None:
     """A stopped call reports no resolution of its own, so its open cards
     close when the call completes."""
@@ -1342,6 +1368,7 @@ def test_a_completed_call_closes_its_open_command_approval_cards() -> None:
                 display_name="Create an issue",
                 arguments={},
                 can_approve_for_command=True,
+                expires_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
             )
         )
     renderer.update(CommandApprovalResolved(approval_id="resolved", outcome="approved"))

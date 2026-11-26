@@ -87,6 +87,7 @@ def _card(row: ActionApproval) -> CommandApprovalRequest:
         display_name=", ".join(names) or actions[0].display_name,
         arguments=row.payload,
         can_approve_for_command=bool(approval_cache.command_grant_actions(row.actions)),
+        expires_at=action_approval.wait_deadline(row.created_at),
     )
 
 

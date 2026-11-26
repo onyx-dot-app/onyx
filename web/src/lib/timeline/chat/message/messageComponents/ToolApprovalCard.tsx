@@ -88,6 +88,7 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
           actions={[{ id: request.tool_name, name: request.display_name }]}
           appName={request.app_name ?? undefined}
           payload={request.arguments}
+          expiresAt={request.expires_at}
           sessionScope={request.can_approve_for_command ? "command" : "chat"}
           canApproveForSession={
             request.can_approve_for_command === true ||

@@ -777,6 +777,8 @@ export interface ToolApprovalRequest extends BaseObj {
   can_approve_for_command?: boolean;
   /** The app of a command's request. */
   app_name?: string | null;
+  /** When a command's request expires. */
+  expires_at?: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {
