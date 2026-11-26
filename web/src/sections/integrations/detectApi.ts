@@ -26,6 +26,11 @@ export type DetectedApi =
 /** The largest spec or schema file, as the backend limits it. */
 export const SPEC_MAX_SIZE_KB = 5 * 1024;
 
+/** True when pasted or typed spec text is over `SPEC_MAX_SIZE_KB` in UTF-8. */
+export function specTextTooLarge(text: string): boolean {
+  return new Blob([text]).size > SPEC_MAX_SIZE_KB * 1024;
+}
+
 export interface SpecFile {
   name: string;
   text: string;

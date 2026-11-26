@@ -483,6 +483,48 @@ test.each<[IntegrationConfigView, string]>([
   }
 );
 
+// Two UTF-8 bytes per character: over 5 MB in bytes, under it in characters.
+const OVERSIZED_TEXT = "é".repeat(2.5 * 1024 * 1024 + 1);
+
+test.each<[IntegrationConfigView, () => string]>([
+  [OPENAPI_VIEW, () => copy.add.rest.import.upload],
+  [GRAPHQL_CONFIG, () => copy.add.graphql.schema.upload],
+  [GRAPHQL_CONFIG, () => copy.add.graphql.schema.title],
+])("refuses pasted text over the size limit (%#)", async (config, target) => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: config.shape,
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config,
+    }),
+    [URL_ACTIONS]: NO_ACTIONS,
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await view.findByRole("button", { name: detailCopy.configuration.save });
+  const control =
+    view.queryByRole("button", { name: target() }) ??
+    view.getByRole("textbox", { name: target() });
+  await u.click(control);
+  await u.paste(OVERSIZED_TEXT);
+
+  expect(await view.findByText(copy.add.api.tooLarge)).toBeInTheDocument();
+  if (config.shape === "graphql") {
+    expect(
+      view.getByRole("textbox", { name: copy.add.graphql.schema.title })
+    ).toHaveValue(GRAPHQL_CONFIG.graphql_schema);
+  }
+  expect(
+    fetchMock.mock.calls.some(([input]) =>
+      String(input).includes("openapi-import")
+    )
+  ).toBe(false);
+});
+
 test("blocks Save while a spec import runs", async () => {
   let finishImport: (view: OpenApiConfigView) => void = () => undefined;
   mockFetch({

@@ -11,7 +11,10 @@ import {
 import { InputVertical, Section, toast } from "@opal/layouts";
 import { introspectGraphQL } from "@/lib/integrations/svc";
 import type { GraphQLConfig } from "@/lib/integrations/types";
-import { SPEC_MAX_SIZE_KB } from "@/sections/integrations/detectApi";
+import {
+  SPEC_MAX_SIZE_KB,
+  specTextTooLarge,
+} from "@/sections/integrations/detectApi";
 
 interface GraphQLFieldsProps {
   draft: GraphQLConfig;
@@ -33,6 +36,12 @@ export default function GraphQLFields({
   const t = useTranslations("admin.integrations.add.graphql");
   const tAdd = useTranslations("admin.integrations.add");
   const [tooLarge, setTooLarge] = useState(false);
+
+  function setSchema(text: string) {
+    const over = specTextTooLarge(text);
+    setTooLarge(over);
+    if (!over) onChange({ ...draft, graphql_schema: text });
+  }
 
   async function introspect() {
     onLoadingChange(true);
@@ -98,8 +107,8 @@ export default function GraphQLFields({
             maxSizeKb={SPEC_MAX_SIZE_KB}
             onFileSizeExceeded={() => setTooLarge(true)}
             setValue={(text) => {
-              setTooLarge(false);
-              if (text.trim()) onChange({ ...draft, graphql_schema: text });
+              if (text.trim()) setSchema(text);
+              else setTooLarge(false);
             }}
           />
           <InputTextArea
@@ -107,9 +116,7 @@ export default function GraphQLFields({
             value={draft.graphql_schema}
             rows={12}
             variant={disabled ? "disabled" : "primary"}
-            onChange={(event) =>
-              onChange({ ...draft, graphql_schema: event.target.value })
-            }
+            onChange={(event) => setSchema(event.target.value)}
           />
         </Section>
       </InputVertical>

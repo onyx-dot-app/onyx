@@ -18,6 +18,7 @@ import type {
 } from "@/lib/integrations/types";
 import {
   SPEC_MAX_SIZE_KB,
+  specTextTooLarge,
   specBaseUrl,
 } from "@/sections/integrations/detectApi";
 
@@ -104,8 +105,10 @@ export default function RestEndpointFields({
             maxSizeKb={SPEC_MAX_SIZE_KB}
             onFileSizeExceeded={() => setTooLarge(true)}
             setValue={(text) => {
-              setTooLarge(false);
-              if (text.trim()) void runImport({ openapi_document: text });
+              const over = specTextTooLarge(text);
+              setTooLarge(over);
+              if (!over && text.trim())
+                void runImport({ openapi_document: text });
             }}
           />
           <Section flexDirection="row" gap={2} height="auto">
