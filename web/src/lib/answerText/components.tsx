@@ -40,7 +40,10 @@ import {
   endsInOpenCodeFence,
   splitMarkdownBlocks,
 } from "@/lib/answerText/streamBlocks";
-import { ANSWER_REMARK_PLUGINS } from "@/lib/answerText/remarkPlugins";
+import {
+  ANSWER_REMARK_PLUGINS,
+  STREAMING_ANSWER_REMARK_PLUGINS,
+} from "@/lib/answerText/remarkPlugins";
 import {
   AnswerCodeBlock,
   InlineCode,
@@ -238,18 +241,20 @@ const BASE_COMPONENTS: Components = {
 interface AnswerMarkdownBlockProps {
   markdown: string;
   components: Components;
+  remarkPlugins: PluggableList;
   rehypePlugins: PluggableList;
 }
 
 const AnswerMarkdownBlock = memo(function AnswerMarkdownBlock({
   markdown,
   components,
+  remarkPlugins,
   rehypePlugins,
 }: AnswerMarkdownBlockProps) {
   return (
     <ReactMarkdown
       components={components}
-      remarkPlugins={ANSWER_REMARK_PLUGINS}
+      remarkPlugins={remarkPlugins}
       rehypePlugins={rehypePlugins}
       urlTransform={transformLinkUri}
     >
@@ -323,6 +328,11 @@ export function AnswerMarkdown({
             key={index}
             markdown={block}
             components={markdownComponents}
+            remarkPlugins={
+              streaming && index === blocks.length - 1
+                ? STREAMING_ANSWER_REMARK_PLUGINS
+                : ANSWER_REMARK_PLUGINS
+            }
             rehypePlugins={
               index === blocks.length - 1
                 ? lastBlockRehypePlugins

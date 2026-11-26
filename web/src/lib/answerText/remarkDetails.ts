@@ -69,10 +69,36 @@ function tailValue(node: MarkdownAstNode | undefined): string {
   return only?.type === "text" ? (only.value ?? "").trim() : htmlValue(node);
 }
 
-/** A paragraph whose last line ends the disclosure: `**Step one**</details>`. */
-function closesInline(node: MarkdownAstNode | undefined): boolean {
-  const end = node?.type === "paragraph" ? node.children?.at(-1) : undefined;
-  return end?.type === "html" && DETAILS_CLOSE.test((end.value ?? "").trim());
+/**
+ * Counts the details tags inside a paragraph, such as `Step one</details>`.
+ * Returns the depth after them, or the index of the child that brings
+ * `depth` to zero.
+ */
+function scanInline(
+  node: MarkdownAstNode | undefined,
+  depth: number
+): { depth: number; close: number } {
+  const children = node?.type === "paragraph" ? (node.children ?? []) : [];
+  for (let k = 0; k < children.length; k++) {
+    const tag = htmlValue(children[k]);
+    if (ANY_DETAILS_OPEN.test(tag)) depth++;
+    else if (DETAILS_CLOSE.test(tag) && --depth === 0)
+      return { depth, close: k };
+  }
+  return { depth, close: -1 };
+}
+
+/** A paragraph of `children`, without leading space, or null if empty. */
+function paragraphOf(
+  node: MarkdownAstNode,
+  children: MarkdownAstNode[]
+): MarkdownAstNode | null {
+  const [first, ...rest] = children;
+  if (first?.type === "text") {
+    const value = (first.value ?? "").trimStart();
+    children = value ? [{ ...first, value }, ...rest] : rest;
+  }
+  return children.length > 0 ? { ...node, children } : null;
 }
 
 /**
@@ -105,14 +131,22 @@ function splitDetailsTags(node: MarkdownAstNode): MarkdownAstNode[] {
   return out;
 }
 
-function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
+function groupDetails(
+  input: MarkdownAstNode[],
+  streaming: boolean
+): MarkdownAstNode[] {
+  // Text after an inline closing tag is spliced in after the disclosure
+  const nodes = [...input];
+  const unfinished = (node: MarkdownAstNode | undefined) =>
+    streaming && isUnfinishedTag(tailValue(node));
   const out: MarkdownAstNode[] = [];
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     if (!node) continue;
     const last = nodes.length - 1;
-    // A streaming answer can end in a tag: it shows once the tag is whole
-    if (i === last && isUnfinishedTag(tailValue(node))) continue;
+    // A streaming answer can end in a tag: it shows once the tag is whole.
+    // A finished answer keeps it, as a literal sign such as `<`.
+    if (i === last && unfinished(node)) continue;
     const open = DETAILS_OPEN.exec(htmlValue(node));
     const next = htmlValue(nodes[i + 1]);
     // ...or at the opener, or inside the summary
@@ -120,20 +154,25 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
     const partial =
       complete === null && i + 1 === last
         ? (PARTIAL_SUMMARY.exec(next) ??
-          (isUnfinishedTag(tailValue(nodes[i + 1])) ? NO_SUMMARY : null))
+          (unfinished(nodes[i + 1]) ? NO_SUMMARY : null))
         : null;
     const summary = complete ?? partial ?? (i === last ? NO_SUMMARY : null);
     let close = -1;
-    let inlineClose = false;
+    // The child of the closing paragraph that holds the closing tag
+    let inlineClose = -1;
     if (open && summary) {
       let depth = 1;
       for (let j = i + 2; j < nodes.length && close < 0; j++) {
         const tag = htmlValue(nodes[j]);
         if (ANY_DETAILS_OPEN.test(tag)) depth++;
         else if (DETAILS_CLOSE.test(tag) && --depth === 0) close = j;
-        else if (closesInline(nodes[j]) && --depth === 0) {
-          close = j;
-          inlineClose = true;
+        else {
+          const inline = scanInline(nodes[j], depth);
+          depth = inline.depth;
+          if (inline.close >= 0) {
+            close = j;
+            inlineClose = inline.close;
+          }
         }
       }
       // Unclosed, it runs to the end of its container, as in HTML, so a
@@ -150,13 +189,14 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
     if (partial !== null) rawTitle = rawTitle.replace(/<\/?[a-z]*$/i, "");
     const title = decodeReferences(rawTitle.trim());
     const closing = nodes[close];
-    const body =
-      inlineClose && closing
-        ? [
-            ...nodes.slice(i + 2, close),
-            { ...closing, children: closing.children?.slice(0, -1) },
-          ]
-        : nodes.slice(i + 2, close);
+    const body = nodes.slice(i + 2, close);
+    if (inlineClose >= 0 && closing) {
+      const children = closing.children ?? [];
+      const before = paragraphOf(closing, children.slice(0, inlineClose));
+      const after = paragraphOf(closing, children.slice(inlineClose + 1));
+      if (before) body.push(before);
+      if (after) nodes.splice(close + 1, 0, after);
+    }
     out.push({
       type: "details",
       data: {
@@ -171,7 +211,7 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
             hChildren: [{ type: "text", value: title }],
           },
         },
-        ...groupDetails(body),
+        ...groupDetails(body, streaming),
       ],
     });
     i = close;
@@ -184,12 +224,16 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
  * markdown into a `details` element, without parsing raw HTML. Other raw
  * HTML is left alone.
  */
-export function remarkDetails() {
+export function remarkDetails(options?: { streaming?: boolean }) {
+  const streaming = options?.streaming ?? false;
   return (tree: MarkdownAstNode) => {
     const visit = (node: MarkdownAstNode) => {
       if (!node.children) return;
       node.children.forEach(visit);
-      node.children = groupDetails(node.children.flatMap(splitDetailsTags));
+      node.children = groupDetails(
+        node.children.flatMap(splitDetailsTags),
+        streaming
+      );
     };
     visit(tree);
   };

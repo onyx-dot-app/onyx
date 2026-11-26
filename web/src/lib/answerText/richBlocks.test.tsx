@@ -157,7 +157,7 @@ test.each([
   const from = answer.indexOf("<details>") + "<details>".length;
   for (let end = from; end <= answer.length; end++) {
     const { container, unmount } = render(
-      <AnswerMarkdown content={answer.slice(0, end)} />
+      <AnswerMarkdown content={answer.slice(0, end)} streaming />
     );
     expect(container.querySelector("details")).not.toBeNull();
     expect(container.textContent).not.toMatch(/<\/?(details|summary)/);
@@ -213,3 +213,44 @@ test("an unclosed details block keeps the rest of the answer inside it", () => {
   expect(details?.querySelector("summary")).toHaveTextContent(/^Steps$/);
   expect(details).toHaveTextContent("Step two");
 });
+
+test("text after a closing tag on the same line stays outside the disclosure", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Steps</summary>\n\nStep one</details>\nMore prose\n\nAfter."
+      }
+    />
+  );
+  const details = container.querySelector("details");
+  expect(details).toHaveTextContent("Step one");
+  expect(details).not.toHaveTextContent("More prose");
+  expect(container.textContent).not.toContain("</details>");
+  expect(container.querySelector("details + p")).toHaveTextContent(
+    /^More prose$/
+  );
+  expect(container.querySelector("details + p + p")).toHaveTextContent(
+    "After."
+  );
+});
+
+test("a whole disclosure inside one body line keeps the outer one open", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Outer</summary>\n\nSee <details><summary>Inner</summary>hidden</details>\n\nStill outer\n\n</details>\n\nAfter."
+      }
+    />
+  );
+  const outer = container.querySelector("details");
+  expect(outer).toHaveTextContent("Still outer");
+  expect(container.querySelector("details + p")).toHaveTextContent(/^After\.$/);
+});
+
+test.each(["Use the sign:\n\n&lt;", "Use the sign:\n\n<"])(
+  "a finished answer keeps a lone sign in its last paragraph: %j",
+  (answer) => {
+    const { container } = render(<AnswerMarkdown content={answer} />);
+    expect(container.textContent).toContain("<");
+  }
+);
