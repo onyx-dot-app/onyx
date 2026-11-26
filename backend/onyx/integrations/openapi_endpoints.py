@@ -249,11 +249,20 @@ def apply_endpoint_lines(
     )
     spec = copy.deepcopy(original)
     existing = _operations(spec)
+    # A line sent as shown keeps its operation as stored, without a parse: a
+    # stored operation may have a line that does not parse back to it.
+    shown: dict[str, tuple[str, str]] = {}
+    for (method, path), operation in existing.items():
+        text = _endpoint_line(spec, method, path, operation).strip()
+        shown[text] = (method, path)
     errors: list[EndpointLineError] = []
     wanted: dict[tuple[str, str], dict[str, Any]] = {}
     new_lines: dict[tuple[str, str], int] = {}
     for index, text in enumerate(lines):
         if not text.strip():
+            continue
+        if (key := shown.get(text.strip())) is not None and key not in wanted:
+            wanted[key] = existing[key]
             continue
         try:
             method, path, query, name = _parse_line(text)

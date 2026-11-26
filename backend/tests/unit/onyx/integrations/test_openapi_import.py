@@ -364,6 +364,41 @@ def test_the_base_url_replaces_each_imported_server() -> None:
     assert openapi_to_url(applied) == "https://pets.example.com/v2"
 
 
+def test_a_line_sent_as_shown_keeps_an_operation_it_cannot_write() -> None:
+    """A stored operation can have a line that does not parse back to it,
+    such as a query name with a space or no name. A save that sends its line
+    unchanged keeps it as stored, also when other lines change."""
+    spec = _callable_spec()
+    reports = {
+        "get": {
+            "operationId": "listReports",
+            "summary": "List reports",
+            "parameters": [
+                {"name": "search term", "in": "query", "schema": {"type": "string"}}
+            ],
+        }
+    }
+    unnamed = {"get": {"operationId": "ping"}}
+    spec["paths"]["/reports"] = reports
+    spec["paths"]["/ping"] = unnamed
+    lines = endpoint_lines(spec)
+    assert "GET /reports?search term List reports" in lines
+
+    base_url_only = _apply(spec, lines)
+    assert base_url_only["paths"]["/reports"] == reports
+    assert base_url_only["paths"]["/ping"] == unnamed
+
+    other_edited = _apply(
+        spec,
+        [line for line in lines if not line.startswith("DELETE /pets/{petId}")]
+        + ["POST /reports Add a report"],
+    )
+    assert other_edited["paths"]["/reports"]["get"] == reports["get"]
+    assert other_edited["paths"]["/ping"] == unnamed
+    assert "delete" not in other_edited["paths"]["/pets/{petId}"]
+    assert "post" in other_edited["paths"]["/reports"]
+
+
 def test_lines_show_and_keep_shared_query_parameters() -> None:
     spec = _callable_spec()
     spec["components"]["parameters"]["limit"] = {
