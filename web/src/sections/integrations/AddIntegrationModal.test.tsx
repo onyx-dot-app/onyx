@@ -739,6 +739,7 @@ describe("Custom API", () => {
   test("a GraphQL endpoint counts its queries and mutations", async () => {
     const schema = `"""Root"""
 type Query {
+  # A brace in a comment, such as }, does not end the type.
   """One ticket"""
   ticket(id: ID!, filter: Filter = {status: "open"}): Ticket
   tickets(first: Int): [Ticket!]!

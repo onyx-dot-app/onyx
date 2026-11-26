@@ -127,7 +127,12 @@ function openApiResult(
 }
 
 function graphqlResult(config: GraphQLConfig): DetectedApi {
-  const sdl = config.graphql_schema;
+  // Strings and comments can hold braces and colons. One pass, so a quote in
+  // a comment or a "#" in a string does not hide what follows.
+  const sdl = config.graphql_schema.replace(
+    /"""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"|#[^\n]*/g,
+    ""
+  );
   return {
     shape: "graphql",
     config,
@@ -165,11 +170,7 @@ function blockFieldCount(sdl: string, bodyStart: number): number {
     if (sdl[end] === "{") depth++;
     else if (sdl[end] === "}") depth--;
   }
-  let body = sdl
-    .slice(bodyStart, end - 1)
-    .replace(/"""[\s\S]*?"""/g, "")
-    .replace(/"(?:[^"\\\n]|\\.)*"/g, "")
-    .replace(/#[^\n]*/g, "");
+  let body = sdl.slice(bodyStart, end - 1);
   // Arguments hold colons too; drop them, inner pairs first.
   for (let previous = ""; previous !== body;) {
     previous = body;
