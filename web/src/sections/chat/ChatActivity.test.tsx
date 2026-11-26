@@ -1,6 +1,7 @@
-import { act, render, screen } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor } from "@tests/setup/test-utils";
 import { unstable_serialize } from "swr";
 import ChatActivity from "@/sections/chat/ChatActivity";
+import { useChatSubagents } from "@/lib/chat/hooks";
 import { PacketType, type Packet } from "@/app/app/services/streamingModels";
 import type { Message } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -394,4 +395,41 @@ test("a live agent shows its run time and no status word; a finished one its out
   expect(screen.getByText("Done")).toBeVisible();
   expect(screen.queryByText("1m 30s")).toBeNull();
   expect(screen.queryByRole("button", { name: "Stop researcher" })).toBeNull();
+});
+
+test("a cached agent list is not the baseline after a failed read", async () => {
+  jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (input) =>
+      String(input).endsWith("/agents")
+        ? new Response("boom", { status: 500 })
+        : new Response(
+            JSON.stringify({ ...STATUS, has_active_subagents: true }),
+            { status: 200 }
+          )
+    );
+  let loaded: boolean | null = null;
+  function Probe() {
+    loaded = useChatSubagents("s", false).loaded;
+    return null;
+  }
+  render(<Probe />, {
+    swrConfig: {
+      shouldRetryOnError: false,
+      fallback: {
+        [unstable_serialize(["/api/chat/chat-session/s/agents", true, null])]: [
+          agent("/root/poet", "running"),
+        ],
+      },
+    },
+  });
+  await waitFor(() =>
+    expect(
+      jest
+        .mocked(global.fetch)
+        .mock.calls.some(([input]) => String(input).endsWith("/agents"))
+    ).toBe(true)
+  );
+  await act(async () => undefined);
+  expect(loaded).toBe(false);
 });

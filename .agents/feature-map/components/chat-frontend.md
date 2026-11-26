@@ -939,7 +939,7 @@ subagent Stop there. It has no Files panel, so its card leaves out the files
 (`showFiles={false}`). It is always the icon alone, so the header never shifts,
 and toggles a card that stays open until that button closes it. The card also
 opens when the count of live agents goes from zero to more while the chat
-shows. `loaded` from `useChatSubagents` turns true only after a list read from
+shows. `loaded` from `useChatSubagents` turns true only after a successful list read from
 the server, so a cached list is never the baseline. In the first list, a live
 run that started up to 10 seconds before the card mounted counts as new (a new
 chat's reply can start agents before that list arrives); older live agents
