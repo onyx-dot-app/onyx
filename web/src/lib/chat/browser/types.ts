@@ -110,6 +110,8 @@ export type BrowserViewerMessage =
  * - live: the service streams the chat's tabs
  * - disconnected: the connection closed; it tries again
  * - disabled: an admin turned the browser off, or the user may not view it
+ * - unreachable: the websocket did not open after several connects; a retry
+ *   is manual
  * - error: the chat or its sandbox is unavailable; a retry is manual
  */
 export type BrowserConnectionState =
@@ -118,4 +120,5 @@ export type BrowserConnectionState =
   | "live"
   | "disconnected"
   | "disabled"
+  | "unreachable"
   | "error";

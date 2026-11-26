@@ -13660,6 +13660,10 @@
           "title": "El navegador está desactivado",
           "description": "Un administrador desactivó el navegador o no puedes ver el navegador de este chat."
         },
+        "unreachable": {
+          "title": "No se pudo conectar con el navegador",
+          "description": "Comprueba que has iniciado sesión y tienes conexión y vuelve a intentarlo."
+        },
         "error": {
           "title": "El navegador no está disponible",
           "description": "No se pudo iniciar el sandbox del chat. Inténtalo de nuevo más tarde."

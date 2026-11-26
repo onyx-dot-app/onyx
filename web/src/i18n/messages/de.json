@@ -13660,6 +13660,10 @@
           "title": "Der Browser ist ausgeschaltet",
           "description": "Ein Administrator hat den Browser ausgeschaltet, oder Sie können den Browser dieses Chats nicht ansehen."
         },
+        "unreachable": {
+          "title": "Der Browser ist nicht erreichbar",
+          "description": "Prüfen Sie, ob Sie angemeldet und online sind, und versuchen Sie es dann erneut."
+        },
         "error": {
           "title": "Der Browser ist nicht verfügbar",
           "description": "Die Sandbox des Chats konnte nicht starten. Versuchen Sie es später erneut."

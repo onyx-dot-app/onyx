@@ -369,6 +369,12 @@ function BrowserStatus({ status, onRetry, onNewTab }: BrowserStatusProps) {
           title: t("status.disabled.title"),
           description: t("status.disabled.description"),
         };
+      case "unreachable":
+        return {
+          title: t("status.unreachable.title"),
+          description: t("status.unreachable.description"),
+          action: { label: t("status.retry"), onClick: onRetry },
+        };
       case "error":
         return {
           title: t("status.error.title"),

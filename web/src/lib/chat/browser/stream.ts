@@ -22,6 +22,9 @@ import type {
 const BROWSER_CLOSE_FORBIDDEN = 4403;
 const BROWSER_CLOSE_NOT_FOUND = 4404;
 const BROWSER_CLOSE_UNAVAILABLE = 4503;
+// A refused handshake, such as for a signed-out user, closes with 1006 and
+// no code of its own, so the client stops after this many in a row
+const MAX_REFUSED_CONNECTS = 6;
 
 // The tool whose start opens the Browser tab
 const BROWSER_OPEN_TOOL_NAME = "browser_open";
@@ -387,6 +390,7 @@ export type BrowserSocketState =
   | "connecting"
   | "disconnected"
   | "disabled"
+  | "unreachable"
   | "error";
 
 interface BrowserStreamEvents {
@@ -414,7 +418,7 @@ const SOCKET_OPEN = 1;
 /**
  * Opens the chat's browser stream and keeps it open: it acks each frame on
  * receipt, and reconnects after a drop with a growing wait. A forbidden,
- * unknown or unavailable chat stops it.
+ * unknown or unavailable chat stops it, and so do connects that never open.
  */
 export function createBrowserStreamClient({
   url,
@@ -425,6 +429,15 @@ export function createBrowserStreamClient({
   let socket: WebSocket | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let failures = 0;
+  let refusals = 0;
+
+  // A connect that did not open; true when the connects stop
+  const refused = () => {
+    if (++refusals < MAX_REFUSED_CONNECTS) return false;
+    stopped = true;
+    events.onState("unreachable");
+    return true;
+  };
 
   const connect = () => {
     retryTimer = null;
@@ -434,12 +447,18 @@ export function createBrowserStreamClient({
     try {
       ws = createSocket(url);
     } catch {
+      if (refused()) return;
       retryTimer = setTimeout(connect, reconnectDelayMs(failures++));
       events.onState("disconnected");
       return;
     }
     ws.binaryType = "arraybuffer";
     socket = ws;
+    let opened = false;
+    ws.addEventListener("open", () => {
+      opened = true;
+      refusals = 0;
+    });
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (socket !== ws) return;
       if (event.data instanceof ArrayBuffer) {
@@ -470,6 +489,7 @@ export function createBrowserStreamClient({
         events.onState("error");
         return;
       }
+      if (!opened && refused()) return;
       events.onState("disconnected");
       retryTimer = setTimeout(connect, reconnectDelayMs(failures++));
     });

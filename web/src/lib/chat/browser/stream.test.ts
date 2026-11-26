@@ -389,6 +389,26 @@ describe("createBrowserStreamClient", () => {
     expect(unavailable.sockets).toHaveLength(1);
   });
 
+  test("stops after connects that never open, until one opens", () => {
+    const { sockets, states } = start();
+    for (let i = 0; i < 5; i++) {
+      sockets.at(-1)?.closeWith(1006);
+      jest.advanceTimersByTime(10_000);
+    }
+    expect(sockets).toHaveLength(6);
+    // An open connect starts the count again
+    sockets.at(-1)?.open();
+    sockets.at(-1)?.closeWith(1006);
+    for (let i = 0; i < 6; i++) {
+      jest.advanceTimersByTime(10_000);
+      sockets.at(-1)?.closeWith(1006);
+    }
+    expect(sockets).toHaveLength(12);
+    expect(states.at(-1)).toBe("unreachable");
+    jest.advanceTimersByTime(20_000);
+    expect(sockets).toHaveLength(12);
+  });
+
   test("stop closes the socket and sends no more", () => {
     const { client, sockets, states } = start();
     sockets[0]?.open();
