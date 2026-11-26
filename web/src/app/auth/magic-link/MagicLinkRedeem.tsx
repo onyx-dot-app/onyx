@@ -94,7 +94,7 @@ export default function MagicLinkRedeem() {
           <Text as="p" font="heading-headline" color="text-05">
             {t("magicLink.confirmEmail.title")}
           </Text>
-          <Text as="p" color="text-03">
+          <Text as="p" font="main-content-body" color="text-03">
             {t("magicLink.confirmEmail.description")}
           </Text>
           <Formik
@@ -137,7 +137,7 @@ export default function MagicLinkRedeem() {
   if (teamChoiceToken === null) {
     return (
       <AuthFlowContainer>
-        <Text as="p" color="text-03">
+        <Text as="p" font="main-content-body" color="text-03">
           {t("magicLink.redeeming.text")}
         </Text>
       </AuthFlowContainer>
@@ -150,7 +150,7 @@ export default function MagicLinkRedeem() {
         <Text as="p" font="heading-headline" color="text-05">
           {t("error.playgroundHeading.title")}
         </Text>
-        <Text as="p" color="text-05">
+        <Text as="p" font="main-content-body" color="text-05">
           {joinChosen
             ? t("error.code.playgroundAskAdmin")
             : t("error.code.playgroundActiveTenant")}
