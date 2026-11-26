@@ -289,3 +289,36 @@ func TestExitedServiceIsLogged(t *testing.T) {
 		t.Fatalf("log has no %q:\n%s", want, logs.String())
 	}
 }
+
+// The command user owns the socket dir, so it can link service.sock to a
+// socket of another user. The root daemon must not connect to that socket.
+func TestDialServiceRefusesAListenerOfAnotherUser(t *testing.T) {
+	b := New(Config{SocketDir: shortDir(t)})
+	ln, err := net.Listen("unix", b.SocketPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	ctx := context.Background()
+	c, err := b.DialService(ctx)
+	if err != nil {
+		t.Fatalf("dial a listener of the service user: %v", err)
+	}
+	_ = c.Close()
+	b.cfg.Credential = &syscall.Credential{Uid: uint32(os.Geteuid()) + 1}
+	if c, err := b.DialService(ctx); err == nil || !strings.Contains(err.Error(), "uid") {
+		if c != nil {
+			_ = c.Close()
+		}
+		t.Fatalf("dial a listener of another user: %v", err)
+	}
+}
