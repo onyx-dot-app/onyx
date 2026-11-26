@@ -588,6 +588,22 @@ describe("browser service", () => {
     assert.deepEqual(otherChat.tabs, []);
   });
 
+  test("keys that open a dialog return at once and leave the dialog pending", async () => {
+    const chat = newChat();
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/key-alert` });
+    for (const params of [
+      { action: "press", key: "a" },
+      { action: "type", text: "abc" },
+    ]) {
+      const started = Date.now();
+      await ok(service.socketPath, chat, "act", { ...params, timeoutMs: 5_000 });
+      assert.ok(Date.now() - started < 3_000, `${params.action} waited for the dialog`);
+      const status = await ok(service.socketPath, chat, "status");
+      assert.deepEqual((status.tabs as Array<{ dialog: unknown }>)[0]?.dialog, { type: "alert", message: "key" });
+      await ok(service.socketPath, chat, "dialog", { accept: true });
+    }
+  });
+
   test("dialogs block agent writes until answered", async () => {
     const chat = newChat();
     await ok(service.socketPath, chat, "open", { url: `${site.url}/form` });

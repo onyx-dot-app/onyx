@@ -259,6 +259,7 @@ const PAGES: Record<string, string> = {
       a.click();
       if (--left === 0) clearInterval(timer);
     }, 100);</script>`,
+  "/key-alert": `<!doctype html><title>Key alert</title><input id="field" autofocus onkeydown="alert('key')">`,
   "/popup": `<!doctype html><title>Opener</title><a id="pop" href="/second" target="_blank">Open popup</a>`,
 };
 
