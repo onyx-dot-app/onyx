@@ -132,6 +132,8 @@ def _parse_line(text: str) -> tuple[str, str, list[str], str]:
     if len(parts) < 3:
         raise ValueError("Put a name after the path.")
     path, _, query_text = parts[1].partition("?")
+    if "#" in path:
+        raise ValueError("The path must not have a #. Write %23 for a # in a path.")
     unpaired = _PATH_PARAM.sub("", path)
     if "{" in unpaired or "}" in unpaired:
         raise ValueError("Each { in the path needs a matching }.")

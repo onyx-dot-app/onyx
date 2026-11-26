@@ -386,6 +386,13 @@ def test_a_line_for_a_path_that_is_not_an_object_is_refused() -> None:
         _apply(spec, ["GET /broken Read it"])
 
 
+def test_a_line_with_a_fragment_in_its_path_is_refused() -> None:
+    with pytest.raises(EndpointLinesError, match="must not have a #"):
+        _apply(_callable_spec(), ["POST /tickets#archive Archive tickets"])
+    added = _apply(_callable_spec(), ["POST /tickets%23archive Archive tickets"])
+    assert "post" in added["paths"]["/tickets%23archive"]
+
+
 def test_imported_lines_with_any_query_name_save_again() -> None:
     """A spec's query names (`$filter`, `fields[user]`) appear in the lines,
     and those lines save again unchanged."""
