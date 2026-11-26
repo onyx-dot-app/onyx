@@ -448,6 +448,19 @@ def test_import_drops_and_lists_an_entry_that_is_not_an_object() -> None:
     validate_openapi_schema(json.loads(view.openapi_document))
 
 
+def test_extensions_under_paths_are_not_endpoints() -> None:
+    """OpenAPI allows ``x-*`` keys under ``paths`` with any value."""
+    spec = _callable_spec()
+    spec["paths"]["x-tags"] = ["pets"]
+    spec["paths"]["x-internal"] = False
+    validate_openapi_schema(spec)
+
+    view = _import(json.dumps(spec))
+
+    assert view.skipped == []
+    assert json.loads(view.openapi_document)["paths"]["x-tags"] == ["pets"]
+
+
 def test_import_needs_no_server_url() -> None:
     spec = _callable_spec()
     del spec["servers"]

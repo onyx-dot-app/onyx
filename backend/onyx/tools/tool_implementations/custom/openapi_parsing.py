@@ -313,14 +313,24 @@ def openapi_to_method_spec(
     )
 
 
+def _path_items(openapi_spec: dict[str, Any]) -> list[tuple[str, Any]]:
+    """Each ``(path, path item)`` under ``paths``, without the ``x-*``
+    extensions, which can be any value."""
+    paths = openapi_spec.get("paths")
+    return [
+        (path, path_item)
+        for path, path_item in (paths.items() if isinstance(paths, dict) else [])
+        if not str(path).startswith("x-")
+    ]
+
+
 def openapi_operations(
     openapi_spec: dict[str, Any],
 ) -> list[tuple[str, dict[str, Any], str, dict[str, Any]]]:
     """Each operation as (path, path item, method, operation)."""
-    paths = openapi_spec.get("paths")
     return [
         (path, path_item, method_name, method)
-        for path, path_item in (paths.items() if isinstance(paths, dict) else [])
+        for path, path_item in _path_items(openapi_spec)
         if isinstance(path_item, dict)
         for method_name, method in path_item.items()
         if str(method_name).lower() in OPENAPI_METHODS and isinstance(method, dict)
@@ -333,9 +343,8 @@ def malformed_operations(
     """Each path item that is not an object, as ``(path, None)``, and each
     operation of a known method that is not an object, as ``(path, method)``.
     ``openapi_operations`` skips them."""
-    paths = openapi_spec.get("paths")
     malformed: list[tuple[str, str | None]] = []
-    for path, path_item in paths.items() if isinstance(paths, dict) else []:
+    for path, path_item in _path_items(openapi_spec):
         if not isinstance(path_item, dict):
             malformed.append((path, None))
             continue
