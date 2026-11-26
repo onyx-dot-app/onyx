@@ -3,6 +3,7 @@ the Codex exec contract with durable exec sessions, files, artifacts and the
 busy signals."""
 
 import io
+import json
 import os
 import threading
 import time
@@ -519,6 +520,38 @@ def test_a_held_command_waits_past_its_window_and_keeps_its_command_id(
     poll = _Hold()
     _run(sandbox.write_stdin(ref, session, "x", hold=poll))
     assert poll.begun == hold.begun
+
+
+def test_an_exec_session_record_cached_before_command_ids_still_works(
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,  # noqa: ARG001
+    new_ref: NewRef,
+) -> None:
+    """A record cached before the upgrade has no command ID. Its command and
+    the other commands of the VM still take input, and its end drops no
+    grants."""
+    ref = new_ref()
+    _, old = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    _, new = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    assert old.session_id is not None and new.session_id is not None
+    key = harness_state.EXEC_SESSIONS_PREFIX + str(ref.sandbox_id)
+    table = json.loads(tenant_cache.get(key) or b"{}")
+    execution_id = table["sessions"][old.session_id]["execution_id"]
+    del table["sessions"][old.session_id]["command_id"]
+    tenant_cache.set(key, json.dumps(table))
+
+    assert _output(_run(sandbox.write_stdin(ref, new.session_id, "y"))[1]) == "y"
+    hold = _Hold()
+    _, wrote = _run(sandbox.write_stdin(ref, old.session_id, "x", hold=hold))
+    assert _output(wrote) == "x" and hold.begun == []
+
+    sandbox_daemon(client_factory, sandbox._place(ref)).interact(
+        execution_id, data=b"", close_stdin=True
+    )
+    _, ended = _run(sandbox.write_stdin(ref, old.session_id, yield_time_ms=10_000))
+    assert ended.exit_code == 0
 
 
 def test_a_stream_reset_at_the_agent_deadline_ends_the_yield_cleanly(

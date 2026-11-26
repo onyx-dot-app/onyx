@@ -292,6 +292,8 @@ def _end_exec_session(
     must not use. A failed drop leaves the grants to their TTL, so the
     command's result and the cleanup of other commands still go on."""
     remove_exec_session(cache, sandbox_id, record.exec_session_id)
+    if record.command_id is None:
+        return
     try:
         approval_cache.drop_command_grants(record.command_id, cache)
     except Exception:
@@ -982,7 +984,10 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             raise ExecSessionEndedError(exec_session_id)
         daemon = sandbox_daemon(self._client_factory, placed)
         text, interrupt, _ = chars.partition(INTERRUPT_CHAR)
-        if hold is not None:
+        if record.command_id is None:
+            # An old record's command sends no app requests that wait.
+            hold = None
+        elif hold is not None:
             hold.begin(record.command_id)
         # A Stop that came before the write or during the hold's begin
         # writes nothing.
