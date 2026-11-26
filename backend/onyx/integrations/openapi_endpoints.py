@@ -290,10 +290,7 @@ def apply_endpoint_lines(
     }
     for key, index in new_lines.items():
         new_id = wanted[key]["operationId"]
-        if new_id in stored_ids or any(
-            other_key != key and other.get("operationId") == new_id
-            for other_key, other in wanted.items()
-        ):
+        if new_id in stored_ids:
             errors.append(
                 EndpointLineError(
                     line=index,
