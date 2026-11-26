@@ -35,7 +35,7 @@ import httpx
 import psutil
 from pydantic import BaseModel
 
-from scripts.benchmark_docprocessing import _LOCK_PATH, _free_port, _read_env_file
+from scripts.benchmark_shared import LOCK_PATH, free_port, read_env_file
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 _ENV_FILE = _BACKEND_DIR.parent / ".vscode" / ".env"
@@ -117,7 +117,7 @@ class Gates:
 
 
 def _bench_env(mock_url: str, log_level: str) -> dict[str, str]:
-    env = _read_env_file(_ENV_FILE)
+    env = read_env_file(_ENV_FILE)
     env.update(os.environ)
     for key in list(env):
         if any(word in key for word in ("BRAINTRUST", "LANGFUSE", "SENTRY")):
@@ -263,12 +263,18 @@ class Bench:
         response.raise_for_status()
         return response.json()
 
-    def saved_answer(self, session_id: str) -> str | None:
+    def saved_answer(self, session_id: str, message_id: int | None) -> str | None:
+        """The saved text of the response that this turn reserved."""
         response = self.client.get(f"/chat/get-chat-session/{session_id}")
         response.raise_for_status()
-        messages = response.json()["messages"]
-        assistants = [m for m in messages if m["message_type"] == "assistant"]
-        return assistants[-1]["message"] if assistants else None
+        for message in response.json()["messages"]:
+            if message["message_id"] == message_id:
+                return (
+                    message["message"]
+                    if message["message_type"] == "assistant"
+                    else None
+                )
+        return None
 
     # -- one turn ------------------------------------------------------------
 
@@ -403,8 +409,10 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
     elapsed = time.monotonic() - started
     after = bench.stats()
     holds = bench.holds()
-    hold_ms = sorted(hold["ms"] for hold in holds["holds"])
-    longest = sorted(holds["holds"], key=lambda hold: -hold["ms"])[:5]
+    # A connection that is still out counts with the time it has been out.
+    all_holds = holds["holds"] + holds["still_open"]
+    hold_ms = sorted(hold["ms"] for hold in all_holds)
+    longest = sorted(all_holds, key=lambda hold: -hold["ms"])[:5]
     breakdown_after = bench.breakdown()
 
     def per_turn_breakdown(kind: str, top: int) -> dict[str, float]:
@@ -424,7 +432,10 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
     per_turn["cpu_ms"] = round(
         sum(after[key] - before[key] for key in cpu_keys) / turns * 1000, 2
     )
-    saved = [bench.saved_answer(result.session_id) for result in results[-3:]]
+    saved = [
+        bench.saved_answer(result.session_id, result.reserved_assistant_message_id)
+        for result in results
+    ]
     timings = [result.model_dump() for result in results]
     return {
         "turns": turns,
@@ -457,6 +468,7 @@ def _run_scenario(bench: Bench, name: str, turns: int) -> dict[str, Any]:
             "max_ms": round(hold_ms[-1], 2) if hold_ms else None,
             "over_100_ms": sum(1 for ms in hold_ms if ms > 100),
             "peak_checked_out": holds["peak_checked_out"],
+            "still_open_after": len(holds["still_open"]),
             "longest": [
                 {"ms": round(hold["ms"], 1), "site": hold["site"]} for hold in longest
             ],
@@ -530,7 +542,7 @@ def _check_scenario(
         count(ids_before_answer) == turns,
     )
     gates.check(
-        f"{name}: the saved answer equals the stream",
+        f"{name}: each reserved response is saved with the streamed answer",
         all(saved == answer for saved in entry["saved_answers"]),
     )
 
@@ -550,6 +562,11 @@ def _check_scenario(
         )
 
     holds = entry["db_connection_holds"]
+    gates.check(
+        f"{name}: no database connection is left open after the turns",
+        holds["still_open_after"] == 0,
+        f"{holds['still_open_after']} still open; longest {holds['longest'][:1]}",
+    )
     if name == "slow-llm":
         gates.check(
             f"{name}: no database connection is held across the LLM call",
@@ -682,7 +699,7 @@ def main() -> None:
         sys.exit(2)
 
     # One run at a time on the machine, shared with the docprocessing benchmark.
-    lock_file = open(_LOCK_PATH, "w")
+    lock_file = open(LOCK_PATH, "w")
     fcntl.flock(lock_file, fcntl.LOCK_EX)
 
     log_dir = Path(tempfile.mkdtemp(prefix="chat-bench-"))
@@ -700,7 +717,7 @@ def main() -> None:
         json.loads(_GOLDEN_PATH.read_text()) if _GOLDEN_PATH.exists() else {}
     )
 
-    mock_port = _free_port()
+    mock_port = free_port()
     mock_url = f"http://127.0.0.1:{mock_port}"
     # A process of its own, started as a module: scripts must not import tests.
     # time.monotonic() is one clock for all processes of the host.
@@ -745,7 +762,7 @@ def main() -> None:
             sys.exit(1)
         report["setup"] = json.loads(setup.stdout.strip().splitlines()[-1])
 
-        port = _free_port()
+        port = free_port()
         server_url = f"http://127.0.0.1:{port}"
         server = subprocess.Popen(
             [sys.executable, "-m", "scripts.chat_bench.server", str(port)],

@@ -16,6 +16,7 @@ from typing import Any
 
 import psutil
 import redis
+import redis.asyncio
 import uvicorn
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -140,6 +141,40 @@ def _install_counters() -> None:
 
     redis.client.Pipeline.immediate_execute_command = counted_immediate
 
+    # Cookie auth reads its token through the asyncio client.
+    async_execute_command = redis.asyncio.Redis.execute_command
+
+    async def counted_async_command(self: Any, *args: Any, **kwargs: Any) -> Any:
+        with _lock:
+            _counts["cache_commands"] += 1
+            _counts["cache_round_trips"] += 1
+            _cache_commands[f"async {args[0]}" if args else "?"] += 1
+        return await async_execute_command(self, *args, **kwargs)
+
+    redis.asyncio.Redis.execute_command = counted_async_command
+
+    async_pipeline_execute = redis.asyncio.client.Pipeline.execute
+
+    async def counted_async_pipeline(self: Any, *args: Any, **kwargs: Any) -> Any:
+        with _lock:
+            _counts["cache_commands"] += max(len(self.command_stack), 1)
+            _counts["cache_round_trips"] += 1
+            _cache_commands["async pipeline"] += 1
+        return await async_pipeline_execute(self, *args, **kwargs)
+
+    redis.asyncio.client.Pipeline.execute = counted_async_pipeline
+
+    async_immediate = redis.asyncio.client.Pipeline.immediate_execute_command
+
+    async def counted_async_immediate(self: Any, *args: Any, **kwargs: Any) -> Any:
+        with _lock:
+            _counts["cache_commands"] += 1
+            _counts["cache_round_trips"] += 1
+            _cache_commands[f"async pipeline {args[0]}" if args else "?"] += 1
+        return await async_immediate(self, *args, **kwargs)
+
+    redis.asyncio.client.Pipeline.immediate_execute_command = counted_async_immediate
+
     thread_start = threading.Thread.start
 
     def counted_start(self: threading.Thread) -> None:
@@ -202,13 +237,20 @@ def main() -> None:
     def holds() -> dict[str, Any]:
         """The connection holds since the last call, then starts a new window."""
         global _peak_checked_out
+        now = time.monotonic()
         with _lock:
             window = list(_holds)
             _holds.clear()
+            # A connection that is still out has no hold yet, so report it here.
+            active = [
+                ((now - started) * 1000, site)
+                for started, site in _checked_out_at.values()
+            ]
             peak = _peak_checked_out
             _peak_checked_out = len(_checked_out_at)
         return {
             "holds": [{"ms": ms, "site": site} for ms, site in window],
+            "still_open": [{"ms": ms, "site": site} for ms, site in active],
             "peak_checked_out": peak,
         }
 

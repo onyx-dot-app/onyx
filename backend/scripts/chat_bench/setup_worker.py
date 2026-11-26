@@ -5,13 +5,23 @@ that the API server only makes an index with the benchmark prefix.
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 from sqlalchemy import select
 
-from onyx.configs.app_configs import POSTGRES_DB, REDIS_DB_NUMBER
+from onyx.configs.app_configs import (
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+    REDIS_DB_NUMBER,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+)
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import (
@@ -20,7 +30,7 @@ from onyx.db.search_settings import (
 )
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.setup import setup_postgres
-from scripts.docprocessing_bench.worker import _flush_redis, _recreate_database
+from scripts.benchmark_shared import flush_redis, recreate_database
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -39,14 +49,20 @@ def setup(index_name: str) -> dict[str, str]:
     if REDIS_DB_NUMBER == 0:
         raise RuntimeError("Refusing to use Redis database 0.")
 
-    _recreate_database()
+    recreate_database(
+        POSTGRES_HOST,
+        POSTGRES_PORT,
+        POSTGRES_USER,
+        os.environ.get("POSTGRES_PASSWORD") or "password",
+        POSTGRES_DB,
+    )
     subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=_BACKEND_DIR,
         check=True,
         stdout=sys.stderr,
     )
-    _flush_redis()
+    flush_redis(REDIS_HOST, REDIS_PORT, REDIS_DB_NUMBER, REDIS_PASSWORD or None)
 
     SqlEngine.set_app_name("chat_bench_setup")
     SqlEngine.init_engine(pool_size=2, max_overflow=2)

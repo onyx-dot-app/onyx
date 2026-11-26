@@ -45,7 +45,7 @@ uv run python -m scripts.benchmark_chat_turn --json-out report.json
 - **Per turn** counts are almost exact. The server runs a few statements of its own between
   turns, so a count can be a fraction above a whole number. A connection checkout also sends
   a pool ping, which the statement count does not include. A cache round trip is one command,
-  one pipeline, or one WATCH or read inside a pipeline.
+  one pipeline, or one WATCH or read inside a pipeline, on the sync or the asyncio client.
 - **DB connections** shows how long the server keeps a connection checked out of the pool:
   the holds per turn, the total time held per turn, the longest hold, and the most connections
   held at one time. `db_connection_holds.longest` in the JSON report names the code that
@@ -74,13 +74,14 @@ The exit status is 1 when a gate fails.
 | Gate | Catches |
 | --- | --- |
 | No error line, one `stop` per turn | A turn that failed or ended twice |
-| The answer is the mock answer; the saved answer equals the stream | Lost or changed content |
+| The answer is the mock answer; the response that each turn reserved is saved with the streamed answer | Lost or changed content, or a save that did not happen |
 | One LLM request per turn | An added or lost model call |
 | The reserved id comes before the answer | A break of `reserve-before-first-token` |
 | Transcript digest equals golden | Any change to packet types, order, placement or content |
 | LLM request digest equals golden | Any change to the prompt, history, tools or parameters |
 | Statements, commits, checkouts, cache round trips and threads per turn not above golden | A change that adds round trips, a commit or a thread |
 | No database connection is held across the LLM call (`slow-llm`) | A session that stays open while the model works |
+| No database connection is left open after the turns | A connection that a turn does not give back |
 | Connections held at one time not above golden | A change that opens a second session while one is open |
 | No traceback in the API server log | An error that the stream hides |
 

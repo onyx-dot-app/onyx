@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import Any
 
 import psutil
-import psycopg2
 from opensearchpy import OpenSearch
 from opensearchpy.helpers import scan
 from pydantic import BaseModel
@@ -111,6 +110,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.models import IndexingSetting
 from onyx.redis.redis_pool import get_redis_client
 from onyx.setup import setup_document_index, setup_postgres
+from scripts.benchmark_shared import flush_redis, recreate_database
 from scripts.docprocessing_bench.corpus import (
     CorpusGenerator,
     CorpusSpec,
@@ -254,39 +254,6 @@ def _opensearch() -> OpenSearch:
     )
 
 
-def _recreate_database() -> None:
-    connection = psycopg2.connect(
-        host=POSTGRES_HOST,
-        port=POSTGRES_PORT,
-        user=POSTGRES_USER,
-        password=os.environ.get("POSTGRES_PASSWORD") or "password",
-        dbname="postgres",
-    )
-    connection.autocommit = True
-    try:
-        with connection.cursor() as cursor:
-            # The name passed _require_bench_name, so it is safe to interpolate.
-            cursor.execute(f'DROP DATABASE IF EXISTS "{POSTGRES_DB}" WITH (FORCE)')
-            cursor.execute(f'CREATE DATABASE "{POSTGRES_DB}"')
-    finally:
-        connection.close()
-
-
-def _flush_redis() -> None:
-    if REDIS_DB_NUMBER == 0:
-        raise RuntimeError("Refusing to flush Redis database 0. Set REDIS_DB_NUMBER.")
-    import redis
-
-    client = redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        db=REDIS_DB_NUMBER,
-        password=REDIS_PASSWORD or None,
-    )
-    client.flushdb()
-    client.close()
-
-
 def _require_bench_file_store() -> None:
     # Batch names restart with the database, so a shared store would lose files.
     if FILE_STORE_BACKEND != "s3" or not S3_FILE_STORE_BUCKET_NAME.startswith(
@@ -304,14 +271,20 @@ def setup(index_name: str) -> SetupResult:
     _require_bench_name("index", index_name)
     _require_bench_file_store()
 
-    _recreate_database()
+    recreate_database(
+        POSTGRES_HOST,
+        POSTGRES_PORT,
+        POSTGRES_USER,
+        os.environ.get("POSTGRES_PASSWORD") or "password",
+        POSTGRES_DB,
+    )
     subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=_BACKEND_DIR,
         check=True,
         stdout=sys.stderr,
     )
-    _flush_redis()
+    flush_redis(REDIS_HOST, REDIS_PORT, REDIS_DB_NUMBER, REDIS_PASSWORD or None)
     _init(pool_size=4)
 
     client = _opensearch()
