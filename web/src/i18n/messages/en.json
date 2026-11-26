@@ -376,7 +376,7 @@
       "decisionModel": {
         "title": "Decision Model",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "Internal search uses this model to rank results and choose how much context to add. You can also set it in Chat Preferences.",
+        "description": "Not used yet. Coming soon.",
         "clear": "Clear",
         "saveFailed": "Failed to update decision model"
       },
@@ -1348,9 +1348,8 @@
         "title": "Chat Naming Model"
       },
       "searchDecisionModel": {
-        "description": "Selects retrieved documents and decides how much context to add. A decision model ranks them in one call. A language model selects them as before.",
-        "title": "Search Decision Model",
-        "decisionSection": "Decision Models"
+        "description": "Selects retrieved documents and decides how much context to add.",
+        "title": "Search Decision Model"
       },
       "taskModels": {
         "loadFailed": "Could not load task models",

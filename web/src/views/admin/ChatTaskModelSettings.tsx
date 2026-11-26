@@ -4,10 +4,7 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { DropdownLoader } from "@opal/loaders";
 import { InputHorizontal, toast, useErrorToast } from "@opal/layouts";
-import {
-  useAdminLanguageModels,
-  useDecisionModel,
-} from "@/lib/languageModels/hooks";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { filterModelConfigurations } from "@/lib/languageModels/options";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
@@ -19,7 +16,6 @@ import type {
 import {
   deleteDefaultChatNamingModel,
   deleteDefaultSearchSelectionModel,
-  saveDecisionModel,
   setDefaultChatNamingModel,
   setDefaultSearchSelectionModel,
 } from "@/lib/languageModels/svc";
@@ -165,47 +161,27 @@ function modelConfigurationId(
 
 /**
  * Model for search's evidence decisions: which retrieved sections to keep and
- * how much context to add. Decision models, listed first, take the
- * decision-model path; language models keep LLM selection. A model that is
- * both is listed in each section.
+ * how much context to add. Unset, search uses the chat's own model.
  */
 export function SearchDecisionModelSetting() {
   const t = useTranslations("admin.chatPreferences");
   const settings = useSettings();
   const { llmProviders, defaultSearchSelection, modelPaging, refetch, error } =
     useAdminLanguageModels();
-  const decision = useDecisionModel();
-  const loadError = error ?? decision.error;
 
-  const decisionValue = modelConfigurationId(
-    decision.providers,
-    decision.model
-  );
-  const selectionValue = modelConfigurationId(
-    llmProviders,
-    defaultSearchSelection
-  );
-  const value = decisionValue ?? selectionValue;
+  const value = modelConfigurationId(llmProviders, defaultSearchSelection);
   const languageProviders = useMemo(
     () =>
       llmProviders
-        ? filterModelConfigurations(llmProviders, { keep: selectionValue })
+        ? filterModelConfigurations(llmProviders, { keep: value })
         : [],
-    [llmProviders, selectionValue]
+    [llmProviders, value]
   );
-  async function handleChange(
-    modelId: number | null,
-    fromDecisionSection: boolean
-  ) {
+  async function handleChange(modelId: number | null) {
     const provider =
       modelId === null
         ? null
-        : findProviderOwningModelConfig(
-            fromDecisionSection
-              ? (decision.providers ?? [])
-              : languageProviders,
-            modelId
-          );
+        : findProviderOwningModelConfig(languageProviders, modelId);
     const model = provider?.model_configurations.find(
       (configuration) => configuration.id === modelId
     );
@@ -213,49 +189,33 @@ export function SearchDecisionModelSetting() {
       toast.error(t("toasts.providerResolveFailed"));
       return;
     }
-    const selection =
-      provider && model
-        ? { provider_id: provider.id, model_name: model.name }
-        : null;
     try {
-      // Exactly one default stays set: it picks the search path.
-      if (selection && fromDecisionSection) {
-        await saveDecisionModel(selection);
-        if (defaultSearchSelection) await deleteDefaultSearchSelectionModel();
-      } else {
-        if (selection) {
-          await setDefaultSearchSelectionModel(
-            selection.provider_id,
-            selection.model_name
-          );
-        } else if (defaultSearchSelection) {
-          await deleteDefaultSearchSelectionModel();
-        }
-        if (decision.model) await saveDecisionModel(null);
+      if (provider && model) {
+        await setDefaultSearchSelectionModel(provider.id, model.name);
+      } else if (defaultSearchSelection) {
+        await deleteDefaultSearchSelectionModel();
       }
-      await Promise.all([refetch(), decision.refetch()]);
+      await refetch();
     } catch (error) {
       toast.error(
         error instanceof Error && error.message
           ? error.message
           : t("toasts.searchDecisionUpdateFailed")
       );
-      // An earlier write may have succeeded; show what is stored.
-      await Promise.allSettled([refetch(), decision.refetch()]);
     }
   }
 
-  useErrorToast(loadError, {
+  useErrorToast(error, {
     id: "search-decision-model-load-failed",
     message: t("taskModels.loadFailed"),
     retry: {
       label: t("taskModels.retry.label"),
-      onRetry: () => void Promise.all([refetch(), decision.refetch()]),
+      onRetry: () => void refetch(),
     },
   });
 
   let control: React.ReactNode;
-  if ((!llmProviders || !decision.providers) && !loadError) {
+  if (!llmProviders && !error) {
     control = <DropdownLoader />;
   } else {
     control = (
@@ -263,18 +223,12 @@ export function SearchDecisionModelSetting() {
         nullable
         globalDefault={{ label: t("taskModels.chatDefault.label") }}
         providers={languageProviders}
-        decisionSection={{
-          title: t("searchDecisionModel.decisionSection"),
-          providers: decision.providers ?? [],
-          selected: decisionValue !== null,
-          onChange: (modelId) => handleChange(modelId, true),
-        }}
         value={value}
-        disabled={!!loadError}
-        isError={loadError ? true : undefined}
+        disabled={!!error}
+        isError={error ? true : undefined}
         grouped={!settings.hide_provider_grouping}
         modelPaging={modelPaging}
-        onChange={(modelId) => handleChange(modelId, false)}
+        onChange={(modelId) => handleChange(modelId)}
       />
     );
   }

@@ -37,8 +37,6 @@ export interface CurrentDefault {
  *  null for the role's "no model" choice (Chat Default, No Default). */
 export interface DefaultChoice {
   id: number | null;
-  /** Search Decision only: picked from the decision-models section. */
-  fromDecision: boolean;
 }
 
 /** The chosen replacement per affected default. A role with a "no model"
@@ -210,14 +208,6 @@ export function buildDefaultChanges(
               ?.image_provider_id ?? null);
       continue;
     }
-    // A decision model picked for Search Decision holds the decision role,
-    // as the Search Decision setting saves it.
-    if (current.role === "search_selection" && choice?.fromDecision) {
-      defaultChanges.decision =
-        id === null ? null : choiceToDefault(candidates("decision"), id);
-      defaultChanges.search_selection = null;
-      continue;
-    }
     defaultChanges[current.role] =
       id === null ? null : choiceToDefault(candidates(current.role), id);
   }
@@ -303,20 +293,12 @@ const IMAGE: readonly ModelCapability[] = ["image"];
 interface RoleSelectProps {
   role: DefaultRole;
   providers: LLMProviderView[];
-  /** Decision models, for Search Decision's decision section. */
-  decisionProviders: LLMProviderView[];
   choice: DefaultChoice | undefined;
   onChange: (choice: DefaultChoice) => void;
 }
 
 /** A role's select, with the same props as the setting that picks it. */
-function RoleSelect({
-  role,
-  providers,
-  decisionProviders,
-  choice,
-  onChange,
-}: RoleSelectProps) {
+function RoleSelect({ role, providers, choice, onChange }: RoleSelectProps) {
   const chatPreferences = useTranslations("admin.chatPreferences");
   const imageGeneration = useTranslations(
     "admin.languageModels.imageGeneration"
@@ -324,7 +306,7 @@ function RoleSelect({
   const settings = useSettings();
   const grouped = !settings.hide_provider_grouping;
   const value = choice?.id ?? null;
-  const pick = (id: number | null) => onChange({ id, fromDecision: false });
+  const pick = (id: number | null) => onChange({ id });
 
   switch (role) {
     case "chat_naming":
@@ -337,16 +319,6 @@ function RoleSelect({
           globalDefault={{
             label: chatPreferences("taskModels.chatDefault.label"),
           }}
-          decisionSection={
-            role === "search_selection"
-              ? {
-                  title: chatPreferences("searchDecisionModel.decisionSection"),
-                  providers: decisionProviders,
-                  selected: choice?.fromDecision ?? false,
-                  onChange: (id) => onChange({ id, fromDecision: true }),
-                }
-              : undefined
-          }
           providers={providers}
           value={value}
           grouped={grouped}
@@ -438,7 +410,6 @@ export function DefaultChoiceRows({
               <RoleSelect
                 role={current.role}
                 providers={options}
-                decisionProviders={candidates("decision")}
                 choice={choices[current.role]}
                 onChange={(choice) => onChange(current.role, choice)}
               />

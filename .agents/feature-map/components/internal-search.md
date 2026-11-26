@@ -1,8 +1,8 @@
 # Internal Search
 
 > The `internal_search` tool: it expands a query into parallel lanes over the
-> document index and federated sources, fuses them, and has an LLM or a
-> decision model select and expand the best sections. The `/search` API and the EE Search page reuse it.
+> document index and federated sources, fuses them, and has an LLM select and
+> expand the best sections. The `/search` API and the EE Search page reuse it.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. EE adds post-query chunk censoring and the Search page.
@@ -81,11 +81,8 @@ SearchTool._run -> SearchTool.search
        _run_search_for_query -> search_pipeline -> search_chunks
        + at most one _run_slack_search lane              [[federated-search]]
   -> weighted_reciprocal_rank_fusion -> merge_individual_chunks (num_hits cap)
-  -> _resolve_decision_client
-     decision client: _select_with_decision_model
-                      (rank_sections_listwise, one decision request)
-     else or on failure: _trim_sections_by_tokens
-                      -> select_sections_for_expansion (one LLM call)
+  -> _trim_sections_by_tokens
+     -> select_sections_for_expansion (one LLM call)
   -> expand_section_with_context per section (parallel)
   -> merge_overlapping_sections -> convert_inference_sections_to_llm_string
 ```
@@ -128,33 +125,20 @@ filters results afterwards except EE censoring
 (`backend/onyx/access/access.py:censor_chunks_for_user`). The
 Slack lane gets none of these filters.
 
-**No cross-encoder.** The selection step replaces one. One LLM call, or one
-decision request, sees all candidate sections together, so it can compare
-across documents. `RerankingModel` exists in
+**No cross-encoder.** The selection step replaces one. One LLM call sees all
+candidate sections together, so it can compare across documents. `RerankingModel` exists in
 `natural_language_processing/search_nlp_models.py`, but only the unused
 `warm_up_cross_encoder` builds one.
 
-**Decision-model rerank and expansion.** When
-`tools/tool_implementations/search/search_tool.py:SearchTool._resolve_decision_client`
-returns a client ([[#decision-path-gate]]), the decision model replaces LLM
-selection. `SearchTool._select_with_decision_model` ranks a wider pool than
-the `num_hits` cap (`RERANK_POOL_SIZE` merged sections, trimmed by tokens) in
-one request ([[#rerank-one-request]]) and keeps the most probable sections.
-Ties keep fusion order. A pick from beyond the top hits gets a search doc.
-While the ranking call runs, the first sections in fusion order expand in the
-background with the decision model only, and search waits only for the
-selected ones. Expansion then asks
-`secondary_llm_flows/decision_rerank_expansion.py:decide_context_expansion`
-first, and `classify_section_relevance` when that call fails or the model
-refuses. Any failure of the rerank falls back to LLM selection in the same
-search ([[#decision-falls-back-to-llm]]).
+**No decision model.** Search does not use the DECISION model. An admin can
+set one ([[llm-providers]]), but selection and expansion always use
+`selection_llm`.
 
 **Three model clients.** Query expansion, scope and time decisions, and Slack
 query processing use the agent's primary model. LLM selection and relevance
 classification use `selection_llm`, which resolves lazily from the
 SEARCH_SELECTION default after retrieval returns sections. If that fails or
-is unset, it uses the primary model. The decision client comes from the
-DECISION default ([[llm-providers]]). Chat checks the primary provider's cost
+is unset, it uses the primary model. Chat checks the primary provider's cost
 limit at turn start (`chat/process_message.py`). The tool checks it itself,
 once per call, only when a `/search` caller skipped that check
 (`primary_llm_cost_checked`). The Slack lane shares that check, and a failure
@@ -227,8 +211,7 @@ calls the index directly for admin document inspection.
    `context/search/retrieval/search_runner.py:search_chunks`).
 4. `llm-and-rich-responses-differ` **The result `content` and `details` serve
    different readers.** The model reads the trimmed, cited string in `content`.
-   `SearchDocsResponse.search_docs` holds every top section before selection,
-   plus any decision-model pick from beyond the top hits.
+   `SearchDocsResponse.search_docs` holds every top section before selection.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
    list means none. Do not feed `details` fields back into the prompt. In chat,
    `ChatAgent._finalize_tool` stages, for the Python tool when the chat offers
@@ -306,40 +289,10 @@ calls the index directly for admin document inspection.
     does (`document_index/FILTER_SEMANTICS.md`, "Owner-only sources"). A new
     private source must follow the same rule, not add a filter to
     `document_index/opensearch/search.py:DocumentQuery._get_search_filters`.
-12. `decision-path-gate` **The decision path needs a configured model, a turn
-    that persists content and, on cloud, a flag.**
-    `tools/tool_implementations/search/search_tool.py:SearchTool._resolve_decision_client`
-    runs at most once per search call. It returns a client only when the DECISION
-    default exists, `chat/incognito.py:current_turn_persists_content` is true,
-    and the PostHog flag `onyx-search-decision-rerank-expansion` is on for the
-    tenant. With the NoOp flag provider (self-hosted) the flag counts as on.
-    The decision client carries no incognito request policy, so content-free
-    turns must keep LLM selection. There is no env var.
-13. `rerank-one-request` **One ranking is one decision request.**
-    `secondary_llm_flows/decision_rerank_expansion.py:rank_sections_listwise`
-    asks one comparative yes/no question per section. Predicate probabilities
-    compare only within one request, so never split the pool across requests
-    or merge scores from two calls. Keep the pool below
-    `MAX_DECISION_QUESTIONS`; the function raises above it. A refused question
-    ranks its section last.
-14. `decision-falls-back-to-llm` **Every decision-path failure falls back to
-    LLM selection in the same search.** A client that cannot be built (such as
-    on a cost limit), a failed or timed-out ranking call, or a refusal of
-    every question makes `SearchTool.search` run `select_sections_for_expansion`
-    and expand with the LLM. Background expansions call the decision model
-    only, with `llm_fallback=False`, because most of those sections are not
-    selected; a failed one expands again in the normal pass if it is selected.
-15. `decision-client-before-cost-check` **The decision client resolves before
-    the primary cost check.** When selection uses the primary model and its
-    budget is exhausted, search still ranks and expands with the decision
-    model, with no LLM fallback. A failed rerank then raises the primary
-    model's budget error. Keep `_resolve_decision_client` ahead of
-    `check_primary_llm_cost` in `SearchTool.search`.
-16. `retrieval-only-makes-no-model-calls` **`retrieval_only` makes no LLM or
-    decision-model call.**
+12. `retrieval-only-makes-no-model-calls` **`retrieval_only` makes no LLM call.**
     `tools/tool_implementations/search/search_tool.py:SearchTool.search` skips
     query expansion, scope and time detection, and the Slack lane, and returns
-    the top sections before the decision client or selection model resolves.
+    the top sections before the selection model resolves.
     It adds `retrieval_context_chunks` neighbors with
     `tools/tool_implementations/search/search_utils.py:expand_section_with_neighbors`,
     which reads them from the index and classifies nothing. `/search/raw` is
@@ -370,9 +323,7 @@ calls the index directly for admin document inspection.
 - [[tools-framework]]: constructs `SearchTool` and supplies the `ToolContext`
   with the planning state and citation start.
 - [[agent-runtime]]: merges repeated calls in one step into one search.
-- [[llm-providers]]: resolves the SEARCH_SELECTION default and the decision
-  client.
-- [[editions-and-gating]]: the PostHog flag provider for the decision path.
+- [[llm-providers]]: resolves the SEARCH_SELECTION default.
 - [[chat-persistence]]: the record mode that decides whether a turn persists
   content.
 - [[projects]]: decides when project and agent files go through search.

@@ -376,7 +376,7 @@
       "decisionModel": {
         "title": "决策模型",
         "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
-        "description": "内部搜索使用此模型对结果排序，并决定添加多少上下文。您也可以在聊天偏好设置中设置它。",
+        "description": "尚未使用，即将推出。",
         "clear": "清除",
         "saveFailed": "无法更新决策模型"
       },
@@ -1348,9 +1348,8 @@
         "title": "聊天命名模型"
       },
       "searchDecisionModel": {
-        "description": "选择检索到的文档，并决定添加多少上下文。决策模型在一次调用中对其排序。语言模型按原方式进行选择。",
-        "title": "搜索决策模型",
-        "decisionSection": "决策模型"
+        "description": "选择检索到的文档，并决定要添加多少上下文。",
+        "title": "搜索决策模型"
       },
       "taskModels": {
         "loadFailed": "无法加载任务模型",

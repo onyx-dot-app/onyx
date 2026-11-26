@@ -183,8 +183,7 @@ rejected signup attempt still counts.
    Onyx-managed provider key, it must call
    `backend/onyx/server/usage_limits.py:check_llm_cost_limit_for_provider`.
    `backend/onyx/llm/factory.py:get_llm_for_persona` does not run the cost check,
-   so its callers must. `get_default_utility_llm` and `get_decision_client` run
-   it themselves.
+   so its callers must. `get_default_utility_llm` runs it itself.
 2. `budget-before-api-call-count` **Run the all-models budget check before
    `check_api_key_usage`.** `check_api_key_usage` increments the API-call counter
    when it runs. The order in `backend/onyx/server/features/search/api.py:search`

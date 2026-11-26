@@ -25,8 +25,6 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.decisions.client import DEFAULT_DECISION_TIMEOUT_S, DecisionClient
-from onyx.llm.decisions.factory import build_decision_client
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
@@ -486,40 +484,6 @@ def get_default_utility_llm(
         additional_headers=additional_headers,
         policy_fn=policy_fn,
     )
-
-
-def get_decision_client(
-    additional_headers: dict[str, str] | None = None,
-    timeout: float = DEFAULT_DECISION_TIMEOUT_S,
-) -> DecisionClient | None:
-    with get_session_with_current_tenant() as db_session:
-        model = fetch_role_model(db_session, ModelRole.DECISION)
-        if model is None:
-            return None
-        provider = model.llm_provider
-        api_key = (
-            provider.api_key.get_value(apply_mask=False) if provider.api_key else ""
-        )
-        check_llm_cost_limit_for_provider(
-            db_session=db_session,
-            tenant_id=get_current_tenant_id(),
-            llm_provider_api_key=api_key,
-        )
-        return build_decision_client(
-            provider=provider.provider,
-            model=model.name,
-            api_key=api_key,
-            api_base=provider.api_base,
-            zoom_voice_provider_id=provider.zoom_voice_provider_id,
-            extra_headers={
-                **build_llm_extra_headers(additional_headers),
-                **_build_provider_extra_headers(
-                    provider.provider, provider.custom_config
-                ),
-            },
-            model_configuration_id=model.id,
-            timeout=timeout,
-        )
 
 
 def get_llm_for_provider(provider: str, model_name: str) -> LLM | None:

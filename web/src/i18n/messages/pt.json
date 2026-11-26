@@ -376,7 +376,7 @@
       "decisionModel": {
         "title": "Modelo de decisão",
         "openAiDecisionsModelName": "Decisões da OpenAI (GPT-6 Luna)",
-        "description": "A pesquisa interna usa este modelo para classificar os resultados e decidir quanto contexto adicionar. Você também pode defini-lo em Preferências de chat.",
+        "description": "Ainda não é usado. Em breve.",
         "clear": "Limpar",
         "saveFailed": "Não foi possível atualizar o modelo de decisão"
       },
@@ -1348,9 +1348,8 @@
         "title": "Modelo de nomeação de chats"
       },
       "searchDecisionModel": {
-        "description": "Seleciona os documentos recuperados e decide quanto contexto adicionar. Um modelo de decisão os classifica em uma única chamada. Um modelo de linguagem os seleciona como antes.",
-        "title": "Modelo de decisão de pesquisa",
-        "decisionSection": "Modelos de decisão"
+        "description": "Seleciona os documentos recuperados e decide quanto contexto adicionar.",
+        "title": "Modelo de decisão de pesquisa"
       },
       "taskModels": {
         "loadFailed": "Não foi possível carregar os modelos de tarefas",
