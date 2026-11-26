@@ -37,9 +37,7 @@ from onyx.llm.models import (
     Message,
     SystemMessage,
     TextContent,
-    ThinkingDeltaEvent,
     ToolCall,
-    ToolCallEndEvent,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -246,58 +244,47 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
 
 
 @pytest.mark.parametrize("inherited", [False, True])
-def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) -> None:
-    def corrupt(event: AgentEvent) -> None:
-        if event.type == "message_end":
-            event.message.content.clear()
-        elif event.type == "message_update":
-            update = event.generation_event
-            if isinstance(update, ToolCallEndEvent):
-                update.tool_call.arguments.clear()
-            elif isinstance(update, ThinkingDeltaEvent) and update.blocks:
-                update.blocks.clear()
-        elif event.type == "tool_end":
-            event.result.content = "corrupted"
-            event.tool_call.arguments["bad"] = True
+def test_events_hold_recorded_objects_that_never_change_after_publication(
+    inherited: bool,
+) -> None:
+    received: list[tuple[AgentEvent, str]] = []
+    shared: list[AgentEvent] = []
 
-    ready = threading.Event()
+    def record(event: AgentEvent) -> None:
+        received.append((event, event.model_dump_json()))
 
-    def generate(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        assert ready.wait(2)
-        return _model(request)
+    def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
+        return result.model_copy(update={"content": "accepted"})
 
     agent = Agent(
-        FakeModelClient(generate),
+        FakeModelClient(_model),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[_tool()],
+        feature=RunHooks(
+            after_tool_call=finalize,
+            prepare_step=lambda _: PreparedStep(output_metadata=ExtraData()),
+        ),
     )
-    observed: list[AgentEvent] = []
-    parent = EventDelivery() if inherited else None
-    if parent is not None:
-        parent.subscribe(corrupt)
+    parent = EventDelivery()
+    if inherited:
+        parent.subscribe(record)
+    parent.subscribe(shared.append)
     run = agent.start(
         max_steps=2,
-        on_event=None if inherited else corrupt,
+        on_event=None if inherited else record,
         _event_parent=parent,
     )
-    run.subscribe(observed.append)
-    ready.set()
-    result = run.result()
-    assert run.wait_for_idle(2)
-    assert result.output.text == "original"
-    assert agent.state.messages[-1].text == "original"
-    assert (
-        next(event for event in observed if event.type == "message_end").message.text
-        == "Searching"
-    )
-    result.output.content.clear()
-    run.snapshot().messages.clear()
-    agent.state.messages.clear()
-    assert run.snapshot().messages[-1].text == "original"
-    if parent is not None:
-        parent.close()
+    assert run.result(timeout=5).output.text == "accepted"
+    assert run.wait_for_idle(5)
+    assert [event.model_dump_json() for event, _ in received] == [
+        dump for _, dump in received
+    ]
+    # Every listener gets the published object; events hold recorded objects.
+    events = [event for event, _ in received]
+    assert all(seen is event for seen, event in zip(shared, events, strict=True))
+    end = next(event for event in events if isinstance(event, MessageEndEvent))
+    assert end.message is run._state.steps[0].message
+    parent.close()
 
 
 @pytest.mark.parametrize(
@@ -515,36 +502,6 @@ def test_prepared_request_shares_history_without_changing_it(
         assert isinstance(assembled_from[0], tuple)
     request.messages.clear()
     assert messages == [original, found]
-
-
-def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
-    observed: list[MessageEndEvent] = []
-
-    def on_event(event: AgentEvent) -> None:
-        if isinstance(event, MessageEndEvent):
-            observed.append(event)
-            event.message.content.clear()
-            if isinstance(event.message.metadata, ExtraData):
-                event.message.metadata.value = "changed"
-
-    agent = Agent(
-        FakeModelClient(
-            lambda *_: AssistantMessage(content=[TextContent(text="answer")])
-        ),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        feature=RunHooks(
-            prepare_step=lambda _: PreparedStep(output_metadata=ExtraData())
-        ),
-    )
-    run = agent.start(max_steps=1, on_event=on_event)
-    result = run.result(timeout=5)
-    assert run.wait_for_idle(5)
-    assert len(observed) == 1
-    recorded = run.snapshot().messages[0]
-    assert isinstance(recorded, AssistantMessage)
-    assert recorded.text == result.output.text == "answer"
-    assert recorded.metadata == ExtraData()
-    assert recorded.id == observed[0].message_id
 
 
 def test_tool_calls_share_one_read_only_history_view() -> None:

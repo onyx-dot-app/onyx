@@ -115,6 +115,7 @@ def _run(
     fusion_mock: MagicMock | None = None,
     results: list[ToolResult] | None = None,
     user_message: str = "resolve the ticket",
+    published: list[tuple[ToolProgress, str]] | None = None,
 ) -> MagicMock:
     """Mock retrieval and scope selection; supplied sections exercise context expansion."""
     mock_search_pipeline = (
@@ -125,6 +126,13 @@ def _run(
     decide = (
         decide_mock if decide_mock is not None else MagicMock(return_value=decision)
     )
+
+    def record(item: ToolProgress) -> None:
+        if progress is not None:
+            progress.append(item.model_copy(deep=True))
+        if published is not None:
+            published.append((item, item.model_dump_json()))
+
     with (
         patch(f"{MODULE}.get_session_with_current_tenant") as mock_session_ctx,
         patch(
@@ -160,11 +168,7 @@ def _run(
                 call_id="search",
                 arguments={"queries": queries or ["ticket"]},
                 cancellation=CancellationSignal(),
-                update=lambda item: (
-                    progress.append(item.model_copy(deep=True))
-                    if progress is not None
-                    else None
-                ),
+                update=record,
                 messages=[UserMessage(content=user_message)],
             ),
             context=(context or ToolContext()).model_copy(
@@ -1125,6 +1129,7 @@ def _run_selection(
     rank: MagicMock,
     decision_client: MagicMock | None,
     expand_effect: Callable[..., InferenceSection] = lambda **kwargs: kwargs["section"],
+    published: list[tuple[ToolProgress, str]] | None = None,
 ) -> tuple[MagicMock, MagicMock, MagicMock, MagicMock]:
     """Run a search that reaches selection; returns the mocks for LLM selection,
     expansion, overlap merging and search-doc conversion."""
@@ -1150,8 +1155,31 @@ def _run_selection(
             return_value=("evidence", {}),
         ),
     ):
-        _run(tool, connected_sources=[DocumentSource.GITHUB], sections=sections)
+        _run(
+            tool,
+            connected_sources=[DocumentSource.GITHUB],
+            sections=sections,
+            published=published,
+        )
     return select, expand, merge, to_docs
+
+
+def test_published_progress_does_not_change_after_publication() -> None:
+    """The run publishes each update as is, so the tool sends a new value for
+    each one instead of changing one it already sent."""
+    published: list[tuple[ToolProgress, str]] = []
+    sections = [_section(f"doc-{index}") for index in range(3)]
+    _run_selection(
+        _make_tool(),
+        sections,
+        MagicMock(return_value=[0.5] * len(sections)),
+        None,
+        published=published,
+    )
+    assert len(published) >= 3
+    assert [item.model_dump_json() for item, _ in published] == [
+        dump for _, dump in published
+    ]
 
 
 def test_decision_rerank_selects_by_listwise_probability() -> None:
