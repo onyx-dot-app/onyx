@@ -68,6 +68,7 @@ import {
 import { FileCard } from "@/sections/cards/FileCard";
 import {
   cancelUpload,
+  dropHeldUploads,
   holdUploads,
   releaseUploads,
 } from "@/lib/projects/uploadProgress";
@@ -112,9 +113,10 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import {
   useChatSessionStore,
+  useCurrentMessageHistory,
+  useCurrentMessageTree,
   useCurrentResponseStopped,
 } from "@/app/app/stores/useChatSessionStore";
-import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useAnswerWithMessage, useWaitingQuestionIds } from "@/lib/chat/hooks";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
@@ -276,6 +278,10 @@ const AppInputBar = React.memo(
       editWithdrawalSession === currentSessionId;
     // A sent question edited in the composer. It is part of the chat's draft.
     const [editing, setEditing] = useState<DraftEdit | null>(null);
+    const editingRef = useRef(editing);
+    useEffect(() => {
+      editingRef.current = editing;
+    }, [editing]);
     const { user, isAdmin } = useUser();
     const { isMac } = useBrowserInfo();
     const sendDelivery = user?.preferences.interrupt_on_send
@@ -471,6 +477,7 @@ const AppInputBar = React.memo(
       previousScopeRef.current = editorScope;
       attachmentsScope = editorScope;
       setHeldSendKey(null);
+      dropHeldUploads(editingRef.current?.stash.files ?? []);
       setEditing(null);
       clearMessage();
       setCurrentMessageFiles([]);
@@ -590,20 +597,19 @@ const AppInputBar = React.memo(
     // hidden message fails, so the edit ends and the draft comes back. A
     // message not loaded yet, such as one older than the first page, counts
     // as shown.
-    const editedMessageShown = useChatSessionStore((state) => {
-      if (!editing || state.currentSessionId === null) return true;
-      const tree = state.sessions.get(state.currentSessionId)?.messageTree;
-      if (
-        !tree ||
-        !Array.from(tree.values()).some(
-          (message) => message.messageId === editing.messageId
-        )
-      )
-        return true;
-      return getLatestMessageChain(tree).some(
-        (message) => message.messageId === editing.messageId
+    const messageTree = useCurrentMessageTree();
+    const messageHistory = useCurrentMessageHistory();
+    const editedMessageId = editing?.messageId;
+    const editedMessageShown = useMemo(() => {
+      if (editedMessageId === undefined || !messageTree) return true;
+      const loaded = Array.from(messageTree.values()).some(
+        (message) => message.messageId === editedMessageId
       );
-    });
+      return (
+        !loaded ||
+        messageHistory.some((message) => message.messageId === editedMessageId)
+      );
+    }, [editedMessageId, messageTree, messageHistory]);
     useEffect(() => {
       if (editing && !editedMessageShown) endEdit(editing.stash);
     }, [editedMessageShown]);
@@ -633,6 +639,7 @@ const AppInputBar = React.memo(
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
       reset: () => {
+        dropHeldUploads(editing?.stash.files ?? []);
         setEditing(null);
         clearMessage();
         clearChatDraft();

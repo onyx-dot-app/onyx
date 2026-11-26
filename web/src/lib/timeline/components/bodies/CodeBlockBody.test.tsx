@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
+import { MAX_HIGHLIGHTED_CHARACTERS } from "@/lib/codeHighlight/hooks";
 import { CodeBlockBody } from "@/lib/timeline/components/bodies/CodeBlockBody";
 
 const LONG_LINE = `curl -X POST https://api.example.com/v1/chat -d '${"x".repeat(200)}'`;
@@ -116,4 +117,18 @@ test.each([
     <CodeBlockBody code={code} language={language} />
   );
   await waitFor(() => expect(shikiTokens(container).length).toBeGreaterThan(0));
+});
+
+test("finished code above the highlight cap stays plain", async () => {
+  // Highlight a small block first, so the grammar is loaded and cached.
+  const small = render(<CodeBlockBody code="const a = 1;" language="ts" />);
+  await waitFor(() =>
+    expect(shikiTokens(small.container).length).toBeGreaterThan(0)
+  );
+
+  const code = `const a = 1;\n${"// filler\n".repeat(MAX_HIGHLIGHTED_CHARACTERS / 9)}`;
+  expect(code.length).toBeGreaterThan(MAX_HIGHLIGHTED_CHARACTERS);
+  const { container } = render(<CodeBlockBody code={code} language="ts" />);
+  await act(async () => {});
+  expect(shikiTokens(container)).toHaveLength(0);
 });

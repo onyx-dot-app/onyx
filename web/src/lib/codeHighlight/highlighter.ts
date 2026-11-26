@@ -54,7 +54,8 @@ function isBundledLanguage(language: string): language is BundledLanguage {
   return Object.hasOwn(bundledLanguages, language);
 }
 
-// Fence tags and file extensions that Shiki knows under another name.
+// Fence tags, file extensions and linguist names that Shiki knows under
+// another name.
 const LANGUAGE_ALIASES = new Map<string, BundledLanguage>([
   ["gitignore", "ini"],
   ["dos", "bat"],
@@ -97,6 +98,57 @@ const LANGUAGE_ALIASES = new Map<string, BundledLanguage>([
   ["gradle", "groovy"],
   ["vbscript", "vb"],
   ["vbs", "vb"],
+  // Linguist language names (see `lib/languages.ts`).
+  ["1c enterprise", "bsl"],
+  ["actionscript", "actionscript-3"],
+  ["alpine abuild", "shellscript"],
+  ["assembly", "asm"],
+  ["batchfile", "bat"],
+  ["closure templates", "soy"],
+  ["common lisp", "lisp"],
+  ["dm", "dream-maker"],
+  ["edn", "clojure"],
+  ["emacs lisp", "elisp"],
+  ["freemarker", "ftl"],
+  ["gentoo ebuild", "shellscript"],
+  ["gentoo eclass", "shellscript"],
+  ["git commit", "git-commit"],
+  ["glimmer js", "gjs"],
+  ["glimmer ts", "gts"],
+  ["godot resource", "gdresource"],
+  ["gradle kotlin dsl", "kotlin"],
+  ["html+erb", "erb"],
+  ["html+razor", "razor"],
+  ["json with comments", "jsonc"],
+  ["jsonld", "json"],
+  ["jupyter notebook", "json"],
+  ["lean 4", "lean4"],
+  ["maven pom", "xml"],
+  ["npm config", "ini"],
+  ["oasv2-json", "json"],
+  ["oasv2-yaml", "yaml"],
+  ["oasv3-json", "json"],
+  ["oasv3-yaml", "yaml"],
+  ["opencl", "c"],
+  ["plpgsql", "sql"],
+  ["power query", "powerquery"],
+  ["protocol buffer", "proto"],
+  ["raml", "yaml"],
+  ["regular expression", "regexp"],
+  ["rocq prover", "coq"],
+  ["saltstack", "yaml"],
+  ["snakemake", "python"],
+  ["ssh config", "ssh-config"],
+  ["starlark", "python"],
+  ["systemverilog", "system-verilog"],
+  ["tcsh", "shellscript"],
+  ["terraform template", "terraform"],
+  ["vim script", "vim"],
+  ["webassembly", "wasm"],
+  ["windows registry entries", "reg"],
+  ["wolfram language", "wolfram"],
+  ["xml property list", "xml"],
+  ["xslt", "xsl"],
 ]);
 
 function highlighterLanguageOf(language: string): string {

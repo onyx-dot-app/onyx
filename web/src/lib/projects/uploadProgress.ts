@@ -107,6 +107,13 @@ export function holdUploads(files: ProjectFile[]): void {
   });
 }
 
+/** Forgets held files that no one will release, such as an abandoned edit. */
+export function dropHeldUploads(files: ProjectFile[]): void {
+  files.forEach((file) => {
+    if (file.temp_id) heldUploads.delete(file.temp_id);
+  });
+}
+
 /**
  * Brings held files up to date. A file whose upload finished becomes the
  * uploaded file, and a file whose upload failed is dropped. A file still
