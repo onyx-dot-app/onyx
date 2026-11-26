@@ -8,6 +8,7 @@ import { Button, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgArrowUpLeft, SvgSquare } from "@opal/icons";
 import type { IconProps } from "@opal/types";
+import { ChatMessageLoader } from "@opal/loaders";
 import { formatDurationSeconds } from "@opal/time";
 import { cn } from "@opal/utils";
 import type { MinimalOnyxDocument } from "@/lib/search/types";
@@ -137,7 +138,12 @@ export function SubagentView({
       <div ref={content} className={cn("w-full", CHAT_GUTTER)}>
         <div className={cn("w-full mx-auto pb-8", CHAT_COLUMN_WIDTH)}>
           <ParentDivider parentTitle={parentTitle} />
-          {empty ? (
+          {messages.length === 0 && loading && !failed ? (
+            <Section gap={1} alignItems="stretch" height="fit">
+              <ChatMessageLoader orientation="end" />
+              <ChatMessageLoader orientation="start" />
+            </Section>
+          ) : empty ? (
             <Section padding={1} height="fit">
               <Text font="secondary-body" color="text-03">
                 {failed ? t("failed") : t("empty")}

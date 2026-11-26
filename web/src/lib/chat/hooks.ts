@@ -1477,7 +1477,12 @@ export function useSubagentTranscript(
           }
         } catch (failure) {
           if (controller.signal.aborted) return;
-          if (failure instanceof FetchError && failure.status === 404) break;
+          // Gone, or no longer allowed: the history reload shows which
+          if (
+            failure instanceof FetchError &&
+            [401, 403, 404].includes(failure.status)
+          )
+            break;
           console.warn("The subagent's live stream dropped", failure);
         }
         if (!stopped)
