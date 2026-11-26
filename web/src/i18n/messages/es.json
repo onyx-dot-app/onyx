@@ -16674,6 +16674,12 @@
       "deleteError": {
         "message": "No se pudo eliminar el chat. Inténtalo de nuevo."
       },
+      "markRead": {
+        "label": "Marcar como leído"
+      },
+      "markUnread": {
+        "label": "Marcar como no leído"
+      },
       "moveToProject": {
         "label": "Mover a un proyecto"
       },
@@ -16682,6 +16688,12 @@
       },
       "projectSearchInput": {
         "placeholder": "Buscar proyectos"
+      },
+      "regenerateTitle": {
+        "label": "Regenerar título"
+      },
+      "regenerateTitleError": {
+        "message": "No se pudo regenerar el título. Inténtalo de nuevo."
       },
       "removeFromProject": {
         "label": "Quitar de {projectName}"
@@ -16706,9 +16718,11 @@
           "label": "Trabajando"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Compartir"
+      },
+      "updatedNow": {
+        "label": "ahora"
       }
     },
     "chatSearch": {

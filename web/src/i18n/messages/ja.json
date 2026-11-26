@@ -16674,6 +16674,12 @@
       "deleteError": {
         "message": "チャットを削除できませんでした。もう一度お試しください。"
       },
+      "markRead": {
+        "label": "既読にする"
+      },
+      "markUnread": {
+        "label": "未読にする"
+      },
       "moveToProject": {
         "label": "プロジェクトに移動"
       },
@@ -16682,6 +16688,12 @@
       },
       "projectSearchInput": {
         "placeholder": "プロジェクトを検索"
+      },
+      "regenerateTitle": {
+        "label": "タイトルを再生成"
+      },
+      "regenerateTitleError": {
+        "message": "タイトルを再生成できませんでした。もう一度お試しください。"
       },
       "removeFromProject": {
         "label": "{projectName} から削除"
@@ -16706,9 +16718,11 @@
           "label": "処理中"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共有"
+      },
+      "updatedNow": {
+        "label": "今"
       }
     },
     "chatSearch": {

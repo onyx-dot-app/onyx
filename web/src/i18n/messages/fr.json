@@ -16674,6 +16674,12 @@
       "deleteError": {
         "message": "Impossible de supprimer la discussion. Veuillez réessayer."
       },
+      "markRead": {
+        "label": "Marquer comme lu"
+      },
+      "markUnread": {
+        "label": "Marquer comme non lu"
+      },
       "moveToProject": {
         "label": "Déplacer vers un projet"
       },
@@ -16682,6 +16688,12 @@
       },
       "projectSearchInput": {
         "placeholder": "Rechercher des projets"
+      },
+      "regenerateTitle": {
+        "label": "Régénérer le titre"
+      },
+      "regenerateTitleError": {
+        "message": "Échec de la régénération du titre. Veuillez réessayer."
       },
       "removeFromProject": {
         "label": "Retirer de {projectName}"
@@ -16706,9 +16718,11 @@
           "label": "En cours"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Partager"
+      },
+      "updatedNow": {
+        "label": "à l'instant"
       }
     },
     "chatSearch": {

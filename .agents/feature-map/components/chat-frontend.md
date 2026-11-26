@@ -1013,7 +1013,11 @@ up its own branding.
 
 **Run status on chat rows.** Each chat row (`sections/sidebar/ChatButton.tsx`)
 shows live status from the session store and unseen Done or Failed status
-from a separate store. The tooltip shows the title and status. Working shimmers
+from a separate store. The row has no tooltip; the status mark carries the
+status as its label. With no status mark, the row shows the relative update time
+at its end until hover. Right-click, or the context-menu key, opens the options
+menu at the pointer. Double-click renames. The menu has Regenerate title (a
+rename with `name: null` and `regenerate: true`, which replaces a saved name) and Mark as unread or Mark as read. Working shimmers
 the title (`SidebarTab` `loading`). The other statuses put a mark at the row's
 end. On hover, the options button replaces the warning icon, error icon, or
 blue unseen dot for Done. Working (`loading`, `streaming` or `cancelling`), Needs

@@ -16674,6 +16674,12 @@
       "deleteError": {
         "message": "فشل حذف المحادثة. يرجى المحاولة مرة أخرى."
       },
+      "markRead": {
+        "label": "وضع علامة كمقروءة"
+      },
+      "markUnread": {
+        "label": "وضع علامة كغير مقروءة"
+      },
       "moveToProject": {
         "label": "نقل إلى مشروع"
       },
@@ -16682,6 +16688,12 @@
       },
       "projectSearchInput": {
         "placeholder": "البحث في المشاريع"
+      },
+      "regenerateTitle": {
+        "label": "إعادة إنشاء العنوان"
+      },
+      "regenerateTitleError": {
+        "message": "فشلت إعادة إنشاء العنوان. يرجى المحاولة مرة أخرى."
       },
       "removeFromProject": {
         "label": "إزالة من {projectName}"
@@ -16706,9 +16718,11 @@
           "label": "قيد العمل"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "مشاركة"
+      },
+      "updatedNow": {
+        "label": "الآن"
       }
     },
     "chatSearch": {

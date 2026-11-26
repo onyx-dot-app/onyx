@@ -16674,6 +16674,12 @@
       "deleteError": {
         "message": "删除对话失败。请重试。"
       },
+      "markRead": {
+        "label": "标记为已读"
+      },
+      "markUnread": {
+        "label": "标记为未读"
+      },
       "moveToProject": {
         "label": "移动到项目"
       },
@@ -16682,6 +16688,12 @@
       },
       "projectSearchInput": {
         "placeholder": "搜索项目"
+      },
+      "regenerateTitle": {
+        "label": "重新生成标题"
+      },
+      "regenerateTitleError": {
+        "message": "重新生成标题失败，请重试。"
       },
       "removeFromProject": {
         "label": "从 {projectName} 中移除"
@@ -16706,9 +16718,11 @@
           "label": "处理中"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "共享"
+      },
+      "updatedNow": {
+        "label": "刚刚"
       }
     },
     "chatSearch": {
