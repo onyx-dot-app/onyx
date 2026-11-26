@@ -341,8 +341,7 @@ counts what is sent, not the stored token counts.
     recorded messages; they must not reference request-only context. A resumed turn rebuilds `ChatFeature` only from
     `chat/models.py:ChatFeatureState` (`chat/restoration.py:restore_chat_agent`),
     not from the current persona or settings. A new prompt input that is not in
-    that state, `ChatFeature.capture_state` and `ChatFeature.restore_state` is lost
-    on resume or makes the restore fail.
+    that state and `chat/restoration.py:restore_chat_agent` is lost on resume.
 12. `usage-only-history-shape` **A usage-only session retains complete input groups.**
     `chat/history_store.py:RedisChatHistoryStore.prepare_messages` combines
     the selected branch of temporary history with the accepted question and its

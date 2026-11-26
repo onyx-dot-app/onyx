@@ -35,6 +35,7 @@ from onyx.agents.tools import (
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import restoration, run_store
+from onyx.chat.checkpoint import CheckpointVersionError
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatFeatureState,
@@ -43,8 +44,10 @@ from onyx.chat.models import (
 from onyx.chat.presentation import ResponsePresenter
 from onyx.chat.run_store import (
     RESUME_FAILED_MESSAGE,
+    RESUME_UPDATED_MESSAGE,
     ChatRunStore,
     fail_suspended_response,
+    resume_failure,
 )
 from onyx.chat.tool_questions import CANCELLED_QUESTION_MESSAGE
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
@@ -1307,7 +1310,10 @@ def test_an_unresumable_response_fails_and_drops_its_saved_state(
     assert len(dumps()) == 1
 
     fail_suspended_response(
-        get_cache_backend(), POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, chat.response_id
+        get_cache_backend(),
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat.response_id,
+        resume_failure(ValueError("The model that this response ran on is gone")),
     )
 
     db_session.expire_all()
@@ -1322,6 +1328,57 @@ def test_an_unresumable_response_fails_and_drops_its_saved_state(
     assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
     assert dumps() == []
     assert sent == []
+
+
+@pytest.mark.parametrize("changed", ["checkpoint", "progress"])
+def test_a_checkpoint_that_this_version_cannot_read_fails_with_the_update_message(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun], changed: str
+) -> None:
+    """A checkpoint saved in a shape that the running code does not read ends
+    the response with the message that Onyx was updated, and the chat takes
+    a new message. The claim reads the checkpoint; restoration reads its
+    progress."""
+    _hand_off(_direct_call(chat, owned_runs))
+    row = db_session.get_one(ChatResponseCheckpoint, chat.response_id)
+    progress = row.state["progress"]
+    assert isinstance(progress, dict)
+    row.state = (
+        {**row.state, "tool_configuration_digest": "digest"}
+        if changed == "checkpoint"
+        else {
+            **row.state,
+            "progress": {**progress, "tool_configuration_digest": "digest"},
+        }
+    )
+    db_session.commit()
+    tool = chat.tool()
+
+    with pytest.raises(CheckpointVersionError) as failure:
+        _resume(
+            chat,
+            owned_runs,
+            reply=_calls(tool, "send"),
+            tools=[_sending(tool)],
+            gated=[tool],
+        )
+    fail_suspended_response(
+        get_cache_backend(),
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat.response_id,
+        resume_failure(failure.value),
+    )
+
+    db_session.expire_all()
+    response = db_session.get(ChatMessage, chat.response_id)
+    assert response is not None and response.response_status == RunStatus.ERROR
+    assert (
+        response.response_failure is not None
+        and response.response_failure.message == RESUME_UPDATED_MESSAGE
+    )
+    assert db_session.get(ChatResponseCheckpoint, chat.response_id) is None
+    db_session.rollback()
+    assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
+    _reject_while_user_input_waits(db_session, chat.chat_session_id)
 
 
 def test_a_response_whose_owner_is_lost_ends_its_requests(

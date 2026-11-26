@@ -32,7 +32,7 @@ from onyx.agents.tools import (
     ToolExecutionMode,
     ToolInvocation,
 )
-from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
+from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES, CheckpointVersionError
 from onyx.chat.models import (
     ChatSearchResult,
     CheckpointBinding,
@@ -239,7 +239,7 @@ def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
         captured.agent_state,
         CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
     )
-    with pytest.raises(ValueError, match="Unknown checkpoint payload"):
+    with pytest.raises(CheckpointVersionError, match="Unknown checkpoint payload"):
         CheckpointStorage({}).load(serialized)
     payload = json.loads(serialized)
     assert payload["checkpoint"]["version"] == 1
@@ -504,8 +504,35 @@ def test_checkpoint_rejects_changed_saved_content(changed: str) -> None:
         saved.response.steps[0].message.content.append(
             TextContent(text="changed output")
         )
-    with pytest.raises(ValueError, match=f"Checkpoint {changed} changed"):
+    with pytest.raises(CheckpointVersionError, match=f"Checkpoint {changed} changed"):
         storage.load(saved.model_dump_json())
+
+
+def test_checkpoint_rejects_payloads_of_other_message_boundaries() -> None:
+    captured = checkpoint()
+    serialized = codec().save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
+    )
+    payload = json.loads(serialized)
+    payload["checkpoint"]["message_payloads"].pop()
+    with pytest.raises(CheckpointVersionError, match="message boundaries changed"):
+        codec().load(json.dumps(payload))
+
+
+def test_checkpoint_rejects_progress_with_a_tool_configuration_digest() -> None:
+    captured = checkpoint()
+    serialized = codec().save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
+    )
+    payload = json.loads(serialized)
+    payload["checkpoint"]["progress"]["tool_configuration_digest"] = "digest"
+    with pytest.raises(CheckpointVersionError, match="changed shape") as failure:
+        codec().load(json.dumps(payload))
+    assert isinstance(failure.value.__cause__, ValidationError)
 
 
 def test_checkpoint_round_trip_keeps_image_references_without_loading_bytes(

@@ -265,8 +265,9 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    order and phases can differ. Saved execution permissions are separate from
    advertised definitions; restoration must not enable a tool merely because it
    was advertised, and it drops permitted names that the agent lacks.
-   `chat/agent.py:ChatFeature.restore_state` also raises when
-   the saved prompt, files, memory or settings differ.
+   The chat and research features rebuild their prompt, files, memory and
+   settings from the saved feature state (`chat/restoration.py:restore_chat_agent`),
+   so `restore_state` only restores the accumulated state.
 4. `context-captured-at-start` **A run copies the caller's context when it
    starts.** `backend/onyx/agents/runtime.py:Run._start` calls `copy_context()`,
    and the run's worker threads use that copy. So set the tenant and open the

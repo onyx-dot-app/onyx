@@ -7,12 +7,13 @@ from io import BytesIO
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, JsonValue, TypeAdapter
+from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 
 from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatFeature, build_chat_agent
+from onyx.chat.checkpoint import CheckpointVersionError
 from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
@@ -132,7 +133,10 @@ def restore_chat_agent(
         raise ValueError("Agent restoration requires saved execution progress")
     if snapshot.progress.feature_state is None:
         raise ValueError("Checkpoint has no supported chat feature state")
-    state = _FEATURE_STATE.validate_python(snapshot.progress.feature_state)
+    try:
+        state = _FEATURE_STATE.validate_python(snapshot.progress.feature_state)
+    except ValidationError as error:
+        raise CheckpointVersionError("Feature state changed shape") from error
     context = checkpoint.agent_state
     is_root = snapshot.parent_run_id is None
     if isinstance(state, ChatFeatureState):

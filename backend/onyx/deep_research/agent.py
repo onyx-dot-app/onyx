@@ -225,20 +225,6 @@ class DeepResearchFeature(AgentFeature):
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
         saved = DeepResearchFeatureState.model_validate(state)
-        if (
-            saved.language_section != self.language_section
-            or saved.reasoning_effort != self.reasoning_effort
-            or saved.file_metadata != self.file_metadata
-            or saved.request_context != self.request_context
-            or saved.context_files
-            != (
-                SavedContextFiles.capture(self.context_files)
-                if self.context_files is not None
-                else None
-            )
-            or saved.skip_clarification != self.skip_clarification
-        ):
-            raise ValueError("Deep research restoration configuration does not match")
         with self._citation_lock:
             self.citation_mapping = saved.citation_mapping
             self.started = time.monotonic() - saved.elapsed_seconds

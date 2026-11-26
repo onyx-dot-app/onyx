@@ -20,7 +20,7 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
 )
-from onyx.agents.runtime import Agent, Run
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.agent import (
@@ -49,10 +49,10 @@ from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.prompt_utils import build_language_section
 from onyx.chat.restoration import restore_chat_agent, restore_subagent
 from onyx.chat.run_store import (
-    RESUME_FAILED_MESSAGE,
     RETRYABLE_START_ERRORS,
     ChatRunStore,
     fail_suspended_response,
+    resume_failure,
 )
 from onyx.chat.session_naming import name_new_chat_session
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
@@ -776,17 +776,18 @@ class ChatTurnExecution:
                         # The response stays suspended, and this turn's
                         # release dispatches it again after a backoff.
                         self._resume_deferred = True
+                        persistence.report_worker_failure(failure)
                     else:
                         # The response ends as failed, so no later dispatch
-                        # tries it again.
+                        # tries it again. The stream shows the saved failure.
+                        ended = resume_failure(failure)
                         fail_suspended_response(
-                            self.setup.cache, get_current_tenant_id(), resumed_id
+                            self.setup.cache,
+                            get_current_tenant_id(),
+                            resumed_id,
+                            ended,
                         )
-                    persistence.report_worker_failure(
-                        failure
-                        if isinstance(failure, Exception)
-                        else RuntimeError(RESUME_FAILED_MESSAGE)
-                    )
+                        persistence.report_worker_failure(RunFailed(ended))
                 else:
                     persistence.save_failure(failure, cancellation.reason)
             except Exception:
