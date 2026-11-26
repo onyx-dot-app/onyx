@@ -418,7 +418,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   (daemon client and `(attempt, generation)`), the instance if it runs, a
   `SessionTransfer` for saves and restores
   (`.../firecracker/session_saves.py`), the session-setup fence, the stop
-  for a purge, and `touch`.
+  for a purge, `_forget_sandbox` (clears the backend's own records of a
+  purged sandbox), and `touch`.
 - `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
   implements the hooks on the microvm code: wake on the first call (capacity
   retry for 10 s), Init only when `Health.initialized` is false or the

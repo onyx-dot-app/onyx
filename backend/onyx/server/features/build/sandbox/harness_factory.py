@@ -61,8 +61,9 @@ def get_harness_sandbox() -> HarnessSandbox:
 
 
 def get_firecracker_sandbox() -> "FirecrackerHarnessSandbox":
-    """The Firecracker sandbox itself, for its node-report calls (idle
-    eviction) and the smoke script."""
+    """The Firecracker sandbox itself, for the smoke script. Node reports
+    use `get_eviction_policy`, which turns eviction off on a configuration
+    error instead of raising."""
     return _firecracker_sandbox()
 
 
