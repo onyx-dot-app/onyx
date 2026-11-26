@@ -131,6 +131,7 @@ def _publish(
         target=ArtifactAtPath(chat_session_id=chat.id, path=path),
         title=title,
         thumbnail=thumbnail,
+        preview_pdf=None,
     )
     at = published_at or _PUBLISHED_AT + timedelta(seconds=next(_PUBLISH_ORDER))
     db_session.execute(
@@ -667,6 +668,7 @@ def test_a_later_publish_never_moves_the_latest_publish_back(
         target=ArtifactAtPath(chat_session_id=chat.id, path="/w/a.md"),
         title=None,
         thumbnail=None,
+        preview_pdf=None,
     )
     db_session.expire_all()
     assert db_session.get_one(ChatArtifact, first.artifact_id).updated_at == ahead
@@ -779,6 +781,7 @@ def test_concurrent_replaces_take_turns_and_a_stale_one_keeps_nothing(
                     mime_type="text/plain",
                     title=None,
                     thumbnail=None,
+                    preview_pdf=None,
                     target=ArtifactById(artifact_id=artifact_id),
                     expected_version=expected,
                 )
@@ -836,6 +839,7 @@ def test_the_expected_version_is_the_newest_available_one(
             mime_type="text/plain",
             title=None,
             thumbnail=None,
+            preview_pdf=None,
             target=ArtifactById(artifact_id=artifact_id),
             expected_version=expected,
         )
@@ -865,6 +869,7 @@ def test_a_replace_without_a_title_keeps_a_title_published_during_it(
             mime_type="text/plain",
             title="New",
             thumbnail=None,
+            preview_pdf=None,
             target=ArtifactById(artifact_id=artifact_id),
         )
         return b"replaced"
@@ -963,6 +968,7 @@ def test_an_update_keeps_a_title_published_after_its_lookup(
             mime_type="text/plain",
             title="New",
             thumbnail=None,
+            preview_pdf=None,
             target=ArtifactById(artifact_id=artifact_id),
         )
         check(artifact, file)

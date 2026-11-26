@@ -161,7 +161,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
 from onyx.server.features.build.sandbox.firecracker.models import ExecSessionTable
 from onyx.server.features.build.sandbox.harness_base import (
     ONYX_VM_FILES_ROOT,
-    RENDER_FIRST_PAGE_ROOT,
+    RENDER_PREVIEW_ROOT,
     TOOL_RESULTS_ROOT,
     ExecSessionNotFoundError,
 )
@@ -2579,6 +2579,19 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
         get_default_file_store().delete_file(file.file_id)
 
 
+def _preview_ids(db_session: Session, name: str) -> list[str]:
+    """The preview PDF records of published files named `name`."""
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(FileRecord.file_id).where(
+                FileRecord.file_origin == FileOrigin.CHAT_FILE_PREVIEW,
+                FileRecord.display_name == f"{name} preview",
+            )
+        )
+    )
+
+
 def _thumbnail_ids(db_session: Session, name: str) -> list[str]:
     """The thumbnail records of published files named `name`."""
     db_session.expire_all()
@@ -2603,7 +2616,9 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
 ) -> None:
     """A PDF, a deck and a Word file each get a JPEG of their first page, also
     under the Onyx directory, which reads with the file's chat access and goes
-    with the chat's hard delete. A markdown file gets none."""
+    with the chat's hard delete. The deck and the Word file also get the PDF
+    of the same LibreOffice run, which only their preview request serves and
+    which goes with the hard delete too. A markdown file gets neither."""
     chat_session = create_chat_session(
         db_session, "thumbnails", user.id, persona_id=DEFAULT_PERSONA_ID
     )
@@ -2650,6 +2665,38 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
         file.thumbnail_file_id
         for file in get_chat_published_files(chat_session.id, db_session)
     ] == [*thumbnail_ids, None]
+    previews = dict(
+        db_session.execute(
+            select(
+                ChatArtifactVersion.file_id, ChatArtifactVersion.preview_file_id
+            ).where(
+                ChatArtifactVersion.file_id.in_(
+                    [file.file_id for file in result.details.files]
+                )
+            )
+        )
+        .tuples()
+        .all()
+    )
+    assert [previews[file.file_id] for file in (pdf, chart_file, notes)] == [
+        None,
+        None,
+        None,
+    ]
+    preview_ids = [
+        preview_id
+        for preview_id in (previews[deck.file_id], previews[memo.file_id])
+        if preview_id is not None
+    ]
+    assert len(preview_ids) == 2
+    for preview_id, source in zip(preview_ids, (b"deck", b"memo"), strict=True):
+        record = store.read_file_record(preview_id)
+        assert (record.file_origin, record.file_type) == (
+            FileOrigin.CHAT_FILE_PREVIEW,
+            "application/pdf",
+        )
+        assert store.read_file(preview_id).read() == b"%PDF-" + source
+        assert not user_can_access_chat_file(preview_id, user, db_session)
 
     # Office files convert to a PDF in a scratch directory of their own,
     # which the render deletes.
@@ -2682,13 +2729,13 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
     assert all(
         execution.env == {"SAL_USE_VCLPLUGIN": "svp"}
         and execution.argv[1].startswith(
-            f"-env:UserInstallation=file://{RENDER_FIRST_PAGE_ROOT}/"
+            f"-env:UserInstallation=file://{RENDER_PREVIEW_ROOT}/"
         )
         for execution in commands
         if execution.argv[0] == "soffice"
     )
     assert not any(
-        key[2].startswith(RENDER_FIRST_PAGE_ROOT + "/") for key in node.agent.files
+        key[2].startswith(RENDER_PREVIEW_ROOT + "/") for key in node.agent.files
     )
 
     other = make_test_user("thumbnail_viewer")
@@ -2701,7 +2748,33 @@ def test_a_published_document_gets_a_thumbnail_with_the_chat_access_and_delete(
     delete_chat_session_by_id(
         chat_session.id, hard_delete=True, user=user, db_session=db_session
     )
-    assert _remaining_file_ids(db_session, thumbnail_ids) == []
+    assert _remaining_file_ids(db_session, [*thumbnail_ids, *preview_ids]) == []
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_deck_whose_pdf_is_too_large_publishes_with_its_thumbnail(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    user: User,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+) -> None:
+    monkeypatch.setattr(harness_sandbox, "RENDER_PREVIEW_MAX_PDF_BYTES", 3)
+    tools = make_tools(
+        create_chat_session(
+            db_session, "large deck", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
+    name = f"{uuid4().hex}.pptx"
+    sandbox.write_file(tools.ref, name, b"deck")
+
+    result, _ = _run(tools.create_file, {"files": [name]})
+
+    assert isinstance(result.details, PublishedFiles)
+    [deck] = result.details.files
+    assert deck.thumbnail_file_id is not None
+    assert _thumbnail_ids(db_session, name) == [deck.thumbnail_file_id]
+    assert _preview_ids(db_session, name) == []
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
@@ -2913,9 +2986,9 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
             db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
         ).id
     )
-    # It renders: the fake pdftoppm reads a file that starts with "%PDF".
-    first = f"{uuid4().hex}.pdf"
-    sandbox.write_file(tools.ref, first, b"%PDF")
+    # It renders, to a thumbnail and a preview PDF.
+    first = f"{uuid4().hex}.pptx"
+    sandbox.write_file(tools.ref, first, b"deck")
     sandbox.write_file(tools.ref, "out/a.txt", b"a")
     sandbox.write_file(tools.ref, "big.bin", b"x" * 17)
     for vm_path in ("/tmp/chart.svg", f"{ONYX_VM_FILES_ROOT}/dir/a.svg"):
@@ -2926,13 +2999,14 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
     assert result.is_error
     assert result.text.endswith(error)
     # The file that the call copied first is deleted again, with its
-    # thumbnail and its artifact.
+    # thumbnail, its preview and its artifact.
     assert _published_records(db_session, tools.ref.session_id) == []
     assert any(
-        execution.argv[0] == "pdftoppm" and execution.argv[-2].endswith(f"/{first}")
+        execution.argv[0] == "soffice" and execution.argv[-1].endswith(f"/{first}")
         for execution in node.agent.executions[str(tools.ref.sandbox_id)].values()
     )
     assert _thumbnail_ids(db_session, first) == []
+    assert _preview_ids(db_session, first) == []
     assert (
         db_session.scalars(
             select(ChatArtifact.id).where(

@@ -154,7 +154,10 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     relative to the chat's working directory, or absolute for a file outside it. A PDF,
     PowerPoint or Word file that rendered has `thumbnail_file_id`, a JPEG of its first page,
     640 pixels on its longer side. Download it from `/chat/file/{thumbnail_file_id}`. Other files,
-    and files published without a thumbnail, have null. `error` is set when the call failed; then it published no file
+    and files published without a thumbnail, have null.
+    Get a PowerPoint or Word file as a PDF from `GET /chat/file/{file_id}?preview=pdf`.
+    If it returns 409 `PREVIEW_NOT_READY`, `POST /chat/file/{file_id}/preview` makes the PDF.
+    `error` is set when the call failed; then it published no file
     - A call that the user stopped, or that stopped with its code mode program, has no end packet. Stopping a
     command call also stops the command. A command that a Ctrl-C (`write_stdin` with `\u0003`)
     ended gets an `exec_end` whose `completion` is `canceled`

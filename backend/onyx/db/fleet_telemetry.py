@@ -1,12 +1,13 @@
 """Bounded reads for fleet telemetry snapshots."""
 
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, NamedTuple
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Date, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import KeyedColumnElement
 
+from onyx.configs.constants import MessageType
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.enums import (
     AccessType,
@@ -15,21 +16,33 @@ from onyx.db.enums import (
     PermissionSyncStatus,
     PortAttemptStatus,
     SyncStatus,
+    UserFileStatus,
 )
 from onyx.db.models import (
+    BuildSession,
+    ChatMessage,
+    ChatSession,
     Connector,
     ConnectorCredentialPair,
     DocPermissionSyncAttempt,
     DocumentByConnectorCredentialPair,
+    DocumentSet,
     ExternalGroupPermissionSyncAttempt,
     HierarchyFetchAttempt,
     IndexAttempt,
     IndexAttemptError,
     IndexAttemptStageMetric,
     License,
+    LLMProvider,
+    MCPServer,
+    Persona,
     PortAttempt,
+    SlackBot,
+    SSOProvider,
     SyncRecord,
+    Tool,
     User,
+    UserFile,
 )
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 
@@ -536,3 +549,236 @@ def license_row(db_session: Session) -> dict[str, Any]:
         func.min(License.created_at).filter(present).label("first_set_at"),
     )
     return dict(db_session.execute(statement).mappings().one())
+
+
+# Message IDs grow with send time, but rows that commit late can trail by a little.
+# Each ID bound searches this much further, and the reads still filter on send time.
+_ID_BOUND_SLACK: timedelta = timedelta(hours=1)
+# Standard accounts by how many questions each asked in 7 days.
+QUERY_BUCKETS: tuple[tuple[str, int, int | None], ...] = (
+    ("q1", 1, 1),
+    ("q2_5", 2, 5),
+    ("q6_20", 6, 20),
+    ("q21_50", 21, 50),
+    ("q51_plus", 51, None),
+)
+
+
+def _user_id() -> KeyedColumnElement[Any]:
+    return User.__table__.c.id
+
+
+def _questions() -> Any:
+    """User chat messages outside agent sub-sessions: the questions people ask."""
+    return (
+        select()
+        .select_from(ChatMessage)
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .where(
+            ChatMessage.message_type == MessageType.USER,
+            ChatSession.spawned_by_message_id.is_(None),
+        )
+    )
+
+
+def message_id_at(db_session: Session, at: datetime) -> int:
+    """The lowest chat message ID sent at or after `at`, less some slack.
+
+    chat_message has no index on its send time, so a time range there scans
+    the table. A binary search over the primary key finds the ID bound with
+    about 30 indexed reads, and later reads scan only that ID range."""
+    target: datetime = at - _ID_BOUND_SLACK
+    low, high = db_session.execute(
+        select(func.min(ChatMessage.id), func.max(ChatMessage.id))
+    ).one()
+    if low is None:
+        return 0
+    high += 1
+    while low < high:
+        middle: int = (low + high) // 2
+        row = db_session.execute(
+            select(ChatMessage.id, ChatMessage.time_sent)
+            .where(ChatMessage.id >= middle)
+            .order_by(ChatMessage.id)
+            .limit(1)
+        ).first()
+        if row is None or row.time_sent >= target:
+            high = middle
+        else:
+            low = row.id + 1
+    return low
+
+
+def first_question_at(db_session: Session) -> datetime | None:
+    """When the first question was asked. Reads in ID order, so it stops at the first
+    user message. A sub-session cannot start before the session that spawned it."""
+    return db_session.scalar(
+        select(ChatMessage.time_sent)
+        .where(ChatMessage.message_type == MessageType.USER)
+        .order_by(ChatMessage.id)
+        .limit(1)
+    )
+
+
+class UsageWeek(NamedTuple):
+    week_start: date
+    queries: int
+    sessions: int
+    active_users: int
+
+
+def usage_week_rows(db_session: Session, start: date, end: date) -> list[UsageWeek]:
+    """Questions, sessions with a question, and active standard accounts per ISO
+    week (Monday, UTC) in [start, end). Weeks without questions have no row."""
+    start_at: datetime = datetime(start.year, start.month, start.day, tzinfo=UTC)
+    end_at: datetime = datetime(end.year, end.month, end.day, tzinfo=UTC)
+    week = cast(
+        func.date_trunc("week", func.timezone("UTC", ChatMessage.time_sent)), Date
+    )
+    statement = (
+        _questions()
+        .add_columns(
+            week.label("week_start"),
+            func.count().label("queries"),
+            func.count(distinct(ChatMessage.chat_session_id)).label("sessions"),
+            func.count(distinct(_user_id()))
+            .filter(User.account_type == AccountType.STANDARD)
+            .label("active_users"),
+        )
+        .outerjoin(User, User.id == ChatSession.user_id)
+        .where(
+            ChatMessage.id >= message_id_at(db_session, start_at),
+            ChatMessage.id < message_id_at(db_session, end_at + 2 * _ID_BOUND_SLACK),
+            ChatMessage.time_sent >= start_at,
+            ChatMessage.time_sent < end_at,
+        )
+        .group_by(week)
+        .order_by(week)
+        .limit(ROW_LIMIT)
+    )
+    return [
+        UsageWeek(row.week_start, row.queries, row.sessions, row.active_users)
+        for row in db_session.execute(statement)
+    ]
+
+
+def usage_counts(db_session: Session, now: datetime) -> dict[str, Any]:
+    """Active accounts, questions, agent use, uploads and Craft sessions as counts.
+    Never who asked or what."""
+    day_ago: datetime = now - timedelta(days=1)
+    week_ago: datetime = now - timedelta(days=7)
+    month_ago: datetime = now - timedelta(days=30)
+    standard = User.account_type == AccountType.STANDARD
+    recent = ChatMessage.time_sent >= week_ago
+    builtin = func.coalesce(Persona.builtin_persona, True)
+    month = (
+        ChatMessage.id >= message_id_at(db_session, month_ago),
+        ChatMessage.time_sent >= month_ago,
+    )
+    totals = db_session.execute(
+        _questions()
+        .add_columns(
+            func.count(distinct(_user_id()))
+            .filter(standard, ChatMessage.time_sent >= day_ago)
+            .label("active_users_1d"),
+            func.count(distinct(_user_id()))
+            .filter(standard, recent)
+            .label("active_users_7d"),
+            func.count(distinct(_user_id())).filter(standard).label("active_users_30d"),
+            func.count().filter(recent).label("queries_7d"),
+            func.count().label("queries_30d"),
+            func.count().filter(recent, builtin).label("builtin"),
+            func.count().filter(recent, ~builtin).label("custom"),
+            func.count(distinct(ChatSession.persona_id))
+            .filter(recent)
+            .label("agents_used_7d"),
+        )
+        .outerjoin(User, User.id == ChatSession.user_id)
+        .outerjoin(Persona, Persona.id == ChatSession.persona_id)
+        .where(*month)
+    ).one()
+    per_user = (
+        _questions()
+        .add_columns(func.count().label("questions"))
+        .join(User, User.id == ChatSession.user_id)
+        .where(*month, recent, standard)
+        .group_by(User.id)
+        .subquery()
+    )
+    buckets = db_session.execute(
+        select(
+            *(
+                func.count()
+                .filter(
+                    per_user.c.questions >= low,
+                    *(() if high is None else (per_user.c.questions <= high,)),
+                )
+                .label(name)
+                for name, low, high in QUERY_BUCKETS
+            )
+        ).select_from(per_user)
+    ).one()
+    uploads = db_session.execute(
+        select(
+            func.count().label("uploads_7d"),
+            func.count()
+            .filter(UserFile.status == UserFileStatus.FAILED)
+            .label("failed_uploads_7d"),
+        ).where(UserFile.created_at >= week_ago)
+    ).one()
+    craft = db_session.execute(
+        select(
+            func.count().filter(BuildSession.created_at >= week_ago),
+            func.count(),
+        )
+    ).one()
+    return {
+        "active_users_1d": totals.active_users_1d,
+        "active_users_7d": totals.active_users_7d,
+        "active_users_30d": totals.active_users_30d,
+        "queries_7d": totals.queries_7d,
+        "queries_30d": totals.queries_30d,
+        "users_by_queries_7d": dict(buckets._mapping),
+        "agent_messages_7d": {"builtin": totals.builtin, "custom": totals.custom},
+        "agents_used_7d": totals.agents_used_7d,
+        "uploads_7d": uploads.uploads_7d,
+        "failed_uploads_7d": uploads.failed_uploads_7d,
+        "craft_sessions_7d": craft[0],
+        "craft_sessions_total": craft[1],
+    }
+
+
+class SetupCounts(NamedTuple):
+    counts: dict[str, int]
+    # Provider type as stored, and how many providers have it.
+    llm_providers: list[tuple[str, int]]
+
+
+def setup_counts(db_session: Session) -> SetupCounts:
+    """How much is configured. Never names, URLs or settings."""
+
+    def total(model: Any, *where: Any) -> Any:
+        return select(func.count()).select_from(model).where(*where).scalar_subquery()
+
+    counts = db_session.execute(
+        select(
+            total(
+                Persona, Persona.builtin_persona.is_(False), Persona.deleted.is_(False)
+            ).label("agents"),
+            total(MCPServer).label("mcp_servers"),
+            total(Tool, Tool.openapi_schema.is_not(None)).label("custom_actions"),
+            total(DocumentSet).label("document_sets"),
+            total(SlackBot).label("slack_bots"),
+            total(SSOProvider, SSOProvider.enabled.is_(True)).label("sso_providers"),
+        )
+    ).one()
+    providers = db_session.execute(
+        select(LLMProvider.provider, func.count())
+        .group_by(LLMProvider.provider)
+        .order_by(LLMProvider.provider)
+        .limit(ROW_LIMIT)
+    ).all()
+    return SetupCounts(
+        counts=dict(counts._mapping),
+        llm_providers=[(provider, count) for provider, count in providers],
+    )

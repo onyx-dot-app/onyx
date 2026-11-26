@@ -21,6 +21,7 @@ from scenarios import (
     FileAttachmentUser,
     HealthProbeUser,
     LongConversationUser,
+    LongTurnUser,
     MultiToolUser,
     ThreadHogUser,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "MultiToolUser",
     "DeepResearchUser",
     "LongConversationUser",
+    "LongTurnUser",
     "DisconnectUser",
     "CompressionUser",
     "FileAttachmentUser",
