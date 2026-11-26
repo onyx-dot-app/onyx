@@ -115,7 +115,10 @@ function openApiResult(
   url: string | null,
   fallback: string | null
 ): DetectedApi | null {
-  const baseUrlGuessed = fallback !== null || !view.base_url.trim();
+  // Onyx fills server variables with their defaults; a "{" left in the URL is
+  // a variable with no default, so the admin sets it.
+  const baseUrlGuessed =
+    fallback !== null || !view.base_url.trim() || view.base_url.includes("{");
   const baseUrl = fallback ?? specBaseUrl(view.base_url, url);
   return baseUrl
     ? {
