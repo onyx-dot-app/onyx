@@ -10731,6 +10731,10 @@
         "saveFailed": "无法保存群组设置。"
       }
     },
+    "plugins": {
+      "title": "插件",
+      "description": "上传 Claude Code 和 Codex 插件，并从 GitHub 同步市场。插件是一组技能，并列出这些技能需要的集成。"
+    },
     "serviceStatus": {
       "page": {
         "description": "Onyx 实例当前的资源使用情况和搜索集群健康状况",

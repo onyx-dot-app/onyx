@@ -10731,6 +10731,10 @@
         "saveFailed": "Impossible d’enregistrer le paramètre de groupe."
       }
     },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Importez des plugins Claude Code et Codex, et synchronisez des marketplaces depuis GitHub. Un plugin est un ensemble de skills qui indique les intégrations dont ces skills ont besoin."
+    },
     "serviceStatus": {
       "page": {
         "description": "Utilisation actuelle des ressources et santé du cluster de recherche de votre instance Onyx",

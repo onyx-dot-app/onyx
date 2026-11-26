@@ -10731,6 +10731,10 @@
         "saveFailed": "Die Gruppeneinstellung konnte nicht gespeichert werden."
       }
     },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Lade Plugins für Claude Code und Codex hoch und synchronisiere Marketplaces von GitHub. Ein Plugin ist eine Gruppe von Skills und nennt die Integrationen, die diese Skills brauchen."
+    },
     "serviceStatus": {
       "page": {
         "description": "Aktuelle Ressourcennutzung und Zustand des Such-Clusters Ihrer Onyx-Instanz",

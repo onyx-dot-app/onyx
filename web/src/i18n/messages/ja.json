@@ -10731,6 +10731,10 @@
         "saveFailed": "グループ設定を保存できませんでした。"
       }
     },
+    "plugins": {
+      "title": "プラグイン",
+      "description": "Claude Code と Codex のプラグインをアップロードし、GitHub からマーケットプレイスを同期します。プラグインはスキルのまとまりで、それらのスキルに必要な連携を示します。"
+    },
     "serviceStatus": {
       "page": {
         "description": "Onyx インスタンスの現在のリソース使用量と検索クラスターの状態",

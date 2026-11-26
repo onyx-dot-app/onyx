@@ -10731,6 +10731,10 @@
         "saveFailed": "그룹 설정을 저장할 수 없습니다."
       }
     },
+    "plugins": {
+      "title": "플러그인",
+      "description": "Claude Code 및 Codex 플러그인을 업로드하고 GitHub에서 마켓플레이스를 동기화합니다. 플러그인은 스킬 묶음이며, 해당 스킬에 필요한 통합을 나열합니다."
+    },
     "serviceStatus": {
       "page": {
         "description": "Onyx 인스턴스의 현재 리소스 사용량과 검색 클러스터 상태",
