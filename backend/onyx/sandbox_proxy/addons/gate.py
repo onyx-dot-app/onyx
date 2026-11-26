@@ -635,7 +635,9 @@ class GateAddon:
             else "MCP protocol"
         )
         try:
-            session = self._resolve_gated_session(flow, sandbox, tag)
+            session = await asyncio.to_thread(
+                self._resolve_gated_session, flow, sandbox, tag
+            )
         except Exception:
             logger.exception(
                 "session_lookup_error tenant=%s sandbox=%s host=%s app_name=%r "

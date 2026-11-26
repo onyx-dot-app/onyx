@@ -15,6 +15,7 @@ import asyncio
 import base64
 import json
 import logging
+import threading
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import AbstractSet, Any
@@ -316,6 +317,28 @@ async def test_resolve_and_match_no_tag_fails_closed() -> None:
     assert result is None
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
     assert resolver.resolve_session_by_id_calls == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_and_match_looks_up_the_session_off_the_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The session lookup can wait on the database, so it must not block
+    other requests on the proxy's event loop."""
+    addon = _build(
+        resolver=StubResolver(sandbox=make_resolved_sandbox()),
+        matcher=_StubMatcher(result=_MATCH),
+    )
+    threads: list[int] = []
+
+    def lookup(*_: object) -> None:
+        threads.append(threading.get_ident())
+
+    monkeypatch.setattr(addon, "_resolve_gated_session", lookup)
+    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    assert await addon._resolve_and_match(flow) is None
+    assert threads and threads[0] != threading.get_ident()
 
 
 # ---------------------------------------------------------------------------
