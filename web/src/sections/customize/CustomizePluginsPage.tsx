@@ -76,6 +76,7 @@ function usePluginSource(): (
   group: PluginGroup
 ) => string {
   const t = useTranslations("customize");
+  const tableCopy = useTranslations("skills.adminTable");
   return (entry, group) =>
     entry.marketplace !== null
       ? t("skills.source.marketplace", {
@@ -83,7 +84,9 @@ function usePluginSource(): (
           scope: entry.marketplace.personal ? "personal" : "company",
         })
       : group === "mine"
-        ? t("skills.source.mine")
+        ? entry.ownerEmail === null
+          ? tableCopy("noOwner")
+          : t("skills.source.mine")
         : group === "organization"
           ? t("skills.source.organization")
           : group === "private" && entry.ownerEmail

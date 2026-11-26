@@ -309,6 +309,30 @@ describe("admin page", () => {
     );
   });
 
+  test("an unpublished upload with no owner says so, not by you", async () => {
+    window.history.replaceState(null, "", "/admin/plugins");
+    mockFetch({
+      "/api/skills": {
+        builtins: [],
+        customs: [
+          plugin("mine", "my-kit"),
+          plugin("orphan", "orphan-kit", { owner: null }),
+        ],
+      },
+      "/api/marketplaces": { marketplaces: [] },
+    });
+    render(<CustomizePluginsPage />);
+
+    const orphan = await screen.findByRole("row", { name: "Open orphan-kit" });
+    expect(within(orphan).getByText("No owner")).toBeInTheDocument();
+    expect(within(orphan).queryByText("by you")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("row", { name: "Open my-kit" })).getByText(
+        "by you"
+      )
+    ).toBeInTheDocument();
+  });
+
   test("deletes the selected plugins in one bulk request after the confirm", async () => {
     window.history.replaceState(null, "", "/admin/plugins");
     const fetchMock = mockFetch({
