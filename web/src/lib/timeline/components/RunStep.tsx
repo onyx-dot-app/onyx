@@ -36,6 +36,16 @@ export function useRunStepOpenState(): RunStepOpenState {
   );
 }
 
+/** The row `RunStep` renders for the step `id`, within `root`. */
+export function findRunStepRow(
+  root: ParentNode,
+  id: string
+): HTMLElement | null {
+  return root.querySelector<HTMLElement>(
+    `[data-run-step-id="${CSS.escape(id)}"]`
+  );
+}
+
 export interface RunStepProps {
   /** Keeps the step's open state in its run card. Such a step starts closed. */
   id?: string;
