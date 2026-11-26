@@ -546,9 +546,10 @@ class HarnessSandbox(abc.ABC):
         timeout_seconds: float,
     ) -> dict[str, JsonValue]:
         """One agent call to the browser service; returns its result. Starts
-        the sandbox and the browser if needed. Raises HarnessSandboxError
-        when the service refuses the call or the browser cannot be reached in
-        `timeout_seconds`. A cancel of the
+        the sandbox and the browser if needed; that startup has its own
+        limits and does not count against `timeout_seconds`. Raises
+        HarnessSandboxError when the service refuses the call or does not
+        answer within `timeout_seconds`. A cancel of the
         current signal ends the call and raises AgentCancelled."""
 
     @abc.abstractmethod

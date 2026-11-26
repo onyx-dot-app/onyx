@@ -11,19 +11,20 @@ import threading
 import time
 import zipfile
 from collections.abc import Generator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import grpc
 import pytest
 from pydantic import JsonValue
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
     cancellation_scope,
 )
+from onyx.microvm import registry
 from onyx.microvm.browser_protocol import (
     BROWSER_SERVICE_PORT,
     MAX_FRAME_BYTES,
@@ -43,7 +44,11 @@ from onyx.microvm.lifecycle import (
     evict_idle_sandbox_vm,
 )
 from onyx.microvm.models import PlacedVm
-from onyx.server.features.build.sandbox.firecracker import harness_state
+from onyx.microvm.registry import get_sandbox_placement
+from onyx.server.features.build.sandbox.firecracker import (
+    harness_sandbox,
+    harness_state,
+)
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
 )
@@ -81,6 +86,7 @@ class FakeBrowserService:
         # A call waits for this before it answers.
         self.release = threading.Event()
         self.release.set()
+        self.called = threading.Event()
         self.closed_views = threading.Event()
         self._connections: list[socket.socket] = []
         service = self
@@ -120,6 +126,7 @@ class FakeBrowserService:
         hello = parse_json_frame(frames.pop(0))
         self.hellos.append(hello)
         if hello["op"] == "call":
+            self.called.set()
             self.release.wait(10)
             conn.sendall(
                 self.raw_answer
@@ -383,7 +390,13 @@ def test_a_stop_cancels_a_call_in_progress(
 ) -> None:
     service.release.clear()
     signal = CancellationSignal()
-    threading.Timer(0.5, signal.cancel).start()
+
+    def cancel_once_called() -> None:
+        # Cancel only while the reply wait blocks, not during VM setup.
+        if service.called.wait(10):
+            signal.cancel()
+
+    threading.Thread(target=cancel_once_called, daemon=True).start()
     started = time.monotonic()
     try:
         with cancellation_scope(signal), pytest.raises(AgentCancelled):
@@ -495,9 +508,16 @@ def test_a_stop_that_a_call_cancels_starts_chrome_again(
     outcome: list[VmStopOutcome] = []
     stop = threading.Thread(target=lambda: outcome.append(_sleep(sandbox, ref)))
     stop.start()
-    assert node.agent.capture_started.wait(timeout=10)
-    assert sandbox.read_file(ref, "notes.txt", max_bytes=10) == b"a"
-    stop.join(timeout=10)
+    try:
+        assert node.agent.capture_started.wait(timeout=10)
+        assert sandbox.read_file(ref, "notes.txt", max_bytes=10) == b"a"
+    finally:
+        # A wanted sandbox cancels the delayed capture, so the stop ends.
+        harness_state.note_wanted(
+            get_cache_backend(tenant_id=TENANT_ID), ref.sandbox_id
+        )
+        stop.join(timeout=40)
+    assert not stop.is_alive()
 
     assert outcome == [VmStopOutcome.KEPT_NO_CHECKPOINT]
     events = node.agent.events
@@ -552,6 +572,7 @@ def test_a_stop_does_not_save_browser_uploads(
 
 
 def test_clear_browser_data_stops_chrome_and_deletes_the_profile_and_its_save(
+    monkeypatch: pytest.MonkeyPatch,
     tenant_cache: CacheBackend,
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
@@ -575,19 +596,33 @@ def test_clear_browser_data_stops_chrome_and_deletes_the_profile_and_its_save(
     # neither restore the old save nor start Chrome on the old profile before
     # the clear ends.
     racers: list[threading.Thread] = []
+    outcomes: list[dict[str, JsonValue] | BaseException] = []
+    at_profile_lock = threading.Event()
+    setup_lock = harness_sandbox._session_setup_lock
+
+    def signalling_setup_lock(
+        cache: CacheBackend, sandbox_id: UUID, session_id: UUID
+    ) -> CacheLock:
+        if session_id == ref.sandbox_id and racers:
+            at_profile_lock.set()
+        return setup_lock(cache, sandbox_id, session_id)
+
+    monkeypatch.setattr(harness_sandbox, "_session_setup_lock", signalling_setup_lock)
+
+    def call() -> None:
+        try:
+            outcomes.append(sandbox.browser_call(ref, "status", {}, timeout_seconds=10))
+        except BaseException as e:
+            outcomes.append(e)
+
     delete = store.delete
 
     def delete_during_a_call(deleted_id: str) -> None:
-        racer = threading.Thread(
-            target=sandbox.browser_call,
-            args=(ref, "status", {}),
-            kwargs={"timeout_seconds": 10},
-        )
-        racer.start()
+        racer = threading.Thread(target=call)
         racers.append(racer)
-        # A call that does not wait for the clear ends well within this.
-        racer.join(2)
-        assert racer.is_alive()
+        racer.start()
+        assert at_profile_lock.wait(10)
+        assert f"browser_start:{sid}" not in node.agent.events
         delete(deleted_id)
 
     store.delete = delete_during_a_call  # ty: ignore[invalid-assignment]
@@ -596,11 +631,38 @@ def test_clear_browser_data_stops_chrome_and_deletes_the_profile_and_its_save(
 
     racers[0].join(10)
     assert not racers[0].is_alive()
+    assert outcomes == [{"tab": "t1"}]
     assert node.agent.events == ["browser_stop", f"browser_start:{sid}"]
     assert not [key for key in node.agent.files if key[:2] == (sid, sid)]
     assert harness_state.get_session_save(tenant_cache, ref.sandbox_id) is None
     assert store.deleted == [file_id]
     assert store.downloads == 1
+
+
+def test_clear_browser_data_on_an_unregistered_node_drops_its_placement(
+    tenant_cache: CacheBackend,
+    shared_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    service: FakeBrowserService,  # noqa: ARG001
+    ref: HarnessSandboxRef,
+) -> None:
+    """The clear cannot reach the VM. If its node comes back, the old VM
+    with the old profile must not serve the browser again: the next wake
+    starts a new attempt, and the node's next report stops the old VM."""
+    sid = str(ref.sandbox_id)
+    sandbox.browser_call(ref, "status", {}, timeout_seconds=10)
+    node.agent.files[(sid, sid, "chrome/Default/Cookies")] = b"x"
+    placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+    assert placement is not None
+    shared_cache.delete(registry._NODE_ADDRESS_PREFIX + placement.node_id)
+
+    sandbox.clear_browser_data(ref)
+
+    assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is None
+    assert harness_state.last_attempt(tenant_cache, ref.sandbox_id) >= (
+        placement.attempt
+    )
 
 
 def test_sandbox_purge_deletes_the_profile_save(

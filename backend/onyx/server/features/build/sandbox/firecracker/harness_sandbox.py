@@ -696,6 +696,23 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     ) -> None:
         """Stop Chrome, delete the profile files, then its save."""
         profile_id = ref.sandbox_id
+        shared_cache = get_shared_cache_backend()
+        placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+        if (
+            placement is not None
+            and get_registered_node(shared_cache, placement.node_id) is None
+        ):
+            # Its VM cannot be cleared, and could serve again if the node
+            # comes back: the next wake starts a new VM.
+            forget_placement(
+                shared_cache,
+                tenant_cache,
+                tenant_id=ref.tenant_id,
+                sandbox_id=ref.sandbox_id,
+                node_id=placement.node_id,
+                attempt=placement.attempt,
+                generation=placement.generation,
+            )
         placed = self._placed_if_running(tenant_cache, ref.sandbox_id)
         if placed is not None:
             daemon = sandbox_daemon(self._client_factory, placed)

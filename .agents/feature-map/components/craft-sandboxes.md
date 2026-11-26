@@ -77,8 +77,11 @@ This component owns:
   `downloads/` (`GET /chat/sessions/{id}/browser/downloads/{name}`), and
   clear browser data.
   Session saves in this
-  runtime hold only `attachments/`, without dependencies
-  (tar + zstd). The node agent moves the archive to and from object storage
+  runtime hold each session's top-level files and directories, the chat's
+  browser `downloads/` included. They leave out dependencies, caches, the
+  file copies in `attachments/` and browser uploads (tar + zstd). The
+  browser profile, with its sign-in cookies, is a session save too: the
+  session named by the sandbox ID. The node agent moves the archive to and from object storage
   with presigned URLs from the API server.
 
 Neighbours:
@@ -468,6 +471,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   it saves the sessions so the cookies are written, its save leaves out
   Chrome's caches and locks (`BROWSER_PROFILE_EXCLUDED_NAMES`), a turn end
   never saves it, and a sandbox purge and "clear browser data" delete it.
+  A clear whose VM is on a node that is not registered drops the
+  placement record, so that VM never serves the old profile again.
   A configuration error in the eviction
   policy turns idle eviction off; it never fails the node report.
   On a draining node (NodeInfo drain state, read by each report) every VM
