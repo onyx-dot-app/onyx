@@ -89,7 +89,38 @@ test("Escape closes an open preview first, and the panel on the next press", () 
   }
 });
 
-test("the width slides on a change of shape, and a change of width within a shape applies at once", () => {
+test("a panel without a reserve slides open and shut", () => {
+  const { rerender } = render(
+    <ChatSidePanel open={false} onEscape={jest.fn()}>
+      <button type="button">Inside</button>
+    </ChatSidePanel>
+  );
+  const panel = screen.getByText("Inside").parentElement!;
+  const animates = () =>
+    [...panel.classList].some((name) => name.startsWith("transition"));
+  expect(animates()).toBe(false);
+  rerender(
+    <ChatSidePanel open onEscape={jest.fn()}>
+      <button type="button">Inside</button>
+    </ChatSidePanel>
+  );
+  expect(animates()).toBe(true);
+  // jsdom has no TransitionEvent
+  const endTransition = (target: Element) => {
+    const event = new Event("transitionend", { bubbles: true });
+    Object.defineProperty(event, "propertyName", { value: "width" });
+    fireEvent(target, event);
+  };
+  // A child's transition does not end the panel's slide
+  endTransition(screen.getByText("Inside"));
+  expect(animates()).toBe(true);
+  endTransition(panel);
+  expect(animates()).toBe(false);
+});
+
+// A slide beside the page would lay out the page and the panel's content
+// again on each frame
+test("a panel with a reserve opens, closes and changes shape in one frame", () => {
   const Panel = ({
     open,
     reserve,
@@ -119,36 +150,19 @@ test("the width slides on a change of shape, and a change of width within a shap
     [...element.classList].some((name) =>
       /^(transition|duration-|ease-)/.test(name)
     );
-  const sliding = () => ({
-    panel: animates(panel),
-    reserve: animates(reserve),
-  });
-  // jsdom has no TransitionEvent
-  const endTransition = (target: Element) => {
-    const event = new Event("transitionend", { bubbles: true });
-    Object.defineProperty(event, "propertyName", { value: "width" });
-    fireEvent(target, event);
-  };
-  const settle = () => endTransition(panel);
-  expect(sliding()).toEqual({ panel: false, reserve: false });
+  const sliding = () => animates(panel) || animates(reserve);
+  expect(sliding()).toBe(false);
 
   rerender(<Panel open reserve={600} covers={false} />);
-  expect(sliding()).toEqual({ panel: true, reserve: true });
-  // A child's transition does not end the panel's slide
-  endTransition(screen.getByText("Inside"));
-  expect(sliding()).toEqual({ panel: true, reserve: true });
-  settle();
-  expect(sliding()).toEqual({ panel: false, reserve: false });
-
-  // The row grows: the panel and the page follow at once
-  rerender(<Panel open reserve={700} covers={false} />);
-  expect(sliding()).toEqual({ panel: false, reserve: false });
-  expect(panel.style.width).toBe("700px");
+  expect(sliding()).toBe(false);
+  expect(reserve.style.width).toBe("600px");
+  expect(panel.style.width).toBe("600px");
 
   rerender(<Panel open reserve={700} covers />);
-  expect(sliding().panel).toBe(true);
+  expect(sliding()).toBe(false);
   expect(panel.style.width).toBe("100%");
-  settle();
-  rerender(<Panel open reserve={800} covers />);
-  expect(sliding().panel).toBe(false);
+
+  rerender(<Panel open={false} reserve={700} covers={false} />);
+  expect(sliding()).toBe(false);
+  expect(reserve.style.width).toBe("0px");
 });

@@ -2795,3 +2795,93 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
     # The root's next step reads the stop as a notice.
     _stream_turn(chat, owner, "What happened?")
     assert any("The user stopped this agent." in text for text in seen)
+
+
+def test_stop_subagents_with_an_agent_id_stops_only_that_agent(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The agents list gives each run's start, and Stop with an agent id leaves
+    the other agents running."""
+    started = {"Task A": Event(), "Task B": Event()}
+    released = {"Task A": Event(), "Task B": Event()}
+
+    def generate(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        texts = [message.text for message in request.messages]
+        task = next((task for task in started if task in texts), None)
+        if task is not None:
+            started[task].set()
+            with signal.on_cancel(released[task].set):
+                assert released[task].wait(30)
+            return AssistantMessage(content=[TextContent(text="Too late")])
+        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="Started")])
+        return AssistantMessage(
+            content=[
+                ModelToolCall(
+                    id=f"spawn-{name}",
+                    name=SPAWN_AGENT_TOOL_NAME,
+                    arguments={"task_name": name, "message": task},
+                )
+                for name, task in (("alpha", "Task A"), ("beta", "Task B"))
+            ]
+        )
+
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    try:
+        for _packet in handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(
+                message="Start two workers",
+                chat_session_id=chat.id,
+                accepts_follow_ups=True,
+            ),
+            user=owner,
+        ):
+            pass
+        assert all(event.wait(15) for event in started.values())
+        agents = {
+            agent.path: agent
+            for agent in chat_backend.get_chat_session_agents(chat.id, owner)
+        }
+        assert set(agents) == {"/root/alpha", "/root/beta"}
+        assert all(agent.started_at is not None for agent in agents.values())
+
+        missing = client.post(
+            f"/chat/chat-session/{chat.id}/stop-subagents",
+            json={"agent_id": str(uuid4())},
+        )
+        assert missing.status_code == 404, missing.text
+        stopped = client.post(
+            f"/chat/chat-session/{chat.id}/stop-subagents",
+            json={"agent_id": str(agents["/root/alpha"].id)},
+        )
+        assert stopped.status_code == 200, stopped.text
+        assert stopped.json() == {"stopped_count": 1}
+        assert released["Task A"].wait(15)
+        assert not released["Task B"].is_set()
+        db_session.expire_all()
+        status = chat_backend.get_chat_session_processing_status(
+            chat.id, BackgroundTasks(), _NO_HEADERS, owner
+        )
+        assert status.has_active_subagents
+        # Without a body, Stop ends the rest.
+        assert client.post(f"/chat/chat-session/{chat.id}/stop-subagents").json() == {
+            "stopped_count": 1
+        }
+        assert chat_turn_work.wait_idle(timeout=30)
+    finally:
+        for event in released.values():
+            event.set()
+    runs = chat_backend.get_chat_session_agents(chat.id, owner)
+    assert {run.path for run in runs} == {"/root/alpha", "/root/beta"}
+    assert all(run.status == RunStatus.CANCELLED for run in runs)
+    assert all(run.stopped_by_user for run in runs)

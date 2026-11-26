@@ -11980,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "Sous-agents en cours",
         "attachFilesButton": {
           "tooltip": "Joindre des fichiers"
         },
@@ -12033,9 +12032,6 @@
           "interruptLabel": "Interrompre",
           "waitHint": "Attendez la fin de la réponse.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "Arrêter les sous-agents"
         },
         "questionAttachmentsHint": "Les réponses aux questions de l'agent ne peuvent pas inclure de fichiers. Retirez les fichiers pour répondre."
       },
@@ -12183,8 +12179,7 @@
         "withdrawFailed": "Impossible de retirer le message en attente.",
         "loadFailed": "Impossible de charger les messages en attente.",
         "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
-        "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente.",
-        "stopSubagentsFailed": "Impossible d'arrêter les sous-agents."
+        "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente."
       },
       "pendingToolApproval": {
         "toast": "Approuvez ou refusez d'abord les appels d'outils en attente."
@@ -13558,17 +13553,18 @@
       },
       "agents": {
         "title": "Agents",
+        "titleRunning": "Agents · {count} en cours",
         "status": {
-          "starting": "Démarrage",
-          "running": "En cours",
-          "suspended": "En attente",
           "complete": "Terminé",
           "limit": "Limite d'étapes atteinte",
           "cancelled": "Annulé",
           "stopped": "Arrêté",
           "error": "Échec"
         },
-        "finished": "Agents précédents"
+        "finished": "Agents précédents",
+        "stop": "Arrêter {name}",
+        "stopTooltip": "Arrêter l'agent",
+        "stopFailed": "Impossible d'arrêter l'agent."
       },
       "files": {
         "title": "Fichiers",

@@ -11980,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "子代理正在工作",
         "attachFilesButton": {
           "tooltip": "附加文件"
         },
@@ -12033,9 +12032,6 @@
           "interruptLabel": "中断",
           "waitHint": "请等待回复完成。",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "停止子代理"
         },
         "questionAttachmentsHint": "回答智能体的问题时不能包含文件。请移除文件后再回答。"
       },
@@ -12183,8 +12179,7 @@
         "withdrawFailed": "无法移除待处理消息。",
         "loadFailed": "无法加载待处理消息。",
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
-        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
-        "stopSubagentsFailed": "无法停止子代理。"
+        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。"
       },
       "pendingToolApproval": {
         "toast": "请先批准或拒绝待处理的工具调用。"
@@ -13558,17 +13553,18 @@
       },
       "agents": {
         "title": "智能体",
+        "titleRunning": "智能体 · {count} 个运行中",
         "status": {
-          "starting": "启动中",
-          "running": "运行中",
-          "suspended": "等待中",
           "complete": "已完成",
           "limit": "已达步骤上限",
           "cancelled": "已取消",
           "stopped": "已停止",
           "error": "失败"
         },
-        "finished": "之前的智能体"
+        "finished": "之前的智能体",
+        "stop": "停止 {name}",
+        "stopTooltip": "停止智能体",
+        "stopFailed": "无法停止该智能体。"
       },
       "files": {
         "title": "文件",

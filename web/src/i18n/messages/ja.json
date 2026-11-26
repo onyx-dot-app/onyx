@@ -11980,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "サブエージェントが作業中",
         "attachFilesButton": {
           "tooltip": "ファイルを添付"
         },
@@ -12033,9 +12032,6 @@
           "interruptLabel": "中断",
           "waitHint": "応答が終わるまでお待ちください。",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "サブエージェントを停止"
         },
         "questionAttachmentsHint": "エージェントの質問への回答にはファイルを含められません。回答するにはファイルを削除してください。"
       },
@@ -12183,8 +12179,7 @@
         "withdrawFailed": "保留中のメッセージを削除できませんでした。",
         "loadFailed": "保留中のメッセージを読み込めませんでした。",
         "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
-        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
-        "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
+        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。"
       },
       "pendingToolApproval": {
         "toast": "先に保留中のツール呼び出しを承認または拒否してください。"
@@ -13558,17 +13553,18 @@
       },
       "agents": {
         "title": "エージェント",
+        "titleRunning": "エージェント · {count} 件実行中",
         "status": {
-          "starting": "開始中",
-          "running": "実行中",
-          "suspended": "待機中",
           "complete": "完了",
           "limit": "ステップ上限に到達",
           "cancelled": "キャンセル済み",
           "stopped": "停止済み",
           "error": "失敗"
         },
-        "finished": "以前のエージェント"
+        "finished": "以前のエージェント",
+        "stop": "{name} を停止",
+        "stopTooltip": "エージェントを停止",
+        "stopFailed": "エージェントを停止できませんでした。"
       },
       "files": {
         "title": "ファイル",

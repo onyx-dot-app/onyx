@@ -11980,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "الوكلاء الفرعيون يعملون",
         "attachFilesButton": {
           "tooltip": "إرفاق ملفات"
         },
@@ -12033,9 +12032,6 @@
           "interruptLabel": "مقاطعة",
           "waitHint": "انتظر حتى ينتهي الرد.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "إيقاف الوكلاء الفرعيين"
         },
         "questionAttachmentsHint": "لا يمكن أن تتضمن الإجابات عن أسئلة الوكيل ملفات. أزل الملفات للإجابة."
       },
@@ -12183,8 +12179,7 @@
         "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
         "loadFailed": "تعذر تحميل الرسائل المعلقة.",
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
-        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
-        "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
+        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار."
       },
       "pendingToolApproval": {
         "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
@@ -13558,17 +13553,18 @@
       },
       "agents": {
         "title": "الوكلاء",
+        "titleRunning": "الوكلاء · {count} قيد التشغيل",
         "status": {
-          "starting": "قيد البدء",
-          "running": "قيد التشغيل",
-          "suspended": "في الانتظار",
           "complete": "تم",
           "limit": "بلغ حد الخطوات",
           "cancelled": "أُلغي",
           "stopped": "أُوقف",
           "error": "فشل"
         },
-        "finished": "الوكلاء السابقون"
+        "finished": "الوكلاء السابقون",
+        "stop": "إيقاف {name}",
+        "stopTooltip": "إيقاف الوكيل",
+        "stopFailed": "تعذّر إيقاف الوكيل."
       },
       "files": {
         "title": "الملفات",

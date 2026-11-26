@@ -1237,10 +1237,8 @@ const AppInputBar = React.memo(
           </div>
         </div>
 
-        {/* One row, so the activity and the hint cannot overlap. */}
-        {((queue.hasActiveSubagents && !isSearchMode) ||
-          hasPendingInput ||
-          questionRefusesFiles) && (
+        {/* One row, so the hints cannot overlap. */}
+        {(hasPendingInput || questionRefusesFiles) && (
           <Section
             flexDirection="row"
             justifyContent="end"
@@ -1250,43 +1248,6 @@ const AppInputBar = React.memo(
             padding={1}
             className="min-w-0 flex-1"
           >
-            {queue.hasActiveSubagents && !isSearchMode && (
-              <Section
-                flexDirection="row"
-                justifyContent="start"
-                width="auto"
-                height="fit"
-                gap={1}
-                data-testid="subagent-activity"
-                className="shrink-0"
-              >
-                {/* The live region holds only the status text, not the Stop control. */}
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  width="auto"
-                  height="fit"
-                  gap={1}
-                  role="status"
-                >
-                  <span
-                    aria-hidden
-                    className="size-1.5 shrink-0 rounded-full bg-status-info-05 motion-safe:animate-pulse"
-                  />
-                  <Text font="secondary-body" color="text-03" maxLines={1}>
-                    {t("appInputBar.subagentsWorking")}
-                  </Text>
-                </Section>
-                <Button
-                  icon={SvgStop}
-                  prominence="tertiary"
-                  size="xs"
-                  aria-label={t("appInputBar.stopSubagentsButton.label")}
-                  tooltip={t("appInputBar.stopSubagentsButton.label")}
-                  onClick={() => void queue.stopSubagents()}
-                />
-              </Section>
-            )}
             {questionRefusesFiles && (
               <Text
                 font="secondary-body"

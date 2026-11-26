@@ -98,11 +98,10 @@
   logout removes all of them. Incognito keeps its composer text and files
   in memory. Persisted drafts are scoped to the signed-in account and tenant.
   Drafts from older tabs without an account or privacy mode are not restored.
-- **Subagents can continue after the answer ends.** A small activity indicator
-  stays visible while background work remains. It shares a row with the
-  pending-input hint. Its Stop subagents button stops every active
-  background agent on the selected branch; it sits outside the `role="status"`
-  text, so the live region announces only the status. The input stays usable. While
+- **Subagents can continue after the answer ends.** The header's activity
+  card opens when agents start and lists each one with its run time and its
+  own Stop button, which stops that agent and the agents below it. The
+  composer shows no subagent status. The input stays usable. While
   subagents run, status polling finds automatic follow-up responses in an idle
   chat and loads them through the normal refresh and replay path. Internal
   agent results do not become user message bubbles. A "Subagent results received" divider shows above each
@@ -671,8 +670,8 @@ closed, the panel takes no room. The panel draws its own toggle once the chat
 has a session, and the header leaves room for it at its end
 (`layouts/chromes/AppChrome.tsx`, the shared view's header padding). That room
 is `--panel-toggle-reserve`, a registered property in `app/globals.css`: the
-open panel sets it to zero on the page element, and the page eases it with
-the panel's slide. The size button's `end-12` in
+open panel sets it to zero on the page element, in the same frame as the
+panel opens. The size button's `end-12` in
 `sections/chat/ChatRightPanel.tsx` repeats its 48px initial value; change both
 together. In the
 DOM, the toggle follows what the user sees: a closed panel puts it in the
@@ -716,13 +715,14 @@ panel does not watch the width; it measures again when it opens.
 `ChatSidePanel`'s `reserve` keeps the medium width in the row's flow, and the
 panel sits over the row's end: at the reserve's width at medium size, at the
 row's full width (`100%`) when it covers. A change of size moves only the
-panel's edge, never the page or the panel's position. The width slides only
-when the panel's shape changes (open, close, beside or over the page); a
-change of the row's width or a drag applies at once. The panel and its
-reserve carry transition timing only while they slide: CSS
-`transition-property` defaults to `all`, so a duration left on them animates
-every drag step and the panel trails the pointer. The chat panel throws
-without the workspace context.
+panel's edge, never the page or the panel's position. With a reserve, open,
+close and every change of shape or width apply in one frame, as T3 Code's
+panels do by default: a width slide beside the page lays out the whole chat
+transcript, and the panel's content from zero width, on each frame, which
+showed as lag and a shifting layout. Only a panel without a reserve (NRF's
+Sources) slides; it carries transition timing only while it slides, because
+CSS `transition-property` defaults to `all`. The chat panel throws without the
+workspace context.
 In the panel, `sections/document-sidebar/DocumentsSidebar.tsx` gets no
 `closeSidebar` and draws no frame; NRF draws its frame. `sections/chat/ChatSidePanel.tsx` is
 the sliding panel frame: it returns focus to the opener on close. It records
@@ -929,12 +929,31 @@ Input that joins a running response arrives as a `user_message` packet;
 reader, with no request. Saved replay emits the same packets from each step's
 human inputs, so both paths render user bubbles between response sections.
 Status polls every 2 seconds while `has_startable_input` or
-`has_active_subagents` is true. `stopSubagents` posts
-`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status.
+`has_active_subagents` is true.
 The header's activity button (`sections/chat/ChatActivity.tsx`) shows once a
-chat has a waiting request, a background agent or a published file. It is
-always the icon alone, so the header never shifts, and toggles a card that
-stays open until that button closes it. The card portals into the page column's
+chat has a waiting request, a background agent or a published file. It sits
+after the share menu. The extension page (`app/nrf/NRFPage.tsx`) has no app
+chrome, so it gives the card its own `activitySlot` and puts the button in the
+side panel's header or beside the new tab's settings button; that is the only
+subagent Stop there. It has no Files panel, so its card leaves out the files
+(`showFiles={false}`). It is always the icon alone, so the header never shifts,
+and toggles a card that stays open until that button closes it. The card also
+opens when the count of live agents goes from zero to more while the chat
+shows. `loaded` from `useChatSubagents` turns true only after a successful list read from
+the server, so a cached list is never the baseline. In the first list, a live
+run that started up to 10 seconds before the card mounted counts as new (a new
+chat's reply can start agents before that list arrives); older live agents
+leave the card closed, and a card closed during a run of agents stays closed.
+The agent rows copy T3 Code's lineage rows: the section header counts the
+running agents ("Agents · 2 running"), and a live row shows the agent glyph
+with a blue dot, its name and its run time, counted up from `started_at`
+(`useStreamingDuration`, plain `Text` so the ticks do not flash). Hover or
+keyboard focus on the row swaps the time for a red filled square Stop (two
+overlaid `Hoverable.Item`s, so the Stop stays in the tab order; a touch screen
+shows the Stop): `useChatSubagents().stopAgent` posts
+`/api/chat/chat-session/{id}/stop-subagents` with `{ "agent_id": ... }`, then
+reloads the status and the list. A finished row shows its outcome and no time.
+The card portals into the page column's
 `activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
 at the chat region's top end, so the header keeps its width and buttons. With
 no output panel open it sets `data-activity-docked`, and in a workspace at
@@ -951,8 +970,8 @@ panel. Agents come from
 `GET /chat/chat-session/{id}/agents` (`lib/chat/hooks.ts:useChatSubagents`),
 which reads `load_session_agent_metadata` for the selected branch and keeps
 the `spawn_agent` children (`ChatConfiguration`; Deep Research workers are
-foreground): `id`, `path`, `status` and `stopped_by_user`, with no
-transcript. The list loads again when the status changes
+foreground): `id`, `path`, `status`, `stopped_by_user`, and the latest run's
+`started_at` (its response's `time_sent`), with no transcript. The list loads again when the status changes
 `has_active_subagents` or `latest_response_id`, and polls while agents are
 active. The status it reads also polls while a reply streams, so agents that
 the reply starts show. An idle chat that sees a running or unknown

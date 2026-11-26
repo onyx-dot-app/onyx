@@ -11980,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "하위 에이전트 작업 중",
         "attachFilesButton": {
           "tooltip": "파일 첨부"
         },
@@ -12033,9 +12032,6 @@
           "interruptLabel": "중단",
           "waitHint": "응답이 끝날 때까지 기다리세요.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "하위 에이전트 중지"
         },
         "questionAttachmentsHint": "에이전트의 질문에 대한 답변에는 파일을 포함할 수 없습니다. 답변하려면 파일을 제거하세요."
       },
@@ -12183,8 +12179,7 @@
         "withdrawFailed": "대기 중인 메시지를 삭제하지 못했습니다.",
         "loadFailed": "대기 중인 메시지를 불러오지 못했습니다.",
         "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
-        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다.",
-        "stopSubagentsFailed": "하위 에이전트를 중지할 수 없습니다."
+        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다."
       },
       "pendingToolApproval": {
         "toast": "먼저 대기 중인 도구 호출을 승인하거나 거부하세요."
@@ -13558,17 +13553,18 @@
       },
       "agents": {
         "title": "에이전트",
+        "titleRunning": "에이전트 · {count}개 실행 중",
         "status": {
-          "starting": "시작 중",
-          "running": "실행 중",
-          "suspended": "대기 중",
           "complete": "완료",
           "limit": "단계 한도 도달",
           "cancelled": "취소됨",
           "stopped": "중지됨",
           "error": "실패"
         },
-        "finished": "이전 에이전트"
+        "finished": "이전 에이전트",
+        "stop": "{name} 중지",
+        "stopTooltip": "에이전트 중지",
+        "stopFailed": "에이전트를 중지할 수 없습니다."
       },
       "files": {
         "title": "파일",

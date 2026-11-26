@@ -1,6 +1,7 @@
 """Select child sessions and restore their branch-visible conversation context."""
 
 from collections.abc import Callable, Collection
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import TypeAdapter
@@ -571,6 +572,19 @@ def agent_metadata(
         failure_kind=failure.kind if failure is not None else None,
         current_turn=current_turn,
     )
+
+
+def load_run_start_times(run_ids: Collection[int]) -> dict[int, datetime]:
+    """Each run's start time, by response id."""
+    if not run_ids:
+        return {}
+    with get_session_with_current_tenant() as db_session:
+        rows = db_session.execute(
+            select(ChatMessage.id, ChatMessage.time_sent).where(
+                ChatMessage.id.in_(run_ids)
+            )
+        ).all()
+    return {row.id: row.time_sent for row in rows}
 
 
 def load_session_agent_metadata(
