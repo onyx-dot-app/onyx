@@ -267,6 +267,15 @@ mod platform {
     /// no other thread's input queue is joined.
     #[cfg(windows)]
     pub fn take_foreground(app: &AppHandle) {
+        if let Some(window) = app.get_webview_window(LAUNCHER) {
+            force_foreground(&window);
+        }
+    }
+
+    /// Brings `window` to the foreground, also when another process holds
+    /// it (see `take_foreground`).
+    #[cfg(windows)]
+    pub fn force_foreground(window: &tauri::WebviewWindow) {
         use ::windows::Win32::UI::Input::KeyboardAndMouse::{
             SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
             KEYEVENTF_KEYUP, VK_MENU,
@@ -275,9 +284,6 @@ mod platform {
             BringWindowToTop, GetForegroundWindow, SetForegroundWindow,
         };
 
-        let Some(window) = app.get_webview_window(LAUNCHER) else {
-            return;
-        };
         let Ok(hwnd) = window.hwnd() else {
             return;
         };
@@ -307,7 +313,7 @@ mod platform {
             }
         };
         if !raised {
-            log::warn!("Windows did not bring the launcher to the foreground");
+            log::warn!("Windows did not bring a window to the foreground");
         }
         // Keyboard focus into the web view.
         let _ = window.set_focus();
@@ -465,6 +471,9 @@ pub fn preload(app: &AppHandle) {
         }
     });
 }
+
+#[cfg(windows)]
+pub(crate) use platform::force_foreground;
 
 /// Shows the launcher if it is hidden, hides it if it is showing.
 pub fn toggle(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send + 'static) {

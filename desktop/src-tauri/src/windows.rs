@@ -57,9 +57,10 @@ fn local_window(
 ) -> Result<WebviewWindow, String> {
     if let Some(window) = app.get_webview_window(label) {
         // A window that waits to close is wanted again: it stays (its
-        // pending replies still reach it), with a fresh page, because the
-        // page shows the end of the command that hid it.
-        if with_retire(label, Retire::reopen) {
+        // pending replies still reach it). Its page shows the end of the
+        // command that hid it, so it reloads, but only once no reply is on
+        // its way (`release` reloads it after the last one).
+        if with_retire(label, Retire::reopen) == Reopened::ReloadNow {
             let _ = window.eval("location.reload()");
         }
         bring_forward(app, &window);
@@ -84,6 +85,24 @@ fn local_window(
     #[cfg(not(target_os = "macos"))]
     let builder = builder.maximizable(false);
     let window = builder.build().map_err(|e| e.to_string())?;
+    // A new window starts with no pending call, whatever an earlier window
+    // with this label left behind.
+    RETIRE
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(label);
+    // The close button while a reply is on its way: hide it instead, and
+    // let the last reply destroy it.
+    let close_label = label.to_string();
+    let close_window = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            if with_retire(&close_label, Retire::close_requested) {
+                api.prevent_close();
+                let _ = close_window.hide();
+            }
+        }
+    });
     activate_app(app);
     Ok(window)
 }
@@ -273,12 +292,26 @@ pub(crate) fn window_failed(app: &AppHandle, window: FailedWindow, error: &str) 
                                 notify(app, "Server locked", reason);
                             } else if let Err(e) = crate::commands::open_change_server(app, None) {
                                 log::warn!("could not open Change server: {e}");
+                            } else if let Some(prefs) = app.get_webview_window(PREFERENCES) {
+                                // Its error line was about this window.
+                                let _ = prefs
+                                    .eval("window.dispatchEvent(new Event('onyx-clear-error'))");
                             }
                         }
                         Retry::Preferences => {
                             let _ = open_preferences(app);
                         }
                         Retry::Launcher => crate::launcher::show(app),
+                    }
+                    let reopened = match retry {
+                        Retry::Route | Retry::ChangeServer => [ONBOARDING, LOGIN]
+                            .into_iter()
+                            .find_map(|label| app.get_webview_window(label)),
+                        Retry::Preferences => app.get_webview_window(PREFERENCES),
+                        Retry::Launcher => None,
+                    };
+                    if let Some(window) = reopened {
+                        crate::launcher::force_foreground(&window);
                     }
                 });
             }
@@ -465,6 +498,28 @@ pub fn fit_to_content(window: &WebviewWindow, content_height: f64) -> Result<(),
 pub(crate) struct Retire {
     pending: u32,
     retiring: bool,
+    /// Reopened while calls were pending: reload the page after the last
+    /// reply, not before (a reload would drop those replies).
+    reload_later: bool,
+}
+
+/// What `Retire::release` asks for after a reply.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Released {
+    Nothing,
+    Destroy,
+    Reload,
+}
+
+/// What `Retire::reopen` asks for when a waiting window is wanted again.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Reopened {
+    /// It was not waiting to close.
+    Nothing,
+    /// No reply pending: reload its page now.
+    ReloadNow,
+    /// Replies pending: show it as it is; the page reloads after the last.
+    ReloadLater,
 }
 
 impl Retire {
@@ -480,21 +535,45 @@ impl Retire {
         self.pending == 0
     }
 
-    /// A reply arrived (`release_window`). True when the window can be
-    /// destroyed now.
-    pub(crate) fn release(&mut self) -> bool {
+    /// A reply arrived (`release_window`).
+    pub(crate) fn release(&mut self) -> Released {
         self.pending = self.pending.saturating_sub(1);
-        self.retiring && self.pending == 0
+        if self.pending > 0 {
+            Released::Nothing
+        } else if self.retiring {
+            Released::Destroy
+        } else if std::mem::take(&mut self.reload_later) {
+            Released::Reload
+        } else {
+            Released::Nothing
+        }
     }
 
     /// The window is wanted again while it waits to close: it stays, and its
-    /// pending replies still reach it. True if it was waiting to close.
-    pub(crate) fn reopen(&mut self) -> bool {
-        std::mem::replace(&mut self.retiring, false)
+    /// pending replies still reach it.
+    pub(crate) fn reopen(&mut self) -> Reopened {
+        if !std::mem::replace(&mut self.retiring, false) {
+            Reopened::Nothing
+        } else if self.pending == 0 {
+            Reopened::ReloadNow
+        } else {
+            self.reload_later = true;
+            Reopened::ReloadLater
+        }
+    }
+
+    /// The native close button. True when the close must wait: the window
+    /// is hidden and destroyed after its last reply instead.
+    pub(crate) fn close_requested(&mut self) -> bool {
+        if self.pending == 0 {
+            return false;
+        }
+        self.retiring = true;
+        true
     }
 
     fn idle(self) -> bool {
-        self.pending == 0 && !self.retiring
+        self.pending == 0 && !self.retiring && !self.reload_later
     }
 }
 
@@ -554,8 +633,15 @@ pub fn close_from(app: &AppHandle, label: &str, caller: Option<&str>) {
 /// window waits to close, the destroy is queued from another thread, so it
 /// runs on a later turn of the main loop, after this call's own reply.
 pub fn release(app: &AppHandle, label: &str) {
-    if !with_retire(label, Retire::release) {
-        return;
+    match with_retire(label, Retire::release) {
+        Released::Nothing => return,
+        Released::Reload => {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.eval("location.reload()");
+            }
+            return;
+        }
+        Released::Destroy => {}
     }
     let app = app.clone();
     let label = label.to_string();
@@ -756,7 +842,10 @@ pub(crate) fn show_offline(
 ) {
     if let Err(e) = crate::offline::show(app, path, choice, reason, epoch) {
         log::warn!("showing the dialog instead of the offline window: {e}");
-        open_failed(app, "Could not open Onyx", &reason.message(server));
+        // The earlier app blocks web views: say that, not the connection.
+        if !webview_failed(app, &e) {
+            open_failed(app, "Could not open Onyx", &reason.message(server));
+        }
     }
 }
 
@@ -812,25 +901,44 @@ mod tests {
 
     #[test]
     fn a_window_closes_only_after_its_last_reply() {
-        use super::Retire;
+        use super::{Released, Reopened, Retire};
         let mut r = Retire::default();
         // Sign out, then Change server, from the same window.
         r.begin();
         r.begin();
         assert!(!r.close(), "two replies are on their way");
-        assert!(!r.release(), "one reply is still on its way");
-        assert!(r.release(), "the last reply arrived");
+        assert_eq!(
+            r.release(),
+            Released::Nothing,
+            "one reply is still on its way"
+        );
+        assert_eq!(r.release(), Released::Destroy, "the last reply arrived");
 
         // No call pending: it closes at once.
         assert!(Retire::default().close());
 
-        // Reopened while it waits: it stays, also after the reply.
+        // Reopened while a reply is pending: it stays as it is, and the page
+        // reloads only after that reply.
         let mut r = Retire::default();
         r.begin();
         assert!(!r.close());
-        assert!(r.reopen());
-        assert!(!r.release());
-        assert!(!Retire::default().reopen());
+        assert_eq!(r.reopen(), Reopened::ReloadLater);
+        assert_eq!(r.release(), Released::Reload);
+        assert!(r.idle());
+        // Reopened with no reply pending: it reloads at once.
+        let mut r = Retire {
+            retiring: true,
+            ..Retire::default()
+        };
+        assert_eq!(r.reopen(), Reopened::ReloadNow);
+        assert_eq!(Retire::default().reopen(), Reopened::Nothing);
+
+        // The close button during a call waits for its reply.
+        let mut r = Retire::default();
+        assert!(!r.close_requested(), "no call: it closes as usual");
+        r.begin();
+        assert!(r.close_requested());
+        assert_eq!(r.release(), Released::Destroy);
     }
 
     #[test]

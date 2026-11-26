@@ -33,6 +33,20 @@ where
             then(&app, choice);
         });
     }
+    // Owned by a visible app window, so the dialog opens in front of it and
+    // not behind the window in front.
+    #[cfg(windows)]
+    let dialog = {
+        use tauri::Manager;
+        match app
+            .webview_windows()
+            .into_values()
+            .find(|w| w.is_visible().unwrap_or(false))
+        {
+            Some(window) => dialog.set_parent(&window),
+            None => dialog,
+        }
+    };
     #[cfg(not(target_os = "macos"))]
     std::thread::spawn(move || {
         let choice = dialog.show();

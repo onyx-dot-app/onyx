@@ -209,8 +209,12 @@ function Preferences() {
     const load = () => void reload();
     load();
     window.addEventListener("focus", load);
+    // The app clears an error line that a window retry fixed.
+    const clearError = () => setError(null);
+    window.addEventListener("onyx-clear-error", clearError);
     return () => {
       window.removeEventListener("focus", load);
+      window.removeEventListener("onyx-clear-error", clearError);
       generation.current += 1;
     };
   }, []);
