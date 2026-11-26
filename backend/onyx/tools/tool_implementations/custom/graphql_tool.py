@@ -221,7 +221,7 @@ class GraphQLTool(ApiTool):
         endpoint_url: str,
         headers: dict[str, str],
         approval: ToolApprovalScope | None,
-        credentials: CallCredentials | None = None,
+        credentials: CallCredentials,
         acting_user_id: UUID | None = None,
     ) -> None:
         operation, field_name = action_key.split(".", 1)

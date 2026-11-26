@@ -31,6 +31,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     parse_openapi_document,
     validate_openapi_schema,
 )
+from tests.unit.fakes import NO_CREDENTIALS
 
 SPEC: dict[str, Any] = {
     "openapi": "3.0.3",
@@ -205,6 +206,8 @@ def test_schema_references_are_inlined_into_the_tool() -> None:
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
+        headers={},
+        credentials=NO_CREDENTIALS,
     )
     body = {"name": "Rex", "owner": {"id": 7}}
     assert tool._request({"kind": "dog", REQUEST_BODY: body}) == (
@@ -317,6 +320,8 @@ def test_a_spec_that_expands_too_far_keeps_its_tools_and_later_refs() -> None:
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
+        headers={},
+        credentials=NO_CREDENTIALS,
     )
 
     assert sorted(t.name for t in tools) == [
@@ -339,6 +344,8 @@ def test_a_spec_with_path_parameters_validates_and_builds_tools() -> None:
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
+        headers={},
+        credentials=NO_CREDENTIALS,
     )
     assert sorted(
         tool.integration_action.action for tool in tools if tool.integration_action
@@ -359,6 +366,8 @@ def test_server_variables_take_their_defaults() -> None:
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
+        headers={},
+        credentials=NO_CREDENTIALS,
     )
     assert {tool._base_url for tool in tools} == {"https://pets.example.com/v2"}
     # With no default, the admin sets the base URL.

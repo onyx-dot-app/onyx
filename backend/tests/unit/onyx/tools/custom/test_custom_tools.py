@@ -34,6 +34,7 @@ from onyx.tools.tool_implementations.http_request import (
 )
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.url import SSRFException
+from tests.unit.fakes import NO_CREDENTIALS
 
 # Kwargs the tool passes on self-hosted below DISABLED.
 _REQUEST_KWARGS: dict[str, Any] = {
@@ -145,6 +146,8 @@ class TestCustomTool(unittest.TestCase):
             integration_id=-1,
             openapi_schema=self.openapi_schema,
             dynamic_schema_info=self.dynamic_schema_info,
+            headers={},
+            credentials=NO_CREDENTIALS,
         )
 
         result = tools[0].run(
@@ -194,6 +197,8 @@ class TestCustomTool(unittest.TestCase):
             integration_id=-1,
             openapi_schema=self.openapi_schema,
             dynamic_schema_info=self.dynamic_schema_info,
+            headers={},
+            credentials=NO_CREDENTIALS,
         )
 
         result = tools[1].run(
@@ -247,6 +252,7 @@ class TestCustomTool(unittest.TestCase):
                 "Custom-Header": "CustomValue",
             },
             dynamic_schema_info=self.dynamic_schema_info,
+            credentials=NO_CREDENTIALS,
         )
 
         tools[0].run(
@@ -291,6 +297,7 @@ class TestCustomTool(unittest.TestCase):
             openapi_schema=self.openapi_schema,
             headers={},
             dynamic_schema_info=self.dynamic_schema_info,
+            credentials=NO_CREDENTIALS,
         )
 
         tools[0].run(
@@ -382,6 +389,7 @@ class TestCustomTool(unittest.TestCase):
                 user_id=user_id,
                 user_email=user_email,
             ),
+            credentials=NO_CREDENTIALS,
         )
 
         tools[0].run(
@@ -452,6 +460,8 @@ class TestCustomTool(unittest.TestCase):
                 user_id=None,
                 user_email=None,
             ),
+            headers={},
+            credentials=NO_CREDENTIALS,
         )
 
         tools[0].run(
@@ -603,6 +613,8 @@ def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> No
                 }
             },
         },
+        headers={},
+        credentials=NO_CREDENTIALS,
     )
     response = unittest.mock.MagicMock()
     response.is_redirect = False
@@ -653,6 +665,7 @@ def test_a_graphql_response_with_errors_is_an_error(
         endpoint_url="https://example.com/graphql",
         headers={},
         approval=None,
+        credentials=NO_CREDENTIALS,
     )
     response = unittest.mock.MagicMock()
     response.is_redirect = False
@@ -701,6 +714,8 @@ def test_custom_tool_file_response_is_serialized_for_llm(
                 }
             },
         },
+        headers={},
+        credentials=NO_CREDENTIALS,
     )
     mock_response = unittest.mock.MagicMock()
     mock_response.is_redirect = False
@@ -892,6 +907,8 @@ def _run_ping(server_url: str) -> ToolResult:
         integration_id=1,
         openapi_schema=_schema(server_url),
         dynamic_schema_info=_NO_PLACEHOLDERS,
+        headers={},
+        credentials=NO_CREDENTIALS,
     )[0]
     response = tool.run(
         ToolInvocation(
@@ -1101,6 +1118,7 @@ def _items_tool(path: str) -> Any:
         openapi_schema=schema,
         dynamic_schema_info=_NO_PLACEHOLDERS,
         headers={"Authorization": "Bearer secret"},
+        credentials=NO_CREDENTIALS,
     )[0]
 
 

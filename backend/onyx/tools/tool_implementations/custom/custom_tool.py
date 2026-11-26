@@ -82,8 +82,8 @@ _FAILURE_MESSAGES: dict[ToolRequestFailure, str] = {
 
 
 class ApiTool(Tool):
-    """A chat tool that sends one HTTP request to an API app. The caller
-    renders the credential into ``headers``."""
+    """A chat tool that sends one HTTP request to an API app, with the
+    credential merged over ``headers``."""
 
     rank = ToolRank.INTEGRATION
 
@@ -97,9 +97,9 @@ class ApiTool(Tool):
         description: str,
         parameters: dict[str, JsonValue],
         base_url: str,
-        headers: dict[str, str] | None,
+        headers: dict[str, str],
         approval: ToolApprovalScope | None,
-        credentials: CallCredentials | None = None,
+        credentials: CallCredentials,
         acting_user_id: UUID | None = None,
     ) -> None:
         self.approval = approval
@@ -113,7 +113,7 @@ class ApiTool(Tool):
         self._tool_definition = ToolDefinition(
             name=name, description=description, parameters=parameters
         )
-        self._extra_headers = headers or {}
+        self._extra_headers = headers
         self._credentials = credentials
         self._acting_user_id = acting_user_id
         self._base_url = base_url
@@ -121,8 +121,6 @@ class ApiTool(Tool):
     @property
     def headers(self) -> dict[str, str]:
         """The credential wins over a request header of the same name."""
-        if self._credentials is None:
-            return self._extra_headers
         return merge_mcp_headers(self._extra_headers, self._credentials.headers)
 
     @abc.abstractmethod
@@ -196,16 +194,14 @@ class ApiTool(Tool):
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         method, url, request_body = self._request(invocation.arguments)
-        credentials = self._credentials
-        if credentials is not None:
-            fresh = fresh_call_credentials(credentials, self._acting_user_id)
-            if isinstance(fresh, ConnectionProblem):
-                return self._failed_response(
-                    status_code=None,
-                    message=f"{self._name} cannot authenticate: {fresh.reason}",
-                    is_auth_error=True,
-                )
-            self._credentials = credentials = fresh
+        credentials = fresh_call_credentials(self._credentials, self._acting_user_id)
+        if isinstance(credentials, ConnectionProblem):
+            return self._failed_response(
+                status_code=None,
+                message=f"{self._name} cannot authenticate: {credentials.reason}",
+                is_auth_error=True,
+            )
+        self._credentials = credentials
         try:
             response = send_tool_request(
                 method,
@@ -222,8 +218,7 @@ class ApiTool(Tool):
                 message=_FAILURE_MESSAGES[e.failure].format(name=self._name),
                 is_unreachable=e.is_unreachable,
             )
-        if credentials is not None:
-            note_rejected_credential(response, credentials)
+        note_rejected_credential(response, credentials)
         content_type = response.content_type
 
         # Detect HTTP errors — only 401/403 are flagged as auth errors
@@ -299,16 +294,16 @@ class CustomTool(ApiTool):
         integration_id: int,
         method_spec: MethodSpec,
         base_url: str,
-        headers: dict[str, str] | None = None,
-        approval: ToolApprovalScope | None = None,
+        headers: dict[str, str],
+        approval: ToolApprovalScope | None,
         # The operationId before placeholder substitution.
-        action_key: str | None = None,
-        credentials: CallCredentials | None = None,
+        action_key: str,
+        credentials: CallCredentials,
         acting_user_id: UUID | None = None,
     ) -> None:
         super().__init__(
             integration_id=integration_id,
-            action_key=action_key or method_spec.raw_name,
+            action_key=action_key,
             name=custom_tool_name(integration_id, method_spec.raw_name),
             # The action's name, as the admin sees it: the operation summary, or
             # the original operationId (e.g. "ServiceNow.GetIncident").
@@ -363,9 +358,9 @@ def build_custom_tools_from_openapi_schema_and_headers(
     integration_id: int,
     openapi_schema: dict[str, Any],
     dynamic_schema_info: DynamicSchemaInfo,
-    headers: dict[str, str] | None = None,
+    headers: dict[str, str],
+    credentials: CallCredentials,
     approval_for: Callable[[str], ToolApprovalScope | None] | None = None,
-    credentials: CallCredentials | None = None,
     acting_user_id: UUID | None = None,
 ) -> list[CustomTool]:
     """Build CustomTool instances from an OpenAPI schema.
