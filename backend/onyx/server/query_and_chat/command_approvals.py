@@ -32,17 +32,6 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def _response(
-    row: ActionApproval, decided_via: ApprovalDecidedVia
-) -> ApprovalDecisionResponse:
-    decision = row.decision
-    if decision not in (ApprovalDecision.APPROVED, ApprovalDecision.REJECTED):
-        raise OnyxError(OnyxErrorCode.CONFLICT, "This request is no longer waiting")
-    return ApprovalDecisionResponse(
-        approval_id=row.approval_id, decision=decision, decided_via=decided_via
-    )
-
-
 def _now_blocked(
     db_session: Session,
     rows: list[ActionApproval],
@@ -146,7 +135,6 @@ def decide_command_approval(
             )
         # A retry repeats the wakes and the scan that the first call may
         # have missed, and keeps the grant that it saved.
-        decided = row
     else:
         # A grant is saved only for a committed approval. The commit also
         # comes before the scan below locks other rows of the command, so two
@@ -230,4 +218,6 @@ def decide_command_approval(
         len(covered_ids),
         len(blocked_ids),
     )
-    return _response(decided, decided_via)
+    return ApprovalDecisionResponse(
+        approval_id=row.approval_id, decision=decision, decided_via=decided_via
+    )
