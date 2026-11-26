@@ -211,12 +211,12 @@ func TestStartAfterAGroupThatDidNotClose(t *testing.T) {
 }
 
 func TestChromeArgsProxy(t *testing.T) {
-	profile := "/home/sandbox/.config/onyx-browser"
+	profile := "/home/onyx/workspaces/sbx-1/chrome"
 	with := chromeArgs(profile, []string{"PATH=/bin", "HTTPS_PROXY=http://127.0.0.1:3128"})
 	if !slices.Contains(with, "--proxy-server=http://127.0.0.1:3128") {
 		t.Fatalf("HTTPS_PROXY set: %v", with)
 	}
-	for _, want := range []string{"--remote-debugging-port=0", "--user-data-dir=/home/sandbox/.config/onyx-browser", "--remote-debugging-address=127.0.0.1"} {
+	for _, want := range []string{"--remote-debugging-port=0", "--user-data-dir=/home/onyx/workspaces/sbx-1/chrome", "--remote-debugging-address=127.0.0.1"} {
 		if !slices.Contains(with, want) {
 			t.Errorf("missing %s in %v", want, with)
 		}
