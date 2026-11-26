@@ -71,7 +71,7 @@ import threading
 import time
 from collections.abc import Generator, Iterator, Sequence
 from pathlib import Path
-from typing import Any, NamedTuple, TypedDict
+from typing import Any, TypedDict
 from uuid import UUID
 
 from docker import DockerClient
@@ -100,12 +100,31 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_CA_VOLUME_NAME,
     SANDBOX_PROXY_HOST,
     SANDBOX_PROXY_INJECTED_PLACEHOLDER,
-    SANDBOX_PROXY_PORT,
 )
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
     document_preview_command,
     parse_document_preview_response,
+)
+from onyx.server.features.build.sandbox.docker.containers import (
+    IPV4_LISTEN_HOST,
+    PROXY_CA_SOURCE_DIR,
+    DockerSandboxOps,
+    build_sandbox_labels,
+    looks_like_internal_compose_host,
+    proxy_env_vars,
+)
+from onyx.server.features.build.sandbox.docker.containers import (
+    LABEL_COMPONENT as LABEL_COMPONENT,
+)
+from onyx.server.features.build.sandbox.docker.containers import (
+    LABEL_COMPONENT_VALUE as LABEL_COMPONENT_VALUE,
+)
+from onyx.server.features.build.sandbox.docker.containers import (
+    LABEL_USER_ID as LABEL_USER_ID,
+)
+from onyx.server.features.build.sandbox.docker.containers import (
+    detect_compose_project as _detect_compose_project,
 )
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
@@ -123,12 +142,14 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.labels import (
-    LABEL_DOCKER_NETWORK,
+    LABEL_DOCKER_NETWORK as LABEL_DOCKER_NETWORK,
+)
+from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
-    LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
+    is_harness_resource,
 )
 from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
@@ -173,7 +194,6 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.timeouts import (
     BULK_TRANSFER_TIMEOUT_SECONDS,
-    POLL_INTERVAL_SECONDS,
     PROVISION_DEADLINE_SECONDS,
 )
 from onyx.server.features.build.utils import get_opencode_disabled_tools
@@ -182,10 +202,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-
-LABEL_COMPONENT = "onyx.app/component"
-LABEL_COMPONENT_VALUE = "craft-sandbox"
-LABEL_USER_ID = "onyx.app/user-id"
 
 # Path conventions inside the sandbox container — must match the K8s image.
 WORKSPACE_ROOT = "/workspace"
@@ -202,14 +218,6 @@ SANDBOX_EXEC_ENV = {"HOME": "/home/sandbox", "USER": "sandbox"}
 SANDBOX_TMP_PATH = "/tmp"  # noqa: S108 - sandbox-local scratch mount.
 SANDBOX_TMPFS_OPTIONS = "rw,nosuid,nodev,size=5g,mode=1777"
 
-# Egress proxy file paths inside the sandbox container. Matched by
-# ``firewall-init.sh``: ``CA_SRC`` defaults to ``/sandbox-ca/ca.crt`` and
-# ``CA_DST`` to ``/etc/ssl/sandbox/ca-bundle.crt``. The bundle dir lives in the
-# container's writable layer (not a separate volume) since only the init step
-# writes to it and only the agent reads it.
-_PROXY_CA_SOURCE_DIR = "/sandbox-ca"
-_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
-_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # kubernetes/docker/Dockerfile). Path must match the COPY destination there.
@@ -226,7 +234,6 @@ _OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
 # Surfaces the `web_search` tool (Onyx's web search, structured results);
 # always on.
 _OPENCODE_WEB_SEARCH_PLUGIN_PATH = "/workspace/opencode-plugins/web-search.ts"
-_MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
 
 # In-container opencode-history archive builder: reuses the sandbox_daemon
 # helper (sqlite-safe backup + symlink guards) and prints the temp archive path,
@@ -352,142 +359,6 @@ def _validate_opencode_history_archive(archive_bytes: bytes) -> None:
             )
 
 
-_COMPOSE_INTERNAL_HOSTNAMES = {
-    "api_server",
-    "background",
-    "relational_db",
-    "cache",
-    "minio",
-    "object-store",
-    "model_server",
-    "indexing_model_server",
-    "inference_model_server",
-    "web_server",
-    "opensearch",
-}
-
-
-def _looks_like_internal_compose_host(url: str) -> bool:
-    """Heuristic: Does ``url`` reference a compose-internal service hostname?
-
-    Used to warn deployers that pointed ONYX_SERVER_URL at a service available
-    only on Compose's default network. Sandboxes can resolve the dedicated
-    ``onyx-craft-api`` alias, but not these unrelated service names.
-    """
-    if not url:
-        return False
-    lowered = url.lower()
-    for host in _COMPOSE_INTERNAL_HOSTNAMES:
-        if (
-            f"//{host}:" in lowered
-            or f"//{host}/" in lowered
-            or lowered.endswith(f"//{host}")
-        ):
-            return True
-    return False
-
-
-def _detect_compose_project(docker_client: DockerClient) -> str | None:
-    """Best-effort lookup of the calling container's compose project name.
-
-    We inspect the container we're currently running in (matched by hostname,
-    which Docker sets to the container short-ID) and pull
-    ``com.docker.compose.project`` off its labels. Returns None when running
-    outside compose (e.g. local tests) so the manager falls back to "ungrouped"
-    sandbox containers.
-    """
-    import socket as _socket
-
-    try:
-        own = docker_client.containers.get(_socket.gethostname())
-    except (NotFound, APIError) as e:
-        logger.debug("compose project auto-detect skipped: %s", e)
-        return None
-    return (own.labels or {}).get("com.docker.compose.project")
-
-
-def build_sandbox_labels(
-    sandbox_id: UUID,
-    tenant_id: str,
-    user_id: UUID | None,
-    compose_project: str | None = None,
-    provisioning_attempt_number: int | None = None,
-) -> dict[str, str]:
-    """Standard label set for sandbox-owned docker resources.
-
-    ``compose_project`` is added as ``com.docker.compose.project`` so Docker
-    Desktop groups sandbox containers under the same "onyx" stack header as
-    api_server/postgres/redis/etc. Auto-detected by ``DockerSandboxManager``
-    from its own container's labels.
-
-    ``provisioning_attempt_number`` is stamped on containers (not the per-sandbox
-    volume, which persists across generations) for attribution.
-    """
-    labels: dict[str, str] = {
-        LABEL_DOCKER_NETWORK: SANDBOX_DOCKER_NETWORK,
-        LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
-        LABEL_SANDBOX_ID: str(sandbox_id),
-        LABEL_TENANT_ID: tenant_id,
-        LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
-    }
-    if user_id is not None:
-        labels[LABEL_USER_ID] = str(user_id)
-    if compose_project:
-        labels["com.docker.compose.project"] = compose_project
-    if provisioning_attempt_number is not None:
-        labels[LABEL_PROVISIONING_ATTEMPT] = str(provisioning_attempt_number)
-    return labels
-
-
-# Sandbox should reach loopback directly; everything else (api server included)
-# goes through the proxy.
-_IPV4_LISTEN_HOST = "0.0.0.0"  # noqa: S104 — isolated sandbox bridge listener
-# Node needs the bracketed "[::1]" form to bypass the proxy for IPv6 loopback.
-_NO_PROXY_LIST = "127.0.0.1,localhost,::1,[::1]"
-
-
-def _proxy_env_vars(
-    *,
-    sandbox_proxy_host: str,
-) -> dict[str, str]:
-    """Proxy-enabled env additions for the sandbox container.
-
-    The Kubernetes lane injects the equivalent vars via the Helm pod template
-    (``onyx.sandboxProxyEnv``); here they're layered on the docker env dict.
-    Includes the firewall-init.sh contract vars since the script runs as the
-    container's entrypoint wrapper and reads them from its own environment.
-    Proxy ports come from build config and are injected as internal env, not
-    caller arguments.
-    """
-    proxy_url = f"http://{sandbox_proxy_host}:{SANDBOX_PROXY_PORT}"
-    return {
-        # firewall-init.sh contract.
-        "SANDBOX_PROXY_HOST": sandbox_proxy_host,
-        "SANDBOX_PROXY_PORT": str(SANDBOX_PROXY_PORT),
-        "SANDBOX_PROXY_BOOTSTRAP_MODE": "entrypoint",
-        "SANDBOX_PROXY_CA_BUNDLE_SRC": f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
-        "SANDBOX_PROXY_CA_BUNDLE_DST": _PROXY_CA_BUNDLE_FILE,
-        # Agent-side proxy + CA wiring.
-        "HTTPS_PROXY": proxy_url,
-        "HTTP_PROXY": proxy_url,
-        "https_proxy": proxy_url,
-        "http_proxy": proxy_url,
-        "NO_PROXY": _NO_PROXY_LIST,
-        "no_proxy": _NO_PROXY_LIST,
-        # Node's built-in fetch ignores HTTPS_PROXY without this.
-        "NODE_USE_ENV_PROXY": "1",
-        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
-        "NODE_EXTRA_CA_CERTS": _PROXY_CA_BUNDLE_FILE,
-        "REQUESTS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
-        "SSL_CERT_FILE": _PROXY_CA_BUNDLE_FILE,
-        "AWS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
-        "CURL_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
-        "GIT_SSL_CAINFO": _PROXY_CA_BUNDLE_FILE,
-        "GH_TOKEN": SANDBOX_PROXY_INJECTED_PLACEHOLDER,
-        "GH_NO_UPDATE_NOTIFIER": "1",
-    }
-
-
 class _ContainerCreateKwargsRequired(TypedDict):
     """
     Always-set fields. Security-critical ones (cap_drop, security_opt,
@@ -544,7 +415,7 @@ def build_container_create_kwargs(
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
     proxy_ca_volume_name: str | None = None,
-    listen_host: str = _IPV4_LISTEN_HOST,
+    listen_host: str = IPV4_LISTEN_HOST,
 ) -> ContainerCreateKwargs:
     """Builds the kwargs dict for ``DockerClient.containers.create``.
 
@@ -610,7 +481,7 @@ def build_container_create_kwargs(
     ``OPENCODE_CONFIG_CONTENT`` for opencode-serve to load at startup; each
     workspace provides its gateway catalog in a session-local config.
     """
-    if not sandbox_proxy_host and _looks_like_internal_compose_host(api_server_url):
+    if not sandbox_proxy_host and looks_like_internal_compose_host(api_server_url):
         logger.warning(
             "ONYX_SERVER_URL=%s looks like an internal compose hostname. Sandboxes only "
             "join the craft bridge network, so default-network DNS will fail. Use the "
@@ -631,7 +502,7 @@ def build_container_create_kwargs(
         "ONYX_WEBAPP_ALLOWED_DEV_ORIGINS": allowed_dev_origins(),
     }
 
-    if listen_host != _IPV4_LISTEN_HOST:
+    if listen_host != IPV4_LISTEN_HOST:
         env["SANDBOX_LISTEN_HOST"] = listen_host
 
     security_opts = ["no-new-privileges:true"]
@@ -653,12 +524,12 @@ def build_container_create_kwargs(
                 "Proxy posture requires both."
             )
         env.update(
-            _proxy_env_vars(
+            proxy_env_vars(
                 sandbox_proxy_host=sandbox_proxy_host,
             )
         )
         volumes[proxy_ca_volume_name] = {
-            "bind": _PROXY_CA_SOURCE_DIR,
+            "bind": PROXY_CA_SOURCE_DIR,
             "mode": "ro",
         }
         # Override the image's ENTRYPOINT (set to entrypoint.sh in #11748);
@@ -714,17 +585,7 @@ def build_container_create_kwargs(
     return kwargs
 
 
-class _OwnedDockerItem(NamedTuple):
-    """A sandbox container or volume whose deployment ownership was verified."""
-
-    kind: SandboxResourceKind
-    name: str
-    instance_id: str
-    created_at: str
-    labels: dict[str, str]
-
-
-class DockerSandboxManager(SandboxManager):
+class DockerSandboxManager(DockerSandboxOps, SandboxManager):
     """Sandbox manager that drives the host Docker Engine.
 
     Process-wide instance is cached by :func:`get_sandbox_manager`.
@@ -772,73 +633,6 @@ class DockerSandboxManager(SandboxManager):
             self._compose_project,
         )
 
-    def _ensure_sandbox_image(self) -> None:
-        with self._image_check_lock:
-            if self._image_checked:
-                return
-
-            image_tag: str | None = None
-            # Digest refs use ``@sha256:...``; do not parse that colon as a tag.
-            if "@" not in self._image:
-                image_name = self._image.rsplit("/", 1)[-1]
-                image_tag = (
-                    image_name.rsplit(":", 1)[1] if ":" in image_name else "latest"
-                )
-            is_mutable_tag = image_tag in _MUTABLE_SANDBOX_IMAGE_TAGS
-            if not is_mutable_tag:
-                try:
-                    self._docker.images.get(self._image)
-                    self._image_checked = True
-                    return
-                except NotFound:
-                    pass
-
-            logger.info(
-                "%s sandbox image %s.",
-                "Refreshing" if is_mutable_tag else "Pulling missing",
-                self._image,
-            )
-            try:
-                self._docker.images.pull(self._image)
-            except APIError as e:
-                if not is_mutable_tag:
-                    raise RuntimeError(
-                        f"Failed to pull sandbox image {self._image}: {e}"
-                    ) from e
-
-                try:
-                    self._docker.images.get(self._image)
-                except NotFound:
-                    raise RuntimeError(
-                        f"Failed to pull sandbox image {self._image}: {e}"
-                    ) from e
-                logger.warning(
-                    "Failed to refresh mutable sandbox image %s; using cached "
-                    "local image: %s",
-                    self._image,
-                    e,
-                )
-
-            self._image_checked = True
-
-    def _ensure_sandbox_network(self) -> None:
-        try:
-            self._docker.networks.get(self._network_name)
-            return
-        except NotFound:
-            pass
-        logger.info("Creating sandbox network: %s.", self._network_name)
-        # Plain bridge (internal=False) — agent needs public internet; host
-        # DOCKER-USER chain handles IMDS blocking.
-        self._docker.networks.create(
-            self._network_name,
-            driver="bridge",
-            labels={
-                LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
-                LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
-            },
-        )
-
     def _ensure_sandbox_volume(self, sandbox_id: UUID, tenant_id: str) -> str:
         volume_name = _sandbox_volume_name(sandbox_id)
         try:
@@ -868,23 +662,6 @@ class DockerSandboxManager(SandboxManager):
                 f"Sandbox {sandbox_id} container not found — call provision() first."
             )
         return c
-
-    def _wait_for_container_running(
-        self, container: Container, deadline: float
-    ) -> bool:
-        while time.monotonic() < deadline:
-            container.reload()
-            state = (container.attrs or {}).get("State") or {}
-            status = state.get("Status")
-            if status == "running":
-                return True
-            if status in ("exited", "dead"):
-                logs = container.logs(tail=100).decode("utf-8", errors="replace")
-                raise RuntimeError(
-                    f"Sandbox container {container.name} exited unexpectedly. Logs:\n{logs[:2000]}"
-                )
-            time.sleep(POLL_INTERVAL_SECONDS)
-        return False
 
     def provision(
         self,
@@ -1038,18 +815,6 @@ class DockerSandboxManager(SandboxManager):
             return None
         return None
 
-    @staticmethod
-    def _remove_incomplete_container(container: Container) -> None:
-        """Best-effort force-remove of a container we failed to fully provision."""
-        try:
-            container.remove(force=True)
-        except (APIError, NotFound) as e:
-            logger.warning(
-                "Failed to remove incomplete sandbox container %s: %s",
-                container.name,
-                e,
-            )
-
     def _create_sandbox_container(
         self,
         *,
@@ -1077,9 +842,7 @@ class DockerSandboxManager(SandboxManager):
         network: Network = self._docker.networks.get(self._network_name)
         # Match the sandbox bridge; dual-stack bridges retain IPv4 listeners.
         listen_host: str = (
-            "::"
-            if network.attrs.get("EnableIPv4", True) is False
-            else _IPV4_LISTEN_HOST
+            "::" if network.attrs.get("EnableIPv4", True) is False else IPV4_LISTEN_HOST
         )
         create_kwargs = build_container_create_kwargs(
             sandbox_id=sandbox_id,
@@ -1171,6 +934,8 @@ class DockerSandboxManager(SandboxManager):
         if sandbox_id is not None:
             labels.append(f"{LABEL_SANDBOX_ID}={sandbox_id}")
         for item in self._iter_owned_items(labels, deadline):
+            if is_harness_resource(item.labels):
+                continue
             resource = sandbox_resource_from_labels(
                 kind=item.kind,
                 name=item.name,
@@ -1186,82 +951,9 @@ class DockerSandboxManager(SandboxManager):
         return {
             tenant_id
             for item in self._iter_owned_items([LABEL_TENANT_ID], deadline)
-            if (tenant_id := item.labels.get(LABEL_TENANT_ID))
+            if not is_harness_resource(item.labels)
+            and (tenant_id := item.labels.get(LABEL_TENANT_ID))
         }
-
-    def _iter_owned_items(
-        self, extra_labels: list[str], deadline: float
-    ) -> Iterator[_OwnedDockerItem]:
-        """Yield this deployment's sandbox containers, then volumes, with labels."""
-        filters: dict[str, str | list[str] | bool] = {
-            "label": [
-                f"{LABEL_COMPONENT}={LABEL_COMPONENT_VALUE}",
-                f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX}",
-                *extra_labels,
-            ]
-        }
-        verified_volumes: dict[str, str] = {}
-        for kind in (
-            SandboxResourceKind.CONTAINER,
-            SandboxResourceKind.VOLUME,
-        ):
-            remaining_request_timeout(deadline)
-            items = (
-                self._cleanup_docker.containers.list(all=True, filters=filters)
-                if kind == SandboxResourceKind.CONTAINER
-                else self._cleanup_docker.volumes.list(filters=filters)
-            )
-            remaining_request_timeout(deadline)
-            for item in items:
-                remaining_request_timeout(deadline)
-                labels = (
-                    item.attrs.get("Labels")
-                    if kind == SandboxResourceKind.VOLUME
-                    else item.labels
-                )
-                labels = labels or {}
-                resource_network = labels.get(LABEL_DOCKER_NETWORK)
-                if (
-                    resource_network is not None
-                    and resource_network != self._network_name
-                ):
-                    continue
-                if resource_network is None:
-                    project_matches = (
-                        bool(self._compose_project)
-                        and labels.get("com.docker.compose.project")
-                        == self._compose_project
-                    )
-                    network_matches = (
-                        kind == SandboxResourceKind.CONTAINER
-                        and self._network_name
-                        in (item.attrs.get("NetworkSettings", {}).get("Networks") or {})
-                    )
-                    volume_matches = kind == SandboxResourceKind.VOLUME and (
-                        verified_volumes.get(item.name) == labels.get(LABEL_SANDBOX_ID)
-                    )
-                    if not (project_matches or network_matches or volume_matches):
-                        logger.warning(
-                            "Retaining Docker resource %s without verified deployment ownership",
-                            item.name,
-                        )
-                        continue
-                sandbox_label = labels.get(LABEL_SANDBOX_ID)
-                if kind == SandboxResourceKind.CONTAINER and sandbox_label:
-                    for mount in item.attrs.get("Mounts") or []:
-                        if mount.get("Type") == "volume" and mount.get("Name"):
-                            verified_volumes[mount["Name"]] = sandbox_label
-                yield _OwnedDockerItem(
-                    kind=kind,
-                    name=item.name,
-                    instance_id=item.id
-                    if kind == SandboxResourceKind.CONTAINER
-                    else item.attrs["CreatedAt"],
-                    created_at=item.attrs["Created"]
-                    if kind == SandboxResourceKind.CONTAINER
-                    else item.attrs["CreatedAt"],
-                    labels=labels,
-                )
 
     def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
         remaining_request_timeout(deadline)
@@ -1279,7 +971,8 @@ class DockerSandboxManager(SandboxManager):
             else:
                 raise ValueError(f"Unsupported Docker resource: {resource.kind}")
             if (
-                labels.get(LABEL_SANDBOX_ID) != str(resource.sandbox_id)
+                is_harness_resource(labels)
+                or labels.get(LABEL_SANDBOX_ID) != str(resource.sandbox_id)
                 or labels.get(LABEL_TENANT_ID) != resource.tenant_id
                 or labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX
             ):
