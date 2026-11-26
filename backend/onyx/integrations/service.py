@@ -180,6 +180,7 @@ from onyx.server.security.store import get_security_settings
 from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
 from onyx.tools.tool_implementations.custom.graphql_tool import introspection_to_sdl
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    MAX_OPENAPI_DOCUMENT_BYTES,
     openapi_to_url,
     parse_openapi_document,
     validate_openapi_schema,
@@ -195,7 +196,7 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
-_MAX_SPEC_BYTES = 5 * 1024 * 1024
+_MAX_SPEC_BYTES = MAX_OPENAPI_DOCUMENT_BYTES
 _SPEC_FETCH_TIMEOUT_SECONDS = 15
 
 _CLIENT_CREDENTIAL_KEYS = ("client_id", "client_secret")

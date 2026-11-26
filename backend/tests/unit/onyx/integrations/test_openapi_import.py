@@ -208,6 +208,14 @@ def test_import_tells_a_document_that_is_no_spec_apart(document: str) -> None:
     assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
+def test_a_pasted_spec_has_the_size_limit_of_a_spec_url() -> None:
+    spec = _callable_spec()
+    spec["info"]["description"] = "x" * (5 * 1024 * 1024)
+
+    with pytest.raises(OnyxError, match="larger than 5 MB"):
+        _import(json.dumps(spec))
+
+
 def test_yaml_timestamps_stay_text() -> None:
     spec = parse_openapi_document(
         "openapi: 3.0.0\ninfo:\n  title: T\n  x-added: 2015-02-22T20:00:45.000Z\n"
