@@ -141,7 +141,7 @@ export class CustomizePluginPage {
     // The modal's accessible name also holds its kind line ("MCP server").
     const dialog = this.page.getByRole("dialog", {
       name: new RegExp(
-        `^Add ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`
+        `^Add ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`
       ),
     });
     await expect(dialog).toBeVisible();
