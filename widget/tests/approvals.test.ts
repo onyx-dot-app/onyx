@@ -333,6 +333,7 @@ describe("approval arguments from the model", () => {
     const command = withFlags({
       can_approve_for_chat: false,
       can_approve_for_command: true,
+      app_name: "Gmail",
     });
     expect(decisions(command)).toEqual([
       "approve_once",
@@ -342,6 +343,7 @@ describe("approval arguments from the model", () => {
     const shown = shownText(
       renderApprovalCard(command, "pending", view(new Set()))
     );
+    expect(shown).toContain("Approval requested: Send email in Gmail");
     expect(shown).toContain("Approve for this command");
     expect(shown).not.toContain("Approve for this chat");
   });

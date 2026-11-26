@@ -64,7 +64,9 @@ export function renderApprovalCard(
   const { submitting, expanded, onDecide, onToggle } = view;
   const name = request.display_name || request.tool_name;
   const record = approvalRecord(status, name);
-  const title = `Approval requested: ${name}`;
+  const title = `Approval requested: ${
+    request.app_name ? `${name} in ${request.app_name}` : name
+  }`;
   const agentLabel = request.agent_name
     ? `${request.agent_name} wants to run ${name}`
     : null;

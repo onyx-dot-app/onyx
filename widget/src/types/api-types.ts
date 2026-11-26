@@ -181,6 +181,8 @@ export interface ToolApprovalRequest {
   // An app request of a command: the card offers "Approve for this command"
   // in place of "Approve for this chat"
   can_approve_for_command?: boolean;
+  // The app of such a request
+  app_name?: string | null;
 }
 
 export interface ToolApprovalResolved {
