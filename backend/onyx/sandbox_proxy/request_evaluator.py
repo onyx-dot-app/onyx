@@ -228,7 +228,8 @@ def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:
 
     if "application/x-www-form-urlencoded" in content_type:
         try:
-            raw = parse_qs(body.decode("utf-8"))
+            # The card shows an empty field: it can clear a value.
+            raw = parse_qs(body.decode("utf-8"), keep_blank_values=True)
         except UnicodeDecodeError:
             return None
         # Collapse parse_qs's list-per-key to match the JSON shape.

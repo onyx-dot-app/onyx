@@ -19,7 +19,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import url_matches_patterns
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.models import RequestMatch
-from onyx.sandbox_proxy.request_evaluator import _matches, _pick
+from onyx.sandbox_proxy.request_evaluator import _matches, _pick, _request_payload
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     IntegrationMatchTarget,
     may_match,
@@ -241,3 +241,13 @@ def test_a_malformed_url_gives_a_load_error_and_keeps_the_valid_targets() -> Non
     assert targets[3].load_error is not None
     for valid in (targets[2], targets[4]):
         assert valid.load_error is None and valid.endpoint is not None
+
+
+def test_a_form_body_keeps_its_empty_fields() -> None:
+    request = http.Request.make(
+        "POST",
+        "https://api.example.com/contacts/1",
+        b"name=Ada&title=&tag=a&tag=b",
+        {"content-type": "application/x-www-form-urlencoded"},
+    )
+    assert _request_payload(request) == {"name": "Ada", "title": "", "tag": ["a", "b"]}
