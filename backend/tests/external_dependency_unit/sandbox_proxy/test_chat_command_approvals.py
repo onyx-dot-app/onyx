@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from onyx.agents.tools import ToolProgress
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.postgres_backend import PostgresCacheBackend
-from onyx.db.chat import create_chat_session
+from onyx.db.chat import create_chat_session, delete_chat_session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
     ActionPolicy,
@@ -632,3 +632,28 @@ def test_command_grants_expire_on_the_postgres_cache(
         )
     finally:
         cache.delete_prefix(f"approval:command:{command_id}:")
+
+
+def test_a_hard_delete_of_the_chat_removes_its_command_approval_rows(
+    db_session: Session, chat: _Chat
+) -> None:
+    command_id = uuid4()
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, command_id),
+        _matched(chat.integration_id),
+        {"method": "POST", "path": "/issues"},
+    )
+    row = db_session.get(ActionApproval, approval_id)
+    assert row is not None
+    assert (row.session_id, row.chat_session_id, row.command_id) == (
+        None,
+        chat.chat_session_id,
+        command_id,
+    )
+
+    delete_chat_session(
+        chat.user.id, chat.chat_session_id, db_session, hard_delete=True
+    )
+
+    db_session.expire_all()
+    assert db_session.get(ActionApproval, approval_id) is None
