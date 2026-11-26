@@ -13,7 +13,6 @@ import {
 import { RenderType } from "@/lib/timeline/chat/message/messageComponents/types";
 import { findRenderer } from "@/lib/timeline/chat/message/messageComponents/renderMessageComponent";
 import { BrowserToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/BrowserToolRenderer";
-import { faviconIcon } from "@/lib/timeline/components/bodies/favicon";
 import CustomToolRenderer from "@/lib/timeline/chat/message/messageComponents/renderers/CustomToolRenderer";
 
 const placement = { turn_index: 0, tab_index: 0 };
@@ -136,9 +135,6 @@ test("each browser action gets its own icon", () => {
     ["type", "browser_act", { action: "type", text: "hi" }],
     ["upload", "browser_act", { action: "upload", paths: ["a.pdf"] }],
     ["open", "browser_open", { url: "https://onyx.app" }],
-    ["openLocal", "browser_open", { url: "http://localhost:3000" }],
-    ["back", "browser_navigate", { history: "back" }],
-    ["snapshot", "browser_snapshot", {}],
   ];
   for (const [label, toolName, args] of toolCalls) {
     render(
@@ -162,10 +158,5 @@ test("each browser action gets its own icon", () => {
   expect(icons.scroll).toBe(SvgMousePointer);
   expect(icons.type).toBe(SvgKeyboard);
   expect(icons.upload).toBe(SvgBrowserFile);
-  // A public page shows its favicon; a private one never asks for it.
-  expect(icons.open).toBe(faviconIcon("https://onyx.app", SvgEarth));
-  expect(icons.open).not.toBe(SvgEarth);
-  expect(icons.openLocal).toBe(SvgEarth);
-  expect(icons.back).toBe(SvgEarth);
-  expect(icons.snapshot).toBe(SvgEarth);
+  expect(icons.open).toBe(SvgEarth);
 });

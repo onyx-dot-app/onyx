@@ -5,12 +5,9 @@ import { SvgGlobe } from "@opal/icons";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
 
-// One icon component per fallback and host, so a chip keeps the same
-// component (and its loaded image) across renders.
-const FAVICON_ICONS = new Map<
-  IconFunctionComponent,
-  Map<string, IconFunctionComponent>
->();
+// One icon component per host, so a chip keeps the same component (and its
+// loaded image) across renders.
+const FAVICON_ICONS = new Map<string, IconFunctionComponent>();
 
 const PRIVATE_SUFFIXES = [
   ".local",
@@ -85,31 +82,22 @@ function hostnameOf(url: string): string | null {
 }
 
 /**
- * An icon that shows a web page's favicon, and `fallback` (the globe) when the
- * URL has no host, its host is private, or its favicon fails to load. The favicon comes
+ * An icon that shows a web page's favicon, and the globe when the URL has no
+ * host, its host is private, or its favicon fails to load. The favicon comes
  * from Google's favicon service, as in the search results, so a private host
  * is never sent there.
  */
-export function faviconIcon(
-  url: string,
-  fallback: IconFunctionComponent = SvgGlobe
-): IconFunctionComponent {
+export function faviconIcon(url: string): IconFunctionComponent {
   const host = hostnameOf(url);
-  if (host === null || isPrivateHost(host)) return fallback;
-  let icons = FAVICON_ICONS.get(fallback);
-  if (!icons) {
-    icons = new Map();
-    FAVICON_ICONS.set(fallback, icons);
-  }
-  const cached = icons.get(host);
+  if (host === null || isPrivateHost(host)) return SvgGlobe;
+  const cached = FAVICON_ICONS.get(host);
   if (cached) return cached;
-  const Fallback = fallback;
 
   const src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(`https://${host}`)}&size=64`;
 
   function Favicon({ size = 16, className }: IconProps) {
     const [failed, setFailed] = useState(false);
-    if (failed) return <Fallback size={size} className={className} />;
+    if (failed) return <SvgGlobe size={size} className={className} />;
     return (
       <img
         src={src}
@@ -124,6 +112,6 @@ export function faviconIcon(
     );
   }
 
-  icons.set(host, Favicon);
+  FAVICON_ICONS.set(host, Favicon);
   return Favicon;
 }

@@ -16,7 +16,6 @@ import {
   readCustomToolCall,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
-import { faviconIcon } from "@/lib/timeline/components/bodies/favicon";
 import { SandboxCallContent } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
 import { ToolFields } from "@/lib/timeline/chat/message/messageComponents/renderers/CustomToolRenderer";
 import { flatFields, isEmptyPayload } from "@/lib/timeline/chat/toolPayload";
@@ -253,13 +252,7 @@ export function BrowserToolRenderer({
 
   return children([
     {
-      icon:
-        toolName === "browser_act"
-          ? actIcon(call.args)
-          : url &&
-              (toolName === "browser_open" || toolName === "browser_navigate")
-            ? faviconIcon(url, SvgEarth)
-            : SvgEarth,
+      icon: toolName === "browser_act" ? actIcon(call.args) : SvgEarth,
       status,
       supportsCollapsible: true,
       content,
