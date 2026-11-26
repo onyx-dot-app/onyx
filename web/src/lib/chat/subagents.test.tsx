@@ -118,7 +118,7 @@ test("a running response shows its live stream, then its saved output once the s
     });
 
   const { result } = renderHook(() =>
-    useSubagentTranscript("chat-1", "agent-1", null)
+    useSubagentTranscript("chat-1", "agent-1", null, null)
   );
 
   await waitFor(() => {
@@ -168,7 +168,7 @@ test("a dropped stream resumes from its last cursor", async () => {
   });
 
   const { result } = renderHook(() =>
-    useSubagentTranscript("chat-1", "agent-1", 7)
+    useSubagentTranscript("chat-1", "agent-1", 7, null)
   );
 
   await waitFor(
@@ -200,7 +200,7 @@ test("a follow-up run that the parent's message started shows after the first re
   );
 
   const { result } = renderHook(() =>
-    useSubagentTranscript("chat-1", "agent-1", null)
+    useSubagentTranscript("chat-1", "agent-1", null, null)
   );
 
   await waitFor(() =>
@@ -235,7 +235,7 @@ test("the streamed packets replace the running response's saved ones while it st
   });
 
   const { result } = renderHook(() =>
-    useSubagentTranscript("chat-1", "agent-1", 7)
+    useSubagentTranscript("chat-1", "agent-1", 7, null)
   );
 
   await waitFor(() =>
@@ -276,7 +276,7 @@ test("packets that a drop cut off from their cursor land once, when the stream r
   });
 
   const { result } = renderHook(() =>
-    useSubagentTranscript("chat-1", "agent-1", 7)
+    useSubagentTranscript("chat-1", "agent-1", 7, null)
   );
 
   await waitFor(
@@ -288,4 +288,35 @@ test("packets that a drop cut off from their cursor land once, when the stream r
   );
   expect(streamCalls).toHaveLength(2);
   expect(streamCalls[1]).toContain("cursor=0");
+});
+
+test("another branch's run of the agent replaces the transcript", async () => {
+  const history = jest.fn(async (runId: number) =>
+    json({
+      messages: [
+        INSTRUCTION,
+        { ...message(11, "assistant", "", 10, null), message: `Run ${runId}` },
+      ],
+      packets: [[text(`Run ${runId}`)]],
+      stream: null,
+    })
+  );
+  let runId = 1;
+  jest.spyOn(global, "fetch").mockImplementation(async () => history(runId));
+
+  const { result, rerender } = renderHook(
+    ({ run }: { run: number }) =>
+      useSubagentTranscript("chat-1", "agent-1", null, run),
+    { initialProps: { run: 1 } }
+  );
+  await waitFor(() =>
+    expect(result.current.messages[1]?.packets).toEqual([text("Run 1")])
+  );
+
+  // The user selects the branch where the agent's latest run is another
+  runId = 2;
+  rerender({ run: 2 });
+  await waitFor(() =>
+    expect(result.current.messages[1]?.packets).toEqual([text("Run 2")])
+  );
 });

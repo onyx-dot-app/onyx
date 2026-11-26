@@ -28,6 +28,7 @@ function agent(path: string, status: ChatSubagent["status"]): ChatSubagent {
     stopped_by_user: false,
     started_at: null,
     stream_id: null,
+    latest_run_id: null,
     activity_tool: null,
   };
 }

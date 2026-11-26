@@ -153,6 +153,7 @@ function agent(
     status,
     stopped_by_user: false,
     started_at: new Date(Date.now() - 5_000).toISOString(),
+    latest_run_id: 1,
     stream_id: status === "running" ? 7 : null,
     activity_tool: activity,
   };

@@ -92,7 +92,8 @@ export function SubagentTranscript({
   const { messages, loading, failed } = useSubagentTranscript(
     sessionId,
     agentId,
-    streamId
+    streamId,
+    agent?.latest_run_id ?? null
   );
   const persona = useActiveAgent();
   const scroller = useRef<HTMLDivElement>(null);

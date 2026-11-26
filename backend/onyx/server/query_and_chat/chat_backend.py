@@ -1745,6 +1745,7 @@ def get_chat_session_agents(
                 status=agent.status,
                 stopped_by_user=agent.failure_kind == RunFailureKind.STOPPED_BY_USER,
                 started_at=agent.latest_run_started_at,
+                latest_run_id=run_id,
                 stream_id=pointer.stream_id if pointer else None,
                 activity_tool=pointer.activity_tool if pointer else None,
             )

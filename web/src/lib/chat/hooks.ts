@@ -1374,16 +1374,19 @@ interface SubagentTranscript {
  * the agents list's live stream for the agent: a new one reloads the history,
  * which names the stream to follow; its end reloads the history too. The
  * history reloads when the stream ends, and a dropped stream resumes from its
- * last cursor.
+ * last cursor. `runId` is the agent's latest run on the selected branch: the
+ * history is keyed on it, so another branch's transcript replaces the old one.
  */
 export function useSubagentTranscript(
   sessionId: string,
   agentId: string,
-  streamId: number | null
+  streamId: number | null,
+  runId: number | null
 ): SubagentTranscript {
+  const url = SWR_KEYS.chatSubagentHistory(sessionId, agentId);
   const { data, error, isLoading, mutate } = useSWR<SubagentHistory, Error>(
-    SWR_KEYS.chatSubagentHistory(sessionId, agentId),
-    errorHandlingFetcher,
+    [url, runId],
+    () => errorHandlingFetcher<SubagentHistory>(url),
     { onErrorRetry: skipRetryOnAuthError, revalidateOnFocus: false }
   );
   const stream = data?.stream ?? null;

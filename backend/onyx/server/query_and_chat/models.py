@@ -530,6 +530,8 @@ class ChatSubagent(BaseModel):
     stopped_by_user: bool
     # When its current or latest run started
     started_at: datetime | None = None
+    # Its current or latest run; another run on another branch has another id
+    latest_run_id: int | None = None
     # The live stream of its running response (`.../agents/{id}/stream`)
     stream_id: int | None = None
     # The tool that its running response last called

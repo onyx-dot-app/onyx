@@ -112,6 +112,8 @@ export interface ChatSubagent {
   stopped_by_user: boolean;
   /** When its current or latest run started, as an ISO date. */
   started_at: string | null;
+  /** Its current or latest run; another branch's run has another id. */
+  latest_run_id: number | null;
   /** The live stream of its running response, while it runs. */
   stream_id: number | null;
   /** The tool that its running response last called. */
