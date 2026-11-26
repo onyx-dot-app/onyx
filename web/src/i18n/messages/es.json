@@ -13676,6 +13676,7 @@
         "action": "Descargar",
         "saved": "El navegador descargó {fileName}"
       },
+      "error": "El navegador no pudo hacerlo. Inténtalo de nuevo.",
       "clearData": {
         "action": "Borrar datos del navegador",
         "title": "¿Borrar los datos del navegador?",

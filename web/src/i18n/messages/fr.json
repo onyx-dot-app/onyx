@@ -13676,6 +13676,7 @@
         "action": "Télécharger",
         "saved": "Le navigateur a téléchargé {fileName}"
       },
+      "error": "Le navigateur n'a pas pu effectuer cette action. Réessayez.",
       "clearData": {
         "action": "Effacer les données du navigateur",
         "title": "Effacer les données du navigateur ?",

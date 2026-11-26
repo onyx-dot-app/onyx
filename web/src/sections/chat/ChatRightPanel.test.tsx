@@ -1580,6 +1580,19 @@ describe("the chat's browser", () => {
     expect(clicked[0]!.download).toBe("a b.csv");
   });
 
+  test("a browser error shows a translated toast with the service's detail", () => {
+    const toastError = jest.spyOn(toast, "error");
+    renderChat([[REPORT]]);
+    act(() => openBrowserInChat("session"));
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    receive({ type: "error", message: "net::ERR_NAME_NOT_RESOLVED" });
+    expect(toastError).toHaveBeenCalledWith(
+      "The browser could not do that. Try again.",
+      { description: "net::ERR_NAME_NOT_RESOLVED" }
+    );
+  });
+
   test("a download's toast shows and saves its name without bidi controls", () => {
     const toastInfo = jest.spyOn(toast, "info");
     const clicked: HTMLAnchorElement[] = [];

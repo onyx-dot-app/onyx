@@ -13676,6 +13676,7 @@
         "action": "Baixar",
         "saved": "O navegador baixou {fileName}"
       },
+      "error": "O navegador não conseguiu fazer isso. Tente novamente.",
       "clearData": {
         "action": "Limpar dados do navegador",
         "title": "Limpar os dados do navegador?",
