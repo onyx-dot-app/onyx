@@ -280,10 +280,14 @@ const PAGES: Record<string, string> = {
   "/popup-download": `<!doctype html><title>Popup download</title>
     <button id="pop" onclick="window.open('/big-download','_blank','noopener')">Download</button>`,
   "/popup": `<!doctype html><title>Opener</title><a id="pop" href="/second" target="_blank">Open popup</a>`,
+  "/frame-alert": `<!doctype html><title>Frame alert</title><script>setTimeout(()=>alert('from frame'),100)</script>`,
+  "/frame-upload": `<!doctype html><title>Frame upload</title>
+    <input id="file" type="file">`,
 };
 
 export type Site = {
   readonly url: string;
+  readonly crossUrl: string;
   readonly stop: () => Promise<void>;
   readonly bigDownloadsStopped: number;
   readonly bigDownloadsPeak: number;
@@ -339,6 +343,15 @@ export const startSite = async (): Promise<Site> => {
       response.end("long");
       return;
     }
+    if (path === "/cross-frame") {
+      const port = (server.address() as NodeNet.AddressInfo).port;
+      const inner = url.searchParams.get("inner") ?? "";
+      response.writeHead(200, { "content-type": "text/html" }).end(
+        `<!doctype html><title>Cross frame</title>
+        <iframe src="http://localhost:${port}/${inner}"></iframe>`,
+      );
+      return;
+    }
     const body = PAGES[path];
     if (body === undefined) {
       response.writeHead(404).end();
@@ -350,6 +363,7 @@ export const startSite = async (): Promise<Site> => {
   const address = server.address() as NodeNet.AddressInfo;
   return {
     url: `http://127.0.0.1:${address.port}`,
+    crossUrl: `http://localhost:${address.port}`,
     get bigDownloadsStopped() {
       return bigDownloadsStopped;
     },

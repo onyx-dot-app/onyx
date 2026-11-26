@@ -120,6 +120,7 @@ type Viewer = {
 type OpenChooser = {
   readonly id: string;
   readonly chooser: FileChooser;
+  readonly origin: string | null;
   readonly offeredTo: string | null;
 };
 
@@ -131,6 +132,7 @@ type Tab = {
   readonly control: SessionControl;
   readonly viewers: Set<Viewer>;
   dialog: Dialog | null;
+  dialogOrigin: string | null;
   fileChooser: OpenChooser | null;
   loading: boolean;
   title: string;
@@ -175,7 +177,7 @@ type ViewerEvent =
       readonly y: number;
       readonly sequence: number;
     }
-  | { readonly type: "fileChooser"; readonly id: string; readonly multiple: boolean }
+  | { readonly type: "fileChooser"; readonly id: string; readonly multiple: boolean; readonly origin: string | null }
   | { readonly type: "fileChooserClosed"; readonly id: string }
   | { readonly type: "download"; readonly fileName: string }
   | { readonly type: "error"; readonly message: string };
@@ -186,7 +188,17 @@ export type TabJson = {
   readonly title: string;
   readonly loading: boolean;
   readonly controller: "agent" | "human" | "none";
-  readonly dialog: { readonly type: string; readonly message: string } | null;
+  readonly dialog: { readonly type: string; readonly message: string; readonly origin: string | null } | null;
+};
+
+/** The frame's origin, or null for an opaque origin such as about:blank or data:. */
+const originOf = (url: string) => {
+  try {
+    const origin = new URL(url).origin;
+    return origin === "null" ? null : origin;
+  } catch {
+    return null;
+  }
 };
 
 const sleepUntil = (deadline: number) =>
@@ -449,7 +461,11 @@ export class BrowserService {
       loading: tab.loading,
       controller: tab.control.controller !== null ? "human" : tab.agentUsed ? "agent" : "none",
       dialog: tab.dialog
-        ? { type: tab.dialog.type(), message: tab.dialog.message().slice(0, MAX_DIALOG_MESSAGE_CHARS) }
+        ? {
+            type: tab.dialog.type(),
+            message: tab.dialog.message().slice(0, MAX_DIALOG_MESSAGE_CHARS),
+            origin: tab.dialogOrigin,
+          }
         : null,
     };
   }
@@ -558,6 +574,7 @@ export class BrowserService {
       control: new SessionControl(() => BrowserPage.invalidateRefs(page)),
       viewers: new Set(),
       dialog: null,
+      dialogOrigin: null,
       fileChooser: null,
       loading: false,
       title: "",
@@ -620,8 +637,14 @@ export class BrowserService {
       tab.loading = false;
       this.scheduleTabs(chat);
     });
+    // Playwright's dialog event has no frame, and it can arrive before or after this one.
+    cdp.on("Page.javascriptDialogOpening", ({ url }) => {
+      tab.dialogOrigin = originOf(url);
+      if (tab.dialog) this.scheduleTabs(chat);
+    });
     // A navigation can close a dialog without us answering it.
     cdp.on("Page.javascriptDialogClosed", () => {
+      tab.dialogOrigin = null;
       if (!tab.dialog) return;
       tab.dialog = null;
       this.broadcastControl(tab);
@@ -1149,9 +1172,18 @@ export class BrowserService {
   }
 
   private async offerFileChooser(tab: Tab, chooser: FileChooser) {
-    if (!(await this.isFileChooserCurrent(chooser))) return;
+    const [current, frame] = await Promise.all([
+      this.isFileChooserCurrent(chooser),
+      chooser.element().ownerFrame().catch(() => null),
+    ]);
+    if (!current) return;
     this.closeFileChooser(tab);
-    tab.fileChooser = { id: NodeCrypto.randomUUID(), chooser, offeredTo: null };
+    tab.fileChooser = {
+      id: NodeCrypto.randomUUID(),
+      chooser,
+      origin: frame ? originOf(frame.url()) : null,
+      offeredTo: null,
+    };
     this.pushFileChooser(tab);
   }
 
@@ -1170,6 +1202,7 @@ export class BrowserService {
       type: "fileChooser",
       id: current.id,
       multiple: current.chooser.isMultiple(),
+      origin: current.origin,
     });
   }
 

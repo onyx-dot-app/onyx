@@ -622,7 +622,11 @@ describe("browser service", () => {
       await ok(service.socketPath, chat, "act", { ...params, timeoutMs: 5_000 });
       assert.ok(Date.now() - started < 3_000, `${params.action} waited for the dialog`);
       const status = await ok(service.socketPath, chat, "status");
-      assert.deepEqual((status.tabs as Array<{ dialog: unknown }>)[0]?.dialog, { type: "alert", message: "key" });
+      assert.deepEqual((status.tabs as Array<{ dialog: unknown }>)[0]?.dialog, {
+        type: "alert",
+        message: "key",
+        origin: site.url,
+      });
       await ok(service.socketPath, chat, "dialog", { accept: true });
     }
   });
@@ -642,7 +646,7 @@ describe("browser service", () => {
       dialog = (status.tabs as Array<{ dialog: unknown }>)[0]?.dialog ?? null;
       if (dialog === null) await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    assert.deepEqual(dialog, { type: "alert", message: "hi" });
+    assert.deepEqual(dialog, { type: "alert", message: "hi", origin: site.url });
     const blocked = await call(service.socketPath, chat, "act", { action: "click", selector: "#btn" });
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.error.code, "dialog_pending");
@@ -981,6 +985,38 @@ describe("browser service", () => {
       assert.deepEqual(await NodeFSP.readdir(outside), []);
     } finally {
       await NodeFSP.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("dialogs and file choosers report the origin of the frame that opened them", async () => {
+    const chat = newChat();
+    assert.notEqual(new URL(site.crossUrl).origin, new URL(site.url).origin);
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/cross-frame?inner=frame-alert` });
+    const viewer = await ViewerClient.connect(service.socketPath, chat);
+    viewer.autoAck = true;
+    try {
+      await viewer.message("tabs", (m) => {
+        const dialog = (m.tabs as Array<{ dialog: { origin: unknown } | null }>)[0]?.dialog;
+        return dialog?.origin === site.crossUrl;
+      });
+      const status = await ok(service.socketPath, chat, "status");
+      assert.deepEqual((status.tabs as Array<{ dialog: unknown }>)[0]?.dialog, {
+        type: "alert",
+        message: "from frame",
+        origin: site.crossUrl,
+      });
+      await ok(service.socketPath, chat, "dialog", { accept: true });
+
+      await ok(service.socketPath, chat, "navigate", { url: `${site.url}/cross-frame?inner=frame-upload` });
+      await ok(service.socketPath, chat, "act", {
+        action: "click",
+        selector: "iframe >> internal:control=enter-frame >> #file",
+      });
+      viewer.send({ type: "takeControl" });
+      const chooser = await viewer.message("fileChooser");
+      assert.equal(chooser.origin, site.crossUrl);
+    } finally {
+      viewer.close();
     }
   });
 
