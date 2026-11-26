@@ -37,3 +37,18 @@ link here from **Known issues** and do not restate the entry.
 - **Where:** `backend/onyx/db/integration.py:write_openapi_document__no_commit`.
 - **Ends when:** The dual write above ends.
 - **Owner:** rohoswagger. **Added:** 2026-11-24.
+
+## Usage-limit counters accept only `CALENDAR_WEEK`
+
+- **What:** A counter allowance on any window other than `CALENDAR_WEEK` is
+  refused at import and again before each check.
+- **Why:** An allowance declares its window, but the `tenant_usage` counter
+  does not read it yet: the check and the increment always use the current
+  calendar-week row. Another window would be counted in the wrong row with no
+  error.
+- **Where:** `backend/onyx/server/usage_limits.py:_counter_window_supported`,
+  called by `_require_supported_windows` and `_measure_and_check`.
+- **Ends when:** The next PR of the ENG-4479 stack passes the allowance's
+  `window_start` to `check_usage_limit` and `increment_usage`. Then the guard
+  checks only that the counter supports the window's anchor.
+- **Owner:** Subash-Mohan. **Added:** 2026-11-25.
