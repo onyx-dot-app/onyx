@@ -155,6 +155,25 @@ type DownloadProgress = {
 };
 type ActiveDownload = { readonly chat: ChatState; readonly fileName: string; receivedBytes: number };
 
+type ViewerControl = "none" | "you" | "another-viewer" | "agent";
+
+// Mirrors BrowserServerMessage in the web chat panel.
+type ViewerEvent =
+  | { readonly type: "tabs"; readonly tabs: Array<TabJson>; readonly selected: string | null }
+  | { readonly type: "viewport"; readonly width: number; readonly height: number }
+  | { readonly type: "control"; readonly controller: ViewerControl }
+  | {
+      readonly type: "pointer";
+      readonly phase: "move" | "click";
+      readonly x: number;
+      readonly y: number;
+      readonly sequence: number;
+    }
+  | { readonly type: "fileChooser"; readonly id: string; readonly multiple: boolean }
+  | { readonly type: "fileChooserClosed"; readonly id: string }
+  | { readonly type: "download"; readonly fileName: string }
+  | { readonly type: "error"; readonly message: string };
+
 export type TabJson = {
   readonly id: string;
   readonly url: string;
@@ -1139,8 +1158,8 @@ export class BrowserService {
 
   // ---- viewers ----
 
-  private send(viewer: Viewer, value: Record<string, unknown>) {
-    this.write(viewer, encodeJson(value));
+  private send(viewer: Viewer, event: ViewerEvent) {
+    this.write(viewer, encodeJson(event));
   }
 
   private write(viewer: Viewer, bytes: Buffer) {
@@ -1154,7 +1173,7 @@ export class BrowserService {
     socket.write(bytes);
   }
 
-  private controllerFor(viewer: Viewer) {
+  private controllerFor(viewer: Viewer): ViewerControl {
     const tab = viewer.selected;
     if (!tab) return "none";
     const owner = tab.control.controller;
