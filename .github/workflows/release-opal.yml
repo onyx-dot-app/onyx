@@ -13,7 +13,7 @@ jobs:
     # mitigates zizmor's cache-poisoning class of finding at the source rather than
     # suppressing it. Bumping Node = bump the digest.
     container:
-      image: node:24@sha256:9d266751ca3d7fdbe651c878ffd5ad0a42fed49a18c283509267c97f025b7496
+      image: node:24@sha256:49f7adaf9f1574bc45c20ea317139b39a59d7e758d0e93745e112fd85cb42623
     environment:
       name: release-opal
     permissions:
