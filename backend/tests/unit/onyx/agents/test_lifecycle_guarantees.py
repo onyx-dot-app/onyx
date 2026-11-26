@@ -64,10 +64,12 @@ from onyx.llm.models import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
+from onyx.tools.tool_implementations.sandbox import turn as sandbox_turn
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import ExecCommandTool
 from onyx.tools.tool_implementations.sandbox.shapes import SHELL_SHAPES
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tracing.flows import LLMFlow
+from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, ScriptedLLM
 
 
@@ -379,7 +381,10 @@ def _deep_research() -> tuple[Agent, object]:
 )
 def test_finished_agent_and_run_are_freed_without_a_garbage_collection_pass(
     build: Callable[[], tuple[Agent, object | None]],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    cache = FakeCache()
+    monkeypatch.setattr(sandbox_turn, "get_cache_backend", lambda **_kwargs: cache)
     agent, feature = build()
     presenter = ResponsePresenter(Emitter(lambda _packet: None))
     gc.collect()
