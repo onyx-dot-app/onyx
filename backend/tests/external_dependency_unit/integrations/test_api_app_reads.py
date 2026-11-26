@@ -2,6 +2,7 @@
 row, not the ``tool`` row that the dual write also keeps."""
 
 import json
+from collections.abc import Iterator
 from typing import Any
 from uuid import uuid4
 
@@ -30,7 +31,10 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     parse_openapi_document,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.integration_helpers import give_access
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    give_access,
+)
 
 
 def _spec(host: str, operation_id: str) -> dict[str, Any]:
@@ -51,9 +55,16 @@ def admin(make_test_user: MakeTestUser) -> User:
     return make_test_user("api-app-reads-admin", is_admin=True)
 
 
+@pytest.fixture
+def integration_ids(db_session: Session, admin: User) -> Iterator[list[int]]:  # noqa: ARG001
+    ids: list[int] = []
+    yield ids
+    delete_integrations(db_session, ids)
+
+
 @pytest.mark.parametrize("document_format", ["json", "yaml"])
 def test_readers_use_the_api_app_document(
-    db_session: Session, admin: User, document_format: str
+    db_session: Session, admin: User, integration_ids: list[int], document_format: str
 ) -> None:
     detail = admin_api.create_integration(
         IntegrationCreate(
@@ -64,6 +75,7 @@ def test_readers_use_the_api_app_document(
         admin,
         db_session,
     )
+    integration_ids.append(detail.id)
     integration = db_session.get(Integration, detail.id)
     assert integration is not None and integration.tool_id is not None
     tool_id = integration.tool_id
