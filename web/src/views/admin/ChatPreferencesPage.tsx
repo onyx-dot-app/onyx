@@ -26,7 +26,7 @@ import {
 } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import { Settings, toSettings } from "@/lib/settings/types";
+import type { Settings } from "@/lib/settings/types";
 import { LanguageSelect } from "@/lib/app/components";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import {
@@ -329,19 +329,13 @@ export default function ChatPreferencesPage() {
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
-      const currentSettings = settings;
-      if (!currentSettings) return;
-
-      const newSettings: Settings = {
-        ...toSettings(currentSettings),
-        ...updates,
-      };
-
+      // Only the changed fields: the server keeps the rest, so overlapping
+      // saves do not write back each other's old values
       try {
         const response = await fetch("/api/admin/settings", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newSettings),
+          body: JSON.stringify(updates),
         });
 
         if (!response.ok) {
@@ -356,7 +350,7 @@ export default function ChatPreferencesPage() {
         toast.error(t("toasts.settingsUpdateFailed"));
       }
     },
-    [settings, navigation, t]
+    [navigation, t]
   );
 
   return (
