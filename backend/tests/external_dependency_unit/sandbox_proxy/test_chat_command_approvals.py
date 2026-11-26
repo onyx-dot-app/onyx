@@ -111,9 +111,13 @@ def chat(
         db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     db_session.commit()
-    chat_session = create_chat_session(
-        db_session, "command", user.id, DEFAULT_PERSONA_ID
-    )
+    try:
+        chat_session = create_chat_session(
+            db_session, "command", user.id, DEFAULT_PERSONA_ID
+        )
+    except Exception:
+        delete_integrations(db_session, [integration_id])
+        raise
     # Every call that a test begins ends here, also when the test fails.
     started: list[CommandApprovals] = []
     begin = CommandApprovals.begin
