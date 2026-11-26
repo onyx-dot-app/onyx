@@ -6735,9 +6735,6 @@
             },
             "renameButton": {
               "tooltip": "名前を変更"
-            },
-            "setDefaultButton": {
-              "label": "デフォルトに設定"
             }
           },
           "selectAllButton": {

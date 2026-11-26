@@ -63,14 +63,12 @@ import {
   ModelSettingsPopover,
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
-import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
 import { getProvider } from "@/lib/languageModels/utils";
 import {
   useAdminLanguageModels,
   useModelDisplayName,
 } from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
-import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
   SvgOnyxOctagon,
@@ -620,7 +618,6 @@ interface ModelRowProps {
   onToggleVisibility: (visible: boolean) => void;
   onRename: (value: string | null) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
-  onSetDefaultModel?: () => void;
 }
 
 /**
@@ -641,7 +638,6 @@ function ModelRow({
   onToggleVisibility,
   onRename,
   onSettingsChange,
-  onSetDefaultModel,
 }: ModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
   // Keeps the hover-revealed actions visible while the settings popover,
@@ -724,7 +720,6 @@ function ModelRow({
             <ContentAction
               font="main-ui-action"
               color="interactive"
-              center
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
               description={description}
@@ -733,6 +728,7 @@ function ModelRow({
                   flexDirection="row"
                   width="fit"
                   height="auto"
+                  alignItems="start"
                   gap={1}
                 >
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
@@ -748,18 +744,6 @@ function ModelRow({
                           onChange={onSettingsChange}
                           onOpenChange={setSettingsOpen}
                         />
-                      )}
-                      {!isDefaultModel && onSetDefaultModel && (
-                        <Button
-                          prominence="internal"
-                          size="sm"
-                          onClick={(e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            onSetDefaultModel();
-                          }}
-                        >
-                          {t("models.row.setDefaultButton.label")}
-                        </Button>
                       )}
                     </OpalSection>
                   </Hoverable.Item>
@@ -856,7 +840,6 @@ function ImageModelRow({
             <ContentAction
               font="main-ui-action"
               color="interactive"
-              center
               icon={() => <InputCheckbox checked={checked} />}
               title={title}
               description={title === model.name ? undefined : model.name}
@@ -865,6 +848,7 @@ function ImageModelRow({
                   flexDirection="row"
                   width="fit"
                   height="auto"
+                  alignItems="start"
                   gap={1}
                 >
                   {isDefaultModel && (
@@ -1018,7 +1002,6 @@ export function ModelSelectionField({
 }: ModelSelectionFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
-  const { mutate } = useSWRConfig();
   const { defaultText } = useAdminLanguageModels();
   const resolveDisplayName = useModelDisplayName();
   const providerId = formikProps.values.id;
@@ -1065,11 +1048,6 @@ export function ModelSelectionField({
       m.name === modelName ? { ...m, ...patch } : m
     );
     formikProps.setFieldValue("model_configurations", updated);
-  }
-
-  async function setDefaultModel(modelName: string) {
-    if (providerId == null) return;
-    await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
   // A cleared name is null, as the API sends it, so clearing a new name is
@@ -1138,7 +1116,7 @@ export function ModelSelectionField({
             // card's inset inside the scroll area.
             <ShadowDiv
               containerClassName="-mx-2"
-              className="max-h-96 px-2"
+              className="max-h-[32rem] px-2"
               variant={{ top: "shadow", bottom: "mask" }}
             >
               <Section gap={1} alignItems="stretch" height="auto">
@@ -1174,13 +1152,6 @@ export function ModelSelectionField({
                             setModelSettings(model.name, patch)
                           }
                           isDefaultModel={model.name === defaultModelName}
-                          onSetDefaultModel={
-                            providerId != null &&
-                            model.is_visible &&
-                            model.supports_chat !== false
-                              ? () => void setDefaultModel(model.name)
-                              : undefined
-                          }
                         />
                       ))}
                       <ImageModelRows models={imageModels} />

@@ -6735,9 +6735,6 @@
             },
             "renameButton": {
               "tooltip": "이름 변경"
-            },
-            "setDefaultButton": {
-              "label": "기본으로 설정"
             }
           },
           "selectAllButton": {

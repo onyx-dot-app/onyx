@@ -6735,9 +6735,6 @@
             },
             "renameButton": {
               "tooltip": "Renomear"
-            },
-            "setDefaultButton": {
-              "label": "Definir como padrão"
             }
           },
           "selectAllButton": {

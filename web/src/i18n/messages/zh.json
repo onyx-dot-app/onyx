@@ -6735,9 +6735,6 @@
             },
             "renameButton": {
               "tooltip": "重命名"
-            },
-            "setDefaultButton": {
-              "label": "设为默认"
             }
           },
           "selectAllButton": {

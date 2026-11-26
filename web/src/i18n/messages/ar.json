@@ -6735,9 +6735,6 @@
             },
             "renameButton": {
               "tooltip": "إعادة تسمية"
-            },
-            "setDefaultButton": {
-              "label": "تعيين كافتراضي"
             }
           },
           "selectAllButton": {
