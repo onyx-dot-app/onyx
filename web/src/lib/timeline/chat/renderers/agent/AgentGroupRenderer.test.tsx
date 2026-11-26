@@ -309,3 +309,15 @@ test("on a page without subagent tabs, a finished group does not read as working
   expect(screen.queryByText(/working/)).toBeNull();
   expect(screen.queryByRole("button", { name: "Open alpha" })).toBeNull();
 });
+
+test("a chat outside the session store shows finished spawns as done, not working", async () => {
+  // A shared chat has no current session, so no agents list
+  useChatSessionStore.setState({ currentSessionId: null });
+  renderCard([
+    ...spawn(0, "alpha", "Find sources"),
+    ...spawn(1, "beta", "Check facts"),
+  ]);
+
+  expect(await screen.findByText("Done")).toBeVisible();
+  expect(screen.queryByText(/working/)).toBeNull();
+});

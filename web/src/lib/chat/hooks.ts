@@ -1319,20 +1319,34 @@ interface SubagentHistory {
   stream: { stream_id: number; response_ids: number[] } | null;
 }
 
+interface SpawnedSubagents {
+  /** The agent for each name; undefined for an empty or unlisted name. */
+  agents: (ChatSubagent | undefined)[];
+  /**
+   * The agents list was read for an open chat. Without it (such as in a
+   * shared chat), an undefined agent is unknown, not starting.
+   */
+  available: boolean;
+}
+
 /**
  * The open chat's agents that the rendering agent spawned with these names,
- * once the agents list holds them; undefined for an empty name, a name it
- * does not hold (such as in a shared chat).
+ * once the agents list holds them.
  */
 export function useSpawnedSubagents(
   names: readonly string[]
-): (ChatSubagent | undefined)[] {
+): SpawnedSubagents {
   const base = useContext(SubagentPathContext);
   const sessionId = useChatSessionStore((state) => state.currentSessionId);
-  const { agents } = useChatSubagents(sessionId, false);
-  return names.map((name) =>
-    name ? agents.find((agent) => agent.path === `${base}/${name}`) : undefined
-  );
+  const { agents, loaded } = useChatSubagents(sessionId, false);
+  return {
+    agents: names.map((name) =>
+      name
+        ? agents.find((agent) => agent.path === `${base}/${name}`)
+        : undefined
+    ),
+    available: sessionId !== null && loaded,
+  };
 }
 
 function isPacket(item: Packet | StreamCursor): item is Packet {

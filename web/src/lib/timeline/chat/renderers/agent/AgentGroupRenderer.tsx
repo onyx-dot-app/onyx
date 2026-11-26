@@ -112,7 +112,7 @@ export function AgentGroupRenderer({
   const t = useTranslations("chat.messages.timeline.agentGroup");
   const calls = agentToolCalls(packets);
   // A failed spawn made no agent
-  const agents = useSpawnedSubagents(
+  const { agents, available } = useSpawnedSubagents(
     calls.map((call) => (call.failed ? "" : call.agentName))
   );
   const isComplete = calls.every((call) => call.isComplete);
@@ -130,9 +130,12 @@ export function AgentGroupRenderer({
       agents[index]?.status === "error" ||
       agents[index]?.status === "limit"
   ).length;
-  // A spawn whose agent the list does not hold yet still starts
-  const starting = calls.filter(
-    (call, index) => !call.failed && agents[index] === undefined
+  // A spawn whose agent the list does not hold yet still starts. Without the
+  // list (a shared chat), only a spawn call that has not ended still works.
+  const starting = calls.filter((call, index) =>
+    available
+      ? !call.failed && agents[index] === undefined
+      : !call.failed && !call.isComplete
   ).length;
   const busy = working.length + starting;
   const starts = working
