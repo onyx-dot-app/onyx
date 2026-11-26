@@ -1,8 +1,14 @@
 // Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
 
+/** A blank line as Markdown defines it: only spaces and tabs. */
+function isBlankLine(line: string): boolean {
+  return /^[ \t]*$/.test(line);
+}
+
 // Definitions, footnotes, raw HTML and container directives can tie blocks together,
 // also inside block quotes and list items. A line that opens a label without closing
 // it may start a definition whose label spans lines. A label may hold escaped brackets.
+
 const DOCUMENT_WIDE_SYNTAX =
   /^(?:[ \t]*(?:>|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t])))*[ \t]*(?:\[(?:\\.|[^\]\\\n])+\]:|\[(?:\\.|[^\]\\\n])*\\?$|<[A-Za-z!?/]|:::)|\[\^/m;
 // A backtick fence's info string cannot contain a backtick, so "```a``` is inline" is a code span.
@@ -41,7 +47,7 @@ export function endsInOpenCodeFence(text: string): boolean {
     const depth = quotes.split(">").length - 1;
     const rest = line.slice(quotes.length);
     if (fence !== null) {
-      if (rest.trim() === "") continue;
+      if (isBlankLine(rest)) continue;
       const left = rest.slice(0, fence.indent);
       if (depth >= fence.depth && !/\S/.test(left)) {
         const closing = rest.trim();
@@ -67,12 +73,12 @@ export function endsInOpenCodeFence(text: string): boolean {
         depth,
         indent: inList ? prefix.length : Math.min(prefix.length, listContent),
       };
-    } else if (rest.trim() !== "") {
+    } else if (!isBlankLine(rest)) {
       const item = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/.exec(rest);
       if (item) listContent = item[0].length;
       else if (afterBlank && !/^[ \t]/.test(rest)) listContent = 0;
     }
-    afterBlank = rest.trim() === "";
+    afterBlank = isBlankLine(rest);
   }
   return fence !== null;
 }
@@ -113,7 +119,7 @@ export function splitMarkdownBlocks(text: string): string[] | null {
       ) {
         fence = null;
       }
-    } else if (line.trim() === "") {
+    } else if (isBlankLine(line)) {
       afterBlankLine = true;
     } else {
       if (
