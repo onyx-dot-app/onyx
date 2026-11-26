@@ -5,6 +5,7 @@ import time
 import uuid
 from collections.abc import Callable, Generator
 
+import grpc
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -15,10 +16,12 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
-from onyx.microvm import availability
+from onyx.microvm import availability, registry
 from onyx.microvm.availability import get_sandbox_status, sandbox_tools_available
+from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.models import NodeStateReport, SandboxToolsOffReason
 from onyx.microvm.node_report import reconcile_node_report
+from onyx.microvm.registry import get_node_info, set_node_agent_address
 from onyx.server.features.build.configs import SandboxRuntime
 from onyx.server.features.microvm import admin_api
 from tests.external_dependency_unit.microvm.conftest import AddNode
@@ -153,6 +156,50 @@ def test_auto_with_a_stale_report_offers_no_tools(
     (node,) = status.nodes
     assert not node.live
     assert node.has_template
+
+
+class _ReRegisteringAgent(FakeHostAgent):
+    """An agent whose node registers again while a NodeInfo read is pending,
+    as after its keys expire."""
+
+    def __init__(self, shared_cache: CacheBackend, node_id: str) -> None:
+        super().__init__(template=NODE_TEMPLATE)
+        self.templates[0].compatible = True
+        self.shared_cache = shared_cache
+        self.node_id = node_id
+        self.address = ""
+
+    def NodeInfo(  # noqa: N802
+        self,
+        request: hostagent_pb2.NodeInfoRequest,
+        context: grpc.ServicerContext,
+    ) -> hostagent_pb2.NodeInfoResponse:
+        self.shared_cache.delete(registry._NODE_ADDRESS_PREFIX + self.node_id)
+        set_node_agent_address(
+            self.shared_cache, node_id=self.node_id, address=self.address
+        )
+        return super().NodeInfo(request, context)
+
+
+def test_a_read_from_a_replaced_registration_records_no_info(
+    set_runtime: SetRuntime,
+    shared_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+) -> None:
+    set_runtime(SandboxRuntime.AUTO)
+    node_id = f"avail-{uuid.uuid4().hex[:8]}"
+    agent = _ReRegisteringAgent(shared_cache, node_id)
+    agent.address = add_node(node_id, agent).address
+    reconcile_node_report(
+        shared_cache,
+        client_factory,
+        NodeStateReport(node_id=node_id, vms=[]),
+        now=int(time.time()),
+    )
+    # The new registration has not reported, so its node does not serve.
+    assert get_node_info(shared_cache, node_id) is None
+    assert not sandbox_tools_available()
 
 
 def test_auto_reuses_its_answer_within_the_cache_window(

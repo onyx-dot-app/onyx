@@ -11,7 +11,9 @@ No schema change. State model: microvm/README.md, "Sandbox state model".
   `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS`.
 - Node info (shared cache, key TTL): the agent's `NodeInfo` as a report pass
   read it, for the sandbox tools check and the admin status. Deleted with the
-  last report time.
+  last report time. A pass writes it only while the registration it started
+  under is still the node's (the registration id, set when a node registers
+  without a live address).
 - Placement record (tenant cache, NO TTL): the VM instance of a sandbox
   (node, attempt, generation) and its last activity. Only Stop, a discard,
   or a reconcile that confirms the VM is gone removes it. Writes from a
@@ -32,6 +34,7 @@ Keys without a TTL need a Redis eviction policy that never evicts them
 
 import base64
 import json
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from uuid import UUID
@@ -65,6 +68,7 @@ _DAEMON_KEY_PREFIX = "sandbox_fc:daemon_key:"
 _RESERVATION_PREFIX = "sandbox_fc:reservation:"
 _NODE_LAST_REPORT_PREFIX = "sandbox_fc:node_last_report:"
 _NODE_INFO_PREFIX = "sandbox_fc:node_info:"
+_NODE_REGISTRATION_PREFIX = "sandbox_fc:node_registration:"
 _MAX_NODES = 10_000
 _MAX_NODE_PLACEMENTS = 100_000
 _LOCK_WAIT_SECONDS = 10.0
@@ -375,6 +379,15 @@ def set_node_agent_address(
             # earlier life.
             shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
             shared_cache.delete(_NODE_INFO_PREFIX + node_id)
+            registration = uuid.uuid4().hex
+        else:
+            raw = shared_cache.get(_NODE_REGISTRATION_PREFIX + node_id)
+            registration = raw.decode() if raw is not None else uuid.uuid4().hex
+        shared_cache.set(
+            _NODE_REGISTRATION_PREFIX + node_id,
+            registration,
+            ex=NODE_SIGNING_KEY_TTL_SECONDS,
+        )
         shared_cache.set(
             _NODE_ADDRESS_PREFIX + node_id, address, ex=NODE_SIGNING_KEY_TTL_SECONDS
         )
@@ -396,6 +409,7 @@ def clear_node_agent_address(shared_cache: CacheBackend, *, node_id: str) -> Non
         shared_cache.delete(_NODE_ADDRESS_KEY_PREFIX + node_id)
         shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
         shared_cache.delete(_NODE_INFO_PREFIX + node_id)
+        shared_cache.delete(_NODE_REGISTRATION_PREFIX + node_id)
         shared_cache.set_remove(_NODES_KEY, node_id)
 
 
@@ -414,6 +428,7 @@ def deregister_node(shared_cache: CacheBackend, *, node_id: str, key_id: str) ->
         shared_cache.delete(_NODE_ADDRESS_KEY_PREFIX + node_id)
         shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
         shared_cache.delete(_NODE_INFO_PREFIX + node_id)
+        shared_cache.delete(_NODE_REGISTRATION_PREFIX + node_id)
         shared_cache.set_remove(_NODES_KEY, node_id)
         return True
 
@@ -468,14 +483,33 @@ def node_reports_stopped(shared_cache: CacheBackend, node_id: str, now: int) -> 
     return now - last > SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS
 
 
-def record_node_info(shared_cache: CacheBackend, node_id: str, info: NodeInfo) -> None:
-    """Keep the node's `NodeInfo` from its last report pass. Expires with the
-    node's keys."""
-    shared_cache.set(
-        _NODE_INFO_PREFIX + node_id,
-        info.model_dump_json(),
-        ex=NODE_SIGNING_KEY_TTL_SECONDS,
-    )
+def get_node_registration(shared_cache: CacheBackend, node_id: str) -> str | None:
+    """The id of the node's current registration, if any."""
+    raw = shared_cache.get(_NODE_REGISTRATION_PREFIX + node_id)
+    return raw.decode() if raw is not None else None
+
+
+def record_node_info(
+    shared_cache: CacheBackend,
+    node_id: str,
+    info: NodeInfo,
+    *,
+    registration: str | None,
+) -> bool:
+    """Keep the node's `NodeInfo` from its last report pass, while
+    `registration` (read before the agent call) is still the node's. Expires
+    with the node's keys. False when the node registered again meanwhile."""
+    with _node_lock(shared_cache, node_id):
+        if not shared_cache.exists(
+            _NODE_ADDRESS_PREFIX + node_id
+        ) or registration != get_node_registration(shared_cache, node_id):
+            return False
+        shared_cache.set(
+            _NODE_INFO_PREFIX + node_id,
+            info.model_dump_json(),
+            ex=NODE_SIGNING_KEY_TTL_SECONDS,
+        )
+        return True
 
 
 def get_node_info(shared_cache: CacheBackend, node_id: str) -> NodeInfo | None:
@@ -535,6 +569,7 @@ def _prune_node(shared_cache: CacheBackend, node_id: str) -> None:
             if not shared_cache.exists(_NODE_ADDRESS_PREFIX + node_id):
                 shared_cache.delete(_NODE_LAST_REPORT_PREFIX + node_id)
                 shared_cache.delete(_NODE_INFO_PREFIX + node_id)
+                shared_cache.delete(_NODE_REGISTRATION_PREFIX + node_id)
                 shared_cache.set_remove(_NODES_KEY, node_id)
     except CacheLockAcquisitionError:
         # A registration holds the lock; the next list prunes if still expired.

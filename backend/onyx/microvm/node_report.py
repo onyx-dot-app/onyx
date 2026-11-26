@@ -21,7 +21,12 @@ import hmac
 import time
 from collections.abc import Callable
 
-from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
+from onyx.cache.interface import (
+    CacheBackend,
+    CacheLock,
+    CacheLockAcquisitionError,
+    CacheLockLostError,
+)
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentConfigError,
@@ -31,6 +36,7 @@ from onyx.microvm.models import NodeInfo, NodeStateReport, NodeStateReportResult
 from onyx.microvm.reconcile import reconcile_node
 from onyx.microvm.registry import (
     claim_node_report_token,
+    get_node_registration,
     get_registered_node,
     node_report_lease,
     record_node_info,
@@ -154,9 +160,11 @@ def _read_node_info(
     client_factory: HostAgentClientFactory,
     node_id: str,
     address: str,
+    registration: str | None,
 ) -> NodeInfo | None:
     """The node's `NodeInfo` from its agent, recorded for the sandbox tools
-    check. None when the read fails; the last record then stays."""
+    check while `registration` is still the node's. None when the read fails
+    or the node registered again; the record then stays as it is."""
     try:
         info = client_factory.client(address).node_info()
     except HostAgentConfigError:
@@ -164,7 +172,15 @@ def _read_node_info(
     except HostAgentError as e:
         logger.warning("sandbox_fc_node_info_read_failed node=%s error=%s", node_id, e)
         return None
-    record_node_info(shared_cache, node_id, info)
+    try:
+        recorded = record_node_info(
+            shared_cache, node_id, info, registration=registration
+        )
+    except CacheLockAcquisitionError:
+        recorded = False
+    if not recorded:
+        logger.info("sandbox_fc_node_info_superseded node=%s", node_id)
+        return None
     return info
 
 
@@ -180,6 +196,9 @@ def reconcile_node_report(
     One pass per node at a time across replicas; a report that finds the
     lease taken is skipped. Raises `NodeNotRegisteredError`.
     """
+    # Read before the address: a registration that replaces this one
+    # afterwards changes it, so this pass cannot record stale info.
+    registration = get_node_registration(shared_cache, report.node_id)
     node = get_registered_node(shared_cache, report.node_id)
     if node is None:
         raise NodeNotRegisteredError(report.node_id)
@@ -198,7 +217,9 @@ def reconcile_node_report(
         return NodeStateReportResult(reconciled=False)
     deadline = time.monotonic() + NODE_REPORT_DEADLINE_SECONDS
     try:
-        info = _read_node_info(shared_cache, client_factory, node.node_id, node.address)
+        info = _read_node_info(
+            shared_cache, client_factory, node.node_id, node.address, registration
+        )
         # The drain state is recorded for background stops. A failed read
         # counts as not draining and keeps the last record.
         draining = checkpointer.supported and info is not None and info.draining

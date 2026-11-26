@@ -272,7 +272,8 @@ sets it in one expression: harness sandboxes serve
 (`microvm/availability.py:sandbox_tools_available`: always with the container
 backend on; for Firecracker with `SANDBOX_RUNTIME=auto` a live registered
 node must report the template, checked from the cache and reused per
-process for 15 s), the user is not anonymous, the
+process for 15 s; a resumed parked run skips the node check,
+`sandbox_tools_configured`), the user is not anonymous, the
 chat is not incognito, the turn has one response and is not Deep Research,
 and no Slack or Discord bot sent it (`SendMessageRequest.origin`). The agent's tools and
 `allowed_tool_ids` do not remove them. They have no tool catalog rows, so no
