@@ -34,7 +34,7 @@ import {
   type PluginGroup,
 } from "@/lib/customize/plugins";
 import { usePanel } from "@/lib/customize/hooks";
-import { pluginHref } from "@/lib/customize/paths";
+import { marketplacesHref, pluginHref } from "@/lib/customize/paths";
 import type { SkillStatusFilter } from "@/lib/customize/skills";
 import {
   memberPluginEntries,
@@ -72,7 +72,7 @@ import { useSkillBulkActions } from "@/sections/skills/useSkillBulkActions";
 /** Where a plugin comes from, as its row or the admin Source column says. */
 function usePluginSource(): (
   entry: MemberPluginEntry,
-  group: PluginGroup
+  group: PluginGroup,
 ) => string {
   const t = useTranslations("customize");
   const tableCopy = useTranslations("skills.adminTable");
@@ -230,22 +230,22 @@ export default function CustomizePluginsPage() {
   const entries = memberPluginEntries(
     (skills.data?.customs ?? []).filter(
       (skill) =>
-        skill.kind === "plugin" && (panel === "admin" || skill.member_visible)
+        skill.kind === "plugin" && (panel === "admin" || skill.member_visible),
     ),
     userEmail,
-    locale
+    locale,
   );
   const enablement = useSkillEnablement(
     skills.data?.customs ?? [],
     skills.refresh,
     (skill) => {
       if (needsAttention(skill.plugin?.needs ?? [])) setTurnedOn(skill);
-    }
+    },
   );
   const groups = groupPlugins(entries, { userEmail, query, status, locale });
   const shownCount = PLUGIN_GROUPS.reduce(
     (count, group) => count + groups[group].length,
-    0
+    0,
   );
 
   // The admin panel lists the shown plugins in one table, by name, and
@@ -253,8 +253,8 @@ export default function CustomizePluginsPage() {
   const sourceOf = usePluginSource();
   const shownGroups = new Map(
     PLUGIN_GROUPS.flatMap((group) =>
-      groups[group].map((entry) => [entry.id, { entry, group }] as const)
-    )
+      groups[group].map((entry) => [entry.id, { entry, group }] as const),
+    ),
   );
   const adminRows = entries
     .filter((entry) => shownGroups.has(entry.id))
@@ -276,7 +276,14 @@ export default function CustomizePluginsPage() {
       allLabel={t("plugins.filter.all")}
     />
   );
-  const addMenu = <AddSkillMenu key="add" upload="plugin" />;
+  const addMenu = (
+    <AddSkillMenu
+      key="add"
+      upload="plugin"
+      onUploadPlugin={() => setUploading(true)}
+      onAddMarketplace={() => setAddingMarketplace(true)}
+    />
+  );
 
   const marketplaces = (
     <>
@@ -304,6 +311,10 @@ export default function CustomizePluginsPage() {
         onAdded={(marketplace) => {
           setAddingMarketplace(false);
           onMarketplaceAdded(marketplace);
+          navigation.go(marketplacesHref(panel));
+          // A hash change does not scroll; the section scrolls itself only
+          // when it mounts.
+          document.getElementById("marketplaces")?.scrollIntoView();
         }}
       />
     </>
