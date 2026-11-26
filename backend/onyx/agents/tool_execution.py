@@ -53,14 +53,6 @@ NO_TOOL_CAN_RUN_RESULT = (
 )
 
 
-def _tool_view(message: Message) -> Message:
-    """An owned copy of a conversation message for a tool. Result details stay
-    with the runtime; tools read them from `recorded_results`."""
-    if isinstance(message, ToolResultMessage) and message.details is not None:
-        message = message.model_copy(update={"details": None})
-    return message.model_copy(deep=True)
-
-
 MAX_TOOL_CALLS_PER_STEP = 64
 # What the model sees for a call whose request was denied without a result.
 DENIED_CALL_MESSAGE = "The tool call was not approved, so it did not run."
@@ -99,7 +91,8 @@ class ToolBatch:
             raise ValueError("Tool execution requires a message ID")
         self.message_id = self.message.id
         self.options = progress.options
-        self.context_messages = history
+        # The model's view of the conversation, shared by every call of the step.
+        self.context_messages = tuple(history)
         # Every recorded tool result before this step.
         self.recorded_results = tuple(
             message for message in recorded if isinstance(message, ToolResultMessage)
@@ -118,9 +111,9 @@ class ToolBatch:
     def _context(self, call: ToolCall) -> ToolCallContext:
         return ToolCallContext(
             step=self.step,
-            call=call.model_copy(deep=True),
-            options=self.options.model_copy(deep=True),
-            messages=[_tool_view(item) for item in self.context_messages],
+            call=call,
+            options=self.options,
+            messages=self.context_messages,
         )
 
     def decide_call(
@@ -375,7 +368,7 @@ class ToolBatch:
                 cancellation=self.run.cancellation_signal,
                 # Nothing observes the call, which already returned.
                 update=lambda _progress: None,
-                messages=[_tool_view(message) for message in self.context_messages],
+                messages=self.context_messages,
                 recorded_results=self._recorded_before(),
                 nested_calls=_NestedCallGate(
                     self, call, opened.message_id, opened.step_index
@@ -527,7 +520,7 @@ class ToolBatch:
             else call.model_copy(deep=True).arguments,
             cancellation=cancellation_signal,
             update=update,
-            messages=[_tool_view(message) for message in self.context_messages],
+            messages=self.context_messages,
             recorded_results=self._recorded_before(),
             agents=self.run.coordination.for_tool(call.id, self.message_id, active)
             if self.run.coordination

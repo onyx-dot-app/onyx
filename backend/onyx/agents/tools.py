@@ -257,8 +257,8 @@ class ToolInvocation:
         self.arguments = arguments
         self.cancellation = cancellation
         self.update = update
-        # The model's view of the conversation, after compaction, without result
-        # details. Read only.
+        # The model's view of the conversation, after compaction: the run's
+        # messages. Read only; read result details from `recorded_results`.
         self.messages = messages
         # Every recorded tool result of the conversation before this call, with
         # details and without compaction, oldest first: earlier steps, then this

@@ -438,7 +438,7 @@ def test_context_transform_does_not_rewrite_durable_history() -> None:
     assert agent.state.messages[0].content == "original"
 
 
-def test_preparation_previous_output_shares_only_detached_callback_messages() -> None:
+def test_preparation_input_shares_the_recorded_history() -> None:
     requests: list[GenerationRequest] = []
     prepared_inputs: list[StepInput] = []
     tool = echo(
@@ -459,14 +459,6 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
             previous = state.previous
             assert previous.message is state.messages[0]
             assert previous.tool_results[0] is state.messages[1]
-            previous.message.content.clear()
-            previous.tool_results[0].content = "callback output"
-            details = previous.tool_results[0].details
-            assert isinstance(details, ToolProgress)
-            details.content = "callback detail"
-            previous.options.max_tokens = 1
-            state.history.clear()
-            state.input_messages.clear()
         return PreparedStep(options=GenerationOptions(max_tokens=128))
 
     agent = Agent(
@@ -489,12 +481,47 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
     model_message = requests[1].messages[2]
     assert isinstance(model_message, AssistantMessage)
     assert [call.name for call in model_message.tool_calls] == ["echo"]
+    # The request shares the recorded messages that the hook saw.
+    assert requests[1].messages[0] is prepared_inputs[1].history[0]
+    assert requests[1].messages[3] is prepared_inputs[1].messages[1]
     assert all(request.options.max_tokens == 128 for request in requests)
-    saved_result = run.snapshot().steps[0].tools["0"].result
-    assert saved_result is not None
-    assert saved_result.content == "tool output"
-    assert isinstance(saved_result.details, ToolProgress)
-    assert saved_result.details.content == "detail"
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda state, _previous: state.messages.append(UserMessage(content="new")),
+        lambda _state, previous: setattr(previous, "message", answer("rewritten")),
+    ],
+    ids=["change-tuple", "replace-field"],
+)
+def test_preparation_hook_that_changes_history_fails_the_run(
+    mutate: Callable[[StepInput, StepResult], None],
+) -> None:
+    def prepare(state: StepInput) -> PreparedStep:
+        if state.previous is not None:
+            mutate(state, state.previous)
+        return PreparedStep()
+
+    agent = Agent(
+        FakeModelClient(
+            lambda request, _signal: calls() if len(request.messages) == 2 else answer()
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content="history")]),
+        tools=[echo()],
+        feature=RunHooks(prepare_step=prepare),
+    )
+    run = agent.start(max_steps=2, messages=[UserMessage(content="question")])
+    with pytest.raises(RunFailed):
+        run.result(3)
+    assert run.wait_for_idle(3)
+    assert [message.text for message in agent.state.messages] == [
+        "history",
+        "question",
+        "",
+        "0",
+    ]
 
 
 def test_tool_hooks_can_block_transform_and_report_progress() -> None:
@@ -978,7 +1005,6 @@ def test_tool_configuration_and_permissions_survive_caller_and_model_mutation(
         inspection[0].definition.parameters["changed"] = "inspection"
         request.tools.clear()
         request.allowed_tool_names = None
-        request.options.tool_choice = ToolChoiceOptions.AUTO
         return AssistantMessage(
             content=[
                 ToolCall(id=name, name=name, arguments={"name": name})

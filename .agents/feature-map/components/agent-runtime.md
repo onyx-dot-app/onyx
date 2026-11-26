@@ -311,6 +311,16 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    cancellation records `RunFailureKind.DEADLINE` and publishes it on
    `AgentEndEvent`. The first cancellation signal wins, so a later deadline
    cannot relabel a user Stop.
+9. `shared-recorded-objects` **Hooks and tools get the run's objects, not
+   copies.** `StepInput`, `StepResult` and `ToolCallContext`
+   (`backend/onyx/agents/models.py`) are frozen and hold tuples, so a hook
+   that replaces a field or changes a sequence fails the run. The messages
+   inside them, `ToolInvocation.messages`, and the model request's messages,
+   tool definitions and options are the run's objects and are not frozen.
+   `llm/model_request.py:serialize_tools` copies each tool schema, because
+   LiteLLM's Vertex AI route changes a schema in place. Read them, and build a
+   replacement with `model_copy(update=...)` for a change. Changing one in
+   place changes the saved history, later requests and other readers.
 
 ---
 
