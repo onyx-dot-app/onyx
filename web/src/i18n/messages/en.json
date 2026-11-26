@@ -16733,7 +16733,6 @@
       "share": {
         "label": "Share"
       },
-      "updatedAt": "Updated {date}",
       "updatedNow": {
         "label": "now"
       }
