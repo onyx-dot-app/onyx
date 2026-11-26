@@ -551,7 +551,9 @@ export function BrowserSurface({
         />
       )}
       <span id={descriptionId} className="sr-only">
-        <Text>{t("surface.inputDescription")}</Text>
+        <Text font="secondary-body" color="text-03">
+          {t("surface.inputDescription")}
+        </Text>
       </span>
       {/* Takes the keys and text for the page. Pinned to the top corner so
           focus does not scroll; 16px stops iOS from zooming on focus. */}
