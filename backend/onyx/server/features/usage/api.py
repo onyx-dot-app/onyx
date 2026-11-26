@@ -78,6 +78,7 @@ from onyx.server.features.usage.models import (
 from onyx.server.query_and_chat.token_limit import (
     BudgetUnit,
     fetch_member_allowance,
+    spend_limit_scopes,
 )
 from onyx.utils.datetime import get_window_start
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
@@ -113,9 +114,14 @@ def _date_range_to_utc_bounds(
     return start_dt, end_dt
 
 
-def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget | None:
+def _user_cost_budget(
+    db_session: Session,
+    user_id: str,
+    scopes: frozenset[TokenRateLimitScope] = frozenset(TokenRateLimitScope),
+) -> EffectiveCostBudget | None:
     """Effective cost budget on all models: the most binding of the per-user
-    allowance, the workspace pool and the most permissive group pool."""
+    allowance, the workspace pool and the most permissive group pool, counting
+    only the `scopes` that hold the caller (`spend_limit_scopes`)."""
     now = datetime.now(tz=timezone.utc)
     candidates: list[EffectiveCostBudget] = []
 
@@ -145,11 +151,15 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
 
     # The per-user allowance: the largest group value per period, else the
     # workspace default, against the user's own usage.
-    allowance = [
-        window
-        for window in fetch_member_allowance(db_session, UUID(user_id), None)
-        if window.unit == BudgetUnit.COST
-    ]
+    allowance = (
+        [
+            window
+            for window in fetch_member_allowance(db_session, UUID(user_id), None)
+            if window.unit == BudgetUnit.COST
+        ]
+        if TokenRateLimitScope.USER in scopes
+        else []
+    )
     if allowance:
         user_buckets = get_user_cost_cents_buckets_since(
             db_session,
@@ -177,9 +187,10 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
         )
 
-    group_candidate = _group_cost_budget_candidate(db_session, user_id, now)
-    if group_candidate is not None:
-        candidates.append(group_candidate)
+    if TokenRateLimitScope.USER_GROUP in scopes:
+        group_candidate = _group_cost_budget_candidate(db_session, user_id, now)
+        if group_candidate is not None:
+            candidates.append(group_candidate)
 
     if not candidates:
         return None
@@ -343,7 +354,7 @@ def get_my_usage(
         if price.input_per_mtok is not None and price.output_per_mtok is not None:
             selected_model_price = price
 
-    budget = _user_cost_budget(db_session, user_id)
+    budget = _user_cost_budget(db_session, user_id, spend_limit_scopes(user))
 
     return UserUsageResponse(
         per_day_by_model=per_day,

@@ -22,6 +22,7 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import TokenRateLimitPeriod
 from onyx.db.cost_override import create_cost_override
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import AccountType
 from onyx.db.models import (
     LLMModelFlow,
     LLMProvider,
@@ -50,6 +51,12 @@ def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) ->
 
 
 class _StubUser:
+    """A person: held to every spending limit scope."""
+
+    is_anonymous = False
+    account_type = AccountType.STANDARD
+    email = "caller@example.com"
+
     def __init__(self, user_id: str) -> None:
         self.id = user_id
 

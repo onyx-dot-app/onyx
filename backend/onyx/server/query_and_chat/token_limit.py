@@ -22,7 +22,9 @@ from onyx.configs.constants import (
     TokenRateLimitPeriod,
     TokenRateLimitScope,
 )
+from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccountType
 from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.token_limit import (
@@ -70,6 +72,28 @@ def check_model_spend_limits(user: User, model_configuration_id: int | None) -> 
     if model_configuration_id is None or not any_model_spend_limit_exists():
         return
     _run_spend_limit_check(user, model_configuration_id)
+
+
+_PERSON_SCOPES = frozenset(TokenRateLimitScope)
+# A service account carries many callers' traffic, so a per-person budget
+# doesn't fit it; the pools it shares with others still do.
+_SERVICE_ACCOUNT_SCOPES = frozenset(
+    {TokenRateLimitScope.GLOBAL, TokenRateLimitScope.USER_GROUP}
+)
+_ANONYMOUS_SCOPES = frozenset({TokenRateLimitScope.GLOBAL})
+
+
+def spend_limit_scopes(user: User) -> frozenset[TokenRateLimitScope]:
+    """The limit scopes that hold `user`: all of them for a person, the
+    workspace and group pools for a service account or API key, and only the
+    workspace pool for the anonymous user."""
+    if user.is_anonymous:
+        return _ANONYMOUS_SCOPES
+    if user.account_type == AccountType.SERVICE_ACCOUNT or is_api_key_email_address(
+        user.email
+    ):
+        return _SERVICE_ACCOUNT_SCOPES
+    return _PERSON_SCOPES
 
 
 def _run_spend_limit_check(user: User, model_configuration_id: int | None) -> None:
