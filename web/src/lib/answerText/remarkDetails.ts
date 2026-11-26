@@ -76,33 +76,52 @@ function inlineHtml(node: MarkdownAstNode): MarkdownAstNode[] {
     : (node.children ?? []).flatMap(inlineHtml);
 }
 
-function without(node: MarkdownAstNode, target: MarkdownAstNode) {
-  if (!node.children) return node;
-  const children: MarkdownAstNode[] = node.children
-    .filter((child) => child !== target)
-    .map((child) => without(child, target));
-  return { ...node, children };
+/** A copy of `node` with `children`, or null if there are none. */
+function withChildren(
+  node: MarkdownAstNode,
+  children: MarkdownAstNode[]
+): MarkdownAstNode | null {
+  return children.length > 0 ? { ...node, children } : null;
+}
+
+/**
+ * Splits an inline node at `target`, which it drops. Formatting around the
+ * target goes to both sides: `**a</details> b**` gives `**a**` and `** b**`.
+ */
+function splitAt(
+  node: MarkdownAstNode,
+  target: MarkdownAstNode
+): [MarkdownAstNode | null, MarkdownAstNode | null] {
+  const children = node.children ?? [];
+  const k = children.findIndex(
+    (child) => child === target || inlineHtml(child).includes(target)
+  );
+  const child = children[k];
+  if (!child) return [node, null];
+  const [head, tail] = child === target ? [null, null] : splitAt(child, target);
+  return [
+    withChildren(node, [...children.slice(0, k), ...(head ? [head] : [])]),
+    withChildren(node, [...(tail ? [tail] : []), ...children.slice(k + 1)]),
+  ];
 }
 
 /**
  * Counts the details tags inside a paragraph, such as `Step one</details>`.
- * Returns the depth after them, or the child that brings `depth` to zero
- * and the closing tag in it.
+ * Returns the depth after them, and the closing tag that brings `depth` to
+ * zero.
  */
 function scanInline(
   node: MarkdownAstNode | undefined,
   depth: number
-): { depth: number; close: number; tag: MarkdownAstNode | null } {
+): { depth: number; tag: MarkdownAstNode | null } {
   const children = node?.type === "paragraph" ? (node.children ?? []) : [];
-  for (const [k, child] of children.entries()) {
-    for (const html of inlineHtml(child)) {
-      const tag = htmlValue(html);
-      if (ANY_DETAILS_OPEN.test(tag)) depth++;
-      else if (DETAILS_CLOSE.test(tag) && --depth === 0)
-        return { depth, close: k, tag: html };
-    }
+  for (const html of children.flatMap(inlineHtml)) {
+    const tag = htmlValue(html);
+    if (ANY_DETAILS_OPEN.test(tag)) depth++;
+    else if (DETAILS_CLOSE.test(tag) && --depth === 0)
+      return { depth, tag: html };
   }
-  return { depth, close: -1, tag: null };
+  return { depth, tag: null };
 }
 
 /** A paragraph of `children`, without leading space, or null if empty. */
@@ -115,7 +134,7 @@ function paragraphOf(
     const value = (first.value ?? "").trimStart();
     children = value ? [{ ...first, value }, ...rest] : rest;
   }
-  return children.length > 0 ? { ...node, children } : null;
+  return withChildren(node, children);
 }
 
 /**
@@ -175,8 +194,7 @@ function groupDetails(
         : null;
     const summary = complete ?? partial ?? (i === last ? NO_SUMMARY : null);
     let close = -1;
-    // The child of the closing paragraph that holds the closing tag
-    let inlineClose = -1;
+    // A closing tag inside a body paragraph
     let closeTag: MarkdownAstNode | null = null;
     if (open && summary) {
       let depth = 1;
@@ -187,9 +205,8 @@ function groupDetails(
         else {
           const inline = scanInline(nodes[j], depth);
           depth = inline.depth;
-          if (inline.close >= 0) {
+          if (inline.tag) {
             close = j;
-            inlineClose = inline.close;
             closeTag = inline.tag;
           }
         }
@@ -209,19 +226,12 @@ function groupDetails(
     const title = decodeReferences(rawTitle.trim());
     const closing = nodes[close];
     const body = nodes.slice(i + 2, close);
-    if (inlineClose >= 0 && closing && closeTag) {
-      const children = closing.children ?? [];
-      const holder = children[inlineClose];
-      // A closing tag inside formatting leaves the formatting in the body
-      const kept =
-        holder && holder !== closeTag ? [without(holder, closeTag)] : [];
-      const before = paragraphOf(closing, [
-        ...children.slice(0, inlineClose),
-        ...kept,
-      ]);
-      const after = paragraphOf(closing, children.slice(inlineClose + 1));
-      if (before) body.push(before);
-      if (after) nodes.splice(close + 1, 0, after);
+    if (closing && closeTag) {
+      const [before, after] = splitAt(closing, closeTag);
+      const head = before && paragraphOf(before, before.children ?? []);
+      const tail = after && paragraphOf(after, after.children ?? []);
+      if (head) body.push(head);
+      if (tail) nodes.splice(close + 1, 0, tail);
     }
     out.push({
       type: "details",

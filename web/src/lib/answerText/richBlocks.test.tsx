@@ -285,3 +285,19 @@ test.each([
     );
   }
 });
+
+test("formatted text after a closing tag leaves the disclosure", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Steps</summary>\n\n**Step one</details> More prose**\n\nAfter."
+      }
+    />
+  );
+  const details = container.querySelector("details");
+  expect(details?.querySelector("strong")).toHaveTextContent(/^Step one$/);
+  expect(details).not.toHaveTextContent("More prose");
+  expect(container.querySelector("details + p strong")).toHaveTextContent(
+    "More prose"
+  );
+});
