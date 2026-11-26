@@ -91,6 +91,9 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
           setMarketplaceOpen(false);
           onMarketplaceAdded(marketplace);
           navigation.go(marketplacesHref(panel));
+          // A hash change does not scroll; the section scrolls itself only
+          // when it mounts.
+          document.getElementById("marketplaces")?.scrollIntoView();
         }}
       />
     </>

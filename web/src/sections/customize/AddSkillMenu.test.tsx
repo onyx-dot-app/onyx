@@ -50,3 +50,22 @@ test.each([
     await waitFor(() => expect(mockRefreshSkillLists).toHaveBeenCalled());
   }
 );
+
+test("an added marketplace scrolls to a Marketplaces section already linked", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins#marketplaces");
+  const section = document.createElement("div");
+  section.id = "marketplaces";
+  section.scrollIntoView = jest.fn();
+  document.body.appendChild(section);
+  render(<AddSkillMenu upload="plugin" />);
+  const user = setupUser();
+
+  await user.click(screen.getByRole("button", { name: "Add" }));
+  await user.click(
+    await screen.findByRole("menuitem", { name: "Add marketplace" })
+  );
+  await user.click(screen.getByRole("button", { name: "Finish add" }));
+
+  expect(section.scrollIntoView).toHaveBeenCalled();
+  section.remove();
+});
