@@ -481,8 +481,10 @@ class GateAddon:
                         # The sandbox closed the socket: end the row, then
                         # re-raise so mitmproxy releases the flow.
                         try:
-                            self._claim_expired_or_read_winner(
-                                approval_id, ctx.tenant_id
+                            await asyncio.to_thread(
+                                self._claim_expired_or_read_winner,
+                                approval_id,
+                                ctx.tenant_id,
                             )
                         except Exception:
                             logger.exception(
@@ -552,7 +554,9 @@ class GateAddon:
             )
             flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             if approval_id is not None:
-                self._terminalize_after_unhandled_error(approval_id, ctx.tenant_id)
+                await asyncio.to_thread(
+                    self._terminalize_after_unhandled_error, approval_id, ctx.tenant_id
+                )
 
     def _recheck_approval(
         self,
@@ -1087,7 +1091,9 @@ class GateAddon:
                 ),
             )
             return decision
-        resolved = self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
+        resolved = await asyncio.to_thread(
+            self._claim_expired_or_read_winner, approval_id, ctx.tenant_id
+        )
         source = "timeout" if resolved == ApprovalDecision.EXPIRED else "db_winner"
         logger.info(
             "approval_decided " + APPROVAL_DECIDED_FIELDS,

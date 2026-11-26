@@ -1471,8 +1471,11 @@ async def test_await_decision_timeout_claims_expired(
 
     claim_calls: list[tuple[UUID, str]] = []
 
+    claim_threads: list[int] = []
+
     def _fake_claim(aid: UUID, tid: str) -> ApprovalDecision:
         claim_calls.append((aid, tid))
+        claim_threads.append(threading.get_ident())
         return ApprovalDecision.EXPIRED
 
     monkeypatch.setattr(addon, "_claim_expired_or_read_winner", _fake_claim)
@@ -1481,6 +1484,7 @@ async def test_await_decision_timeout_claims_expired(
 
     assert decision == ApprovalDecision.EXPIRED
     assert claim_calls == [(approval_id, ctx.tenant_id)]
+    assert claim_threads != [threading.get_ident()]
 
 
 @pytest.mark.parametrize("claim_fails", [False, True])
@@ -1508,9 +1512,11 @@ async def test_a_request_cancelled_during_the_wait_ends_the_row_and_reraises(
         raise asyncio.CancelledError()
 
     claims: list[UUID] = []
+    claim_threads: list[int] = []
 
     def claim(aid: UUID, _tenant_id: str) -> ApprovalDecision:
         claims.append(aid)
+        claim_threads.append(threading.get_ident())
         if claim_fails:
             raise RuntimeError("db down")
         return ApprovalDecision.EXPIRED
@@ -1524,6 +1530,8 @@ async def test_a_request_cancelled_during_the_wait_ends_the_row_and_reraises(
         await addon.request(make_flow(proxy_auth=_basic_auth(_TAG_UUID)))
 
     assert claims == [approval_id]
+    # In a worker: the DB call must not block the proxy event loop.
+    assert claim_threads != [threading.get_ident()]
     assert addon._parked.snapshot() == []
 
 
