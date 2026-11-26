@@ -284,6 +284,42 @@ export function isFailedCustomToolDelta(delta: CustomToolDelta): boolean {
   );
 }
 
+/** One custom tool call, read from its packets. */
+export interface CustomToolCallState {
+  /** The latest arguments, or null before any arrive. */
+  args: Record<string, unknown> | null;
+  failed: boolean;
+  /** The call ended, by its section end or by an error. */
+  isComplete: boolean;
+}
+
+/** Reads one custom tool call's state from the packets of that call. */
+export function readCustomToolCall(
+  packets: readonly Packet[]
+): CustomToolCallState {
+  const call: CustomToolCallState = {
+    args: null,
+    failed: false,
+    isComplete: false,
+  };
+  for (const { obj } of packets) {
+    if (obj.type === PacketType.CUSTOM_TOOL_ARGS) {
+      call.args = obj.tool_args;
+    } else if (
+      obj.type === PacketType.CUSTOM_TOOL_DELTA &&
+      isFailedCustomToolDelta(obj)
+    ) {
+      call.failed = true;
+    } else if (obj.type === PacketType.ERROR) {
+      call.failed = true;
+      call.isComplete = true;
+    } else if (obj.type === PacketType.SECTION_END) {
+      call.isComplete = true;
+    }
+  }
+  return call;
+}
+
 // File Reader Packets
 export interface FileReaderStart extends BaseObj {
   type: "file_reader_start";

@@ -3,7 +3,7 @@
 import { type ComponentProps, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import {
-  isFailedCustomToolDelta,
+  readCustomToolCall,
   PacketType,
   type CustomToolPacket,
   type Packet,
@@ -48,25 +48,9 @@ export function SkillToolRenderer({
 }: ComponentProps<MessageRenderer<CustomToolPacket, {}>>) {
   const t = useTranslations("chat.messages.timeline.skill");
   const tool = skillTool(packets);
-  let name = "";
-  let failed = false;
-  let isComplete = false;
-  for (const { obj } of packets) {
-    if (obj.type === PacketType.CUSTOM_TOOL_ARGS && tool) {
-      const value: unknown = obj.tool_args[tool.nameArg];
-      if (typeof value === "string") name = value.trim();
-    } else if (
-      obj.type === PacketType.CUSTOM_TOOL_DELTA &&
-      isFailedCustomToolDelta(obj)
-    ) {
-      failed = true;
-    } else if (obj.type === PacketType.ERROR) {
-      failed = true;
-      isComplete = true;
-    } else if (obj.type === PacketType.SECTION_END) {
-      isComplete = true;
-    }
-  }
+  const { args, failed, isComplete } = readCustomToolCall(packets);
+  const nameValue: unknown = tool && args ? args[tool.nameArg] : undefined;
+  const name = typeof nameValue === "string" ? nameValue.trim() : "";
 
   useEffect(() => {
     if (isComplete) onComplete();

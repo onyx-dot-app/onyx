@@ -3,7 +3,7 @@ import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { codeSpan, markdown } from "@opal/utils";
 import {
-  isFailedCustomToolDelta,
+  readCustomToolCall,
   PacketType,
   type CustomToolPacket,
   type Packet,
@@ -65,28 +65,15 @@ export function AgentToolRenderer({
 }: ComponentProps<MessageRenderer<CustomToolPacket, {}>>) {
   const t = useTranslations("chat.messages.timeline.agentTool");
   const tool = agentTool(packets);
+  const { args, failed, isComplete } = readCustomToolCall(packets);
   let name = "";
   let message = "";
-  let failed = false;
-  let isComplete = false;
-  for (const { obj } of packets) {
-    if (obj.type === PacketType.CUSTOM_TOOL_ARGS && tool) {
-      name =
-        stringArg(obj.tool_args, tool.nameArg) ||
-        // The Claude family names the target `to`.
-        (tool.action === "send" ? stringArg(obj.tool_args, "to") : "");
-      if (tool.messageArg) message = stringArg(obj.tool_args, tool.messageArg);
-    } else if (
-      obj.type === PacketType.CUSTOM_TOOL_DELTA &&
-      isFailedCustomToolDelta(obj)
-    ) {
-      failed = true;
-    } else if (obj.type === PacketType.ERROR) {
-      failed = true;
-      isComplete = true;
-    } else if (obj.type === PacketType.SECTION_END) {
-      isComplete = true;
-    }
+  if (tool && args) {
+    name =
+      stringArg(args, tool.nameArg) ||
+      // The Claude family names the target `to`.
+      (tool.action === "send" ? stringArg(args, "to") : "");
+    if (tool.messageArg) message = stringArg(args, tool.messageArg);
   }
 
   useEffect(() => {
