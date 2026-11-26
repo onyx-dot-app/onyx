@@ -1,8 +1,15 @@
 import { render, screen } from "@tests/setup/test-utils";
-import { Packet, PacketType } from "@/app/app/services/streamingModels";
+import {
+  Packet,
+  PacketType,
+  StopReason,
+} from "@/app/app/services/streamingModels";
 import type { MinimalAgent } from "@/lib/agents/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { AgentTimeline } from "@/lib/timeline/chat/AgentTimeline";
+import {
+  AgentTimeline,
+  MAX_HOISTED_STEPS,
+} from "@/lib/timeline/chat/AgentTimeline";
 import type {
   TransformedStep,
   TurnGroup,
@@ -55,6 +62,152 @@ const sequentialTurn: TurnGroup[] = [{ turnIndex: 0, steps: [step(0)] }];
 beforeEach(() => {
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: "s" });
   useChatSessionStore.getState().createSession("s");
+});
+
+const command: Packet[] = [
+  {
+    placement: { turn_index: MAX_HOISTED_STEPS, tab_index: 0 },
+    obj: {
+      type: PacketType.EXEC_COMMAND_START,
+      cmd: "npm test",
+      workdir: null,
+    },
+  },
+];
+// More steps than a hoisted run has, so they collapse into one run card.
+const longRun: TurnGroup[] = [
+  ...Array.from({ length: MAX_HOISTED_STEPS }, (_, index) => ({
+    turnIndex: index,
+    steps: [step(index)],
+  })),
+  {
+    turnIndex: MAX_HOISTED_STEPS,
+    steps: [
+      {
+        key: "command",
+        groupKey: "command",
+        turnIndex: MAX_HOISTED_STEPS,
+        tabIndex: 0,
+        packets: command,
+        nestedCalls: [],
+        streamPackets: command,
+        codeMode: null,
+      },
+    ],
+  },
+];
+
+describe("AgentTimeline's collapsed run card", () => {
+  it("titles a working run by its current step", () => {
+    render(<AgentTimeline turnGroups={longRun} chatState={{ agent }} />);
+
+    expect(screen.getByText("Running npm...")).toBeVisible();
+  });
+
+  it("says how long a finished run worked", () => {
+    render(
+      <AgentTimeline
+        turnGroups={longRun}
+        chatState={{ agent }}
+        stopPacketSeen
+        processingDurationSeconds={12}
+      />
+    );
+
+    expect(screen.getByText(/^Worked for 12/)).toBeVisible();
+  });
+
+  it("titles a stopped run as a finished one", () => {
+    render(
+      <AgentTimeline
+        turnGroups={longRun}
+        chatState={{ agent }}
+        stopPacketSeen
+        stopReason={StopReason.USER_CANCELLED}
+        processingDurationSeconds={12}
+      />
+    );
+
+    expect(screen.getByText(/^Worked for 12/)).toBeVisible();
+    expect(screen.queryByText(/stopped/i)).not.toBeInTheDocument();
+  });
+
+  it("does not time a later run by the response's start", () => {
+    render(
+      <AgentTimeline
+        turnGroups={longRun}
+        chatState={{ agent }}
+        stopPacketSeen
+        processingDurationSeconds={12}
+        isFirstRun={false}
+      />
+    );
+
+    expect(screen.getByText("Worked")).toBeVisible();
+  });
+
+  it("times a later run from its first step", async () => {
+    let now = 1_000_000;
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const view = render(
+        <AgentTimeline
+          turnGroups={longRun.slice(0, 1)}
+          chatState={{ agent }}
+          isFirstRun={false}
+        />
+      );
+      now += 40_000;
+      view.rerender(
+        <AgentTimeline
+          turnGroups={longRun}
+          chatState={{ agent }}
+          isFirstRun={false}
+        />
+      );
+      view.rerender(
+        <AgentTimeline
+          turnGroups={longRun}
+          chatState={{ agent }}
+          isFirstRun={false}
+          stopPacketSeen
+        />
+      );
+
+      expect(await screen.findByText(/^Worked for 40/)).toBeVisible();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("keeps a later run's time when it collapses as it stops", async () => {
+    let now = 1_000_000;
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const view = render(
+        <AgentTimeline
+          turnGroups={longRun.slice(0, 1)}
+          chatState={{ agent }}
+          isFirstRun={false}
+        />
+      );
+      now += 40_000;
+      // The sixth step and the stop arrive together: the run card first
+      // mounts settled.
+      view.rerender(
+        <AgentTimeline
+          turnGroups={longRun}
+          chatState={{ agent }}
+          isFirstRun={false}
+          stopPacketSeen
+        />
+      );
+
+      expect(await screen.findByText(/^Worked for 40/)).toBeVisible();
+    } finally {
+      clock.mockRestore();
+    }
+  });
 });
 
 describe("AgentTimeline while a tool call waits for the user", () => {

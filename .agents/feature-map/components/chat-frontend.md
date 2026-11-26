@@ -775,7 +775,15 @@ it. A yield (status `running`) ends the program's turn: the model acts next.
 `useTimelineHeader` takes `codeModeWorking`, so the run header reads
 "Working" while the program runs between calls.
 The header names a step's activity from its own first packet; nested packets
-do not decide it. A step with no activity of its own reads "Working". Before
+do not decide it. A step with no activity of its own reads "Working". A
+command step names its program (`web/src/lib/timeline/chat/commandProgramName.ts`, from T3 Code).
+A reasoning step shows the title of its latest section, a bold line or a
+heading (`reasoningPreview`), or "Thinking" before the first title. Its own
+step card also shows this title while it streams. The
+collapsed run card shows this header while it works. Once done, it reads
+"Worked for {duration}", also after a stop: the answer's own notice says it
+stopped. Only the response's first run uses the response's start and
+duration (`isFirstRun`); a later run times itself. Before
 the first step, the response shows the cursor, not a run card. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a

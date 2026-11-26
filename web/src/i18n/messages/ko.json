@@ -12556,6 +12556,9 @@
           "runningCommand": {
             "label": "명령 실행 중..."
           },
+          "runningProgram": {
+            "label": "{program} 실행 중..."
+          },
           "editingFiles": {
             "label": "파일 편집 중..."
           },
@@ -12564,48 +12567,6 @@
           },
           "browsing": {
             "label": "웹 페이지 탐색 중..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "작업 중...",
-              "done": "작업을 마쳤습니다"
-            },
-            "crunchingDetails": {
-              "working": "세부 사항을 분석하는 중...",
-              "done": "세부 사항을 분석했습니다"
-            },
-            "connectingDots": {
-              "working": "점들을 연결하는 중...",
-              "done": "점들을 연결했습니다"
-            },
-            "runningNumbers": {
-              "working": "숫자를 계산하는 중...",
-              "done": "숫자를 계산했습니다"
-            },
-            "fillingGaps": {
-              "working": "빈 곳을 채우는 중...",
-              "done": "빈 곳을 채웠습니다"
-            },
-            "sortingThingsOut": {
-              "working": "정리하는 중...",
-              "done": "정리했습니다"
-            },
-            "gatheringPieces": {
-              "working": "조각을 모으는 중...",
-              "done": "조각을 모았습니다"
-            },
-            "workingThroughIt": {
-              "working": "해결하는 중...",
-              "done": "해결했습니다"
-            },
-            "ironingOutDetails": {
-              "working": "세부 사항을 다듬는 중...",
-              "done": "세부 사항을 다듬었습니다"
-            },
-            "roundingThingsOut": {
-              "working": "마무리하는 중...",
-              "done": "마무리했습니다"
-            }
           }
         },
         "internalSearch": {
@@ -12632,9 +12593,6 @@
             "before": "{date} 이전",
             "between": "{start}부터 {end}까지"
           }
-        },
-        "interruptedThinking": {
-          "label": "중단된 사고"
         },
         "memory": {
           "default": {
@@ -12757,10 +12715,10 @@
           "label": "{count, plural, one {#단계} other {#단계}}"
         },
         "thoughtDuration": {
-          "label": "{duration} 동안 생각함"
+          "label": "{duration} 동안 작업함"
         },
         "thoughtUnknownDuration": {
-          "label": "잠시 생각함"
+          "label": "작업함"
         },
         "toggleRow": {
           "ariaLabel": "타임라인 전환"

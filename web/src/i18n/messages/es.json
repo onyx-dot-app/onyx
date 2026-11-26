@@ -12556,6 +12556,9 @@
           "runningCommand": {
             "label": "Ejecutando comando..."
           },
+          "runningProgram": {
+            "label": "Ejecutando {program}..."
+          },
           "editingFiles": {
             "label": "Editando archivos..."
           },
@@ -12564,48 +12567,6 @@
           },
           "browsing": {
             "label": "Navegando por páginas web..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "Trabajando en ello...",
-              "done": "Trabajo realizado"
-            },
-            "crunchingDetails": {
-              "working": "Analizando los detalles...",
-              "done": "Detalles analizados"
-            },
-            "connectingDots": {
-              "working": "Atando cabos...",
-              "done": "Cabos atados"
-            },
-            "runningNumbers": {
-              "working": "Haciendo cuentas...",
-              "done": "Cuentas hechas"
-            },
-            "fillingGaps": {
-              "working": "Llenando los huecos...",
-              "done": "Huecos llenados"
-            },
-            "sortingThingsOut": {
-              "working": "Poniendo orden...",
-              "done": "Orden puesto"
-            },
-            "gatheringPieces": {
-              "working": "Reuniendo las piezas...",
-              "done": "Piezas reunidas"
-            },
-            "workingThroughIt": {
-              "working": "Resolviéndolo...",
-              "done": "Resuelto"
-            },
-            "ironingOutDetails": {
-              "working": "Puliendo los detalles...",
-              "done": "Detalles pulidos"
-            },
-            "roundingThingsOut": {
-              "working": "Redondeándolo...",
-              "done": "Redondeado"
-            }
           }
         },
         "internalSearch": {
@@ -12632,9 +12593,6 @@
             "before": "antes del {date}",
             "between": "del {start} al {end}"
           }
-        },
-        "interruptedThinking": {
-          "label": "Pensamiento interrumpido"
         },
         "memory": {
           "default": {
@@ -12757,10 +12715,10 @@
           "label": "{count, plural, one {# paso} other {# pasos}}"
         },
         "thoughtDuration": {
-          "label": "Pensó durante {duration}"
+          "label": "Trabajó durante {duration}"
         },
         "thoughtUnknownDuration": {
-          "label": "Pensó durante un tiempo"
+          "label": "Trabajó"
         },
         "toggleRow": {
           "ariaLabel": "Alternar la línea de tiempo"

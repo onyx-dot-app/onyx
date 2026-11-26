@@ -12556,6 +12556,9 @@
           "runningCommand": {
             "label": "コマンドを実行中..."
           },
+          "runningProgram": {
+            "label": "{program} を実行中..."
+          },
           "editingFiles": {
             "label": "ファイルを編集中..."
           },
@@ -12564,48 +12567,6 @@
           },
           "browsing": {
             "label": "ウェブページを閲覧中..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "作業中...",
-              "done": "作業しました"
-            },
-            "crunchingDetails": {
-              "working": "詳細を分析中...",
-              "done": "詳細を分析しました"
-            },
-            "connectingDots": {
-              "working": "点と点をつないでいます...",
-              "done": "点と点をつなぎました"
-            },
-            "runningNumbers": {
-              "working": "数字を計算中...",
-              "done": "数字を計算しました"
-            },
-            "fillingGaps": {
-              "working": "足りない部分を補っています...",
-              "done": "足りない部分を補いました"
-            },
-            "sortingThingsOut": {
-              "working": "整理しています...",
-              "done": "整理しました"
-            },
-            "gatheringPieces": {
-              "working": "ピースを集めています...",
-              "done": "ピースを集めました"
-            },
-            "workingThroughIt": {
-              "working": "取り組んでいます...",
-              "done": "取り組みました"
-            },
-            "ironingOutDetails": {
-              "working": "細部を詰めています...",
-              "done": "細部を詰めました"
-            },
-            "roundingThingsOut": {
-              "working": "仕上げています...",
-              "done": "仕上げました"
-            }
           }
         },
         "internalSearch": {
@@ -12632,9 +12593,6 @@
             "before": "{date}より前",
             "between": "{start}から{end}まで"
           }
-        },
-        "interruptedThinking": {
-          "label": "中断された思考"
         },
         "memory": {
           "default": {
@@ -12757,10 +12715,10 @@
           "label": "{count, plural, one {# ステップ} other {# ステップ}}"
         },
         "thoughtDuration": {
-          "label": "{duration} 思考しました"
+          "label": "{duration} 作業しました"
         },
         "thoughtUnknownDuration": {
-          "label": "しばらく思考しました"
+          "label": "作業しました"
         },
         "toggleRow": {
           "ariaLabel": "タイムラインを切り替え"

@@ -1,17 +1,10 @@
 "use client";
 
-import React, {
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  useId,
-} from "react";
-import { useTranslations } from "next-intl";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Presence } from "@opal/components";
 import { SvgListTree } from "@opal/icons";
 import { Section } from "@opal/layouts";
-import { pick, prefersReducedMotion, seededRandom } from "@opal/utils";
+import { prefersReducedMotion } from "@opal/utils";
 import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { constructCurrentMemoryState } from "@/lib/timeline/chat/renderers/memory/memoryStateUtils";
 import { isMemoryToolPackets } from "@/lib/timeline/chat/packetHelpers";
@@ -40,23 +33,6 @@ export const MAX_HOISTED_STEPS = 5;
 /** How long the hoisted step cards take to fold into the run card, in ms. */
 const HANDOVER_MS = 300;
 
-/**
- * The collapsed run card's header, one pair picked at random per card: its
- * text while the run works, and once it is done.
- */
-const RUN_PHRASES = [
-  "doingWork",
-  "crunchingDetails",
-  "connectingDots",
-  "runningNumbers",
-  "fillingGaps",
-  "sortingThingsOut",
-  "gatheringPieces",
-  "workingThroughIt",
-  "ironingOutDetails",
-  "roundingThingsOut",
-] as const;
-
 /** hoisted → handover → collapsed; a run never goes back. */
 type RunLayout = "hoisted" | "handover" | "collapsed";
 
@@ -82,6 +58,9 @@ export interface AgentTimelineProps {
   /** A tool call in the latest turn waits for the user's approval or
    * answers */
   awaitingUser?: AwaitingUser | null;
+  /** The run is the response's first, so the response's start and duration
+   * time it. A later run times itself while it works here. */
+  isFirstRun?: boolean;
 }
 
 /**
@@ -102,7 +81,8 @@ function areAgentTimelinePropsEqual(
     prev.chatState === next.chatState &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.codeModeWorking === next.codeModeWorking &&
-    prev.awaitingUser === next.awaitingUser
+    prev.awaitingUser === next.awaitingUser &&
+    prev.isFirstRun === next.isFirstRun
   );
 }
 
@@ -152,6 +132,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   toolProcessingDuration,
   codeModeWorking = false,
   awaitingUser = null,
+  isFirstRun = true,
 }: AgentTimelineProps) {
   const { headerText, userStopped } = useTimelineHeader(
     turnGroups,
@@ -162,14 +143,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const { memoryText, memoryOperation, memoryId, memoryIndex } =
     useTimelineStepState(turnGroups);
   const streamingStartTime = useStreamingStartTime();
-  const t = useTranslations("chat.messages.timeline");
-  // Picked per card, seeded from its id: the same on the server and the
-  // client, and kept from working to done.
-  const cardId = useId();
-  const phrase = useMemo(
-    () => pick(RUN_PHRASES, seededRandom(cardId)),
-    [cardId]
-  );
 
   const steps = useMemo<ChatRunStep[]>(
     () =>
@@ -186,6 +159,25 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // approval or an answer keeps it working after text.
   const isActive =
     !stopPacketSeen && (!hasDisplayContent || awaitingUser !== null);
+  // A later run starts when its first step arrives here, which can be well
+  // before its run card mounts.
+  const [runStartedAt, setRunStartedAt] = useState<number | undefined>(() =>
+    isActive && steps.length > 0 ? Date.now() : undefined
+  );
+  if (runStartedAt === undefined && isActive && steps.length > 0) {
+    setRunStartedAt(Date.now());
+  }
+  // When the run stopped working here, for a run card that first mounts
+  // after that and so never timed the run itself.
+  const [runEndedAt, setRunEndedAt] = useState<number | undefined>();
+  if (runStartedAt !== undefined && !isActive && runEndedAt === undefined) {
+    setRunEndedAt(Date.now());
+  }
+  if (isActive && runEndedAt !== undefined) setRunEndedAt(undefined);
+  const localDurationSeconds =
+    runStartedAt !== undefined && runEndedAt !== undefined
+      ? Math.max(1, Math.round((runEndedAt - runStartedAt) / 1000))
+      : undefined;
 
   // Hoisted: each step of a short run is its own run card, with the step's
   // title as its header. Once the run has more steps, they collapse into one
@@ -301,26 +293,23 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       {layout !== "hoisted" && (
         <div key="card" ref={cardRef}>
           <Presence appear={cardHandedOver}>
-            {/* Collapsed: the run's steps in one run card, summed up rather
-                than titled by its current step. A wait for the user still
-                says so. */}
+            {/* Collapsed: the run's steps in one run card, titled by its
+                current step while it works. */}
             <RunCard
               steps={steps}
-              workingText={
-                awaitingUser !== null
-                  ? headerText
-                  : t(`header.runPhrases.${phrase}.working`)
-              }
-              doneText={t(`header.runPhrases.${phrase}.done`)}
+              workingText={headerText}
               icon={SvgListTree}
               appear={!cardHandedOver}
               startFolded={cardHandedOver}
               isActive={isActive}
-              isStopped={stopPacketSeen && userStopped}
               autoCollapse={hasDisplayContent}
-              streamingStartTime={streamingStartTime}
+              streamingStartTime={
+                isFirstRun ? streamingStartTime : runStartedAt
+              }
               durationSeconds={
-                toolProcessingDuration ?? processingDurationSeconds
+                (isFirstRun
+                  ? (toolProcessingDuration ?? processingDurationSeconds)
+                  : undefined) ?? localDurationSeconds
               }
               summary={{
                 memoryText,
