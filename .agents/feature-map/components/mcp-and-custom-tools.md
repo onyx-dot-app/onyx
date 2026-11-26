@@ -1059,9 +1059,8 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - An MCP server or OpenAPI tool made through the admin MCP or tool routes has
   no integration, so chat offers none of its actions.
 - The temporary shapes of API apps are in the tech debt register:
-  [the dual write to `tool`](../TECH-DEBT.md#dual-write-of-openapi-apps-to-tool),
-  [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps) and
-  [request-body `$ref`s](../TECH-DEBT.md#request-body-ref-left-unresolved).
+  [the dual write to `tool`](../TECH-DEBT.md#dual-write-of-openapi-apps-to-tool) and
+  [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps).
 
 - Schema placeholders are a plain string replace.
   `build_custom_tools_from_openapi_schema_and_headers` replaces
