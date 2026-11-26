@@ -10727,10 +10727,6 @@
         "saveFailed": "Não foi possível salvar a configuração de grupo."
       }
     },
-    "plugins": {
-      "title": "Plugins",
-      "description": "Envie plugins do Claude Code e do Codex e sincronize marketplaces do GitHub. Um plugin é um conjunto de skills e lista as integrações de que essas skills precisam."
-    },
     "serviceStatus": {
       "page": {
         "description": "Uso atual de recursos e integridade do cluster de busca da sua instância do Onyx",
