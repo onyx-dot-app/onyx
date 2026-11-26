@@ -268,7 +268,7 @@ const AppInputBar = React.memo(
     } = useContentEditable({
       initialContent: initialMessage,
       wrapperRef: inputWrapperRef,
-      pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
+      pasteTilesEnabled: user?.preferences?.paste_as_tile ?? true,
     });
 
     // Something is mentioned only when picked from the `@` menu, which puts a

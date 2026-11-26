@@ -665,9 +665,16 @@ export function useContentEditable({
     (text: string) => {
       const plainPaste = plainPasteRef.current;
       plainPasteRef.current = false;
+      // A paste replaces a selected tile, so the tile's selection and editor end.
+      clearTileSelection();
+      setTilePopover(null);
 
       if (pasteTilesEnabled && !plainPaste && shouldCreatePasteTile(text)) {
-        const existing = findMatchingPasteTile(text);
+        // A paste over a selection replaces it, so it never expands a tile.
+        const existing =
+          window.getSelection()?.isCollapsed === false
+            ? null
+            : findMatchingPasteTile(text);
         if (existing) {
           expandTile(existing);
           return;
@@ -679,6 +686,7 @@ export function useContentEditable({
     },
     [
       pasteTilesEnabled,
+      clearTileSelection,
       insertTileAtCursor,
       insertTextAtCursor,
       expandTile,

@@ -275,6 +275,18 @@ test("incognito greys out Deep Research and explains why", async () => {
   );
 });
 
+test("a large paste becomes a tile when the preference is not set", async () => {
+  const user = setupUser();
+  render(<Composer />);
+  await user.click(screen.getByRole("textbox"));
+  const large = "line 1\nline 2\nline 3\nline 4";
+  await user.paste(large);
+  const tile = screen
+    .getByRole("textbox")
+    .querySelector<HTMLElement>("[data-rich-tile]");
+  expect(tile).toHaveAttribute("data-text", large);
+});
+
 function projectFile(id: string): ProjectFile {
   return {
     id,
