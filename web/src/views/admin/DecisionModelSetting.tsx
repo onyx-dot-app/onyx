@@ -89,7 +89,6 @@ export default function DecisionModelSetting() {
             capabilities={DECISION_CAPABILITIES}
             providers={providers}
             value={selectedId}
-            placeholder={t("decisionModel.notConfigured")}
             disabled={saving.isPending}
             grouped={!settings.hide_provider_grouping}
             onChange={(id) => {

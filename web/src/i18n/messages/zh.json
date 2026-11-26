@@ -378,7 +378,6 @@
         "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
         "description": "内部搜索使用此模型对结果排序，并决定添加多少上下文。您也可以在聊天偏好设置中设置它。",
         "clear": "清除",
-        "notConfigured": "未配置",
         "saveFailed": "无法更新决策模型"
       },
       "providers": {
@@ -1357,9 +1356,6 @@
         "loadFailed": "无法加载任务模型",
         "retry": {
           "label": "重试"
-        },
-        "addProvider": {
-          "label": "添加提供商"
         },
         "chatDefault": {
           "label": "聊天默认"
@@ -6986,7 +6982,6 @@
         "defaultModel": {
           "title": "图像模型",
           "description": "图像生成操作使用的模型。",
-          "placeholder": "选择模型",
           "error": "无法更改默认图像模型",
           "noDefault": {
             "label": "无默认",

@@ -318,7 +318,6 @@ function RoleSelect({
   onChange,
 }: RoleSelectProps) {
   const chatPreferences = useTranslations("admin.chatPreferences");
-  const decisionModels = useTranslations("admin.decisionModels");
   const imageGeneration = useTranslations(
     "admin.languageModels.imageGeneration"
   );
@@ -363,7 +362,6 @@ function RoleSelect({
             label: imageGeneration("defaultModel.noDefault.label"),
             description: imageGeneration("defaultModel.noDefault.description"),
           }}
-          placeholder={imageGeneration("defaultModel.placeholder")}
           providers={providers}
           value={value}
           onChange={pick}
@@ -384,7 +382,6 @@ function RoleSelect({
       return (
         <SimpleModelSelector
           capabilities={DECISION}
-          placeholder={decisionModels("decisionModel.notConfigured")}
           providers={providers}
           value={value}
           grouped={grouped}

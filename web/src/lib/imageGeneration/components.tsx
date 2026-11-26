@@ -50,6 +50,7 @@ export function DefaultImageModelSetting() {
       description={t("defaultModel.description")}
       center
       withLabel
+      fillInput
     >
       <SimpleModelSelector
         nullable
@@ -61,7 +62,6 @@ export function DefaultImageModelSetting() {
           label: t("defaultModel.noDefault.label"),
           description: t("defaultModel.noDefault.description"),
         }}
-        placeholder={t("defaultModel.placeholder")}
         disabled={!hasModels}
         isError={error ? true : undefined}
       />

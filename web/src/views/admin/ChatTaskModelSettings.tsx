@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
 import { DropdownLoader } from "@opal/loaders";
 import { InputHorizontal, toast, useErrorToast } from "@opal/layouts";
 import {
@@ -17,7 +16,6 @@ import type {
   DefaultModel,
   ModelOptionProvider,
 } from "@/lib/languageModels/types";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   deleteDefaultChatNamingModel,
   deleteDefaultSearchSelectionModel,
@@ -95,12 +93,6 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
   let control: React.ReactNode;
   if (!llmProviders && !error) {
     control = <DropdownLoader />;
-  } else if (llmProviders?.length === 0) {
-    control = (
-      <Button href={ADMIN_ROUTES.LLM_MODELS.path} prominence="secondary">
-        {t("taskModels.addProvider.label")}
-      </Button>
-    );
   } else {
     control = (
       <SimpleModelSelector
@@ -265,12 +257,6 @@ export function SearchDecisionModelSetting() {
   let control: React.ReactNode;
   if ((!llmProviders || !decision.providers) && !loadError) {
     control = <DropdownLoader />;
-  } else if (llmProviders?.length === 0 && decision.providers?.length === 0) {
-    control = (
-      <Button href={ADMIN_ROUTES.LLM_MODELS.path} prominence="secondary">
-        {t("taskModels.addProvider.label")}
-      </Button>
-    );
   } else {
     control = (
       <SimpleModelSelector

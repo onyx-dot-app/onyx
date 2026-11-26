@@ -378,7 +378,6 @@
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
         "description": "Internal search uses this model to rank results and choose how much context to add. You can also set it in Chat Preferences.",
         "clear": "Clear",
-        "notConfigured": "Not configured",
         "saveFailed": "Failed to update decision model"
       },
       "providers": {
@@ -1357,9 +1356,6 @@
         "loadFailed": "Could not load task models",
         "retry": {
           "label": "Retry"
-        },
-        "addProvider": {
-          "label": "Add Provider"
         },
         "chatDefault": {
           "label": "Chat Default"
@@ -6986,7 +6982,6 @@
         "defaultModel": {
           "title": "Image Model",
           "description": "The model that the Image Generation action uses.",
-          "placeholder": "Select a model",
           "error": "Could not change the default image model",
           "noDefault": {
             "label": "No Default",

@@ -253,18 +253,6 @@ describe("ChatTaskModelSettings", () => {
     expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
   });
 
-  test("offers provider setup when none are configured", async () => {
-    listedProviders = [];
-    hasDecisionProviders = false;
-    render(<TaskModels />);
-    const links = await screen.findAllByRole("link", { name: "Add Provider" });
-    expect(links).toHaveLength(2);
-    links.forEach((link) =>
-      expect(link).toHaveAttribute("href", "/admin/ai-models")
-    );
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-  });
-
   test("shows both selects in an error state when the listing fails", async () => {
     listingResponse = async () =>
       new Response(JSON.stringify({ detail: "Unavailable" }), { status: 503 });
@@ -300,7 +288,7 @@ describe("ChatTaskModelSettings", () => {
   test("opts into a decision model and clears it without a chat fallback", async () => {
     const user = setupUser();
     render(<DecisionModelSetting />);
-    const input = await screen.findByPlaceholderText("Not configured");
+    const input = await screen.findByPlaceholderText("Select model");
     expect(
       screen.queryByRole("button", { name: "Clear" })
     ).not.toBeInTheDocument();
@@ -318,9 +306,7 @@ describe("ChatTaskModelSettings", () => {
     );
     await user.click(await screen.findByRole("button", { name: "Clear" }));
     await waitFor(() => expect(decisionModel).toBeNull());
-    expect(await screen.findByPlaceholderText("Not configured")).toHaveValue(
-      ""
-    );
+    expect(await screen.findByPlaceholderText("Select model")).toHaveValue("");
     expect(defaultChatNaming).toBeNull();
     expect(defaultSearchSelection).toBeNull();
   });

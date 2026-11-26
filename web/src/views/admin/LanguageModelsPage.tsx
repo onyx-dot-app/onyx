@@ -732,7 +732,11 @@ export default function LanguageModelsPage() {
               font="main-content-emphasis"
               title={t("sections.chat.title")}
             />
-            <Disabled disabled={!hasProviders} tooltip={t("noProviders.title")}>
+            <Disabled
+              disabled={!hasProviders}
+              tooltip={t("noProviders.title")}
+              tooltipAlign="follow"
+            >
               <Card border="solid" rounding={4}>
                 <Section alignItems="stretch">
                   <InputHorizontal
@@ -740,6 +744,7 @@ export default function LanguageModelsPage() {
                     description={t("defaultModel.description")}
                     center
                     withLabel
+                    fillInput
                   >
                     <SimpleModelSelector
                       providers={filterModelConfigurations(
@@ -937,6 +942,7 @@ export default function LanguageModelsPage() {
             <Disabled
               disabled={!hasImageModels}
               tooltip={t("sections.imageGeneration.empty")}
+              tooltipAlign="follow"
             >
               <Card border="solid" rounding={4}>
                 <DefaultImageModelSetting />
@@ -960,6 +966,7 @@ export default function LanguageModelsPage() {
             <Disabled
               disabled={!hasProviders && !hasDecisionProviders}
               tooltip={t("sections.decisions.empty")}
+              tooltipAlign="follow"
             >
               <Card border="solid" rounding={4}>
                 <Section alignItems="stretch">

@@ -378,7 +378,6 @@
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
         "description": "내부 검색은 이 모델로 결과의 순위를 매기고 추가할 컨텍스트의 양을 정합니다. 채팅 환경설정에서도 설정할 수 있습니다.",
         "clear": "해제",
-        "notConfigured": "설정되지 않음",
         "saveFailed": "판단 모델을 업데이트하지 못했습니다"
       },
       "providers": {
@@ -1357,9 +1356,6 @@
         "loadFailed": "작업 모델을 불러오지 못했습니다",
         "retry": {
           "label": "다시 시도"
-        },
-        "addProvider": {
-          "label": "제공자 추가"
         },
         "chatDefault": {
           "label": "채팅 기본값"
@@ -6986,7 +6982,6 @@
         "defaultModel": {
           "title": "이미지 모델",
           "description": "이미지 생성 작업이 사용하는 모델입니다.",
-          "placeholder": "모델 선택",
           "error": "기본 이미지 모델을 변경할 수 없습니다",
           "noDefault": {
             "label": "기본값 없음",

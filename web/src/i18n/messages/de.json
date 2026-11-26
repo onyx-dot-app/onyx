@@ -378,7 +378,6 @@
         "openAiDecisionsModelName": "OpenAI-Entscheidungen (GPT-6 Luna)",
         "description": "Die interne Suche nutzt dieses Modell, um Ergebnisse zu ordnen und den Umfang des Kontexts festzulegen. Sie können es auch in den Chat-Einstellungen festlegen.",
         "clear": "Löschen",
-        "notConfigured": "Nicht konfiguriert",
         "saveFailed": "Entscheidungsmodell konnte nicht aktualisiert werden"
       },
       "providers": {
@@ -1357,9 +1356,6 @@
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
         "retry": {
           "label": "Erneut versuchen"
-        },
-        "addProvider": {
-          "label": "Anbieter hinzufügen"
         },
         "chatDefault": {
           "label": "Chat-Standard"
@@ -6986,7 +6982,6 @@
         "defaultModel": {
           "title": "Bildmodell",
           "description": "Das Modell, das die Aktion Bildgenerierung verwendet.",
-          "placeholder": "Modell auswählen",
           "error": "Das Standard-Bildmodell konnte nicht geändert werden",
           "noDefault": {
             "label": "Kein Standard",

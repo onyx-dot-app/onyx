@@ -378,7 +378,6 @@
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
         "description": "社内検索はこのモデルを使って結果を順位付けし、追加するコンテキストの量を決めます。チャット設定でも設定できます。",
         "clear": "解除",
-        "notConfigured": "未設定",
         "saveFailed": "判断モデルを更新できませんでした"
       },
       "providers": {
@@ -1357,9 +1356,6 @@
         "loadFailed": "タスクモデルを読み込めませんでした",
         "retry": {
           "label": "再試行"
-        },
-        "addProvider": {
-          "label": "プロバイダーを追加"
         },
         "chatDefault": {
           "label": "チャットのデフォルト"
@@ -6986,7 +6982,6 @@
         "defaultModel": {
           "title": "画像モデル",
           "description": "画像生成アクションが使用するモデルです。",
-          "placeholder": "モデルを選択",
           "error": "デフォルトの画像モデルを変更できませんでした",
           "noDefault": {
             "label": "デフォルトなし",
