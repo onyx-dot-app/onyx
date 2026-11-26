@@ -60,6 +60,7 @@ from onyx.db.scheduled_task import (
     insert_run,
     mark_run_status,
     requeue_queued_run__no_commit,
+    soft_delete_scheduled_task,
     sync_chat_run__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -376,6 +377,12 @@ def test_a_run_chat_keeps_the_task_integrations_after_the_run_ends(
     assert run.status == ScheduledTaskRunStatus.SUCCEEDED
 
     assert used() == proxy_used() == {linked.id: task_settings}
+
+    # A deleted task takes its integrations away, without a fallback to the
+    # agent's.
+    soft_delete_scheduled_task(db_session=db_session, task_id=task.id, user_id=owner.id)
+    db_session.commit()
+    assert used() == proxy_used() == {}
 
 
 def test_scheduled_chats_stay_out_of_the_chat_history(

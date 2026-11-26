@@ -13,6 +13,7 @@ from onyx.db.models import (
     Integration,
     IntegrationActionPolicy,
     Persona__Integration,
+    ScheduledTask,
     ScheduledTask__Integration,
     ScheduledTaskRun,
     Tool,
@@ -147,15 +148,17 @@ def list_chat_task_links(
     """The integration links of the task whose run made the chat. None: no
     run made the chat, and the chat uses its agent. A run chat keeps the
     task's scope after the run ends, so a command that outlives the run
-    never gains the agent's integrations."""
-    task_id = db_session.scalar(
-        select(ScheduledTaskRun.task_id).where(
-            ScheduledTaskRun.chat_session_id == chat_session_id
-        )
-    )
-    if task_id is None:
+    never gains the agent's integrations. Empty once the task is deleted."""
+    task = db_session.execute(
+        select(ScheduledTask.id, ScheduledTask.deleted)
+        .join(ScheduledTaskRun, ScheduledTaskRun.task_id == ScheduledTask.id)
+        .where(ScheduledTaskRun.chat_session_id == chat_session_id)
+    ).first()
+    if task is None:
         return None
-    return list_task_integration_links(db_session, task_id)
+    if task.deleted:
+        return []
+    return list_task_integration_links(db_session, task.id)
 
 
 def replace_task_integration_links__no_commit(
