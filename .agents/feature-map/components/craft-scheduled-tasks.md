@@ -27,7 +27,7 @@ Each fire adds a row to the task's run history. A run opens at
 `/app?chatId=<chat_session_id>`, with a banner that names the task. A running
 run streams in the normal chat view. Scheduled chats are not in the chat
 history list or chat search. After a run ends, the user can send follow-ups
-in the same chat; those turns use the user's normal integration settings.
+in the same chat; those turns keep the task's integration settings.
 
 When a run reaches an Ask action, the turn parks, the run shows "Awaiting
 approval", and the owner gets a notification. The owner approves in the chat
@@ -121,10 +121,12 @@ normal chat).
 
 **Integrations.** Task create and patch accept
 `integrations: [{integration_id, action_settings}]`, checked and stored by
-`integrations/craft.py:replace_task_integrations__no_commit`. While a run is
-in flight in a chat, `integrations/policy.py:chat_integrations` gives the
-chat the task's integrations with the task's settings, also those the owner
-turned off; tool construction and the approval check both read it. The
+`integrations/craft.py:replace_task_integrations__no_commit`. In the chat of
+a run, `integrations/policy.py:chat_integrations` gives the chat the task's
+integrations with the task's settings, also those the owner turned off, and
+also after the run ends, so a VM command that outlives the run never gains
+the agent's integrations. Tool construction, the approval check and the
+sandbox proxy all read it. The
 catalog (`list_task_integration_views`) lists what chat can run: MCP and
 OpenAPI integrations, not API apps without an OpenAPI tool.
 
@@ -247,7 +249,7 @@ OpenAPI integrations, not API apps without an OpenAPI tool.
 - `setup-task-policy-test` **Set up a task-policy test.** Give the task one
   integration with an action on Ask. Run once: the run parks as
   AWAITING_APPROVAL. Approve in the chat: the run ends SUCCEEDED within one
-  dispatch tick. A follow-up after the run uses the user's settings.
+  dispatch tick. A follow-up after the run keeps the task's settings.
 
 ---
 

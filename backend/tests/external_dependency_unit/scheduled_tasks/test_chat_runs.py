@@ -65,7 +65,11 @@ from onyx.db.scheduled_task import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.models import ActionSettings, EffectivePolicy
-from onyx.integrations.policy import chat_integrations, resolve_chat_action_policies
+from onyx.integrations.policy import (
+    chat_integrations,
+    chat_session_integrations,
+    resolve_chat_action_policies,
+)
 from onyx.scheduled_tasks.executor import _start_run, run_scheduled_task_logic
 from onyx.tools.models import IntegrationLinkConfiguration
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -306,7 +310,7 @@ def test_a_run_that_waits_a_day_for_approval_is_cancelled(
     assert response.response_status == RunStatus.CANCELLED
 
 
-def test_a_chat_uses_the_task_integrations_only_while_its_run_is_in_flight(
+def test_a_run_chat_keeps_the_task_integrations_after_the_run_ends(
     db_session: Session,
     owner: User,
     cleanup: list[int],
@@ -340,7 +344,8 @@ def test_a_chat_uses_the_task_integrations_only_while_its_run_is_in_flight(
         ],
     )
     run, response = _run_with_response(db_session, task, RunStatus.RUNNING)
-    assert run.chat_session_id is not None
+    chat_session_id = run.chat_session_id
+    assert chat_session_id is not None
 
     def used() -> dict[int, ActionSettings]:
         return {
@@ -351,14 +356,26 @@ def test_a_chat_uses_the_task_integrations_only_while_its_run_is_in_flight(
             if integration_id in (linked.id, other.id)
         }
 
-    assert used() == {linked.id: task_settings}
+    def proxy_used() -> dict[int, ActionSettings]:
+        held = chat_session_integrations(db_session, owner.id, chat_session_id)
+        assert held is not None
+        return {
+            integration_id: agent_integration.settings
+            for integration_id, agent_integration in held.items()
+            if integration_id in (linked.id, other.id)
+        }
 
-    # An approval resumed the response and it ended; the run status follows
-    # only at the next dispatch tick.
+    assert used() == proxy_used() == {linked.id: task_settings}
+
+    # A command of the run can outlive it; it never gains the agent's
+    # integrations.
     response.response_status = RunStatus.COMPLETE
     db_session.commit()
+    sync_chat_run__no_commit(db_session, run)
+    db_session.commit()
+    assert run.status == ScheduledTaskRunStatus.SUCCEEDED
 
-    assert used() == {linked.id: ActionSettings(), other.id: ActionSettings()}
+    assert used() == proxy_used() == {linked.id: task_settings}
 
 
 def test_scheduled_chats_stay_out_of_the_chat_history(
@@ -434,7 +451,7 @@ def test_a_task_ask_ignores_the_owners_always_allow(
     )
     db_session.commit()
 
-    assert policy() is EffectivePolicy.ALLOW
+    assert policy() is EffectivePolicy.ASK
 
 
 def test_a_run_over_budget_fails_before_its_chat(

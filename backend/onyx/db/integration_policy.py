@@ -4,15 +4,12 @@ from uuid import UUID
 from sqlalchemy import delete, false, or_, select
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import MessageType
 from onyx.db.enums import (
     ApprovalDecidedVia,
     IntegrationActionPolicyValue,
-    ScheduledTaskRunStatus,
 )
 from onyx.db.models import (
     ApprovalRequest,
-    ChatMessage,
     Integration,
     IntegrationActionPolicy,
     Persona__Integration,
@@ -144,38 +141,19 @@ def list_task_integration_links(
     )
 
 
-def list_in_flight_task_links(
+def list_chat_task_links(
     db_session: Session, chat_session_id: UUID
 ) -> list[ScheduledTask__Integration] | None:
-    """The integration links of the task whose run is in flight in the chat.
-    None: no run is in flight there, and the chat uses its agent. The run's
-    response decides: the run status follows a resumed response only at the
-    next dispatch tick."""
+    """The integration links of the task whose run made the chat. None: no
+    run made the chat, and the chat uses its agent. A run chat keeps the
+    task's scope after the run ends, so a command that outlives the run
+    never gains the agent's integrations."""
     task_id = db_session.scalar(
         select(ScheduledTaskRun.task_id).where(
-            ScheduledTaskRun.chat_session_id == chat_session_id,
-            ScheduledTaskRun.status.in_(
-                (
-                    ScheduledTaskRunStatus.RUNNING,
-                    ScheduledTaskRunStatus.AWAITING_APPROVAL,
-                )
-            ),
+            ScheduledTaskRun.chat_session_id == chat_session_id
         )
     )
     if task_id is None:
-        return None
-    # The run's response is the first response of its chat.
-    response_status = db_session.scalar(
-        select(ChatMessage.response_status)
-        .where(
-            ChatMessage.chat_session_id == chat_session_id,
-            ChatMessage.message_type == MessageType.ASSISTANT,
-            ChatMessage.response_status.is_not(None),
-        )
-        .order_by(ChatMessage.id)
-        .limit(1)
-    )
-    if response_status is not None and response_status.is_terminal:
         return None
     return list_task_integration_links(db_session, task_id)
 

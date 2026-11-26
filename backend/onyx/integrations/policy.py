@@ -36,7 +36,7 @@ from onyx.db.integration_access import load_user_integration_states
 from onyx.db.integration_policy import (
     get_policy_rows,
     get_session_granted_actions,
-    list_in_flight_task_links,
+    list_chat_task_links,
     list_persona_integration_links,
 )
 from onyx.db.models import Integration, IntegrationAction
@@ -338,11 +338,11 @@ def chat_integrations(
     *,
     for_everyone_only: bool = False,
 ) -> dict[int, AgentIntegration]:
-    """The integrations a chat can use. While a scheduled run is in flight in
-    the chat, these are the task's integrations with the task's settings.
-    The task's authority ends with the run; later turns use the agent."""
+    """The integrations a chat can use. In the chat of a scheduled run, these
+    are the task's integrations with the task's settings, also after the run
+    ends."""
     task_links = (
-        list_in_flight_task_links(db_session, chat_session_id)
+        list_chat_task_links(db_session, chat_session_id)
         if chat_session_id is not None
         else None
     )
