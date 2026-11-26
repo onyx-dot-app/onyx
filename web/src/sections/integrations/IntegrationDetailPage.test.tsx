@@ -120,6 +120,24 @@ test("shows the overview and turns the integration off", async () => {
   );
 });
 
+test("lists the URL patterns of a URL-pattern app", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      shape: "custom",
+      config: {
+        shape: "custom",
+        upstream_url_patterns: ["https://api.example.com/v1/*"],
+      },
+    }),
+  });
+  open();
+  const view = await inPanel();
+  expect(
+    await view.findByText(detailCopy.overview.urlPatternApp.title)
+  ).toBeInTheDocument();
+  expect(view.getByText("https://api.example.com/v1/*")).toBeInTheDocument();
+});
+
 test("deletes the integration after a confirmation", async () => {
   const fetchMock = mockFetch({
     [URL_DETAIL]: makeDetail(),

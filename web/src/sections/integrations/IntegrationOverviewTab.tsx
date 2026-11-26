@@ -25,11 +25,20 @@ export default function IntegrationOverviewTab({
 
   return (
     <Section gap={4} alignItems="stretch" height="auto">
-      {integration.shape === "custom" && (
+      {integration.config.shape === "custom" && (
         <MessageCard
           variant="warning"
           title={t("urlPatternApp.title")}
           description={t("urlPatternApp.description")}
+          bottomChildren={
+            <div className="px-2">
+              {integration.config.upstream_url_patterns.map((pattern) => (
+                <Text key={pattern} as="p" font="secondary-mono">
+                  {pattern}
+                </Text>
+              ))}
+            </div>
+          }
         />
       )}
       {!integration.can_manage && (
