@@ -869,7 +869,8 @@ default agent, is Blocked.
     response, which has no owner by design, and ends a `RUNNING` response or a
     `SUSPENDED` one without a checkpoint, with its rows; the inbox lists such
     a selected response for repair. Only a parked selected response blocks sends
-    (`server/query_and_chat/chat_backend.py:_reject_while_user_input_waits`); a waiting agent does
+    (`server/query_and_chat/chat_backend.py:_reject_while_user_input_waits`,
+    `db/chat.py:selected_response_status_for_user`); a waiting agent does
     not. A send that the route let through before the response parked fails
     in `prepare_chat_turn` once it holds admission, since its parent is the
     parked response. The checkpoint owns only its programs' dumps: a parked
@@ -937,9 +938,10 @@ default agent, is Blocked.
     rejects an approval of a now-blocked action.
 20. `waiting-approval-blocks-send` **A chat that waits for the user starts
     no user turn.** `server/query_and_chat/chat_backend.py:_reject_while_user_input_waits`
-    rejects `send-chat-message` and the pending-message submit and interrupt
-    routes with `APPROVAL_PENDING` (409) while the chat's selected response is
-    `SUSPENDED`. A live turn with an open card, a background agent's request
+    rejects the pending-message submit and interrupt routes with
+    `APPROVAL_PENDING` (409) while the chat's selected response is
+    `SUSPENDED`. `send-chat-message` applies the same rule with one read
+    (`db/chat.py:selected_response_status_for_user`). A live turn with an open card, a background agent's request
     and a parked response on another branch do not block. The send route
     checks before the
     stream starts, so the client gets a status, not a stream packet. Stop and

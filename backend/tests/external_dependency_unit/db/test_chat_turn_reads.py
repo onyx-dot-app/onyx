@@ -12,12 +12,15 @@ from onyx.db.chat import (
     CHAT_RESPONSE_STATEMENT_TIMEOUT_MS,
     configure_response_transaction__no_commit,
     get_chat_session_by_id,
+    get_selected_branch,
     load_message_branch,
     reserve_chat_response_ids,
+    selected_response_status_for_user,
 )
 from onyx.db.models import ChatMessage, ChatSession
 from onyx.db.persona import get_default_behavior_persona
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 def _chat_with_response(
@@ -63,6 +66,69 @@ def _chat_with_response(
     question.latest_child_message_id = response.id
     db_session.flush()
     return chat, root, question, response
+
+
+def _status_by_the_two_old_reads(
+    db_session: Session, chat_session_id: UUID, user_id: UUID | None
+) -> RunStatus | None:
+    """What the send route read before: the session, then the selected branch."""
+    try:
+        get_chat_session_by_id(
+            chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
+        )
+    except ValueError:
+        return None
+    selected, _ = get_selected_branch(db_session, chat_session_id)
+    return selected.response_status if selected is not None else None
+
+
+def test_selected_response_status_is_one_read_with_the_session_checks(
+    db_session: Session, executed_sql: list[str]
+) -> None:
+    owner = create_test_user(db_session, "turn-reads-owner")
+    other = create_test_user(db_session, "turn-reads-other")
+    try:
+        chat, _, _, _ = _chat_with_response(db_session, owner.id, RunStatus.SUSPENDED)
+        executed_sql.clear()
+        assert (
+            selected_response_status_for_user(db_session, chat.id, owner.id)
+            == RunStatus.SUSPENDED
+        )
+        assert len(executed_sql) == 1
+        assert selected_response_status_for_user(db_session, uuid4(), owner.id) is None
+
+        # The same answer as the two old reads, for each owner, caller, status,
+        # last message and deleted flag.
+        for chat_owner in (owner.id, None):
+            for status in (RunStatus.SUSPENDED, RunStatus.COMPLETE):
+                for question_last in (False, True):
+                    for deleted in (False, True):
+                        chat, _, _, response = _chat_with_response(
+                            db_session, chat_owner, status
+                        )
+                        if question_last:
+                            follow_up = ChatMessage(
+                                chat_session_id=chat.id,
+                                parent_message_id=response.id,
+                                message="next",
+                                token_count=1,
+                                message_type=MessageType.USER,
+                            )
+                            db_session.add(follow_up)
+                            db_session.flush()
+                            response.latest_child_message_id = follow_up.id
+                        chat.deleted = deleted
+                        db_session.flush()
+                        for caller in (owner.id, other.id, None):
+                            assert selected_response_status_for_user(
+                                db_session, chat.id, caller
+                            ) == _status_by_the_two_old_reads(
+                                db_session, chat.id, caller
+                            ), (chat_owner, status, question_last, deleted, caller)
+    finally:
+        db_session.rollback()
+        delete_test_user(db_session, owner, other)
+        db_session.commit()
 
 
 def test_load_message_branch_reads_the_root_once(
