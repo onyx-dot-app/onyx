@@ -99,6 +99,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "--command-user=%s needs a root daemon; run as root or set --command-user=\n", *cmdUser)
 		os.Exit(2)
 	}
+	if err := checkPorts(*port, *listen, *browserBin); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	fc.ReadLinkRoots = splitList(*readLinks)
 	fc.CaptureRoots = splitList(*captureDirs)
 	fc.CaptureExclude = splitList(*captureExclude)
@@ -188,6 +192,14 @@ func baseEnv(environ []string, ident *commandIdentity) map[string]string {
 		maps.Copy(base, ident.env)
 	}
 	return base
+}
+
+// checkPorts refuses a vsock API port that the browser relay also needs.
+func checkPorts(port uint, listen, browserBin string) error {
+	if port == browserRelayPort && listen == "" && browserBin != "" {
+		return fmt.Errorf("--port=%d is the browser relay port; pick another port or set --browser-binary=", port)
+	}
+	return nil
 }
 
 // splitList splits a comma-separated flag. An empty flag is an empty list.
