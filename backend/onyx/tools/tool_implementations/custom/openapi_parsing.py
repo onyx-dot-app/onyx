@@ -459,6 +459,8 @@ def validate_openapi_schema(
 
     if "paths" not in schema:
         raise ValueError("`paths` section is required in OpenAPI schema")
+    if not isinstance(schema["paths"], dict):
+        raise ValueError("`paths` in OpenAPI schema must be an object")
 
     servers = schema.get("servers", [])
     if not isinstance(servers, list) or not all(

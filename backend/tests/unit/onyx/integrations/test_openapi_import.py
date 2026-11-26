@@ -451,6 +451,8 @@ def test_import_refuses_servers_of_the_wrong_shape(servers: Any) -> None:
             lambda spec: spec.update(swagger=spec.pop("openapi")),
             "Swagger 3.0.3 is not supported",
         ),
+        (lambda spec: spec.update(paths=None), "`paths` in OpenAPI schema must be"),
+        (lambda spec: spec.update(paths=[]), "`paths` in OpenAPI schema must be"),
     ],
 )
 def test_import_refuses_a_spec_that_create_refuses(change: Any, message: str) -> None:
