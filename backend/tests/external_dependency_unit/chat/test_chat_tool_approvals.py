@@ -142,6 +142,7 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
+    make_app_integration,
     make_mcp_integration,
     set_policy,
 )
@@ -2138,39 +2139,66 @@ def test_an_action_with_no_integration_needs_a_builtin_key() -> None:
     assert ToolApprovalScope(integration_id=None, action_id=BUILTIN_ACTION)
 
 
+def _ask_for_request_tool(
+    chat: ApprovalChat, action_id: str
+) -> PendingToolInput | ToolResult | None:
+    return open_tool_approval(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=chat.chat_session_id,
+        response_id=chat.response_id,
+        user_id=chat.user.id,
+        tool_call_id=f"call-{uuid4().hex[:8]}",
+        tool_name="app__1__request",
+        details=ToolApprovalDetails(display_name="Any other request"),
+        arguments={},
+        scope=ToolApprovalScope(
+            integration_id=chat.integration_id, action_id=action_id
+        ),
+        signed_out=False,
+    )
+
+
 def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
     db_session: Session, chat: ApprovalChat
 ) -> None:
     """The request tool of an app (`unspecified`) asks each time: an
     approval for the chat is saved as a single approval, and the next call
     asks again."""
-
-    def ask() -> PendingToolInput | ToolResult | None:
-        return open_tool_approval(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            chat_session_id=chat.chat_session_id,
-            response_id=chat.response_id,
-            user_id=chat.user.id,
-            tool_call_id=f"call-{uuid4().hex[:8]}",
-            tool_name="app__1__request",
-            details=ToolApprovalDetails(display_name="Any other request"),
-            arguments={},
-            scope=ToolApprovalScope(
-                integration_id=chat.integration_id,
-                action_id=WHOLE_DOMAIN_ACTION_TYPE,
-            ),
-            signed_out=False,
-        )
-
-    first = ask()
-    assert isinstance(first, PendingToolInput)
-    assert not first.can_approve_for_chat
-
-    chat.decide(db_session, first.request_id, ApprovalChoice.APPROVE_SESSION)
-
-    [row] = chat.rows(db_session)
-    assert (row.decision, row.decided_via) == (
-        ApprovalDecision.APPROVED,
-        ApprovalDecidedVia.USER,
+    integration, _ = make_app_integration(
+        db_session, upstream_url_patterns=["https://api.example.com/*"]
     )
-    assert isinstance(ask(), PendingToolInput)
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    app_chat = _saved_turn(db_session, chat.user, integration.id)
+    try:
+        first = _ask_for_request_tool(app_chat, WHOLE_DOMAIN_ACTION_TYPE)
+        assert isinstance(first, PendingToolInput)
+        assert not first.can_approve_for_chat
+
+        app_chat.decide(db_session, first.request_id, ApprovalChoice.APPROVE_SESSION)
+
+        [row] = app_chat.rows(db_session)
+        assert (row.decision, row.decided_via) == (
+            ApprovalDecision.APPROVED,
+            ApprovalDecidedVia.USER,
+        )
+        assert isinstance(
+            _ask_for_request_tool(app_chat, WHOLE_DOMAIN_ACTION_TYPE),
+            PendingToolInput,
+        )
+    finally:
+        db_session.rollback()
+        delete_messages_and_files_from_chat_session(
+            app_chat.chat_session_id, db_session
+        )
+        delete_integrations(db_session, [integration.id])
+
+
+def test_an_mcp_tool_named_like_the_request_tool_can_be_approved_for_the_chat(
+    chat: ApprovalChat,
+) -> None:
+    pending = _ask_for_request_tool(chat, WHOLE_DOMAIN_ACTION_TYPE)
+
+    assert isinstance(pending, PendingToolInput)
+    assert pending.can_approve_for_chat

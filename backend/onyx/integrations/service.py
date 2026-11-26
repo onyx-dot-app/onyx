@@ -1374,6 +1374,7 @@ def _credential_fields(integration: Integration) -> list[CredentialField]:
 
 
 def _action_views(
+    kind: IntegrationKind,
     actions: list[IntegrationAction],
     admin_rows: Mapping[str, IntegrationActionPolicyValue],
 ) -> list[IntegrationActionView]:
@@ -1390,7 +1391,7 @@ def _action_views(
                 else None
             ),
             effective_admin_policy=admin_policy(admin_rows, action.key, action),
-            always_asks=always_asks(action.key),
+            always_asks=always_asks(kind, action.key),
         )
         for action in actions
     ]
@@ -1400,7 +1401,9 @@ def action_views(
     integration: Integration, db_session: Session
 ) -> list[IntegrationActionView]:
     rows = get_policy_rows(db_session, integration.id, None)
-    return _action_views(integration_actions(integration.id, db_session), rows.admin)
+    return _action_views(
+        integration.kind, integration_actions(integration.id, db_session), rows.admin
+    )
 
 
 def _setup_reason(
@@ -1692,6 +1695,7 @@ def admin_actions(
             STORED_TO_EFFECTIVE[default_row] if default_row is not None else None
         ),
         actions=_action_views(
+            integration.kind,
             integration_actions(integration.id, db_session),
             rows.admin,
         ),
@@ -1945,6 +1949,7 @@ def member_actions(
             ),
         )
         for view in _action_views(
+            integration.kind,
             integration_actions(integration.id, db_session),
             rows.admin,
         )
@@ -1994,7 +1999,7 @@ def set_action_grants__no_commit(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Your admin blocks {key}. You cannot save Always allow for it.",
             )
-        if always_asks(key):
+        if always_asks(integration.kind, key):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Craft asks for approval for each {key} request. "
@@ -2039,7 +2044,9 @@ def agent_catalog(user: User, db_session: Session) -> list[AgentIntegrationOptio
             kind=integration.kind,
             shape=shapes[integration.id][0],
             users_can_save_always_allow=integration.users_can_save_always_allow,
-            actions=_action_views(actions[integration.id], admin_rows[integration.id]),
+            actions=_action_views(
+                integration.kind, actions[integration.id], admin_rows[integration.id]
+            ),
         )
         for integration in sorted(
             integrations,

@@ -42,7 +42,10 @@ from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.integration import get_integration_by_id
 from onyx.db.integration_policy import get_session_granted_actions
 from onyx.integrations.models import EffectivePolicy
-from onyx.integrations.policy import always_asks, resolve_chat_action_policies
+from onyx.integrations.policy import (
+    integration_action_always_asks,
+    resolve_chat_action_policies,
+)
 from onyx.llm.models import ToolResult
 from onyx.tools.models import (
     ToolApprovalDetails,
@@ -73,7 +76,9 @@ def open_tool_approval(
     belongs to: the call that waits, or the call whose tool made it."""
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         lock_session_grants__no_commit(db_session, chat_session_id)
-        can_approve_for_chat = not always_asks(scope.action_id)
+        can_approve_for_chat = not integration_action_always_asks(
+            db_session, scope.integration_id, scope.action_id
+        )
         if can_approve_for_chat and scope.action_id in get_session_granted_actions(
             db_session, chat_session_id, scope.integration_id
         ):

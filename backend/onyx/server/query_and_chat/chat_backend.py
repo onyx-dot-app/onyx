@@ -186,7 +186,7 @@ from onyx.file_store.serving import (
 )
 from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
 from onyx.integrations.models import ApprovalMode
-from onyx.integrations.policy import always_asks
+from onyx.integrations.policy import integration_action_always_asks
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
     get_llm_for_persona,
@@ -2193,8 +2193,11 @@ def decide_approval(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
     rejected = body.decision == ApprovalChoice.REJECT
     # An action that asks each time takes a chat approval as a single one.
-    standing = body.decision == ApprovalChoice.APPROVE_SESSION and not always_asks(
-        approval.action_id
+    standing = (
+        body.decision == ApprovalChoice.APPROVE_SESSION
+        and not integration_action_always_asks(
+            db_session, approval.integration_id, approval.action_id
+        )
     )
     upgrades_to_grant = (
         standing

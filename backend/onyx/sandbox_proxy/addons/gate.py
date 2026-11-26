@@ -33,8 +33,9 @@ from onyx.external_apps.matching.engine import (
     actions_requiring_approval,
 )
 from onyx.integrations.actions import integration_actions
-from onyx.integrations.craft import always_asks, resolve_craft_action_policies
+from onyx.integrations.craft import resolve_craft_action_policies
 from onyx.integrations.models import EffectivePolicy
+from onyx.integrations.policy import always_asks
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import (
