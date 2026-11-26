@@ -1,18 +1,16 @@
 "use client";
 
+// Adapted from T3 Code (MIT, github.com/pingdotgg/t3code).
+
 import { memo, useEffect, useId, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, InputTypeIn, SelectCard, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import {
-  SvgCheckSquare,
-  SvgClock,
-  SvgLoader,
-  SvgSquare,
-  SvgX,
-} from "@opal/icons";
+import { SvgCheckSquare, SvgLoader, SvgSquare } from "@opal/icons";
 import CometEdge from "@/refresh-components/CometEdge";
+import { RunStep } from "@/lib/timeline/components/RunStep";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import type {
   ToolQuestion,
   ToolQuestionAnswer,
@@ -449,67 +447,87 @@ interface QuestionRecordProps {
 }
 
 /**
- * How the questions ended, in one line, and below it each answer from the
- * card, or else each question.
+ * How the questions ended, as a timeline step: its title is each answer, or
+ * else the outcome, and its body each question with its answer.
  */
 function QuestionRecord({ questions, status }: QuestionRecordProps) {
   const t = useTranslations("chat.messages.toolQuestion");
   const format = useFormatter();
   const answers =
     status.kind === "answered" && status.answers ? status.answers : null;
-  const title =
+  const outcome =
     status.kind === "answered"
       ? t(answers ? "record.answered" : "record.answeredInChat")
       : t(`record.${status.kind}`);
   const lines = questions.map((item) => {
     const answer = answers?.find((entry) => entry.question_id === item.id);
-    if (!answers) return { id: item.id, text: item.question };
     const option = answer?.option_labels.length
       ? format.list(answer.option_labels)
       : null;
     const note = answer?.user_note ?? null;
     return {
       id: item.id,
-      text: t("record.answer", {
-        header: item.header,
-        answer:
-          option && note
-            ? t("record.optionAndNote", { option, note })
-            : (option ?? note ?? ""),
-      }),
+      header: item.header,
+      question: item.question,
+      answer:
+        option && note
+          ? t("record.optionAndNote", { option, note })
+          : (option ?? note),
     };
   });
+  const title = answers
+    ? lines
+        .map((line) =>
+          t("record.answer", { header: line.header, answer: line.answer ?? "" })
+        )
+        .join(" · ")
+    : outcome;
   return (
-    <Section gap={1} alignItems="stretch" height="auto">
-      <div role="status">
-        <Content
-          font="main-ui-muted"
-          icon={
-            status.kind === "answered"
-              ? SvgCheckSquare
-              : status.kind === "cancelled"
-                ? SvgX
-                : SvgClock
-          }
-          title={title}
-        />
+    <>
+      <div role="status" className="sr-only">
+        <Text as="p" font="main-ui-muted" color="text-04">
+          {outcome}
+        </Text>
       </div>
-      <div className="ps-6">
-        <Section gap={1} alignItems="stretch" height="auto">
-          {lines.map((line) => (
-            <Text
-              key={line.id}
-              as="p"
-              font="secondary-body"
-              color="text-03"
-              wordWrap="wrap-anywhere"
-            >
-              {line.text}
-            </Text>
-          ))}
-        </Section>
-      </div>
-    </Section>
+      <RunStep
+        status="done"
+        icon={STEP_ICONS.request}
+        title={title}
+        body={
+          <Section gap={1} alignItems="stretch" height="auto">
+            {lines.map((line) => (
+              <Section
+                key={line.id}
+                gap={0.25}
+                alignItems="stretch"
+                height="auto"
+              >
+                <Text
+                  as="p"
+                  font="secondary-body"
+                  color="text-03"
+                  wordWrap="wrap-anywhere"
+                >
+                  {line.question}
+                </Text>
+                {line.answer && (
+                  <div className="ps-3">
+                    <Text
+                      as="p"
+                      font="secondary-body"
+                      color="text-04"
+                      wordWrap="wrap-anywhere"
+                    >
+                      {line.answer}
+                    </Text>
+                  </div>
+                )}
+              </Section>
+            ))}
+          </Section>
+        }
+      />
+    </>
   );
 }
 

@@ -809,6 +809,7 @@ jobs:
         "run-id=${{ github.run_id }}-multitenant-tests",
         "extras=ecr-cache",
         "volume=100gb",
+        spot=false,
       ]
     timeout-minutes: 15
 

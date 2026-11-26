@@ -22,10 +22,7 @@ from onyx.llm.models import (
 )
 
 
-@pytest.mark.parametrize("copy_messages", [False, True])
-def test_replay_omits_duplicate_call_ids_with_their_results(
-    copy_messages: bool,
-) -> None:
+def test_replay_omits_duplicate_call_ids_with_their_results() -> None:
     narration = TextContent(text="Checking the sources")
     thinking = ThinkingContent(text="Compare the evidence")
     valid = ToolCall(id="valid", name="lookup", arguments={"query": "unique"})
@@ -60,7 +57,7 @@ def test_replay_omits_duplicate_call_ids_with_their_results(
     ]
     original = [message.model_copy(deep=True) for message in messages]
 
-    replay = messages_for_model(messages, copy_messages=copy_messages)
+    replay = messages_for_model(messages)
 
     assert replay == [
         AssistantMessage(content=[narration, valid]),
@@ -71,10 +68,7 @@ def test_replay_omits_duplicate_call_ids_with_their_results(
     assert messages == original
 
 
-@pytest.mark.parametrize("copy_messages", [False, True])
-def test_replay_omits_blockless_thinking_without_changing_recorded_output(
-    copy_messages: bool,
-) -> None:
+def test_replay_omits_blockless_thinking_without_changing_recorded_output() -> None:
     partial = AssistantMessage()
     apply_generation_event(
         partial, ThinkingDeltaEvent(content_index=0, text="Partial reasoning")
@@ -85,7 +79,7 @@ def test_replay_omits_blockless_thinking_without_changing_recorded_output(
     messages: list[Message] = [partial, UserMessage(content="Continue"), answered]
     original = [message.model_copy(deep=True) for message in messages]
 
-    replay = messages_for_model(messages, copy_messages=copy_messages)
+    replay = messages_for_model(messages)
 
     assert replay == [
         messages[1],
@@ -98,10 +92,7 @@ def test_replay_omits_blockless_thinking_without_changing_recorded_output(
     assert messages == original
 
 
-@pytest.mark.parametrize("copy_messages", [False, True])
-def test_replay_preserves_signed_blocks_and_omits_unfinished_thinking(
-    copy_messages: bool,
-) -> None:
+def test_replay_preserves_signed_blocks_and_omits_unfinished_thinking() -> None:
     signed = ThinkingBlock(thinking="Completed reasoning", signature="signature")
     redacted = RedactedThinkingBlock(data="opaque")
     partial = ThinkingBlock(thinking="Unfinished reasoning")
@@ -124,7 +115,7 @@ def test_replay_preserves_signed_blocks_and_omits_unfinished_thinking(
     ]
     original = [message.model_copy(deep=True) for message in messages]
 
-    replay = messages_for_model(messages, copy_messages=copy_messages)
+    replay = messages_for_model(messages)
 
     assert replay == [
         messages[1],
@@ -192,10 +183,8 @@ def test_replay_preserves_partial_output_and_only_completed_exchanges() -> None:
     assert replay_assistant.thinking == ""
     assert assistant.thinking == "Inspect the evidence"
     assert [call.id for call in replay_assistant.tool_calls] == ["complete"]
-    assert replay[1] == result
-    replay_assistant.tool_calls[0].arguments["queries"] = ["changed"]
+    assert replay[1] is result
     assert [message.model_dump_json() for message in recorded] == before
-    assert replay[1] is not result
 
 
 def test_replay_does_not_match_results_across_a_user_message() -> None:
@@ -207,12 +196,12 @@ def test_replay_does_not_match_results_across_a_user_message() -> None:
     assert len(call.tool_calls) == 1
 
 
-def test_replay_can_reuse_owned_content_without_mutating_the_message_list() -> None:
+def test_replay_shares_messages_and_gives_the_assistant_its_own_content_list() -> None:
     assistant = AssistantMessage(content=[TextContent(text="Partial answer")])
     user = UserMessage(content="Question")
     recorded: list[Message] = [user, assistant]
 
-    replay = messages_for_model(recorded, copy_messages=False)
+    replay = messages_for_model(recorded)
 
     assert replay == recorded
     assert replay is not recorded

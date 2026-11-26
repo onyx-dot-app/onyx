@@ -16,12 +16,13 @@ from onyx.agents.models import (
     ExecutionCheckpoint,
     PreparedStep,
     RunFailureKind,
+    RunHooks,
     RunStatus,
     StepInput,
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, RestorableFeature, Run, RunFailed, RunReleased
+from onyx.agents.runtime import Agent, AgentFeature, Run, RunFailed, RunReleased
 from onyx.agents.tools import (
     AgentTool,
     HumanToolAnswer,
@@ -123,8 +124,7 @@ def test_prepared_tool_selection_survives_json_handoff_without_repreparation() -
             agent_id="agent",
             state=state,
             tools=[selected, unselected],
-            prepare_step=prepare,
-            before_tool_call=_gate,
+            feature=RunHooks(prepare_step=prepare, before_tool_call=_gate),
         )
 
     run = make_agent(AgentState()).start(max_steps=2, coordinator=coordinator)
@@ -180,7 +180,7 @@ def test_handoff_release_failure_settles_waiters_after_saving() -> None:
                 execute=lambda _: ToolResult(content="sent"),
             )
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
     run = agent.start(max_steps=2, coordinator=coordinator)
     try:
@@ -216,8 +216,10 @@ def test_preparation_rejects_unregistered_permissions_before_generation(
         FakeModelClient(unexpected),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[tool],
-        prepare_step=lambda _: PreparedStep(
-            allowed_tool_names=frozenset({"unregistered"})
+        feature=RunHooks(
+            prepare_step=lambda _: PreparedStep(
+                allowed_tool_names=frozenset({"unregistered"})
+            )
         ),
     ).start(background=False, max_steps=1)
     try:
@@ -269,7 +271,7 @@ def test_answer_starts_approved_action_while_parallel_sibling_is_running() -> No
                 execute=effect,
             ),
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
     run = agent.start(max_steps=2, on_event=observe)
     try:
@@ -314,7 +316,7 @@ def test_answer_during_suspension_delivery_drain_restarts_exactly_once() -> None
                 execute=effect,
             )
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
     run = agent.start(max_steps=2, on_event=observe)
     try:
@@ -349,7 +351,7 @@ def test_identical_answer_retry_restarts_after_thread_start_failure(
                 execute=effect,
             )
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
     run = agent.start(max_steps=2)
     assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
@@ -517,7 +519,7 @@ def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> 
                     execute=question,
                 ),
             ],
-            before_tool_call=_gate,
+            feature=RunHooks(before_tool_call=_gate),
         )
 
     agent = make_agent(AgentState())
@@ -593,7 +595,7 @@ def test_an_answer_that_changes_only_standing_applies_on_resume() -> None:
                     ),
                 ),
             ],
-            before_tool_call=_gate,
+            feature=RunHooks(before_tool_call=_gate),
         )
 
     run = make_agent(AgentState()).start(max_steps=3)
@@ -636,7 +638,10 @@ def test_an_answer_that_changes_only_standing_applies_on_resume() -> None:
         assert resumed.wait_for_idle(3)
 
 
-class _FailingRestoration(RestorableFeature):
+class _FailingRestoration(AgentFeature):
+    def bind(self) -> RunHooks:
+        return RunHooks(capture_state=self.capture_state)
+
     def capture_state(self) -> BaseModel:
         raise RuntimeError("Feature state could not be captured")
 
@@ -649,9 +654,12 @@ class _FeatureState(BaseModel):
     sources: dict[str, list[str]] = Field(default_factory=dict)
 
 
-class _StatefulFeature(RestorableFeature):
+class _StatefulFeature(AgentFeature):
     def __init__(self) -> None:
         self.state = _FeatureState()
+
+    def bind(self) -> RunHooks:
+        return RunHooks(before_tool_call=_gate, capture_state=self.capture_state)
 
     def capture_state(self) -> _FeatureState:
         return self.state
@@ -690,8 +698,7 @@ def test_json_checkpoint_restores_feature_fields_before_resuming_tools() -> None
                     execute=feature.execute,
                 )
             ],
-            before_tool_call=_gate,
-            restoration=feature,
+            feature=feature,
         )
 
     original = _StatefulFeature()
@@ -750,7 +757,7 @@ def test_feature_capture_failure_finishes_run_and_releases_work() -> None:
                 execute=question,
             )
         ],
-        restoration=_FailingRestoration(),
+        feature=_FailingRestoration(),
     )
     run = agent.start(max_steps=2)
     snapshot = run.wait_until_settled(3)
@@ -778,7 +785,7 @@ def test_resume_after_completed_step_does_not_repeat_completion_callback() -> No
             lambda *_: AssistantMessage(content=[TextContent(text="finished")])
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        after_step=complete,
+        feature=RunHooks(after_step=complete),
     )
     run = agent.start(max_steps=1)
     try:
@@ -802,7 +809,9 @@ def test_resume_after_completed_step_does_not_repeat_completion_callback() -> No
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             state=restored.agent_state,
             agent_id=restored.run_state.agent_id,
-            after_step=lambda _: pytest.fail("Completed callback must not repeat"),
+            feature=RunHooks(
+                after_step=lambda _: pytest.fail("Completed callback must not repeat")
+            ),
         )
         resumed = replacement.resume(restored.run_state)
         assert resumed.result(2).output.text == "finished"
@@ -827,7 +836,7 @@ def test_current_thread_start_returns_on_suspension_and_resumes_on_worker() -> N
                 execute=lambda _: ToolResult(content="sent"),
             )
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
 
     def terminal(_run: Run) -> None:
@@ -861,7 +870,7 @@ def test_released_run_does_not_save_terminal_output() -> None:
                 execute=lambda _: ToolResult(content="sent"),
             )
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
     terminals: list[Run] = []
     coordinator = AgentCoordinator(store=FakeRunStore(save=terminals.append))
@@ -896,7 +905,7 @@ def test_checkpoint_save_precedes_local_release(save_fails: bool) -> None:
                 execute=effect,
             )
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
     run = agent.start(background=False, max_steps=2, coordinator=coordinator)
     assert run.wait_for_idle(3)
@@ -949,7 +958,7 @@ def test_explicit_suspension_blocks_dependency_wakeup_until_resume(
                 execute=effect,
             )
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
     run = agent.start(max_steps=2)
     try:
@@ -987,7 +996,7 @@ def test_run_can_capture_and_release_without_its_creating_agent() -> None:
                 execute=lambda _: ToolResult(content="sent"),
             )
         ],
-        before_tool_call=_gate,
+        feature=RunHooks(before_tool_call=_gate),
     )
     reference = weakref.ref(agent)
     run = agent.start(messages=[UserMessage(content="Send it")], max_steps=2)
@@ -1063,8 +1072,10 @@ def test_handoff_resumes_when_other_tool_configuration_changes(change: str) -> N
             state=state,
             tools=tools,
             tool_phases=phases,
-            prepare_step=lambda _: PreparedStep(tool_phase="current"),
-            before_tool_call=_gate,
+            feature=RunHooks(
+                prepare_step=lambda _: PreparedStep(tool_phase="current"),
+                before_tool_call=_gate,
+            ),
         )
 
     run = make_agent(AgentState()).start(max_steps=2)
@@ -1118,8 +1129,7 @@ def test_resume_at_the_extra_step_does_not_take_another() -> None:
         FakeModelClient(calls),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[lookup],
-        prepare_step=no_tools,
-        after_step=complete,
+        feature=RunHooks(prepare_step=no_tools, after_step=complete),
     )
     run = agent.start(max_steps=1)
     try:
@@ -1146,8 +1156,7 @@ def test_resume_at_the_extra_step_does_not_take_another() -> None:
             state=restored.agent_state,
             agent_id=restored.run_state.agent_id,
             tools=[lookup],
-            prepare_step=no_tools,
-            after_step=lambda _: True,
+            feature=RunHooks(prepare_step=no_tools, after_step=lambda _: True),
         )
         resumed = replacement.resume(restored.run_state)
         with pytest.raises(RunFailed):

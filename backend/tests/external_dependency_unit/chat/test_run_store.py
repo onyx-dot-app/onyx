@@ -27,6 +27,7 @@ from onyx.agents.models import (
     InputSource,
     MessageDelivery,
     PreparedStep,
+    RunHooks,
     RunProgress,
     RunState,
     RunStatus,
@@ -48,7 +49,7 @@ from onyx.agents.tools import (
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import run_store
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import (
@@ -320,8 +321,7 @@ def fake_agent(
         agent_id=agent_id,
         state=state,
         tools=tools,
-        prepare_step=prepare_step,
-        after_tool_call=after_tool_call,
+        feature=RunHooks(prepare_step=prepare_step, after_tool_call=after_tool_call),
     )
 
 
@@ -379,15 +379,12 @@ def chat_agent(
     chat_files: list[ChatFile] | None = None,
     tools: Sequence[Tool] = (),
     code_mode: bool = False,
-) -> ChatAgent:
+) -> Agent:
     state = state or AgentState()
-    return ChatAgent(
+    return ChatFeature(
         create_subagent=create_subagent,
         code_mode=code_mode,
         messages=state.messages,
-        checkpoint=state.checkpoint,
-        agent_id=agent_id,
-        previous_run_id=previous_run_id,
         tools=list(tools),
         custom_agent_prompt=None,
         base_system_prompt=prompt,
@@ -403,7 +400,7 @@ def chat_agent(
         user_memory_context=None,
         llm=llm,
         chat_files=chat_files,
-    )
+    ).agent(state, agent_id=agent_id, previous_run_id=previous_run_id)
 
 
 def add_turn(
@@ -963,7 +960,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             patch.object(file_store, "read_file", wraps=file_store.read_file) as reads,
             patch.object(file_store, "save_file", wraps=file_store.save_file) as saves,
         ):
-            feature = chat_agent(
+            agent = chat_agent(
                 FakeModelClient(answering("done")),
                 prompt="Help",
                 chat_files=[
@@ -977,6 +974,8 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                     ChatFile(filename="generated.csv", content=generated_bytes),
                 ],
             )
+            feature = agent.feature
+            assert isinstance(feature, ChatFeature)
             captured = ExecutionCheckpoint(
                 agent_state=AgentState(),
                 run_state=RunState(
@@ -1016,9 +1015,9 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 user_identity=None,
                 subagent_factory=lambda _depth: pytest.fail("No agent tools"),
             )
-            assert isinstance(rebuilt, ChatAgent)
+            assert isinstance(rebuilt.feature, ChatFeature)
             assert [tool.name for tool in rebuilt.tools] == [
-                tool.name for tool in feature.tools
+                tool.name for tool in agent.tools
             ]
             assert all(file.content is None for file in state.chat_files)
             assert state.chat_files[0].file_id == original_id
@@ -1664,9 +1663,14 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             message for step in restored.steps for message in step.input_messages
         ] == received
         if not cancel_child:
-            metadata = later.snapshot().steps[-1].message.metadata
-            assert isinstance(metadata, ChatMessageMetadata)
-            assert metadata.sources[1].document_id == "child-source"
+            # Each step holds the citation numbers new to the run.
+            sources = {
+                number: document
+                for step in later.snapshot().steps
+                if isinstance(step.message.metadata, ChatMessageMetadata)
+                for number, document in step.message.metadata.sources.items()
+            }
+            assert sources[1].document_id == "child-source"
             # A child's cited documents can be attached to its root response.
             db_session.execute(
                 update(ChatMessage__SearchDoc)
@@ -1722,7 +1726,7 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
         state: AgentState | None = None,
         agent_id: str | None = None,
         previous_run_id: str | None = None,
-    ) -> ChatAgent:
+    ) -> Agent:
         return chat_agent(
             llm,
             state=state,
@@ -1829,7 +1833,7 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
 
         llm = FakeModelClient(later_reply)
 
-        def restore_child(history: SavedAgentContext, _depth: int) -> ChatAgent:
+        def restore_child(history: SavedAgentContext, _depth: int) -> Agent:
             restored_ids.append(history.agent_id)
             assert history.previous_run_id == child.run_id
             return make_agent(
@@ -2538,7 +2542,7 @@ def test_chat_parent_works_while_its_child_runs_and_reads_the_result(
             return calls(ToolCall(id="work", name="echo", arguments={"value": "x"}))
         return text("Parent answer")
 
-    def make_agent(agent_id: str | None = None) -> ChatAgent:
+    def make_agent(agent_id: str | None = None) -> Agent:
         return chat_agent(
             FakeModelClient(reply),
             agent_id=agent_id,

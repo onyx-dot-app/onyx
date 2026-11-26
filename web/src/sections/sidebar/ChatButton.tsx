@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, memo, useMemo, useEffect } from "react";
-import { useTranslations } from "next-intl";
+import React, { useState, memo, useMemo, useEffect, useRef } from "react";
+import { useFormatter, useTranslations } from "next-intl";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
 import { ChatSession } from "@/app/app/types";
-import { ConfirmationModalLayout } from "@opal/layouts";
+import { ConfirmationModalLayout, Section } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import {
@@ -31,25 +31,31 @@ import {
   showErrorNotification,
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
+import { compactElapsed } from "@/lib/sidebar/relativeTime";
+import { useNowMinute } from "@opal/hooks";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import {
   SvgAlertCircle,
   SvgAlertTriangle,
+  SvgCheck,
   SvgChevronLeft,
   SvgHelpCircle,
   SvgEdit,
   SvgFolder,
   SvgFolderIn,
   SvgFolderPlus,
+  SvgMail,
   SvgMoreHorizontal,
+  SvgRefreshCw,
   SvgShare,
   SvgTrash,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
+import { markRecentChatShortcutTarget } from "@/lib/shortcuts/utils";
 import { usePinChatAgent } from "@/lib/agents/hooks";
 import { useChatExportMenu, useChatRunStatus } from "@/lib/chat/hooks";
-import type { ChatRunStatus } from "@/lib/chat/runStatus";
+import { useUnseenRuns, type ChatRunStatus } from "@/lib/chat/runStatus";
 import type { IconFunctionComponent } from "@opal/types";
 import UnseenMarker from "@/refresh-components/UnseenMarker";
 
@@ -97,6 +103,8 @@ const ChatButton = memo(
     jumpShortcut,
   }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
+    const format = useFormatter();
+    const nowMinute = useNowMinute();
     const appPosition = useAppPosition();
     const active = useMemo(
       () => appPosition.isChat() && appPosition.chat() === chatSession.id,
@@ -108,6 +116,11 @@ const ChatButton = memo(
       chatSession.name || UNNAMED_CHAT
     );
     const [renaming, setRenaming] = useState(false);
+    const [regeneratingTitle, setRegeneratingTitle] = useState(false);
+    const [contextPoint, setContextPoint] = useState<{
+      x: number;
+      y: number;
+    } | null>(null);
     const deleteModal = useCreateModal();
     const shareModal = useCreateModal();
     const [searchTerm, setSearchTerm] = useState("");
@@ -121,7 +134,23 @@ const ChatButton = memo(
     } = useProjectsContext();
     const pinChatAgent = usePinChatAgent();
     const { exportMenuItem } = useChatExportMenu(chatSession);
+    const markUnseen = useUnseenRuns((state) => state.markUnseen);
+    const markSeen = useUnseenRuns((state) => state.markSeen);
     const [menuOpen, setMenuOpen] = useState(false);
+    const optionsRef = useRef<HTMLDivElement>(null);
+    const focusOptionsOnOpen = useRef(false);
+
+    // The menu's keys are handled on its trigger, so a menu opened from the
+    // row needs focus there.
+    useEffect(() => {
+      if (!menuOpen) {
+        focusOptionsOnOpen.current = false;
+        return;
+      }
+      if (!focusOptionsOnOpen.current) return;
+      focusOptionsOnOpen.current = false;
+      optionsRef.current?.querySelector("button")?.focus();
+    }, [menuOpen]);
     const [optionsFocused, setOptionsFocused] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
@@ -232,6 +261,8 @@ const ChatButton = memo(
           : []),
       ],
     };
+    const unread = runStatus === "done" || runStatus === "failed";
+    const canToggleUnread = runStatus === null || unread;
     const menuItems: DropdownMenuItem[] = [
       {
         kind: "action",
@@ -247,6 +278,30 @@ const ChatButton = memo(
         title: t("chatButton.rename.label"),
         onSelect: () => setRenaming(true),
       },
+      {
+        kind: "action",
+        id: "regenerate-title",
+        icon: SvgRefreshCw,
+        title: t("chatButton.regenerateTitle.label"),
+        disabled: regeneratingTitle,
+        onSelect: () => void handleRegenerateTitle(),
+      },
+      ...(canToggleUnread
+        ? [
+            {
+              kind: "action" as const,
+              id: "toggle-unread",
+              icon: unread ? SvgCheck : SvgMail,
+              title: unread
+                ? t("chatButton.markRead.label")
+                : t("chatButton.markUnread.label"),
+              onSelect: () =>
+                unread
+                  ? markSeen(chatSession.id)
+                  : markUnseen(chatSession.id, "done"),
+            },
+          ]
+        : []),
       {
         kind: "action",
         id: "move",
@@ -291,10 +346,61 @@ const ChatButton = memo(
       await pinChatAgent(chatSession);
     }
 
+    // A project's chat rows read the projects cache, not the recents list.
+    async function refreshAfterRename() {
+      await Promise.all([
+        refreshChatSessions(),
+        project ? fetchProjects() : undefined,
+        project && currentProjectId
+          ? refreshCurrentProjectDetails()
+          : undefined,
+      ]);
+    }
+
     async function handleRename(newName: string) {
       setDisplayName(newName);
       await renameChatSession(chatSession.id, newName);
-      await refreshChatSessions();
+      await refreshAfterRename();
+    }
+
+    async function handleRegenerateTitle() {
+      setRegeneratingTitle(true);
+      try {
+        const response = await renameChatSession(chatSession.id, null, true);
+        if (!response.ok) throw new Error(`Rename failed: ${response.status}`);
+        await refreshAfterRename();
+      } catch (error) {
+        console.error("Failed to regenerate chat title:", error);
+        showErrorNotification(t("chatButton.regenerateTitleError.message"));
+      } finally {
+        setRegeneratingTitle(false);
+      }
+    }
+
+    function handleContextMenu(event: React.MouseEvent<HTMLElement>) {
+      if (renaming || event.target instanceof HTMLInputElement) return;
+      event.preventDefault();
+      setContextPoint({ x: event.clientX, y: event.clientY });
+      setMenuOpen(true);
+      focusOptionsOnOpen.current = true;
+    }
+
+    function handleDoubleClick(event: React.MouseEvent<HTMLElement>) {
+      if (
+        renaming ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        (event.target instanceof Element &&
+          event.target.closest('[data-testid="ChatButton/options"]'))
+      )
+        return;
+      event.preventDefault();
+      // The first click opens the chat, which focuses the composer on load
+      // and would blur the rename input.
+      markRecentChatShortcutTarget(chatSession.id);
+      setRenaming(true);
     }
 
     async function handleChatDelete() {
@@ -400,6 +506,28 @@ const ChatButton = memo(
       runStatus && runStatusLabel
         ? renderRunStatusMarker(runStatus, runStatusLabel)
         : null;
+    const elapsed = compactElapsed(chatSession.time_updated, nowMinute);
+    const updatedDate = new Date(chatSession.time_updated);
+    const hasUpdatedDate = !Number.isNaN(updatedDate.getTime());
+    const timeLabel = hasUpdatedDate ? (
+      <div className="mx-1 shrink-0">
+        <Text
+          as="p"
+          font="secondary-body"
+          color="text-03"
+          wordWrap="whitespace-nowrap"
+        >
+          {elapsed
+            ? format.number(elapsed.value, {
+                style: "unit",
+                unit: elapsed.unit,
+                unitDisplay: "narrow",
+              })
+            : t("chatButton.updatedNow.label")}
+        </Text>
+      </div>
+    ) : null;
+    const restingMarker = runStatusMarker ?? timeLabel;
     const optionsButton = (
       <Dropdown.Trigger asChild>
         <Button
@@ -419,6 +547,7 @@ const ChatButton = memo(
         {/* The click stays here: the row underneath opens the chat. */}
         <div
           role="presentation"
+          ref={optionsRef}
           data-testid="ChatButton/options"
           onClick={noProp()}
         >
@@ -433,11 +562,11 @@ const ChatButton = memo(
             </span>
           )}
           {(!renaming || menuOpen) &&
-            (runStatusMarker ? (
+            (restingMarker ? (
               <Hoverable.Item
                 group="ChatButton"
                 variant="replace-on-hover"
-                resting={runStatusMarker}
+                resting={restingMarker}
               >
                 {optionsButton}
               </Hoverable.Item>
@@ -449,6 +578,8 @@ const ChatButton = memo(
         </div>
         <Dropdown.Data
           label={t("chatButton.options.label")}
+          // The default 15rem cap hides "Delete" below a scroll.
+          maxHeight="none"
           items={menuItems}
           views={{ move: moveView }}
         />
@@ -469,10 +600,28 @@ const ChatButton = memo(
       ) : null;
 
     const popover = (
-      <Dropdown width={60} side="right" onOpenChange={setMenuOpen}>
+      <Dropdown
+        width={60}
+        side="right"
+        open={menuOpen}
+        virtualAnchor={
+          contextPoint
+            ? {
+                getBoundingClientRect: () =>
+                  new DOMRect(contextPoint.x, contextPoint.y, 0, 0),
+              }
+            : undefined
+        }
+        onOpenChange={(open) => {
+          setMenuOpen(open);
+          if (!open) setContextPoint(null);
+        }}
+      >
         <Hoverable.Root
           group="ChatButton"
           data-testid="ChatButton"
+          onContextMenu={handleContextMenu}
+          onDoubleClick={handleDoubleClick}
           interaction={menuOpen ? "hover" : "rest"}
         >
           <SidebarTab
@@ -480,19 +629,12 @@ const ChatButton = memo(
             href={isDragging || renaming ? undefined : chatLink.href}
             onClick={renaming ? undefined : handleClick}
             selected={active}
-            loading={runStatus === "working"}
-            tooltip={
-              renaming || !runStatusLabel
-                ? undefined
-                : t("chatButton.runStatusTooltip", {
-                    title: displayName,
-                    status: runStatusLabel,
-                  })
-            }
+            loading={runStatus === "working" || regeneratingTitle}
             rightChildren={jumpHint ?? rightMenu}
             rightChildrenAtRest={
               (jumpHint && jumpShortcut?.width) ||
-              (!!runStatusMarker && !renaming)
+              (!renaming &&
+                (runStatusMarker ? true : timeLabel ? "2rem" : false))
             }
             nested={!!project}
           >

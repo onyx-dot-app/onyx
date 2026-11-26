@@ -18,6 +18,7 @@ from onyx.agents.models import (
     ExecutionStatus,
     PreparedStep,
     RunFailureKind,
+    RunHooks,
     RunState,
     RunStatus,
     StepInput,
@@ -72,7 +73,7 @@ def test_first_step_failure_is_recorded_and_agent_can_retry(source: str) -> None
             flow=LLMFlow.CHAT_RESPONSE,
             cancellation=external if source == "configured" else None,
         ),
-        prepare_step=decide,
+        feature=RunHooks(prepare_step=decide),
     )
     handles: list[Run] = []
     with cancellation_scope(external) if source == "scope" else nullcontext():
@@ -558,8 +559,7 @@ def test_completed_step_decides_completion_before_budget_limit(
             lambda *_: AssistantMessage(content=[TextContent(text="Answer")])
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=prepare,
-        after_step=after_step,
+        feature=RunHooks(prepare_step=prepare, after_step=after_step),
     )
     run = agent.start(max_steps=1)
     result = run.result()
@@ -580,7 +580,7 @@ def test_final_validation_failure_preserves_completed_output() -> None:
             lambda *_: AssistantMessage(content=[TextContent(text="Partial answer")])
         ),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        after_step=validate,
+        feature=RunHooks(after_step=validate),
     ).start(max_steps=1)
     with pytest.raises(RunFailed):
         run.result()

@@ -50,23 +50,24 @@ func runDesktopScript(args []string) error {
 		return fatalErrorf("Failed to find desktop directory: %v", err)
 	}
 
-	// desktop is a member of the root bun workspace (see the root package.json
-	// "workspaces" field), so its dependencies are hoisted to and installed from
-	// the repo root rather than desktop/node_modules.
+	// desktop/ has its own bun.lock, and its Vite build reads Opal and React
+	// from web/, so both get their dependencies before the script runs.
 	root, err := paths.GitRoot()
 	if err != nil {
 		return fatalErrorf("Failed to find repo root: %v", err)
 	}
-	rootNodeModules := filepath.Join(root, "node_modules")
-	if needsInstall, reason := nodeModulesNeedsInstall(rootNodeModules); needsInstall {
-		log.Infof("%s, running bun install --frozen-lockfile...", reason)
-		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
-		installCmd.Dir = root
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		installCmd.Stdin = os.Stdin
-		if err := installCmd.Run(); err != nil {
-			return fatalErrorf("Failed to run bun install: %v", err)
+	for _, dir := range []string{filepath.Join(root, "web"), desktopDir} {
+		if needsInstall, reason := nodeModulesNeedsInstall(dir); needsInstall {
+			log.Infof("%s: %s, running bun install --frozen-lockfile...", filepath.Base(dir), reason)
+			installCmd := exec.Command("bun", "install", "--frozen-lockfile")
+			installCmd.Dir = dir
+			installCmd.Stdout = os.Stdout
+			installCmd.Stderr = os.Stderr
+			installCmd.Stdin = os.Stdin
+			if err := installCmd.Run(); err != nil {
+				return fatalErrorf("Failed to run bun install: %v", err)
+			}
+			writeLockStamp(dir)
 		}
 	}
 
@@ -124,7 +125,7 @@ func desktopHelpDescription() string {
 Examples:
   ods desktop dev
   ods desktop build
-  ods desktop build:dmg`
+  ods desktop typecheck`
 
 	scripts := desktopScriptNames()
 	if len(scripts) == 0 {

@@ -278,7 +278,7 @@ def test_new_chat_is_named_with_the_turns_model(naming_llm: MagicMock) -> None:
             return_value=[first_question],
         ),
         patch(
-            "onyx.chat.session_naming.save_chat_session_name_if_unnamed",
+            "onyx.chat.session_naming.save_generated_chat_session_name",
             return_value=True,
         ),
         patch("onyx.chat.session_naming.check_token_rate_limits"),
@@ -323,7 +323,7 @@ def test_naming_request_uses_the_users_chat_defaults() -> None:
         ),
         patch("onyx.chat.session_naming.fetch_user_preferences") as fetch_preferences,
         patch(
-            "onyx.chat.session_naming.save_chat_session_name_if_unnamed",
+            "onyx.chat.session_naming.save_generated_chat_session_name",
             return_value=True,
         ),
         patch("onyx.chat.session_naming.check_token_rate_limits"),
@@ -352,3 +352,78 @@ def test_naming_request_uses_the_users_chat_defaults() -> None:
         llm_override=chat_session.llm_override,
         additional_headers=None,
     )
+
+
+def _name_chat_session_with_saved_name(
+    *, regenerate: bool, generate: MagicMock
+) -> tuple[str, MagicMock]:
+    chat_session = MagicMock(description="Old title")
+    user = MagicMock()
+
+    with (
+        patch("onyx.chat.session_naming.get_cache_backend"),
+        patch("onyx.chat.session_naming.get_session_with_current_tenant"),
+        patch(
+            "onyx.chat.session_naming.get_chat_session_by_id",
+            return_value=chat_session,
+        ),
+        patch(
+            "onyx.chat.session_naming.create_chat_history_chain",
+            return_value=[_chat_message("Explain usage metering", MessageType.USER)],
+        ),
+        patch("onyx.chat.session_naming.fetch_user_preferences"),
+        patch(
+            "onyx.chat.session_naming.save_generated_chat_session_name",
+            return_value=True,
+        ) as save,
+        patch("onyx.chat.session_naming.check_token_rate_limits"),
+        patch("onyx.chat.session_naming.get_default_utility_llm", return_value=None),
+        patch("onyx.chat.session_naming.get_llm_for_persona"),
+        patch("onyx.chat.session_naming.get_current_tenant_id"),
+        patch("onyx.chat.session_naming.check_llm_cost_limit_for_provider"),
+        patch("onyx.chat.session_naming.check_model_spend_limits"),
+        patch("onyx.chat.session_naming.get_llm_token_counter", return_value=len),
+        patch("onyx.chat.session_naming.ensure_trace"),
+        patch("onyx.chat.session_naming.generate_chat_session_name", generate),
+    ):
+        name = name_chat_session(
+            chat_session_id=uuid4(),
+            user=user,
+            additional_headers=None,
+            regenerate=regenerate,
+        )
+    return name, save
+
+
+def test_naming_request_keeps_a_saved_name() -> None:
+    generate = MagicMock(return_value="New title")
+
+    name, save = _name_chat_session_with_saved_name(regenerate=False, generate=generate)
+
+    assert name == "Old title"
+    generate.assert_not_called()
+    save.assert_not_called()
+
+
+def test_regenerating_replaces_a_saved_name() -> None:
+    generate = MagicMock(return_value="New title")
+
+    name, save = _name_chat_session_with_saved_name(regenerate=True, generate=generate)
+
+    assert name == "New title"
+    assert save.call_args.kwargs["expected_name"] == "Old title"
+    assert save.call_args.kwargs["name"] == "New title"
+
+
+def test_failed_regeneration_raises_and_keeps_the_saved_name() -> None:
+    generate = MagicMock(side_effect=RuntimeError("llm down"))
+
+    with pytest.raises(RuntimeError):
+        _name_chat_session_with_saved_name(regenerate=True, generate=generate)
+
+
+def test_empty_regenerated_name_raises_and_keeps_the_saved_name() -> None:
+    generate = MagicMock(return_value="  ")
+
+    with pytest.raises(ValueError):
+        _name_chat_session_with_saved_name(regenerate=True, generate=generate)

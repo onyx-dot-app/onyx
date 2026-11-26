@@ -6,6 +6,7 @@ import { RunCard } from "@/lib/timeline/components/RunCard";
 import { RunStep } from "@/lib/timeline/components/RunStep";
 import TaskBody from "@/lib/timeline/craft/components/tool-cards/TaskBody";
 import SkillBadge from "@/lib/timeline/craft/components/tool-cards/SkillBadge";
+import { TextDiffStat } from "@/lib/timeline/components/bodies/DiffStat";
 import {
   ThinkingBody,
   splitThinkingTitle,
@@ -49,6 +50,7 @@ function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
       );
     return (
       <RunStep
+        id={entry.id}
         // Thinking keeps its own icon while it streams.
         status={entry.status === "streaming" ? "done" : entry.status}
         icon={STEP_ICONS.thinking}
@@ -80,6 +82,7 @@ function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
 
   return (
     <RunStep
+      id={entry.id}
       status={entry.status}
       icon={getToolCallIcon(toolCall)}
       title={renderToolCallHeader(toolCall)}
@@ -89,9 +92,17 @@ function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
           : undefined
       }
       headerAccessory={
-        toolCall.skillName && toolCall.toolName !== "skill" ? (
-          <SkillBadge name={toolCall.skillName} />
-        ) : undefined
+        <>
+          {toolCall.kind === "edit" && toolCall.status !== "failed" && (
+            <TextDiffStat
+              oldText={toolCall.oldContent ?? ""}
+              newText={toolCall.newContent ?? ""}
+            />
+          )}
+          {toolCall.skillName && toolCall.toolName !== "skill" && (
+            <SkillBadge name={toolCall.skillName} />
+          )}
+        </>
       }
       body={hasToolCallBody(toolCall) ? renderToolCallBody(toolCall) : null}
     />
@@ -120,11 +131,7 @@ export default function CraftTimeline({
       workingText={t("working.label")}
       autoCollapse={autoCollapse}
       isActive={isActive || entries.some((e) => e.status === "streaming")}
-      renderStep={(entry) => (
-        // Every step starts closed. The card drops its steps when it
-        // closes, so reopening it closes them all again.
-        <CraftTimelineStep entry={entry} />
-      )}
+      renderStep={(entry) => <CraftTimelineStep entry={entry} />}
     />
   );
 }

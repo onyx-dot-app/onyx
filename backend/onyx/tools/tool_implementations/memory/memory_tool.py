@@ -98,7 +98,7 @@ class MemoryTool(Tool):
             )
 
         existing_memories = list(user_memory.memories) if user_memory else []
-        chat_history = tool_message_history(list(invocation.messages))
+        chat_history = tool_message_history(invocation.messages)
 
         memory_text, index_to_replace = process_memory_update(
             new_memory=memory,

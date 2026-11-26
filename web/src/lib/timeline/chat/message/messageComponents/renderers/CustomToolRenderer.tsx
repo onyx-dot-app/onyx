@@ -7,6 +7,7 @@ import {
   CustomToolArgs,
   CustomToolDelta,
   CustomToolErrorInfo,
+  CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
   SectionEnd,
 } from "@/app/app/services/streamingModels";
 import {
@@ -154,6 +155,10 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
             })
       );
     }
+    if (responseType === CUSTOM_TOOL_ERROR_RESPONSE_TYPE)
+      return markdown(
+        t("customTool.callFailedStatus.text", { toolName: chip })
+      );
     if (responseType === "image")
       return markdown(t("customTool.imagesStatus.text", { toolName: chip }));
     if (responseType === "csv")

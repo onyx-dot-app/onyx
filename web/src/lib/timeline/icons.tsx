@@ -2,13 +2,14 @@ import {
   SvgActions,
   SvgAlertCircle,
   SvgCheckCircle,
-  SvgLightbulbSimple,
+  SvgBrain,
   SvgCpu,
   SvgEdit,
   SvgFileText,
   SvgGlobe,
   SvgImage,
   SvgLoader,
+  SvgMessageCircle,
   SvgSearch,
   SvgSparkle,
   SvgStop,
@@ -23,7 +24,7 @@ function SpinningLoader({ className, ...props }: IconProps) {
 
 /** The rail's step icons, one per kind of step, shared by chat and Craft. */
 export const STEP_ICONS = {
-  thinking: SvgLightbulbSimple,
+  thinking: SvgBrain,
   execute: SvgTerminal,
   search: SvgSearch,
   webSearch: SvgGlobe,
@@ -34,6 +35,8 @@ export const STEP_ICONS = {
   image: SvgImage,
   agent: SvgCpu,
   skill: SvgSparkle,
+  /** An approval or a question that waited for the user. */
+  request: SvgMessageCircle,
   done: SvgCheckCircle,
   /** Replaces the kind's icon while the step runs. */
   running: SpinningLoader,

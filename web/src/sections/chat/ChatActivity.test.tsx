@@ -1,5 +1,7 @@
-import { act, render, screen } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor } from "@tests/setup/test-utils";
+import { unstable_serialize } from "swr";
 import ChatActivity from "@/sections/chat/ChatActivity";
+import { useChatSubagents } from "@/lib/chat/hooks";
 import { PacketType, type Packet } from "@/app/app/services/streamingModels";
 import type { Message } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -18,7 +20,13 @@ const STATUS: ChatSessionStatus = {
 };
 
 function agent(path: string, status: ChatSubagent["status"]): ChatSubagent {
-  return { id: path, path, status, stopped_by_user: false };
+  return {
+    id: path,
+    path,
+    status,
+    stopped_by_user: false,
+    started_at: null,
+  };
 }
 
 function serve(agents: ChatSubagent[], status = STATUS) {
@@ -90,7 +98,7 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 // The app chrome's slot, where the card pins
-function renderActivity() {
+function renderActivity(showFiles?: boolean) {
   return render(
     <AppWorkspaceElementsContext.Provider
       value={{
@@ -100,10 +108,23 @@ function renderActivity() {
         activitySlot: document.body,
       }}
     >
-      <ChatActivity sessionId="s" />
+      <ChatActivity sessionId="s" showFiles={showFiles} />
     </AppWorkspaceElementsContext.Provider>
   );
 }
+
+const PUBLISHED_FILE = {
+  file_id: "file-1",
+  name: "main.py",
+  title: null,
+  path: "/w/main.py",
+  display_path: "/w/main.py",
+  size: 10,
+  mime_type: "text/x-python",
+  artifact_id: "artifact-1",
+  version: 1,
+  thumbnail_file_id: null,
+};
 
 test("shows nothing for a chat without requests, agents or files", async () => {
   serve([]);
@@ -142,7 +163,7 @@ test("a request this client already decided leaves the card at once", async () =
   expect(screen.queryByText("Approve run_command")).toBeNull();
 });
 
-test("an agent that a streaming reply starts shows while the reply streams", async () => {
+test("an agent that a streaming reply starts opens the card once per run of agents", async () => {
   jest.useFakeTimers();
   try {
     let agents: ChatSubagent[] = [];
@@ -159,8 +180,13 @@ test("an agent that a streaming reply starts shows while the reply streams", asy
     agents = [agent("/root/poet", "running")];
     status = { ...STATUS, has_active_subagents: true };
     await act(async () => jest.advanceTimersByTimeAsync(5000));
-    act(() => screen.getByRole("button", { name: "Activity" }).click());
     expect(screen.getByText("poet")).toBeVisible();
+
+    // Closed while the agents run, the card stays closed
+    act(() => screen.getByRole("button", { name: "Activity" }).click());
+    agents = [agent("/root/poet", "running"), agent("/root/critic", "running")];
+    await act(async () => jest.advanceTimersByTimeAsync(5000));
+    expect(screen.queryByText("poet")).toBeNull();
   } finally {
     jest.useRealTimers();
   }
@@ -180,7 +206,7 @@ test("lists running agents on one line each and folds the finished ones", async 
   const trigger = await screen.findByRole("button", { name: "Activity" });
   act(() => trigger.click());
   expect(screen.getByText("poet")).toBeVisible();
-  expect(screen.getByText("Running")).toBeVisible();
+  expect(screen.getByText("Agents · 1 running")).toBeVisible();
   expect(screen.queryByText("researcher")).toBeNull();
 
   const finished = screen.getByRole("button", { name: /Previous agents/ });
@@ -194,18 +220,7 @@ test("lists running agents on one line each and folds the finished ones", async 
 
 test("View all files shows the Files list even while a file is open", async () => {
   serve([]);
-  const file = {
-    file_id: "file-1",
-    name: "main.py",
-    title: null,
-    path: "/w/main.py",
-    display_path: "/w/main.py",
-    size: 10,
-    mime_type: "text/x-python",
-    artifact_id: "artifact-1",
-    version: 1,
-    thumbnail_file_id: null,
-  };
+  const file = PUBLISHED_FILE;
   showReply([
     {
       placement: { turn_index: 0, tab_index: 0 },
@@ -223,4 +238,198 @@ test("View all files shows the Files list even while a file is open", async () =
   const panel = useChatSessionStore.getState().sessions.get("s")?.rightPanel;
   expect(panel?.mode).not.toBe("closed");
   expect(panel?.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+});
+
+test("a page without a Files panel leaves the files out of the card", async () => {
+  serve([agent("/root/poet", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  showReply([
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: PacketType.PUBLISH_FILES_END,
+        files: [PUBLISHED_FILE],
+        error: null,
+      },
+    },
+  ]);
+  renderActivity(false);
+
+  const trigger = await screen.findByRole("button", { name: "Activity" });
+  act(() => trigger.click());
+  expect(screen.getByText("poet")).toBeVisible();
+  expect(screen.queryByText("View 1 file")).toBeNull();
+});
+
+test("files alone do not show the toggle on a page without a Files panel", async () => {
+  serve([]);
+  showReply([
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: PacketType.PUBLISH_FILES_END,
+        files: [PUBLISHED_FILE],
+        error: null,
+      },
+    },
+  ]);
+  const view = renderActivity(false);
+  await act(async () => undefined);
+  expect(view.container).toBeEmptyDOMElement();
+});
+
+// The run's start in the past, as an ISO date
+function startedAgo(ms: number): string {
+  return new Date(Date.now() - ms).toISOString();
+}
+
+test("a run that started just before the card mounted opens it, as in a new chat", async () => {
+  serve(
+    [{ ...agent("/root/poet", "running"), started_at: startedAgo(2_000) }],
+    {
+      ...STATUS,
+      has_active_subagents: true,
+    }
+  );
+  renderActivity();
+  expect(await screen.findByText("poet")).toBeVisible();
+});
+
+test("agents that started well before the chat loads leave the card closed", async () => {
+  serve(
+    [{ ...agent("/root/poet", "running"), started_at: startedAgo(60_000) }],
+    {
+      ...STATUS,
+      has_active_subagents: true,
+    }
+  );
+  renderActivity();
+  await screen.findByRole("button", { name: "Activity" });
+  await act(async () => undefined);
+  expect(screen.queryByText("poet")).toBeNull();
+});
+
+test("an empty list cached from an earlier visit does not open the card for agents already live", async () => {
+  serve(
+    [{ ...agent("/root/poet", "running"), started_at: startedAgo(60_000) }],
+    {
+      ...STATUS,
+      has_active_subagents: true,
+    }
+  );
+  // The cache still holds the chat as it was before its agents started
+  render(
+    <AppWorkspaceElementsContext.Provider
+      value={{
+        workspace: { current: null },
+        page: { current: null },
+        panelToggleSlot: null,
+        activitySlot: document.body,
+      }}
+    >
+      <ChatActivity sessionId="s" />
+    </AppWorkspaceElementsContext.Provider>,
+    {
+      swrConfig: {
+        fallback: {
+          "/api/chat/chat-session/s/status": STATUS,
+          [unstable_serialize([
+            "/api/chat/chat-session/s/agents",
+            false,
+            null,
+          ])]: [],
+        },
+      },
+    }
+  );
+  await screen.findByRole("button", { name: "Activity" });
+  await act(async () => undefined);
+  expect(screen.queryByText("poet")).toBeNull();
+});
+
+test("each live agent has its own Stop, which stops only that agent", async () => {
+  serve([agent("/root/poet", "running"), agent("/root/critic", "running")], {
+    ...STATUS,
+    has_active_subagents: true,
+  });
+  renderActivity();
+  const trigger = await screen.findByRole("button", { name: "Activity" });
+  act(() => trigger.click());
+  const fetchSpy = jest.mocked(global.fetch);
+  await act(async () =>
+    screen.getByRole("button", { name: "Stop poet" }).click()
+  );
+
+  const stops = fetchSpy.mock.calls.filter(([url]) =>
+    String(url).endsWith("/stop-subagents")
+  );
+  expect(stops).toHaveLength(1);
+  expect(String(stops[0]?.[0])).toBe("/api/chat/chat-session/s/stop-subagents");
+  expect(stops[0]?.[1]?.method).toBe("POST");
+  expect(stops[0]?.[1]?.body).toBe(JSON.stringify({ agent_id: "/root/poet" }));
+  expect(screen.getByRole("button", { name: "Stop critic" })).toBeVisible();
+});
+
+test("a live agent shows its run time and no status word; a finished one its outcome only", async () => {
+  serve(
+    [
+      { ...agent("/root/poet", "running"), started_at: startedAgo(65_000) },
+      {
+        ...agent("/root/researcher", "complete"),
+        started_at: startedAgo(90_000),
+      },
+    ],
+    { ...STATUS, has_active_subagents: true }
+  );
+  renderActivity();
+  const trigger = await screen.findByRole("button", { name: "Activity" });
+  act(() => trigger.click());
+  expect(await screen.findByText("1m 5s")).toBeVisible();
+  expect(screen.queryByText("Running")).toBeNull();
+  // The Stop's tooltip names the action; its label names the agent
+  expect(screen.getByRole("button", { name: "Stop poet" })).toBeInTheDocument();
+  // A finished agent has no Stop and no time
+  act(() => screen.getByRole("button", { name: /Previous agents/ }).click());
+  expect(screen.getByText("Done")).toBeVisible();
+  expect(screen.queryByText("1m 30s")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Stop researcher" })).toBeNull();
+});
+
+test("a cached agent list is not the baseline after a failed read", async () => {
+  jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (input) =>
+      String(input).endsWith("/agents")
+        ? new Response("boom", { status: 500 })
+        : new Response(
+            JSON.stringify({ ...STATUS, has_active_subagents: true }),
+            { status: 200 }
+          )
+    );
+  let loaded: boolean | null = null;
+  function Probe() {
+    loaded = useChatSubagents("s", false).loaded;
+    return null;
+  }
+  render(<Probe />, {
+    swrConfig: {
+      shouldRetryOnError: false,
+      fallback: {
+        [unstable_serialize(["/api/chat/chat-session/s/agents", true, null])]: [
+          agent("/root/poet", "running"),
+        ],
+      },
+    },
+  });
+  await waitFor(() =>
+    expect(
+      jest
+        .mocked(global.fetch)
+        .mock.calls.some(([input]) => String(input).endsWith("/agents"))
+    ).toBe(true)
+  );
+  await act(async () => undefined);
+  expect(loaded).toBe(false);
 });

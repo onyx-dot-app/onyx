@@ -47,9 +47,10 @@ export const ChatStep = React.memo(function ChatStep({
         results={results}
         status={status}
         headerAccessory={headerAccessory}
+        stepId={step.key}
       />
     ),
-    [status, headerAccessory]
+    [status, headerAccessory, step.key]
   );
 
   return (
@@ -60,8 +61,7 @@ export const ChatStep = React.memo(function ChatStep({
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
-      // Every step starts closed. The card drops its steps when it closes,
-      // so reopening it closes them all again.
+      // Every step starts closed; the run card keeps its open state.
       defaultExpanded={false}
       // Every step folds its body away, as in Craft: the renderer always
       // draws its full view, never a compact or masked one.

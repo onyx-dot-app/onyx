@@ -21,6 +21,7 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
+from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
     HumanToolAnswer,
     InputDecision,
@@ -28,7 +29,7 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
 from onyx.chat.models import (
     ChatFeatureState,
@@ -39,8 +40,8 @@ from onyx.chat.models import (
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchCycle, SearchDoc
-from onyx.deep_research.agent import DeepResearchAgent
-from onyx.deep_research.research_agent import ResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
+from onyx.deep_research.research_agent import ResearchFeature
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
     GENERATE_REPORT_TOOL_NAME,
@@ -94,11 +95,10 @@ def model() -> FakeModelClient:
     )
 
 
-def chat(*tools: Tool, agent_id: str | None = None) -> ChatAgent:
-    return ChatAgent(
+def chat(*tools: Tool) -> ChatFeature:
+    return ChatFeature(
         messages=[],
         tools=list(tools),
-        agent_id=agent_id,
         custom_agent_prompt=None,
         base_system_prompt="Help",
         context_files=ExtractedContextFiles(
@@ -153,7 +153,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
     assert saved.progress is not None
     assert saved.progress.feature_state is not None
     restored.restore_state(saved.progress.feature_state)
-    restored.tools[0].execute(
+    restored.bind().tools[0].execute(
         ToolInvocation(
             call_id="call",
             arguments={},
@@ -171,23 +171,19 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
 
 
 def test_research_json_restores_next_citation_number() -> None:
-    original = ResearchAgent([], model(), len, None, "", ReasoningEffort.LOW)
+    original = ResearchFeature([], model(), len, None, "", ReasoningEffort.LOW)
     original.citation_processor.citation_to_doc = {8: document()}
     original.citation_mapping = {8: "reference"}
     encoded = original.capture_state().model_dump_json()
-    restored = ResearchAgent([], model(), len, None, "", ReasoningEffort.LOW)
+    restored = ResearchFeature([], model(), len, None, "", ReasoningEffort.LOW)
     restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
     assert restored.citation_processor.get_next_citation_number() == 9
     assert restored.citation_mapping == {8: "reference"}
-    changed = ResearchAgent([], model(), len, None, "French", ReasoningEffort.LOW)
-    with pytest.raises(ValueError, match="configuration"):
-        changed.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
 
 
 def test_deep_research_restores_citations_and_control_tools() -> None:
-    def feature() -> DeepResearchAgent:
-        return DeepResearchAgent(
-            messages=[],
+    def feature() -> DeepResearchFeature:
+        return DeepResearchFeature(
             allowed_tools=[],
             llm=model(),
             token_counter=len,
@@ -211,11 +207,13 @@ def test_deep_research_restores_citations_and_control_tools() -> None:
     restored = feature()
     restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
     assert prepared.tool_phase == "clarification"
-    tools = [tool for tool in restored.tools if tool.name == GENERATE_PLAN_TOOL_NAME]
+    tools = [
+        tool for tool in restored.bind().tools if tool.name == GENERATE_PLAN_TOOL_NAME
+    ]
     assert restored.citation_mapping[4].document_id == "reference"
     assert tools[0].definition == next(
         tool.definition
-        for tool in original.tools
+        for tool in original.bind().tools
         if tool.name == GENERATE_PLAN_TOOL_NAME
     )
     result = tools[0].execute(
@@ -230,16 +228,22 @@ def test_deep_research_restores_citations_and_control_tools() -> None:
     assert result.text == "Proceed to planning."
 
 
-def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
-
-    original = chat(CaptureContextTool())
-    original.llm = FakeModelClient(
+def test_chat_suspends_and_resumes_with_fresh_feature_and_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    feature = chat(CaptureContextTool())
+    feature.llm = FakeModelClient(
         lambda _request, _signal: AssistantMessage(
             content=[ToolCall(id="echo-call", name="echo", arguments={})]
         )
     )
-    original.before_tool_call = lambda _context: PendingToolInput(
-        request_id="approve-echo", prompt="Run echo?", mode=InputMode.EXECUTE
+    original = feature.agent(AgentState())
+    original.feature = feature.bind().model_copy(
+        update={
+            "before_tool_call": lambda _context: PendingToolInput(
+                request_id="approve-echo", prompt="Run echo?", mode=InputMode.EXECUTE
+            )
+        }
     )
     run = original.start(max_steps=3, messages=[UserMessage(content="Check")])
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
@@ -250,12 +254,12 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
         checkpoint.agent_state,
         CheckpointBinding(tenant_id="tenant", response_id=checkpoint.run_state.run_id),
     )
-    del original, run, checkpoint
+    del feature, original, run, checkpoint
 
     tool = CaptureContextTool()
     restored = chat(tool)
     checkpoint = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES).load(encoded)
-    restored = ChatAgent(
+    restored = ChatFeature(
         messages=checkpoint.agent_state.messages,
         tools=[tool],
         custom_agent_prompt=None,
@@ -264,8 +268,6 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
         persona=None,
         user_memory_context=None,
         llm=model(),
-        agent_id=checkpoint.run_state.agent_id,
-        checkpoint=checkpoint.agent_state.checkpoint,
     )
     prepared_indices: list[int] = []
     prepare = restored._prepare_step
@@ -274,8 +276,10 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
         prepared_indices.append(state.step.index)
         return prepare(state)
 
-    restored.prepare_step = prepare_next
-    resumed = restored.resume(checkpoint.run_state)
+    monkeypatch.setattr(restored, "_prepare_step", prepare_next)
+    resumed = restored.agent(
+        checkpoint.agent_state, agent_id=checkpoint.run_state.agent_id
+    ).resume(checkpoint.run_state)
     resumed.submit(
         HumanToolAnswer(request_id="approve-echo", decision=InputDecision.APPROVE)
     )
@@ -315,22 +319,19 @@ def test_search_planning_survives_partial_step_checkpoint(kind: str) -> None:
     search = PlanningSearch()
     gated = ApprovalTool()
 
-    def feature(llm: LLM, agent_id: str | None = None) -> ChatAgent | ResearchAgent:
+    def build(
+        llm: LLM, agent_id: str | None = None
+    ) -> tuple[ChatFeature | ResearchFeature, Agent]:
         if kind == "research":
-            return ResearchAgent(
-                [search, gated],
-                llm,
-                len,
-                None,
-                "",
-                ReasoningEffort.LOW,
-                agent_id=agent_id,
+            research = ResearchFeature(
+                [search, gated], llm, len, None, "", ReasoningEffort.LOW
             )
-        agent = chat(search, gated, agent_id=agent_id)
-        agent.llm = llm
-        return agent
+            return research, research.agent(agent_id=agent_id)
+        feature = chat(search, gated)
+        feature.llm = llm
+        return feature, feature.agent(AgentState(), agent_id=agent_id)
 
-    original = feature(
+    original_feature, original = build(
         FakeModelClient(
             lambda _request, _signal: AssistantMessage(
                 content=[
@@ -340,17 +341,21 @@ def test_search_planning_survives_partial_step_checkpoint(kind: str) -> None:
             )
         )
     )
-    original.before_tool_call = lambda context: (
-        PendingToolInput(
-            request_id="approval", prompt="Run tool?", mode=InputMode.EXECUTE
-        )
-        if context.call.name == WebSearchTool.NAME
-        else None
+    original.feature = original_feature.bind().model_copy(
+        update={
+            "before_tool_call": lambda context: (
+                PendingToolInput(
+                    request_id="approval", prompt="Run tool?", mode=InputMode.EXECUTE
+                )
+                if context.call.name == WebSearchTool.NAME
+                else None
+            )
+        }
     )
     run = original.start(max_steps=2, messages=[UserMessage(content="Find facts")])
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
-    assert original.search_context == SearchContext()
+    assert original_feature.search_context == SearchContext()
     checkpoint = run.capture()
     storage = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES)
     encoded = storage.save(
@@ -371,8 +376,8 @@ def test_search_planning_survives_partial_step_checkpoint(kind: str) -> None:
     assert isinstance(completed_search.metadata, SearchPlanningResult)
     assert completed_search.metadata.original_queries == ("facts",)
 
-    restored = feature(model(), checkpoint.run_state.agent_id)
-    resumed = restored.resume(checkpoint.run_state)
+    restored, restored_agent = build(model(), checkpoint.run_state.agent_id)
+    resumed = restored_agent.resume(checkpoint.run_state)
     resumed.submit(
         HumanToolAnswer(request_id="approval", decision=InputDecision.APPROVE)
     )
@@ -385,7 +390,9 @@ def test_search_planning_survives_partial_step_checkpoint(kind: str) -> None:
     assert len(restored.search_context.search_cycles) == 1
     assert restored.search_context.search_cycles[0].searched_sources == ["web"]
 
-    next_run = restored.start(max_steps=1, messages=[UserMessage(content="New turn")])
+    next_run = restored_agent.start(
+        max_steps=1, messages=[UserMessage(content="New turn")]
+    )
     assert next_run.result(timeout=5).output.text == "done"
     assert next_run.wait_for_idle(timeout=5)
     assert restored.search_context == SearchContext()
@@ -396,23 +403,13 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
 
     def build(
         llm: LLM, agent_id: str | None = None, context: AgentState | None = None
-    ) -> ResearchAgent | DeepResearchAgent:
+    ) -> tuple[ResearchFeature | DeepResearchFeature, Agent]:
         context = context or AgentState()
         if kind == "research":
-            return ResearchAgent(
-                [],
-                llm,
-                len,
-                None,
-                "",
-                ReasoningEffort.LOW,
-                messages=context.messages,
-                checkpoint=context.checkpoint,
-                agent_id=agent_id,
-            )
+            research = ResearchFeature([], llm, len, None, "", ReasoningEffort.LOW)
+            return research, research.agent(context, agent_id=agent_id)
         if kind == "deep_research":
-            return DeepResearchAgent(
-                messages=context.messages,
+            deep_research = DeepResearchFeature(
                 allowed_tools=[],
                 llm=llm,
                 token_counter=len,
@@ -421,25 +418,28 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
                 reasoning_effort=ReasoningEffort.LOW,
                 all_injected_file_metadata=None,
                 skip_clarification=True,
-                checkpoint=context.checkpoint,
-                agent_id=agent_id,
             )
+            return deep_research, deep_research.agent(context, agent_id=agent_id)
         raise ValueError(f"Unknown feature: {kind}")
 
     name = GENERATE_REPORT_TOOL_NAME
     responses = (
         [Delta(content="Research plan")] if kind == "deep_research" else []
     ) + [tool_delta(name)]
-    original = build(ScriptedLLM(responses, 128000))
-    if isinstance(original, ResearchAgent):
-        original.citation_processor.citation_to_doc = {6: document()}
-        original.citation_mapping = {6: "reference"}
-    elif isinstance(original, DeepResearchAgent):
-        original.citation_mapping = {6: document()}
-    original.before_tool_call = lambda _context: PendingToolInput(
-        request_id="control",
-        prompt="Continue?",
-        mode=InputMode.EXECUTE,
+    original_feature, original = build(ScriptedLLM(responses, 128000))
+    if isinstance(original_feature, ResearchFeature):
+        original_feature.citation_processor.citation_to_doc = {6: document()}
+        original_feature.citation_mapping = {6: "reference"}
+    elif isinstance(original_feature, DeepResearchFeature):
+        original_feature.citation_mapping = {6: document()}
+    original.feature = original_feature.bind().model_copy(
+        update={
+            "before_tool_call": lambda _context: PendingToolInput(
+                request_id="control",
+                prompt="Continue?",
+                mode=InputMode.EXECUTE,
+            )
+        }
     )
     run = original.start(max_steps=3, messages=[UserMessage(content="Research")])
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
@@ -451,13 +451,14 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
         CheckpointBinding(tenant_id="tenant", response_id=checkpoint.run_state.run_id),
     )
     saved_id = run.id
-    del original, run, checkpoint
+    del original_feature, original, run, checkpoint
 
     final_model = ScriptedLLM([Delta(content="Answer [6]")], 128000)
-    restored = build(final_model)
     checkpoint = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES).load(encoded)
-    restored = build(final_model, checkpoint.run_state.agent_id, checkpoint.agent_state)
-    resumed = restored.resume(checkpoint.run_state)
+    restored, restored_agent = build(
+        final_model, checkpoint.run_state.agent_id, checkpoint.agent_state
+    )
+    resumed = restored_agent.resume(checkpoint.run_state)
     resumed.submit(
         HumanToolAnswer(request_id="control", decision=InputDecision.APPROVE)
     )
@@ -466,14 +467,14 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
     assert result.run_id == saved_id
     assert result.output.text == "Answer [6]"
     assert len(final_model.requests) == 1
-    if isinstance(restored, ResearchAgent):
+    if isinstance(restored, ResearchFeature):
         assert restored.citation_processor.citation_to_doc[6].document_id == "reference"
-    elif isinstance(restored, DeepResearchAgent):
+    elif isinstance(restored, DeepResearchFeature):
         assert restored.citation_mapping[6].document_id == "reference"
 
 
 def test_research_restores_search_context_and_resets_it_for_new_run() -> None:
-    original = ResearchAgent([], model(), len, None, "", ReasoningEffort.LOW)
+    original = ResearchFeature([], model(), len, None, "", ReasoningEffort.LOW)
     original.search_context = SearchContext(
         search_cycles=(
             SearchCycle(cycle_number=1, queries=["facts"], searched_sources=["web"]),
@@ -484,12 +485,14 @@ def test_research_restores_search_context_and_resets_it_for_new_run() -> None:
         time_filter_computed=True,
     )
     encoded = original.capture_state().model_dump_json()
-    restored = ResearchAgent([], model(), len, None, "", ReasoningEffort.LOW)
+    restored = ResearchFeature([], model(), len, None, "", ReasoningEffort.LOW)
     restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
     assert restored._tool_context().search_context == original.search_context
     assert not restored._tool_context().skip_search_query_expansion
 
-    run = restored.start(max_steps=1, messages=[UserMessage(content="New question")])
+    run = restored.agent().start(
+        max_steps=1, messages=[UserMessage(content="New question")]
+    )
     assert run.result(timeout=5).output.text == "done"
     assert run.wait_for_idle(timeout=5)
     assert restored.search_context == SearchContext()
@@ -621,22 +624,27 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
 def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> None:
     payload = b"\xff\x00file"
     coordinator = AgentCoordinator()
-    original = chat(CaptureContextTool())
-    original.chat_files = [
+    feature = chat(CaptureContextTool())
+    feature.chat_files = [
         ChatFile.lazy_from_filename(
             filename="input.bin",
             loader=lambda: payload,
         )
     ]
-    original.llm = FakeModelClient(
+    feature.llm = FakeModelClient(
         lambda _request, _signal: AssistantMessage(
             content=[ToolCall(id="echo-call", name="echo", arguments={})],
         )
     )
-    original.before_tool_call = lambda _context: PendingToolInput(
-        request_id="echo",
-        prompt="Continue?",
-        mode=InputMode.EXECUTE,
+    original = feature.agent(AgentState())
+    original.feature = feature.bind().model_copy(
+        update={
+            "before_tool_call": lambda _context: PendingToolInput(
+                request_id="echo",
+                prompt="Continue?",
+                mode=InputMode.EXECUTE,
+            )
+        }
     )
     run = original.start(
         max_steps=2, messages=[UserMessage(content="Check")], coordinator=coordinator
@@ -652,17 +660,16 @@ def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> N
         encoded = codec.save(checkpoint.run_state, checkpoint.agent_state, binding)
         decoded = codec.load(encoded, expected_binding=binding)
         tool = CaptureContextTool()
-        restored = ChatAgent(
+        restored = ChatFeature(
             messages=decoded.agent_state.messages,
             tools=[tool],
             custom_agent_prompt=None,
             base_system_prompt="Help",
-            context_files=original.context_files,
+            context_files=feature.context_files,
             persona=None,
             user_memory_context=None,
             llm=model(),
-            agent_id=decoded.run_state.agent_id,
-        )
+        ).agent(decoded.agent_state, agent_id=decoded.run_state.agent_id)
         resumed = restored.resume(decoded.run_state, coordinator=coordinator)
         assert resumed is not run and resumed.id == run.id
         resumed.submit(

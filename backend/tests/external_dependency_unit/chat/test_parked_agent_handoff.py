@@ -12,6 +12,7 @@ from uuid import UUID
 
 import pytest
 from fastapi import BackgroundTasks
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -20,10 +21,13 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import process_message
-from onyx.chat.agent import ChatAgent
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import dispatch_pending_chat_messages
-from onyx.chat.run_store import INPUT_POLL_SECONDS, ChatRunStore
+from onyx.chat.run_store import (
+    INPUT_POLL_SECONDS,
+    RESUME_FAILED_MESSAGE,
+    ChatRunStore,
+)
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -102,7 +106,7 @@ def _gated(integration_id: int, sent: list[str]) -> FakeMCPTool:
     return tool
 
 
-def _agent(tool: FakeMCPTool, checkpoint: ExecutionCheckpoint | None) -> ChatAgent:
+def _agent(tool: FakeMCPTool, checkpoint: ExecutionCheckpoint | None) -> Agent:
     return chat_agent(
         FakeModelClient(_reply),
         agent_id=checkpoint.run_state.agent_id if checkpoint else None,
@@ -357,7 +361,7 @@ def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
             assert coordinator.close(timeout=10)
 
 
-@pytest.mark.parametrize("unavailable", ["raises", "falls_back"])
+@pytest.mark.parametrize("unavailable", ["raises", "invalid", "falls_back"])
 def test_a_decided_agent_whose_host_cannot_start_ends(
     db_session: Session,
     chat: ApprovalChat,
@@ -370,7 +374,9 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
     being gone, it ends the agents that it would resume, as a root
     continuation that cannot start ends its response. Model selection that
     falls back to another model counts as the model being gone. The chat then
-    has no active agents, so status reads stop dispatching."""
+    has no active agents, so status reads stop dispatching. A setup error,
+    even a validation error, is not saved data of another version, so the
+    agent gets the generic message."""
     sent: list[str] = []
     file_store = get_default_file_store()
     prefix = f"agent-checkpoint/{chat.chat_session_id}/"
@@ -382,6 +388,11 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
         requested.append(llm_override)
         if unavailable == "raises":
             raise ValueError("The model is no longer available")
+        if unavailable == "invalid":
+            raise ValidationError.from_exception_data(
+                "LLMOverride",
+                [{"type": "missing", "loc": ("model_provider",), "input": {}}],
+            )
         return ScriptedLLM(lambda *_args: pytest.fail("The agent ran on another model"))
 
     monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", model_gone)
@@ -428,9 +439,16 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
             override and (override.model_configuration_id, override.temperature)
             for override in requested
         ] == [(4242, 0.3)]
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            failure = session.get_one(ChatMessage, agent_response_id).response_failure
+        assert failure is not None and failure.message == RESUME_FAILED_MESSAGE
         [error] = host_errors
         if unavailable == "raises":
             assert isinstance(error, ValueError)
+        elif unavailable == "invalid":
+            assert isinstance(error, ValidationError)
         else:
             assert isinstance(error, OnyxError)
             assert error.error_code == OnyxErrorCode.NOT_FOUND

@@ -21,6 +21,7 @@ import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
 import MessageTime from "@/lib/timeline/chat/message/MessageTime";
 import { HumanMessageBubble } from "@/lib/timeline/chat/message/HumanMessage";
+import { chatFindInlineKey } from "@/lib/chatFind/match";
 import type {
   TransformedStep,
   TurnGroup,
@@ -58,6 +59,7 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import { useTranslations } from "next-intl";
+import { GALLERY_ROOT_ATTR } from "@/app/app/components/files/images/gallery";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -558,7 +560,10 @@ const AgentMessage = React.memo(function AgentMessage({
   let nextAnswerRef = 0;
 
   return (
-    <div className="group/agent-message w-full">
+    <div
+      className="group/agent-message w-full"
+      {...{ [GALLERY_ROOT_ATTR]: "" }}
+    >
       {/* One cursor for the whole turn, across its sections. It stays until
           the answer has finished, and hides while the turn waits for the user
           to approve a tool call or answer a question. */}
@@ -585,6 +590,10 @@ const AgentMessage = React.memo(function AgentMessage({
                     <HumanMessageBubble
                       content={section.userMessage.message}
                       mentions={section.userMessage.mentions}
+                      findKey={chatFindInlineKey(
+                        nodeId,
+                        section.userMessage.id
+                      )}
                     />
                   </Section>
                 )}
@@ -645,6 +654,11 @@ const AgentMessage = React.memo(function AgentMessage({
                           case "record":
                             return {
                               kind: "card",
+                              // A decided request is a step row, as in T3 Code.
+                              flush:
+                                segment.record.kind === "approval"
+                                  ? segment.record.status !== "pending"
+                                  : segment.record.status.kind !== "pending",
                               key:
                                 segment.record.kind === "approval"
                                   ? segment.record.request.approval_id
@@ -771,6 +785,16 @@ const AgentMessage = React.memo(function AgentMessage({
                                     isLastSection && codeModeWorking
                                   }
                                   awaitingUser={awaitingUser}
+                                  isFirstRun={
+                                    sectionIndex === 0 &&
+                                    !segments
+                                      .slice(0, index)
+                                      .some(
+                                        (s) =>
+                                          s.kind === "run" &&
+                                          s.turnGroups.length > 0
+                                      )
+                                  }
                                 />
                               ),
                             };
@@ -824,7 +848,7 @@ const AgentMessage = React.memo(function AgentMessage({
                 />
               )}
               {timeSent && (
-                <div className="ms-auto shrink-0 px-2 opacity-0 group-hover/agent-message:opacity-100 group-focus-within/agent-message:opacity-100 no-hover:opacity-100">
+                <div className="ms-auto shrink-0 px-2 opacity-0 transition-opacity duration-0 group-hover/agent-message:duration-150 group-hover/agent-message:opacity-100 group-hover/agent-message:delay-300 group-focus-within/agent-message:opacity-100 no-hover:opacity-100">
                   <MessageTime timeSent={timeSent} />
                 </div>
               )}
@@ -854,6 +878,10 @@ function endsWithRun(segments: SectionSegment[]): boolean {
   );
   return (
     last?.kind === "images" ||
+    // A question is a tool call with no step of its own, so its record
+    // ends the run; without a slot under it, the cursor stays on the text
+    // above the card.
+    (last?.kind === "record" && last.record.kind === "question") ||
     (last?.kind === "run" && last.turnGroups.length > 0)
   );
 }

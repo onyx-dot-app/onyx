@@ -117,8 +117,10 @@ test("the user answers the agent's questions on the card and in the chat", async
     await chatPage.expectAnswerParagraph(
       "I will update the docs and the README."
     );
-    await questions.expectRecord("Answered", "Scope: Docs and the README");
-    await questions.expectRecord("Answered", "Audience: End users");
+    await questions.expectRecord(
+      "Answered",
+      "Scope: Docs and the README · Audience: End users"
+    );
 
     // A message typed in the chat answers the second question. Text sent
     // before the reply settles would join that turn.
@@ -153,11 +155,11 @@ test("the user answers the agent's questions on the card and in the chat", async
     expect(results.get(secondCall)).toBe("Use a short table");
 
     await chatPage.reload();
-    await questions.expectRecord("Answered", "Scope: Docs and the README");
     await questions.expectRecord(
-      "Answered in the chat",
-      "How should the release notes look?"
+      "Answered",
+      "Scope: Docs and the README · Audience: End users"
     );
+    await questions.expectRecord("Answered in the chat");
     await chatPage.expectHumanMessageBubble("Use a short table");
     await chatPage.expectAnswerParagraph("The release notes are drafted.");
   } finally {

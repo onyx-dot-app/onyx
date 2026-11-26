@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any, Literal
@@ -442,6 +442,18 @@ class SearchDoc(BaseModel):
             self.updated_at.isoformat() if self.updated_at else None
         )
         return initial_dict
+
+
+def new_or_changed[K](
+    documents: Mapping[K, SearchDoc], earlier: Mapping[K, SearchDoc]
+) -> dict[K, SearchDoc]:
+    """The documents that `earlier` lacks, or holds another copy of: what a
+    step adds to the documents of its run's earlier steps."""
+    return {
+        key: document
+        for key, document in documents.items()
+        if (known := earlier.get(key)) is not document and known != document
+    }
 
 
 class SearchDocsResponse(BaseModel):

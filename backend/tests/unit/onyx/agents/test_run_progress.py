@@ -12,6 +12,7 @@ from onyx.agents.models import (
     PreparedStep,
     RunAction,
     RunFailureKind,
+    RunHooks,
     RunProgress,
     RunState,
     RunStatus,
@@ -168,7 +169,7 @@ def test_step_inputs_reach_the_model_and_survive_partial_generation(
                 execute=lookup,
             )
         ],
-        prepare_step=prepare,
+        feature=RunHooks(prepare_step=prepare),
     )
     run = agent.start(
         messages=[UserMessage(content="Do the work")], max_steps=3, background=False
@@ -210,8 +211,10 @@ def test_untagged_step_input_is_rejected_before_the_model_call() -> None:
     agent = Agent(
         FakeModelClient(reply),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        prepare_step=lambda _: PreparedStep(
-            input_messages=[UserMessage(content="Untagged instruction")]
+        feature=RunHooks(
+            prepare_step=lambda _: PreparedStep(
+                input_messages=[UserMessage(content="Untagged instruction")]
+            )
         ),
     )
     run = agent.start(

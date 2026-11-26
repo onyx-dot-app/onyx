@@ -1,6 +1,6 @@
 /**
- * Map a file path's extension to a highlight.js language id. Pure and
- * dependency-free (no highlight.js), so it's safe to import statically — the
+ * Map a file path's extension to a Shiki language id. Pure and
+ * dependency-free (no Shiki), so it's safe to import statically — the
  * heavy highlighter itself lives in `highlighter.ts` and is loaded lazily.
  */
 export function getLanguageFromPath(
@@ -12,9 +12,9 @@ export function getLanguageFromPath(
 
   const langMap: Record<string, string> = {
     js: "javascript",
-    jsx: "javascript",
+    jsx: "jsx",
     ts: "typescript",
-    tsx: "typescript",
+    tsx: "tsx",
     py: "python",
     json: "json",
     css: "css",
@@ -28,5 +28,6 @@ export function getLanguageFromPath(
     sql: "sql",
   };
 
-  return langMap[ext];
+  // Other extensions pass through; the highlighter resolves or rejects them.
+  return langMap[ext] ?? ext;
 }

@@ -44,6 +44,11 @@ export interface ResponseItem {
   key: React.Key;
   node: React.ReactNode;
   /**
+   * A `card` that is a step row of its own: no inset, and the step list's
+   * 0.5rem gap above it instead of 0.75rem.
+   */
+  flush?: boolean;
+  /**
    * Play the entry even when the item is present on the first render. Unset,
    * only items that arrive later play it.
    */
@@ -92,8 +97,12 @@ function useTurnCursor(
       // Hidden (e.g. while the turn waits for the user): fade out in place,
       // also where the turn would hold it, and keep checking so the cursor
       // returns once it may show again.
-      // The root's `data-cursor-hidden` says it may not show.
-      if (root.hasAttribute("data-cursor-hidden") && (anchor || placed)) {
+      // The root's `data-cursor-hidden`, or a last marker of kind "hidden"
+      // (text that streams into an open code block), says it may not show.
+      const hidden =
+        root.hasAttribute("data-cursor-hidden") ||
+        anchor?.getAttribute(RESPONSE_CURSOR_ANCHOR_ATTRIBUTE) === "hidden";
+      if (hidden && (anchor || placed)) {
         cursor.style.opacity = "0";
         visible = false;
         frame = requestAnimationFrame(place);
@@ -280,15 +289,19 @@ export function Response({ items, working = false }: ResponseProps) {
             <div
               key={item.key}
               className={cn(
+                item.flush && index > 0 && "-mt-1",
                 appear &&
                   index > 0 &&
-                  "transition-[margin-top] duration-200 ease-out motion-reduce:transition-none starting:-mt-3"
+                  "transition-[margin-top] duration-200 ease-out motion-reduce:transition-none",
+                appear &&
+                  index > 0 &&
+                  (item.flush ? "starting:-mt-4" : "starting:-mt-3")
               )}
             >
               <Presence appear={appear} grow>
                 {/* Every item but a run card punches in to the run card's
                     content. */}
-                <ResponseInset>{item.node}</ResponseInset>
+                <ResponseInset flush={item.flush}>{item.node}</ResponseInset>
               </Presence>
             </div>
           );

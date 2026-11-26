@@ -112,18 +112,22 @@ export class ToolQuestionCard {
   }
 
   /**
-   * The record of the questions that `line` names: how they ended, and a
-   * line per question. Nothing waits after it.
+   * The record of the questions: a timeline step titled with the answers, or
+   * else with how the questions ended (`title` defaults to `outcome`). Its
+   * live region announces the outcome. Nothing waits after it.
    */
   async expectRecord(
-    title: string,
-    line: string,
+    outcome: string,
+    title = outcome,
     timeout = 30_000
   ): Promise<void> {
     const record = this.records.filter({
-      has: this.page.getByText(line, { exact: true }),
+      has: this.page.getByRole("button", {
+        name: `Expand ${title}`,
+        exact: true,
+      }),
     });
-    await expect(record.getByRole("status")).toHaveText(title, { timeout });
+    await expect(record.getByRole("status")).toHaveText(outcome, { timeout });
     await expect(this.region).toHaveCount(0);
   }
 }

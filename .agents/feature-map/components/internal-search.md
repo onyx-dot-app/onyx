@@ -171,14 +171,14 @@ between calls. It reads the turn's planning state from
 new decisions as `SearchPlanningResult` in the result metadata. A
 `retrieval_only` call reads an empty `SearchContext` instead, so it searches
 the query as written. After each step,
-`chat/agent.py:ChatAgent._after_step` and the research agent fold them with
+`chat/agent.py:ChatFeature._after_step` and the research agent fold them with
 `tools/tool_implementations/search/search_tool.py:update_search_context`, in
 model-call order. Each completed search adds a `SearchCycle`, also one with no
 hits; an error or an empty source selection adds none. The next call's scope
 decision reads those cycles, so a "check A, then B" request advances to the next
 unsearched source. `_build_scope_note` tells the model which sources and queries
 ran. In chat only, after a step that called `internal_search` (also one that
-failed), `ChatAgent._tool_context` sets `skip_search_query_expansion`. A repeat
+failed), `ChatFeature._tool_context` sets `skip_search_query_expansion`. A repeat
 search then makes no rephrase or keyword-expansion LLM call and uses the
 model's own queries. The one exception: when the call advances to a source not
 yet searched, it reuses the turn's `SearchContext.cached_expansion`. The
@@ -231,7 +231,7 @@ calls the index directly for admin document inspection.
    plus any decision-model pick from beyond the top hits.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
    list means none. Do not feed `details` fields back into the prompt. In chat,
-   `ChatAgent._finalize_tool` stages, for the Python tool when the chat offers
+   `ChatFeature._finalize_tool` stages, for the Python tool when the chat offers
    it and has no sandbox, the files that `SearchDocsResponse.openable_file_names`
    maps to their names ([[code-execution]]); a file that fails to read is
    logged and skipped, though the result still names it.

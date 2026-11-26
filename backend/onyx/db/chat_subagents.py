@@ -1,6 +1,7 @@
 """Select child sessions and restore their branch-visible conversation context."""
 
 from collections.abc import Callable, Collection
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import TypeAdapter
@@ -242,19 +243,36 @@ def read_agent_completions(
                 ChatMessage.response_status,
                 ChatMessage.response_failure,
             ),
-            load_only(ChatResponseItem.message, ChatResponseItem.rendering),
+            load_only(ChatResponseItem.message, ChatResponseItem.step_index),
         )
     ).all()
     ancestors = session_ancestors(
         db_session, [response.chat_session_id for response, _ in rows]
     )
     responses = {response.id: response for response, _ in rows}
+    # Each step's rendering holds only the citations new to its run, so the
+    # output's citations are those of every step up to the output's.
+    output_steps = {
+        response.id: item.step_index for response, item in rows if item is not None
+    }
+    renderings = db_session.execute(
+        select(
+            ChatResponseItem.chat_message_id,
+            ChatResponseItem.step_index,
+            ChatResponseItem.rendering,
+        )
+        .where(
+            ChatResponseItem.chat_message_id.in_(list(output_steps)),
+            ChatResponseItem.rendering.is_not(None),
+        )
+        .order_by(ChatResponseItem.chat_message_id, ChatResponseItem.step_index)
+    ).all()
     sources = _cited_sources(
         db_session,
         [
-            (response.id, read_message_rendering(item.rendering))
-            for response, item in rows
-            if item is not None and item.rendering is not None
+            (response_id, read_message_rendering(rendering))
+            for response_id, step_index, rendering in renderings
+            if step_index <= output_steps[response_id]
         ],
         lambda response_id: root_response_id(db_session, responses[response_id]),
     )
@@ -571,6 +589,19 @@ def agent_metadata(
         failure_kind=failure.kind if failure is not None else None,
         current_turn=current_turn,
     )
+
+
+def load_run_start_times(run_ids: Collection[int]) -> dict[int, datetime]:
+    """Each run's start time, by response id."""
+    if not run_ids:
+        return {}
+    with get_session_with_current_tenant() as db_session:
+        rows = db_session.execute(
+            select(ChatMessage.id, ChatMessage.time_sent).where(
+                ChatMessage.id.in_(run_ids)
+            )
+        ).all()
+    return {row.id: row.time_sent for row in rows}
 
 
 def load_session_agent_metadata(

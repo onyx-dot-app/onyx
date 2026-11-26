@@ -21,6 +21,8 @@ interface ScrollContainerContextType {
   ) => () => void;
   /** Stops idle following before the fold expands. Returns the scroll to run after expansion. */
   prepareReveal: (row: Element) => ((cancelled?: boolean) => void) | undefined;
+  /** Stops following and any glide, so a scroll the app makes stays put. */
+  releaseFollowing: () => void;
 }
 
 const ScrollContainerContext = createContext<
@@ -33,12 +35,14 @@ export function ScrollContainerProvider({
   contentWrapperRef,
   sessionId,
   prepareReveal,
+  releaseFollowing,
 }: {
   children: React.ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   contentWrapperRef: RefObject<HTMLDivElement | null>;
   sessionId?: string;
   prepareReveal: (row: Element) => ((cancelled?: boolean) => void) | undefined;
+  releaseFollowing: () => void;
 }) {
   // One observer for every row of the container, rebuilt only when the
   // container's height changes the margin.
@@ -105,6 +109,7 @@ export function ScrollContainerProvider({
       sessionId,
       observeNearViewport,
       prepareReveal,
+      releaseFollowing,
     }),
     [
       scrollContainerRef,
@@ -112,6 +117,7 @@ export function ScrollContainerProvider({
       sessionId,
       observeNearViewport,
       prepareReveal,
+      releaseFollowing,
     ]
   );
 

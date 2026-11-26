@@ -138,10 +138,19 @@ other limit resets through the admin-only
 card replace keeps a current reset and its baselines on the new row for the
 same bucket (`backend/ee/onyx/db/token_limit.py:replace_card_token_rate_limits`).
 
-**Tenant usage limits.** These are synchronous counters on `tenant_usage`. Each
-check reads the trial status and a per-tenant override from the control plane
+**Tenant usage limits.** These are synchronous counters on `tenant_usage`.
+`backend/onyx/server/usage_limits.py` holds one `LimitPolicy` per plan
+(`CLOUD_TRIAL`, `CLOUD_PAID`). A policy lists an `Allowance` per usage type: the
+amount, its window, whose usage counts, where the usage is read from, and the
+override-record field that replaces the amount for one tenant. Each of these can
+differ between policies, and a usage type a policy does not list is unlimited
+under it. The types are in `backend/onyx/server/models.py`. A counter allowance
+must use `CALENDAR_WEEK`, the only window `tenant_usage` reads and writes for now
+([TECH-DEBT](../TECH-DEBT.md)); another window fails at import. Each check picks the plan from the trial status, reads a per-tenant
+override from the control plane
 (`backend/ee/onyx/server/tenant_usage_limits.py`, refreshed every 24 h), then
-falls back to the env-var default. Checks run before the increment, so the
+falls back to the policy's amount. An override is an absolute value, not an
+amount added to the policy. Checks run before the increment, so the
 rejected request is not counted. Docprocessing increments
 `UsageType.CHUNKS_INDEXED` after each batch, and a failed increment does not fail
 indexing. LLM enrichment at indexing (contextual RAG and image summarization)
@@ -322,9 +331,10 @@ rejected signup attempt still counts.
   also goes in the `ck_token_rate_limit_group` check on `token_rate_limit`.
 - `add-tenant-usage-type` **Add a tenant usage type.** Copy `UsageType.NON_STREAMING_API_CALLS`: add it to
   `backend/onyx/db/usage.py:UsageType`, the `tenant_usage` columns, the env
-  defaults in `shared_configs/configs.py`, `_FIELD_AND_DEFAULT` in
-  `backend/onyx/server/usage_limits.py`, and the override model
-  `TenantUsageLimitOverrides`.
+  defaults in `shared_configs/configs.py`, the override model
+  `TenantUsageLimitOverrides`, and one `Allowance` line on each policy in
+  `backend/onyx/server/usage_limits.py` that limits it. The policy test fails
+  until each cloud policy covers every `UsageType`.
 - `trip-budget-by-hand` **Trip a budget by hand.** Do this only on a
   disposable test workspace: the PUT replaces every limit on the workspace
   pool. On an EE build, `PUT
@@ -343,7 +353,8 @@ rejected signup attempt still counts.
 
 ## Verification
 
-- Unit tests: `backend/tests/unit/onyx/server/query_and_chat/`,
+- Unit tests: `backend/tests/unit/onyx/server/test_usage_limits.py`,
+  `backend/tests/unit/onyx/server/query_and_chat/`,
   `backend/tests/unit/ee/onyx/server/test_spending_limit_models.py`,
   `backend/tests/unit/onyx/server/manage/` and `backend/tests/unit/onyx/auth/`.
 - Entry-point order: `backend/tests/external_dependency_unit/server/`.

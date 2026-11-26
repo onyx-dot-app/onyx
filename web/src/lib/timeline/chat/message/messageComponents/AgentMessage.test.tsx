@@ -930,7 +930,9 @@ test("a question waits with a header, then a typed answer shows as the user's me
       "Answered in the chat"
     );
     expect(
-      within(record).getByText("Which files should I change?")
+      within(record).getByRole("button", {
+        name: "Expand Answered in the chat",
+      })
     ).toBeInTheDocument();
     expect(screen.getByText("Only the README")).toBeInTheDocument();
     // The user's message comes after the record and before the answer.
@@ -942,6 +944,83 @@ test("a question waits with a header, then a typed answer shows as the user's me
     expect(
       screen.queryByText("Waiting for your answer...")
     ).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("the cursor waits under a question that the user answered on its card", async () => {
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  const packets: Packet[] = [
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: PacketType.MESSAGE_START,
+        id: "intro",
+        content: "",
+        final_documents: null,
+      },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: PacketType.MESSAGE_DELTA, content: "Let me ask first." },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: PacketType.SECTION_END },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_REQUEST,
+        question_request_id: "question",
+        tool_call_id: "call",
+        questions: [
+          {
+            id: "scope",
+            header: "Scope",
+            question: "Which files should I change?",
+            options: [{ label: "Docs", description: "Only the docs." }],
+            multi_select: false,
+          },
+        ],
+      },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_RESOLVED,
+        question_request_id: "question",
+        outcome: "answered",
+        answered_via: "card",
+        answers: [{ question_id: "scope", option_labels: ["Docs"] }],
+        message: null,
+      },
+    },
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    const record = await screen.findByTestId("tool-question-card");
+    const markers = view.container.querySelectorAll("[data-response-cursor]");
+    const last = markers.item(markers.length - 1);
+    expect(last).not.toBeNull();
+    expect(
+      record.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   } finally {
     view.unmount();
   }
@@ -1049,11 +1128,7 @@ test("an expanded step keeps its state when a call is inserted before it", async
   }
 });
 
-// The run card's header is a phrase picked per card.
-const WORKING_PHRASES = Object.values(
-  en.chat.messages.timeline.header.runPhrases
-).map((phrase) => phrase.working);
-const isWorkingPhrase = (text: string) => WORKING_PHRASES.includes(text);
+const WORKING = en.chat.messages.timeline.header.working.label;
 
 test("a program without tool calls shows only a working header", async () => {
   seedSessionAwaitingAnswer();
@@ -1081,7 +1156,7 @@ test("a program without tool calls shows only a working header", async () => {
   );
   const view = render(renderMessage(running));
   try {
-    expect(await screen.findByText(isWorkingPhrase)).toBeInTheDocument();
+    expect(await screen.findByText(WORKING)).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/36|sum\(range|step/i);
 
     // A finished response is no longer working, even with no final delta.
@@ -1095,7 +1170,7 @@ test("a program without tool calls shows only a working header", async () => {
       ])
     );
     await waitFor(() =>
-      expect(screen.queryByText(isWorkingPhrase)).not.toBeInTheDocument()
+      expect(screen.queryByText(WORKING)).not.toBeInTheDocument()
     );
   } finally {
     view.unmount();

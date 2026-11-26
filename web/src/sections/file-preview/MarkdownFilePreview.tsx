@@ -1,17 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
-import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import { rehypeDirection } from "@/lib/rehypeDirection";
 import { transformLinkUri, URI_SCHEME_REGEX } from "@/lib/utils";
 import "katex/dist/katex.min.css";
 import "@/lib/timeline/chat/message/custom-code-styles.css";
+import { AnswerCodeBlock, InlineCode } from "@/lib/answerText/codeBlocks";
+
+const REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
 
 interface MarkdownFilePreviewProps {
   text: string;
@@ -21,8 +21,8 @@ interface MarkdownFilePreviewProps {
 }
 
 /**
- * Markdown as a document, with its fenced code highlighted once grammars
- * load; a fence without a language stays plain, as in chat messages. Raw
+ * Markdown as a document, with its fenced code as code blocks, as in chat
+ * messages; a fence without a language stays plain. Raw
  * HTML in the source shows as text. Links pass `transformLinkUri` and open in
  * a new tab: a link with a scheme stays as it is, and one that starts with
  * `www.` goes to its site. Any other link, such as a path relative to the
@@ -32,22 +32,16 @@ export function MarkdownFilePreview({
   text,
   thumbnail = false,
 }: MarkdownFilePreviewProps) {
-  const languages = useHighlightLanguages();
-  const rehypePlugins = useMemo<PluggableList>(
-    () =>
-      languages
-        ? [[rehypeHighlight, { languages }], rehypeKatex, rehypeDirection]
-        : [rehypeKatex, rehypeDirection],
-    [languages]
-  );
   const document = (
     <ReactMarkdown
       className="prose prose-onyx max-w-none text-sm wrap-break-word"
       remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
-      rehypePlugins={rehypePlugins}
+      rehypePlugins={REHYPE_PLUGINS}
       urlTransform={transformLinkUri}
       components={{
         ...(thumbnail && { img: () => null }),
+        pre: AnswerCodeBlock,
+        code: InlineCode,
         a: ({ href, children }) => {
           const target = href?.trim();
           const url = !target

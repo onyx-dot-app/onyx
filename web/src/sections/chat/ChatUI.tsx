@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from "react";
 import { Message } from "@/app/app/types";
-import type { ComposedMessage } from "@/lib/chat/types";
+import type { ComposedMessage, MessageEdit } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
 import AgentResultsDivider from "@/lib/timeline/chat/message/AgentResultsDivider";
@@ -84,12 +84,12 @@ export interface ChatUIProps {
 
   onResubmit: () => void;
 
+  /** Starts an edit of a sent question in the composer. Stable identity. */
+  onEditMessage?: (edit: MessageEdit) => void;
+
   /** Node ID of the latest user message, the scroll anchor. Its row stays
    *  mounted. */
   anchorNodeId?: number;
-
-  /** Currently selected models for multi-model comparison. */
-  selectedModels?: SelectedModel[];
 
   /**
    * When on, the chat uses the wide width's padding layout. The width itself
@@ -109,8 +109,8 @@ const ChatUI = React.memo(
     deepResearchEnabled,
     onResubmit,
     anchorNodeId,
-    selectedModels,
     wideChat,
+    onEditMessage,
   }: ChatUIProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
@@ -194,13 +194,11 @@ const ChatUI = React.memo(
     // Use refs to keep callbacks stable while always using latest values
     const onSubmitRef = useRef(onSubmit);
     const deepResearchEnabledRef = useRef(deepResearchEnabled);
-    const selectedModelsRef = useRef(selectedModels);
 
     useEffect(() => {
       onSubmitRef.current = onSubmit;
       deepResearchEnabledRef.current = deepResearchEnabled;
-      selectedModelsRef.current = selectedModels;
-    }, [onSubmit, deepResearchEnabled, selectedModels]);
+    }, [onSubmit, deepResearchEnabled]);
 
     const createRegenerator = useCallback(
       (regenerationRequest: { messageId: number; parentMessage: Message }) => {
@@ -215,20 +213,6 @@ const ChatUI = React.memo(
             regenerationRequest,
           });
         };
-      },
-      []
-    );
-
-    const handleEditWithMessageId = useCallback(
-      (edited: ComposedMessage, msgId: number) => {
-        const models = selectedModelsRef.current;
-        onSubmitRef.current({
-          ...edited,
-          messageIdToResend: msgId,
-          currentMessageFiles: [],
-          deepResearch: deepResearchEnabledRef.current,
-          selectedModels: models && models.length >= 2 ? models : undefined,
-        });
       },
       []
     );
@@ -324,7 +308,7 @@ const ChatUI = React.memo(
                 timeSent={message.timeSent}
                 messageId={message.messageId}
                 nodeId={message.nodeId}
-                onEdit={handleEditWithMessageId}
+                onEdit={chatState === "input" ? onEditMessage : undefined}
                 otherMessagesCanSwitchTo={
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }

@@ -33,9 +33,15 @@ from onyx.chat.models import (
     MessageRendering,
     PresentationMode,
     ResponseRecord,
+    RunDocuments,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
-from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
+from onyx.chat.renderer import (
+    CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+    MessageRenderer,
+    ResponseLayout,
+    ToolRenderer,
+)
 from onyx.chat.response import response_record
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
@@ -190,7 +196,7 @@ def test_citation_display_keeps_raw_transcript(
     accumulator = MessageAccumulator()
     renderer = MessageRenderer(
         MessageRendering(citation_mode=CitationMode.REMOVE),
-        {},
+        RunDocuments(),
         ResponseLayout(),
     )
     packets: list[Packet] = []
@@ -288,11 +294,11 @@ def test_formatting_failure_keeps_accepted_response(
 def test_interrupted_text_is_not_duplicated_and_matches_reload() -> None:
     message = AssistantMessage(content=[TextContent(text="See [1")])
     settings = MessageRendering(citation_mode=CitationMode.HYPERLINK)
-    live = MessageRenderer(settings, {}, ResponseLayout())
+    live = MessageRenderer(settings, RunDocuments(), ResponseLayout())
     output = live.consume(TextDeltaEvent(content_index=0, text="See [1"))
     output += live.complete(message)
     output += live.finish()
-    saved = MessageRenderer(settings, {}, ResponseLayout())
+    saved = MessageRenderer(settings, RunDocuments(), ResponseLayout())
     restored = saved.complete(message)
     assert live.answer == saved.answer == "See [1"
     assert (
@@ -323,7 +329,9 @@ def test_interleaved_answer_sections_preserve_content_order(
         ]
     )
     renderer = MessageRenderer(
-        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, ResponseLayout()
+        MessageRendering(citation_mode=CitationMode.HYPERLINK),
+        RunDocuments(),
+        ResponseLayout(),
     )
     events = [
         TextDeltaEvent(content_index=0, text="Before ["),
@@ -387,7 +395,7 @@ def test_tool_tabs_do_not_cross_interleaved_content(
             content_index=4, tool_call_id="3", tool_name="internal_search"
         ),
     ]
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    renderer = MessageRenderer(MessageRendering(), RunDocuments(), ResponseLayout())
     output = [
         packet
         for event in events[:streamed_blocks]
@@ -434,10 +442,14 @@ def test_report_sources_include_only_observed_citations(
         document_ids=["1", "2"],
     )
     message = AssistantMessage(content=[TextContent(text=text)])
-    live = MessageRenderer(settings, documents, ResponseLayout())
+    live = MessageRenderer(
+        settings, RunDocuments().add_steps([(settings, documents)]), ResponseLayout()
+    )
     output = live.consume(TextDeltaEvent(content_index=0, text=text))
     output.extend(live.complete(message))
-    saved = MessageRenderer(settings, documents, ResponseLayout()).complete(message)
+    saved = MessageRenderer(
+        settings, RunDocuments().add_steps([(settings, documents)]), ResponseLayout()
+    ).complete(message)
     for packets in (output, saved):
         assert [
             doc.document_id
@@ -510,7 +522,9 @@ def test_parallel_child_packets_stay_in_parent_tabs() -> None:
 def test_citation_recovery_waits_for_completion_and_does_not_duplicate() -> None:
     raw = "[1234567890123456789]"
     renderer = MessageRenderer(
-        MessageRendering(citation_mode=CitationMode.HYPERLINK), {}, ResponseLayout()
+        MessageRendering(citation_mode=CitationMode.HYPERLINK),
+        RunDocuments(),
+        ResponseLayout(),
     )
     early = renderer.consume(TextDeltaEvent(content_index=0, text=raw))
     assert not any(
@@ -588,12 +602,11 @@ def test_leading_citation_keeps_metadata(live: bool) -> None:
         metadata={},
         match_highlights=[],
     )
+    settings = MessageRendering(
+        citation_mode=CitationMode.HYPERLINK, citation_documents={1: "doc"}
+    )
     renderer = MessageRenderer(
-        MessageRendering(
-            citation_mode=CitationMode.HYPERLINK, citation_documents={1: "doc"}
-        ),
-        {"doc": doc},
-        ResponseLayout(),
+        settings, RunDocuments().add_steps([(settings, {"doc": doc})]), ResponseLayout()
     )
     packets = (
         renderer.consume(TextDeltaEvent(content_index=0, text="[1] Answer"))
@@ -850,6 +863,62 @@ def test_tool_errors_only_display_explicit_public_details(
 
 
 @pytest.mark.parametrize("live", [False, True])
+@pytest.mark.parametrize("is_error", [False, True])
+def test_generic_card_marks_a_failed_call_without_details(
+    live: bool, is_error: bool
+) -> None:
+    """A call that raised ToolCallException has no error details. Its card
+    still says that it failed, without the text the model got and without an
+    error packet."""
+    call = ToolCall(id="call", name="skills_read", arguments={"name": "missing"})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="No skill is named 'missing'.",
+        is_error=is_error,
+    )
+    if live:
+        renderer = ToolRenderer(call, Placement(turn_index=0))
+        output = renderer.start() + renderer.complete(result)
+    else:
+        output = replay_response(
+            ResponseRecord(
+                run_id="r",
+                status=RunStatus.COMPLETE,
+                steps=[
+                    StepRecord(
+                        message=AssistantMessage(id="m", content=[call]),
+                        generation_status=ExecutionStatus.COMPLETE,
+                        tools={
+                            call.id: ToolExecutionRecord(
+                                status=ExecutionStatus.COMPLETE, result=result
+                            )
+                        },
+                    )
+                ],
+            ),
+            {},
+            {},
+            {},
+        )
+    failures = [
+        packet.obj
+        for packet in output
+        if isinstance(packet.obj, CustomToolDelta)
+        and packet.obj.response_type == CUSTOM_TOOL_ERROR_RESPONSE_TYPE
+    ]
+    assert len(failures) == int(is_error)
+    assert all(failure.data is None for failure in failures)
+    assert not any(isinstance(packet.obj, PacketException) for packet in output)
+    assert all(
+        "No skill is named" not in packet.model_dump_json()
+        for packet in output
+        if is_error
+    )
+    assert any(isinstance(packet.obj, SectionEnd) for packet in output)
+
+
+@pytest.mark.parametrize("live", [False, True])
 def test_completion_batches_content(live: bool) -> None:
     tool = ToolCall(id="lookup", name="lookup", arguments={})
     message = AssistantMessage(
@@ -860,7 +929,7 @@ def test_completion_batches_content(live: bool) -> None:
             *[TextContent(text="b") for _ in range(128)],
         ]
     )
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    renderer = MessageRenderer(MessageRendering(), RunDocuments(), ResponseLayout())
     output: list[Packet] = []
     if live:
         output.extend(

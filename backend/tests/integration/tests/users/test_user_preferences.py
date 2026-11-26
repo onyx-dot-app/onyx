@@ -34,7 +34,7 @@ DEFAULT_PREFERENCES: dict[str, Any] = {
     "motion": "system",
     "popup_dismissal": "auto_dismiss",
     "dynamic_conversations": True,
-    "paste_as_tile": False,
+    "paste_as_tile": True,
     "interrupt_on_send": False,
     "voice_auto_send": False,
     "voice_auto_playback": False,
@@ -100,7 +100,7 @@ def test_every_setting_round_trips(
         params={"temperature_override_enabled": True},
     )
     _patch(user, "/shortcut-enabled", params={"shortcut_enabled": True})
-    _patch(user, "/paste-as-tile", params={"paste_as_tile": True})
+    _patch(user, "/paste-as-tile", params={"paste_as_tile": False})
     _patch(user, "/interrupt-on-send", params={"interrupt_on_send": True})
     _patch(user, "/auto-scroll", {"auto_scroll": False})
     _patch(user, "/user/theme-preference", {"theme_preference": "light"})
@@ -142,7 +142,7 @@ def test_every_setting_round_trips(
         "reasoning_effort_default": "high",
         "temperature_override_enabled": True,
         "shortcut_enabled": True,
-        "paste_as_tile": True,
+        "paste_as_tile": False,
         "interrupt_on_send": True,
         "auto_scroll": False,
         "theme_preference": "light",
