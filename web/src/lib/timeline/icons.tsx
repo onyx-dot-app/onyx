@@ -1,7 +1,6 @@
 import {
   SvgActions,
   SvgAlertCircle,
-  SvgBubbleText,
   SvgCheckCircle,
   SvgBrain,
   SvgCpu,
@@ -10,6 +9,7 @@ import {
   SvgGlobe,
   SvgImage,
   SvgLoader,
+  SvgMessageCircle,
   SvgSearch,
   SvgSparkle,
   SvgStop,
@@ -36,7 +36,7 @@ export const STEP_ICONS = {
   agent: SvgCpu,
   skill: SvgSparkle,
   /** An approval or a question that waited for the user. */
-  request: SvgBubbleText,
+  request: SvgMessageCircle,
   done: SvgCheckCircle,
   /** Replaces the kind's icon while the step runs. */
   running: SpinningLoader,

@@ -126,6 +126,7 @@ export { default as SvgManageAgent } from "@opal/icons/manage-agent";
 export { default as SvgMaximize2 } from "@opal/icons/maximize-2";
 export { default as SvgMcp } from "@opal/icons/mcp";
 export { default as SvgMenu } from "@opal/icons/menu";
+export { default as SvgMessageCircle } from "@opal/icons/message-circle";
 export { default as SvgMicrophone } from "@opal/icons/microphone";
 export { default as SvgMicrophoneOff } from "@opal/icons/microphone-off";
 export { default as SvgMinus } from "@opal/icons/minus";
