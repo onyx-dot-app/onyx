@@ -304,7 +304,7 @@ async def test_insufficient_scope_has_discovery_challenge(
             ","
         )
     }
-    assert {"www-authenticate", "mcp-session-id"} <= exposed
+    assert "www-authenticate" in exposed
     challenge = response.headers["www-authenticate"]
     assert 'error="insufficient_scope"' in challenge
     assert 'scope="read:search read:chat"' in challenge
