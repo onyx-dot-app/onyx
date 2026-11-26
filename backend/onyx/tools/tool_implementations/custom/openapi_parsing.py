@@ -189,6 +189,19 @@ def operation_parameters(
     return list(merged.values())
 
 
+def resolved_operation(
+    openapi_spec: dict[str, Any], path_item: dict[str, Any], operation: dict[str, Any]
+) -> dict[str, Any]:
+    """``operation`` with the parameters of its path item and with the local
+    references of its parameters and request body resolved."""
+    resolved = dict(operation)
+    if parameters := operation_parameters(openapi_spec, path_item, operation):
+        resolved["parameters"] = parameters
+    if "requestBody" in operation:
+        resolved["requestBody"] = resolve_ref(openapi_spec, operation["requestBody"])
+    return resolved
+
+
 def openapi_to_method_spec(
     openapi_spec: dict[str, Any],
     path: str,
@@ -206,16 +219,13 @@ def openapi_to_method_spec(
     if not summary:
         raise ValueError(f"Summary is not specified for {method_name.upper()} {path}")
 
-    spec = dict(method)
-    if parameters := operation_parameters(openapi_spec, path_item, method):
-        spec["parameters"] = parameters
     return MethodSpec(
         name=sanitize_tool_name(raw_name),
         raw_name=raw_name,
         summary=summary,
         path=path,
         method=method_name,
-        spec=spec,
+        spec=resolved_operation(openapi_spec, path_item, method),
     )
 
 
@@ -235,14 +245,14 @@ def openapi_operations(
 
 def inline_path_parameters(openapi_spec: dict[str, Any]) -> dict[str, Any]:
     """``openapi_spec`` with each path item cut to its operations, and the
-    path item's parameters copied into each operation. Releases before the
+    path item's parameters copied into each operation, with local references
+    resolved as ``resolved_operation`` does. Releases before the
     api_app table read only this shape from ``tool.openapi_schema``."""
     paths: dict[str, dict[str, Any]] = {}
     for path, path_item, method_name, method in openapi_operations(openapi_spec):
-        operation = dict(method)
-        if parameters := operation_parameters(openapi_spec, path_item, method):
-            operation["parameters"] = parameters
-        paths.setdefault(path, {})[method_name] = operation
+        paths.setdefault(path, {})[method_name] = resolved_operation(
+            openapi_spec, path_item, method
+        )
     return {**openapi_spec, "paths": paths}
 
 

@@ -23,6 +23,8 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    REQUEST_BODY,
+    inline_path_parameters,
     openapi_to_method_specs,
     openapi_to_url,
     parse_openapi_document,
@@ -102,6 +104,37 @@ def test_path_parameters_apply_to_each_operation() -> None:
     }
     # The document stays as it was.
     assert "parameters" not in SPEC["paths"]["/pets/{petId}"]["delete"]
+
+
+def test_a_request_body_reference_is_resolved() -> None:
+    body = {
+        "required": True,
+        "content": {"application/json": {"schema": {"type": "object"}}},
+    }
+    spec = {
+        "openapi": "3.0.3",
+        "info": {"title": "Pets", "version": "1.0"},
+        "servers": [{"url": "https://pets.example.com"}],
+        "components": {"requestBodies": {"Pet": body}},
+        "paths": {
+            "/pets": {
+                "post": {
+                    "operationId": "addPet",
+                    "summary": "Add a pet",
+                    "requestBody": {"$ref": "#/components/requestBodies/Pet"},
+                }
+            }
+        },
+    }
+
+    (method_spec,) = openapi_to_method_specs(spec)
+
+    assert method_spec.to_tool_definition().parameters["properties"] == {
+        REQUEST_BODY: {"type": "object"}
+    }
+    assert inline_path_parameters(spec)["paths"]["/pets"]["post"]["requestBody"] == (
+        body
+    )
 
 
 def test_a_spec_with_path_parameters_validates_and_builds_tools() -> None:
