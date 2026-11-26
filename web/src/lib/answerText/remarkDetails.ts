@@ -1,11 +1,11 @@
 import type { MarkdownAstNode } from "@/lib/answerText/remarkGithubAlerts";
 
 const DETAILS_TOKEN =
-  /<details\b[^>]*>|<summary>[\s\S]*?<\/summary>|<\/details>/gi;
+  /<details(?=[\s/>])[^>]*>|<summary>[\s\S]*?<\/summary>|<\/details>/gi;
 const DETAILS_OPEN = /^<details(\s+open)?\s*>$/i;
 // Any opener, also one with other attributes: it stays raw HTML, but its
 // closing tag must not end an outer disclosure.
-const ANY_DETAILS_OPEN = /^<details\b[^>]*>$/i;
+const ANY_DETAILS_OPEN = /^<details(?=[\s/>])[^>]*>$/i;
 const SUMMARY = /^<summary>([\s\S]*?)<\/summary>$/i;
 // A summary the stream has not closed yet
 const PARTIAL_SUMMARY = /^<summary>((?:(?!<\/summary>)[\s\S])*)$/i;
@@ -69,23 +69,40 @@ function tailValue(node: MarkdownAstNode | undefined): string {
   return only?.type === "text" ? (only.value ?? "").trim() : htmlValue(node);
 }
 
+/** The raw HTML in an inline node, also inside formatting, in source order. */
+function inlineHtml(node: MarkdownAstNode): MarkdownAstNode[] {
+  return node.type === "html"
+    ? [node]
+    : (node.children ?? []).flatMap(inlineHtml);
+}
+
+function without(node: MarkdownAstNode, target: MarkdownAstNode) {
+  if (!node.children) return node;
+  const children: MarkdownAstNode[] = node.children
+    .filter((child) => child !== target)
+    .map((child) => without(child, target));
+  return { ...node, children };
+}
+
 /**
  * Counts the details tags inside a paragraph, such as `Step one</details>`.
- * Returns the depth after them, or the index of the child that brings
- * `depth` to zero.
+ * Returns the depth after them, or the child that brings `depth` to zero
+ * and the closing tag in it.
  */
 function scanInline(
   node: MarkdownAstNode | undefined,
   depth: number
-): { depth: number; close: number } {
+): { depth: number; close: number; tag: MarkdownAstNode | null } {
   const children = node?.type === "paragraph" ? (node.children ?? []) : [];
-  for (let k = 0; k < children.length; k++) {
-    const tag = htmlValue(children[k]);
-    if (ANY_DETAILS_OPEN.test(tag)) depth++;
-    else if (DETAILS_CLOSE.test(tag) && --depth === 0)
-      return { depth, close: k };
+  for (const [k, child] of children.entries()) {
+    for (const html of inlineHtml(child)) {
+      const tag = htmlValue(html);
+      if (ANY_DETAILS_OPEN.test(tag)) depth++;
+      else if (DETAILS_CLOSE.test(tag) && --depth === 0)
+        return { depth, close: k, tag: html };
+    }
   }
-  return { depth, close: -1 };
+  return { depth, close: -1, tag: null };
 }
 
 /** A paragraph of `children`, without leading space, or null if empty. */
@@ -160,6 +177,7 @@ function groupDetails(
     let close = -1;
     // The child of the closing paragraph that holds the closing tag
     let inlineClose = -1;
+    let closeTag: MarkdownAstNode | null = null;
     if (open && summary) {
       let depth = 1;
       for (let j = i + 2; j < nodes.length && close < 0; j++) {
@@ -172,6 +190,7 @@ function groupDetails(
           if (inline.close >= 0) {
             close = j;
             inlineClose = inline.close;
+            closeTag = inline.tag;
           }
         }
       }
@@ -190,9 +209,16 @@ function groupDetails(
     const title = decodeReferences(rawTitle.trim());
     const closing = nodes[close];
     const body = nodes.slice(i + 2, close);
-    if (inlineClose >= 0 && closing) {
+    if (inlineClose >= 0 && closing && closeTag) {
       const children = closing.children ?? [];
-      const before = paragraphOf(closing, children.slice(0, inlineClose));
+      const holder = children[inlineClose];
+      // A closing tag inside formatting leaves the formatting in the body
+      const kept =
+        holder && holder !== closeTag ? [without(holder, closeTag)] : [];
+      const before = paragraphOf(closing, [
+        ...children.slice(0, inlineClose),
+        ...kept,
+      ]);
       const after = paragraphOf(closing, children.slice(inlineClose + 1));
       if (before) body.push(before);
       if (after) nodes.splice(close + 1, 0, after);

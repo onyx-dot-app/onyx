@@ -254,3 +254,34 @@ test.each(["Use the sign:\n\n&lt;", "Use the sign:\n\n<"])(
     expect(container.textContent).toContain("<");
   }
 );
+
+test("a custom element named like details does not count as a disclosure", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Steps</summary>\n\nSee <details-card>Example</details-card>.\n\n</details>\n\nNext steps."
+      }
+    />
+  );
+  expect(container.querySelector("details + p")).toHaveTextContent(
+    /^Next steps\.$/
+  );
+});
+
+test.each([
+  // An inline pair whose closer sits in bold text
+  "<details>\n<summary>Outer</summary>\n\nSee <details><summary>Inner</summary>**Example</details>**\n\n</details>\n\nAfter.",
+  // The outer closer itself sits in bold text
+  "<details>\n<summary>Outer</summary>\n\n**Step one</details>** more\n\nAfter.",
+])("a details tag inside formatting still counts: %j", (answer) => {
+  const { container } = render(<AnswerMarkdown content={answer} />);
+  const after = Array.from(container.querySelectorAll("p")).find(
+    (p) => p.textContent === "After."
+  );
+  expect(after?.closest("details")).toBeNull();
+  if (answer.includes("**Step one")) {
+    expect(container.querySelector("details strong")).toHaveTextContent(
+      /^Step one$/
+    );
+  }
+});
