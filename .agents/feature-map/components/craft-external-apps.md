@@ -374,7 +374,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     (`server/features/build/sandbox/harness_base.py:CommandHold`). The gate holds the request only while the
     mark names the tagged chat, writes an `action_approval` row with
     `chat_session_id` and `command_id` (method, path and body as its payload;
-    `body_bytes` in place of a JSON body over 64 KB),
+    `body_bytes` in place of a body that is not JSON or is over 64 KB),
     announces it under the command ID, and sends no notification. It checks
     the mark again after the write and expires its own row when the call
     ended, so no row waits that no card shows. The call's watcher shows the row

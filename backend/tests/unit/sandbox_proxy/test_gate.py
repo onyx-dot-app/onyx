@@ -2490,6 +2490,16 @@ def test_a_command_card_shows_the_size_of_a_large_body() -> None:
     }
 
 
+def test_a_command_card_shows_the_size_of_a_body_that_is_not_json() -> None:
+    ctx = _ctx().model_copy(update={"chat_command_id": _COMMAND})
+    flow = make_flow(raw_content=b"\x00" * 300)
+    flow.request.path = "/upload"
+
+    payload = gate._approval_payload(flow, ctx, make_matched_actions(payload={}))
+
+    assert payload == {"method": "POST", "path": "/upload", "body_bytes": 300}
+
+
 def test_a_chat_recheck_matches_the_agents_integrations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

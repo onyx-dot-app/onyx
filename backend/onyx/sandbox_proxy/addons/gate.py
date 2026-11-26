@@ -1524,18 +1524,19 @@ def _approval_payload(
     flow: http.HTTPFlow, ctx: SessionContext, matched_actions: AllMatchedActions
 ) -> dict[str, Any]:
     """What the card shows. A chat card also names the method and path, and
-    shows the size of a body too large to show."""
+    shows the size of a body it does not show."""
     if ctx.chat_command_id is None:
         return matched_actions.payload
     payload: dict[str, Any] = {
         "method": flow.request.method,
         "path": flow.request.path,
     }
-    if matched_actions.payload:
-        if len(json.dumps(matched_actions.payload)) > _CARD_BODY_MAX_BYTES:
-            payload["body_bytes"] = len(flow.request.raw_content or b"")
-        else:
-            payload["body"] = matched_actions.payload
+    if matched_actions.payload and (
+        len(json.dumps(matched_actions.payload)) <= _CARD_BODY_MAX_BYTES
+    ):
+        payload["body"] = matched_actions.payload
+    elif flow.request.raw_content:
+        payload["body_bytes"] = len(flow.request.raw_content)
     return payload
 
 
