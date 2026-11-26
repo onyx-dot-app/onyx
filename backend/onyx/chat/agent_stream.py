@@ -11,12 +11,13 @@ import time
 from collections.abc import Mapping
 from uuid import UUID
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from onyx.agents.events import AgentEndEvent, AgentEvent, ToolStartEvent
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheBackend
 from onyx.chat.emitter import Emitter
+from onyx.chat.models import AgentStreamPointer
 from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.chat_configs import CHAT_STREAM_BUFFER_TTL_S
@@ -33,13 +34,6 @@ _POINTER_PREFIX = "chatagentstream"
 _FLUSH_INTERVAL_S = 0.25
 # The pointer lives as long as the buffer; the ticker renews it this often.
 _POINTER_RENEW_INTERVAL_S = 60.0
-
-
-class AgentStreamPointer(BaseModel):
-    """The live stream of a background run, and the tool call it last started."""
-
-    stream_id: int
-    activity_tool: str | None = None
 
 
 def _pointer_key(response_id: int) -> str:
