@@ -201,8 +201,12 @@ def graphql_request(
 
 def graphql_failed(tool_result: CustomToolUserFileSnapshot | JsonValue) -> bool:
     """A GraphQL server reports a failed field with status 200 and an
-    ``errors`` list. The result keeps any partial ``data``."""
-    return isinstance(tool_result, dict) and bool(tool_result.get("errors"))
+    ``errors`` list, in each result of a batch. The result keeps any partial
+    ``data``."""
+    results = tool_result if isinstance(tool_result, list) else [tool_result]
+    return any(
+        isinstance(result, dict) and bool(result.get("errors")) for result in results
+    )
 
 
 class GraphQLTool(ApiTool):
