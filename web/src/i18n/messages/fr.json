@@ -6728,7 +6728,6 @@
             "errorToast": "Échec de la récupération des modèles"
           },
           "row": {
-            "defaultLabel": "Modèle par défaut",
             "decisionTag": {
               "decisionOnly": "Modèle de décision. Non disponible dans le sélecteur de modèles de chat.",
               "chatAndDecision": "Prend en charge les tâches de chat et de décision."
@@ -14058,6 +14057,15 @@
         "defaultChat": "Chat par défaut",
         "defaultImage": "Image par défaut"
       },
+      "defaultRoles": {
+        "chat": "Chat par défaut",
+        "imageGeneration": "Image par défaut",
+        "imageProcessing": "Traitement d'images par défaut",
+        "chatNaming": "Nommage des chats par défaut",
+        "searchSelection": "Décision de recherche par défaut",
+        "decision": "Décision par défaut",
+        "craft": "Craft par défaut"
+      },
       "modelTypes": {
         "chat": "Chat",
         "decision": "Décision",
@@ -15587,6 +15595,7 @@
       "otherOptions": "Autres options"
     },
     "common": {
+      "back": "Retour",
       "clear": "Effacer",
       "clearFilter": "Effacer le filtre",
       "close": "Fermer",

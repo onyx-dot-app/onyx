@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
+import type { ModelRoleName } from "@/lib/badges/components";
 import {
   useAdminLanguageModels,
   useAdminLanguageModelsWithImageModels,
@@ -20,14 +21,7 @@ import { useImageGenerationConfigs } from "@/lib/imageGeneration/hooks";
 import type { ImageGenerationConfigView } from "@/lib/imageGeneration/types";
 
 /** A deployment default: the backend's `ModelRole`. */
-export type DefaultRole =
-  | "chat"
-  | "image_processing"
-  | "chat_naming"
-  | "search_selection"
-  | "decision"
-  | "craft"
-  | "image_generation";
+export type DefaultRole = ModelRoleName;
 
 /** A default the deployment holds now. */
 export interface CurrentDefault {

@@ -6728,7 +6728,6 @@
             "errorToast": "Falha ao buscar os modelos"
           },
           "row": {
-            "defaultLabel": "Modelo padrão",
             "decisionTag": {
               "decisionOnly": "Modelo de decisão. Não está disponível no seletor de modelos de chat.",
               "chatAndDecision": "Suporta tarefas de chat e de decisão."
@@ -14058,6 +14057,15 @@
         "defaultChat": "Chat padrão",
         "defaultImage": "Imagem padrão"
       },
+      "defaultRoles": {
+        "chat": "Chat padrão",
+        "imageGeneration": "Imagem padrão",
+        "imageProcessing": "Processamento de imagens padrão",
+        "chatNaming": "Nomeação de chats padrão",
+        "searchSelection": "Decisão de pesquisa padrão",
+        "decision": "Decisão padrão",
+        "craft": "Craft padrão"
+      },
       "modelTypes": {
         "chat": "Chat",
         "decision": "Decisão",
@@ -15587,6 +15595,7 @@
       "otherOptions": "Outras opções"
     },
     "common": {
+      "back": "Voltar",
       "clear": "Limpar",
       "clearFilter": "Limpar filtro",
       "close": "Fechar",

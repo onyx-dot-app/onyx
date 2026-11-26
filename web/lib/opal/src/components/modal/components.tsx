@@ -47,6 +47,23 @@ function ModalExitSignal() {
   return null;
 }
 
+/**
+ * How many modal cards enclose this point of the React tree. A modal opened
+ * from inside another sits one layer above it, so its overlay covers and
+ * blurs the modal below.
+ */
+const ModalDepthContext = React.createContext(0);
+
+/** The stacking data for a modal layer `depth` levels deep. */
+function nestedLayer(depth: number) {
+  return depth > 0
+    ? {
+        "data-nested": "",
+        style: { "--opal-modal-depth": depth } as React.CSSProperties,
+      }
+    : {};
+}
+
 interface ModalOverlayProps extends WithoutStyles<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
 > {
@@ -54,10 +71,12 @@ interface ModalOverlayProps extends WithoutStyles<
 }
 
 function ModalOverlay({ ref, ...props }: ModalOverlayProps) {
+  const depth = React.useContext(ModalDepthContext);
   return (
     <DialogPrimitive.Overlay
       ref={ref}
       className="opal-modal-overlay"
+      {...nestedLayer(depth)}
       {...props}
     />
   );
@@ -149,6 +168,7 @@ function ModalContent({
   ...props
 }: ModalContentProps) {
   const closeButtonRef = React.useRef<HTMLDivElement>(null);
+  const depth = React.useContext(ModalDepthContext);
   const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
   const [hasDescription, setHasDescription] = React.useState(false);
   const hasUserTypedRef = React.useRef(false);
@@ -245,15 +265,21 @@ function ModalContent({
       } as React.CSSProperties)
     : undefined;
 
-  const positionerStyle = maxHeight
-    ? {
-        ...containerStyle,
-        maxHeight: `min(${maxHeight}, var(--opal-modal-available-height))`,
-      }
-    : containerStyle;
+  const layerStyle = nestedLayer(depth).style;
+  const positionerStyle =
+    maxHeight || layerStyle
+      ? {
+          ...containerStyle,
+          ...layerStyle,
+          ...(maxHeight && {
+            maxHeight: `min(${maxHeight}, var(--opal-modal-available-height))`,
+          }),
+        }
+      : containerStyle;
 
   const positionerData = {
     "data-width": width,
+    ...(depth > 0 && { "data-nested": "" }),
     ...(!hasContainerCenter && { "data-viewport-centered": "" }),
   };
 
@@ -315,45 +341,50 @@ function ModalContent({
         setHasDescription,
       }}
     >
-      <DialogPrimitive.Portal>
-        {!skipOverlay && <ModalOverlay />}
-        {bottomSlot ? (
-          <DialogPrimitive.Content
-            asChild
-            ref={handleRef}
-            {...dialogEventHandlers}
-          >
-            <div
-              style={positionerStyle}
-              className="opal-modal-positioner opal-modal-stack"
-              {...positionerData}
+      <ModalDepthContext.Provider value={depth + 1}>
+        <DialogPrimitive.Portal>
+          {/* The overlay sits at this modal's own depth, under its card. */}
+          <ModalDepthContext.Provider value={depth}>
+            {!skipOverlay && <ModalOverlay />}
+          </ModalDepthContext.Provider>
+          {bottomSlot ? (
+            <DialogPrimitive.Content
+              asChild
+              ref={handleRef}
+              {...dialogEventHandlers}
             >
               <div
-                className="opal-modal-card"
-                data-height={height}
-                data-background={background}
+                style={positionerStyle}
+                className="opal-modal-positioner opal-modal-stack"
+                {...positionerData}
               >
-                {children}
+                <div
+                  className="opal-modal-card"
+                  data-height={height}
+                  data-background={background}
+                >
+                  {children}
+                </div>
+                <div className="opal-modal-bottom-slot">{bottomSlot}</div>
+                <ModalExitSignal />
               </div>
-              <div className="opal-modal-bottom-slot">{bottomSlot}</div>
+            </DialogPrimitive.Content>
+          ) : (
+            <DialogPrimitive.Content
+              ref={handleRef}
+              style={positionerStyle}
+              className="opal-modal-positioner opal-modal-card"
+              data-height={height}
+              data-background={background}
+              {...positionerData}
+              {...dialogEventHandlers}
+            >
+              {children}
               <ModalExitSignal />
-            </div>
-          </DialogPrimitive.Content>
-        ) : (
-          <DialogPrimitive.Content
-            ref={handleRef}
-            style={positionerStyle}
-            className="opal-modal-positioner opal-modal-card"
-            data-height={height}
-            data-background={background}
-            {...positionerData}
-            {...dialogEventHandlers}
-          >
-            {children}
-            <ModalExitSignal />
-          </DialogPrimitive.Content>
-        )}
-      </DialogPrimitive.Portal>
+            </DialogPrimitive.Content>
+          )}
+        </DialogPrimitive.Portal>
+      </ModalDepthContext.Provider>
     </ModalContext.Provider>
   );
 }

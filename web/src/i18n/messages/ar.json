@@ -6728,7 +6728,6 @@
             "errorToast": "فشل جلب النماذج"
           },
           "row": {
-            "defaultLabel": "النموذج الافتراضي",
             "decisionTag": {
               "decisionOnly": "نموذج لاتخاذ القرارات. غير متاح في قائمة نماذج الدردشة.",
               "chatAndDecision": "يدعم مهام الدردشة واتخاذ القرارات."
@@ -14058,6 +14057,15 @@
         "defaultChat": "الدردشة الافتراضية",
         "defaultImage": "الصورة الافتراضية"
       },
+      "defaultRoles": {
+        "chat": "الدردشة الافتراضية",
+        "imageGeneration": "الصورة الافتراضية",
+        "imageProcessing": "معالجة الصور الافتراضية",
+        "chatNaming": "تسمية الدردشة الافتراضية",
+        "searchSelection": "قرار البحث الافتراضي",
+        "decision": "القرار الافتراضي",
+        "craft": "Craft الافتراضي"
+      },
       "modelTypes": {
         "chat": "الدردشة",
         "decision": "قرار",
@@ -15587,6 +15595,7 @@
       "otherOptions": "خيارات أخرى"
     },
     "common": {
+      "back": "رجوع",
       "clear": "مسح",
       "clearFilter": "مسح الفلتر",
       "close": "إغلاق",

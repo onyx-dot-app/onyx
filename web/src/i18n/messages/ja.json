@@ -6728,7 +6728,6 @@
             "errorToast": "モデルを取得できませんでした"
           },
           "row": {
-            "defaultLabel": "デフォルトモデル",
             "decisionTag": {
               "decisionOnly": "判断モデルです。チャットのモデル選択には表示されません。",
               "chatAndDecision": "チャットと判断の両方のタスクに対応しています。"
@@ -14058,6 +14057,15 @@
         "defaultChat": "デフォルトのチャット",
         "defaultImage": "デフォルトの画像"
       },
+      "defaultRoles": {
+        "chat": "デフォルトのチャット",
+        "imageGeneration": "デフォルトの画像",
+        "imageProcessing": "デフォルトの画像処理",
+        "chatNaming": "デフォルトのチャット命名",
+        "searchSelection": "デフォルトの検索判定",
+        "decision": "デフォルトの判定",
+        "craft": "デフォルトの Craft"
+      },
       "modelTypes": {
         "chat": "チャット",
         "decision": "判断",
@@ -15587,6 +15595,7 @@
       "otherOptions": "その他のオプション"
     },
     "common": {
+      "back": "戻る",
       "clear": "クリア",
       "clearFilter": "フィルターをクリア",
       "close": "閉じる",

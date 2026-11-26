@@ -6728,7 +6728,6 @@
             "errorToast": "Die Modelle konnten nicht abgerufen werden"
           },
           "row": {
-            "defaultLabel": "Standardmodell",
             "decisionTag": {
               "decisionOnly": "Entscheidungsmodell. Nicht in der Chat-Modellauswahl verfügbar.",
               "chatAndDecision": "Unterstützt Chat- und Entscheidungsaufgaben."
@@ -14058,6 +14057,15 @@
         "defaultChat": "Standard-Chat",
         "defaultImage": "Standard-Bild"
       },
+      "defaultRoles": {
+        "chat": "Standard-Chat",
+        "imageGeneration": "Standardbild",
+        "imageProcessing": "Standard-Bildverarbeitung",
+        "chatNaming": "Standard-Chatbenennung",
+        "searchSelection": "Standard-Suchentscheidung",
+        "decision": "Standardentscheidung",
+        "craft": "Standard-Craft"
+      },
       "modelTypes": {
         "chat": "Chat",
         "decision": "Entscheidung",
@@ -15587,6 +15595,7 @@
       "otherOptions": "Weitere Optionen"
     },
     "common": {
+      "back": "Zurück",
       "clear": "Leeren",
       "clearFilter": "Filter zurücksetzen",
       "close": "Schließen",

@@ -5,6 +5,9 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import type { ContentColor } from "@opal/layouts/content/components";
 import { Button, Modal, Text } from "@opal/components";
 import { useModalClose } from "@opal/components/modal/context";
+import { Section } from "@opal/layouts/general/components";
+import { SvgArrowLeft } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,6 +35,13 @@ interface ConfirmationModalProps {
    */
   onClose?: () => void;
 
+  /**
+   * Shows a Back button at the start of the footer, for a confirmation that
+   * a modal below it opened: Back returns to that modal, while Cancel and
+   * the X close both.
+   */
+  onBack?: () => void;
+
   /** Gray body background separating it from the header and footer. */
   twoTone?: boolean;
 }
@@ -56,8 +66,10 @@ function ConfirmationModalLayout(props: ConfirmationModalProps) {
     submit,
     hideCancel,
     onClose: externalOnClose,
+    onBack,
     twoTone = true,
   } = props;
+  const strings = useOpalStrings();
   const ownerClose = useModalClose();
   // `onClose={undefined}` (e.g. while busy) means "not closable", so only an
   // omitted prop falls back to the owner.
@@ -96,13 +108,20 @@ function ConfirmationModalLayout(props: ConfirmationModalProps) {
             children
           )}
         </Modal.Body>
-        <Modal.Footer>
-          {!hideCancel && canClose && (
-            <Button prominence="secondary" onClick={onClose}>
-              Cancel
+        <Modal.Footer justifyContent={onBack ? "between" : undefined}>
+          {onBack && (
+            <Button prominence="secondary" icon={SvgArrowLeft} onClick={onBack}>
+              {strings.back}
             </Button>
           )}
-          {submit}
+          <Section flexDirection="row" gap={2} width="auto" height="auto">
+            {!hideCancel && canClose && (
+              <Button prominence="secondary" onClick={onClose}>
+                Cancel
+              </Button>
+            )}
+            {submit}
+          </Section>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

@@ -35,6 +35,13 @@ Radix Dialog compound, the Figma Modal. `Modal` is the Radix root (`open`, `onOp
 | `background`             | `"default" \| "gray"`                    | `"default"` | Card background (`tint-00` or `tint-01`)                                                                              |
 | `bottomSlot`             | `ReactNode`                              | —           | Rendered below the card, inside the dialog's focus scope                                                              |
 
+## Nested modals
+
+A modal mounted inside another modal's React tree (for example a confirmation that a form modal opens)
+stacks above it: its overlay covers and blurs the modal below, and its card sits above that overlay.
+Mount the inner modal inside the outer `Modal.Content`, not beside it. Radix then treats clicks in the
+inner modal as inside the outer one, so they do not close it.
+
 ## Modal.Backdrop
 
 For flows that replace `Modal.Content` between screens, mount one `Modal.Backdrop`

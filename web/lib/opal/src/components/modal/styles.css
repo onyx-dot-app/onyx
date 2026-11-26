@@ -19,6 +19,11 @@
   @apply fixed inset-0 bg-mask-03 backdrop-blur-03 pointer-events-none;
   z-index: var(--z-modal-overlay);
 }
+/* A modal opened from inside another sits above it: its overlay covers and
+   blurs the card below, and its own card sits above that overlay. */
+.opal-modal-overlay[data-nested] {
+  z-index: calc(var(--z-modal) + 2 * var(--opal-modal-depth) - 1);
+}
 .opal-modal-overlay[data-state="open"] {
   @apply animate-in fade-in-0;
 }
@@ -40,6 +45,9 @@
   top: var(--opal-modal-top);
   max-height: var(--opal-modal-available-height);
   z-index: var(--z-modal);
+}
+.opal-modal-positioner[data-nested] {
+  z-index: calc(var(--z-modal) + 2 * var(--opal-modal-depth));
 }
 .opal-modal-positioner[data-viewport-centered] {
   @apply left-1/2;

@@ -6728,7 +6728,6 @@
             "errorToast": "Failed to fetch models"
           },
           "row": {
-            "defaultLabel": "Default Model",
             "decisionTag": {
               "decisionOnly": "Decision model. Not available in the chat model picker.",
               "chatAndDecision": "Supports both chat and decision tasks."
@@ -14058,6 +14057,15 @@
         "defaultChat": "Default Chat",
         "defaultImage": "Default Image"
       },
+      "defaultRoles": {
+        "chat": "Default Chat",
+        "imageGeneration": "Default Image",
+        "imageProcessing": "Default Image Processing",
+        "chatNaming": "Default Chat Naming",
+        "searchSelection": "Default Search Decision",
+        "decision": "Default Decision",
+        "craft": "Default Craft"
+      },
       "modelTypes": {
         "chat": "Chat",
         "decision": "Decision",
@@ -15587,6 +15595,7 @@
       "otherOptions": "Other options"
     },
     "common": {
+      "back": "Back",
       "clear": "Clear",
       "clearFilter": "Clear filter",
       "close": "Close",

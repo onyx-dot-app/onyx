@@ -113,21 +113,57 @@ export function LabelBadge({ label, tooltip }: LabelBadgeProps) {
 /** What a model can do. */
 export type ModelType = "chat" | "vision" | "decision" | "image";
 
-/** Each capability has its own colour, so a row's tags read at a glance. */
-const MODEL_TYPE_BADGES: Record<ModelType, { color: StatusColor }> = {
-  chat: { color: "success" },
-  vision: { color: "pending" },
-  decision: { color: "warning" },
-  image: { color: "queued" },
-};
-
-/** A model type badge's props, for a `tag` or `badge` slot. The label is
- *  the type's key under `common.badges.modelTypes`. */
+/** A model type badge's props, for a `tag` or `badge` slot: a grey tag whose
+ *  label is the type's key under `common.badges.modelTypes`. */
 export function useModelTypeBadge(modelType: ModelType): BadgeProps {
   const t = useTranslations("common.badges.modelTypes");
   return useMemo(
-    () => ({ title: t(modelType), ...MODEL_TYPE_BADGES[modelType], size: 4 }),
+    () => ({ title: t(modelType), color: "default", size: 4 }),
     [t, modelType]
+  );
+}
+
+/** A deployment role a model can hold, as the backend's `ModelRole`. */
+export type ModelRoleName =
+  | "chat"
+  | "image_generation"
+  | "image_processing"
+  | "chat_naming"
+  | "search_selection"
+  | "decision"
+  | "craft";
+
+/** The role's key under `common.badges.defaultRoles`. */
+const DEFAULT_ROLE_COPY_KEYS: Record<
+  ModelRoleName,
+  | "chat"
+  | "imageGeneration"
+  | "imageProcessing"
+  | "chatNaming"
+  | "searchSelection"
+  | "decision"
+  | "craft"
+> = {
+  chat: "chat",
+  image_generation: "imageGeneration",
+  image_processing: "imageProcessing",
+  chat_naming: "chatNaming",
+  search_selection: "searchSelection",
+  decision: "decision",
+  craft: "craft",
+};
+
+/** The blue tags that say which roles a model holds, e.g. "Default Chat". */
+export function useDefaultRoleBadges(roles: ModelRoleName[]): BadgeProps[] {
+  const t = useTranslations("common.badges.defaultRoles");
+  return useMemo(
+    () =>
+      roles.map((role) => ({
+        title: t(DEFAULT_ROLE_COPY_KEYS[role]),
+        color: "info",
+        size: 4,
+      })),
+    [t, roles]
   );
 }
 

@@ -64,10 +64,7 @@ import {
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { getProvider } from "@/lib/languageModels/utils";
-import {
-  useAdminLanguageModels,
-  useModelDisplayName,
-} from "@/lib/languageModels/hooks";
+import { useModelDisplayName } from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import {
   SvgArrowExchange,
@@ -89,7 +86,11 @@ import {
   useCreateModal,
   type BadgeProps,
 } from "@opal/components";
-import { useModelTypeBadge } from "@/lib/badges/components";
+import {
+  useDefaultRoleBadges,
+  useModelTypeBadge,
+  type ModelRoleName,
+} from "@/lib/badges/components";
 import { ContentAction } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
@@ -614,7 +615,8 @@ function CapabilityTags({ badges }: CapabilityTagsProps) {
 
 interface ModelRowProps {
   model: ModelConfiguration;
-  isDefaultModel: boolean;
+  /** The deployment roles this model holds, shown beside its title. */
+  defaultRoles: ModelRoleName[];
   onToggleVisibility: (visible: boolean) => void;
   onRename: (value: string | null) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
@@ -634,7 +636,7 @@ interface ModelRowProps {
  */
 function ModelRow({
   model,
-  isDefaultModel,
+  defaultRoles,
   onToggleVisibility,
   onRename,
   onSettingsChange,
@@ -664,6 +666,7 @@ function ModelRow({
         ]
       : []),
   ];
+  const roleBadges = useDefaultRoleBadges(defaultRoles);
   const isSelected = model.is_visible;
   const toggleVisibility = () => onToggleVisibility(!model.is_visible);
   // A click that blurs and commits an inline rename reaches the row after the
@@ -689,7 +692,7 @@ function ModelRow({
     >
       <Interactive.Stateful
         variant="select-heavy"
-        state={isSelected ? "selected" : "empty"}
+        state={isSelected ? "filled" : "empty"}
         onPointerDownCapture={(e: React.PointerEvent) => {
           // Scoped to the title row: the checkbox also owns a hidden input.
           renamingAtPointerDown.current =
@@ -723,6 +726,7 @@ function ModelRow({
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
               description={description}
+              badge={roleBadges}
               rightChildren={
                 <OpalSection
                   flexDirection="row"
@@ -747,18 +751,6 @@ function ModelRow({
                       )}
                     </OpalSection>
                   </Hoverable.Item>
-                  {isDefaultModel && (
-                    <span className="px-1.5">
-                      <Text
-                        as="p"
-                        font="secondary-action"
-                        wordWrap="whitespace-nowrap"
-                        color="action-selection-05"
-                      >
-                        {t("models.row.defaultLabel")}
-                      </Text>
-                    </span>
-                  )}
                 </OpalSection>
               }
               editable
@@ -779,7 +771,8 @@ interface ImageModelRowProps {
   checked: boolean;
   /** The name shown, with any staged rename. */
   title: string;
-  isDefaultModel: boolean;
+  /** The deployment roles this model holds, shown beside its title. */
+  defaultRoles: ModelRoleName[];
   onToggle: (connect: boolean) => void;
   onRename: (value: string | null) => void;
 }
@@ -789,12 +782,13 @@ function ImageModelRow({
   model,
   checked,
   title,
-  isDefaultModel,
+  defaultRoles,
   onToggle,
   onRename,
 }: ImageModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
   const imageBadge = useModelTypeBadge("image");
+  const roleBadges = useDefaultRoleBadges(defaultRoles);
   const toggle = () => onToggle(!checked);
   // A click that blurs and commits an inline rename reaches the row after the
   // edit input unmounts, so the input's presence is sampled at pointerdown.
@@ -813,7 +807,7 @@ function ImageModelRow({
     <Hoverable.Root group="image-model-row" data-model-name={model.name}>
       <Interactive.Stateful
         variant="select-heavy"
-        state={checked ? "selected" : "empty"}
+        state={checked ? "filled" : "empty"}
         onPointerDownCapture={(e: React.PointerEvent) => {
           renamingAtPointerDown.current =
             e.currentTarget.querySelector(".opal-content-title-row input") !=
@@ -843,6 +837,7 @@ function ImageModelRow({
               icon={() => <InputCheckbox checked={checked} />}
               title={title}
               description={title === model.name ? undefined : model.name}
+              badge={roleBadges}
               rightChildren={
                 <OpalSection
                   flexDirection="row"
@@ -850,20 +845,7 @@ function ImageModelRow({
                   height="auto"
                   alignItems="start"
                   gap={1}
-                >
-                  {isDefaultModel && (
-                    <span className="px-1.5">
-                      <Text
-                        as="p"
-                        font="secondary-action"
-                        wordWrap="whitespace-nowrap"
-                        color="action-selection-05"
-                      >
-                        {t("models.row.defaultLabel")}
-                      </Text>
-                    </span>
-                  )}
-                </OpalSection>
+                ></OpalSection>
               }
               editable
               editTooltip={t("models.row.renameButton.tooltip")}
@@ -959,9 +941,33 @@ interface ImageModelRowsProps {
   models: ImageGenerationProviderModel[];
 }
 
+/**
+ * The roles each of the modal's saved models holds, by model name. Image
+ * models hold only the image generation role, so `image` picks which side.
+ */
+function useModelRoles(): (
+  modelName: string,
+  image: boolean
+) => ModelRoleName[] {
+  const { values } = useFormikContext<BaseLLMFormValues>();
+  const currentDefaults = useCurrentDefaults();
+  return (modelName, image) =>
+    values.id == null
+      ? []
+      : currentDefaults
+          .filter(
+            (current) =>
+              current.providerId === values.id &&
+              current.modelName === modelName &&
+              (current.role === "image_generation") === image
+          )
+          .map((current) => current.role);
+}
+
 /** The image models' rows in the Models list, after the chat models. */
 function ImageModelRows({ models }: ImageModelRowsProps) {
-  const { changes, defaultConfig, isChecked, stage } = useImageModelStaging();
+  const { changes, isChecked, stage } = useImageModelStaging();
+  const rolesOf = useModelRoles();
   return (
     <>
       {models.map((model) => (
@@ -974,10 +980,7 @@ function ImageModelRows({ models }: ImageModelRowsProps) {
               ? model.display_name || model.name
               : (changes[model.name]?.customDisplayName ?? model.name)
           }
-          isDefaultModel={
-            model.image_provider_id !== null &&
-            defaultConfig?.image_provider_id === model.image_provider_id
-          }
+          defaultRoles={rolesOf(model.name, true)}
           onToggle={(connect) => stage([{ model, connect }])}
           onRename={(value) => stage([{ model, customDisplayName: value }])}
         />
@@ -1002,9 +1005,7 @@ export function ModelSelectionField({
 }: ModelSelectionFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
-  const { defaultText } = useAdminLanguageModels();
   const resolveDisplayName = useModelDisplayName();
-  const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const models = formikProps.values.model_configurations;
   const [layout, setLayout] = useState<ModelListLayout | null>(null);
@@ -1062,6 +1063,7 @@ export function ModelSelectionField({
   }
 
   const imageModels = useListedImageModels();
+  const rolesOf = useModelRoles();
   const imageStaging = useImageModelStaging();
   const hasAnyModel = models.length > 0 || imageModels.length > 0;
   const allSelected =
@@ -1130,12 +1132,6 @@ export function ModelSelectionField({
                   const known = new Set(order);
                   const added = models.filter((m) => !known.has(m.name));
                   const shownModels = [...ordered, ...added];
-                  const defaultModelName =
-                    providerId != null &&
-                    defaultText?.provider_id === providerId
-                      ? defaultText.model_name
-                      : undefined;
-
                   return (
                     <>
                       {shownModels.map((model) => (
@@ -1151,7 +1147,7 @@ export function ModelSelectionField({
                           onSettingsChange={(patch) =>
                             setModelSettings(model.name, patch)
                           }
-                          isDefaultModel={model.name === defaultModelName}
+                          defaultRoles={rolesOf(model.name, false)}
                         />
                       ))}
                       <ImageModelRows models={imageModels} />
@@ -1309,6 +1305,12 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
     return onSubmit(values, helpers);
   };
 
+  /** Back on the confirmation returns to the provider modal, as it was. */
+  function closeConfirmation() {
+    confirmModal.toggle(false);
+    setPending(null);
+  }
+
   async function handleConfirm() {
     if (!pending) return;
     const { defaultChanges, imageDefault } = buildDefaultChanges(
@@ -1335,60 +1337,63 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
   }
 
   return (
-    <>
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        validateOnMount
-        onSubmit={handleSubmit}
-      >
-        {() => (
-          <ModalWrapperInner
-            providerName={providerName}
-            llmProvider={llmProvider}
-            onClose={onClose}
-            modelConfigurations={initialValues.model_configurations}
-            description={description}
-          >
-            {children}
-          </ModalWrapperInner>
-        )}
-      </Formik>
-      <confirmModal.Provider>
-        <ConfirmationModalLayout
-          icon={SvgArrowExchange}
-          title={t("defaultChanges.title")}
-          description={t("defaultChanges.description")}
-          onClose={() => {
-            confirmModal.toggle(false);
-            setPending(null);
-          }}
-          submit={
-            <Button
-              disabled={
-                isConfirming ||
-                !pending ||
-                !choicesComplete(pending.affected, candidates, choices)
-              }
-              onClick={() => void handleConfirm()}
-            >
-              {t("defaultChanges.confirm")}
-            </Button>
+    <Formik
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      validateOnMount
+      onSubmit={handleSubmit}
+    >
+      {() => (
+        <ModalWrapperInner
+          providerName={providerName}
+          llmProvider={llmProvider}
+          onClose={onClose}
+          modelConfigurations={initialValues.model_configurations}
+          description={description}
+          // Opened from inside the provider modal, the confirmation stacks
+          // above it and blurs it.
+          nested={
+            <confirmModal.Provider>
+              <ConfirmationModalLayout
+                icon={SvgArrowExchange}
+                title={t("defaultChanges.title")}
+                description={t("defaultChanges.description")}
+                onBack={closeConfirmation}
+                onClose={() => {
+                  closeConfirmation();
+                  onClose();
+                }}
+                submit={
+                  <Button
+                    disabled={
+                      isConfirming ||
+                      !pending ||
+                      !choicesComplete(pending.affected, candidates, choices)
+                    }
+                    onClick={() => void handleConfirm()}
+                  >
+                    {t("defaultChanges.confirm")}
+                  </Button>
+                }
+              >
+                {pending && (
+                  <DefaultChoiceRows
+                    affected={pending.affected}
+                    candidates={candidates}
+                    choices={choices}
+                    onChange={(role, id) =>
+                      setChoices((prev) => ({ ...prev, [role]: id }))
+                    }
+                  />
+                )}
+              </ConfirmationModalLayout>
+            </confirmModal.Provider>
           }
         >
-          {pending && (
-            <DefaultChoiceRows
-              affected={pending.affected}
-              candidates={candidates}
-              choices={choices}
-              onChange={(role, id) =>
-                setChoices((prev) => ({ ...prev, [role]: id }))
-              }
-            />
-          )}
-        </ConfirmationModalLayout>
-      </confirmModal.Provider>
-    </>
+          {children}
+        </ModalWrapperInner>
+      )}
+    </Formik>
   );
 }
 
@@ -1399,6 +1404,8 @@ interface ModalWrapperInnerProps {
   modelConfigurations?: ModelConfiguration[];
   children: React.ReactNode;
   description?: string;
+  /** A modal opened from this one, e.g. a confirmation; it stacks above. */
+  nested?: React.ReactNode;
 }
 function ModalWrapperInner({
   providerName,
@@ -1407,6 +1414,7 @@ function ModalWrapperInner({
   modelConfigurations,
   children,
   description: descriptionOverride,
+  nested,
 }: ModalWrapperInnerProps) {
   const t = useTranslations("admin.languageModels.modals");
   const {
@@ -1529,6 +1537,7 @@ function ModalWrapperInner({
             </Button>
           </Modal.Footer>
         </Form>
+        {nested}
       </Modal.Content>
     </Modal>
   );

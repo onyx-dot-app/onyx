@@ -6728,7 +6728,6 @@
             "errorToast": "No se pudieron obtener los modelos"
           },
           "row": {
-            "defaultLabel": "Modelo predeterminado",
             "decisionTag": {
               "decisionOnly": "Modelo de decisiones. No está disponible en el selector de modelos de chat.",
               "chatAndDecision": "Admite tareas de chat y de decisiones."
@@ -14058,6 +14057,15 @@
         "defaultChat": "Chat predeterminado",
         "defaultImage": "Imagen predeterminada"
       },
+      "defaultRoles": {
+        "chat": "Chat predeterminado",
+        "imageGeneration": "Imagen predeterminada",
+        "imageProcessing": "Procesamiento de imágenes predeterminado",
+        "chatNaming": "Nombres de chat predeterminados",
+        "searchSelection": "Decisión de búsqueda predeterminada",
+        "decision": "Decisión predeterminada",
+        "craft": "Craft predeterminado"
+      },
       "modelTypes": {
         "chat": "Chat",
         "decision": "Decisión",
@@ -15587,6 +15595,7 @@
       "otherOptions": "Otras opciones"
     },
     "common": {
+      "back": "Atrás",
       "clear": "Borrar",
       "clearFilter": "Quitar filtro",
       "close": "Cerrar",

@@ -6728,7 +6728,6 @@
             "errorToast": "获取模型失败"
           },
           "row": {
-            "defaultLabel": "默认模型",
             "decisionTag": {
               "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
               "chatAndDecision": "支持聊天和决策任务。"
@@ -14058,6 +14057,15 @@
         "defaultChat": "默认聊天",
         "defaultImage": "默认图像"
       },
+      "defaultRoles": {
+        "chat": "默认聊天",
+        "imageGeneration": "默认图像",
+        "imageProcessing": "默认图像处理",
+        "chatNaming": "默认聊天命名",
+        "searchSelection": "默认搜索决策",
+        "decision": "默认决策",
+        "craft": "默认 Craft"
+      },
       "modelTypes": {
         "chat": "聊天",
         "decision": "决策",
@@ -15587,6 +15595,7 @@
       "otherOptions": "其他选项"
     },
     "common": {
+      "back": "返回",
       "clear": "清除",
       "clearFilter": "清除筛选",
       "close": "关闭",
