@@ -115,7 +115,7 @@ test.each([
   }
 );
 
-test("a longer title under the same key widens the box though the observer stays quiet", () => {
+test("a longer title under the same key widens the box though the observer stays quiet", async () => {
   mockTitleWidths();
   const view = render(
     <Presence.Swap swapKey="working" axis="inline">
@@ -131,5 +131,5 @@ test("a longer title under the same key widens the box though the observer stays
       <span>Searching the web for flowers</span>
     </Presence.Swap>
   );
-  expect(box()?.style.width).toBe("290px");
+  await waitFor(() => expect(box()?.style.width).toBe("290px"));
 });
