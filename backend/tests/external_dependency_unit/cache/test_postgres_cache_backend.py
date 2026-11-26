@@ -388,3 +388,44 @@ def test_shared_cache_backend_works_on_postgres(
     cache.set(key, b"value", ex=60)
     assert cache.get(key) == b"value"
     cache.delete(key)
+
+
+def test_renewal_with_other_keys_does_not_deadlock_with_delete_many() -> None:
+    """A renewal that also renews other keys, and a delete of the same keys that
+    are set again each round, must lock rows in one order."""
+    backend = PostgresCacheBackend(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, statement_timeout_ms=10_000
+    )
+    owner, fence, responses = _key(), _key(), _key()
+    rounds = 150
+    errors: list[BaseException] = []
+    start = Barrier(4)
+
+    def renew() -> None:
+        start.wait()
+        for _ in range(rounds):
+            try:
+                backend.renew_if_value(owner, b"token", 60, also=[responses, fence])
+            except BaseException as e:
+                errors.append(e)
+
+    def release() -> None:
+        start.wait()
+        for _ in range(rounds):
+            try:
+                for name in (owner, fence, responses):
+                    backend.set(name, b"token", ex=30)
+                backend.delete_many([fence, responses, owner])
+            except BaseException as e:
+                errors.append(e)
+
+    try:
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(renew) for _ in range(3)]
+            futures.append(executor.submit(release))
+            for future in futures:
+                future.result()
+    finally:
+        backend.delete_many([owner, fence, responses])
+
+    assert errors == []

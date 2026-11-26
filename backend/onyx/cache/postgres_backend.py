@@ -377,7 +377,20 @@ class PostgresCacheBackend(CacheBackend):
             return
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
             _set_statement_timeout(session, self._statement_timeout_ms)
-            session.execute(delete(CacheStore).where(CacheStore.key.in_(keys)))
+            # A DELETE locks rows in scan order. Lock them in key order first,
+            # as ``renew_if_value`` does, and delete only the locked rows, so
+            # the two cannot deadlock. A key that another caller sets during
+            # the call is treated as set after the delete.
+            locked = list(
+                session.scalars(
+                    select(CacheStore.key)
+                    .where(CacheStore.key.in_(keys))
+                    .order_by(CacheStore.key)
+                    .with_for_update()
+                )
+            )
+            if locked:
+                session.execute(delete(CacheStore).where(CacheStore.key.in_(locked)))
             session.commit()
 
     def delete_prefix(self, prefix: str) -> None:
@@ -530,14 +543,22 @@ class PostgresCacheBackend(CacheBackend):
     ) -> bool:
         """Renew a matching unexpired lease and commit the update.
 
-        The row lock is taken first so the expiry check and the new deadline
+        The row locks are taken first so the expiry check and the new deadline
         use the clock after any lock wait, not the transaction start time.
-        It is held to the commit, so the ``also`` keys change with the lease.
+        They are held to the commit, so the ``also`` keys change with the lease.
+
+        Rows are locked in key order by one statement, as in ``delete_many``,
+        and only locked rows are written, so the two cannot deadlock. An
+        ``also`` key that another caller sets during the call keeps the TTL
+        that caller gave it.
         """
         from onyx.db.engine.sql_engine import get_session_with_tenant
 
         lock_stmt = (
-            select(CacheStore.key).where(CacheStore.key == key).with_for_update()
+            select(CacheStore.key)
+            .where(CacheStore.key.in_([key, *also]))
+            .order_by(CacheStore.key)
+            .with_for_update()
         )
         now = func.clock_timestamp()
         stmt = (
@@ -552,12 +573,17 @@ class PostgresCacheBackend(CacheBackend):
         )
         with get_session_with_tenant(tenant_id=self._tenant_id) as session:
             _set_statement_timeout(session, self._statement_timeout_ms)
-            session.execute(lock_stmt)
-            renewed = session.execute(stmt).scalar_one_or_none()
-            if renewed is not None and also:
+            locked = set(session.scalars(lock_stmt))
+            # A lease that is set after the lock statement is not this call's
+            # to renew, and a write to its unlocked row could deadlock.
+            renewed = (
+                session.execute(stmt).scalar_one_or_none() if key in locked else None
+            )
+            locked_also = [name for name in also if name in locked]
+            if renewed is not None and locked_also:
                 session.execute(
                     update(CacheStore)
-                    .where(CacheStore.key.in_(also))
+                    .where(CacheStore.key.in_(locked_also))
                     .values(expires_at=now + timedelta(seconds=seconds))
                 )
             session.commit()
