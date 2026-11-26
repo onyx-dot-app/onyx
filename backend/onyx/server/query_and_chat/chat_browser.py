@@ -251,8 +251,8 @@ async def _pump(
 ) -> None:
     """Pump both directions until one ends or the lease ends. The viewer
     leaving ends the view quietly; an ended lease closes the websocket with
-    its error's code; anything else (also a failed access check) with
-    CLOSE_RECONNECT, and the reconnect checks access again."""
+    its error's code; anything else, also a check that cannot complete,
+    with CLOSE_RECONNECT, and the reconnect checks access again."""
     from_viewer = asyncio.create_task(
         _viewer_to_service(websocket, stream, chat_session_id)
     )
@@ -267,19 +267,14 @@ async def _pump(
         for task in pumps:
             task.cancel()
         await asyncio.gather(*pumps, return_exceptions=True)
-    if lease in done:
-        check_error = lease.exception()
-        if check_error is None:
-            await _close_refused(websocket, lease.result())
-            return
-        logger.warning(
-            "chat_browser_view_check_failed chat=%s: %r", chat_session_id, check_error
-        )
+    if lease in done and lease.exception() is None:
+        await _close_refused(websocket, lease.result())
+        return
     viewer_error = from_viewer.exception() if from_viewer in done else None
     viewer_left = from_viewer in done and (
         viewer_error is None or isinstance(viewer_error, WebSocketDisconnect)
     )
-    for task in done & pumps:
+    for task in done:
         error = task.exception()
         if error is not None and not isinstance(error, WebSocketDisconnect):
             logger.warning(
