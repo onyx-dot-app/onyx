@@ -44,6 +44,10 @@ class GraphQLOpMatcher(RuleMatcher[GraphQLOp]):
     rule_type = GraphQLOp
 
     def matches(self, rule: GraphQLOp, context: MatchContext) -> bool:
+        if context.request.method.upper() != "POST" or not path_matches(
+            rule.path, context.request.path
+        ):
+            return False
         return any(
             operation_type == rule.operation_type and field == rule.field
             for operation_type, field in context.graphql_invocations

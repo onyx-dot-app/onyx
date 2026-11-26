@@ -95,3 +95,25 @@ def test_known_graphql_fields_of_one_action_do_not_ask() -> None:
         {"query": '{ issues { nodes { id } } issue(id: "x") { id } }'}
     )
     assert actions == ["linear.issues.read"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("DELETE", "/repos/o/r/issues/comments/1"),
+        ("POST", "/repos/o/r/issues/comments/1"),
+        ("GET", "/graphql"),
+    ],
+)
+def test_a_graphql_body_matches_only_a_post_to_the_graphql_endpoint(
+    method: str, path: str
+) -> None:
+    matched = recognize_actions(
+        ExternalAppType.GITHUB,
+        ProxiedRequest(
+            method=method,
+            path=path,
+            body=json.dumps({"query": "{ viewer { id } }"}).encode(),
+        ),
+    )
+    assert [action.action_type for action in matched] == [WHOLE_DOMAIN_ACTION_TYPE]

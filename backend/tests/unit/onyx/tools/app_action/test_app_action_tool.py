@@ -207,6 +207,30 @@ def test_rejects_a_graphql_document_with_a_second_action() -> None:
     assert mixed.is_error and unknown.is_error
 
 
+@pytest.mark.parametrize(
+    ("method", "url"),
+    [
+        ("DELETE", "https://api.github.com/repos/o/r/issues/comments/1"),
+        ("GET", "https://api.github.com/graphql"),
+    ],
+)
+def test_a_graphql_body_does_not_make_another_request_its_action(
+    method: str, url: str
+) -> None:
+    """A read GraphQL body must not carry a request to another endpoint."""
+    with patch(_SEND) as send:
+        result = _run(
+            _tool("github.user.read", offered=("github.user.read", "unspecified")),
+            method=method,
+            url=url,
+            body={"query": "{ viewer { id } }"},
+        )
+
+    send.assert_not_called()
+    assert result.is_error
+    assert "app__7__request" in result.content
+
+
 def test_request_tool_takes_only_a_request_that_is_no_other_action() -> None:
     tool = _tool("unspecified")
     with patch(_SEND, return_value=_response()) as send:
