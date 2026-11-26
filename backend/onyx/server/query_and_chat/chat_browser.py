@@ -31,13 +31,11 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi_users.authentication import Strategy
 from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketState
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import (
-    auth_backend,
     current_user_from_websocket_cookie,
     read_websocket_cookie_user,
 )
@@ -271,7 +269,6 @@ async def chat_browser_live_view(
     websocket: WebSocket,
     chat_session_id: UUID,
     user: User = Depends(current_user_from_websocket_cookie),
-    strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
 ) -> None:
     """The live view of the chat's tabs."""
     # Accepted first, so that a refusal reaches the viewer with its code.
@@ -283,9 +280,7 @@ async def chat_browser_live_view(
         return
     sandbox = get_harness_sandbox()
     lease = asyncio.create_task(
-        _hold_browser_view(
-            sandbox, ref, lambda: read_websocket_cookie_user(websocket, strategy)
-        )
+        _hold_browser_view(sandbox, ref, lambda: read_websocket_cookie_user(websocket))
     )
     try:
         await websocket.send_json({"type": "starting"})

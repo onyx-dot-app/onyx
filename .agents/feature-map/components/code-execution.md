@@ -392,9 +392,9 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         HarnessSandbox.install_skill then sends them as one tar
                                         to the daemon's InstallSkill and waits (guest-daemon
                                         README "Skills").
-  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
-                                        command gets AGENT_BROWSER_SESSION=<chat session>, so
-                                        chats in one VM keep separate browsers); each
+  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (the
+                                        browser is not a command: the browser_* tools call
+                                        the VM's browser service, see browser_tools.py); each
                                         ExecOutputDelta -> ToolProgress, which the tool
                                         stops at the call's character budget (the request
                                         of the shape's arguments: max_output_tokens x 4, or
