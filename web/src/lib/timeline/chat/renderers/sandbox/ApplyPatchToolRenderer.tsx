@@ -119,9 +119,13 @@ export function ApplyPatchToolRenderer({
       : "";
 
   // One panel: each file's diff. The output band shows only when it adds
-  // something: the error, or the changed files when some have no panel.
+  // something: the error, or the changed files when some have no panel
+  // (past the line limit, or a header the preview did not read).
   const showOutput =
-    error !== null || !parsed?.files.length || parsed.omittedFiles > 0;
+    error !== null ||
+    !parsed?.files.length ||
+    parsed.omittedFiles > 0 ||
+    (end !== null && parsed.files.length < end.files.length);
   const content = (
     <SandboxCallContent renderType={renderType}>
       {parsed?.files.map((file, index) => (
