@@ -2,7 +2,9 @@
 
 Only the new harness calls this; opencode sessions keep `get_sandbox_manager`
 (pod or Docker, chosen by `SANDBOX_BACKEND`). The harness gets Firecracker
-sandboxes with `SANDBOX_RUNTIME=firecracker`.
+sandboxes with `SANDBOX_RUNTIME=firecracker`. The container backend
+(`get_container_harness_sandbox`, `SANDBOX_CONTAINER_HARNESS=true`) is built
+but not yet selected for harness calls.
 """
 
 import threading
@@ -15,10 +17,18 @@ from onyx.microvm.lifecycle import (
     SandboxCheckpointer,
     UnknownActivity,
 )
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_CONTAINER_HARNESS,
+    SandboxBackend,
+)
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
+    from onyx.server.features.build.sandbox.container.harness_sandbox import (
+        ContainerHarnessSandbox,
+    )
     from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
         FirecrackerHarnessSandbox,
     )
@@ -27,6 +37,7 @@ logger = setup_logger()
 
 _lock = threading.Lock()
 _instance: "FirecrackerHarnessSandbox | None" = None
+_container_instance: "ContainerHarnessSandbox | None" = None
 _eviction_error_logged = False
 
 
@@ -54,6 +65,46 @@ def _firecracker_sandbox() -> "FirecrackerHarnessSandbox":
                 template=SANDBOX_FC_TEMPLATE, archive_store=default_archive_store()
             )
     return _instance
+
+
+def get_container_harness_sandbox() -> "ContainerHarnessSandbox":
+    """The container backend: pods with SANDBOX_BACKEND=kubernetes, Docker
+    containers with SANDBOX_BACKEND=docker."""
+    global _container_instance
+    if not SANDBOX_CONTAINER_HARNESS:
+        raise HarnessSandboxUnavailableError(
+            "Container harness sandboxes need SANDBOX_CONTAINER_HARNESS=true"
+        )
+    with _lock:
+        if _container_instance is None:
+            # Deferred: the Docker or Kubernetes client loads only when used.
+            from onyx.server.features.build.sandbox.container.harness_sandbox import (
+                ContainerHarnessSandbox,
+            )
+            from onyx.server.features.build.sandbox.container.runtime import (
+                ContainerRuntime,
+            )
+            from onyx.server.features.build.sandbox.container.transfer import (
+                default_file_store_archives,
+            )
+
+            runtime: ContainerRuntime
+            if SANDBOX_BACKEND is SandboxBackend.DOCKER:
+                from onyx.server.features.build.sandbox.container.docker_runtime import (
+                    DockerRuntime,
+                )
+
+                runtime = DockerRuntime()
+            else:
+                from onyx.server.features.build.sandbox.container.pod_runtime import (
+                    PodRuntime,
+                )
+
+                runtime = PodRuntime()
+            _container_instance = ContainerHarnessSandbox(
+                runtime=runtime, archives=default_file_store_archives()
+            )
+    return _container_instance
 
 
 def get_harness_sandbox() -> HarnessSandbox:

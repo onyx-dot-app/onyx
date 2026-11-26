@@ -446,6 +446,27 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   execution table (`EXECUTION_CAP_REACHED`) raises `ExecCapReachedError`.
   Each command has a client label; when Start gets no answer, the harness
   finds the command by that label and adopts it.
+- `.../sandbox/container/harness_sandbox.py:ContainerHarnessSandbox`
+  implements the hooks for one container per sandbox, without KVM:
+  `.../container/pod_runtime.py:PodRuntime` (a pod from the PodTemplate
+  `SANDBOX_HARNESS_POD_TEMPLATE` plus an overlay, a daemon Secret owned by
+  the pod) or `.../container/docker_runtime.py:DockerRuntime` (Compose,
+  `firewall-init` entrypoint, `pids_limit`, optional `SANDBOX_DOCKER_RUNTIME`).
+  The image is the craft-runtime `container` target; the guest daemon
+  listens on TCP with TLS, and the client pins a self-signed certificate
+  made per container (`.../container/tls.py`). The container record
+  (`.../container/state.py`) holds the name, address, `(attempt,
+  generation)` and the certificate; the daemon key uses the per-sandbox key
+  record of `onyx/microvm/registry.py`. A daemon restart is a new
+  generation (Init again; old exec records end); session files follow the
+  attempt (`RunningInstance.files_identity`), so they outlive the restart.
+  An unusable container is replaced by the next attempt. Saves stream CaptureSession into the file store and back
+  (`.../container/transfer.py:FileStoreSessionTransfer`). The Celery sweep
+  (`SWEEP_HARNESS_CONTAINERS`, beat only with `SANDBOX_CONTAINER_HARNESS`)
+  deletes containers without a record after the resource grace time and
+  sends `STOP_IDLE_HARNESS_CONTAINER`, which saves every session and deletes
+  the container. `.../sandbox/harness_factory.py:get_container_harness_sandbox` builds
+  it; no harness call selects it yet.
 - `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
   `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`
   (`backend/onyx/microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the source image

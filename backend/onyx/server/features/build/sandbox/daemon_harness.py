@@ -197,7 +197,15 @@ class RunningInstance:
 
     @property
     def identity(self) -> tuple[int, int]:
+        """The processes' instance: exec records belong to it."""
         return (self.attempt, self.generation)
+
+    @property
+    def files_identity(self) -> tuple[int, int]:
+        """The instance whose files a session's setup and saves use. A
+        backend whose files outlive a daemon restart keeps it across
+        generations."""
+        return self.identity
 
 
 def _find_started(
@@ -345,7 +353,7 @@ class DaemonHarnessSandbox[InstanceT: RunningInstance](HarnessSandbox):
         # Only a session restored on this instance: a save of a session that
         # was never set up here would replace its last save with less.
         if ref.session_id not in sessions_on_instance(
-            tenant_cache, ref.sandbox_id, instance.identity
+            tenant_cache, ref.sandbox_id, instance.files_identity
         ):
             return
         with session_save_lock(tenant_cache, ref.session_id) as held:
@@ -401,7 +409,7 @@ class DaemonHarnessSandbox[InstanceT: RunningInstance](HarnessSandbox):
 
         def set_up() -> bool:
             return ref.session_id in sessions_on_instance(
-                tenant_cache, ref.sandbox_id, instance.identity
+                tenant_cache, ref.sandbox_id, instance.files_identity
             )
 
         if set_up():

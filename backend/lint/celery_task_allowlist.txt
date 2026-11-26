@@ -88,6 +88,8 @@ task HOOK_EXECUTION_LOG_CLEANUP_TASK: Beat cleanup of old hook execution logs.
 task CLEANUP_IDLE_SANDBOXES: Beat sweep of one tenant's stale and idle sandbox rows.
 task RECONCILE_SANDBOX_RUNTIMES: Beat check of every live sandbox runtime against its tenant's database state.
 task PUSH_SKILLS_TO_USERS: Pushes skills to running sandboxes, out of the request that changed them.
+task SWEEP_HARNESS_CONTAINERS: Beat check of every harness sandbox container: deletes orphans and sends the idle stops.
+task STOP_IDLE_HARNESS_CONTAINER: Saves the sessions of one idle harness sandbox container, which can take minutes, then deletes it.
 task SYNC_MARKETPLACE: Syncs one GitHub marketplace when a user asks; downloads and stores many plugin bundles.
 task SCHEDULED_TASKS_DISPATCH_DUE: Beat check that claims due scheduled tasks and sends their runs.
 task SCHEDULED_TASKS_RUN: Runs one user-scheduled Craft task, on the scheduled tasks worker.
@@ -151,6 +153,8 @@ beat hook-execution-log-cleanup: Deletes old hook execution logs daily.
 beat cleanup-idle-sandboxes: Sweeps stale and idle sandboxes on its configured interval.
 beat reconcile-sandbox-runtimes: Reconciles sandbox runtimes every 15 minutes on a self-hosted deployment.
 beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_reconcile-sandbox-runtimes: Reconciles sandbox runtimes every 15 minutes across the cloud.
+beat sweep-harness-containers: Stops idle harness sandbox containers and deletes orphans every minute on a self-hosted deployment.
+beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_sweep-harness-containers: Stops idle harness sandbox containers and deletes orphans every minute across the cloud.
 beat dispatch-due-scheduled-tasks: Dispatches due scheduled tasks every 30 seconds.
 beat cleanup-stuck-scheduled-runs: Fails stuck scheduled runs every hour.
 beat scheduled-eval-pipeline: Runs the configured eval datasets weekly.

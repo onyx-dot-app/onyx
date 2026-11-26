@@ -22,6 +22,7 @@ from onyx.document_index.opensearch.constants import (
 )
 from onyx.server.features.build.configs import (
     ENABLE_CRAFT,
+    SANDBOX_CONTAINER_HARNESS,
     SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
 )
 from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
@@ -609,6 +610,27 @@ if ENABLE_CRAFT:
         beat_cloud_tasks.append(_sandbox_reconcile_task)
     else:
         tasks_to_schedule.append(_sandbox_reconcile_task)
+
+
+if SANDBOX_CONTAINER_HARNESS:
+    # Cluster-wide: one runtime listing covers every tenant's containers.
+    _harness_sweep_interval = timedelta(minutes=1)
+    _harness_sweep_task: dict[str, Any] = {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_sweep-harness-containers"
+        if MULTI_TENANT
+        else "sweep-harness-containers",
+        "task": OnyxCeleryTask.SWEEP_HARNESS_CONTAINERS,
+        "schedule": _harness_sweep_interval,
+        "options": {
+            "queue": OnyxCeleryQueues.SANDBOX,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": int(_harness_sweep_interval.total_seconds()),
+        },
+    }
+    if MULTI_TENANT:
+        beat_cloud_tasks.append(_harness_sweep_task)
+    else:
+        tasks_to_schedule.append(_harness_sweep_task)
 
 
 if not DISABLE_VECTOR_DB:

@@ -57,7 +57,7 @@ It is the runtime image plus these parts, all owned by root:
 | Path | Part |
 |---|---|
 | `/usr/local/bin/guest-daemon` | The guest daemon, built from `microvm/cmd/guest-daemon` |
-| `/usr/local/bin/sandbox-entrypoint` | The image entrypoint: makes `/tmp/onyx`, then runs `guest-daemon --container` with its arguments under `tini` (PID 1, reaps orphaned command children). It refuses to run as root |
+| `/usr/local/bin/sandbox-entrypoint` | The image entrypoint: makes `/tmp/onyx`, adds the proxy CA (`SANDBOX_PROXY_CA_BUNDLE_SRC`, default `/sandbox-ca/ca.crt`, when readable) to the sandbox user's NSS database for Chrome, then runs `guest-daemon --container` with its arguments under `tini` (PID 1, reaps orphaned command children). It refuses to run as root |
 | `/usr/local/bin/firewall-init` | The sandbox image's `firewall-init.sh`: installs the proxy CA and the iptables egress lockdown |
 | `iptables`, `setpriv` | For `firewall-init` (`util-linux` gives `setpriv`) |
 | `tini` | PID 1 |
