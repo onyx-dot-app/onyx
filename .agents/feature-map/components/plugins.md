@@ -15,11 +15,13 @@ Group or user restriction needs EE.
 
 - **An admin** opens the Agents & Plugins sidebar section. Admin >
   Integrations (`/admin/integrations`) lists the MCP servers and apps from
-  `GET /admin/integrations`, with Name (and the owner of a private one, or the
-  "No access" reason for a manager with no access of its own), Type, Sign-in,
+  `GET /admin/integrations`, with Name (under it the "No access" reason for a
+  manager with no access of its own, else the description, else the owner of a
+  private one), Type, Sign-in,
   Install Setting and Status, a type filter, search and "Needs setup". The "Add"
-  menu (here and on the Customize Integrations tab) has MCP Server and Custom
-  API. "Browse the Catalog" at the foot of both lists opens the catalog: presets
+  menu (here and on the Customize Integrations tab) has MCP server, Custom API
+  and From catalog. From catalog, and "Browse the Catalog" at the foot of both
+  lists, open the catalog: presets
   and suggested MCP servers in one grid, with or without Craft, where a suggested MCP server replaces
   the preset of its service
   ([TECH-DEBT.md](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog)).
