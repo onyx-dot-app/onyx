@@ -321,18 +321,26 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     [modelPaging, trimmedQuery, providerIdByValue]
   );
 
-  const selectValue =
-    decisionSection?.selected && value !== null
+  // Disabled by its caller, or with no model to offer, the select shows the
+  // placeholder rather than a value or the Global Default row. A pending
+  // save keeps showing the value it saves.
+  const showPlaceholder =
+    disabled || (models.length === 0 && decisionRows.length === 0);
+  const selectValue = showPlaceholder
+    ? ""
+    : decisionSection?.selected && value !== null
       ? DECISION_SELECT_PREFIX + value
       : toSelectValue(value);
 
   // The Global Default row is what null shows as; otherwise a non-nullable
   // field's own value is its floor. Either way a re-pick is a no-op.
-  const defaultOption = globalDefault
-    ? GLOBAL_DEFAULT_SELECT_VALUE
-    : nullable || value === null
-      ? undefined
-      : selectValue;
+  const defaultOption = showPlaceholder
+    ? undefined
+    : globalDefault
+      ? GLOBAL_DEFAULT_SELECT_VALUE
+      : nullable || value === null
+        ? undefined
+        : selectValue;
 
   return (
     <InputSingleSelect

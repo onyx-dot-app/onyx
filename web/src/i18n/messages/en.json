@@ -6981,7 +6981,7 @@
       "imageGeneration": {
         "defaultModel": {
           "title": "Image Model",
-          "description": "The model that the Image Generation action uses.",
+          "description": "Used to generate images in sessions.",
           "error": "Could not change the default image model",
           "noDefault": {
             "label": "No Default",

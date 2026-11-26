@@ -6981,7 +6981,7 @@
       "imageGeneration": {
         "defaultModel": {
           "title": "Modelo de imagen",
-          "description": "El modelo que usa la acción Generación de imágenes.",
+          "description": "Se usa para generar imágenes en las sesiones.",
           "error": "No se pudo cambiar el modelo de imagen predeterminado",
           "noDefault": {
             "label": "Sin predeterminado",

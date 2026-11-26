@@ -6981,7 +6981,7 @@
       "imageGeneration": {
         "defaultModel": {
           "title": "画像モデル",
-          "description": "画像生成アクションが使用するモデルです。",
+          "description": "セッションで画像を生成するために使用されます。",
           "error": "デフォルトの画像モデルを変更できませんでした",
           "noDefault": {
             "label": "デフォルトなし",

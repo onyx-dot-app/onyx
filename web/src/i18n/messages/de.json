@@ -6981,7 +6981,7 @@
       "imageGeneration": {
         "defaultModel": {
           "title": "Bildmodell",
-          "description": "Das Modell, das die Aktion Bildgenerierung verwendet.",
+          "description": "Wird zum Erstellen von Bildern in Sitzungen verwendet.",
           "error": "Das Standard-Bildmodell konnte nicht geändert werden",
           "noDefault": {
             "label": "Kein Standard",

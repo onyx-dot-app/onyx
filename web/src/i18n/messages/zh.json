@@ -6981,7 +6981,7 @@
       "imageGeneration": {
         "defaultModel": {
           "title": "图像模型",
-          "description": "图像生成操作使用的模型。",
+          "description": "用于在会话中生成图像。",
           "error": "无法更改默认图像模型",
           "noDefault": {
             "label": "无默认",
