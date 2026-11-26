@@ -542,6 +542,25 @@ def test_lines_that_grow_the_stored_spec_over_5_mb_are_refused() -> None:
     assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
 
 
+def test_removing_a_line_from_a_compact_spec_near_5_mb_saves() -> None:
+    spec = _callable_spec()
+    spec["info"]["description"] = ""
+    room = 5 * 1024 * 1024 - len(json.dumps(spec, separators=(",", ":")))
+    spec["info"]["description"] = "x" * (room - 10)
+    stored = json.dumps(spec, separators=(",", ":"))
+    lines = [line for line in endpoint_lines(spec) if "DELETE" not in line]
+
+    document, saved = _openapi_document(
+        OpenApiConfigInput(base_url="https://pets.example.com", endpoints=lines),
+        stored,
+        title="Pets",
+        description=None,
+    )
+
+    assert "delete" not in saved["paths"]["/pets/{petId}"]
+    assert "\n" not in document
+
+
 def test_a_fetched_spec_with_a_query_in_its_server_url_is_refused() -> None:
     spec = _callable_spec()
     spec["servers"] = [{"url": "https://pets.example.com/api?key=1"}]

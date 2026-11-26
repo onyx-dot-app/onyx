@@ -357,11 +357,14 @@ def apply_endpoint_lines(
 
 
 def _dump_like(document: str, spec: dict[str, Any]) -> str:
-    """``spec`` as JSON if ``document`` is JSON, else as YAML."""
+    """``spec`` as JSON if ``document`` is JSON, else as YAML. JSON on one
+    line stays compact, so an edit adds no whitespace."""
     try:
         json.loads(document)
     except json.JSONDecodeError:
         return yaml.safe_dump(spec, sort_keys=False, allow_unicode=True)
+    if "\n" not in document.strip():
+        return json.dumps(spec, separators=(",", ":"))
     return json.dumps(spec, indent=2)
 
 
