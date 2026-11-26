@@ -621,6 +621,9 @@ def introspect_graphql_endpoint(
             ssrf=outbound_ssrf_params(get_security_settings().ssrf_protection_level),
             max_response_bytes=_MAX_SPEC_BYTES,
             json_body={"query": get_introspection_query(descriptions=True)},
+            # The HTTP rules of the spec URL fetch and MCP setup.
+            timeout=_SPEC_FETCH_TIMEOUT_SECONDS,
+            trust_env=False,
         )
     except ToolRequestError as e:
         reason: str = e.failure.value

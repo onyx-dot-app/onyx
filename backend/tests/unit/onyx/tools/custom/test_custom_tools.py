@@ -41,6 +41,7 @@ from tests.unit.fakes import NO_CREDENTIALS
 # Kwargs the tool passes on self-hosted below DISABLED.
 _REQUEST_KWARGS: dict[str, Any] = {
     "timeout": TOOL_REQUEST_TIMEOUT,
+    "trust_env": True,
     "allow_private_network": True,
     "block_loopback_and_link_local": True,
     "block_link_local_only": False,
@@ -936,7 +937,7 @@ def test_call_pins_private_ip_on_self_hosted() -> None:
         8080,
     )
     assert args[6] == TOOL_REQUEST_TIMEOUT
-    assert kwargs == {"json": {"q": 1}, "stream": True}
+    assert kwargs == {"json": {"q": 1}, "stream": True, "trust_env": True}
 
 
 def test_call_refuses_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1175,6 +1176,30 @@ def test_introspection_follows_the_admin_ssrf_level(
                 GraphQLIntrospectRequest(endpoint_url="http://10.0.0.1/graphql")
             )
     assert pinned.called is reaches
+
+
+def test_introspection_uses_the_http_rules_of_the_spec_fetch() -> None:
+    """Introspection is a setup fetch: the spec fetch timeout, no proxy or
+    netrc from the environment, and no redirect."""
+    from onyx.integrations import service
+    from onyx.server.features.integrations.models import GraphQLIntrospectRequest
+
+    response = _response({"data": None})
+    with (
+        patch.object(service, "get_security_settings"),
+        patch(
+            "onyx.utils.url._validate_and_resolve_url",
+            return_value=("1.2.3.4", "api.example.com", 443),
+        ),
+        patch("onyx.utils.url._pinned_request", return_value=response) as pinned,
+        pytest.raises(OnyxError),
+    ):
+        service.introspect_graphql_endpoint(
+            GraphQLIntrospectRequest(endpoint_url="https://api.example.com/graphql")
+        )
+    args, kwargs = pinned.call_args
+    assert args[6] == service._SPEC_FETCH_TIMEOUT_SECONDS
+    assert kwargs["trust_env"] is False
 
 
 @pytest.mark.parametrize(

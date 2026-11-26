@@ -151,6 +151,8 @@ def send_tool_request(
     ssrf: OutboundSSRFParams,
     max_response_bytes: int | None = None,
     json_body: JsonValue | None = None,
+    timeout: float | tuple[float, float] = TOOL_REQUEST_TIMEOUT,
+    trust_env: bool = True,
 ) -> ToolResponse:
     """Send one request with the SSRF checks of ``ssrf``. A redirect is
     refused, so a credential header never goes to a second host. Raises
@@ -161,7 +163,8 @@ def send_tool_request(
             url,
             method=method,
             headers=headers,
-            timeout=TOOL_REQUEST_TIMEOUT,
+            timeout=timeout,
+            trust_env=trust_env,
             allow_private_network=ssrf.allow_private_network,
             block_loopback_and_link_local=ssrf.block_loopback_and_link_local,
             block_link_local_only=ssrf.block_link_local_only,
