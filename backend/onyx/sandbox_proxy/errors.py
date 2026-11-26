@@ -48,9 +48,9 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "requests are currently failing and stop attempting this call."
     ),
     SandboxProxyError.NO_ACTIVE_SESSION: (
-        "This request needs to be tied to an active Craft session for approval, "
-        "but no such session could be found, so it was blocked. This usually "
-        "means the session ended or the request was made outside of a Craft "
+        "This request needs to be tied to an active chat or Craft session for "
+        "approval, but no such session could be found, so it was blocked. This "
+        "usually means the session ended or the request was made outside of a "
         "session. Retrying the same request will not help — tell the user the "
         "action could not be authorized and ask how they want to proceed."
     ),

@@ -39,3 +39,9 @@ def test_every_code_has_a_message() -> None:
 def test_credential_error_names_no_product() -> None:
     # Craft and chat commands both get this prose.
     assert "Craft" not in SandboxProxyError.CREDENTIAL_ERROR.message
+
+
+def test_no_active_session_covers_chat_and_craft() -> None:
+    message = SandboxProxyError.NO_ACTIVE_SESSION.message
+    assert "chat or Craft session" in message
+    assert "outside of a Craft" not in message
