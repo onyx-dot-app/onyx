@@ -104,6 +104,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
 )
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.sandbox.browser_tools import with_browser_tools
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     SANDBOX_TOOLS,
@@ -694,11 +695,17 @@ def test_sandbox_tool_definitions_are_the_same_in_every_chat(
 
 
 @pytest.mark.parametrize("family", list(ToolFamily))
-def test_the_token_estimate_covers_a_sandbox_turn(family: ToolFamily) -> None:
+@pytest.mark.parametrize("browser", [True, False])
+def test_the_token_estimate_covers_a_sandbox_turn(
+    family: ToolFamily, browser: bool
+) -> None:
     turn = _sandbox_turn(family, chat_files=True)
     tools: list[Tool] = [
         *(tool for tool, _ in _guided_tools(family)),
-        *(tool(turn) for tool in SANDBOX_TOOLS[family].tools),
+        *(
+            tool(turn)
+            for tool in with_browser_tools(SANDBOX_TOOLS[family].tools, browser=browser)
+        ),
     ]
     actual = len(
         build_system_prompt(
@@ -715,6 +722,7 @@ def test_the_token_estimate_covers_a_sandbox_turn(family: ToolFamily) -> None:
         token_counter=len,
         tool_family=family,
         sandbox_tools=True,
+        browser_tools=browser,
     )
     assert estimate >= actual
 
@@ -1178,6 +1186,7 @@ def test_the_token_estimate_names_the_model_s_tools(
         token_counter=count,
         tool_family=family,
         sandbox_tools=True,
+        browser_tools=False,
     )
     [estimate] = prompts
     assert [name for name in named if name not in estimate] == []

@@ -136,6 +136,16 @@ def load_settings(raise_on_error: bool = False) -> Settings:
     return settings
 
 
+def load_browser_enabled() -> bool:
+    """The `browser_enabled` setting. False when the settings cannot be read,
+    so a read error never turns on a browser that an admin turned off."""
+    try:
+        return load_settings(raise_on_error=True).browser_enabled
+    except Exception:
+        logger.exception("Could not load the browser setting; the browser is off")
+        return False
+
+
 def clear_chat_retention() -> None:
     """Stops the retention task from deleting chats. Raises if the stored
     settings cannot be read, so a failed read never passes for cleared."""

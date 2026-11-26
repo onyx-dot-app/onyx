@@ -335,7 +335,7 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     # The daemon makes the session directory and uses it as the default cwd.
     assert command.session_id == str(ref.session_id)
     assert command.cwd == ""
-    assert command.env == {"AGENT_BROWSER_SESSION": str(ref.session_id)}
+    assert command.env == {}
 
 
 def test_exec_command_reports_a_failed_command_and_relative_workdir(
@@ -772,6 +772,23 @@ def test_files_round_trip_in_the_session_directory(
     # The guest daemon cannot write mode 000; the call fails, not writes 0644.
     with pytest.raises(HarnessSandboxError, match="mode 000"):
         sandbox.write_file(ref, "notes/locked.txt", b"x", mode=0)
+
+
+@pytest.mark.usefixtures("node")
+def test_a_streamed_file_checks_its_size_before_its_first_chunk(
+    sandbox: FirecrackerHarnessSandbox,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    sandbox.write_file(ref, "downloads/a.bin", b"alpha")
+
+    assert b"".join(sandbox.stream_file(ref, "downloads/a.bin", max_bytes=5)) == (
+        b"alpha"
+    )
+    with pytest.raises(SandboxFileTooLargeError):
+        sandbox.stream_file(ref, "downloads/a.bin", max_bytes=4)
+    with pytest.raises(SandboxFileNotFoundError):
+        sandbox.stream_file(ref, "downloads/gone.bin", max_bytes=5)
 
 
 def test_stat_files_maps_the_daemon_facts_of_each_path(

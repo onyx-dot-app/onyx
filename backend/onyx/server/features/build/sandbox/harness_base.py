@@ -41,11 +41,14 @@ from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from typing import IO
 from uuid import UUID
 
+from pydantic import JsonValue
+
 from onyx.file_processing.file_types import (
     OFFICE_MIME_TYPES_BY_EXTENSION,
     PRESENTATION_MIME_TYPE,
     WORD_PROCESSING_MIME_TYPE,
 )
+from onyx.microvm.browser_protocol import BrowserFrame
 from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
@@ -62,6 +65,8 @@ from onyx.server.features.build.sandbox.models import (
 # The directory of the chat's files in its session directory: copies of file
 # store files (tools/tool_implementations/sandbox/file_copies.py).
 CHAT_FILES_DIR = "attachments"
+# Uploads for the chat browser's file chooser, in the session directory.
+BROWSER_UPLOADS_DIR = "browser-uploads"
 # The chat's project files and its agent's files, in CHAT_FILES_DIR.
 PROJECT_FILES_DIR = f"{CHAT_FILES_DIR}/project"
 AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
@@ -141,6 +146,9 @@ EXEC_DEFAULT_ENV: dict[str, str] = {
 }
 
 INTERRUPT_CHAR = "\x03"
+
+# An open live view keeps the sandbox busy this long after each renewal.
+BROWSER_VIEW_LEASE_SECONDS = 60.0
 
 
 def _strip_trailing_spaces_and_dots(text: str) -> str:
@@ -340,6 +348,24 @@ class SessionFiles(abc.ABC):
         end that (None). Each SessionFiles has one such mark."""
 
 
+class BrowserStream(abc.ABC):
+    """A live view connection to the sandbox's browser service, in the
+    service's frames (`onyx.microvm.browser_protocol`). The caller sends the
+    view hello first."""
+
+    @abc.abstractmethod
+    async def send(self, frame: BrowserFrame) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def receive(self) -> BrowserFrame | None:
+        """The next frame; None once the service closed the connection."""
+
+    @abc.abstractmethod
+    async def aclose(self) -> None:
+        pass
+
+
 class HarnessSandbox(abc.ABC):
     """What the harness calls. All methods block; see the module docstring."""
 
@@ -401,6 +427,15 @@ class HarnessSandbox(abc.ABC):
         missing file, SandboxFileTooLargeError over max_bytes, and
         HarnessSandboxError for a path that is not a regular file or that a
         link takes out of its root."""
+
+    @abc.abstractmethod
+    def stream_file(
+        self, ref: HarnessSandboxRef, path: str, *, max_bytes: int
+    ) -> Iterator[bytes]:
+        """read_file, as chunks that are not kept in memory. Raises the
+        same errors before the first chunk, and SandboxFileTooLargeError
+        while it reads a file that grows over max_bytes. Dropping the
+        iterator unread cancels the transfer."""
 
     @abc.abstractmethod
     def write_file(
@@ -495,5 +530,39 @@ class HarnessSandbox(abc.ABC):
 
     @abc.abstractmethod
     def is_busy(self, *, tenant_id: str, sandbox_id: UUID) -> bool:
-        """True while a command runs, a turn is in progress, a copy runs, or
-        an approval waits. Never starts the sandbox."""
+        """True while a command runs, a turn is in progress, a copy runs, an
+        approval waits, or a live view is open. Never starts the sandbox."""
+
+    # Browser. Each call names the chat by `ref.session_id`; the service
+    # shows a chat only its own tabs.
+
+    @abc.abstractmethod
+    def browser_call(
+        self,
+        ref: HarnessSandboxRef,
+        method: str,
+        params: dict[str, JsonValue],
+        *,
+        timeout_seconds: float,
+    ) -> dict[str, JsonValue]:
+        """One agent call to the browser service; returns its result. Starts
+        the sandbox and the browser if needed; that startup has its own
+        limits and does not count against `timeout_seconds`. Raises
+        HarnessSandboxError when the service refuses the call or does not
+        answer within `timeout_seconds`. A cancel of the
+        current signal ends the call and raises AgentCancelled."""
+
+    @abc.abstractmethod
+    async def open_browser_stream(self, ref: HarnessSandboxRef) -> BrowserStream:
+        """Start the sandbox and the browser if needed, and open a live view
+        connection. Raises when the browser cannot be reached."""
+
+    @abc.abstractmethod
+    def renew_browser_view(self, ref: HarnessSandboxRef) -> None:
+        """Keep the sandbox busy for BROWSER_VIEW_LEASE_SECONDS more: a live
+        view of the chat is open. Never starts the sandbox."""
+
+    @abc.abstractmethod
+    def clear_browser_data(self, ref: HarnessSandboxRef) -> None:
+        """Stop the browser and delete its profile (sign-ins, cookies,
+        storage) and the profile's save. Never starts the sandbox."""

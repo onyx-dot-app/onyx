@@ -81,6 +81,11 @@
   each version as
   `{WEB_DOMAIN}/app/artifacts/<artifact_id>/v<N>`, which opens the file in
   the output panel.
+  While the admin setting `browser_enabled` is on, the model also gets the
+  browser tools (`browser_open`, `browser_navigate`, `browser_snapshot`,
+  `browser_act`, `browser_wait_for`, `browser_evaluate`, `browser_status`,
+  `browser_dialog`), which drive the chat's own tabs in the VM's one Chrome;
+  the user can watch the tabs live and take control of one.
 
 ---
 
@@ -92,8 +97,9 @@ stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
 `apply_patch`, `edit`, `write`, `library_create_library_file`, `library_list`,
 `library_prepare_materialize`, `library_replace_library_file`, `library_manage_library`,
-`library_read`, `library_find`, `library_search`, `artifact`) and the artifact operations that
-they share. Code mode's packets and replay belong to [[streaming-protocol]], and
+`library_read`, `library_find`, `library_search`, `artifact`, and the browser tools) and the
+artifact operations that they share. The live view routes and the browser service in the VM
+belong to [[craft-sandboxes]]. Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -328,7 +334,27 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         `onyx:artifacts.delete`, one key for both families, so
                                         a chat grant survives a model switch); a turn whose
                                         ApprovalMode is RUN_WITHOUT_ASKING (evals) builds
-                                        them with no scope
+                                        them with no scope, the browser tools included;
+                                        browser_tools.with_browser_tools appends
+                                        BROWSER_TOOLS (rank BROWSER, after the family's
+                                        sandbox tools) with ChatTurnSetup.browser_tools (the
+                                        browser_enabled setting, read once in
+                                        prepare_chat_turn, off when the settings
+                                        cannot be read); the token estimate counts
+                                        their descriptions too
+                                        (calculate_reserved_tokens browser_tools)
+  browser_tools.py (SEQUENTIAL, one     each call is one HarnessSandbox.browser_call (one Dial
+  group)                                to the VM's browser service, named by the chat); a
+                                        service refusal (for example human_control: a human
+                                        controls the tab) is a tool error with the service's
+                                        message. browser_open's description has the browser
+                                        usage (the user can watch and take control; on a
+                                        refusal, open a tab with new_tab or ask the user),
+                                        and its name must stay: the web panel opens itself
+                                        on its start packet. Reads (status, snapshot,
+                                        wait_for) RUNS_AGAIN; the others get an
+                                        interrupted result. Paths (upload, screenshot) are
+                                        session-relative
   prompt_utils.py:build_system_prompt   the `# Environment` section ends the prompt with
                                         the VM's facts (prompts/sandbox_tools.py:
                                         ENVIRONMENT_SECTION): the working directory
@@ -344,7 +370,7 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         holds nothing of its files, so tool definitions
                                         are the same in every chat. The
                                         token estimate counts each family's sandbox tool
-                                        descriptions at their longest. In code mode
+                                        descriptions (and the browser tools') at their longest. In code mode
                                         every artifact function is deferred, so only the
                                         deferred-groups note names its group (`library`,
                                         or `artifact` for Claude models), with the line
@@ -367,9 +393,9 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         HarnessSandbox.install_skill then sends them as one tar
                                         to the daemon's InstallSkill and waits (guest-daemon
                                         README "Skills").
-  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
-                                        command gets AGENT_BROWSER_SESSION=<chat session>, so
-                                        chats in one VM keep separate browsers); each
+  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (the
+                                        browser is not a command: the browser_* tools call
+                                        the VM's browser service, see browser_tools.py); each
                                         ExecOutputDelta -> ToolProgress, which the tool
                                         stops at the call's character budget (the request
                                         of the shape's arguments: max_output_tokens x 4, or

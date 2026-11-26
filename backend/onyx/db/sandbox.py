@@ -575,10 +575,14 @@ def get_retained_session_ids(
     db_session: Session, session_ids: list[UUID], cutoff: datetime.datetime
 ) -> set[UUID]:
     """The IDs in `session_ids` that chat retention keeps: an existing chat
-    session (the retention task deletes the expired ones), or a build
-    session with activity since `cutoff`."""
+    session (the retention task deletes the expired ones), a build session
+    with activity since `cutoff`, or a sandbox ID (the session of the
+    sandbox's browser profile)."""
     if not session_ids:
         return set()
+    profiles = db_session.scalars(
+        select(Sandbox.id).where(Sandbox.id.in_(session_ids))
+    ).all()
     chats = db_session.scalars(
         select(ChatSession.id).where(ChatSession.id.in_(session_ids))
     ).all()
@@ -588,4 +592,4 @@ def get_retained_session_ids(
             BuildSession.last_activity_at >= cutoff,
         )
     ).all()
-    return {*chats, *builds}
+    return {*chats, *builds, *profiles}

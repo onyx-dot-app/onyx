@@ -166,7 +166,7 @@
 - **In chat**, the agent sees the names and descriptions of the user's
   enabled custom skills and, when the turn has the sandbox tools, the
   available chat built-ins (`skills/built_in.py:CHAT_BUILT_IN_SKILL_IDS`:
-  pptx, and browser with `ENABLE_BROWSER`). In this catalog, a skill's
+  pptx; chats browse with the browser tools, not the browser skill). In this catalog, a skill's
   `metadata.short-description` replaces its description when it has one;
   `skills_list` shows the full description. The agent reads a skill's
   SKILL.md with its skill read tool (`skills_read`, or `skill` for Claude

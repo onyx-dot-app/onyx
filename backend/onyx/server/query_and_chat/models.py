@@ -617,6 +617,12 @@ class ChatSearchResponse(BaseModel):
     next_page: int | None = None
 
 
+class BrowserUploadResponse(BaseModel):
+    """Paths of uploaded files, relative to the chat session directory."""
+
+    paths: list[str]
+
+
 # How a user may open an artifact link (GET /chat/artifacts/{artifact_id}):
 # owner, the owning chat; chat_reader, the chat's shared view; file_only, the
 # version alone, which a chat that the user can read holds.
