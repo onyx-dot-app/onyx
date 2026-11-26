@@ -222,6 +222,25 @@ def _operation(
     return operation
 
 
+def _shown_lines(
+    spec: dict[str, Any], existing: dict[tuple[str, str], dict[str, Any]]
+) -> dict[str, tuple[str, str]]:
+    """The operation of each line as shown. A line sent as shown keeps its
+    operation as stored, without a parse: a stored operation may have a line
+    that does not parse back to it. An operation with malformed parameters has
+    no line; a save can still remove it."""
+    shown: dict[str, tuple[str, str]] = {}
+    for (method, path), operation in existing.items():
+        try:
+            shown[_endpoint_line(spec, method, path, operation).strip()] = (
+                method,
+                path,
+            )
+        except TypeError:
+            continue
+    return shown
+
+
 def apply_endpoint_lines(
     document: str | None,
     *,
@@ -249,12 +268,7 @@ def apply_endpoint_lines(
     )
     spec = copy.deepcopy(original)
     existing = _operations(spec)
-    # A line sent as shown keeps its operation as stored, without a parse: a
-    # stored operation may have a line that does not parse back to it.
-    shown: dict[str, tuple[str, str]] = {}
-    for (method, path), operation in existing.items():
-        text = _endpoint_line(spec, method, path, operation).strip()
-        shown[text] = (method, path)
+    shown = _shown_lines(spec, existing)
     errors: list[EndpointLineError] = []
     wanted: dict[tuple[str, str], dict[str, Any]] = {}
     new_lines: dict[tuple[str, str], int] = {}
@@ -275,7 +289,12 @@ def apply_endpoint_lines(
             ):
                 raise ValueError(f"{path} in the spec is not an object.")
             old = existing.get(key)
-            wanted[key] = _operation(spec, method, path, query, name, old)
+            try:
+                wanted[key] = _operation(spec, method, path, query, name, old)
+            except TypeError:
+                raise ValueError(
+                    f"The parameters of {method} {path} in the spec are not valid."
+                ) from None
         except ValueError as e:
             errors.append(EndpointLineError(line=index, message=str(e)))
             continue

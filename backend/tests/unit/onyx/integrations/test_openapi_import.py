@@ -399,6 +399,20 @@ def test_a_line_sent_as_shown_keeps_an_operation_it_cannot_write() -> None:
     assert "post" in other_edited["paths"]["/reports"]
 
 
+def test_lines_save_over_an_operation_with_malformed_parameters() -> None:
+    """A removed operation with malformed parameters does not break the
+    save. A line that edits it gets a line error."""
+    spec = _callable_spec()
+    spec["paths"]["/broken"] = {"get": {"operationId": "broken", "parameters": 5}}
+    kept = endpoint_lines(_callable_spec())
+
+    saved = _apply(spec, kept)
+
+    assert "/broken" not in saved["paths"]
+    with pytest.raises(EndpointLinesError, match="Line 3: The parameters of GET"):
+        _apply(spec, [*kept, "GET /broken Read it"])
+
+
 def test_lines_show_and_keep_shared_query_parameters() -> None:
     spec = _callable_spec()
     spec["components"]["parameters"]["limit"] = {
