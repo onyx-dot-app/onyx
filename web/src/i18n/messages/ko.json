@@ -12236,10 +12236,6 @@
         }
       },
       "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "복사됨!",
-          "label": "복사"
-        },
         "wrapButton": {
           "unwrapLabel": "줄 바꿈 해제",
           "wrapLabel": "줄 바꿈"

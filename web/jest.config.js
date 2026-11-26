@@ -34,8 +34,6 @@ const esmPackages = [
   "remark-.*", // All remark packages
   "rehype-.*", // All rehype packages
   "unified",
-  "lowlight",
-  "highlight\\.js",
   "shiki",
   "@shikijs",
   "oniguruma-.*",

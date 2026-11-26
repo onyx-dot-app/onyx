@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { render } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import MinimalMarkdown from "./MinimalMarkdown";
@@ -29,5 +29,29 @@ describe("MinimalMarkdown", () => {
       const link = screen.getByText("click").closest("a");
       expect(link).not.toHaveAttribute("href");
     });
+  });
+
+  test("renders a fenced block as a highlighted code block with a header", async () => {
+    render(<MinimalMarkdown content={"```ts:src/a.ts\nconst a = 1;\n```\n"} />);
+
+    const block = screen.getByTestId("answer-code-block");
+    expect(block).toHaveTextContent("src/a.ts");
+    await waitFor(() =>
+      expect(block.querySelector('span[style*="--shiki"]')).not.toBeNull()
+    );
+  });
+
+  test("a custom code renderer also renders fenced code", () => {
+    render(
+      <MinimalMarkdown
+        content={"```ts\nconst a = 1;\n```\n"}
+        components={{
+          code: ({ children }) => <kbd data-testid="custom">{children}</kbd>,
+        }}
+      />
+    );
+
+    expect(screen.getByTestId("custom")).toHaveTextContent("const a = 1;");
+    expect(screen.queryByTestId("answer-code-block")).toBeNull();
   });
 });

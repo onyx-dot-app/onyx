@@ -12236,10 +12236,6 @@
         }
       },
       "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "コピーしました！",
-          "label": "コピー"
-        },
         "wrapButton": {
           "unwrapLabel": "折り返さない",
           "wrapLabel": "折り返す"

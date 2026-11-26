@@ -12236,10 +12236,6 @@
         }
       },
       "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "Copiado!",
-          "label": "Copiar"
-        },
         "wrapButton": {
           "unwrapLabel": "Não quebrar linhas",
           "wrapLabel": "Quebrar linhas"

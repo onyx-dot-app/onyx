@@ -237,7 +237,9 @@ describe("text formats", () => {
     expect(screen.queryByRole("button", { name: "Show source" })).toBeNull();
     expectDownloadLink("Download", "main.js");
     await waitFor(() =>
-      expect(view.container.querySelector("code .hljs-keyword")).not.toBeNull()
+      expect(
+        view.container.querySelector('code span[style*="--shiki"]')
+      ).not.toBeNull()
     );
   });
 
@@ -319,9 +321,9 @@ describe("text formats", () => {
   test("JSON indented past the highlight limit shows plain", async () => {
     // Compact, the JSON fits the limit; indented, it does not
     const json = JSON.stringify(
-      Array.from({ length: 15_000 }, (_, index) => ({ k: index }))
+      Array.from({ length: 7_000 }, (_, index) => ({ k: index }))
     );
-    expect(json.length).toBeLessThan(200_000);
+    expect(json.length).toBeLessThan(100_000);
     jest
       .mocked(fetchChatFile)
       .mockResolvedValue(fileResponse(json, "application/json", "big.json"));
@@ -338,6 +340,63 @@ describe("text formats", () => {
       expect(small.container.querySelector("code span")).not.toBeNull()
     );
     expect(view.container.querySelector("code span")).toBeNull();
+  });
+
+  test("a long file highlights every line, a slice at a time", async () => {
+    const text = [
+      ...Array.from({ length: 450 }, (_, index) => `// line ${index}`),
+      "const last = 1;",
+    ].join("\n");
+    const { container } = render(
+      <CodeFilePreview text={text} language="typescript" />
+    );
+    expect(container.querySelector("code")).toHaveTextContent("const last");
+
+    await waitFor(() =>
+      expect(
+        Array.from(
+          container.querySelectorAll('code span[style*="--shiki"]')
+        ).some((span) => span.textContent === "const")
+      ).toBe(true)
+    );
+  });
+
+  test("a Windows file keeps one line per gutter number past a slice", async () => {
+    const lineCount = 450;
+    const text = Array.from(
+      { length: lineCount },
+      (_, index) => `const v${index} = ${index};`
+    ).join("\r\n");
+    const { container } = render(
+      <CodeFilePreview text={text} language="typescript" />
+    );
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('code span[style*="--shiki"]')
+      ).not.toBeNull()
+    );
+    const shownLines = container
+      .querySelector("code")
+      ?.textContent?.split("\n");
+    expect(shownLines).toHaveLength(lineCount);
+    expect(shownLines?.[lineCount - 1]).toBe(
+      `const v${lineCount - 1} = ${lineCount - 1};`
+    );
+  });
+
+  test.each([
+    ["apacheconf", "RewriteEngine On"],
+    ["gradle", "apply plugin: 'java'"],
+  ])("a %s file gets Shiki tokens", async (language, text) => {
+    const { container } = render(
+      <CodeFilePreview text={text} language={language} />
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector('code span[style*="--shiki"]')
+      ).not.toBeNull()
+    );
   });
 
   test("JSON shows indented", async () => {
@@ -397,16 +456,12 @@ describe("text formats", () => {
     expect(
       await screen.findByRole("heading", { name: "Setup" })
     ).toBeInTheDocument();
+    const [tagged, untagged] = screen.getAllByTestId("answer-code-block");
     await waitFor(() =>
-      expect(view.container.querySelector("code .hljs-keyword")).not.toBeNull()
+      expect(tagged?.querySelector('span[style*="--shiki"]')).not.toBeNull()
     );
-    // Guessing a language for large untagged blocks can freeze the tab
-    const untagged = screen.getByText("SELECT id FROM users WHERE id = 1;", {
-      exact: false,
-    });
-    expect(
-      untagged.closest("code")?.querySelector("[class^=hljs-]")
-    ).toBeNull();
+    expect(untagged).toHaveTextContent("SELECT id FROM users WHERE id = 1;");
+    expect(untagged?.querySelector('span[style*="--shiki"]')).toBeNull();
   });
 
   test("markdown links with a scheme or www. open their site; other links show as text", async () => {

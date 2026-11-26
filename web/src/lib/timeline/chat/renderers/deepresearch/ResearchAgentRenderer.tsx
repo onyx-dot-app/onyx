@@ -117,18 +117,14 @@ export const ResearchAgentRenderer: MessageRenderer<
   const showOnlyTools =
     isCondensedMode && !fullReportContent && visibleNestedToolGroups.length > 0;
 
-  // Process content once for consistent markdown handling
-  // This ensures code block extraction uses the same offsets as rendered content
   const processedReportContent = useMemo(
     () => processContent(fullReportContent),
     [fullReportContent]
   );
 
   // Get markdown components for rendering (stable across renders)
-  // Uses processed content so code block extraction offsets match rendered content
   const markdownComponents = useMarkdownComponents(
     state,
-    processedReportContent,
     "main-ui-body",
     "text-03"
   );
@@ -138,7 +134,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   // Uses pre-computed processedReportContent since ExpandableTextDisplay
   // passes the same fullReportContent that we processed above
   // Parameters are required by ExpandableTextDisplay interface but we use
-  // the pre-processed content to ensure offsets match code block extraction
+  // the pre-processed content
   const renderReport = useCallback(
     (_content: string, _isExpanded?: boolean) =>
       renderMarkdown(

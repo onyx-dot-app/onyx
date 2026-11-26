@@ -16,49 +16,6 @@ export function extractTextFromReactNode(node: React.ReactNode): string {
   return "";
 }
 
-export function extractCodeText(
-  node: any,
-  content: string,
-  children: React.ReactNode
-): string {
-  let codeText: string | null = null;
-
-  if (
-    node?.position?.start?.offset != null &&
-    node?.position?.end?.offset != null
-  ) {
-    codeText = content
-      .slice(node.position.start.offset, node.position.end.offset)
-      .trim();
-
-    // Match code block with optional language declaration
-    const codeBlockMatch = codeText.match(/^```[^\n]*\n([\s\S]*?)\n?```$/);
-    if (codeBlockMatch) {
-      const codeTextMatch = codeBlockMatch[1];
-      if (codeTextMatch !== undefined) {
-        codeText = codeTextMatch;
-      }
-    }
-
-    // Normalize indentation
-    const codeLines = codeText.split("\n");
-    const minIndent = codeLines
-      .filter((line) => line.trim().length > 0)
-      .reduce((min, line) => {
-        const match = line.match(/^\s*/);
-        return Math.min(min, match ? match[0].length : min);
-      }, Infinity);
-
-    const formattedCodeLines = codeLines.map((line) => line.slice(minIndent));
-    codeText = formattedCodeLines.join("\n").trim();
-  } else {
-    // Fallback if position offsets are not available
-    codeText = extractTextFromReactNode(children);
-  }
-
-  return codeText || "";
-}
-
 const QUOTE_MARKER_REGEX = /^ {0,3}> ?/;
 const LIST_MARKER_REGEX = /^[ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)/;
 const FENCE_REGEX = /^([ \t]*)(`{3,}|~{3,})(.*)$/;
@@ -92,12 +49,6 @@ const indentOf = (text: string): number =>
 
 type FenceRole = "open" | "close" | "code" | "text";
 
-interface FenceLine {
-  role: FenceRole;
-  // For bare backtick openers: index just past the fence characters.
-  bareFenceEnd?: number;
-}
-
 interface OpenFence {
   fence: string;
   quoteDepth: number;
@@ -110,7 +61,7 @@ interface OpenFence {
 // no info string; a block also ends when its blockquote or list item ends.
 // A trailing unclosed block (mid-stream) stays "code". Mirrors
 // CodeFenceTracker in backend/onyx/chat/citation_processor.py.
-const classifyFenceLines = (lines: string[]): FenceLine[] => {
+const classifyFenceLines = (lines: string[]): FenceRole[] => {
   let open: OpenFence | null = null;
   let listColumn = 0;
 
@@ -120,7 +71,7 @@ const classifyFenceLines = (lines: string[]): FenceLine[] => {
     return depth < fence.quoteDepth || indentOf(rest) < fence.base;
   };
 
-  return lines.map((line): FenceLine => {
+  return lines.map((line): FenceRole => {
     if (open !== null) {
       if (!containerEnded(open, line)) {
         const { rest } = stripQuotes(line, open.quoteDepth);
@@ -134,15 +85,15 @@ const classifyFenceLines = (lines: string[]): FenceLine[] => {
           (match[3] ?? "").trim() === ""
         ) {
           open = null;
-          return { role: "close" };
+          return "close";
         }
-        return { role: "code" };
+        return "code";
       }
       open = null;
     }
 
     const { depth, rest } = stripQuotes(line);
-    if (rest.trim() === "") return { role: "text" };
+    if (rest.trim() === "") return "text";
     const marker = LIST_MARKER_REGEX.exec(rest);
     const fenceStart = marker ? marker[0].length : 0;
     if (marker) {
@@ -151,40 +102,18 @@ const classifyFenceLines = (lines: string[]): FenceLine[] => {
       listColumn = 0;
     }
     const match = FENCE_REGEX.exec(rest.slice(fenceStart));
-    if (!match) return { role: "text" };
+    if (!match) return "text";
     const indentText = match[1] ?? "";
     const indent = widthOf(indentText);
     // 4+ spaces past the container column is an indented code block.
-    if (marker ? indent > 0 : indent > listColumn + 3) return { role: "text" };
+    if (marker ? indent > 0 : indent > listColumn + 3) return "text";
     const fence = match[2] ?? "";
     const info = match[3] ?? "";
     // Backtick fences cannot have backticks in the info string.
-    if (fence.startsWith("`") && info.includes("`")) return { role: "text" };
+    if (fence.startsWith("`") && info.includes("`")) return "text";
     open = { fence, quoteDepth: depth, base: listColumn };
-    const bare = fence.startsWith("`") && info.trim() === "";
-    return {
-      role: "open",
-      bareFenceEnd: bare
-        ? line.length -
-          rest.length +
-          fenceStart +
-          indentText.length +
-          fence.length
-        : undefined,
-    };
+    return "open";
   });
-};
-
-// Labels bare opening backtick fences as `plaintext`; closers stay bare.
-export const labelBareCodeFences = (content: string): string => {
-  const lines = content.split("\n");
-  const classified = classifyFenceLines(lines);
-  return lines
-    .map((line, i) => {
-      const end = classified[i]?.bareFenceEnd;
-      return end === undefined ? line : `${line.slice(0, end)}plaintext`;
-    })
-    .join("\n");
 };
 
 // Replaces each fenced code block, including an unclosed trailing one
@@ -198,7 +127,7 @@ export const replaceFencedCodeBlocks = (
   const out: string[] = [];
   let block: string[] | null = null;
   for (const [i, line] of lines.entries()) {
-    const role = classified[i]?.role;
+    const role = classified[i];
     if (block && (role === "code" || role === "close")) {
       block.push(line);
       if (role === "close") {

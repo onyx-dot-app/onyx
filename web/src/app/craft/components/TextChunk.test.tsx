@@ -5,9 +5,6 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 jest.mock("@/hooks/useSmoothStreaming", () => ({
   useSmoothStreaming: () => ({ enabled: false }),
 }));
-jest.mock("@/hooks/useHighlightLanguages", () => ({
-  useHighlightLanguages: () => null,
-}));
 
 beforeEach(() => {
   useBuildSessionStore.setState({
