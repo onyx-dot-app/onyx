@@ -186,8 +186,14 @@ export default function AddIntegrationModal({
   const flow: Flow = start.kind === "prefill" ? "mcp_server" : start.kind;
   const presets = useIntegrationPresets(flow === "catalog");
 
+  // A link with a bad URL opens the form with the URL error.
+  const badPrefillUrl = prefill !== null && !normalizedUrl(prefill.serverUrl);
   const [step, setStep] = useState<Step>(
-    flow === "catalog" ? "catalog" : prefill ? "detecting" : "connect"
+    flow === "catalog"
+      ? "catalog"
+      : prefill && !badPrefillUrl
+        ? "detecting"
+        : "connect"
   );
   const [name, setName] = useState(prefill?.name ?? "");
   const [url, setUrl] = useState(prefill?.serverUrl ?? "");
@@ -211,13 +217,15 @@ export default function AddIntegrationModal({
   const [ownerChoice, setOwnerChoice] = useState<boolean | null>(null);
   const forOrganization = ownerChoice ?? prefill?.forOrganization === true;
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [showErrors, setShowErrors] = useState(false);
+  const [showErrors, setShowErrors] = useState(badPrefillUrl);
   const [busy, setBusy] = useState(false);
   // Each detection gets a new run; Back and close drop the run in flight.
   const run = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (prefill) void probeMcp(prefill.name, prefill.serverUrl);
+    if (prefill && !badPrefillUrl) {
+      void probeMcp(prefill.name, prefill.serverUrl);
+    }
     return () => run.current?.abort();
     // Runs once: the prefill is where this modal starts.
   }, []);

@@ -263,6 +263,20 @@ describe("MCP server", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("a deep link with a bad URL shows the URL error and checks nothing", async () => {
+    open({
+      kind: "prefill",
+      prefill: {
+        name: "Linear",
+        serverUrl: "not a url",
+        transport: "STREAMABLE_HTTP",
+        returnTo: "/app/customize/plugins/7?tab=integrations",
+      },
+    });
+    expect(await screen.findByText(add.mcp.url.error)).toBeInTheDocument();
+    expect(mockProbe).not.toHaveBeenCalled();
+  });
+
   test("a deep link checks the server at once and returns to the plugin", async () => {
     mockProbe.mockResolvedValue(OAUTH_PROBE);
     mockFetch({
