@@ -444,7 +444,7 @@ test("a server URL with a port variable and no default stays editable", async ()
   );
 });
 
-test("a spec imported from a URL clears a refused upload", async () => {
+test("a refused REST upload blocks Save until a spec imports", async () => {
   mockFetch({
     [URL_DETAIL]: makeDetail({
       kind: "api",
@@ -469,6 +469,10 @@ test("a spec imported from a URL clears a refused upload", async () => {
   });
   await u.upload(input, big);
   expect(await view.findByText(copy.add.api.tooLarge)).toBeInTheDocument();
+  const save = view.getByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  expect(save).toBeDisabled();
 
   await u.type(
     view.getByRole("textbox", { name: copy.add.rest.import.url }),
@@ -481,6 +485,7 @@ test("a spec imported from a URL clears a refused upload", async () => {
   await waitFor(() =>
     expect(view.queryByText(copy.add.api.tooLarge)).not.toBeInTheDocument()
   );
+  expect(save).toBeEnabled();
 });
 
 test("keeps the Base URL when a spec imported from a URL has no single server", async () => {

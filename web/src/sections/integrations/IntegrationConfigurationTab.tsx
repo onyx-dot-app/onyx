@@ -338,6 +338,8 @@ export default function IntegrationConfigurationTab({
                   showErrors={showErrors}
                   disabled={disabled || loadingSchema}
                   onImportingChange={setLoadingSchema}
+                  tooLarge={schemaTooLarge}
+                  onTooLargeChange={setSchemaTooLarge}
                 />
               )}
             </Section>

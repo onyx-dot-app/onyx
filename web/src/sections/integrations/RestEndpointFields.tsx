@@ -47,6 +47,9 @@ interface RestEndpointFieldsProps {
   /** Also true while an import runs; the parent holds that state. */
   disabled: boolean;
   onImportingChange: (importing: boolean) => void;
+  /** A spec over the size limit was refused; the parent blocks Save. */
+  tooLarge: boolean;
+  onTooLargeChange: (tooLarge: boolean) => void;
 }
 
 export default function RestEndpointFields({
@@ -56,13 +59,14 @@ export default function RestEndpointFields({
   showErrors,
   disabled,
   onImportingChange,
+  tooLarge,
+  onTooLargeChange,
 }: RestEndpointFieldsProps) {
   const t = useTranslations("admin.integrations.add.rest");
   const tAdd = useTranslations("admin.integrations.add");
   const [specUrl, setSpecUrl] = useState("");
   // Save drops the actions of these operations, so show them before Save.
   const [skipped, setSkipped] = useState<string[]>([]);
-  const [tooLarge, setTooLarge] = useState(false);
 
   async function runImport(
     body: { openapi_document: string } | { spec_url: string }
@@ -80,7 +84,7 @@ export default function RestEndpointFields({
           (draft.baseUrl.trim() || view.base_url),
       });
       setSkipped(view.skipped);
-      setTooLarge(false);
+      onTooLargeChange(false);
       toast.success(t("import.done", { count: view.endpoints.length }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("import.failed"));
@@ -103,12 +107,12 @@ export default function RestEndpointFields({
             placeholder={t("import.upload")}
             variant={disabled ? "disabled" : "primary"}
             maxSizeKb={SPEC_MAX_SIZE_KB}
-            onFileSizeExceeded={() => setTooLarge(true)}
+            onFileSizeExceeded={() => onTooLargeChange(true)}
             // Called before setValue, which may start an import.
             onReadingChange={onImportingChange}
             setValue={(text) => {
               const over = specTextTooLarge(text);
-              setTooLarge(over);
+              onTooLargeChange(over);
               if (!over && text.trim())
                 void runImport({ openapi_document: text });
             }}
