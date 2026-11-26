@@ -85,43 +85,54 @@ def _spend(db_session: Session, user: User, cost_cents: float) -> None:
 def pooled(db_session: Session) -> Generator[_Pooled, None, None]:
     """A service account and a person in one group with a cost pool, a
     per-member allowance, and a workspace per-user default. Limits apply
-    tenant-wide, so every row added here is removed afterwards."""
-    service = create_test_user(
-        db_session,
-        "usage-scopes-service",
-        account_type=AccountType.SERVICE_ACCOUNT,
-        assign_default_group=False,
-    )
-    person = create_test_user(db_session, "usage-scopes-person")
-    group = UserGroup(name=f"usage-scopes-{uuid4().hex}", is_up_to_date=True)
-    db_session.add(group)
-    db_session.flush()
-    for member in (service, person):
-        db_session.add(User__UserGroup(user_id=member.id, user_group_id=group.id))
-    db_session.commit()
-
+    tenant-wide, so every row added here is removed afterwards, even when
+    setup fails partway."""
+    users: list[User] = []
+    group_ids: list[int] = []
     limit_ids: list[int] = []
-    _limit(db_session, limit_ids, TokenRateLimitScope.USER_GROUP, _POOL_CENTS, group.id)
-    _limit(
-        db_session,
-        limit_ids,
-        TokenRateLimitScope.USER_GROUP_MEMBER,
-        _MEMBER_CENTS,
-        group.id,
-    )
-    _limit(db_session, limit_ids, TokenRateLimitScope.USER, _DEFAULT_CENTS)
+    try:
+        service = create_test_user(
+            db_session,
+            "usage-scopes-service",
+            account_type=AccountType.SERVICE_ACCOUNT,
+            assign_default_group=False,
+        )
+        users.append(service)
+        person = create_test_user(db_session, "usage-scopes-person")
+        users.append(person)
+        group = UserGroup(name=f"usage-scopes-{uuid4().hex}", is_up_to_date=True)
+        db_session.add(group)
+        db_session.flush()
+        group_ids.append(group.id)
+        for member in (service, person):
+            db_session.add(User__UserGroup(user_id=member.id, user_group_id=group.id))
+        db_session.commit()
 
-    yield _Pooled(service, person)
+        _limit(
+            db_session, limit_ids, TokenRateLimitScope.USER_GROUP, _POOL_CENTS, group.id
+        )
+        _limit(
+            db_session,
+            limit_ids,
+            TokenRateLimitScope.USER_GROUP_MEMBER,
+            _MEMBER_CENTS,
+            group.id,
+        )
+        _limit(db_session, limit_ids, TokenRateLimitScope.USER, _DEFAULT_CENTS)
 
-    db_session.rollback()
-    db_session.execute(delete(TokenRateLimit).where(TokenRateLimit.id.in_(limit_ids)))
-    db_session.execute(delete(UserUsage).where(UserUsage.model == _MODEL_NAME))
-    db_session.execute(
-        delete(User__UserGroup).where(User__UserGroup.user_group_id == group.id)
-    )
-    db_session.execute(delete(UserGroup).where(UserGroup.id == group.id))
-    delete_test_user(db_session, service, person)
-    db_session.commit()
+        yield _Pooled(service, person)
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(TokenRateLimit).where(TokenRateLimit.id.in_(limit_ids))
+        )
+        db_session.execute(delete(UserUsage).where(UserUsage.model == _MODEL_NAME))
+        db_session.execute(
+            delete(User__UserGroup).where(User__UserGroup.user_group_id.in_(group_ids))
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id.in_(group_ids)))
+        delete_test_user(db_session, *users)
+        db_session.commit()
 
 
 def test_service_account_sees_its_group_pool(
