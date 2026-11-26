@@ -4,13 +4,13 @@
 
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import type { Socket } from "node:net";
 import type {
   BrowserContext,
   CDPSession,
   Dialog,
-  Download,
   FileChooser,
   Page,
 } from "playwright-core";
@@ -73,6 +73,7 @@ const AGENT_CURSOR_MOVE_MS = 160;
 const AGENT_CURSOR_CLICK_LEAD_MS = 40;
 // A page can start downloads without a gesture, so each chat has a budget. Downloads are saved
 // with the chat session (archive limit 1 GiB), and a failed save keeps the VM from idle stop.
+// The budget counts saved bytes and the bytes of all downloads that still run.
 const DOWNLOAD_MAX_BYTES = 256 * 1024 * 1024;
 const CHAT_DOWNLOAD_LIMIT = 20;
 const VIEWER_QUALITY = 70;
@@ -132,6 +133,7 @@ type Tab = {
   closing: boolean;
   captureLock: Promise<void>;
   capturing: number;
+  readonly frames: Set<string>;
 };
 
 type ChatState = {
@@ -144,6 +146,14 @@ type ChatState = {
   downloads: number;
   downloadBytes: number;
 };
+
+type DownloadStart = { readonly guid: string; readonly frameId: string; readonly suggestedFilename: string };
+type DownloadProgress = {
+  readonly guid: string;
+  readonly state: "inProgress" | "completed" | "canceled";
+  readonly receivedBytes: number;
+};
+type ActiveDownload = { readonly chat: ChatState; readonly fileName: string; receivedBytes: number };
 
 export type TabJson = {
   readonly id: string;
@@ -248,7 +258,11 @@ export class BrowserService {
   private readonly log: Log;
   private readonly chats = new Map<string, ChatState>();
   private readonly pageTabs = new WeakMap<Page, Tab>();
-  private browserSession: Promise<CDPSession> | null = null;
+  // Frame and target ids of each chat's pages, so a download in any frame or popup finds its chat.
+  private readonly frameChats = new Map<string, ChatState>();
+  private readonly activeDownloads = new Map<string, ActiveDownload>();
+  private browserSession: CDPSession | null = null;
+  private downloadDir = "";
   private tabCounter = 0;
   private pointerSequence = 0;
 
@@ -258,7 +272,32 @@ export class BrowserService {
     this.log = options.log;
   }
 
-  start() {
+  async start() {
+    const browser = this.context.browser();
+    if (!browser) throw new Error("The browser context has no browser.");
+    this.downloadDir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-downloads-"));
+    const session = await browser.newBrowserCDPSession();
+    this.browserSession = session;
+    session.on("Target.targetCreated", ({ targetInfo }) => {
+      const { openerId, openerFrameId, parentId, parentFrameId } = targetInfo;
+      for (const owner of [openerFrameId, openerId, parentFrameId, parentId]) {
+        const chat = owner === undefined ? undefined : this.frameChats.get(owner);
+        if (!chat) continue;
+        this.frameChats.set(targetInfo.targetId, chat);
+        return;
+      }
+    });
+    session.on("Target.targetDestroyed", ({ targetId }) => this.frameChats.delete(targetId));
+    session.on("Browser.downloadWillBegin", (event) => this.beginDownload(event));
+    session.on("Browser.downloadProgress", (event) => void this.trackDownload(event));
+    await session.send("Target.setDiscoverTargets", { discover: true });
+    // Downloads go to a directory this service owns, so it sees every download, also one that
+    // starts in a popup before the popup is a tab.
+    await session.send("Browser.setDownloadBehavior", {
+      behavior: "allowAndName",
+      downloadPath: this.downloadDir,
+      eventsEnabled: true,
+    });
     // Pages that a chat's tab opens belong to that chat; pages with no owner are ignored.
     this.context.on("page", (page) => {
       void page
@@ -433,7 +472,10 @@ export class BrowserService {
     chat.opening += 1;
     try {
       const page = await this.context.newPage();
-      return await this.registerPage(chat, page, agentUsed);
+      return await this.registerPage(chat, page, agentUsed).catch(async (error: unknown) => {
+        await page.close().catch(noop);
+        throw error;
+      });
     } finally {
       chat.opening -= 1;
     }
@@ -476,6 +518,7 @@ export class BrowserService {
       closing: false,
       captureLock: Promise.resolve(),
       capturing: 0,
+      frames: new Set(),
     };
     // Page.frameNavigated fires for a new document only, not for a history rewrite (onyx.app
     // rewrites its URL after load): refs and the file chooser die with the document.
@@ -484,11 +527,17 @@ export class BrowserService {
       BrowserPage.invalidateRefs(page);
       this.closeFileChooser(tab);
     });
-    // saveAs copies only a finished download, so stop one that passes the budget while it runs.
-    cdp.on("Page.downloadProgress", ({ guid, state, receivedBytes }) => {
-      if (state === "inProgress" && receivedBytes > DOWNLOAD_MAX_BYTES - chat.downloadBytes)
-        this.cancelDownload(guid);
+    cdp.on("Page.frameAttached", ({ frameId }) => {
+      tab.frames.add(frameId);
+      this.frameChats.set(frameId, chat);
     });
+    cdp.on("Page.frameDetached", ({ frameId, reason }) => {
+      if (reason !== "remove") return;
+      tab.frames.delete(frameId);
+      this.frameChats.delete(frameId);
+    });
+    const { targetInfo } = await cdp.send("Target.getTargetInfo");
+    this.frameChats.set(targetInfo.targetId, chat);
     await cdp.send("Page.enable").catch(noop);
     page.setDefaultTimeout(BrowserPage.DEFAULT_TIMEOUT_MS);
     page.setDefaultNavigationTimeout(BrowserPage.DEFAULT_TIMEOUT_MS);
@@ -536,7 +585,6 @@ export class BrowserService {
       tab.dialog = dialog;
       this.broadcastControl(tab);
     });
-    page.on("download", (download) => void this.saveDownload(tab, download));
     page.on("filechooser", (chooser) => void this.offerFileChooser(tab, chooser));
     // Playwright cannot use a crashed page again, so the tab closes.
     page.on("crash", () => {
@@ -563,6 +611,7 @@ export class BrowserService {
     tab.closing = true;
     const chat = tab.chat;
     chat.tabs.delete(tab.id);
+    for (const frame of tab.frames) this.frameChats.delete(frame);
     void tab.control.close().catch(noop);
     tab.fileChooser = null;
     tab.dialog = null;
@@ -957,47 +1006,68 @@ export class BrowserService {
   // ---- downloads and file chooser ----
 
   private cancelDownload(guid: string) {
-    const browser = this.context.browser();
-    if (!browser) return;
-    this.browserSession ??= browser.newBrowserCDPSession();
     void this.browserSession
-      .then((session) => session.send("Browser.cancelDownload", { guid }))
-      .catch((error: unknown) => {
-        this.browserSession = null;
-        this.log("download_cancel_failed", { error: String(error) });
-      });
+      ?.send("Browser.cancelDownload", { guid })
+      .catch((error: unknown) => this.log("download_cancel_failed", { error: String(error) }));
   }
 
-  private async saveDownload(tab: Tab, download: Download) {
-    const chat = tab.chat;
-    if (chat.downloads >= CHAT_DOWNLOAD_LIMIT || chat.downloadBytes >= DOWNLOAD_MAX_BYTES) {
-      this.log("download_over_budget", { chat: chat.id, tab: tab.id });
-      await download.cancel().catch(noop);
-      await download.delete().catch(noop);
+  private chatDownloadBytes(chat: ChatState) {
+    let total = chat.downloadBytes;
+    for (const download of this.activeDownloads.values())
+      if (download.chat === chat) total += download.receivedBytes;
+    return total;
+  }
+
+  private beginDownload({ guid, frameId, suggestedFilename }: DownloadStart) {
+    const chat = this.frameChats.get(frameId);
+    if (!chat || chat.downloads >= CHAT_DOWNLOAD_LIMIT || this.chatDownloadBytes(chat) >= DOWNLOAD_MAX_BYTES) {
+      this.log("download_refused", { chat: chat?.id ?? null, reason: chat ? "over budget" : "no chat" });
+      this.cancelDownload(guid);
       return;
     }
     chat.downloads += 1;
+    this.activeDownloads.set(guid, { chat, fileName: suggestedFilename || "download", receivedBytes: 0 });
+  }
+
+  private async trackDownload({ guid, state, receivedBytes }: DownloadProgress) {
+    const download = this.activeDownloads.get(guid);
+    if (download) download.receivedBytes = receivedBytes;
+    if (state === "inProgress") {
+      if (download && this.chatDownloadBytes(download.chat) > DOWNLOAD_MAX_BYTES) {
+        this.activeDownloads.delete(guid);
+        this.log("download_too_large", { chat: download.chat.id, size: receivedBytes });
+        this.cancelDownload(guid);
+      }
+      return;
+    }
+    this.activeDownloads.delete(guid);
+    const temporary = NodePath.join(this.downloadDir, guid);
+    try {
+      if (download && state === "completed") await this.saveDownload(download, temporary);
+    } finally {
+      await NodeFSP.rm(temporary, { force: true }).catch(noop);
+    }
+  }
+
+  private async saveDownload(download: ActiveDownload, temporary: string) {
+    const { chat, receivedBytes: size } = download;
+    if (this.chatDownloadBytes(chat) + size > DOWNLOAD_MAX_BYTES) {
+      this.log("download_too_large", { chat: chat.id, size });
+      return;
+    }
+    chat.downloadBytes += size;
     const dir = NodePath.join(chatDir(this.sessionsRoot, chat.id), "downloads");
     let path: string | null = null;
     try {
-      if (await download.failure()) return;
-      const fileName = await reserveUniqueFile(dir, download.suggestedFilename() || "download");
+      const fileName = await reserveUniqueFile(dir, download.fileName);
       path = NodePath.join(dir, fileName);
-      await download.saveAs(path);
-      const { size } = await NodeFSP.stat(path);
-      if (chat.downloadBytes + size > DOWNLOAD_MAX_BYTES) {
-        await NodeFSP.rm(path, { force: true });
-        this.log("download_too_large", { chat: tab.chat.id, tab: tab.id, size });
-        return;
-      }
-      chat.downloadBytes += size;
-      this.log("download_saved", { chat: tab.chat.id, tab: tab.id, fileName, size });
-      for (const viewer of tab.chat.viewers) this.send(viewer, { type: "download", fileName });
+      await NodeFSP.copyFile(temporary, path);
+      this.log("download_saved", { chat: chat.id, fileName, size });
+      for (const viewer of chat.viewers) this.send(viewer, { type: "download", fileName });
     } catch (error) {
+      chat.downloadBytes -= size;
       if (path !== null) await NodeFSP.rm(path, { force: true }).catch(noop);
-      this.log("download_failed", { chat: tab.chat.id, tab: tab.id, error: String(error) });
-    } finally {
-      await download.delete().catch(noop);
+      this.log("download_failed", { chat: chat.id, error: String(error) });
     }
   }
 

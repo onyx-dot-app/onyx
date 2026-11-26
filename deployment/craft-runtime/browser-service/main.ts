@@ -44,7 +44,7 @@ const main = async () => {
     process.exit(1);
   });
   const service = new BrowserService({ context, sessionsRoot, log });
-  service.start();
+  await service.start();
 
   await NodeFSP.rm(socketPath, { force: true });
   const server = NodeNet.createServer({ allowHalfOpen: true }, (socket) => service.handleConnection(socket));
