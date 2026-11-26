@@ -189,7 +189,7 @@ def search(
         project_id_filter=None,
         persona_id_filter=None,
         slack_context=None,
-        enable_slack_search=True,
+        enable_slack_search=not request.skip_federated_search,
         include_link=True,
         auto_detect_filters=auto_detect_filters,
     )

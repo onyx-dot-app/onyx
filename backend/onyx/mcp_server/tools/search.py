@@ -97,8 +97,11 @@ def _document_url(document_id: str, link: str | None) -> str:
     Ingestion API callers can store any string as a link, so only an absolute
     http(s) link is used."""
     if link:
-        parts = urlsplit(link)
-        if parts.scheme in ("http", "https") and parts.netloc:
+        try:
+            parts = urlsplit(link)
+        except ValueError:
+            parts = None
+        if parts and parts.scheme in ("http", "https") and parts.netloc:
             return link
     return f"{WEB_DOMAIN.rstrip('/')}/app/document?id={quote(document_id, safe='')}"
 
@@ -827,7 +830,7 @@ async def search(query: str) -> SearchOutput:
         request: SearchRequest | RawSearchRequest = (
             RawSearchRequest(query=query)
             if MCP_SERVER_SEARCH_RETRIEVAL_ONLY
-            else SearchRequest(query=query)
+            else SearchRequest(query=query, skip_federated_search=True)
         )
         route = "/search/raw" if MCP_SERVER_SEARCH_RETRIEVAL_ONLY else "/search"
         response = await _post_model(_api_url(route), request, access_token)

@@ -190,6 +190,9 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    search/fetch contract: they return Pydantic models, so FastMCP declares an
    output schema and sends `structuredContent` plus the same JSON as text.
    Their `id` is the Onyx document id and must stay stable across searches.
+   `search` sends `skip_federated_search`, because federated Slack results
+   ([[federated-search]]) have ids that are not in the index, so `fetch`
+   could not read them. `search_indexed_documents` keeps them.
 5. `errors-are-tool-errors` **A failed call raises `ToolError`; an empty result
    does not.** `mcp_server/tools/search.py:_tool_error` wraps the
    `{"error": ..., "results": []}` body in a `ToolError`, which the client

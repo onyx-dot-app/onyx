@@ -178,9 +178,7 @@ def get_document_content(
         document_id=first.document_id,
         title=first.semantic_identifier,
         content=section.combined_content,
-        link=next(iter(first.source_links.values()), None)
-        if first.source_links
-        else None,
+        link=next((link for link in (first.source_links or {}).values() if link), None),
         source_type=first.source_type,
         updated_at=first.updated_at,
         metadata=first.metadata,

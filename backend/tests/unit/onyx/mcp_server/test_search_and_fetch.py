@@ -1,5 +1,6 @@
 """Mapping and error cases of `search` and `fetch`, and the time_cutoff check."""
 
+import json
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,6 +24,7 @@ class _Stub:
     """What the API server returns, plus the paths the tools called."""
 
     paths: list[str] = field(default_factory=list)
+    bodies: list[dict[str, Any]] = field(default_factory=list)
     search_results: list[dict[str, Any]] = field(default_factory=list)
     content_status: int = 200
     content_body: dict[str, Any] = field(default_factory=dict)
@@ -35,6 +37,8 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
     def _handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         state.paths.append(path)
+        if request.content:
+            state.bodies.append(json.loads(request.content))
         if path.endswith("/manage/indexed-sources"):
             return httpx.Response(200, json={"sources": ["github"]})
         if path.endswith(("/search", "/search/raw")):
@@ -98,6 +102,7 @@ async def test_search_dedupes_by_document_and_builds_urls(stub: _Stub) -> None:
         _result("bare", "test-doc-123"),
         _result("ftp", "ftp://files.example/x"),
         _result("rel", "/relative/path"),
+        _result("malformed", "http://[not-a-host"),
     ]
 
     output = await search_module.search("anything")
@@ -108,7 +113,9 @@ async def test_search_dedupes_by_document_and_builds_urls(stub: _Stub) -> None:
         ("bare", f"{_WEB_DOMAIN}/app/document?id=bare"),
         ("ftp", f"{_WEB_DOMAIN}/app/document?id=ftp"),
         ("rel", f"{_WEB_DOMAIN}/app/document?id=rel"),
+        ("malformed", f"{_WEB_DOMAIN}/app/document?id=malformed"),
     ]
+    assert stub.bodies[-1]["skip_federated_search"] is True
 
 
 @pytest.mark.asyncio

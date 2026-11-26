@@ -41,6 +41,7 @@ The request needs nothing but a query. Everything else narrows the search or cha
 | `persona_id` | Search as an Agent. The Agent's document sets, attached documents and search start date apply on top of the other filters, and its LLM is used for query expansion. |
 | `provider` / `model` | The LLM used for query expansion and section selection. Both must be sent together, and the caller must have access to the provider. Defaults to the Agent's LLM, or the deployment default. |
 | `skip_query_expansion` | Run the query as written instead of rewriting and expanding it first. Useful when the query is already precise, or when you have your own expansion step. |
+| `skip_federated_search` | Do not search federated sources such as Slack live. Every result then has a `document_id` that `GET /document/content` can read. |
 | `message_history` | Preceding conversation turns, so a query like "what about last quarter?" can be interpreted in context. Defaults to `query` on its own. |
 
 Results come back most relevant first:
