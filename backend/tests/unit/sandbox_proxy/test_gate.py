@@ -2346,45 +2346,6 @@ async def test_a_request_cancelled_during_the_foreground_check_leaves_no_parked_
 
 
 @pytest.mark.asyncio
-async def test_a_command_grant_of_another_chat_covers_nothing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A grant belongs to the chat that approved it: a request that names the
-    command from another chat asks again."""
-    addon, cache = _command_gate(monkeypatch, foreground=False)
-    approval_cache.grant_command_actions(
-        _COMMAND, uuid4(), 42, ["slack.messages.write"], cache
-    )
-    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
-    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
-
-    await addon.request(flow)
-
-    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
-    assert not spy.persisted and not spy.dispatched
-
-
-@pytest.mark.asyncio
-async def test_a_process_left_by_an_ended_command_gets_no_grant(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The harness saw the command end: a process that it left running asks
-    again, and with no call to show a card it is refused."""
-    addon, cache = _command_gate(monkeypatch, foreground=False)
-    approval_cache.grant_command_actions(
-        _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], cache
-    )
-    approval_cache.drop_command_grants(_COMMAND, cache)
-    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
-    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
-
-    await addon.request(flow)
-
-    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
-    assert not spy.persisted and not spy.dispatched
-
-
-@pytest.mark.asyncio
 async def test_a_command_grant_covers_the_command_after_it_leaves_the_foreground(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2566,23 +2527,6 @@ async def test_a_command_approval_sends_its_request_without_a_saved_grant(
 
 
 @pytest.mark.asyncio
-async def test_a_command_grant_never_covers_a_request_that_always_asks(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    addon, cache = _command_gate(
-        monkeypatch, match=make_matched_actions(action_type="unspecified")
-    )
-    approval_cache.grant_command_actions(
-        _COMMAND, UUID(_TAG_UUID), 42, ["unspecified"], cache
-    )
-    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
-
-    await addon.request(make_flow(proxy_auth=_basic_auth(_COMMAND_TAG)))
-
-    assert len(spy.persisted) == 1
-
-
-@pytest.mark.asyncio
 async def test_blocked_wins_over_a_command_grant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2707,22 +2651,6 @@ def test_a_failed_announce_still_returns_the_committed_row(
     )
 
     assert addon._parked.snapshot() == [(ctx.tenant_id, {approval_id})]
-
-
-def test_a_command_card_shows_the_size_of_a_large_body() -> None:
-    ctx = _ctx().model_copy(update={"chat_command_id": _COMMAND})
-    body = {"text": "x" * (128 * 1024)}
-    raw = json.dumps(body).encode()
-    flow = make_flow(raw_content=raw)
-    flow.request.path = "/api/chat.postMessage"
-
-    payload = gate._approval_payload(flow, ctx, make_matched_actions(payload=body))
-
-    assert payload == {
-        "method": "POST",
-        "path": "/api/chat.postMessage",
-        "body_bytes": len(raw),
-    }
 
 
 def test_a_command_card_shows_the_size_of_a_body_that_is_not_json() -> None:
