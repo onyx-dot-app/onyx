@@ -35,6 +35,7 @@ _ACCESS_ROUTES = frozenset(
         ("POST", "/search"),
         ("POST", "/search/raw"),
         ("POST", "/search/postgres-query"),
+        ("GET", "/document/content"),
         ("POST", "/web-search/search-lite"),
         ("POST", "/web-search/open-urls"),
         ("GET", "/manage/indexed-sources"),

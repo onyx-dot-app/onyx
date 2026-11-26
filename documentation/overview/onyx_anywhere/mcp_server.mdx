@@ -5,7 +5,8 @@ description: "Search Onyx from Claude, ChatGPT, Codex, and Claude Code using OAu
 icon: "plug"
 ---
 
-Connect your AI client to Onyx so it can search your Onyx documents, search the web, and read web pages.
+Connect your AI client to Onyx so it can search your Onyx documents, read their full text, search the web,
+and read web pages.
 
 <Note>
   This page covers Onyx as an MCP **server**. To give Onyx Agents tools from another MCP server,
@@ -57,14 +58,15 @@ Return the matching document titles and source links.
 If you cannot access Onyx or find a relevant document, say so explicitly.
 ```
 
-The client should call `search_indexed_documents` and return document titles and source links.
+The client should call `search_indexed_documents` (or `search`) and return document titles and source links.
 An empty result can be valid. Try a document that you know you can open in Onyx.
 
 ## Permissions and data access
 
 A connected app gets the `read:search` and `read:chat` scopes. It can search documents that you can access,
 query their metadata and your chat history, search the web, and open web pages.
-It cannot create API keys or use other Onyx APIs. Your document permissions still apply.
+It cannot create API keys or use other Onyx APIs. Your document permissions still apply. All tools are read-only.
+They never change documents or settings.
 
 An app that you connected before Onyx added `read:chat` has only `read:search`, and it cannot query your chat history.
 To give it full access, disconnect the app and connect it again.
@@ -163,6 +165,48 @@ Keep our procedure and the public recommendations separate, with links for each.
 
 ## Tool reference
 
+If a tool call fails, the server returns an MCP error with a message, not a successful result.
+A search that finds nothing is a successful, empty result.
+
+### search and fetch
+
+These two tools are the standard search and fetch pair that hosts such as ChatGPT company knowledge expect.
+Use `search` to find documents and `fetch` to read one document in full.
+
+`search` runs the same Onyx search as `search_indexed_documents`. It takes one parameter.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `query` | string | Yes | The question or search query. |
+
+The response is a JSON object with a `results` array. It has one entry for each document, in ranked order.
+Each entry has `id`, `title`, and `url`. The `id` is the Onyx document ID and stays the same across searches.
+
+`fetch` returns the full indexed text of one document.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | Yes | The `id` from a `search` result. |
+
+```json
+{
+  "id": "https://onyx.example.com/docs/rollback",
+  "title": "Rollback procedure",
+  "text": "Full indexed text of the document...",
+  "url": "https://onyx.example.com/docs/rollback",
+  "metadata": {"owner": "Platform"}
+}
+```
+
+- **Link:** `url` is the source link of the document when it is an absolute HTTP or HTTPS URL.
+  Otherwise it is an Onyx page, `https://<your Onyx domain>/app/document?id=<id>`.
+  That page shows the indexed text to a signed-in user who can access the document.
+- **Access:** Onyx checks your access to the document on every `fetch` call.
+  A document that does not exist and a document that you cannot access return the same error.
+- **Size limit:** `fetch` reads up to 100,000 characters. A larger document returns an error and Onyx does not cut the text.
+  Use `search_indexed_documents` to get the relevant sections of a large document.
+- **Freshness:** The text is the copy that Onyx indexed. It is not a live read of the source.
+
 ### search_indexed_documents
 
 Search the knowledge indexed in Onyx. By default the search includes query expansion, retrieval, document selection,
@@ -191,8 +235,7 @@ and context expansion.
 
 Document-set and agent names must exist in your workspace. Unknown source types, document sets,
 or agents return an error with suggested or available values. Correct the filter before retrying.
-Empty filter arrays do not restrict the search. Use a valid timestamp:
-an invalid `time_cutoff` can result in a search without a date restriction.
+Empty filter arrays do not restrict the search. An invalid `time_cutoff` returns an error. Onyx does not ignore it.
 
 The response is one JSON text block with a `results` array. It has no separate structured copy.
 Each result includes `title`, `url`, `source_type`, `content`, and `updated_at`.
@@ -295,7 +338,8 @@ named filters are resolved on the search call and return an error when they cann
 | A request returns `401` | Sign in again. The 30-day authorization expired, or someone disconnected the app. |
 | A request returns `403` | Check your permissions and workspace membership. Signing in again does not restore a removed permission. |
 | A request returns `402` | Ask your administrator to check billing or the license. |
-| A request returns `503` | A required service is unavailable. Retry, then ask your administrator to check service health. |
+| A request returns `503` | A required service is unavailable. With a personal access token or API key, this includes an Onyx API outage. Retry, then ask your administrator to check service health. |
+| `fetch` fails for a document that `search` returned | You cannot access the document, or it is over 100,000 characters. Open its link in Onyx, or use `search_indexed_documents`. |
 | ChatGPT sign-in returns `Client ID 'https://chatgpt.com/oauth/client.json' not found` | Create the plugin again with **Registration method** set to **Dynamic Client Registration (DCR)**. See [ChatGPT](/overview/onyx_anywhere/mcp_server/chatgpt#chatgpt-on-the-web). |
 | Sign-in returns `503` | Onyx could not get the client's metadata document. Retry. If it continues, ask your administrator to check that the client's metadata URL is public. |
 | An expected document is missing | Check that you can find it in Onyx and that your filters match its source, document set, and update time. |

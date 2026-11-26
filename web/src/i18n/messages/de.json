@@ -18251,5 +18251,12 @@
         "label": "Führung"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "Dokument nicht gefunden",
+      "description": "Dokument nicht gefunden oder Sie haben keinen Zugriff"
+    },
+    "openSource": "Quelle öffnen"
   }
 }

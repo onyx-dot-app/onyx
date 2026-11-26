@@ -18251,5 +18251,12 @@
         "label": "Liderança"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "Documento não encontrado",
+      "description": "Documento não encontrado ou você não tem acesso"
+    },
+    "openSource": "Abrir fonte"
   }
 }

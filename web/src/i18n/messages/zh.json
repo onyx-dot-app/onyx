@@ -18251,5 +18251,12 @@
         "label": "管理层"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "未找到文档",
+      "description": "未找到文档或您无权访问"
+    },
+    "openSource": "打开来源"
   }
 }

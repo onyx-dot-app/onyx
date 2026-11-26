@@ -293,6 +293,27 @@ export class OnyxApiClient {
   }
 
   /**
+   * Ingests one text document that has no source link.
+   *
+   * @returns The ID of the indexed document
+   */
+  async ingestDocument(title: string, text: string): Promise<string> {
+    const response = await this.post("/onyx-api/ingestion", {
+      document: {
+        sections: [{ text }],
+        semantic_identifier: title,
+        metadata: {},
+        source: "ingestion_api",
+      },
+    });
+    const result = await this.handleResponse<{ document_id: string }>(
+      response,
+      "Failed to ingest document"
+    );
+    return result.document_id;
+  }
+
+  /**
    * Creates a simple file connector with mock credentials.
    * This enables the Knowledge toggle in assistant creation.
    *

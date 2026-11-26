@@ -20,6 +20,8 @@ class MCPServerToolName(str, Enum):
     SEARCH_WEB = "search_web"
     OPEN_URLS = "open_urls"
     QUERY_METADATA = "query_metadata"
+    SEARCH = "search"
+    FETCH = "fetch"
 
 
 # TODO: Add resource metrics when MCP resource usage expands beyond discovery.

@@ -50,6 +50,7 @@ Results come back most relevant first:
   "results": [
     {
       "citation_id": 1,
+      "document_id": "https://docs.example.com/q3-planning",
       "title": "Q3 Planning",
       "content": "Full text of the matched section...",
       "link": "https://...",
@@ -63,6 +64,9 @@ Results come back most relevant first:
 
 `metadata` holds the fields that the source supplies for the document. It is `null` when there are none.
 Use its keys and values in `tags`.
+
+`document_id` is the stable ID of the source document. Use it with [`GET /document/content`](#read-a-full-document)
+to read the full text. It is `null` when the search cannot map a result to a document.
 
 `citation_id` identifies the source document, not the result:
 several results share one `citation_id` when the search returned multiple non-overlapping sections of the same document.
@@ -240,6 +244,40 @@ With `stream: true` the response is `text/event-stream`, one JSON object per lin
   ```
 </CodeGroup>
 
+## Read a full document
+
+`GET /document/content?document_id=<id>` returns the indexed text of one document.
+Use the `document_id` from a `POST /search` or `POST /search/raw` result. The endpoint needs the **Search &mdash;
+Read** scope.
+
+```bash
+curl -s -G "${API_BASE_URL}/document/content" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  --data-urlencode "document_id=${DOCUMENT_ID}"
+```
+
+The response has these fields:
+
+| Field | Description |
+|-------|-------------|
+| `document_id` | The document ID. |
+| `title` | The document title. |
+| `content` | The indexed text of the whole document. |
+| `link` | The source link, or `null`. |
+| `source_type` | The connector source type. |
+| `updated_at` | When the source last changed, or `null`. |
+| `metadata` | The metadata fields that the source supplies. |
+
+The text is the copy that Onyx indexed. It is not a live read of the source.
+Onyx applies the calling user's document permissions on every call.
+
+| Status | Error code | Meaning |
+|--------|-----------|---------|
+| `404` | `DOCUMENT_NOT_FOUND` | The document does not exist, or the user cannot access it. Both cases look the same. |
+| `413` | `PAYLOAD_TOO_LARGE` | The document is over 100,000 characters. Onyx does not cut the text. Use the search results for the relevant sections. |
+
+Like the search endpoints, this endpoint answers with `501` when `DISABLE_VECTOR_DB` is set.
+
 ## Search history
 
 Every query sent through `POST /search/send-search-message` by a signed-in user is recorded,
@@ -252,8 +290,8 @@ and `filter_days` to narrow the window. Queries sent to `POST /search` and to th
 If the caller is an LLM client such as Claude Code, Codex, or Claude Desktop,
 you do not need to call these endpoints yourself.
 Connect the client to the [Onyx MCP server](/overview/onyx_anywhere/mcp_server).
-Its `search_indexed_documents` tool runs the same retrieval pipeline as `POST /search`,
-and the client decides when to search.
+Its `search_indexed_documents` and `search` tools run the same retrieval pipeline as `POST /search`,
+and its `fetch` tool reads a full document. The client decides when to search.
 
 ## Next Steps
 

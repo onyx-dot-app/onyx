@@ -16,18 +16,25 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
 from fastmcp.server.auth.auth import AccessToken
 from mcp.types import TextContent
 
 import onyx.mcp_server.tools.search as search_module
 import onyx.mcp_server.utils as utils_module
-from tests.unit.onyx.mcp_server.tool_result import tool_payload
+from tests.unit.onyx.mcp_server.tool_result import error_payload, tool_payload
 
 _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
 
 
 async def _search(**kwargs: Any) -> dict[str, Any]:
     return tool_payload(await search_module.search_indexed_documents(**kwargs))
+
+
+async def _search_error(**kwargs: Any) -> dict[str, Any]:
+    with pytest.raises(ToolError) as exc:
+        await search_module.search_indexed_documents(**kwargs)
+    return error_payload(exc.value)
 
 
 @dataclass
@@ -117,7 +124,7 @@ async def test_search_without_agent_stays_unscoped(stub: _Stub) -> None:
 
 @pytest.mark.asyncio
 async def test_unknown_agent_errors_without_searching(stub: _Stub) -> None:
-    payload = await _search(query="anything", agent="no-such-agent")
+    payload = await _search_error(query="anything", agent="no-such-agent")
 
     assert payload["results"] == []
     assert "no-such-agent" in payload["error"]
@@ -135,7 +142,7 @@ async def test_unknown_agent_error_stays_small_for_large_tenants(
         {"id": i, "name": f"Team {i} Knowledge", "description": "d"} for i in range(40)
     ]
 
-    payload = await _search(query="anything", agent="totally-unrelated")
+    payload = await _search_error(query="anything", agent="totally-unrelated")
 
     assert "renamed or removed" in payload["error"]
     assert "agents" in payload["error"]
@@ -146,7 +153,7 @@ async def test_unknown_agent_error_stays_small_for_large_tenants(
 @pytest.mark.asyncio
 async def test_agent_with_document_sets_is_rejected(stub: _Stub) -> None:
     """Explicit sets replace an agent's scope downstream, so both is refused."""
-    payload = await _search(
+    payload = await _search_error(
         query="anything", agent="Support", document_set_names=["Engineering Wiki"]
     )
 
@@ -178,7 +185,7 @@ async def test_unknown_agent_error_survives_empty_source_list(stub: _Stub) -> No
     """The agent error is more actionable than the generic no-sources message."""
     stub.sources = []
 
-    payload = await _search(query="anything", agent="no-such-agent")
+    payload = await _search_error(query="anything", agent="no-such-agent")
 
     assert "no-such-agent" in payload["error"]
     assert "Support" in payload["error"]
@@ -202,7 +209,7 @@ async def test_unindexed_source_type_errors_instead_of_being_dropped(
     stub: _Stub,
 ) -> None:
     """Silently skipping the filter returns a wider result set as if scoped."""
-    payload = await _search(query="anything", source_types=["confluence"])
+    payload = await _search_error(query="anything", source_types=["confluence"])
 
     assert payload["results"] == []
     assert "confluence" in payload["error"]
@@ -214,7 +221,9 @@ async def test_unindexed_source_type_errors_instead_of_being_dropped(
 async def test_unknown_document_set_errors_and_names_the_valid_ones(
     stub: _Stub,
 ) -> None:
-    payload = await _search(query="anything", document_set_names=["Enginering Wiki"])
+    payload = await _search_error(
+        query="anything", document_set_names=["Enginering Wiki"]
+    )
 
     assert payload["results"] == []
     assert "Enginering Wiki" in payload["error"]
@@ -228,7 +237,7 @@ async def test_inventory_failure_errors(stub: _Stub) -> None:
     here is real trouble — fail loudly rather than search unvalidated."""
     stub.inventory_status = 500
 
-    payload = await _search(query="anything", source_types=["github"])
+    payload = await _search_error(query="anything", source_types=["github"])
 
     assert payload["results"] == []
     # Not a _FilterError: the caller supplied nothing wrong, so it surfaces
@@ -242,7 +251,7 @@ async def test_inventory_failure_errors(stub: _Stub) -> None:
 async def test_ambiguous_agent_name_errors(stub: _Stub) -> None:
     stub.agents.append({"id": 11, "name": "support", "description": "same name"})
 
-    payload = await _search(query="anything", agent="SUPPORT")
+    payload = await _search_error(query="anything", agent="SUPPORT")
 
     assert payload["results"] == []
     assert "ambiguous" in payload["error"]

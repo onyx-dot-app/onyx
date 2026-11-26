@@ -188,7 +188,9 @@ LLM cost of every multi-search chat turn.
 
 **Other entry points.** `server/features/search/api.py` builds a `SearchTool`
 for `/search` and `/search/raw` and calls `SearchTool.search` outside the chat
-runtime, with its own trace and tool span. `ee/onyx/search/process_search_query.py`
+runtime, with its own trace and tool span. Each result carries the section's
+`document_id` from the tool's citation mapping, so a caller can read the whole
+document with `GET /document/content` ([[mcp-server]]). `ee/onyx/search/process_search_query.py`
 calls `search_pipeline` directly, with its own expansion and section target,
 and is the only caller of `FORCED_DOCUMENT_SET_NAMES` scope
 (`context/search/forced_document_set.py`). `backend/onyx/server/query_and_chat/query_backend.py:admin_search`

@@ -18251,5 +18251,12 @@
         "label": "Dirección"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "Documento no encontrado",
+      "description": "Documento no encontrado o no tienes acceso"
+    },
+    "openSource": "Abrir fuente"
   }
 }

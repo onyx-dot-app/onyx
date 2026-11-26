@@ -18251,5 +18251,12 @@
         "label": "Leadership"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "Document not found",
+      "description": "Document not found or you do not have access"
+    },
+    "openSource": "Open source"
   }
 }

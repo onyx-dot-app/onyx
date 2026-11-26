@@ -18251,5 +18251,12 @@
         "label": "経営"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "ドキュメントが見つかりません",
+      "description": "ドキュメントが見つからないか、アクセス権がありません"
+    },
+    "openSource": "ソースを開く"
   }
 }
