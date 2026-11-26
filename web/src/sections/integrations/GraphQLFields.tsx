@@ -22,7 +22,7 @@ interface GraphQLFieldsProps {
   /** Also true while introspection runs; the parent holds that state. */
   disabled: boolean;
   onLoadingChange: (loading: boolean) => void;
-  /** A refused schema; the parent blocks Save while it is set. */
+  /** A refused schema or a failed load; the parent blocks Save while it is set. */
   importError: string | null;
   onImportErrorChange: (importError: string | null) => void;
 }
@@ -54,7 +54,7 @@ export default function GraphQLFields({
       const view = await introspectGraphQL(draft.endpoint_url);
       if (setSchema(view.graphql_schema)) toast.success(t("introspect.done"));
     } catch (error) {
-      toast.error(
+      onImportErrorChange(
         error instanceof Error ? error.message : t("introspect.failed")
       );
     } finally {
@@ -78,9 +78,11 @@ export default function GraphQLFields({
             placeholder={t("endpointUrl.placeholder")}
             value={draft.endpoint_url}
             variant={disabled ? "disabled" : "primary"}
-            onChange={(event) =>
-              onChange({ ...draft, endpoint_url: event.target.value })
-            }
+            onChange={(event) => {
+              // An edit discards a failed load; the schema stays as it was.
+              onImportErrorChange(null);
+              onChange({ ...draft, endpoint_url: event.target.value });
+            }}
           />
           <Button
             type="button"

@@ -824,6 +824,49 @@ test("a schema loaded from the endpoint clears a refused upload", async () => {
   expect(save).toBeEnabled();
 });
 
+test("a failed schema load blocks Save until the endpoint URL changes", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "graphql",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: GRAPHQL_CONFIG,
+    }),
+    "POST /api/admin/integrations/graphql-introspect": new Response(
+      JSON.stringify({ detail: "Could not load the schema" }),
+      { status: 400 }
+    ),
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const endpoint = view.getByRole("textbox", {
+    name: copy.add.graphql.endpointUrl.title,
+  });
+  await u.clear(endpoint);
+  await u.type(endpoint, "https://new.example.com/graphql");
+  await u.click(
+    view.getByRole("button", { name: copy.add.graphql.introspect.submit })
+  );
+
+  expect(
+    await view.findByText("Could not load the schema")
+  ).toBeInTheDocument();
+  expect(save).toBeDisabled();
+
+  await u.type(endpoint, "2");
+  expect(view.queryByText("Could not load the schema")).not.toBeInTheDocument();
+  expect(save).toBeEnabled();
+  expect(
+    view.getByRole("textbox", { name: copy.add.graphql.schema.title })
+  ).toHaveValue(GRAPHQL_CONFIG.graphql_schema);
+});
+
 // Two UTF-8 bytes per character: over 5 MB in bytes, under it in characters.
 const OVERSIZED_TEXT = "é".repeat(2.5 * 1024 * 1024 + 1);
 
