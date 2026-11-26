@@ -274,7 +274,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    with no chat grant and no run mode. Allow goes out, Blocked is denied, and
    Ask is refused with `approval_needs_tool`, which names the chat tool
    (`sandbox_proxy/addons/gate.py:_app_tool_hint`: `custom__<id>__<action key>` for a REST or GraphQL app,
-   `app__<id>__<action>` for a preset). The initial IP listing fails loudly when
+   `app__<id>__<action>` for a preset), or says that the app has no tool for
+   the request, as for a request that matches only `unspecified`. The initial IP listing fails loudly when
    two sandboxes share an IP
    (`backend/onyx/sandbox_proxy/sandbox_identity/kubernetes.py:K8sInformerLookup._initial_list`,
    `backend/onyx/sandbox_proxy/sandbox_identity/docker.py:DockerEventsLookup._initial_sync`).
