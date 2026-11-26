@@ -26,7 +26,8 @@ cache-only too. A lost grant only asks the user again.
   command, so the drop scans for grant keys only when the command has one.
 * `approval:command:{command_id}:ended` — set by `drop_command_grants` before
   it drops the grants. A grant saved after the drop sees it and removes
-  itself, so a late save cannot restore a grant of an ended command.
+  itself, so a late save cannot restore a grant of an ended command. A grant
+  check reads it too, so a grant the drop has not removed yet covers nothing.
 """
 
 import asyncio
@@ -307,12 +308,16 @@ def command_grants_cover(
     cache: CacheBackend,
 ) -> bool:
     """Whether the user of the chat approved every one of `action_types`
-    (non-empty) for the rest of the command."""
+    (non-empty) for the rest of the command. The ended mark wins over grants
+    that its drop has not removed yet."""
     keys = {
         _command_grant_key(command_id, chat_session_id, integration_id, action_type)
         for action_type in action_types
     }
-    return bool(keys) and cache.exists_many(keys) == keys
+    return (
+        bool(keys)
+        and cache.exists_many(keys | {_command_ended_key(command_id)}) == keys
+    )
 
 
 def drop_command_grants(command_id: UUID, cache: CacheBackend) -> None:

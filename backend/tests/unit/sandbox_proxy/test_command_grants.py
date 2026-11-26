@@ -64,6 +64,22 @@ def test_dropping_the_grants_of_a_command_keeps_other_commands() -> None:
     )
 
 
+def test_a_grant_does_not_cover_once_its_command_is_marked_ended(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A request between the ended mark and the delete gets no grant."""
+    cache = FakeCache()
+    command, chat = uuid4(), uuid4()
+    approval_cache.grant_command_actions(command, chat, 7, ["issues.create"], cache)
+    monkeypatch.setattr(cache, "delete_prefix", lambda _prefix: None)
+
+    approval_cache.drop_command_grants(command, cache)
+
+    assert not approval_cache.command_grants_cover(
+        command, chat, 7, ["issues.create"], cache
+    )
+
+
 def test_dropping_a_command_without_grants_scans_no_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
