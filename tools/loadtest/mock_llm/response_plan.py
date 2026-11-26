@@ -454,7 +454,9 @@ def _code_mode_step(
     programs the turn already ran. A None program ends the turn's tool calls.
 
     Each program's first line marks its position, so n survives history
-    compaction that replaces the turn's earlier run calls with a summary."""
+    compaction that replaces the turn's earlier run calls with a summary. When
+    compaction keeps no run call of the turn, the plan starts again; that
+    needs an input limit far below that of a real model."""
     cell = code_mode.running_cell(turn)
     if cell is not None:
         return [

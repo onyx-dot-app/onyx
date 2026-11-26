@@ -442,7 +442,10 @@ A code profile needs code mode on the API server. Without an offered run tool
 with `internal_search`, the mock returns HTTP 400. Register each model name
 that you use. A long-tail turn prints about 1.3 million characters in total,
 so register the model with the input limit of the model that you are
-simulating; a smaller limit adds history compression to the turn.
+simulating; a smaller limit adds history compression to the turn. Each
+program marks its plan position, so a compacted turn continues its plan. A
+much smaller limit, where compaction keeps none of the turn's programs,
+restarts the plan.
 
 ## Run recipes
 
