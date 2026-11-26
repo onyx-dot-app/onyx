@@ -12775,6 +12775,9 @@
               "patching": {
                 "status": "{count, plural, =0 {Aplicando patch aos arquivos…} one {Aplicando patch a # arquivo…} other {Aplicando patch a # arquivos…}}"
               }
+            },
+            "deleted": {
+              "label": "Arquivo excluído"
             }
           },
           "stopped": {

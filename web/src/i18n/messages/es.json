@@ -12775,6 +12775,9 @@
               "patching": {
                 "status": "{count, plural, =0 {Aplicando parche a archivos…} one {Aplicando parche a # archivo…} other {Aplicando parche a # archivos…}}"
               }
+            },
+            "deleted": {
+              "label": "Archivo eliminado"
             }
           },
           "stopped": {
