@@ -10,16 +10,16 @@ here is best-effort over `CacheBackend`. Two lists:
   recorded; the parked proxy BLPOPs to wake before the wait timeout.
 
 A command that a chat runs in its VM uses the announce list under its command
-ID, and two more keys:
+ID, and four more keys:
 
 * `approval:command:{command_id}:foreground` — the chat session of a command
   that a call of the chat's run waits on. The call sets and renews it; the
   proxy holds an Ask request of the command only while it is set.
 * `approval:command:{command_id}:grant:{chat_session_id}:{integration_id}:{action}`
   — one key per action that the user of the chat approved for the rest of the
-  command. Plain keys,
-  not a set, so the TTL applies on every cache backend. The harness drops
-  them when it sees the command end (`drop_command_grants`).
+  command. Plain keys, not a set, so the TTL applies on every cache
+  backend. The harness drops them when it sees the command end
+  (`drop_command_grants`).
 * `approval:command:{command_id}:granted` — set before the first grant of the
   command, so the drop scans for grant keys only when the command has one.
 * `approval:command:{command_id}:ended` — set by `drop_command_grants` before
