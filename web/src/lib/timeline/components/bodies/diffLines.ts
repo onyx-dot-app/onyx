@@ -232,6 +232,7 @@ export function countDiffLines(lines: DiffLine[]): DiffCounts {
 export interface PatchFile {
   /** The file's path, and its new path when it moved. */
   path: string;
+  change: "add" | "update" | "delete";
   /** The shown lines, which the patch's line limit can cut. */
   lines: DiffLine[];
   /** Every added and removed line of the file, shown or not. */
@@ -247,6 +248,8 @@ export interface ParsedPatch {
   removed: number;
   /** Lines that the limit left out, in the panels and in later files. */
   omittedLines: number;
+  /** Files after the line limit, which have no panel. */
+  omittedFiles: number;
 }
 
 /** The most patch lines shown; the rest is a count. Totals keep all lines. */
@@ -267,6 +270,7 @@ export function parseApplyPatch(patch: string): ParsedPatch {
     added: 0,
     removed: 0,
     omittedLines: 0,
+    omittedFiles: 0,
   };
   let file: PatchFile | null = null;
   let isNewFile = false;
@@ -294,8 +298,21 @@ export function parseApplyPatch(patch: string): ParsedPatch {
       isNewFile = header?.[1] === "Add";
       file = null;
       if (shown < MAX_PATCH_LINES) {
-        file = { path: header?.[2] ?? "", lines: [], added: 0, removed: 0 };
+        file = {
+          path: header?.[2] ?? "",
+          change:
+            header?.[1] === "Add"
+              ? "add"
+              : header?.[1] === "Delete"
+                ? "delete"
+                : "update",
+          lines: [],
+          added: 0,
+          removed: 0,
+        };
         parsed.files.push(file);
+      } else {
+        parsed.omittedFiles++;
       }
       if (header) continue;
     }

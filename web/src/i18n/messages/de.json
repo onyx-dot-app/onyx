@@ -12780,6 +12780,9 @@
               "patching": {
                 "status": "{count, plural, =0 {Patche Dateien…} one {Patche # Datei…} other {Patche # Dateien…}}"
               }
+            },
+            "deleted": {
+              "label": "Datei gelöscht"
             }
           },
           "stopped": {
