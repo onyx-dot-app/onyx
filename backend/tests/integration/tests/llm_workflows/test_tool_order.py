@@ -61,7 +61,7 @@ class _FamilyTools(BaseModel):
 
 _FAMILIES: dict[ToolFamily, _FamilyTools] = {
     ToolFamily.OPENAI: _FamilyTools(
-        code_mode=["exec", "wait"],
+        code_mode=["execute_code", "wait"],
         built_ins=["internal_search", "open_url", "postgres_query", "add_memory"],
         skills=["skills_list", "skills_read"],
         agents=[
@@ -74,7 +74,7 @@ _FAMILIES: dict[ToolFamily, _FamilyTools] = {
         question="request_user_input",
     ),
     ToolFamily.CLAUDE: _FamilyTools(
-        code_mode=["repl", "poll"],
+        code_mode=["execute_code", "poll"],
         built_ins=["internal_search", "web_fetch", "postgres_query", "add_memory"],
         skills=["skills_list", "skill"],
         agents=["agent", "list_agents", "interrupt_agent", "send_message"],

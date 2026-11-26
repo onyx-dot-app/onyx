@@ -44,7 +44,7 @@ from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat.chat_backend import (
     get_chat_session_processing_status,
 )
-from onyx.tools.constants import EXEC_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolApprovalScope, ToolContext
 from onyx.tools.tool_implementations.subagents.shapes import (
     AGENT_SHAPES,
@@ -77,7 +77,9 @@ def _reply(request: GenerationRequest, _signal: CancellationSignal) -> Assistant
         return AssistantMessage(content=[TextContent(text=results[-1].text)])
     return AssistantMessage(
         content=[
-            ToolCall(id="program", name=EXEC_TOOL_NAME, arguments={"code": PROGRAM})
+            ToolCall(
+                id="program", name=EXECUTE_CODE_TOOL_NAME, arguments={"code": PROGRAM}
+            )
         ]
     )
 

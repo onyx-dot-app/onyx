@@ -1492,7 +1492,7 @@ def test_a_program_finds_the_artifact_tools_with_tool_search(
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "exec"
+        if tool["function"]["name"] == "execute_code"
     ]
     assert (
         f"\n  - library: {LibraryListTool.CODE_MODE_NAMESPACE_DESCRIPTION}\n"
