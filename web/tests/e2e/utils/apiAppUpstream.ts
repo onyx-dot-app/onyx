@@ -9,8 +9,9 @@ import type { AddressInfo } from "net";
  * The backend must reach it. It uses the host variables of the MCP test
  * servers: CI binds to 0.0.0.0 and the backend containers call
  * host.docker.internal. The backend's SSRF guard blocks loopback, so a local
- * run sets MCP_TEST_SERVER_PUBLIC_HOST to a private address of this machine,
- * and the backend sets MCP_SERVER_ALLOW_PRIVATE_NETWORK=true, as CI does.
+ * run sets MCP_TEST_SERVER_BIND_HOST=0.0.0.0 and MCP_TEST_SERVER_PUBLIC_HOST
+ * to a private address of this machine, and the backend sets
+ * MCP_SERVER_ALLOW_PRIVATE_NETWORK=true, as CI does.
  */
 
 const BIND_HOST =
