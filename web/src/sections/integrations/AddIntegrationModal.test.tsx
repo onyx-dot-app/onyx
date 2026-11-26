@@ -185,6 +185,29 @@ describe("MCP server", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("Continue checks an unreachable server again after Back", async () => {
+    mockProbe
+      .mockResolvedValueOnce({
+        kind: "unreachable",
+        reason: "connection_failed",
+      })
+      .mockResolvedValueOnce(OAUTH_PROBE);
+    const { user } = open({ kind: "mcp_server" });
+    await fillConnect(
+      user,
+      "Docs",
+      add.mcp.url.title,
+      "https://mcp.example.com/mcp"
+    );
+    await screen.findByText(add.mcp.probe.unreachable);
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.click(screen.getByRole("button", { name: add.continue }));
+
+    expect(await screen.findByText(add.mcp.probe.oauth)).toBeInTheDocument();
+    expect(mockProbe).toHaveBeenCalledTimes(2);
+  });
+
   test("a server with no detected transport does not keep the last one", async () => {
     mockProbe.mockResolvedValueOnce(OAUTH_PROBE).mockResolvedValueOnce({
       kind: "unreachable",
@@ -920,6 +943,46 @@ describe("Custom API", () => {
         },
       })
     );
+  });
+
+  test("Continue checks an unreachable URL again after Back", async () => {
+    const detail = "The URL timed out.";
+    let reachable = false;
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": () =>
+        reachable
+          ? failure(400)
+          : new Response(
+              JSON.stringify({ error_code: "BAD_GATEWAY", detail }),
+              { status: 502 }
+            ),
+      "POST /api/admin/integrations/graphql-introspect": {
+        shape: "graphql",
+        endpoint_url: "https://billing.example.com/graphql",
+        graphql_schema: "type Query { invoices: Int }",
+      },
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Billing",
+      add.api.url.title,
+      "https://billing.example.com/graphql"
+    );
+    await screen.findByText(
+      add.detected.restUnreachable.replace("{detail}", detail)
+    );
+
+    reachable = true;
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.click(screen.getByRole("button", { name: add.continue }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(
+      screen.queryByText(
+        add.detected.restUnreachable.replace("{detail}", detail)
+      )
+    ).not.toBeInTheDocument();
   });
 
   test("a URL whose answer is over the spec size limit warns and is a REST base URL", async () => {

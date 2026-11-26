@@ -214,6 +214,7 @@ export default function AddIntegrationModal({
   // Each detection gets a new run; Back and close drop the run in flight.
   const run = useRef<AbortController | null>(null);
   // Continue with these inputs again returns to the setup step as it was.
+  // Null after a failed check, so Continue checks again.
   const detectedFrom = useRef<DetectionInputs | null>(null);
 
   useEffect(() => {
@@ -290,10 +291,13 @@ export default function AddIntegrationModal({
           ? prefill.transport
           : "STREAMABLE_HTTP")
     );
-    enterSetup({ shape: "mcp_server", probe }, mcpSignIn(probe), {
-      url: normalizedUrl(serverUrl),
-      file: null,
-    });
+    enterSetup(
+      { shape: "mcp_server", probe },
+      mcpSignIn(probe),
+      probe.kind === "unreachable"
+        ? null
+        : { url: normalizedUrl(serverUrl), file: null }
+    );
   }
 
   async function detectCustomApi(apiUrl: string | null) {
@@ -326,7 +330,9 @@ export default function AddIntegrationModal({
     enterSetup(
       detected,
       { ...DEFAULT_SIGN_IN, authMethod: "api_key" },
-      { url: apiUrl, file }
+      detected.shape === "rest" && detected.warning !== null
+        ? null
+        : { url: apiUrl, file }
     );
   }
 
