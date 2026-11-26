@@ -341,7 +341,8 @@ admin value is not Ask.
   its server URL. For one release each create and spec change writes both
   the `tool` row and the `api_app` row
   (`db/integration.py:write_openapi_document__no_commit`). The `tool` copy
-  has path-level parameters copied into each operation
+  has path-level parameters copied into each operation and server variable
+  defaults filled into the server URL
   (`tools/tool_implementations/custom/openapi_parsing.py:inline_path_parameters`), the shape the previous
   release reads. The readers read
   `api_app` only. Migration `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
