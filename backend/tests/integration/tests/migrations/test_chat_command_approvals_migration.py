@@ -44,8 +44,50 @@ def _migrate(direction: str, revision: str) -> None:
         )
 
 
+class _Seeds:
+    """The rows a test commits, deleted at teardown."""
+
+    def __init__(self) -> None:
+        self.user_ids: list[UUID] = []
+        self.integration_ids: list[int] = []
+
+    def delete(self, engine: Engine) -> None:
+        with engine.begin() as conn:
+            apps = conn.execute(
+                text(
+                    "SELECT tool_id, api_app_id FROM integration WHERE id = ANY(:ids)"
+                ),
+                {"ids": self.integration_ids},
+            ).all()
+            for statement in (
+                "DELETE FROM action_approval WHERE integration_id = ANY(:ids)",
+                "DELETE FROM integration_connection WHERE integration_id = ANY(:ids)",
+                "DELETE FROM integration WHERE id = ANY(:ids)",
+            ):
+                conn.execute(text(statement), {"ids": self.integration_ids})
+            conn.execute(
+                text("DELETE FROM tool WHERE id = ANY(:ids)"),
+                {"ids": [tool_id for tool_id, _ in apps]},
+            )
+            conn.execute(
+                text("DELETE FROM api_app WHERE id = ANY(:ids)"),
+                {"ids": [app_id for _, app_id in apps]},
+            )
+            for statement in (
+                "DELETE FROM chat_session WHERE user_id = ANY(:ids)",
+                "DELETE FROM build_session WHERE user_id = ANY(:ids)",
+                'DELETE FROM "user" WHERE id = ANY(:ids)',
+            ):
+                conn.execute(text(statement), {"ids": self.user_ids})
+
+
 @pytest.fixture
-def engine() -> Generator[Engine, None, None]:
+def seeds() -> _Seeds:
+    return _Seeds()
+
+
+@pytest.fixture
+def engine(seeds: _Seeds) -> Generator[Engine, None, None]:
     _migrate("upgrade", "head")
     _migrate("downgrade", PREVIOUS_REVISION)
     engine = create_engine(
@@ -61,8 +103,11 @@ def engine() -> Generator[Engine, None, None]:
     try:
         yield engine
     finally:
-        _migrate("upgrade", "head")
-        engine.dispose()
+        try:
+            _migrate("upgrade", "head")
+            seeds.delete(engine)
+        finally:
+            engine.dispose()
 
 
 def _insert_user(conn: Connection) -> UUID:
@@ -169,10 +214,12 @@ def _kept_rows(conn: Connection) -> dict[str, list[Any]]:
     }
 
 
-def test_upgrade_keeps_the_craft_approval_rows(engine: Engine) -> None:
+def test_upgrade_keeps_the_craft_approval_rows(engine: Engine, seeds: _Seeds) -> None:
     with engine.begin() as conn:
         user_id = _insert_user(conn)
         integration_id = _insert_rest_app(conn)
+        seeds.user_ids.append(user_id)
+        seeds.integration_ids.append(integration_id)
         approval_id = _insert_craft_approval(conn, user_id, integration_id)
         before = _approval(conn, approval_id)
 
@@ -189,11 +236,13 @@ def test_upgrade_keeps_the_craft_approval_rows(engine: Engine) -> None:
         ).one() == (None, None)
 
 
-def test_a_rollback_drops_only_the_command_rows(engine: Engine) -> None:
+def test_a_rollback_drops_only_the_command_rows(engine: Engine, seeds: _Seeds) -> None:
     _migrate("upgrade", REVISION)
     with engine.begin() as conn:
         user_id = _insert_user(conn)
         integration_id = _insert_rest_app(conn)
+        seeds.user_ids.append(user_id)
+        seeds.integration_ids.append(integration_id)
         craft_approval = _insert_craft_approval(conn, user_id, integration_id)
         chat_session_id = uuid4()
         conn.execute(
