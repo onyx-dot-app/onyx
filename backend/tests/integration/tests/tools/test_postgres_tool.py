@@ -5,7 +5,7 @@ tool and a persona without it does not, a chat turn can run it, and results
 are scoped per user (another user's chat history is invisible — empty result,
 not an error or a leak). The mock LLM scripts the tool calls, so the assertions check the
 tool output the model received. With code mode on, the call runs inside an
-`exec` program and its text comes back in the program's output, so the
+`execute_code` program and its text comes back in the program's output, so the
 assertions look for the text rather than compare the whole result.
 """
 
@@ -348,14 +348,14 @@ def test_postgres_tool_pages_through_every_document_in_a_program(
             tool_calls=[
                 ToolCall(
                     id=_PAGING_PROGRAM_ID,
-                    name="exec",
+                    name="execute_code",
                     arguments={
                         "code": _PAGING_PROGRAM.format(title=f"pgpage-{tag}"),
                         "yield_time_ms": 120_000,
                     },
                 )
             ],
-            conditions=RequestConditions(offers=["exec"]),
+            conditions=RequestConditions(offers=["execute_code"]),
         ),
         _answer_after(_PAGING_PROGRAM_ID),
     )

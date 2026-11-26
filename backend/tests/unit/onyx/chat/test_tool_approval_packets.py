@@ -142,7 +142,7 @@ def test_a_program_call_that_ends_without_a_decision_reports_how(
         if request.messages and isinstance(request.messages[-1], ToolResultMessage):
             return AssistantMessage(content=[TextContent(text="done")])
         return AssistantMessage(
-            content=[ToolCall(id="program", name="exec", arguments={})]
+            content=[ToolCall(id="program", name="execute_code", arguments={})]
         )
 
     live: list[Packet] = []
@@ -151,7 +151,9 @@ def test_a_program_call_that_ends_without_a_decision_reports_how(
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=[
             AgentTool(
-                definition=ToolDefinition(name="exec", description="", parameters={}),
+                definition=ToolDefinition(
+                    name="execute_code", description="", parameters={}
+                ),
                 execute=program,
                 resume_with_input=resume_with_input,
                 approval_required=[CALL.name],

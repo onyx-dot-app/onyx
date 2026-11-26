@@ -38,9 +38,8 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import (
-    EXEC_TOOL_NAME,
+    EXECUTE_CODE_TOOL_NAME,
     POLL_TOOL_NAME,
-    REPL_TOOL_NAME,
     WAIT_TOOL_NAME,
 )
 from onyx.tools.tool_implementations.code_mode.models import (
@@ -100,7 +99,7 @@ CLOSING = CellClosing(
 
 
 def _reply(
-    run_name: str = EXEC_TOOL_NAME, wait_name: str = WAIT_TOOL_NAME
+    run_name: str = EXECUTE_CODE_TOOL_NAME, wait_name: str = WAIT_TOOL_NAME
 ) -> Callable[[GenerationRequest, CancellationSignal], AssistantMessage]:
     turns = iter(
         [
@@ -179,7 +178,7 @@ def test_cell_observations_and_closing_render_in_call_order(
     agent = Agent(
         (StoppedAnswerClient if stopped else FakeModelClient)(_reply()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[_tool(EXEC_TOOL_NAME), _tool(WAIT_TOOL_NAME)],
+        tools=[_tool(EXECUTE_CODE_TOOL_NAME), _tool(WAIT_TOOL_NAME)],
         on_finish=_close,
     )
     run = agent.start(
@@ -359,9 +358,10 @@ def test_a_call_left_unfinished_renders_as_stopped() -> None:
 @pytest.mark.parametrize(
     ("name", "arguments", "start"),
     [
-        *(
-            (name, {"code": "work()"}, packets.CodeModeStart(code="work()"))
-            for name in (EXEC_TOOL_NAME, REPL_TOOL_NAME)
+        (
+            EXECUTE_CODE_TOOL_NAME,
+            {"code": "work()"},
+            packets.CodeModeStart(code="work()"),
         ),
         *(
             (
@@ -386,13 +386,11 @@ def test_run_and_wait_calls_of_every_shape_render_as_cells(
     ] == [start]
 
 
-def test_a_chat_with_code_mode_calls_under_other_names_loads() -> None:
-    """Calls saved under names that no shape has, such as execute_code and
-    wait_code, replay as tool cards without error."""
+def _replay(run_name: str, wait_name: str) -> list[packets.Packet]:
     agent = Agent(
-        FakeModelClient(_reply("execute_code", "wait_code")),
+        FakeModelClient(_reply(run_name, wait_name)),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[_tool("execute_code"), _tool("wait_code")],
+        tools=[_tool(run_name), _tool(wait_name)],
         on_finish=_close,
     )
     run = agent.start(max_steps=10)
@@ -404,6 +402,27 @@ def test_a_chat_with_code_mode_calls_under_other_names_loads() -> None:
     assert projected.response is not None
     replayed = replay_response(projected.response, {}, {}, {})
     assert not [p for p in replayed if isinstance(p.obj, packets.PacketException)]
+    return replayed
+
+
+def test_a_saved_execute_code_call_replays_as_a_code_cell() -> None:
+    replayed = _replay("execute_code", "wait")
+    assert [
+        (p.placement.turn_index, p.obj.code)
+        for p in replayed
+        if isinstance(p.obj, packets.CodeModeStart)
+    ] == [(0, "work()"), (1, "")]
+
+
+@pytest.mark.parametrize(
+    ("run_name", "wait_name"), [("exec", "wait_code"), ("repl", "wait_code")]
+)
+def test_a_chat_with_code_mode_calls_under_other_names_loads(
+    run_name: str, wait_name: str
+) -> None:
+    """Calls saved under names that no shape has replay as tool cards without
+    error."""
+    replayed = _replay(run_name, wait_name)
     assert not [p for p in replayed if isinstance(p.obj, packets.CodeModeStart)]
     # Each call keeps its card, and the answer follows them.
     assert {p.placement.turn_index for p in replayed} == {0, 1, 2}

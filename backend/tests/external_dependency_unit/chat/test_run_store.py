@@ -2528,7 +2528,7 @@ def test_chat_parent_works_while_its_child_runs_and_reads_the_result(
                 return calls(
                     ToolCall(
                         id="work",
-                        name="exec",
+                        name="execute_code",
                         arguments={
                             "code": "print(await tools.echo(value='x'))",
                             "yield_time_ms": 30000,
@@ -2557,7 +2557,7 @@ def test_chat_parent_works_while_its_child_runs_and_reads_the_result(
         # Agent tools stay direct tools; in code mode the work tool is a function.
         offered = {tool.name for tool in parent_requests[0].tools or []}
         assert {"spawn_agent", "send_message"} <= offered
-        assert ("exec" in offered) is code_mode
+        assert ("execute_code" in offered) is code_mode
         assert ("echo" in offered) is not code_mode
         # The child's answer reaches the parent after its work, as a new input
         # right after the work's result.
