@@ -90,8 +90,7 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "The proxy could not obtain the credentials needed to authenticate this "
         "request, so it was blocked. The integration is likely not connected, or "
         "its saved credentials have expired or been revoked. Ask the user to "
-        "connect or reconnect this integration in their Craft settings, then "
-        "retry."
+        "connect or reconnect this integration, then retry."
     ),
     SandboxProxyError.DESTINATION_BLOCKED: (
         "This request targets an internal network address that sandboxes are not "

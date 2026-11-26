@@ -34,3 +34,8 @@ def test_every_code_has_a_message() -> None:
     # A new code without prose makes `.message` raise KeyError here.
     for code in SandboxProxyError:
         assert code.message
+
+
+def test_credential_error_names_no_product() -> None:
+    # Craft and chat commands both get this prose.
+    assert "Craft" not in SandboxProxyError.CREDENTIAL_ERROR.message
