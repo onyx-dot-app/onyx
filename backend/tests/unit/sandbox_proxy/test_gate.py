@@ -2422,6 +2422,34 @@ async def test_a_command_grant_covers_the_command_after_it_leaves_the_foreground
 
 
 @pytest.mark.asyncio
+async def test_a_grant_saved_as_the_call_stops_waiting_sends_the_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A card is approved for the command, then the call stops waiting,
+    while the gate checks a request of the same action: the request sees the
+    grant and is not refused."""
+    addon, cache = _command_gate(monkeypatch)
+
+    def grant_then_leave(_ctx: SessionContext) -> bool:
+        approval_cache.grant_command_actions(
+            _COMMAND, UUID(_TAG_UUID), 42, ["slack.messages.write"], cache
+        )
+        approval_cache.clear_command_foreground(_COMMAND, cache)
+        return False
+
+    monkeypatch.setattr(addon, "_command_in_foreground", grant_then_leave)
+    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    _spy_approval_insert(monkeypatch)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert not spy.persisted
+    assert len(spy.dispatched) == 1
+
+
+@pytest.mark.asyncio
 async def test_a_command_grant_row_stores_the_size_of_a_large_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

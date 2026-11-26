@@ -396,7 +396,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     check, and two decisions never lock each other's rows. A repeated
     decision runs the wake and the scan again. A failed grant drop is logged,
     and the command's result still returns. A grant covers the command until it exits, also after the
-    call stops waiting on it (the gate checks it before the foreground mark),
+    call stops waiting on it (the gate reads it when the foreground mark is gone, so it sees a grant
+    saved before the call stopped waiting),
     and never covers an action that always asks. The harness drops the
     command's grants when a call sees the command end
     (`server/features/build/sandbox/firecracker/harness_sandbox.py:_end_exec_session`,

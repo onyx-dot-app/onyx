@@ -750,11 +750,13 @@ class GateAddon:
         if (
             ctx.chat_command_id is not None
             and matched_actions.governing_action.policy is ActionPolicy.ASK
-            and not await asyncio.to_thread(self._command_grant, ctx, matched_actions)
             and not await asyncio.to_thread(self._command_in_foreground, ctx)
+            and not await asyncio.to_thread(self._command_grant, ctx, matched_actions)
         ):
             # Only a call that waits on the command can show a card; a
             # background process has none. A command grant needs no card.
+            # The grant is read after the mark, so a grant saved before the
+            # call stopped waiting is seen.
             logger.info(
                 "egress_block " + EGRESS_TARGET_FIELDS + " reason=%s",
                 *egress_target_args(flow, sandbox),
