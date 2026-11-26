@@ -143,7 +143,7 @@ def _insert_url_pattern_app(
     return integration_id
 
 
-def _seed(conn: Connection, user_ids: list[UUID]) -> tuple[UUID, int, dict[str, int]]:
+def _seed(conn: Connection, user_ids: list[UUID]) -> tuple[UUID, dict[str, int]]:
     tag = uuid4().hex[:8]
     user_id = uuid4()
     user_ids.append(user_id)
@@ -182,7 +182,7 @@ def _seed(conn: Connection, user_ids: list[UUID]) -> tuple[UUID, int, dict[str, 
             ),
             {"persona_id": persona_id, "id": integration_id},
         )
-    return user_id, persona_id, ids
+    return user_id, ids
 
 
 def _rows(conn: Connection, ids: list[int]) -> dict[int, Any]:
@@ -211,7 +211,7 @@ def test_a_prefix_pattern_app_becomes_a_rest_app_in_place(
     engine: Engine, user_ids: list[UUID]
 ) -> None:
     with engine.begin() as conn:
-        user_id, _, ids = _seed(conn, user_ids)
+        user_id, ids = _seed(conn, user_ids)
 
     upgrade_postgres(database=POSTGRES_DB, config_name="alembic", revision=REVISION)
 
