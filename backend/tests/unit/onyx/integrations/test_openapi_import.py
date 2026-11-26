@@ -137,6 +137,82 @@ def test_a_request_body_reference_is_resolved() -> None:
     )
 
 
+def test_schema_references_are_inlined_into_the_tool() -> None:
+    spec = {
+        "openapi": "3.0.3",
+        "info": {"title": "Pets", "version": "1.0"},
+        "servers": [{"url": "https://pets.example.com"}],
+        "components": {
+            "schemas": {
+                "Pet": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "owner": {"$ref": "#/components/schemas/Owner"},
+                        "parent": {"$ref": "#/components/schemas/Pet"},
+                        "toy": {"$ref": "#/components/schemas/Missing"},
+                    },
+                },
+                "Owner": {"type": "object", "properties": {"id": {"type": "integer"}}},
+                "Kind": {"type": "string", "enum": ["cat", "dog"]},
+            }
+        },
+        "paths": {
+            "/pets/{kind}": {
+                "post": {
+                    "operationId": "addPet",
+                    "summary": "Add a pet",
+                    "parameters": [
+                        {
+                            "name": "kind",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"$ref": "#/components/schemas/Kind"},
+                        }
+                    ],
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/Pet"}
+                            }
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+    (method_spec,) = openapi_to_method_specs(spec)
+
+    properties = method_spec.to_tool_definition().parameters["properties"]
+    assert properties == {
+        REQUEST_BODY: {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "owner": {"type": "object", "properties": {"id": {"type": "integer"}}},
+                # A cycle and a missing reference admit any value.
+                "parent": {},
+                "toy": {},
+            },
+        },
+        "kind": {"type": "string", "enum": ["cat", "dog"]},
+    }
+    assert "$ref" not in json.dumps(inline_path_parameters(spec)["paths"])
+
+    (tool,) = build_custom_tools_from_openapi_schema_and_headers(
+        1,
+        spec,
+        dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
+    )
+    body = {"name": "Rex", "owner": {"id": 7}}
+    assert tool._request({"kind": "dog", REQUEST_BODY: body}) == (
+        "post",
+        "https://pets.example.com/pets/dog",
+        body,
+    )
+
+
 def test_a_spec_with_path_parameters_validates_and_builds_tools() -> None:
     spec = _callable_spec()
     validate_openapi_schema(spec)

@@ -188,6 +188,39 @@ def resolve_ref(openapi_spec: dict[str, Any], value: Any) -> Any:
     return target
 
 
+# Shared schemas can reuse each other so much that inlining them grows
+# exponentially, as YAML aliases do.
+_MAX_INLINED_REFS = 1000
+
+
+def inline_refs(openapi_spec: dict[str, Any], value: Any) -> Any:
+    """``value`` with each local ``$ref`` in it replaced by a copy of what it
+    points to. A reference that is cyclic, not local, missing, or past
+    ``_MAX_INLINED_REFS`` becomes ``{}``, which admits any value."""
+    inlined = 0
+
+    def inline(node: Any, open_refs: frozenset[str]) -> Any:
+        nonlocal inlined
+        if isinstance(node, list):
+            return [inline(item, open_refs) for item in node]
+        if not isinstance(node, dict):
+            return node
+        ref = node.get("$ref")
+        if not isinstance(ref, str):
+            return {key: inline(item, open_refs) for key, item in node.items()}
+        target = resolve_ref(openapi_spec, node)
+        if target is node or ref in open_refs or inlined >= _MAX_INLINED_REFS:
+            return {}
+        inlined += 1
+        resolved = inline(target, open_refs | {ref})
+        siblings = {
+            key: inline(item, open_refs) for key, item in node.items() if key != "$ref"
+        }
+        return {**resolved, **siblings} if isinstance(resolved, dict) else resolved
+
+    return inline(value, frozenset())
+
+
 def operation_parameters(
     openapi_spec: dict[str, Any], path_item: dict[str, Any], operation: dict[str, Any]
 ) -> list[Any]:
@@ -211,12 +244,12 @@ def resolved_operation(
     openapi_spec: dict[str, Any], path_item: dict[str, Any], operation: dict[str, Any]
 ) -> dict[str, Any]:
     """``operation`` with the parameters of its path item and with the local
-    references of its parameters and request body resolved."""
+    references in its parameters and request body inlined."""
     resolved = dict(operation)
     if parameters := operation_parameters(openapi_spec, path_item, operation):
-        resolved["parameters"] = parameters
+        resolved["parameters"] = inline_refs(openapi_spec, parameters)
     if "requestBody" in operation:
-        resolved["requestBody"] = resolve_ref(openapi_spec, operation["requestBody"])
+        resolved["requestBody"] = inline_refs(openapi_spec, operation["requestBody"])
     return resolved
 
 
