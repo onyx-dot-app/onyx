@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from redis.exceptions import RedisError
 
+from onyx.cache.interface import CacheBackend
 from onyx.db.enums import ActionPolicy
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
@@ -100,8 +101,10 @@ def test_a_failed_grant_drop_still_ends_the_command(
     """The command's result and the cleanup of other commands do not wait on
     the grant drop; the grants then end with their TTL."""
     removed: list[str] = []
+    dropped: list[tuple[UUID, CacheBackend]] = []
 
-    def drop(*_args: object) -> None:
+    def drop(command_id: UUID, cache: CacheBackend) -> None:
+        dropped.append((command_id, cache))
         raise RedisError("down")
 
     monkeypatch.setattr(
@@ -120,6 +123,8 @@ def test_a_failed_grant_drop_still_ends_the_command(
         last_used=0.0,
     )
 
-    harness_sandbox._end_exec_session(FakeCache(), uuid4(), record)
+    cache = FakeCache()
+    harness_sandbox._end_exec_session(cache, uuid4(), record)
 
+    assert dropped == [(record.command_id, cache)]
     assert removed == ["exec-1"]
