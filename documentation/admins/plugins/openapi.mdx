@@ -8,8 +8,9 @@ An OpenAPI plugin connects Onyx to a REST API. You import an [OpenAPI](https://s
 or you type one line for each endpoint, and Onyx turns each operation into a tool.
 Agents read the operation descriptions and parameters to decide when and how to call the API.
 
-OpenAPI plugins work in default Chat and in custom agents. They are not available in Craft. For Craft,
-use an [MCP server](/admins/plugins/mcp) or a [custom Craft App](/admins/plugins/craft_apps#custom-apps).
+OpenAPI plugins work in default Chat, in custom agents, and in Craft. Craft has no tools for them.
+It sends HTTP requests to the base URL from its sandbox.
+The sandbox proxy adds the credentials and applies the policy of the action that each request matches.
 
 Users with the **Manage Actions** permission can add and edit OpenAPI plugins.
 Only full admins can change default Chat availability.
