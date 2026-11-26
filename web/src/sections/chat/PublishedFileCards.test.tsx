@@ -232,7 +232,7 @@ test("without a Files panel, a click previews the file in a modal", async () => 
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(fetchChatFile).toHaveBeenCalledWith(
     "file-md",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
 });

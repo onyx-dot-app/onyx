@@ -226,7 +226,7 @@ test("a shared chat's card of an older version opens that version, labelled", as
   ).toBeVisible();
   expect(fetchChatFile).toHaveBeenLastCalledWith(
     "file-1",
-    false,
+    "original",
     expect.any(AbortSignal)
   );
   expect(

@@ -9,11 +9,12 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, Literal
+from typing import Literal
 
 import tiktoken
 
 from mock_llm import code_mode
+from mock_llm.code_workload import CodePool
 from mock_llm.models import (
     ChatCompletionRequest,
     ChatMessage,
@@ -24,6 +25,7 @@ from mock_llm.models import (
     ToolCallFunction,
     ToolDefinition,
     Usage,
+    content_text,
 )
 from mock_llm.profiles import (
     TurnProfile,
@@ -107,12 +109,13 @@ def citation_ids(request: ChatCompletionRequest) -> list[int]:
     ids: set[int] = set()
     last_user = _last_user_index(request.messages)
     for message in request.messages[last_user + 1 :]:
-        if message.role != "tool" or not isinstance(message.content, str):
+        text = content_text(message.content)
+        if message.role != "tool" or text is None:
             continue
         try:
-            payload = json.loads(message.content)
+            payload = json.loads(text)
         except ValueError:
-            ids |= code_mode.citation_ids(message.content)
+            ids |= code_mode.citation_ids(text)
             continue
         if not isinstance(payload, dict) or not isinstance(
             payload.get("results"), list
@@ -175,7 +178,20 @@ DEFAULT_TTFT_MS = int(os.environ.get("MOCK_TTFT_MS", "300"))
 DEFAULT_ITL_MS = int(os.environ.get("MOCK_ITL_MS", "15"))
 DEFAULT_LEN_TOKENS = int(os.environ.get("MOCK_LEN_TOKENS", "150"))
 
-_KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx|sections|class)(\d+)")
+KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx|sections|class|tail)(\d+)")
+# The first line of each code mode program: its position in the turn's plan.
+_PROGRAM_MARK_RE = re.compile(r"# mock program (\d+)\n")
+# Code profile query suffixes, in order; a turn with more searches repeats them.
+_CODE_QUERY_ASPECTS = (
+    "overview",
+    "details",
+    "implementation",
+    "limitations",
+    "examples",
+    "timeline",
+    "owners",
+    "metrics",
+)
 
 _FILLER_WORDS = (
     "This is deterministic mock answer content used only for load testing "
@@ -206,7 +222,12 @@ class Knobs:
         # Code mode only: one program runs every planned search round
         # (mock-profile-search-v1-codebatched) instead of one program per round.
         self.code_batched: bool = "-codebatched" in model
-        for name, value in _KNOB_RE.findall(model):
+        # Code profile only: the observed turns of this tool family, and the
+        # percent of turns that run the long-tail plan (mock-profile-code-v1-tail10).
+        # The family rule mirrors model_capabilities.is_claude_model; keep in sync.
+        self.code_pool: CodePool = "claude" if "claude" in model.lower() else "openai"
+        self.tail_percent: int = 0
+        for name, value in KNOB_RE.findall(model):
             if name == "ttft":
                 self.ttft_s = int(value) / 1000.0
             elif name == "itl":
@@ -225,6 +246,10 @@ class Knobs:
                 self.classification = int(value)
             elif name == "maxctx":
                 self.max_ctx_tokens = int(value)
+            elif name == "tail":
+                if int(value) > 100:
+                    raise ValueError("tail must be between 0 and 100")
+                self.tail_percent = int(value)
 
 
 def _assistant_called(messages: list[ChatMessage], names: tuple[str, ...]) -> bool:
@@ -239,25 +264,13 @@ def _assistant_called(messages: list[ChatMessage], names: tuple[str, ...]) -> bo
     return False
 
 
-def _content_text(content: str | list[Any] | None) -> str | None:
-    """Extract text from message content, which is either a plain string or
-    a list of multimodal content parts."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        for part in content:
-            if isinstance(part, dict) and part.get("type") == "text":
-                return str(part.get("text", ""))
-    return None
-
-
 def _last_user_index(messages: list[ChatMessage]) -> int:
     """Ignore Onyx's operational reminders when locating the user turn."""
     for index in range(len(messages) - 1, -1, -1):
         message = messages[index]
         if message.role != "user":
             continue
-        text = (_content_text(message.content) or "").strip()
+        text = (content_text(message.content) or "").strip()
         # llm_step.py serializes USER_REMINDER messages with this wrapper.
         if text.startswith("<system-reminder>") and text.endswith("</system-reminder>"):
             continue
@@ -268,7 +281,7 @@ def _last_user_index(messages: list[ChatMessage]) -> int:
 def _last_user_text(messages: list[ChatMessage]) -> str:
     index = _last_user_index(messages)
     if index >= 0:
-        text = _content_text(messages[index].content)
+        text = content_text(messages[index].content)
         if text is not None:
             return text
     return "load test query"
@@ -357,27 +370,28 @@ def _new_call(name: str, arguments: str) -> ToolCall:
     )
 
 
-def _search_profile_calls(
+def _profile_calls(
     turn: list[ChatMessage],
     by_name: dict[str, ToolDefinition],
     knobs: Knobs,
     profile: TurnProfile,
     snippet: str,
 ) -> list[ToolCall] | None:
-    """The next step of the seeded search plan; None without a search tool.
+    """The next step of the seeded search or code plan; None when a search
+    plan has no search tool.
 
-    In code mode each round is one program, or one program runs every round
-    in parallel when `knobs.code_batched` is set."""
+    In code mode each search round is one program, or one program runs every
+    round in parallel when `knobs.code_batched` is set."""
+    if profile.kind == "code":
+        return _code_profile_calls(turn, by_name, profile, snippet)
     if "internal_search" in by_name:
         completed_rounds = _rounds_called(turn, "internal_search")
         if completed_rounds >= profile.search_rounds:
             return []
         queries = _round_queries(snippet, completed_rounds, profile)
         return [_new_call("internal_search", json.dumps({"queries": queries}))]
-    exec_tool = by_name.get(code_mode.EXEC)
-    if exec_tool is None or "internal_search" not in code_mode.code_functions(
-        exec_tool
-    ):
+    run = code_mode.run_tool(by_name)
+    if run is None or "internal_search" not in code_mode.code_functions(run):
         return None
 
     def program(ran: int) -> str | None:
@@ -388,22 +402,82 @@ def _search_profile_calls(
             [("internal_search", _round_queries(snippet, i, profile)) for i in rounds]
         )
 
-    return _code_mode_step(turn, program)
+    return _code_mode_step(turn, run.function.name, program)
+
+
+def _code_profile_calls(
+    turn: list[ChatMessage],
+    by_name: dict[str, ToolDefinition],
+    profile: TurnProfile,
+    snippet: str,
+) -> list[ToolCall]:
+    """The next program of the code profile's plan (profile.programs).
+
+    Each search of the turn gets the next query of a fixed sequence, so turns
+    with many searches repeat queries."""
+    run = code_mode.run_tool(by_name)
+    if run is None or "internal_search" not in code_mode.code_functions(run):
+        raise ValueError(
+            "mock-profile-code-v1 needs code mode: offer exec or repl with an "
+            "internal_search function"
+        )
+
+    def program(ran: int) -> str | None:
+        if ran >= len(profile.programs):
+            return None
+        planned = profile.programs[ran]
+        first = sum(p.searches for p in profile.programs[:ran]) * profile.queries
+        queries = [
+            snippet
+            if index == 0
+            else f"{snippet} "
+            + _CODE_QUERY_ASPECTS[(index - 1) % len(_CODE_QUERY_ASPECTS)]
+            for index in range(first, first + planned.searches * profile.queries)
+        ]
+        return code_mode.profile_program(
+            [
+                queries[start : start + profile.queries]
+                for start in range(0, len(queries), profile.queries)
+            ],
+            planned.output_chars,
+            planned.failed,
+        )
+
+    return _code_mode_step(turn, run.function.name, program)
 
 
 def _code_mode_step(
-    turn: list[ChatMessage], program: Callable[[int], str | None]
+    turn: list[ChatMessage], run_name: str, program: Callable[[int], str | None]
 ) -> list[ToolCall]:
     """The next code mode step of the current turn: wait for a cell that the
     latest result left running, else run `program(n)`, where n counts the
-    programs the turn already ran. A None program ends the turn's tool calls."""
+    programs the turn already ran. A None program ends the turn's tool calls.
+
+    Each program's first line marks its position, so n survives history
+    compaction that replaces the turn's earlier run calls with a summary. When
+    compaction keeps no run call of the turn, the plan starts again; that
+    needs an input limit far below that of a real model."""
     cell = code_mode.running_cell(turn)
     if cell is not None:
-        return [_new_call(code_mode.WAIT, json.dumps({"cell_id": cell}))]
-    code = program(_rounds_called(turn, code_mode.EXEC))
+        return [
+            _new_call(code_mode.WAIT_TOOLS[run_name], json.dumps({"cell_id": cell}))
+        ]
+    ran = 0
+    for message in turn:
+        if message.role != "assistant":
+            continue
+        for call in message.tool_calls or []:
+            if call.function.name != run_name:
+                continue
+            mark = _PROGRAM_MARK_RE.match(
+                json.loads(call.function.arguments).get("code", "")
+            )
+            if mark is not None:
+                ran = int(mark.group(1)) + 1
+    code = program(ran)
     if code is None:
         return []
-    return [_new_call(code_mode.EXEC, json.dumps({"code": code}))]
+    return [_new_call(run_name, json.dumps({"code": f"# mock program {ran}\n{code}"}))]
 
 
 def _pick_tool(
@@ -447,11 +521,11 @@ def _pick_tool(
 
     if (
         profile is not None
-        and profile.kind == "search"
+        and profile.kind in ("search", "code")
         and choice == "auto"
         and _GENERATE_PLAN not in by_name
     ):
-        calls = _search_profile_calls(turn, by_name, knobs, profile, snippet)
+        calls = _profile_calls(turn, by_name, knobs, profile, snippet)
         if calls is not None:
             return calls
 
@@ -481,18 +555,18 @@ def _pick_tool(
     if _GENERATE_PLAN in by_name:
         return [make(by_name[_GENERATE_PLAN])]
     retrieval = [by_name[n] for n in _RETRIEVAL_TOOLS if n in by_name]
-    exec_tool = by_name.get(code_mode.EXEC)
-    if knobs.n_auto_tools > 0 and not retrieval and exec_tool is not None:
+    run = code_mode.run_tool(by_name)
+    if knobs.n_auto_tools > 0 and not retrieval and run is not None:
         # One program calls up to n_auto_tools query-taking functions in
         # parallel; then the turn answers.
-        offered = code_mode.code_functions(exec_tool)
+        offered = code_mode.code_functions(run)
         functions = [n for n in code_mode.QUERY_FUNCTIONS if n in offered]
         searches = [(n, [snippet]) for n in functions[: knobs.n_auto_tools]]
 
         def program(ran: int) -> str | None:
             return code_mode.search_program(searches) if ran == 0 and searches else None
 
-        return _code_mode_step(turn, program)
+        return _code_mode_step(turn, run.function.name, program)
     if knobs.n_auto_tools > 0 and not has_tool_result:
         # Up to n_auto_tools retrieval tools in parallel; else the first tool.
         chosen = retrieval[: knobs.n_auto_tools]
@@ -570,7 +644,13 @@ def prepare_response(
     user_text = _last_user_text(request.messages)
     question = current_question(user_text)
     profile = (
-        turn_profile(kind, question, int(os.environ.get("MOCK_WORKLOAD_SEED", "0")))
+        turn_profile(
+            kind,
+            question,
+            int(os.environ.get("MOCK_WORKLOAD_SEED", "0")),
+            code_pool=knobs.code_pool,
+            tail_percent=knobs.tail_percent,
+        )
         if kind
         else None
     )
@@ -641,14 +721,14 @@ def prepare_response(
     if profile:
         duration = helper_duration(user_text.strip(), system)
         first_s = (
-            1.05
+            min(1.05, profile.tool_step_s)
             if calls
             else min(0.3, duration)
             if duration is not None
             else profile.first_output_s
         )
         end_s = (
-            1.5
+            profile.tool_step_s
             if calls
             else duration
             if duration is not None

@@ -256,17 +256,13 @@ def delete_test_users_and_owned_rows(
 ) -> None:
     """Delete test-owned chat resources and their non-cascading links."""
     db_session.rollback()
-    # Published files and thumbnails are file records, which a chat's delete
-    # leaves; a user without any never reaches the file store.
-    artifact_files = (
-        db_session.execute(
-            select(ChatArtifactVersion.file_id, ChatArtifactVersion.thumbnail_file_id)
-            .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
-            .where(ChatArtifact.user_id.in_(user_ids))
-        )
-        .tuples()
-        .all()
-    )
+    # Published files, thumbnails and previews are file records, which a
+    # chat's delete leaves; a user without any never reaches the file store.
+    artifact_files = db_session.scalars(
+        select(ChatArtifactVersion.file_id)
+        .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+        .where(ChatArtifact.user_id.in_(user_ids))
+    ).all()
     if artifact_files:
         delete_chat_artifact_files(artifact_files)
     persona_ids = select(Persona.id).where(Persona.user_id.in_(user_ids))

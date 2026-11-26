@@ -121,6 +121,7 @@ def _publish(
         ),
         title=title,
         thumbnail=None,
+        preview_pdf=None,
     )
 
 
@@ -426,7 +427,7 @@ def test_a_missing_artifact_removes_its_document(
     _index(artifact_id)
     assert _chunks(db_session, artifact_id)
 
-    delete_chat_artifact_files([(published.file_id, None)])
+    delete_chat_artifact_files([published.file_id])
     db_session.execute(delete(ChatArtifact).where(ChatArtifact.id == artifact_id))
     db_session.commit()
     _index(artifact_id)
@@ -451,8 +452,10 @@ def test_a_publish_over_a_stopped_delete_removes_the_old_document(
 
     real_delete_files = chat_db.delete_chat_artifact_files
 
-    def delete_then_stop(versions: Sequence[tuple[str, str | None]]) -> None:
-        real_delete_files(versions)
+    def delete_then_stop(
+        file_ids: Sequence[str],
+    ) -> None:
+        real_delete_files(file_ids)
         raise RuntimeError("The pod stopped")
 
     monkeypatch.setattr(chat_db, "delete_chat_artifact_files", delete_then_stop)
