@@ -1,5 +1,6 @@
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import {
+  act,
   render,
   screen,
   setupUser,
@@ -702,6 +703,47 @@ test("blocks Save while a spec import runs", async () => {
 
   finishImport(OPENAPI_VIEW);
   await waitFor(() => expect(save).toBeEnabled());
+});
+
+test("blocks Save while a schema file is read", async () => {
+  let finishRead: () => void = () => undefined;
+  jest
+    .spyOn(FileReader.prototype, "readAsText")
+    .mockImplementation(function (this: FileReader) {
+      finishRead = () => {
+        Object.defineProperty(this, "result", {
+          value: "type Query { b: Int }",
+        });
+        this.onload?.(new ProgressEvent("load") as ProgressEvent<FileReader>);
+      };
+    });
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "graphql",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: GRAPHQL_CONFIG,
+    }),
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const input =
+    activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("No file input");
+  await u.upload(input, new File(["ignored"], "schema.graphql"));
+  await waitFor(() => expect(save).toBeDisabled());
+
+  act(() => finishRead());
+  await waitFor(() => expect(save).toBeEnabled());
+  expect(
+    view.getByRole("textbox", { name: copy.add.graphql.schema.title })
+  ).toHaveValue("type Query { b: Int }");
 });
 
 test("connects the organization account with an API key", async () => {

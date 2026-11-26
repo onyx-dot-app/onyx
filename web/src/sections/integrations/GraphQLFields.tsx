@@ -106,6 +106,7 @@ export default function GraphQLFields({
             variant={disabled ? "disabled" : "primary"}
             maxSizeKb={SPEC_MAX_SIZE_KB}
             onFileSizeExceeded={() => setTooLarge(true)}
+            onReadingChange={onLoadingChange}
             setValue={(text) => {
               if (text.trim()) setSchema(text);
               else setTooLarge(false);

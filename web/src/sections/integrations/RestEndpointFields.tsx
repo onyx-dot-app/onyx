@@ -103,6 +103,8 @@ export default function RestEndpointFields({
             variant={disabled ? "disabled" : "primary"}
             maxSizeKb={SPEC_MAX_SIZE_KB}
             onFileSizeExceeded={() => setTooLarge(true)}
+            // Called before setValue, which may start an import.
+            onReadingChange={onImportingChange}
             setValue={(text) => {
               const over = specTextTooLarge(text);
               setTooLarge(over);
