@@ -262,14 +262,34 @@ def openapi_operations(
 def inline_path_parameters(openapi_spec: dict[str, Any]) -> dict[str, Any]:
     """``openapi_spec`` with each path item cut to its operations, and the
     path item's parameters copied into each operation, with local references
-    resolved as ``resolved_operation`` does. Releases before the
-    api_app table read only this shape from ``tool.openapi_schema``."""
+    resolved as ``resolved_operation`` does, and each server URL with its
+    variable defaults filled in. Releases before the api_app table read only
+    this shape from ``tool.openapi_schema``."""
     paths: dict[str, dict[str, Any]] = {}
     for path, path_item, method_name, method in openapi_operations(openapi_spec):
         paths.setdefault(path, {})[method_name] = resolved_operation(
             openapi_spec, path_item, method
         )
-    return {**openapi_spec, "paths": paths}
+    servers = openapi_spec.get("servers")
+    if not isinstance(servers, list):
+        return {**openapi_spec, "paths": paths}
+    return {
+        **openapi_spec,
+        "paths": paths,
+        "servers": [
+            (
+                {
+                    **server,
+                    "url": _with_variable_defaults(
+                        server["url"], server.get("variables")
+                    ),
+                }
+                if isinstance(server, dict) and isinstance(server.get("url"), str)
+                else server
+            )
+            for server in servers
+        ],
+    }
 
 
 def check_unique_name(method_spec: MethodSpec, seen_names: dict[str, str]) -> None:

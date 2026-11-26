@@ -178,7 +178,8 @@ def test_the_legacy_tool_route_writes_the_api_app_row(
 def test_the_tool_row_copy_reads_with_the_previous_release(
     db_session: Session, admin: User
 ) -> None:
-    spec = _spec("https://weather.example.com", "get_forecast")
+    spec = _spec("https://weather.example.com/{version}", "get_forecast")
+    spec["servers"][0]["variables"] = {"version": {"default": "v2"}}
     spec["paths"] = {
         "/cities/{city}": {
             "summary": "One city",
@@ -217,3 +218,5 @@ def test_the_tool_row_copy_reads_with_the_previous_release(
     assert [definition.name for definition in definitions] == ["get_city"]
     properties = definitions[0].parameters["properties"]
     assert isinstance(properties, dict) and "city" in properties
+    # The previous release reads servers[].url only, without variables.
+    assert tool.openapi_schema["servers"][0]["url"] == "https://weather.example.com/v2"
