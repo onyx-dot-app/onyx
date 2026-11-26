@@ -515,6 +515,11 @@ describe("Custom API", () => {
   test.each([
     ["no server", "", "https://pets.example.com/api/v2/"],
     ["a relative server", "/", "https://pets.example.com/api/v2"],
+    [
+      "an absolute server",
+      "https://prod.example.com",
+      "https://pets.example.com/api/v2",
+    ],
   ])(
     "an uploaded spec with %s takes the URL as its base URL",
     async (_case, specBaseUrl, url) => {

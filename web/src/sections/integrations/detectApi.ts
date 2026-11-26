@@ -11,8 +11,8 @@ export type DetectedApi =
   | {
       shape: "openapi";
       view: OpenApiConfigView;
-      /** The spec names no single server URL, so Onyx guessed the base URL
-       * for the admin to check. */
+      /** The base URL is not one server URL of the spec, so the admin
+       * checks it. */
       baseUrlGuessed: boolean;
     }
   | { shape: "rest"; baseUrl: string }
@@ -108,19 +108,15 @@ export function apiBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
 }
 
-/** The spec's server URL resolved against `url`. A spec with no single
- * server URL takes `fallback`, else the root of `url`. With a `fallback`, a
- * relative server URL takes it too: an uploaded spec has no location. */
+/** `fallback` (the URL entered with an upload) when given, else the spec's
+ * server URL resolved against `url`, else the root of `url`. */
 function openApiResult(
   view: OpenApiConfigView,
   url: string | null,
   fallback: string | null
 ): DetectedApi | null {
-  const baseUrlGuessed =
-    !view.base_url.trim() ||
-    (fallback !== null && normalizedUrl(view.base_url) === null);
-  const baseUrl =
-    (baseUrlGuessed ? fallback : null) ?? specBaseUrl(view.base_url, url);
+  const baseUrlGuessed = fallback !== null || !view.base_url.trim();
+  const baseUrl = fallback ?? specBaseUrl(view.base_url, url);
   return baseUrl
     ? {
         shape: "openapi",

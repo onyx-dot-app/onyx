@@ -134,8 +134,8 @@ opens REST setup; any other failure (no permission, an Onyx error) stops
 detection with an error. An import
 `VALIDATION_ERROR` (a spec that Onyx cannot add) stops there and shows under
 the URL. Step 2 lists the endpoints that the import skipped, and asks for the
-base URL when the spec has no single server URL, or when an uploaded spec has
-a relative one. A catalog tile fills a preset or
+base URL when the spec has no single server URL. With an upload, the entered
+URL is the base URL, prefilled for the admin to check. A catalog tile fills a preset or
 a suggested MCP server. Step 2 shows the sign-in mode; the method, OAuth
 client, header template, transport and owner are under Advanced. The Actions tab
 (`sections/integrations/IntegrationActionsTab.tsx`) is built from
