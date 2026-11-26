@@ -206,7 +206,8 @@ a text reply follows. A whole response is laid out by the shared `Response`
 `Response` spaces them. A run card is a padded surface, so every other item
 (text, the cursor, cards) punches in by the card's padding, title inset and
 icon-box padding, plus 1px for the glyph's own inset (`ResponseInset`), to
-start at the run card's visible icon. The message list
+start at the run card's visible icon. A `flush` card (chat's decided approval or
+question) is a step row, so it takes no inset and the step list's 0.5rem gap. The message list
 uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
 `CHAT_COLUMN_ROW`), not a Craft-only width.
 
