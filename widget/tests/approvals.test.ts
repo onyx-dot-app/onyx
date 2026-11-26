@@ -37,6 +37,7 @@ import {
 import { chatStream, idle, offer, runs } from "./session-status";
 import type { ChatMessage } from "../src/types/widget-types";
 import { OnyxChatWidget } from "../src/widget";
+import { saveSession } from "../src/utils/storage";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -126,6 +127,47 @@ describe("approval packets", () => {
     const live = processPacket(resolution, replayed).message;
     expect(live).toEqual(replayed);
     expect(live?.approvals).toEqual([entry("a", "approved"), entry("b")]);
+  });
+});
+
+describe("saved session", () => {
+  it("keeps command approval cards out of the host page's storage", () => {
+    const saved = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => saved.set(key, value),
+      removeItem: (key: string) => saved.delete(key),
+    };
+    const original = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "sessionStorage"
+    );
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: storage,
+      configurable: true,
+    });
+    try {
+      const command: ApprovalEntry = {
+        request: {
+          ...request("2", "POST"),
+          arguments: { path: "/v1/send?token=secret" },
+          can_approve_for_chat: false,
+          can_approve_for_command: true,
+          app_name: "Gmail",
+        },
+        outcome: null,
+      };
+      saveSession("s", [streamingMessage([entry("1"), command])], "id");
+      const stored = saved.get("onyx-widget-session") ?? "";
+      expect(stored).not.toContain("secret");
+      const messages: ChatMessage[] = JSON.parse(stored).messages;
+      expect(
+        messages[0]?.approvals?.map((e) => e.request.approval_id)
+      ).toEqual(["1"]);
+    } finally {
+      if (original) Object.defineProperty(globalThis, "sessionStorage", original);
+      else Reflect.deleteProperty(globalThis, "sessionStorage");
+    }
   });
 });
 

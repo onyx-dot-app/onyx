@@ -262,7 +262,9 @@ panel picks up the new session when the user returns.
    `email`, else a shared value. `widget/src/utils/storage.ts:loadSession`
    drops a session for another identity. A JWT with neither claim falls back
    to the shared value, so a second such visitor in the same tab can restore
-   the transcript of the first.
+   the transcript of the first. `saveSession` leaves out the approval cards
+   of VM command app requests (`app_name` set): they show the request's path
+   and body, and scripts of the host page can read `sessionStorage`.
 7. `widget-reset-cancels-send` **`resetConversation` must cancel a send at
    every stage.** The admin guide tells host pages to call it on sign-out or an
    account change, so a send that survives a reset shows the previous user's
