@@ -91,6 +91,7 @@ const worker: ChatSubagent = {
   duration_seconds: 113,
 };
 let listed: ChatSubagent[] = [worker];
+let refreshFailed = false;
 const stopAgent = jest.fn();
 
 jest.mock("@/lib/chat/hooks", () => ({
@@ -99,7 +100,7 @@ jest.mock("@/lib/chat/hooks", () => ({
   useSubagentTranscript: () => ({
     messages: [answer],
     loading: false,
-    failed: false,
+    failed: refreshFailed,
   }),
 }));
 
@@ -109,6 +110,7 @@ function shownSubagent(): string | null {
 
 beforeEach(() => {
   listed = [worker];
+  refreshFailed = false;
   window.history.replaceState(null, "", "/app?chatId=chat-1&subagent=agent-1");
 });
 
@@ -131,6 +133,23 @@ test("the view shows the parent divider over the transcript, and the divider ope
   expect(new URLSearchParams(window.location.search).get("chatId")).toBe(
     "chat-1"
   );
+});
+
+test("a failed refresh keeps the transcript it has", () => {
+  refreshFailed = true;
+  render(
+    <SubagentView
+      sessionId="chat-1"
+      agentId="agent-1"
+      parentTitle={null}
+      setPresentingDocument={jest.fn()}
+    />
+  );
+
+  expect(screen.getByRole("button", { name: "the report" })).toBeVisible();
+  expect(
+    screen.queryByText("Could not load this agent's conversation.")
+  ).toBeNull();
 });
 
 test("the bar shows the model and how long the agent took, and Open parent goes back", () => {

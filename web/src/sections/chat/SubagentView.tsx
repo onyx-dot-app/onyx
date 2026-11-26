@@ -104,12 +104,22 @@ export function SubagentView({
   );
   const persona = useActiveAgent();
   const scroller = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true);
+  // Steps reveal one at a time, so the content grows between message updates
   useLayoutEffect(() => {
     const element = scroller.current;
-    if (element && atEnd.current) element.scrollTop = element.scrollHeight;
-  }, [messages]);
-  const empty = failed || (!loading && messages.length === 0);
+    if (!element || !content.current) return;
+    const observer = new ResizeObserver(() => {
+      // Content that fits has no scroll to say the reader left the end
+      if (element.scrollHeight <= element.clientHeight) atEnd.current = true;
+      if (atEnd.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(content.current);
+    return () => observer.disconnect();
+  }, []);
+  // A failed refresh keeps the transcript it has
+  const empty = messages.length === 0 && (failed || !loading);
 
   return (
     <div
@@ -124,7 +134,7 @@ export function SubagentView({
           element.scrollHeight - element.scrollTop - element.clientHeight < 32;
       }}
     >
-      <div className={cn("w-full", CHAT_GUTTER)}>
+      <div ref={content} className={cn("w-full", CHAT_GUTTER)}>
         <div className={cn("w-full mx-auto pb-8", CHAT_COLUMN_WIDTH)}>
           <ParentDivider parentTitle={parentTitle} />
           {empty ? (
