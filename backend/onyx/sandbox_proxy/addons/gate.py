@@ -440,14 +440,13 @@ class GateAddon:
         approval_id: UUID | None = None
         try:
             if matched_actions.governing_action.policy is ActionPolicy.ASK:
+                payload = _approval_payload(flow, ctx, matched_actions)
                 approval_id = await asyncio.to_thread(
-                    self._apply_session_grant, ctx, matched_actions
+                    self._apply_session_grant, ctx, matched_actions, payload
                 )
                 if approval_id is None:
                     approval_id = self._persist_approval_row(
-                        ctx,
-                        matched_actions,
-                        _approval_payload(flow, ctx, matched_actions),
+                        ctx, matched_actions, payload
                     )
                     # Close the race with a session grant created during persistence.
                     if (
@@ -455,6 +454,7 @@ class GateAddon:
                             self._apply_session_grant,
                             ctx,
                             matched_actions,
+                            payload,
                             approval_id=approval_id,
                         )
                         is not None
@@ -888,11 +888,13 @@ class GateAddon:
         self,
         ctx: SessionContext,
         matched_actions: AllMatchedActions,
+        payload: dict[str, Any],
         *,
         approval_id: UUID | None = None,
     ) -> UUID | None:
         """Apply an existing session grant (or, for a chat request, command
-        grant) in the caller's worker thread."""
+        grant) in the caller's worker thread. ``payload`` is what the row
+        stores, as for a row that shows a card."""
         from_chat = ctx.chat_command_id is not None
         grant = (
             ApprovalDecidedVia.COMMAND_GRANT
@@ -913,7 +915,7 @@ class GateAddon:
                             a.model_dump(mode="json") for a in matched_actions.actions
                         ],
                         app_name=matched_actions.app_name,
-                        payload=matched_actions.payload,
+                        payload=payload,
                         integration_id=matched_actions.target.integration_id,
                         decision=ApprovalDecision.APPROVED,
                         decided_via=grant,

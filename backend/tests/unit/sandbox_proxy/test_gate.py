@@ -2318,6 +2318,32 @@ async def test_a_command_grant_covers_the_same_action_only(
 
 
 @pytest.mark.asyncio
+async def test_a_command_grant_row_stores_the_size_of_a_large_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A row that a command grant approves stores what a card would show, not
+    the whole body."""
+    body = {"text": "x" * (128 * 1024)}
+    raw = json.dumps(body).encode()
+    addon, cache = _command_gate(monkeypatch, match=make_matched_actions(payload=body))
+    approval_cache.grant_command_actions(_COMMAND, 42, ["slack.messages.write"], cache)
+    _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
+    inserted = _spy_approval_insert(monkeypatch)
+    _approved_command_row(monkeypatch)
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG), raw_content=raw)
+    flow.request.path = "/api/chat.postMessage"
+
+    await addon.request(flow)
+
+    assert inserted[0]["decided_via"] == ApprovalDecidedVia.COMMAND_GRANT
+    assert inserted[0]["payload"] == {
+        "method": "POST",
+        "path": "/api/chat.postMessage",
+        "body_bytes": len(raw),
+    }
+
+
+@pytest.mark.asyncio
 async def test_a_command_grant_does_not_cover_an_action_that_asks_since(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

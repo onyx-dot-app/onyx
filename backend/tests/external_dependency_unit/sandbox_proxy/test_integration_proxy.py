@@ -590,7 +590,7 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
     )
     db_session.commit()
 
-    applied = addon._apply_session_grant(ctx, resolved)
+    applied = addon._apply_session_grant(ctx, resolved, resolved.payload)
     assert applied is not None
     assert (
         db_session.scalar(
@@ -604,7 +604,9 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
         _request(f"https://{other_host}/mcp", _tool_call("update")), user
     )
     other_resolved = addon._resolve_request_policies(ctx, other_matched)
-    assert addon._apply_session_grant(ctx, other_resolved) is None
+    assert (
+        addon._apply_session_grant(ctx, other_resolved, other_resolved.payload) is None
+    )
 
 
 def test_the_craft_mcp_config_lists_only_connected_integrations_that_are_on(
