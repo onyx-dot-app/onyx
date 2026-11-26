@@ -488,7 +488,9 @@ export default function AddIntegrationModal({
             })
           : t("detected.openapi", { count: found.view.endpoints.length });
       case "rest":
-        return t("detected.rest");
+        return found.unreachable === null
+          ? t("detected.rest")
+          : t("detected.restUnreachable", { detail: found.unreachable });
       case "graphql":
         return t("detected.graphql", {
           queries: found.queries,

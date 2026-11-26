@@ -56,7 +56,9 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     1 skipped." Open **Skipped endpoints** to see each one and the reason. If the schema is not OpenAPI 3,
     or no operation is left, Onyx shows the error under the URL.
     If the URL is not an OpenAPI schema or a GraphQL endpoint, Onyx treats it as a REST API with no schema.
-    This also applies when the server does not answer or answers with an error, for example HTTP 404.
+    If Onyx cannot reach the URL, it shows a warning with the reason. For example, the server does not answer,
+    answers with an error such as HTTP 404, or SSRF Protection blocks the URL. Check the URL,
+    or continue and add the API as a REST API with no schema.
 
     For an API with no schema, Onyx asks for one endpoint on each line in **Endpoints**:
 

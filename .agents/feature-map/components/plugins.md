@@ -129,9 +129,10 @@ sign-in. A custom API URL or uploaded spec goes through
 `sections/integrations/detectApi.ts`: `POST /admin/integrations/openapi-import`,
 then `POST /admin/integrations/graphql-introspect`, else a REST base URL that
 takes endpoint lines (`EndpointLinesField`). Only a 400 answer means "not
-this kind". Onyx also answers 400 when the URL does not answer, so such a URL
-opens REST setup; any other failure (no permission, an Onyx error) stops
-detection with an error. An import
+this kind". A 502 (the URL is blocked, times out, fails to connect or gives a
+non-2xx answer) stops detection and opens REST setup with a warning that holds
+the server's detail (`detected.restUnreachable`); any other failure (no
+permission, an Onyx error) stops detection with an error. An import
 `VALIDATION_ERROR` (a spec that Onyx cannot add) stops there and shows under
 the URL. Step 2 lists the endpoints that the import skipped, and asks for the
 base URL when the spec has no single server URL. With an upload, the entered

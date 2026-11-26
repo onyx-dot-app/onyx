@@ -15,7 +15,13 @@ export type DetectedApi =
        * checks it. */
       baseUrlGuessed: boolean;
     }
-  | { shape: "rest"; baseUrl: string }
+  | {
+      shape: "rest";
+      baseUrl: string;
+      /** Why Onyx could not check the URL, from the server. Null when the URL
+       * answered and is not a spec or a GraphQL endpoint. */
+      unreachable: string | null;
+    }
   | {
       shape: "graphql";
       config: GraphQLConfig;
@@ -44,9 +50,10 @@ function isGraphQLFile(name: string): boolean {
  * Finds the kind of API. An uploaded `.graphql` file is a GraphQL schema for
  * the URL; another file is an OpenAPI spec. With only a URL: an OpenAPI spec
  * at the URL, else a GraphQL endpoint that answers introspection, else a REST
- * base URL with no spec. Null when the API needs a URL that is missing.
- * Throws when the file is not a spec that Onyx can add, the URL is a spec
- * that Onyx cannot add, or a check fails with no answer.
+ * base URL with no spec. A URL that Onyx cannot reach is a REST base URL
+ * with the reason. Null when the API needs a URL that is missing. Throws when
+ * the file is not a spec that Onyx can add, the URL is a spec that Onyx
+ * cannot add, or a check fails with no answer.
  */
 export async function detectApi(
   url: string | null,
@@ -75,6 +82,7 @@ export async function detectApi(
     );
     if (result) return result;
   } catch (error) {
+    if (isUnreachable(error)) return restResult(url, error.message);
     // A spec that Onyx cannot add, or a failed check, stops here. Else it is
     // not a spec; try GraphQL next.
     if (!isNotThisKind(error) || isSpecError(error)) throw error;
@@ -82,9 +90,20 @@ export async function detectApi(
   try {
     return graphqlResult(await introspectGraphQL(url));
   } catch (error) {
+    if (isUnreachable(error)) return restResult(url, error.message);
     if (!isNotThisKind(error)) throw error;
-    return { shape: "rest", baseUrl: apiBaseUrl(url) };
+    return restResult(url, null);
   }
+}
+
+function restResult(url: string, unreachable: string | null): DetectedApi {
+  return { shape: "rest", baseUrl: apiBaseUrl(url), unreachable };
+}
+
+/** The URL is blocked, timed out, failed to connect or gave a non-2xx
+ * answer. */
+function isUnreachable(error: unknown): error is FetchError {
+  return error instanceof FetchError && error.status === 502;
 }
 
 function isSpecError(error: unknown): boolean {
@@ -93,8 +112,8 @@ function isSpecError(error: unknown): boolean {
   );
 }
 
-/** Onyx checked the URL and it is not this kind of API, or the URL did not
- * answer. Any other failure (no permission, an Onyx error) is not an answer. */
+/** Onyx checked the URL and it is not this kind of API. Any other failure (no
+ * permission, an Onyx error) is not an answer. */
 export function isNotThisKind(error: unknown): error is FetchError {
   return error instanceof FetchError && error.status === 400;
 }

@@ -10491,6 +10491,7 @@
           "openapiSkipped": "API REST, {count, plural, one {# point de terminaison} other {# points de terminaison}}. Ignorés : {skipped}.",
           "skippedTitle": "Points de terminaison ignorés",
           "rest": "API REST sans spécification. Ajoutez les points de terminaison ci-dessous.",
+          "restUnreachable": "Onyx ne peut pas joindre l’URL : {detail} Vous pouvez quand même l’ajouter comme API REST sans spécification. Ajoutez les points de terminaison ci-dessous.",
           "graphql": "API GraphQL, {queries, plural, one {# requête} other {# requêtes}} et {mutations, plural, one {# mutation} other {# mutations}}",
           "preset": "Application intégrée. Onyx appelle son API."
         },

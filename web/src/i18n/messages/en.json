@@ -10491,6 +10491,7 @@
           "openapiSkipped": "REST API, {count, plural, one {# endpoint} other {# endpoints}}. {skipped} skipped.",
           "skippedTitle": "Skipped endpoints",
           "rest": "REST API with no spec. Add the endpoints below.",
+          "restUnreachable": "Onyx cannot reach the URL: {detail} You can still add it as a REST API with no spec. Add the endpoints below.",
           "graphql": "GraphQL API, {queries, plural, one {# query} other {# queries}} and {mutations, plural, one {# mutation} other {# mutations}}",
           "preset": "Built-in app. Onyx calls its API."
         },

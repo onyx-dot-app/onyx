@@ -10491,6 +10491,7 @@
           "openapiSkipped": "REST API，{count, plural, other {# 个端点}}。已跳过 {skipped} 个。",
           "skippedTitle": "已跳过的端点",
           "rest": "没有规范的 REST API。请在下方添加端点。",
+          "restUnreachable": "Onyx 无法访问该 URL：{detail} 你仍然可以将其添加为没有规范的 REST API。请在下方添加端点。",
           "graphql": "GraphQL API，{queries, plural, other {# 个查询}}和{mutations, plural, other {# 个变更}}",
           "preset": "内置应用。Onyx 调用其 API。"
         },

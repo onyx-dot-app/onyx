@@ -10491,6 +10491,7 @@
           "openapiSkipped": "API REST, {count, plural, one {# endpoint} other {# endpoints}}. Ignorados: {skipped}.",
           "skippedTitle": "Endpoints ignorados",
           "rest": "API REST sem especificação. Adicione os endpoints abaixo.",
+          "restUnreachable": "O Onyx não consegue acessar a URL: {detail} Você ainda pode adicioná-la como uma API REST sem especificação. Adicione os endpoints abaixo.",
           "graphql": "API GraphQL, {queries, plural, one {# consulta} other {# consultas}} e {mutations, plural, one {# mutação} other {# mutações}}",
           "preset": "App integrado. O Onyx chama a API dele."
         },

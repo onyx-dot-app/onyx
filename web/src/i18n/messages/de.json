@@ -10491,6 +10491,7 @@
           "openapiSkipped": "REST-API, {count, plural, one {# Endpunkt} other {# Endpunkte}}. {skipped} übersprungen.",
           "skippedTitle": "Übersprungene Endpunkte",
           "rest": "REST-API ohne Spezifikation. Fügen Sie unten die Endpunkte hinzu.",
+          "restUnreachable": "Onyx kann die URL nicht erreichen: {detail} Sie können sie trotzdem als REST-API ohne Spezifikation hinzufügen. Fügen Sie unten die Endpunkte hinzu.",
           "graphql": "GraphQL-API, {queries, plural, one {# Query} other {# Queries}} und {mutations, plural, one {# Mutation} other {# Mutationen}}",
           "preset": "Integrierte App. Onyx ruft ihre API auf."
         },

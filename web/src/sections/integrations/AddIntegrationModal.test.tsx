@@ -850,6 +850,77 @@ describe("Custom API", () => {
     );
   });
 
+  test("a URL that Onyx cannot reach is a REST base URL with a warning", async () => {
+    const detail =
+      "The URL is blocked. An admin can allow it in SSRF Protection.";
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": () =>
+        new Response(JSON.stringify({ error_code: "BAD_GATEWAY", detail }), {
+          status: 502,
+        }),
+      "POST /api/admin/integrations": makeDetail({ id: 15 }),
+      "/api/admin/integrations": [],
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Billing",
+      add.api.url.title,
+      "https://billing.internal/"
+    );
+
+    expect(
+      await screen.findByText(
+        add.detected.restUnreachable.replace("{detail}", detail)
+      )
+    ).toBeInTheDocument();
+    // An unreachable URL is not checked for GraphQL.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await user.type(
+      screen.getByRole("textbox", { name: add.rest.endpoints.title }),
+      "GET /invoices List invoices"
+    );
+    await submit(user);
+    await waitFor(() =>
+      expect(
+        requestBody(fetchMock, "POST", "/api/admin/integrations")
+      ).toMatchObject({
+        config: {
+          shape: "openapi",
+          openapi_document: null,
+          base_url: "https://billing.internal",
+          endpoints: ["GET /invoices List invoices"],
+        },
+      })
+    );
+  });
+
+  test("an endpoint that Onyx cannot introspect warns and is a REST base URL", async () => {
+    const detail = "The URL did not answer in time.";
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": () => failure(400),
+      "POST /api/admin/integrations/graphql-introspect": () =>
+        new Response(JSON.stringify({ error_code: "BAD_GATEWAY", detail }), {
+          status: 502,
+        }),
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Billing",
+      add.api.url.title,
+      "https://billing.example.com/graphql"
+    );
+
+    expect(
+      await screen.findByText(
+        add.detected.restUnreachable.replace("{detail}", detail)
+      )
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   test("a new URL checks again and starts the setup over", async () => {
     const fetchMock = mockFetch({
       "POST /api/admin/integrations/openapi-import": {
@@ -890,7 +961,7 @@ describe("Custom API", () => {
   test("a failed check is an error, not a REST base URL", async () => {
     const fetchMock = mockFetch({
       "POST /api/admin/integrations/openapi-import": () => failure(400),
-      "POST /api/admin/integrations/graphql-introspect": () => failure(502),
+      "POST /api/admin/integrations/graphql-introspect": () => failure(500),
     });
     const { user } = open({ kind: "api" });
     await fillConnect(

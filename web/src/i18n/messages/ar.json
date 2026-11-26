@@ -10491,6 +10491,7 @@
           "openapiSkipped": "واجهة REST، {count, plural, one {# نقطة نهاية} other {# نقاط نهاية}}. تم تخطي {skipped}.",
           "skippedTitle": "نقاط النهاية التي تم تخطيها",
           "rest": "واجهة REST بدون مواصفة. أضف نقاط النهاية أدناه.",
+          "restUnreachable": "لا يمكن لـ Onyx الوصول إلى عنوان URL: {detail} لا يزال بإمكانك إضافته كواجهة REST بدون مواصفة. أضف نقاط النهاية أدناه.",
           "graphql": "واجهة GraphQL، {queries, plural, one {# استعلام} other {# استعلامات}} و{mutations, plural, one {# تعديل} other {# تعديلات}}",
           "preset": "تطبيق مدمج. يستدعي Onyx واجهة API الخاصة به."
         },
