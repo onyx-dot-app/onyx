@@ -25,11 +25,14 @@ export interface RehypeStreamingCursorOptions {
 
 // The cursor goes after these, never inside: code shows its text verbatim,
 // a link would make the cursor part of it, and KaTeX output is a fixed
-// layout.
+// layout. A closed details block hides its body, so the cursor goes after it.
 const OPAQUE_TAGS = new Set(["pre", "code", "a"]);
 
 function isOpaque(node: Element): boolean {
   if (OPAQUE_TAGS.has(node.tagName)) return true;
+  const open = node.properties.open;
+  if (node.tagName === "details" && (open === undefined || open === false))
+    return true;
   const className = node.properties.className;
   return (
     Array.isArray(className) &&
