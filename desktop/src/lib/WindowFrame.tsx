@@ -94,7 +94,7 @@ interface ErrorTextProps {
 export function ErrorText({ message }: ErrorTextProps) {
   if (!message) return null;
   return (
-    <p role="alert" className="font-secondary-body text-status-error-05">
+    <p role="alert" className="font-secondary-body text-status-error-05 break-words">
       {message}
     </p>
   );

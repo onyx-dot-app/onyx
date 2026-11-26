@@ -266,7 +266,10 @@ pub async fn start_in_browser(
     crate::reclaim_links(app, "before browser sign-in");
     app.opener()
         .open_url(authorize.as_str(), None::<&str>)
-        .map_err(|e| format!("Could not open your browser: {e}"))?;
+        .map_err(|e| {
+            log::warn!("could not open the browser for sign-in: {e}");
+            "Could not open your browser. Sign in in an Onyx window instead.".to_string()
+        })?;
     Ok(true)
 }
 

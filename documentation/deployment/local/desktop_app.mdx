@@ -51,7 +51,9 @@ Each Onyx release on the [GitHub Releases page](https://github.com/onyx-dot-app/
 - **macOS**: macOS 13 or later.
 - **Windows**: administrator rights to install. The installers include the WebView2 runtime, so they also install on
   a device with no internet access.
-- **Linux**: glibc 2.35 or later (Ubuntu 22.04, Debian 12, and later), and these desktop services:
+- **Linux**: glibc 2.35 or later and WebKitGTK 4.1 (`webkit2gtk-4.1`), as on Ubuntu 22.04, Debian 12, Fedora, and later.
+  RHEL 9 and its rebuilds do not ship WebKitGTK 4.1, so the `.rpm` does not install there.
+  The app also needs these desktop services:
   - A **Secret Service** provider, such as GNOME Keyring or KWallet, that runs and is unlocked in the user's session.
     The app keeps the session token there. Without it, sign-in fails with a message that names the Secret Service.
     Minimal window managers, VDI sessions, and SSH sessions often have no provider.

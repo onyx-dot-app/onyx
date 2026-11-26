@@ -255,7 +255,11 @@ pub async fn login(
     let epoch = state.epoch();
     let token = state.api.login(&server, &email, &password).await?;
     // Fails if the user changed server, signed out or finished SSO meanwhile.
-    if !state.commit_sign_in(&server, &token, epoch)? {
+    let committed = state.commit_sign_in(&server, &token, epoch).map_err(|e| {
+        log::warn!("could not save the password sign-in: {e}");
+        e
+    })?;
+    if !committed {
         return Err("Sign-in was cancelled.".into());
     }
     log::info!("signed in with a password");
@@ -405,6 +409,12 @@ pub async fn sign_out(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn change_server(app: AppHandle) -> Result<(), String> {
     open_change_server(&app)
+}
+
+/// Why the server cannot change now, if it is locked.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn server_lock_now(app: &AppHandle) -> Option<&'static str> {
+    server_lock_reason(&app.state::<AppState>().policy())
 }
 
 /// The Change server path, also for Try Again after onboarding did not open.

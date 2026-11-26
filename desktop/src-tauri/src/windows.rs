@@ -255,7 +255,12 @@ pub(crate) fn window_failed(app: &AppHandle, window: FailedWindow, error: &str) 
                     match retry {
                         Retry::Route => route(app),
                         Retry::ChangeServer => {
-                            if let Err(e) = crate::commands::open_change_server(app) {
+                            // A policy read can lock the server while the
+                            // dialog is open: say so. A window error has
+                            // its own dialog from `open_local`.
+                            if let Some(reason) = crate::commands::server_lock_now(app) {
+                                notify(app, "Server locked", reason);
+                            } else if let Err(e) = crate::commands::open_change_server(app) {
                                 log::warn!("could not open Change server: {e}");
                             }
                         }
@@ -294,11 +299,15 @@ pub(crate) fn webview_failed(app: &AppHandle, error: &str) -> bool {
         }
         if !SHOWN.swap(true, Ordering::SeqCst) {
             log::warn!("a window could not start its web view: {error}");
-            notify(
-                app,
-                "Onyx could not open",
-                "Close the older version of Onyx, then open Onyx again.",
-            );
+            // The app has no window it can show: OK quits, so the next
+            // launch is a new process, not this hidden one.
+            let dialog = rfd::MessageDialog::new()
+                .set_title("Onyx could not open")
+                .set_description(crate::dialog::text(
+                    "Close the older version of Onyx, then open Onyx again.",
+                ))
+                .set_buttons(rfd::MessageButtons::Ok);
+            crate::dialog::show(app, dialog, |app, _| app.exit(0));
         }
         true
     }

@@ -556,13 +556,12 @@ fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
     }
 }
 
-/// Shows the launcher (Try Again after it did not open).
+/// Shows the launcher (Try Again after it did not open). The dialog that
+/// had focus just closed, so this takes the same blur grace and foreground
+/// as a notification click; otherwise the launcher hides at once.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn show(app: &AppHandle) {
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        show_now(&handle, crate::windows::route);
-    });
+    show_for_notification(app, |_| true, crate::windows::route);
 }
 
 /// Whether the launcher is on screen. Safe to call off the main thread.

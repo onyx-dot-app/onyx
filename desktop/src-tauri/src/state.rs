@@ -298,12 +298,22 @@ impl AppState {
             sign_in_writes_config(TOKEN_NEEDS_RECORD, rejected),
             || session_store::store(server, token),
             || {
-                self.config.update(|c| {
-                    if TOKEN_NEEDS_RECORD {
-                        c.session_servers.insert(server.to_string());
-                    }
-                    c.rejected_tokens.remove(server);
-                })
+                self.config
+                    .update(|c| {
+                        if TOKEN_NEEDS_RECORD {
+                            c.session_servers.insert(server.to_string());
+                        }
+                        c.rejected_tokens.remove(server);
+                    })
+                    .map_err(|e| {
+                        log::warn!("could not record the sign-in in config.json: {e}");
+                        SIGN_IN_NOT_SAVED.to_string()
+                    })
+            },
+            || {
+                if let Err(e) = session_store::clear(server) {
+                    log::warn!("could not delete the token of a failed sign-in: {e}");
+                }
             },
         )?;
         *cache = Some((server.to_string(), token.to_string()));
@@ -441,14 +451,24 @@ impl AppState {
 /// Saves a new token, then records that this install saved it. A token that
 /// another install left must not get a record before the new token replaces
 /// it. If the record fails, the next launch rejects the new token.
+/// What a sign-in says when config.json cannot record it.
+pub const SIGN_IN_NOT_SAVED: &str =
+    "Onyx could not save your sign-in. Check that config.json can be written, then try again.";
+
+/// Saves the token, then the config record. If the record fails, `undo`
+/// deletes the token just saved, so a failed sign-in leaves no session.
 fn save_then_record(
     needs_record: bool,
     save: impl FnOnce() -> Result<(), String>,
     record: impl FnOnce() -> Result<(), String>,
+    undo: impl FnOnce(),
 ) -> Result<(), String> {
     save()?;
     if needs_record {
-        record()?;
+        if let Err(e) = record() {
+            undo();
+            return Err(e);
+        }
     }
     Ok(())
 }
@@ -561,12 +581,16 @@ mod tests {
         assert!(sign_in_writes_config(true, false));
         assert!(!sign_in_writes_config(false, false));
         // A failed write fails the sign-in.
+        let undone = std::cell::Cell::new(false);
         let result = save_then_record(
             sign_in_writes_config(false, true),
             || Ok(()),
             || Err("disk full".to_string()),
+            || undone.set(true),
         );
         assert!(result.is_err());
+        // The token it stored is deleted again.
+        assert!(undone.get());
     }
 
     #[test]
@@ -610,6 +634,7 @@ mod tests {
                 steps.borrow_mut().push("record");
                 Ok(())
             },
+            || {},
         )
         .unwrap();
         assert_eq!(*steps.borrow(), ["save", "record"]);
@@ -625,6 +650,7 @@ mod tests {
                 *recorded.borrow_mut() = true;
                 Ok(())
             },
+            || {},
         );
         assert!(result.is_err());
         assert!(!*recorded.borrow());
@@ -632,7 +658,7 @@ mod tests {
 
     #[test]
     fn no_record_where_none_is_required() {
-        save_then_record(false, || Ok(()), || panic!("recorded")).unwrap();
+        save_then_record(false, || Ok(()), || panic!("recorded"), || {}).unwrap();
     }
 
     #[test]

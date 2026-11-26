@@ -675,7 +675,9 @@ How the app differs from macOS:
   Ubuntu 22.04 and fails if a file in the `.deb` or the AppImage needs a newer glibc.
   The `.deb` depends on `libc6 (>= 2.35)`. The `.rpm` requires `libc.so.6(GLIBC_2.35)(64bit)`, the
   capability that glibc 2.35 and later provide: the Tauri rpm bundler writes each `depends` entry as one
-  unversioned name, so `glibc >= 2.35` cannot be used there.
+  unversioned name, so `glibc >= 2.35` cannot be used there. This capability does not gate RHEL 9
+  and its rebuilds: their glibc 2.34 backports the `GLIBC_2.35` symbols. What stops the `.rpm` there
+  is `webkit2gtk-4.1`, which EL9 does not ship.
 
 Linux needs some desktop services:
 
