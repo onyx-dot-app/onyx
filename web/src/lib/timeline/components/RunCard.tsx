@@ -109,6 +109,9 @@ function useStepListScroll(isRunning: boolean) {
     const observer = new ResizeObserver(() => {
       if (runningRef.current && atEndRef.current) {
         list.scrollTop = list.scrollHeight;
+        // Recorded now, so a user scroll before the scroll event still reads
+        // as a scroll up.
+        lastTopRef.current = list.scrollTop;
         return;
       }
       const row =
@@ -122,7 +125,10 @@ function useStepListScroll(isRunning: boolean) {
         rowBox.bottom - listBox.bottom,
         rowBox.top - listBox.top
       );
-      if (delta > 0) list.scrollTop += delta;
+      if (delta > 0) {
+        list.scrollTop += delta;
+        lastTopRef.current = list.scrollTop;
+      }
     });
     observer.observe(content);
     return () => observer.disconnect();
@@ -144,10 +150,15 @@ function useStepListScroll(isRunning: boolean) {
   }, [list]);
 
   // Opening a step stops the follow until the user scrolls back to the end.
-  const reveal = useCallback((id: string | null) => {
-    revealIdRef.current = id;
-    if (id !== null) atEndRef.current = false;
-  }, []);
+  // Closing one at the end follows again: no scroll happens to say so.
+  const reveal = useCallback(
+    (id: string | null) => {
+      revealIdRef.current = id;
+      if (id !== null) atEndRef.current = false;
+      else if (list && distanceFromEnd(list) <= 1) atEndRef.current = true;
+    },
+    [list]
+  );
 
   return { listRef: setList, onScroll, reveal };
 }
