@@ -1400,16 +1400,18 @@ export class BrowserService {
         const paths = Array.isArray(message.paths) ? message.paths : null;
         if (paths === null || paths.some((path) => typeof path !== "string"))
           throw invalid("paths must be a list of strings.");
-        if (
-          !open ||
-          open.id !== message.id ||
-          open.offeredTo !== viewer.id ||
-          tab.control.controller !== viewer.id
-        )
-          throw new OperationError("failed", "That file picker is no longer open.");
+        // Checked again after the path checks: control can change meanwhile.
+        const offered = () =>
+          open !== null &&
+          tab.fileChooser === open &&
+          open.id === message.id &&
+          open.offeredTo === viewer.id &&
+          tab.control.controller === viewer.id;
+        if (!offered()) throw new OperationError("failed", "That file picker is no longer open.");
         const files = await Promise.all(
           (paths as Array<string>).map((path) => resolveInChat(this.sessionsRoot, chat.id, path)),
         );
+        if (!open || !offered()) throw new OperationError("failed", "That file picker is no longer open.");
         if (files.length > 0)
           await open.chooser.setFiles(open.chooser.isMultiple() ? files : files.slice(0, 1));
         if (tab.fileChooser === open) this.closeFileChooser(tab);

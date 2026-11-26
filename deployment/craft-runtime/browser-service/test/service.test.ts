@@ -461,6 +461,33 @@ describe("browser service", () => {
     }
   });
 
+  test("a file chooser answer sent before a release does not set files", async () => {
+    const chat = newChat();
+    const uploads = NodePath.join(service.sessionsRoot, chat, "browser-uploads");
+    await NodeFSP.mkdir(uploads, { recursive: true });
+    await NodeFSP.writeFile(NodePath.join(uploads, "notes.txt"), "hello");
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/upload` });
+    const center = await boxOf(service.socketPath, chat, "#file");
+    const viewer = await ViewerClient.connect(service.socketPath, chat);
+    viewer.autoAck = true;
+    try {
+      viewer.send({ type: "takeControl" });
+      await viewer.message("control", (m) => m.controller === "you");
+      clickAt(viewer, center.x, center.y);
+      const chooser = await viewer.message("fileChooser");
+      // The release arrives while the answer's path checks wait on the disk.
+      viewer.send({ type: "fileChooser", id: chooser.id, paths: ["browser-uploads/notes.txt"] });
+      viewer.send({ type: "releaseControl" });
+      await viewer.message("error");
+      const text = await ok(service.socketPath, chat, "evaluate", {
+        expression: "document.getElementById('picked').textContent",
+      });
+      assert.notEqual(text.value, "picked notes.txt");
+    } finally {
+      viewer.close();
+    }
+  });
+
   test("a file chooser closes on a new document but stays on a history rewrite", async () => {
     const chat = newChat();
     const uploads = NodePath.join(service.sessionsRoot, chat, "browser-uploads");
