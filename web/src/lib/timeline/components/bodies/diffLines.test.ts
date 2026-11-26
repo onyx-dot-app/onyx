@@ -189,3 +189,13 @@ describe("a change of the final newline", () => {
     });
   });
 });
+
+test("a patch of many line-free files shows a bounded number of panels", () => {
+  const deletes = Array.from(
+    { length: 5000 },
+    (_, i) => `*** Delete File: f${i}.txt`
+  ).join("\n");
+  const parsed = parseApplyPatch(`*** Begin Patch\n${deletes}\n*** End Patch`);
+  expect(parsed.files).toHaveLength(100);
+  expect(parsed.omittedFiles).toBe(4900);
+});
