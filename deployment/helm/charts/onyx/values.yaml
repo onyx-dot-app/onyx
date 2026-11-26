@@ -1816,7 +1816,10 @@ auth:
   # their node signing key (craft.sandboxRuntime auto or firecracker). With
   # no value and no existingSecret, the chart makes a random value on install
   # and keeps it on upgrade. An inline value must be at least 32 characters
-  # (the chart fails otherwise).
+  # (the chart fails otherwise). Renders without cluster access (helm
+  # template, Argo CD) cannot read the earlier value and make a new one each
+  # time, which breaks node registration: there, set existingSecret (plus
+  # craft.hostAgent.registrationExistingSecret) or a value.
   sandboxNodeRegistration:
     enabled: true
     allPods: false  # Restricted: only the API server checks it (plus the other restricted pods)
@@ -2137,14 +2140,16 @@ craft:
   # How sandboxes run. The chart sets SANDBOX_RUNTIME to this value for the
   # backend and sandbox-proxy. Mirrors the Terraform craft_sandbox_runtime.
   # - "auto" (default): Firecracker on the onyx.app/kvm=true nodes, when the
-  #   chart has every input: auth.sandboxNodeRegistration and a pinned
-  #   release tag (global.version or the chart appVersion; not "latest",
-  #   "edge" or "beta"), or craft.hostAgent.image.tag and a root drive tag.
+  #   chart has every input: auth.sandboxNodeRegistration and a stable,
+  #   beta or nightly-latest release tag (global.version or the chart
+  #   appVersion; not "latest", "edge", "beta" or a dev build), or
+  #   craft.hostAgent.image.tag and a root drive tag.
   #   Then the chart deploys the host agent below, sandbox-proxy and the
   #   egress certificates, with or without ENABLE_CRAFT. Without KVM nodes
   #   the agent has no pods, and the backend offers no sandbox tools. Without
   #   the inputs, the chart renders no Firecracker parts. With a
-  #   global.version before v6.0.0, "auto" acts as "pod".
+  #   global.version, api.image.tag or celery_shared.image.tag before
+  #   v6.0.0, "auto" acts as "pod".
   # - "firecracker": the same parts always; the chart fails on a missing input.
   # - "pod": no Firecracker. Craft (ENABLE_CRAFT) uses pod sandboxes.
   # - "off": no sandbox parts. Not with ENABLE_CRAFT.

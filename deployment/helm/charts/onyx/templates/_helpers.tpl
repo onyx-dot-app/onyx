@@ -294,7 +294,8 @@ true
 {{/*
 craft.sandboxRuntime: "auto" (default), "firecracker", "pod" or "off".
 Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
-(global.version) does not know "auto", so "auto" acts as "pod" there.
+(global.version, or the api or celery_shared image tag) does not know
+"auto", so "auto" acts as "pod" there.
 */}}
 {{- define "onyx.craftSandboxRuntime" -}}
 {{- $runtime := lower (toString ((.Values.craft | default dict).sandboxRuntime | default "auto")) -}}
@@ -307,10 +308,18 @@ Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
 {{- $runtime -}}
 {{- end }}
 
-{{/* "true" when global.version is a release tag before v6.0.0, also a short one such as 5 or 5.1. */}}
+{{/*
+"true" when the backend runs a release before v6.0.0: global.version, or an
+api or celery_shared image tag that overrides it. Short tags such as 5 or
+5.1 count.
+*/}}
 {{- define "onyx.craftPreV6App" -}}
-{{- $v := trimSuffix "-dev" (toString .Values.global.version) -}}
-{{- if and (regexMatch "^v?[0-9]+(\\.[0-9]+){0,2}(-[0-9A-Za-z.-]+)?$" $v) (semverCompare "<6.0.0-0" $v) -}}true{{- end -}}
+{{- $old := false -}}
+{{- range list .Values.global.version (dig "image" "tag" "" (.Values.api | default dict)) (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}
+{{- $v := trimSuffix "-dev" (toString .) -}}
+{{- if and (regexMatch "^v?[0-9]+(\\.[0-9]+){0,2}(-[0-9A-Za-z.-]+)?$" $v) (semverCompare "<6.0.0-0" $v) -}}{{- $old = true -}}{{- end -}}
+{{- end -}}
+{{- if $old -}}true{{- end -}}
 {{- end }}
 
 {{/*
@@ -465,17 +474,18 @@ and the root drive only under pinned tags (craft-runtime-release.yml).
 {{- end }}
 
 {{/*
-The Firecracker release tag of one Onyx image tag, or empty. The releases
-publish it only as the git tag (v6.0.0, nightly-latest-20261125), so
-6.0.0 maps to v6.0.0, and the short tags (6, 6.0) float.
+The Firecracker release tag of one Onyx image tag, or empty. Releases
+publish the images only for stable, beta and nightly-latest git tags
+(craft-runtime-release.yml), so 6.0.0 maps to v6.0.0, and other tags
+(6, 6.0, dev-build-*, edge) give none.
 */}}
 {{- define "onyx.craftFcReleaseTagOf" -}}
 {{- $v := trimSuffix "-dev" . -}}
 {{- if regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+" $v -}}
 {{- $v = printf "v%s" $v -}}
 {{- end -}}
-{{- if not (regexMatch "^v?[0-9]+(\\.[0-9]+)?$" $v) -}}
-{{- include "onyx.craftFcPinned" $v -}}
+{{- if or (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[0-9]+)?$" $v) (regexMatch "^nightly-latest-[0-9A-Za-z.-]+$" $v) -}}
+{{- $v -}}
 {{- end -}}
 {{- end }}
 
@@ -498,7 +508,7 @@ release tag. The rootfs image is rootfs-<version> and SANDBOX_FC_TEMPLATE is
 {{- define "onyx.craftFcPinnedTag" -}}
 {{- $v := index . 0 -}}
 {{- if not (include "onyx.craftFcPinned" $v) -}}
-{{- fail (printf "craft.sandboxRuntime=firecracker needs a pinned %s, not %q: set global.version to an Onyx release tag (for example v6.0.0), not latest, edge or beta, or set %s" (index . 1) $v (index . 2)) -}}
+{{- fail (printf "craft.sandboxRuntime=firecracker needs a pinned %s, not %q: set global.version to a stable, beta or nightly-latest Onyx release tag (for example v6.0.0; not latest, edge, beta or a dev build), or set %s" (index . 1) $v (index . 2)) -}}
 {{- end -}}
 {{- $v -}}
 {{- end }}

@@ -376,3 +376,57 @@ def test_explicit_drive_image_needs_its_template_in_auto() -> None:
         ]
     )
     assert _agent(docs) is not None
+
+
+@pytest.mark.parametrize(
+    "version", ["dev-build-craft-fc-56750c9", "edge", "v6.0.0-cloud.3"]
+)
+def test_tags_without_firecracker_images_render_no_agent_in_auto(version: str) -> None:
+    """Releases publish the Firecracker images only for stable, beta and
+    nightly-latest tags."""
+    docs = _render(["--set-string", f"global.version={version}", *_REGISTRATION])
+    assert _agent(docs) is None
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "auto"
+
+
+def test_a_dev_build_renders_the_agent_with_explicit_image_tags() -> None:
+    docs = _render(
+        [
+            "--set-string",
+            "global.version=dev-build-craft-fc-56750c9",
+            *_REGISTRATION,
+            "--set-string",
+            "craft.hostAgent.image.tag=dev-build-craft-fc-56750c9",
+            "--set-string",
+            "craft.hostAgent.rootfs.version=dev-build-craft-fc-56750c9",
+        ]
+    )
+    agent = _agent(docs)
+    assert agent is not None
+    assert _pod_spec(agent)["containers"][0]["image"].endswith(
+        ":dev-build-craft-fc-56750c9"
+    )
+
+
+@pytest.mark.parametrize("version", ["v6.0.0-beta.2", "nightly-latest-20261125"])
+def test_beta_and_nightly_tags_render_the_agent_in_auto(version: str) -> None:
+    docs = _render(["--set-string", f"global.version={version}", *_REGISTRATION])
+    agent = _agent(docs)
+    assert agent is not None
+    assert _pod_spec(agent)["containers"][0]["image"].endswith(f":{version}")
+
+
+@pytest.mark.parametrize("component", ["api", "celery_shared"])
+def test_an_old_backend_image_tag_makes_auto_act_as_pod(component: str) -> None:
+    """An install that pins older backend images under a newer global.version
+    must not send SANDBOX_RUNTIME=auto to them."""
+    docs = _render(
+        [
+            *_PINNED,
+            *_REGISTRATION,
+            "--set-string",
+            f"{component}.image.tag=v5.1.3",
+        ]
+    )
+    assert _configmap(docs)["SANDBOX_RUNTIME"] == "pod"
+    assert _agent(docs) is None

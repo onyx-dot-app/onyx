@@ -30,13 +30,23 @@ https://github.com/onyx-dot-app/onyx/blob/main/deployment/helm/MIGRATION.md
 {{- if and (eq (include "onyx.craftSandboxRuntime" .) "auto") (not (include "onyx.craftFcEnabled" .)) }}
 
 Firecracker sandboxes are off. craft.sandboxRuntime=auto needs:
-  - a pinned image tag: global.version or the chart appVersion as an Onyx
-    release tag (for example v6.0.0, not latest, edge or beta), or
-    craft.hostAgent.image.tag and craft.hostAgent.rootfs.version;
+  - a pinned image tag: global.version or the chart appVersion as a
+    stable, beta or nightly-latest Onyx release tag (for example v6.0.0,
+    not latest, edge, beta or a dev build), or craft.hostAgent.image.tag
+    and craft.hostAgent.rootfs.version;
   - auth.sandboxNodeRegistration with a value, or with existingSecret plus
     craft.hostAgent.registrationExistingSecret.
 The preflight pods on onyx.app/kvm=true nodes show if a node can run
 Firecracker:
 
   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=craft-fc-preflight
+{{- end }}
+{{- $nodeReg := (.Values.auth | default dict).sandboxNodeRegistration | default dict }}
+{{- if and (include "onyx.craftFcEnabled" .) (not $nodeReg.existingSecret) }}
+
+The chart keeps the node registration value (auth.sandboxNodeRegistration)
+in a Secret of this release. A render without cluster access (helm template,
+Argo CD) cannot read that Secret and makes a new value each time, which
+breaks node registration. For those, set auth.sandboxNodeRegistration.existingSecret plus
+craft.hostAgent.registrationExistingSecret, or a value.
 {{- end }}
