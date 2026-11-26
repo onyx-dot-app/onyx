@@ -144,18 +144,40 @@ function openApiResult(
 }
 
 function graphqlResult(config: GraphQLConfig): DetectedApi {
-  // Strings and comments can hold braces and colons. One pass, so a quote in
-  // a comment or a "#" in a string does not hide what follows.
-  const sdl = config.graphql_schema.replace(
-    /"""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"|#[^\n]*/g,
-    ""
-  );
+  const sdl = withoutStringsAndComments(config.graphql_schema);
   return {
     shape: "graphql",
     config,
     queries: rootFieldCount(sdl, rootTypeName(sdl, "query", "Query")),
     mutations: rootFieldCount(sdl, rootTypeName(sdl, "mutation", "Mutation")),
   };
+}
+
+/** The SDL without strings and comments, which can hold braces and colons.
+ * One linear pass, so a quote in a comment or a "#" in a string does not hide
+ * what follows, and an unclosed quote does not rescan the rest. */
+function withoutStringsAndComments(sdl: string): string {
+  let kept = "";
+  let i = 0;
+  while (i < sdl.length) {
+    if (sdl.startsWith('"""', i)) {
+      const close = sdl.indexOf('"""', i + 3);
+      i = close === -1 ? sdl.length : close + 3;
+    } else if (sdl[i] === '"') {
+      i++;
+      while (i < sdl.length && sdl[i] !== '"' && sdl[i] !== "\n") {
+        i += sdl[i] === "\\" ? 2 : 1;
+      }
+      if (sdl[i] === '"') i++;
+    } else if (sdl[i] === "#") {
+      const close = sdl.indexOf("\n", i);
+      i = close === -1 ? sdl.length : close;
+    } else {
+      kept += sdl[i];
+      i++;
+    }
+  }
+  return kept;
 }
 
 /** The root type of an operation. The default name applies only when the SDL
@@ -165,11 +187,16 @@ function rootTypeName(
   operation: "query" | "mutation",
   fallback: string
 ): string | null {
-  const schema = /\bschema\s*(?:@[^{]*)?\{([^}]*)\}/.exec(sdl)?.[1];
-  if (schema === undefined) return fallback;
+  // indexOf, not a regex with "[^{]*", so a header with no brace after it
+  // does not rescan the rest of the SDL for each match.
+  const start = /\bschema\s*[@{]/.exec(sdl)?.index;
+  const open = start === undefined ? -1 : sdl.indexOf("{", start);
+  const close = open === -1 ? -1 : sdl.indexOf("}", open);
+  if (close === -1) return fallback;
   return (
-    new RegExp(`\\b${operation}\\s*:\\s*([A-Za-z_]\\w*)`).exec(schema)?.[1] ??
-    null
+    new RegExp(`\\b${operation}\\s*:\\s*([A-Za-z_]\\w*)`).exec(
+      sdl.slice(open + 1, close)
+    )?.[1] ?? null
   );
 }
 
@@ -177,15 +204,25 @@ function rootTypeName(
  * 0 when it is missing. */
 function rootFieldCount(sdl: string, typeName: string | null): number {
   if (typeName === null) return 0;
-  const blocks = new RegExp(`\\btype\\s+${typeName}\\b[^{]*\\{`, "g");
+  const header = new RegExp(`\\btype\\s+${typeName}\\b`, "g");
   let count = 0;
-  for (const start of sdl.matchAll(blocks)) {
-    count += blockFieldCount(sdl, start.index + start[0].length);
+  for (let match = header.exec(sdl); match; match = header.exec(sdl)) {
+    const open = sdl.indexOf("{", header.lastIndex);
+    if (open === -1) break;
+    const block = blockFields(sdl, open + 1);
+    count += block.count;
+    // Go on after the block, so headers before one brace are scanned once.
+    header.lastIndex = block.end;
   }
   return count;
 }
 
-function blockFieldCount(sdl: string, bodyStart: number): number {
+/** The number of fields in the block whose body starts at `bodyStart`, and
+ * the index after its closing brace. */
+function blockFields(
+  sdl: string,
+  bodyStart: number
+): { count: number; end: number } {
   let end = bodyStart;
   for (let depth = 1; end < sdl.length && depth > 0; end++) {
     if (sdl[end] === "{") depth++;
@@ -200,5 +237,5 @@ function blockFieldCount(sdl: string, bodyStart: number): number {
     else if (char === ")") parens = Math.max(0, parens - 1);
     else if (parens === 0) body += char;
   }
-  return body.match(/[A-Za-z_]\w*\s*:/g)?.length ?? 0;
+  return { count: body.match(/[A-Za-z_]\w*\s*:/g)?.length ?? 0, end };
 }
