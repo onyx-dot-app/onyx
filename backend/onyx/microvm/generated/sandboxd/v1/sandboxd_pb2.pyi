@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob d5316e2fe860e9c79c8fd58d56a7931a5be71bce)
-# at commit b2a8cf0221 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob b64a60dc3c36eb519c6bdd345a91460604c787c0)
+# at commit e39a377074 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -36,6 +36,7 @@ class ErrorReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     LIMIT_EXCEEDED: _ClassVar[ErrorReason]
     ARCHIVE_INVALID: _ClassVar[ErrorReason]
     EXECUTION_CAP_REACHED: _ClassVar[ErrorReason]
+    BROWSER_START_FAILED: _ClassVar[ErrorReason]
 
 class OutputStream(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -106,6 +107,7 @@ FILE_EXISTS: ErrorReason
 LIMIT_EXCEEDED: ErrorReason
 ARCHIVE_INVALID: ErrorReason
 EXECUTION_CAP_REACHED: ErrorReason
+BROWSER_START_FAILED: ErrorReason
 OUTPUT_STREAM_UNSPECIFIED: OutputStream
 STDOUT: OutputStream
 STDERR: OutputStream
@@ -780,16 +782,22 @@ class BrowserStartRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class BrowserStartResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("cdp_port", "started")
+    CDP_PORT_FIELD_NUMBER: _ClassVar[int]
+    STARTED_FIELD_NUMBER: _ClassVar[int]
+    cdp_port: int
+    started: bool
+    def __init__(self, cdp_port: _Optional[int] = ..., started: bool = ...) -> None: ...
 
 class BrowserStopRequest(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
 class BrowserStopResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("stopped",)
+    STOPPED_FIELD_NUMBER: _ClassVar[int]
+    stopped: bool
+    def __init__(self, stopped: bool = ...) -> None: ...
 
 class ManagedStatusRequest(_message.Message):
     __slots__ = ("mount",)

@@ -1,6 +1,7 @@
 import contextvars
 import json
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -34,6 +35,10 @@ from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_text,
 )
 from onyx.document_index.interfaces import (
+    ContentMatchCount,
+    ContentMatchDateField,
+    ContentMatchKey,
+    ContentMatchRequest,
     DocumentIndex,
     DocumentInsertionRecord,
     DocumentSectionRequest,
@@ -44,6 +49,7 @@ from onyx.document_index.interfaces import (
     TenantState,
 )
 from onyx.document_index.opensearch.client import (
+    SEARCH_TIMEOUT_ERRORS,
     OpenSearchClient,
     OpenSearchDocumentMissingError,
     OpenSearchIndexClient,
@@ -76,6 +82,7 @@ from onyx.document_index.opensearch.schema import (
     get_opensearch_doc_chunk_id,
 )
 from onyx.document_index.opensearch.search import (
+    CONTENT_MATCH_DATE_FIELD_NAMES,
     DocumentQuery,
     get_min_max_normalization_pipeline_name_and_config,
     get_normalization_pipeline_name_and_config,
@@ -103,6 +110,9 @@ _PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
 # clauses, so a fetch stays well under indices.query.bool.max_clause_count
 # (1024 on Cloud).
 _MAX_CHUNK_KEYS_PER_FETCH = 100
+
+# Distinct document IDs per page of a content count.
+_CONTENT_COUNT_PAGE_SIZE = 1000
 
 # Chunk IDs logged per direction when the cc-pair access shadow comparison
 # finds a disagreement.
@@ -1316,6 +1326,66 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
         return KeywordTermCounts(total=len(terms), distinct=len(set(terms)))
 
+    def match_documents_by_content(
+        self,
+        request: ContentMatchRequest,
+        date_field: ContentMatchDateField,
+        descending: bool,
+        after: ContentMatchKey | None,
+        limit: int,
+    ) -> list[ContentMatchKey]:
+        body = DocumentQuery.get_content_match_query(
+            request=request,
+            tenant_state=self._tenant_state,
+            date_field=date_field,
+            descending=descending,
+            after=after,
+            limit=limit,
+        )
+        return self._client.search_for_document_date_keys(
+            body=body,
+            date_field_name=CONTENT_MATCH_DATE_FIELD_NAMES[date_field],
+            search_type=OpenSearchSearchType.CONTENT_MATCH,
+        )
+
+    def count_phrase_terms(self, phrase: str) -> int:
+        # A content match analyzes the phrase as it is, with no stopword list
+        # of its own. Title and content share one analyzer.
+        return len(self._client.analyze(phrase, field=CONTENT_FIELD_NAME))
+
+    def count_documents_by_content(
+        self,
+        request: ContentMatchRequest,
+        max_count: int,
+        deadline: float | None = None,
+    ) -> ContentMatchCount:
+        count = 0
+        after_document_id: str | None = None
+        while True:
+            try:
+                page = self._client.search_for_document_id_page(
+                    body=DocumentQuery.get_content_count_query(
+                        request=request,
+                        tenant_state=self._tenant_state,
+                        after_document_id=after_document_id,
+                        page_size=_CONTENT_COUNT_PAGE_SIZE,
+                    ),
+                    search_type=OpenSearchSearchType.CONTENT_COUNT,
+                )
+            except SEARCH_TIMEOUT_ERRORS:
+                # Keep the pages already counted; with none, the call fails.
+                if after_document_id is None:
+                    raise
+                return ContentMatchCount(count=count, is_complete=False)
+            count += len(page.document_ids)
+            if len(page.document_ids) < _CONTENT_COUNT_PAGE_SIZE:
+                return ContentMatchCount(count=count, is_complete=True)
+            if count >= max_count or (
+                deadline is not None and time.monotonic() >= deadline
+            ):
+                return ContentMatchCount(count=count, is_complete=False)
+            after_document_id = page.after_document_id
+
     def semantic_retrieval(
         self,
         query_embedding: Embedding,
@@ -1560,6 +1630,29 @@ class OpenSearchIndexPair(DocumentIndex):
 
     def count_keyword_terms(self, query: str) -> KeywordTermCounts:
         return self._primary.count_keyword_terms(query)
+
+    def match_documents_by_content(
+        self,
+        request: ContentMatchRequest,
+        date_field: ContentMatchDateField,
+        descending: bool,
+        after: ContentMatchKey | None,
+        limit: int,
+    ) -> list[ContentMatchKey]:
+        return self._primary.match_documents_by_content(
+            request, date_field, descending, after, limit
+        )
+
+    def count_documents_by_content(
+        self,
+        request: ContentMatchRequest,
+        max_count: int,
+        deadline: float | None = None,
+    ) -> ContentMatchCount:
+        return self._primary.count_documents_by_content(request, max_count, deadline)
+
+    def count_phrase_terms(self, phrase: str) -> int:
+        return self._primary.count_phrase_terms(phrase)
 
     def semantic_retrieval(
         self,

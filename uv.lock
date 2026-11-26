@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -4352,7 +4352,6 @@ wheels = [
 name = "onyx"
 version = "0.0.0"
 source = { virtual = "." }
-default-groups = ["backend", "dev", "ee", "model-server"]
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "aiobotocore" },
@@ -4518,8 +4517,11 @@ ee = [
 ]
 loadtest = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "locust" },
     { name = "prometheus-client" },
+    { name = "pytest" },
+    { name = "tiktoken" },
     { name = "uvicorn" },
 ]
 model-server = [
@@ -4708,8 +4710,11 @@ dev = [
 ee = [{ name = "posthog", specifier = "==3.7.4" }]
 loadtest = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "locust", specifier = ">=2.32" },
     { name = "prometheus-client", specifier = ">=0.21" },
+    { name = "pytest", specifier = "==9.0.3" },
+    { name = "tiktoken", specifier = "==0.13.0" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
 model-server = [

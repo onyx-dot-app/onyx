@@ -74,6 +74,9 @@ const (
 	// Run or Start: the daemon already keeps the most executions (64) and all
 	// of them run, so no ended one can be dropped. Cancel one, or wait.
 	ErrorReason_EXECUTION_CAP_REACHED ErrorReason = 20
+	// BrowserStart: Chrome did not start, or its DevTools endpoint did not
+	// answer in time. The message has the end of Chrome's stderr.
+	ErrorReason_BROWSER_START_FAILED ErrorReason = 21
 )
 
 // Enum value maps for ErrorReason.
@@ -100,6 +103,7 @@ var (
 		18: "LIMIT_EXCEEDED",
 		19: "ARCHIVE_INVALID",
 		20: "EXECUTION_CAP_REACHED",
+		21: "BROWSER_START_FAILED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED": 0,
@@ -123,6 +127,7 @@ var (
 		"LIMIT_EXCEEDED":           18,
 		"ARCHIVE_INVALID":          19,
 		"EXECUTION_CAP_REACHED":    20,
+		"BROWSER_START_FAILED":     21,
 	}
 )
 
@@ -4475,7 +4480,6 @@ func (x *InstallSkillResponse) GetExpandedBytes() int64 {
 	return 0
 }
 
-// Browser placeholders.
 type BrowserStartRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -4513,7 +4517,11 @@ func (*BrowserStartRequest) Descriptor() ([]byte, []int) {
 }
 
 type BrowserStartResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Loopback port of the DevTools endpoint (http://127.0.0.1:<port>).
+	CdpPort uint32 `protobuf:"varint,1,opt,name=cdp_port,json=cdpPort,proto3" json:"cdp_port,omitempty"`
+	// True when this call started Chrome, false when it already ran.
+	Started       bool `protobuf:"varint,2,opt,name=started,proto3" json:"started,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4546,6 +4554,20 @@ func (x *BrowserStartResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BrowserStartResponse.ProtoReflect.Descriptor instead.
 func (*BrowserStartResponse) Descriptor() ([]byte, []int) {
 	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *BrowserStartResponse) GetCdpPort() uint32 {
+	if x != nil {
+		return x.CdpPort
+	}
+	return 0
+}
+
+func (x *BrowserStartResponse) GetStarted() bool {
+	if x != nil {
+		return x.Started
+	}
+	return false
 }
 
 type BrowserStopRequest struct {
@@ -4585,7 +4607,9 @@ func (*BrowserStopRequest) Descriptor() ([]byte, []int) {
 }
 
 type BrowserStopResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// True when a browser was running.
+	Stopped       bool `protobuf:"varint,1,opt,name=stopped,proto3" json:"stopped,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4618,6 +4642,13 @@ func (x *BrowserStopResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BrowserStopResponse.ProtoReflect.Descriptor instead.
 func (*BrowserStopResponse) Descriptor() ([]byte, []int) {
 	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *BrowserStopResponse) GetStopped() bool {
+	if x != nil {
+		return x.Stopped
+	}
+	return false
 }
 
 type ManagedStatusRequest struct {
@@ -5319,10 +5350,13 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x14\n" +
 	"\x05files\x18\x02 \x01(\x03R\x05files\x12%\n" +
 	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\"\x15\n" +
-	"\x13BrowserStartRequest\"\x16\n" +
-	"\x14BrowserStartResponse\"\x14\n" +
-	"\x12BrowserStopRequest\"\x15\n" +
-	"\x13BrowserStopResponse\",\n" +
+	"\x13BrowserStartRequest\"K\n" +
+	"\x14BrowserStartResponse\x12\x19\n" +
+	"\bcdp_port\x18\x01 \x01(\rR\acdpPort\x12\x18\n" +
+	"\astarted\x18\x02 \x01(\bR\astarted\"\x14\n" +
+	"\x12BrowserStopRequest\"/\n" +
+	"\x13BrowserStopResponse\x12\x18\n" +
+	"\astopped\x18\x01 \x01(\bR\astopped\",\n" +
 	"\x14ManagedStatusRequest\x12\x14\n" +
 	"\x05mount\x18\x01 \x01(\tR\x05mount\"\xe1\x01\n" +
 	"\x10ManagedSlotState\x122\n" +
@@ -5352,7 +5386,7 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\bprevious\x18\x03 \x01(\x0e2\x1e.craft.sandboxd.v1.ManagedSlotR\bprevious\x12&\n" +
 	"\x0fprevious_in_use\x18\x04 \x01(\bR\rpreviousInUse\x12\x17\n" +
 	"\await_ms\x18\x05 \x01(\x04R\x06waitMs\x12\x14\n" +
-	"\x05mount\x18\x06 \x01(\tR\x05mount*\xd4\x03\n" +
+	"\x05mount\x18\x06 \x01(\tR\x05mount*\xee\x03\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x13\n" +
@@ -5375,7 +5409,8 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\vFILE_EXISTS\x10\x11\x12\x12\n" +
 	"\x0eLIMIT_EXCEEDED\x10\x12\x12\x13\n" +
 	"\x0fARCHIVE_INVALID\x10\x13\x12\x19\n" +
-	"\x15EXECUTION_CAP_REACHED\x10\x14*E\n" +
+	"\x15EXECUTION_CAP_REACHED\x10\x14\x12\x18\n" +
+	"\x14BROWSER_START_FAILED\x10\x15*E\n" +
 	"\fOutputStream\x12\x1d\n" +
 	"\x19OUTPUT_STREAM_UNSPECIFIED\x10\x00\x12\n" +
 	"\n" +

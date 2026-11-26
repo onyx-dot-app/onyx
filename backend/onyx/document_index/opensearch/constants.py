@@ -108,6 +108,12 @@ LUCENE_SCALAR_QUANTIZATION: dict[VectorQuantization, LuceneScalarQuantization] =
 }
 
 
+# The composite aggregation that pages through distinct document IDs, and its
+# one source.
+DOCUMENT_ID_AGGREGATION_NAME = "document_ids"
+DOCUMENT_ID_AGGREGATION_SOURCE = "document_id"
+
+
 class OpenSearchSearchType(str, Enum):
     """Search type label used for Prometheus metrics."""
 
@@ -119,6 +125,8 @@ class OpenSearchSearchType(str, Enum):
     RANDOM = "random"
     DOC_ID_RETRIEVAL = "doc_id_retrieval"
     CC_PAIR_ACCESS_SHADOW = "cc_pair_access_shadow"
+    CONTENT_MATCH = "content_match"
+    CONTENT_COUNT = "content_count"
     UNKNOWN = "unknown"
 
 
