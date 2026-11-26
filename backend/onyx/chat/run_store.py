@@ -1251,7 +1251,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 if self._owner(response_id) is not None:
                     raise ValueError("Response already has an owner")
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                    response = find_response__no_commit(session, response_id)
+                    response = find_response__no_commit(
+                        session, response_id, for_root_save=True
+                    )
                     if response is None or response.response_status is not None:
                         raise ValueError("Response is unavailable for a new run")
                     save_response_record__no_commit(
