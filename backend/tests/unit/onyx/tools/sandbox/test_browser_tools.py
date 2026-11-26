@@ -23,6 +23,7 @@ from onyx.tools.tool_implementations.sandbox.browser_tools import (
     BrowserNavigateTool,
     BrowserOpenTool,
     BrowserSnapshotTool,
+    BrowserWaitForTool,
     with_browser_tools,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SANDBOX_TOOLS
@@ -106,7 +107,7 @@ def test_act_sends_the_service_params_with_session_paths() -> None:
                 "ref": "e2_5",
                 "paths": [f"{session_workspace(ref.session_id)}/a.pdf", "b/c.png"],
                 "modifiers": None,
-                "timeout_ms": 999_999,
+                "timeout_ms": 30_000,
             }
         ),
         MagicMock(),
@@ -121,11 +122,22 @@ def test_act_sends_the_service_params_with_session_paths() -> None:
             "action": "upload",
             "ref": "e2_5",
             "paths": ["a.pdf", "b/c.png"],
-            "timeoutMs": 60_000,
+            "timeoutMs": 30_000,
         },
     )
-    assert kwargs["timeout_seconds"] > 60
+    assert kwargs["timeout_seconds"] > 30
     assert result.content == '{"tab":{"id":"t1"}}'
+
+
+@pytest.mark.parametrize("timeout_ms", [0, 60_001])
+def test_a_timeout_out_of_range_is_a_tool_error(timeout_ms: int) -> None:
+    turn, sandbox = _turn({})
+    with pytest.raises(ToolCallException) as refused:
+        BrowserWaitForTool(turn)._run(
+            _invocation({"text": "Done", "timeout_ms": timeout_ms}), MagicMock()
+        )
+    assert "timeout_ms" in refused.value.llm_facing_message
+    sandbox.browser_call.assert_not_called()
 
 
 def test_open_and_snapshot_map_their_arguments() -> None:

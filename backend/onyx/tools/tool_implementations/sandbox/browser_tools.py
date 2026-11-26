@@ -38,6 +38,7 @@ from onyx.tools.tool_implementations.sandbox.errors import (
     sandbox_errors_as_tool_errors,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
+    BROWSER_DEFAULT_TIMEOUT_MS,
     BrowserActArguments,
     BrowserArguments,
     BrowserDialogArguments,
@@ -46,15 +47,13 @@ from onyx.tools.tool_implementations.sandbox.models import (
     BrowserOpenArguments,
     BrowserSnapshotArguments,
     BrowserStatusArguments,
+    BrowserTimeoutArguments,
     BrowserWaitForArguments,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.utils import truncate_output
 
-# The service's default and largest wait of one call.
-BROWSER_DEFAULT_TIMEOUT_MS = 15_000
-BROWSER_MAX_TIMEOUT_MS = 60_000
 # Time that a call gets beyond the service's own wait: the hop to the VM.
 _CALL_MARGIN_SECONDS = 15.0
 # Largest result text that the model gets.
@@ -64,12 +63,6 @@ _INTERRUPTED_BROWSER_MESSAGE = (
     "The call was interrupted before it returned and was not run again. "
     "Check the page with browser_status or browser_snapshot before you retry."
 )
-
-
-def _timeout_ms(requested: int | None) -> int:
-    if requested is None:
-        return BROWSER_DEFAULT_TIMEOUT_MS
-    return min(max(requested, 1), BROWSER_MAX_TIMEOUT_MS)
 
 
 def _session_path(ref: HarnessSandboxRef, path: str) -> str:
@@ -116,18 +109,22 @@ class _BrowserTool[ArgumentsT: BrowserArguments](SandboxTool):
     ) -> tuple[dict[str, JsonValue], int]:
         """The service params of a call (the set arguments, in camelCase, with
         session-relative paths), and the service's wait in ms."""
-        params = arguments.model_dump(mode="json", by_alias=True, exclude_none=True)
         wait_ms = BROWSER_DEFAULT_TIMEOUT_MS
-        if "timeout_ms" in type(arguments).model_fields:
-            requested = params.get("timeoutMs")
-            wait_ms = _timeout_ms(requested if isinstance(requested, int) else None)
-            params["timeoutMs"] = wait_ms
-        paths = params.get("paths")
-        if isinstance(paths, list):
-            params["paths"] = [_session_path(ref, str(path)) for path in paths]
-        screenshot_path = params.get("screenshotPath")
-        if isinstance(screenshot_path, str):
-            params["screenshotPath"] = _session_path(ref, screenshot_path)
+        update: dict[str, object] = {}
+        if isinstance(arguments, BrowserTimeoutArguments):
+            if arguments.timeout_ms is not None:
+                wait_ms = arguments.timeout_ms
+            update["timeout_ms"] = wait_ms
+        if isinstance(arguments, BrowserActArguments) and arguments.paths is not None:
+            update["paths"] = [_session_path(ref, path) for path in arguments.paths]
+        if (
+            isinstance(arguments, BrowserSnapshotArguments)
+            and arguments.screenshot_path is not None
+        ):
+            update["screenshot_path"] = _session_path(ref, arguments.screenshot_path)
+        params = arguments.model_copy(update=update).model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        )
         return params, wait_ms
 
     def _content(self, result: dict[str, JsonValue]) -> str:

@@ -1226,6 +1226,9 @@ _BROWSER_MAX_TEXT_CHARS = 64_000
 _BROWSER_MAX_SELECTOR_CHARS = 2048
 _BROWSER_MAX_LIST_ITEMS = 100
 _BROWSER_MAX_UPLOAD_PATHS = 20
+# The service's default and largest wait of one call.
+BROWSER_DEFAULT_TIMEOUT_MS = 15_000
+BROWSER_MAX_TIMEOUT_MS = 60_000
 
 BrowserAction = Literal[
     "click", "type", "hover", "select", "drag", "press", "scroll", "upload"
@@ -1249,6 +1252,12 @@ class BrowserTabArguments(BrowserArguments):
     )
 
 
+class BrowserTimeoutArguments(BrowserTabArguments):
+    timeout_ms: int | None = Field(
+        default=None, ge=1, le=BROWSER_MAX_TIMEOUT_MS, description=TIMEOUT_ARGUMENT
+    )
+
+
 class BrowserStatusArguments(BrowserArguments):
     pass
 
@@ -1266,14 +1275,13 @@ class BrowserOpenArguments(BrowserArguments):
     )
 
 
-class BrowserNavigateArguments(BrowserTabArguments):
+class BrowserNavigateArguments(BrowserTimeoutArguments):
     url: str | None = Field(
         default=None, max_length=_BROWSER_MAX_URL_CHARS, description=URL_ARGUMENT
     )
     history: Literal["back", "forward", "reload"] | None = Field(
         default=None, description="Go back, forward, or reload."
     )
-    timeout_ms: int | None = Field(default=None, description=TIMEOUT_ARGUMENT)
 
     @model_validator(mode="after")
     def _one_target(self) -> Self:
@@ -1291,7 +1299,7 @@ class BrowserSnapshotArguments(BrowserTabArguments):
     )
 
 
-class BrowserActArguments(BrowserTabArguments):
+class BrowserActArguments(BrowserTimeoutArguments):
     action: BrowserAction
     ref: str | None = Field(
         default=None,
@@ -1330,7 +1338,6 @@ class BrowserActArguments(BrowserTabArguments):
         max_length=_BROWSER_MAX_UPLOAD_PATHS,
         description="upload: files in the working directory.",
     )
-    timeout_ms: int | None = Field(default=None, description=TIMEOUT_ARGUMENT)
 
     @model_validator(mode="after")
     def _paired_coordinates(self) -> Self:
@@ -1339,7 +1346,7 @@ class BrowserActArguments(BrowserTabArguments):
         return self
 
 
-class BrowserWaitForArguments(BrowserTabArguments):
+class BrowserWaitForArguments(BrowserTimeoutArguments):
     ref: str | None = Field(
         default=None,
         max_length=_BROWSER_MAX_SELECTOR_CHARS,
@@ -1354,7 +1361,6 @@ class BrowserWaitForArguments(BrowserTabArguments):
         default=None, max_length=_BROWSER_MAX_TEXT_CHARS, description="Case counts."
     )
     url_includes: str | None = Field(default=None, max_length=_BROWSER_MAX_URL_CHARS)
-    timeout_ms: int | None = Field(default=None, description=TIMEOUT_ARGUMENT)
 
     @model_validator(mode="after")
     def _some_condition(self) -> Self:
@@ -1368,13 +1374,12 @@ class BrowserWaitForArguments(BrowserTabArguments):
         return self
 
 
-class BrowserEvaluateArguments(BrowserTabArguments):
+class BrowserEvaluateArguments(BrowserTimeoutArguments):
     expression: str = Field(
         min_length=1,
         max_length=_BROWSER_MAX_TEXT_CHARS,
         description="JavaScript expression; a promise is awaited.",
     )
-    timeout_ms: int | None = Field(default=None, description=TIMEOUT_ARGUMENT)
 
 
 class BrowserDialogArguments(BrowserTabArguments):
