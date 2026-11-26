@@ -710,6 +710,39 @@ describe("Custom API", () => {
     );
   });
 
+  test("keeps the REST endpoints after Back only for the same base URL", async () => {
+    mockFetch({
+      "POST /api/admin/integrations/openapi-import": () => failure(400),
+      "POST /api/admin/integrations/graphql-introspect": () => failure(400),
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Billing",
+      add.api.url.title,
+      "https://billing.example.com"
+    );
+    const lines = await screen.findByRole("textbox", {
+      name: add.rest.endpoints.title,
+    });
+    await user.type(lines, "GET /invoices List invoices");
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.click(screen.getByRole("button", { name: add.continue }));
+    expect(
+      await screen.findByRole("textbox", { name: add.rest.endpoints.title })
+    ).toHaveValue("GET /invoices List invoices");
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    const url = screen.getByRole("textbox", { name: add.api.url.title });
+    await user.clear(url);
+    await user.type(url, "https://payroll.example.com");
+    await user.click(screen.getByRole("button", { name: add.continue }));
+    expect(
+      await screen.findByRole("textbox", { name: add.rest.endpoints.title })
+    ).toHaveValue("");
+  });
+
   test("a failed check is an error, not a REST base URL", async () => {
     const fetchMock = mockFetch({
       "POST /api/admin/integrations/openapi-import": () => failure(400),

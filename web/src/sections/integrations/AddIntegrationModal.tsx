@@ -295,6 +295,12 @@ export default function AddIntegrationModal({
       return;
     }
     if (detected.shape === "openapi") setBaseUrl(detected.view.base_url);
+    // Endpoint lines typed for one API must not be saved against another.
+    if (
+      detected.shape === "rest" &&
+      (detection?.shape !== "rest" || detection.baseUrl !== detected.baseUrl)
+    )
+      setEndpoints("");
     // Most APIs take a key; the method is ready for a later choice of sign-in.
     enterSetup(detected, { ...DEFAULT_SIGN_IN, authMethod: "api_key" });
   }
