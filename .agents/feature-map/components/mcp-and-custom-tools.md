@@ -24,9 +24,9 @@
 - **An admin adds an OpenAPI action.** The admin pastes an OpenAPI 3 schema with
   one server URL. Each operation in it becomes a tool that the model can call.
   The admin can add static headers, link a per-tool OAuth client, or forward
-  each user's Onyx login token. A schema with a missing or duplicate
-  `operationId`, or a server URL that SSRF protection blocks, is rejected at
-  save.
+  each user's Onyx login token. An import drops each operation with a missing
+  or duplicate `operationId` and lists it as skipped. A save rejects such a
+  schema, or a server URL that SSRF protection blocks.
 - **A member connects an account.** On a per-user server, each member connects
   their own API key or OAuth account. One member's connection never serves
   another member.
