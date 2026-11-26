@@ -106,11 +106,18 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 ```
 
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
-loads the integrations the sandbox owner can use. These are the integrations
-that are on for the user ([[mcp-and-custom-tools]] has the access rule).
+loads the integrations the sandbox owner can use (`_usable_ids`). For a Craft
+session these are the integrations that are on for the user
+([[mcp-and-custom-tools]] has the access rule).
 `sandbox_proxy/usable_integrations.py:UsableIntegrations`
 caches the integration ids of each user for 30 seconds, and the evaluator and
-the resolver share it. It also caches, for 30 seconds per tenant, one
+the resolver share it. A request whose session tag is a chat of the owner
+reads, on each request and with no cache, the integrations of that chat
+(`integrations/policy.py:chat_session_integrations`): the agent links, or the
+task links while a scheduled run is in flight, narrowed by the chat's saved
+tool options (`apply_tool_options`), Required ones kept. These can include a
+linked integration that the user turned off. `UsableIntegrations` also
+caches, for 30 seconds per tenant, one
 `IntegrationMatchTarget` (`sandbox_proxy/resolvers/mcp_matching.py`) for each
 enabled integration: the MCP server URL, the OpenAPI base URL or the app URL
 patterns. `load_match_targets` reads them with one query for each kind table.
