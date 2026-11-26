@@ -40,6 +40,7 @@ from onyx.db.integration_policy import (
     list_persona_integration_links,
 )
 from onyx.db.models import Integration, IntegrationAction
+from onyx.db.persona import user_can_access_persona
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.models import (
@@ -422,11 +423,16 @@ def chat_session_integrations(
 ) -> dict[int, AgentIntegration] | None:
     """``chat_integrations`` of the agent of the chat, narrowed by the chat's
     saved tool options as its tools are. None when the chat is not a chat of
-    the user that is not deleted."""
+    the user that is not deleted. Empty when the user can no longer use the
+    custom agent of the chat."""
     chat_session = get_chat_session_for_user(db_session, chat_session_id, user_id)
     if chat_session is None:
         return None
     if chat_session.persona_id is None:
+        return {}
+    if chat_session.persona_id != DEFAULT_PERSONA_ID and not user_can_access_persona(
+        db_session, chat_session.persona_id, chat_session.user
+    ):
         return {}
     options = chat_session.tool_options
     return apply_tool_options(

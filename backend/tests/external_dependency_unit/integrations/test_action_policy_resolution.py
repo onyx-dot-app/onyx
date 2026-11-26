@@ -18,6 +18,7 @@ from onyx.db.enums import (
     ApprovalDecision,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
+    PersonaSharePermission,
     PluginInstallationPolicy,
 )
 from onyx.db.integration import list_integration_actions
@@ -33,6 +34,7 @@ from onyx.db.models import (
     IntegrationAction,
     Persona,
     Persona__Integration,
+    Persona__User,
     User,
     UserIntegrationPreference,
 )
@@ -49,6 +51,7 @@ from onyx.tools.models import IntegrationEntry, ToolOptions
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
     create_test_persona,
+    share_persona_with_user,
 )
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
@@ -337,6 +340,48 @@ def test_the_approval_recheck_reads_the_integrations_the_user_can_use(
         assert _recheck(db_session, no_access, user, persona.id) is (
             EffectivePolicy.BLOCKED
         )
+    finally:
+        db_session.rollback()
+        db_session.query(Persona).filter(Persona.id == persona.id).delete()
+        db_session.commit()
+
+
+def test_a_chat_on_an_agent_the_user_lost_gets_no_integrations(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    integrations: list[int],
+    make_test_user: MakeTestUser,
+) -> None:
+    """The sandbox proxy reads these policies for the commands of a chat, so
+    after the user loses access to the custom agent of the chat, its Allow
+    links stop, and the default agent's integrations do not take over."""
+    owner = make_test_user("policy_lost_owner")
+    user = make_test_user("policy_lost_member")
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.test/mcp",
+        name=f"lost-{uuid4().hex[:8]}",
+        tools=("update",),
+    )
+    integrations.append(integration.id)
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    set_policy(db_session, integration.id, "update", ALLOW)
+    persona = create_test_persona(db_session, owner)
+    try:
+        link_persona(db_session, persona.id, integration.id)
+        share_persona_with_user(
+            db_session, persona, user, PersonaSharePermission.VIEWER
+        )
+        assert _recheck(db_session, integration, user, persona.id) is E_ALLOW
+        assert _recheck(db_session, integration, user, DEFAULT_PERSONA_ID) is E_ALLOW
+
+        db_session.query(Persona__User).filter(
+            Persona__User.persona_id == persona.id
+        ).delete()
+        db_session.commit()
+        assert _recheck(db_session, integration, user, persona.id) is E_BLOCKED
     finally:
         db_session.rollback()
         db_session.query(Persona).filter(Persona.id == persona.id).delete()
