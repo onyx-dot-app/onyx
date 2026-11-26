@@ -19,6 +19,9 @@ always left to right.
 A panel can hold more than one section: e.g. a "Request" header and its
 lines, then a "Response" header and its lines.
 
+The panel defines `--opal-ansi-0` to `--opal-ansi-15`, the 16 terminal colors,
+with light and dark values. Terminal output can use them in `richNodes()` spans.
+
 Highlighting is the caller's: pass each line's `content` as plain text or as
 highlighted markup.
 
@@ -49,12 +52,12 @@ lines").
 
 ### `CodePanel.Output`
 
-| Prop       | Type      | Default | Description                                                              |
-| ---------- | --------- | ------- | ------------------------------------------------------------------------ |
-| `children` | `string`  | —       | The output text                                                          |
-| `error`    | `boolean` | `false` | Red text on a red tint                                                   |
-| `loading`  | `boolean` | `false` | The output is still awaited: a line shimmer in place of the text         |
-| `follow`   | `boolean` | `false` | Keeps the newest output in view as it streams, until the user scrolls up |
+| Prop       | Type                  | Default | Description                                                              |
+| ---------- | --------------------- | ------- | ------------------------------------------------------------------------ |
+| `children` | `string \| RichNodes` | —       | The output text, or styled nodes (`richNodes()`), e.g. terminal colors   |
+| `error`    | `boolean`             | `false` | Red text on a red tint                                                   |
+| `loading`  | `boolean`             | `false` | The output is still awaited: a line shimmer in place of the text         |
+| `follow`   | `boolean`             | `false` | Keeps the newest output in view as it streams, until the user scrolls up |
 
 ### `CodePanel.Footer`
 

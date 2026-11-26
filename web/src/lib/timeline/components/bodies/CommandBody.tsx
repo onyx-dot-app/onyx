@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { CodePanel, type CodePanelLine } from "@opal/components";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
-import type { RichStr } from "@opal/types";
+import type { RichNodes, RichStr } from "@opal/types";
 import { stripBidiControls } from "@opal/utils";
 
 interface CommandBodyProps {
@@ -19,7 +19,8 @@ interface CommandBodyProps {
   /** A comment line above the command, such as "in /workspace/app"; it is
    *  highlighted as a comment and not copied. */
   comment?: string;
-  output: string;
+  /** Plain text, or styled nodes such as terminal colors. */
+  output: string | RichNodes;
   /** Error output, shown in its own band. */
   error?: string;
   /** Shown when there is no command, output or error. */
