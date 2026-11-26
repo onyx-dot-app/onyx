@@ -9,7 +9,19 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "@opal/layouts";
+import { SvgDownload } from "@opal/icons";
+import { stripBidiControls } from "@opal/utils";
+import { browserDownloadUrl } from "@/lib/chat/browser/api";
 import {
+  RIGHT_PANEL_BROWSER_TAB,
+  type ChatRightPanelAction,
+  type ChatRightPanelState,
+} from "@/lib/chat/rightPanel";
+import { downloadFile } from "@/lib/download";
+import {
+  browserPageTitle,
   type BrowserSocketState,
   browserStreamUrl,
   createBrowserStreamClient,
@@ -275,5 +287,177 @@ export function useBrowserStream({
     retry,
     answerFileChooser,
     dropInputRef,
+  };
+}
+
+// A browser page's tab in the panel; the browser selects the shown page
+function browserPageTab(pageId: string): string {
+  return `${RIGHT_PANEL_BROWSER_TAB}:${pageId}`;
+}
+
+interface UseChatBrowserTabsOptions {
+  // The chat whose panel this is
+  sessionId: string | null;
+  // The panel is open
+  open: boolean;
+  state: ChatRightPanelState;
+  dispatch: (action: ChatRightPanelAction) => void;
+  // Called before the hook changes the panel's tab itself
+  onInsideChange: () => void;
+}
+
+export interface ChatBrowserTab {
+  id: string;
+  // The page's title or host. Null for a page with neither, and for the tab
+  // that stands for the browser until the stream lists its pages.
+  title: string | null;
+}
+
+export interface ChatBrowserTabs {
+  stream: BrowserStream;
+  // The chat whose browser is open in the panel
+  sessionId: string | null;
+  // The browser is the panel's active tab
+  shown: boolean;
+  // The tab of the page that the browser shows
+  tabId: string;
+  tabs: ChatBrowserTab[];
+  // False when `tabId` is not a page of the browser
+  selectTab: (tabId: string) => boolean;
+  // False when the panel closes the tab itself
+  closeTab: (tabId: string) => boolean;
+  // As T3 Code's "+" menu: each opening adds a new page and shows it
+  openPage: () => void;
+}
+
+/**
+ * The chat's browser in the right panel: its stream while the panel is open
+ * on a chat whose browser is open, a tab per page of the browser, and the
+ * toasts for its downloads and errors.
+ */
+export function useChatBrowserTabs({
+  sessionId,
+  open,
+  state,
+  dispatch,
+  onInsideChange,
+}: UseChatBrowserTabsOptions): ChatBrowserTabs {
+  const tb = useTranslations("chat.browser");
+  const browserSessionId = state.browserOpen ? sessionId : null;
+  const browserOpen = browserSessionId !== null;
+  const onDownload = useCallback(
+    ({ fileName }: BrowserDownload, downloadSessionId: string) => {
+      // The page names the file, so bidi controls must not disguise it
+      const shownName = stripBidiControls(fileName);
+      toast.info(tb("download.saved", { fileName: shownName }), {
+        action: {
+          icon: SvgDownload,
+          label: tb("download.action"),
+          // An attachment link starts the download without leaving the page
+          onClick: () =>
+            downloadFile(shownName, {
+              url: browserDownloadUrl(downloadSessionId, fileName),
+            }),
+        },
+      });
+    },
+    [tb]
+  );
+  const stream = useBrowserStream({
+    sessionId: browserSessionId,
+    active: open,
+    onDownload,
+    onError: (message) => toast.error(tb("error"), { description: message }),
+  });
+  const pages = stream.state.tabs;
+  const browserLive = stream.state.connection === "live";
+  // The browser selects the page that it shows: its tab is the active one
+  // while the browser shows. Until the stream lists the pages, one tab
+  // stands for the browser.
+  const selectedPage = pages.find(
+    (page) => page.id === stream.state.selectedTabId
+  );
+  const tabId =
+    selectedPage === undefined
+      ? RIGHT_PANEL_BROWSER_TAB
+      : browserPageTab(selectedPage.id);
+  const tabs: ChatBrowserTab[] = [
+    ...pages.map(
+      (page): ChatBrowserTab => ({
+        id: browserPageTab(page.id),
+        title: browserPageTitle(page),
+      })
+    ),
+    ...(browserOpen && selectedPage === undefined
+      ? [{ id: RIGHT_PANEL_BROWSER_TAB, title: null }]
+      : []),
+  ];
+
+  const { send } = stream;
+  const pageOfTab = (id: string) =>
+    pages.find((page) => browserPageTab(page.id) === id);
+  const selectTab = (id: string) => {
+    const page = pageOfTab(id);
+    if (page === undefined) return false;
+    if (page.id !== selectedPage?.id) send({ type: "selectTab", tab: page.id });
+    dispatch({ type: "showTab", tabId: RIGHT_PANEL_BROWSER_TAB });
+    return true;
+  };
+  // "Open browser" before the stream is live opens its page once it is. A
+  // live browser whose last page closes closes in the panel.
+  // The pages asked for, and the chat whose browser gets them; closing the
+  // browser drops them
+  const newTabPendingRef = useRef<{ sessionId: string; count: number } | null>(
+    null
+  );
+  const hadPagesRef = useRef(false);
+  const pageCount = pages.length;
+  const insideChange = useEffectEvent(onInsideChange);
+  useEffect(() => {
+    if (!browserLive) {
+      hadPagesRef.current = false;
+      return;
+    }
+    const pending = newTabPendingRef.current;
+    newTabPendingRef.current = null;
+    if (pending !== null && pending.sessionId === browserSessionId)
+      for (let i = 0; i < pending.count; i++) send({ type: "newTab" });
+    const hadPages = hadPagesRef.current;
+    hadPagesRef.current = pageCount > 0;
+    if (hadPages && pageCount === 0) {
+      insideChange();
+      dispatch({ type: "closeTab", tabId: RIGHT_PANEL_BROWSER_TAB });
+    }
+  }, [browserLive, browserSessionId, pageCount, send, dispatch]);
+  const openPage = () => {
+    if (sessionId !== null && !(browserLive && send({ type: "newTab" }))) {
+      const pending = newTabPendingRef.current;
+      newTabPendingRef.current = {
+        sessionId,
+        count: pending?.sessionId === sessionId ? pending.count + 1 : 1,
+      };
+    }
+    dispatch({ type: "openBrowser" });
+  };
+  const closeTab = (id: string) => {
+    // The browser closes the page; its tab goes when the page list drops it
+    const page = pageOfTab(id);
+    if (page !== undefined) {
+      send({ type: "closeTab", tab: page.id });
+      return true;
+    }
+    if (id === RIGHT_PANEL_BROWSER_TAB) newTabPendingRef.current = null;
+    return false;
+  };
+
+  return {
+    stream,
+    sessionId: browserSessionId,
+    shown: browserOpen && state.activeId === RIGHT_PANEL_BROWSER_TAB,
+    tabId,
+    tabs,
+    selectTab,
+    closeTab,
+    openPage,
   };
 }
