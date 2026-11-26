@@ -21,6 +21,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/grpc"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/egressrelay"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
@@ -31,6 +32,9 @@ import (
 
 // windowBytes is the HTTP/2 flow-control window of the gRPC server.
 const windowBytes = 16 << 20
+
+// browserRelayPort is the vsock port that relays to the browser service.
+const browserRelayPort = 3011
 
 // version is set with -ldflags "-X main.version=...".
 var version = "dev"
@@ -72,7 +76,7 @@ func main() {
 	flag.Int64Var(&fc.Limits.Entries, "capture-max-entries", files.DefaultLimits.Entries, "most files and directories in a session archive")
 	zlevel := flag.String("capture-zstd-level", "fastest", "zstd level of CaptureSession: fastest, default, better or best")
 	fileOwner := flag.String("file-owner", files.DefaultOwner, "uid:gid that gets the files and directories that WriteFile, UploadFile and RestoreSession make in the sessions root and the onyx root (the image's sandbox user); empty: they stay root's")
-	browserBin := flag.String("browser-binary", browser.DefaultBinary, "Chrome that BrowserStart runs; empty turns the browser calls off")
+	browserBin := flag.String("browser-binary", browser.DefaultBinary, "Chrome that BrowserStart runs; empty turns the browser calls, the browser service and its relay off")
 	cmdUser := flag.String("command-user", files.DefaultOwner, "uid:gid that runs every command (the image's sandbox user); empty: commands run as root")
 	flag.Parse()
 	var ok bool
@@ -157,7 +161,8 @@ func main() {
 	}
 	var bcfg *browser.Config
 	if *browserBin != "" {
-		bcfg = &browser.Config{Binary: *browserBin, ProfileDir: browserProfileDir(ident), Log: log}
+		bcfg = &browser.Config{Binary: *browserBin, ServiceScript: browser.ServiceScript, Node: browser.Node,
+			SessionsRoot: fstore.Config().SessionsRoot, Log: log}
 		if ident != nil {
 			bcfg.Credential = ident.cred
 		}
@@ -183,22 +188,6 @@ func baseEnv(environ []string, ident *commandIdentity) map[string]string {
 		maps.Copy(base, ident.env)
 	}
 	return base
-}
-
-// browserProfileDir is the browser's --user-data-dir, in the HOME of the
-// command user (else the daemon's).
-func browserProfileDir(ident *commandIdentity) string {
-	home := ""
-	if ident != nil {
-		home = ident.env["HOME"]
-	}
-	if home == "" {
-		home = os.Getenv("HOME")
-	}
-	if home == "" {
-		home = "/root"
-	}
-	return filepath.Join(home, ".config", "onyx-browser")
 }
 
 // splitList splits a comma-separated flag. An empty flag is an empty list.
@@ -287,6 +276,23 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	// session restores and file writes stream hundreds of MiB to the guest.
 	gs := srv.NewGRPCServer(grpc.InitialWindowSize(windowBytes), grpc.InitialConnWindowSize(windowBytes),
 		grpc.ReadBufferSize(1<<20), grpc.WriteBufferSize(1<<20))
+
+	if br != nil && listen == "" {
+		bln, err := vsock.Listen(browserRelayPort)
+		if err != nil {
+			return fmt.Errorf("browser relay port %d: %w", browserRelayPort, err)
+		}
+		defer func() { _ = bln.Close() }()
+		// Each connection goes to the service socket, or closes when no service
+		// runs. There is no idle timeout: a viewer gets no bytes while its tab
+		// does not change, and the host side ends the stream.
+		relay := &egressrelay.Relay{Dial: br.DialService, Log: log}
+		go func() {
+			if err := relay.Serve(bln); err != nil {
+				log.Error("browser relay stopped", "err", err)
+			}
+		}()
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()

@@ -11,6 +11,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser/browsertest"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
 
@@ -19,39 +20,50 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func browserHarness(t *testing.T, mode string) *harness {
+// browserHarness serves a Browser of fake Chromes, with sessions in a temp dir.
+func browserHarness(t *testing.T, mode string) (*harness, string) {
 	t.Helper()
+	sessions := filepath.Join(t.TempDir(), "sessions")
+	fs, err := files.New(files.Config{SessionsRoot: sessions})
+	if err != nil {
+		t.Fatal(err)
+	}
 	b := browser.New(browser.Config{
-		Binary: browsertest.Binary(t), ProfileDir: filepath.Join(t.TempDir(), "onyx-browser"),
-		Isolator: execs.ProcessGroups{}, StartTimeout: 10 * time.Second,
+		Binary: browsertest.Binary(t), Isolator: execs.ProcessGroups{}, StartTimeout: 10 * time.Second,
 	})
 	t.Cleanup(func() { _, _ = b.Stop() })
-	h := newHarness(t, execs.Config{}, Config{Browser: b, BaseEnv: map[string]string{browsertest.EnvMode: mode}})
-	return h
+	h := newHarness(t, execs.Config{}, Config{Browser: b, Files: fs, BaseEnv: map[string]string{browsertest.EnvMode: mode}})
+	return h, sessions
 }
 
 func TestBrowserStartStop(t *testing.T) {
-	h := browserHarness(t, browsertest.ModeServe)
+	h, sessions := browserHarness(t, browsertest.ModeServe)
 	c, _ := h.client()
 	if _, err := c.SetKey(context.Background(), &pb.SetKeyRequest{Key: testKey}); err != nil {
 		t.Fatal(err)
 	}
 	ctx := keyed(context.Background())
-	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{}); reason(err) != "NOT_INITIALIZED" {
+	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{ProfileSessionId: "sbx-1"}); reason(err) != "NOT_INITIALIZED" {
 		t.Fatalf("browser start before Init: %v", err)
 	}
 	if _, err := c.Init(ctx, initReq()); err != nil {
 		t.Fatal(err)
 	}
 
-	r, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{})
-	if err != nil || !r.GetStarted() || r.GetCdpPort() == 0 {
-		t.Fatalf("first start: %v %v", r, err)
+	// Each fake Chrome writes the free port that it got to DevToolsActivePort.
+	activePort := func() string {
+		data, err := os.ReadFile(filepath.Join(sessions, "sbx-1", "chrome", "DevToolsActivePort"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
 	}
-	port := r.GetCdpPort()
-	r, err = c.BrowserStart(ctx, &pb.BrowserStartRequest{})
-	if err != nil || r.GetStarted() || r.GetCdpPort() != port {
-		t.Fatalf("second start: %v %v", r, err)
+	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{ProfileSessionId: "sbx-1"}); err != nil {
+		t.Fatalf("first start: %v", err)
+	}
+	first := activePort()
+	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{ProfileSessionId: "sbx-1"}); err != nil || activePort() != first {
+		t.Fatalf("second start did not keep Chrome: %v", err)
 	}
 	if hr, err := c.Health(context.Background(), &pb.HealthRequest{}); err != nil || hr.GetRunningExecutions() != 0 {
 		t.Fatalf("the browser counts as an execution: %v %v", hr, err)
@@ -65,10 +77,27 @@ func TestBrowserStartStop(t *testing.T) {
 }
 
 func TestBrowserStartFailed(t *testing.T) {
-	h := browserHarness(t, browsertest.ModeFail)
+	h, _ := browserHarness(t, browsertest.ModeFail)
 	c := h.initialized()
-	_, err := c.BrowserStart(keyed(context.Background()), &pb.BrowserStartRequest{})
+	_, err := c.BrowserStart(keyed(context.Background()), &pb.BrowserStartRequest{ProfileSessionId: "sbx-1"})
 	if reason(err) != "BROWSER_START_FAILED" || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("failing chrome: %v", err)
+	}
+}
+
+func TestBrowserStartProfileSession(t *testing.T) {
+	h, sessions := browserHarness(t, browsertest.ModeServe)
+	c := h.initialized()
+	ctx := keyed(context.Background())
+	for _, id := range []string{"../x", ""} {
+		if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{ProfileSessionId: id}); reason(err) != "INVALID_ARGUMENT" {
+			t.Fatalf("profile session %q: %v", id, err)
+		}
+	}
+	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{ProfileSessionId: "sbx-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(sessions, "sbx-1", "chrome", "DevToolsActivePort")); err != nil {
+		t.Fatalf("chrome does not use the session profile: %v", err)
 	}
 }

@@ -4481,9 +4481,14 @@ func (x *InstallSkillResponse) GetExpandedBytes() int64 {
 }
 
 type BrowserStartRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Session whose directory holds the Chrome profile:
+	// <sessions root>/<profile_session_id>/chrome. The daemon checks the ID
+	// and creates the directory as for the file calls (INVALID_ARGUMENT for a
+	// bad or empty ID).
+	ProfileSessionId string `protobuf:"bytes,1,opt,name=profile_session_id,json=profileSessionId,proto3" json:"profile_session_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *BrowserStartRequest) Reset() {
@@ -4516,12 +4521,15 @@ func (*BrowserStartRequest) Descriptor() ([]byte, []int) {
 	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{55}
 }
 
+func (x *BrowserStartRequest) GetProfileSessionId() string {
+	if x != nil {
+		return x.ProfileSessionId
+	}
+	return ""
+}
+
 type BrowserStartResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Loopback port of the DevTools endpoint (http://127.0.0.1:<port>).
-	CdpPort uint32 `protobuf:"varint,1,opt,name=cdp_port,json=cdpPort,proto3" json:"cdp_port,omitempty"`
-	// True when this call started Chrome, false when it already ran.
-	Started       bool `protobuf:"varint,2,opt,name=started,proto3" json:"started,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4554,20 +4562,6 @@ func (x *BrowserStartResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BrowserStartResponse.ProtoReflect.Descriptor instead.
 func (*BrowserStartResponse) Descriptor() ([]byte, []int) {
 	return file_sandboxd_v1_sandboxd_proto_rawDescGZIP(), []int{56}
-}
-
-func (x *BrowserStartResponse) GetCdpPort() uint32 {
-	if x != nil {
-		return x.CdpPort
-	}
-	return 0
-}
-
-func (x *BrowserStartResponse) GetStarted() bool {
-	if x != nil {
-		return x.Started
-	}
-	return false
 }
 
 type BrowserStopRequest struct {
@@ -5349,11 +5343,10 @@ const file_sandboxd_v1_sandboxd_proto_rawDesc = "" +
 	"\x14InstallSkillResponse\x12\x1c\n" +
 	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x14\n" +
 	"\x05files\x18\x02 \x01(\x03R\x05files\x12%\n" +
-	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\"\x15\n" +
-	"\x13BrowserStartRequest\"K\n" +
-	"\x14BrowserStartResponse\x12\x19\n" +
-	"\bcdp_port\x18\x01 \x01(\rR\acdpPort\x12\x18\n" +
-	"\astarted\x18\x02 \x01(\bR\astarted\"\x14\n" +
+	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\"C\n" +
+	"\x13BrowserStartRequest\x12,\n" +
+	"\x12profile_session_id\x18\x01 \x01(\tR\x10profileSessionId\"5\n" +
+	"\x14BrowserStartResponseJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\bcdp_portR\astarted\"\x14\n" +
 	"\x12BrowserStopRequest\"/\n" +
 	"\x13BrowserStopResponse\x12\x18\n" +
 	"\astopped\x18\x01 \x01(\bR\astopped\",\n" +
