@@ -11,7 +11,6 @@ import { Message } from "@/app/app/types";
 import type { ComposedMessage, MessageEdit } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
-import AgentResultsDivider from "@/lib/timeline/chat/message/AgentResultsDivider";
 import { ErrorBanner } from "@/lib/timeline/chat/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
@@ -340,20 +339,24 @@ const ChatUI = React.memo(
           </WindowedRow>
         );
       } else if (message.type === "agent_results") {
+        // The follow-up continues the turn, as T3 Code shows it: the hidden
+        // question takes no room, but keeps its row for the scroll anchor.
         return (
           <WindowedRow
             id={messageReactComponentKey}
             key={messageReactComponentKey}
-            className={cn("w-full self-center", msgWidth)}
+            className={cn("w-full self-center -mt-12", msgWidth)}
             pinned={pinned}
             initiallyMounted={initiallyMounted}
             heightCache={rowHeightCache}
           >
-            <AgentResultsDivider />
+            <div data-agent-results aria-hidden />
           </WindowedRow>
         );
       } else if (message.type === "assistant" || message.type === "error") {
         const previousMessage = i !== 0 ? messages[i - 1] : null;
+        // A turn's actions show once, under its last answer
+        const continued = messages[i + 1]?.type === "agent_results";
 
         // Skip assistant messages already rendered in MultiModelResponseView
         if (
@@ -376,7 +379,12 @@ const ChatUI = React.memo(
           <WindowedRow
             id={messageReactComponentKey}
             key={messageReactComponentKey}
-            className={cn("w-full self-center", msgWidth)}
+            className={cn(
+              "w-full self-center",
+              // The rest of the same turn
+              previousMessage?.type === "agent_results" && "-mt-8",
+              msgWidth
+            )}
             pinned={pinned}
             initiallyMounted={initiallyMounted}
             heightCache={rowHeightCache}
@@ -399,7 +407,7 @@ const ChatUI = React.memo(
                 parentMessage={previousMessage}
                 processingDurationSeconds={message.processingDurationSeconds}
                 timeSent={message.timeSent}
-                hideFooter={message.type === "error"}
+                hideFooter={message.type === "error" || continued}
                 disableTTS={message.type === "error"}
               />
             )}

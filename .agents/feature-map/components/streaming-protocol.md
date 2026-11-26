@@ -85,7 +85,22 @@ resume-stream: get_processing_stream_id (must match stream_id) -> read_stream_ch
   before the response starts (404 when it finds no buffer or a gap)
   -> StreamCursor line, then blocks + StreamCursor line per batch
   -> poll until done or the owner lapses, with heartbeats
+
+background subagent run (chat/agent_stream.py:BackgroundRunStream, from ChatRunStore.register)
+  -> its own ResponsePresenter -> StreamBufferWriter(agent session ID, stream_id = ms at start)
+       flushed every 250 ms by its own ticker; a resumed run first replays its saved output
+  -> pointer chatagentstream_{response_id} = {stream_id, activity_tool}
+  -> its own AgentEnd: OverallStop + mark_done; ChatRunStore.release closes it and drops the pointer
+agents/{agent_id}/stream: the same tailing (_tail_stream_buffer) while the pointer names the stream
 ```
+
+A background run's events never reach its parent's stream (only foreground
+children forward to the parent, `EventDelivery.forwards_to_parent`), so each
+execution writes its own buffer in the shared cache, and any pod serves it.
+`GET /chat/chat-session/{id}/agents` returns each live agent's `stream_id`
+and `activity_tool` (the tool it last started) from the pointer, and
+`GET .../agents/{agent_id}/history` returns its saved conversation with the
+live `stream`, read before the messages.
 
 `chat/execution.py:start_chat_turn` publishes the ID lines and starts the turn
 on its own threads, then returns the reader. `_stream_chat_turn` closes the

@@ -12210,9 +12210,6 @@
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
         }
       },
-      "agentResults": {
-        "received": "Résultats des sous-agents reçus"
-      },
       "callout": {
         "note": {
           "title": "Remarque"
@@ -12812,14 +12809,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "Lancement du sous-agent {name}",
-            "done": "Sous-agent {name} lancé",
-            "failed": "Impossible de lancer le sous-agent {name}",
-            "runningUnnamed": "Lancement du sous-agent",
-            "doneUnnamed": "Sous-agent lancé",
-            "failedUnnamed": "Impossible de lancer le sous-agent"
-          },
           "send": {
             "running": "Envoi du message à {name}",
             "done": "Message envoyé à {name}",
@@ -12836,6 +12825,17 @@
             "doneUnnamed": "Sous-agent interrompu",
             "failedUnnamed": "Impossible d'interrompre le sous-agent"
           }
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {# sous-agent} other {# sous-agents}}",
+          "summary": {
+            "working": "{count, number} au travail",
+            "done": "{count, number} terminés",
+            "failed": "{count, number} en échec",
+            "stopped": "{count, number} arrêtés"
+          },
+          "activity": "Utilise {tool}",
+          "open": "Ouvrir {name}"
         }
       },
       "toolApproval": {
@@ -13630,6 +13630,35 @@
       "next": "Résultat suivant",
       "placeholder": "Rechercher dans la session",
       "previous": "Résultat précédent"
+    },
+    "subagents": {
+      "status": {
+        "starting": "Démarrage",
+        "running": "En cours",
+        "waiting": "En attente",
+        "completed": "Terminé",
+        "stopped": "Arrêté",
+        "failed": "Échec",
+        "limit": "Limite d'étapes atteinte"
+      },
+      "timedStatus": {
+        "running": "En cours {elapsed}",
+        "waiting": "En attente {elapsed}",
+        "completed": "Terminé en {elapsed}"
+      },
+      "view": {
+        "parent": "Sous-agent de",
+        "parentOf": "Sous-agent de · {title}",
+        "openParentChat": "Ouvrir la discussion parente",
+        "empty": "Cet agent n'a pas encore de messages.",
+        "failed": "Impossible de charger la conversation de cet agent."
+      },
+      "bar": {
+        "runsOnItsOwn": "S'exécute de lui-même",
+        "openParent": "Ouvrir le parent",
+        "announcement": "Sous-agent {model} : {status}",
+        "announcementUnnamed": "Sous-agent : {status}"
+      }
     }
   },
   "common": {

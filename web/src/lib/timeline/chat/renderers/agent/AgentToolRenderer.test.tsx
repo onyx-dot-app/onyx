@@ -125,47 +125,43 @@ test("list_agents keeps the generic tool step", () => {
   );
 });
 
-test("a running spawn names the subagent and shows its prompt", () => {
+test("a running spawn is its subagent card alone, with its prompt", () => {
   const onComplete = renderStep(call("spawn_agent", spawnArgs, "running"));
-  expect(screen.getByTestId("icon")).toHaveTextContent("true");
-  expect(screen.getByTestId("status")).toHaveTextContent(
-    "Spawning subagent limerick-6"
-  );
-  expect(screen.getByTestId("body")).toHaveTextContent(
+  // No step header: the card stands alone, as T3 Code's
+  expect(screen.getByTestId("status")).toBeEmptyDOMElement();
+  const body = screen.getByTestId("body");
+  expect(body).toHaveTextContent("limerick-6");
+  expect(body).toHaveTextContent(
     "Wait idly for about one minute. Then write a limerick."
   );
+  expect(body).toHaveTextContent("Starting");
   expect(screen.queryByText("task_name:")).not.toBeInTheDocument();
   expect(onComplete).not.toHaveBeenCalled();
-  // A spawn that never ended has no success title to show.
-  expect(screen.getByTestId("done")).toBeEmptyDOMElement();
 });
 
 test.each([
-  ["spawn_agent", spawnArgs, "Spawned subagent limerick-6", prompt],
-  [
-    "agent",
-    { description: "limerick-6", prompt },
-    "Spawned subagent limerick-6",
-    prompt,
-  ],
-  [
-    "send_message",
-    { target: "/root/limerick-6", message: "Hurry" },
-    "Sent message to /root/limerick-6",
-    "Hurry",
-  ],
-  [
-    "send_message",
-    { to: "/root/limerick-6", message: "Hurry" },
-    "Sent message to /root/limerick-6",
-    "Hurry",
-  ],
+  ["spawn_agent", spawnArgs],
+  ["agent", { description: "limerick-6", prompt }],
+])("a finished %s call is the agent's card", (name, args) => {
+  const onComplete = renderStep(call(name, args, "done"));
+  const body = screen.getByTestId("body");
+  expect(body).toHaveTextContent("limerick-6");
+  expect(body).toHaveTextContent("Then write a limerick.");
+  expect(body).not.toHaveTextContent("Starting");
+  expect(onComplete).toHaveBeenCalled();
+});
+
+test.each([
+  [{ target: "/root/limerick-6", message: "Hurry" }],
+  [{ to: "/root/limerick-6", message: "Hurry" }],
 ])(
-  "a finished %s call names the agent and shows the text sent",
-  (name, args, title, text) => {
-    const onComplete = renderStep(call(name, args, "done"));
-    expect(screen.getByTestId("done")).toHaveTextContent(title);
-    expect(screen.getByTestId("body").textContent).toBe(text);
+  "a finished send_message call names the agent and shows the text sent",
+  (args) => {
+    const onComplete = renderStep(call("send_message", args, "done"));
+    expect(screen.getByTestId("done")).toHaveTextContent(
+      "Sent message to /root/limerick-6"
+    );
+    expect(screen.getByTestId("body").textContent).toBe("Hurry");
     expect(onComplete).toHaveBeenCalled();
   }
 );
@@ -179,17 +175,14 @@ test("a finished interrupt names the agent and has no body", () => {
 });
 
 test.each(["error", "toolError", "rejected"] as const)(
-  "a failed spawn (%s) says so",
+  "a failed spawn (%s) says so on its card",
   (end) => {
     renderStep(call("spawn_agent", spawnArgs, end));
-    expect(screen.getByTestId("done")).toHaveTextContent(
-      "Could not spawn subagent limerick-6"
-    );
+    expect(screen.getByTestId("body")).toHaveTextContent("Failed");
   }
 );
 
-test("a spawn without arguments falls back to the plain title", () => {
+test("a spawn without arguments names a subagent", () => {
   renderStep(call("spawn_agent", null, "running"));
-  expect(screen.getByTestId("status")).toHaveTextContent(/^Spawning subagent$/);
-  expect(screen.getByTestId("body")).toBeEmptyDOMElement();
+  expect(screen.getByTestId("body")).toHaveTextContent("1 subagent");
 });

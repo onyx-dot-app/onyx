@@ -12210,9 +12210,6 @@
           "text": "応答は制限時間に達したため停止しました。"
         }
       },
-      "agentResults": {
-        "received": "サブエージェントの結果を受信しました"
-      },
       "callout": {
         "note": {
           "title": "注記"
@@ -12812,14 +12809,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "サブエージェント {name} を起動中",
-            "done": "サブエージェント {name} を起動しました",
-            "failed": "サブエージェント {name} を起動できませんでした",
-            "runningUnnamed": "サブエージェントを起動中",
-            "doneUnnamed": "サブエージェントを起動しました",
-            "failedUnnamed": "サブエージェントを起動できませんでした"
-          },
           "send": {
             "running": "{name} にメッセージを送信中",
             "done": "{name} にメッセージを送信しました",
@@ -12836,6 +12825,17 @@
             "doneUnnamed": "サブエージェントを中断しました",
             "failedUnnamed": "サブエージェントを中断できませんでした"
           }
+        },
+        "agentGroup": {
+          "title": "{count, plural, other {# 件のサブエージェント}}",
+          "summary": {
+            "working": "{count, number} 件作業中",
+            "done": "{count, number} 件完了",
+            "failed": "{count, number} 件失敗",
+            "stopped": "{count, number} 件停止"
+          },
+          "activity": "{tool} を使用中",
+          "open": "{name} を開く"
         }
       },
       "toolApproval": {
@@ -13630,6 +13630,35 @@
       "next": "次の一致",
       "placeholder": "セッション内を検索",
       "previous": "前の一致"
+    },
+    "subagents": {
+      "status": {
+        "starting": "開始中",
+        "running": "実行中",
+        "waiting": "待機中",
+        "completed": "完了",
+        "stopped": "停止済み",
+        "failed": "失敗",
+        "limit": "ステップ上限に到達"
+      },
+      "timedStatus": {
+        "running": "実行中 {elapsed}",
+        "waiting": "待機中 {elapsed}",
+        "completed": "{elapsed} で完了"
+      },
+      "view": {
+        "parent": "サブエージェント",
+        "parentOf": "サブエージェント · 親: {title}",
+        "openParentChat": "親チャットを開く",
+        "empty": "このエージェントにはまだメッセージがありません。",
+        "failed": "このエージェントの会話を読み込めませんでした。"
+      },
+      "bar": {
+        "runsOnItsOwn": "単独で実行",
+        "openParent": "親を開く",
+        "announcement": "{model} サブエージェント: {status}",
+        "announcementUnnamed": "サブエージェント: {status}"
+      }
     }
   },
   "common": {

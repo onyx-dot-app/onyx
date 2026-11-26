@@ -22,10 +22,12 @@ import { PythonToolRenderer } from "@/lib/timeline/chat/renderers/code/PythonToo
 import { NestedCall } from "@/lib/timeline/chat/packetHelpers";
 import { ReasoningRenderer } from "@/lib/timeline/chat/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "@/lib/timeline/chat/message/messageComponents/renderers/CustomToolRenderer";
+import { AgentToolRenderer } from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
 import {
-  AgentToolRenderer,
   isAgentToolPacket,
-} from "@/lib/timeline/chat/renderers/agent/AgentToolRenderer";
+  isSpawnPacket,
+} from "@/lib/timeline/chat/renderers/agent/agentTools";
+import AgentGroupRenderer from "@/lib/timeline/chat/renderers/agent/AgentGroupRenderer";
 import {
   isSkillToolPacket,
   SkillToolRenderer,
@@ -189,6 +191,10 @@ export function findRenderer(
   }
   if (packets.some(isPublishFilesToolPacket)) {
     return PublishFilesToolRenderer;
+  }
+  // Spawns of one turn, which the timeline groups into one step
+  if (packets.filter(isSpawnPacket).length > 1) {
+    return AgentGroupRenderer;
   }
   if (packets.some(isAgentToolPacket)) {
     return AgentToolRenderer;

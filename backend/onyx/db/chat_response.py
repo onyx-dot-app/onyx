@@ -862,6 +862,8 @@ def reserve_child_response__no_commit(
         token_count=0,
         message_type=MessageType.ASSISTANT,
         response_status=RunStatus.RUNNING,
+        # A child runs on its spawner's model
+        model_display_name=parent.model_display_name,
     )
     session.add(response)
     session.flush()
@@ -1353,19 +1355,34 @@ def save_response_record__no_commit(
 
 
 def read_suspended_response_replay(
-    db_session: Session, response_id: int
+    db_session: Session,
+    response_id: int,
+    *,
+    claimed: bool = False,
+    root_session_id: UUID | None = None,
 ) -> tuple[ChatExecutionRecord, ResponseReplayData]:
     """The saved output of a suspended response, to replay where its run
-    continues."""
+    continues. A `claimed` response is one whose resume already marked it
+    running, as an agent host's claim of a parked run does. Its requests are
+    still replayed. `root_session_id` is the chat that holds the requests of
+    a subagent's response; it defaults to the response's own session."""
     message = db_session.get(ChatMessage, response_id)
     if message is None:
         raise ValueError("The response is not suspended")
     read = read_chat_execution(message, load_child_responses(db_session, [message]))
-    if read is None or read[0].response.status != RunStatus.SUSPENDED:
+    if read is None or (not claimed and read[0].response.status != RunStatus.SUSPENDED):
         raise ValueError("The response is not suspended")
     execution, tool_calls = read
+    chat_approvals = load_chat_approvals(
+        db_session, root_session_id or message.chat_session_id, [message.id]
+    )
     return execution, read_response_replay_data(
-        execution, tool_calls, message, db_session
+        execution,
+        tool_calls,
+        message,
+        db_session,
+        chat_approvals,
+        show_requests=claimed,
     )
 
 
@@ -1375,13 +1392,15 @@ def read_response_replay_data(
     root: ChatMessage,
     db_session: Session,
     chat_approvals: ChatApprovals | None = None,
+    show_requests: bool = False,
 ) -> ResponseReplayData:
     """Load detached display data for an already authorized response execution.
 
     `execution` and `tool_calls` are what `read_chat_execution` read from
     `root`. `chat_approvals` holds the requests of a page of responses that
     includes this one (`load_chat_approvals`); it is read for this response
-    when not given."""
+    when not given. `show_requests` replays the requests of a running
+    response whose stream starts with this replay."""
     if chat_approvals is None:
         chat_approvals = load_chat_approvals(
             db_session, root.chat_session_id, [root.id]
@@ -1458,7 +1477,10 @@ def read_response_replay_data(
     # A running response's requests reach the client through its stream.
     approvals: dict[tuple[str, str], list[SavedToolApproval]] = {}
     status = execution.response.status
-    if accepted and (status.is_terminal or status == RunStatus.SUSPENDED):
+    shows_requests = (
+        show_requests or status.is_terminal or status == RunStatus.SUSPENDED
+    )
+    if accepted and shows_requests:
         for run_id in run_ids:
             for request in chat_approvals.requests.get(int(run_id), []):
                 approvals.setdefault((run_id, request.tool_call_id), []).append(request)

@@ -113,6 +113,13 @@ class PendingChatMessage(BaseModel):
     mentions: Mentions
 
 
+class AgentStreamPointer(BaseModel):
+    """The live stream of a background run, and the tool call it last started."""
+
+    stream_id: int
+    activity_tool: str | None = None
+
+
 class QueuedChatTurn(BaseModel):
     """The next root turn: a submitted message, or unread agent results when None."""
 

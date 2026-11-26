@@ -2,7 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
-import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
+import {
+  RootLayout,
+  RootLayoutRightPanelSlotContext,
+  Section,
+} from "@opal/layouts";
 import { cn, markdown } from "@opal/utils";
 import { INTERACTIVE_SELECTOR } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -13,7 +17,8 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import useChatSessions from "@/hooks/useChatSessions";
 import { showErrorNotification } from "@/lib/sidebar/utils";
 import { endIncognitoSession } from "@/app/app/services/lib";
-import { useChatExportMenu } from "@/lib/chat/hooks";
+import { useChatExportMenu, useChatSubagents } from "@/lib/chat/hooks";
+import { subagentName, useSubagentNavigation } from "@/lib/chat/subagents";
 import ChatActivity from "@/sections/chat/ChatActivity";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
@@ -53,6 +58,61 @@ import { PANEL_TOGGLE_ROOM } from "@/lib/outputPanel/layout";
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
+
+interface ChatTitleProps {
+  sessionId: string;
+  title: string;
+}
+
+/** The chat's title; with a subagent open, `chat / subagent`, as T3 Code. */
+function ChatTitle({ sessionId, title }: ChatTitleProps) {
+  const { shownId } = useSubagentNavigation();
+  const { agents } = useChatSubagents(sessionId, false);
+  const agent = shownId
+    ? agents.find((candidate) => candidate.id === shownId)
+    : undefined;
+  if (!agent)
+    return (
+      <Text
+        as="p"
+        font="main-ui-action"
+        color="text-04"
+        maxLines={1}
+        overflowTooltip
+      >
+        {title}
+      </Text>
+    );
+  return (
+    <Section flexDirection="row" justifyContent="start" gap={0.5} height="fit">
+      {/* The chat's title gives way to the subagent's */}
+      <Section alignItems="stretch" height="fit" grow={0}>
+        <Text
+          as="p"
+          font="main-ui-action"
+          color="text-03"
+          maxLines={1}
+          overflowTooltip
+        >
+          {title}
+        </Text>
+      </Section>
+      <Text font="main-ui-action" color="text-03">
+        /
+      </Text>
+      <Section width="fit" height="fit">
+        <Text
+          as="p"
+          font="main-ui-action"
+          color="text-04"
+          wordWrap="whitespace-nowrap"
+        >
+          {subagentName(agent.path)}
+        </Text>
+      </Section>
+    </Section>
+  );
+}
 
 function Header() {
   const t = useTranslations("chat.appChrome");
@@ -251,15 +311,10 @@ function Header() {
                   currentChatSession?.id === appPosition.chat() &&
                   currentChatSession.name && (
                     <div className="min-w-0 px-2">
-                      <Text
-                        as="p"
-                        font="main-ui-action"
-                        color="text-04"
-                        maxLines={1}
-                        overflowTooltip
-                      >
-                        {currentChatSession.name}
-                      </Text>
+                      <ChatTitle
+                        sessionId={currentChatSession.id}
+                        title={currentChatSession.name}
+                      />
                     </div>
                   )}
               </div>

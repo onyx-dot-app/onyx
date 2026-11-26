@@ -233,6 +233,7 @@ export { SvgArrowLeftDot } from "@opal/icons/directional";
 export { SvgArrowRight } from "@opal/icons/directional";
 export { SvgArrowRightCircle } from "@opal/icons/directional";
 export { SvgArrowRightDot } from "@opal/icons/directional";
+export { SvgArrowUpLeft } from "@opal/icons/directional";
 export { SvgArrowUpRight } from "@opal/icons/directional";
 export { SvgArrowWallLeft } from "@opal/icons/directional";
 export { SvgArrowWallRight } from "@opal/icons/directional";

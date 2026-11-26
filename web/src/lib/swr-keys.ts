@@ -118,6 +118,8 @@ export const SWR_KEYS = {
     `/api/chat/chat-session/${sessionId}/status`,
   chatSessionAgents: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/agents`,
+  chatSubagentHistory: (sessionId: string, agentId: string) =>
+    `/api/chat/chat-session/${sessionId}/agents/${agentId}/history`,
   pendingChatMessages: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/pending-messages`,
   maxSelectedDocumentTokens: (personaId: number) =>

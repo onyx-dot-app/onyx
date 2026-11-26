@@ -12210,9 +12210,6 @@
           "text": "Die Antwort wurde gestoppt, weil sie ihr Zeitlimit erreicht hat."
         }
       },
-      "agentResults": {
-        "received": "Ergebnisse der Subagenten empfangen"
-      },
       "callout": {
         "note": {
           "title": "Hinweis"
@@ -12812,14 +12809,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "Subagent {name} wird gestartet",
-            "done": "Subagent {name} gestartet",
-            "failed": "Subagent {name} konnte nicht gestartet werden",
-            "runningUnnamed": "Subagent wird gestartet",
-            "doneUnnamed": "Subagent gestartet",
-            "failedUnnamed": "Subagent konnte nicht gestartet werden"
-          },
           "send": {
             "running": "Nachricht an {name} wird gesendet",
             "done": "Nachricht an {name} gesendet",
@@ -12836,6 +12825,17 @@
             "doneUnnamed": "Subagent unterbrochen",
             "failedUnnamed": "Subagent konnte nicht unterbrochen werden"
           }
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {# Subagent} other {# Subagenten}}",
+          "summary": {
+            "working": "{count, number} arbeiten",
+            "done": "{count, number} fertig",
+            "failed": "{count, number} fehlgeschlagen",
+            "stopped": "{count, number} gestoppt"
+          },
+          "activity": "Nutzt {tool}",
+          "open": "{name} öffnen"
         }
       },
       "toolApproval": {
@@ -13630,6 +13630,35 @@
       "next": "Nächster Treffer",
       "placeholder": "In Sitzung suchen",
       "previous": "Vorheriger Treffer"
+    },
+    "subagents": {
+      "status": {
+        "starting": "Startet",
+        "running": "Läuft",
+        "waiting": "Wartet",
+        "completed": "Abgeschlossen",
+        "stopped": "Gestoppt",
+        "failed": "Fehlgeschlagen",
+        "limit": "Schrittlimit erreicht"
+      },
+      "timedStatus": {
+        "running": "Läuft {elapsed}",
+        "waiting": "Wartet {elapsed}",
+        "completed": "Abgeschlossen in {elapsed}"
+      },
+      "view": {
+        "parent": "Subagent von",
+        "parentOf": "Subagent von · {title}",
+        "openParentChat": "Übergeordneten Chat öffnen",
+        "empty": "Dieser Agent hat noch keine Nachrichten.",
+        "failed": "Das Gespräch dieses Agenten konnte nicht geladen werden."
+      },
+      "bar": {
+        "runsOnItsOwn": "Läuft selbstständig",
+        "openParent": "Übergeordneten öffnen",
+        "announcement": "{model}-Subagent: {status}",
+        "announcementUnnamed": "Subagent: {status}"
+      }
     }
   },
   "common": {
