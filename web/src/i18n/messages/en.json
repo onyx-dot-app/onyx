@@ -6986,7 +6986,6 @@
         "defaultModel": {
           "title": "Image Model",
           "description": "The model that the Image Generation action uses.",
-          "emptyDescription": "Turn on an image model in a provider's settings to generate images.",
           "placeholder": "Select a model",
           "error": "Could not change the default image model",
           "noDefault": {
@@ -7016,9 +7015,11 @@
           "title": "Chat"
         },
         "imageGeneration": {
+          "empty": "Turn on an image model in a provider's settings to generate images.",
           "title": "Image Generation"
         },
         "decisions": {
+          "empty": "Set up an LLM or decision provider to use decisions.",
           "title": "Decisions"
         }
       }

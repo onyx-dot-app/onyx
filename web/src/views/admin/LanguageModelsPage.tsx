@@ -466,7 +466,10 @@ export default function LanguageModelsPage() {
     defaultText,
     modelPaging,
   } = useAdminLanguageModels();
-  const { defaultConfig: defaultImageConfig } = useImageGenerationConfigs();
+  const { configs: imageConfigs, defaultConfig: defaultImageConfig } =
+    useImageGenerationConfigs();
+  // While loading, the sections stay enabled rather than flash disabled.
+  const hasImageModels = imageConfigs?.length !== 0;
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
@@ -574,6 +577,9 @@ export default function LanguageModelsPage() {
     (provider) => !getProvider(provider.provider).decisionOnly
   );
   const hasProviders = chatProviders.length > 0;
+  const hasDecisionProviders = (existingLlmProviders ?? []).some(
+    (provider) => getProvider(provider.provider).decisionOnly
+  );
   const chatProviderCount = chatProviders.length;
   const isFirstProvider = chatProviderCount === 0;
 
@@ -712,19 +718,21 @@ export default function LanguageModelsPage() {
       />
 
       <SettingsLayouts.Body>
-        {hasProviders ? (
-          <>
-            {/* ── Chat: the chat defaults, then the task models ── */}
-            <Section
-              gap={3}
-              height="fit"
-              alignItems="stretch"
-              justifyContent="start"
-            >
-              <Content
-                font="main-content-emphasis"
-                title={t("sections.chat.title")}
-              />
+        <>
+          {/* Each section always shows; one with nothing to choose from is
+                disabled, and its tooltip says what to set up. */}
+          {/* ── Chat: the chat defaults, then the task models ── */}
+          <Section
+            gap={3}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              font="main-content-emphasis"
+              title={t("sections.chat.title")}
+            />
+            <Disabled disabled={!hasProviders} tooltip={t("noProviders.title")}>
               <Card border="solid" rounding={4}>
                 <Section alignItems="stretch">
                   <InputHorizontal
@@ -912,48 +920,58 @@ export default function LanguageModelsPage() {
                   )}
                 </Section>
               </Card>
-            </Section>
+            </Disabled>
+          </Section>
 
-            {/* ── Image Generation: the default image model ── */}
-            <Section
-              gap={3}
-              height="fit"
-              alignItems="stretch"
-              justifyContent="start"
+          {/* ── Image Generation: the default image model ── */}
+          <Section
+            gap={3}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              font="main-content-emphasis"
+              title={t("sections.imageGeneration.title")}
+            />
+            <Disabled
+              disabled={!hasImageModels}
+              tooltip={t("sections.imageGeneration.empty")}
             >
-              <Content
-                font="main-content-emphasis"
-                title={t("sections.imageGeneration.title")}
-              />
               <Card border="solid" rounding={4}>
                 <DefaultImageModelSetting />
               </Card>
-            </Section>
+            </Disabled>
+          </Section>
 
-            {/* ── Decisions: the decision model ── */}
-            <Section
-              gap={3}
-              height="fit"
-              alignItems="stretch"
-              justifyContent="start"
+          {/* ── Decisions: the decision model ── */}
+          <Section
+            gap={3}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              font="main-content-emphasis"
+              title={t("sections.decisions.title")}
+            />
+            {/* Search Decision also runs on chat models, so the card needs
+                  either kind of provider. */}
+            <Disabled
+              disabled={!hasProviders && !hasDecisionProviders}
+              tooltip={t("sections.decisions.empty")}
             >
-              <Content
-                font="main-content-emphasis"
-                title={t("sections.decisions.title")}
-              />
               <Card border="solid" rounding={4}>
                 <Section alignItems="stretch">
                   <DecisionModelSetting />
                   <SearchDecisionModelSetting />
                 </Section>
               </Card>
-            </Section>
+            </Disabled>
+          </Section>
 
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-          </>
-        ) : (
-          <MessageCard variant="info" title={t("noProviders.title")} />
-        )}
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
+        </>
 
         {/* ── Available Providers (only when providers exist) ── */}
         {sortedProviders.length > 0 && (

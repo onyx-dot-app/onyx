@@ -47,11 +47,7 @@ export function DefaultImageModelSetting() {
   return (
     <InputHorizontal
       title={t("defaultModel.title")}
-      description={
-        hasModels
-          ? t("defaultModel.description")
-          : t("defaultModel.emptyDescription")
-      }
+      description={t("defaultModel.description")}
       center
       withLabel
     >

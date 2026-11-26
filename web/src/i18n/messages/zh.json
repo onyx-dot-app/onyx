@@ -6986,7 +6986,6 @@
         "defaultModel": {
           "title": "图像模型",
           "description": "图像生成操作使用的模型。",
-          "emptyDescription": "在提供商设置中开启一个图像模型即可生成图像。",
           "placeholder": "选择模型",
           "error": "无法更改默认图像模型",
           "noDefault": {
@@ -7016,9 +7015,11 @@
           "title": "聊天"
         },
         "imageGeneration": {
+          "empty": "在提供商设置中开启一个图像模型即可生成图像。",
           "title": "图像生成"
         },
         "decisions": {
+          "empty": "设置 LLM 提供商或决策提供商以使用决策功能。",
           "title": "决策"
         }
       }

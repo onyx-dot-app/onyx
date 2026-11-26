@@ -6986,7 +6986,6 @@
         "defaultModel": {
           "title": "Modèle d'image",
           "description": "Le modèle qu'utilise l'action Génération d'images.",
-          "emptyDescription": "Activez un modèle d'image dans les paramètres d'un fournisseur pour générer des images.",
           "placeholder": "Sélectionnez un modèle",
           "error": "Impossible de modifier le modèle d'image par défaut",
           "noDefault": {
@@ -7016,9 +7015,11 @@
           "title": "Chat"
         },
         "imageGeneration": {
+          "empty": "Activez un modèle d'image dans les paramètres d'un fournisseur pour générer des images.",
           "title": "Génération d'images"
         },
         "decisions": {
+          "empty": "Configurez un fournisseur de LLM ou de décisions pour utiliser les décisions.",
           "title": "Décisions"
         }
       }

@@ -6986,7 +6986,6 @@
         "defaultModel": {
           "title": "이미지 모델",
           "description": "이미지 생성 작업이 사용하는 모델입니다.",
-          "emptyDescription": "이미지를 생성하려면 제공자 설정에서 이미지 모델을 켜세요.",
           "placeholder": "모델 선택",
           "error": "기본 이미지 모델을 변경할 수 없습니다",
           "noDefault": {
@@ -7016,9 +7015,11 @@
           "title": "채팅"
         },
         "imageGeneration": {
+          "empty": "이미지를 생성하려면 제공자 설정에서 이미지 모델을 켜세요.",
           "title": "이미지 생성"
         },
         "decisions": {
+          "empty": "결정을 사용하려면 LLM 공급자 또는 결정 공급자를 설정하세요.",
           "title": "결정"
         }
       }

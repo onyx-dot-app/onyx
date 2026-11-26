@@ -6986,7 +6986,6 @@
         "defaultModel": {
           "title": "Bildmodell",
           "description": "Das Modell, das die Aktion Bildgenerierung verwendet.",
-          "emptyDescription": "Aktivieren Sie ein Bildmodell in den Einstellungen eines Anbieters, um Bilder zu generieren.",
           "placeholder": "Modell auswählen",
           "error": "Das Standard-Bildmodell konnte nicht geändert werden",
           "noDefault": {
@@ -7016,9 +7015,11 @@
           "title": "Chat"
         },
         "imageGeneration": {
+          "empty": "Aktivieren Sie ein Bildmodell in den Einstellungen eines Anbieters, um Bilder zu generieren.",
           "title": "Bildgenerierung"
         },
         "decisions": {
+          "empty": "Richten Sie einen LLM- oder Entscheidungsanbieter ein, um Entscheidungen zu nutzen.",
           "title": "Entscheidungen"
         }
       }
