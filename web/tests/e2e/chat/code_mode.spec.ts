@@ -12,7 +12,7 @@ const TOOL_OUTPUT = "3 orders";
 const MESSAGE = "You have three open orders.";
 // Code mode runs behind the scenes; none of it is user-facing copy.
 const CODE_MODE_TEXT =
-  /program output|await tools\.lookup_orders|\bcell\b|Ran code|continues|execute_code|wait_code|\b(?:exec|repl)\b|\b(?:wait|poll)\(cell_id/i;
+  /program output|await tools\.lookup_orders|\bcell\b|Ran code|continues|execute_code|wait_code|\b(?:wait|poll)\(cell_id/i;
 
 test.describe("Code mode", () => {
   test.beforeEach(() => {

@@ -11,6 +11,7 @@ from pydantic_monty import Monty, MontyTypingError
 
 from onyx.llm.model_capabilities import ToolFamily
 from onyx.llm.models import ToolResult
+from onyx.prompts.tool_prompts import WEB_SEARCH_DESCRIPTION
 from onyx.tools.constants import (
     SEND_MESSAGE_TOOL_NAME,
     SKILLS_LIST_TOOL_NAME,
@@ -47,9 +48,6 @@ from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OPEN_URL_SHAPES,
     OPEN_URL_TOOL_NAMES,
@@ -78,6 +76,7 @@ from onyx.tools.tool_implementations.subagents.subagent_tools import (
     ListAgentsTool,
 )
 from tests.unit.onyx.tools.code_mode.fakes import (
+    FakeImageGenerationTool,
     FakeMCPTool,
     FakeTool,
     FakeWebSearchTool,
@@ -207,9 +206,9 @@ class _BatchedSearchTool(FakeWebSearchTool):
 def test_usage_note_reaches_the_docstring() -> None:
     stubs = build_tool_stubs(OPENAI_CODE_MODE, [_BatchedSearchTool(_unused)])
     assert (
-        "snippets.\n\n        Pass all queries in one call.\n\n        Args:"
-        in _full_text(stubs)
-    )
+        f"{WEB_SEARCH_DESCRIPTION.splitlines()[-1]}\n\n"
+        "        Pass all queries in one call.\n\n        Args:"
+    ) in _full_text(stubs)
 
 
 def test_mcp_like_schema_with_odd_names_and_refs() -> None:
@@ -703,13 +702,6 @@ def test_stub_text_is_deterministic() -> None:
     )
 
 
-class FakeImageGenerationTool(ImageGenerationTool):
-    """An image generation tool without a provider; only its stub is used."""
-
-    def __init__(self) -> None:
-        self._id = 5
-
-
 def test_image_generation_returns_typed_images() -> None:
     stubs = build_tool_stubs(OPENAI_CODE_MODE, [FakeImageGenerationTool()])
     function = stubs.functions["generate_image"]
@@ -863,7 +855,8 @@ def test_the_names_of_different_operations_never_overlap() -> None:
     ]
     names = [name for operation in operations for name in operation]
     assert len(names) == len(set(names))
-    # Each family names each operation, and the families' names differ.
+    # Each family names each operation; outside code mode's shared run tool,
+    # the families' names differ.
     for family in ToolFamily:
         shape = CODE_MODE_SHAPES[family]
         assert shape.run_name in RUN_TOOL_NAMES
@@ -874,13 +867,34 @@ def test_the_names_of_different_operations_never_overlap() -> None:
         assert SKILL_READ_SHAPES[family].name in SKILLS_READ_TOOL_NAMES
         assert OPEN_URL_SHAPES[family].name in OPEN_URL_TOOL_NAMES
     for names_by_family in (
-        [shape.run_name for shape in CODE_MODE_SHAPES.values()],
         [shape.name for shape in SHELL_SHAPES.values()],
         [shape.spawn_name for shape in AGENT_SHAPES.values()],
         [shape.name for shape in SKILL_READ_SHAPES.values()],
         [shape.name for shape in OPEN_URL_SHAPES.values()],
     ):
         assert len(set(names_by_family)) == len(ToolFamily)
+
+
+def test_every_family_runs_programs_with_execute_code() -> None:
+    """Every family names the run tool `execute_code`; the wait tool and the
+    program functions keep each family's names."""
+    assert {
+        family: (
+            shape.run_name,
+            shape.wait_name,
+            shape.search_name,
+            shape.describe.name if shape.describe else None,
+        )
+        for family, shape in CODE_MODE_SHAPES.items()
+    } == {
+        ToolFamily.OPENAI: ("execute_code", "wait", "tool_search", None),
+        ToolFamily.CLAUDE: (
+            "execute_code",
+            "poll",
+            "search_tools",
+            "describe_tool",
+        ),
+    }
 
 
 def test_tool_search_matches_words_in_any_script() -> None:
@@ -1274,3 +1288,20 @@ def test_a_program_gets_the_full_value_that_the_content_cuts() -> None:
         "state": "whole",
         "exit_code": None,
     }
+
+
+def test_every_line_of_a_multi_line_description_is_indented() -> None:
+    tool = FakeMCPTool("lookup", _unused, {"type": "object", "properties": {}})
+    tool._description = 'First line.\n- a "quoted" item\n\nLast line ends with "'
+    [function_stub] = build_tool_stubs(OPENAI_CODE_MODE, [tool]).functions.values()
+    stub = function_stub.stub
+    assert '\n        - a "quoted" item\n\n        Last line ends with \\"' in stub
+    [tools_class] = ast.parse(f"class tools:\n{stub}").body
+    assert isinstance(tools_class, ast.ClassDef)
+    [function] = tools_class.body
+    assert isinstance(function, ast.AsyncFunctionDef)
+    docstring = ast.get_docstring(function)
+    assert docstring is not None
+    assert docstring.startswith(
+        'First line.\n- a "quoted" item\n\nLast line ends with "\n'
+    )
