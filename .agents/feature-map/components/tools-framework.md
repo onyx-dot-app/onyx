@@ -204,7 +204,10 @@ run_in_background)` or `exec_command(cmd, workdir, yield_time_ms,
 max_output_tokens)`, and `write_stdin` with `timeout` or `yield_time_ms` and
 `max_output_tokens`), `tools/tool_implementations/subagents/shapes.py:AGENT_SHAPES` (`agent(description,
 prompt)` or `spawn_agent(task_name, message)`; `send_message` with `to` or
-`target`; only the OpenAI shape has `wait_agent`),
+`target`; only the OpenAI shape has `wait_agent`. The web timeline keeps its
+own copy of the spawn, `send_message` and `interrupt_agent` names and
+arguments in `web/src/lib/timeline/chat/renderers/agent/AgentToolRenderer.tsx`,
+which titles those calls with the agent's name and shows the text sent),
 `tools/tool_implementations/skills/skill_tools.py:SKILL_READ_SHAPES` (`skill(skill)` or
 `skills_read(name)`), and `tools/tool_implementations/open_url/open_url_tool.py:OPEN_URL_SHAPES`
 (`web_fetch` or `open_url`, same arguments), and
@@ -243,7 +246,11 @@ returns its SKILL.md, frontmatter included, up to 32,000 characters per call
 sandbox tool `load_skill` copies a skill into the VM. The Deep Research orchestrator binds
 both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
-tool catalog rows. A direct call renders as a generic tool card
+tool catalog rows. A direct read (`skills_read` or `skill`) or `load_skill`
+call renders as a skill step with the skill icon, titled "Read skill {name}"
+or "Loaded skill {name}", with no body
+(`web/src/lib/timeline/chat/renderers/skill/SkillToolRenderer.tsx`). A direct
+`skills_list` call renders as a generic tool card
 (`web/src/lib/timeline/chat/message/messageComponents/renderers/CustomToolRenderer.tsx`),
 not the SKILL.md text. The card shows the arguments as fields, and hides a
 response whose fields all repeat a request field (same key and value). In code mode they are `IMMEDIATE`
@@ -441,7 +448,13 @@ are plain `AgentTool` objects with no `Tool` row, and
    delta by the type of `details`. A tool with no branch renders as a custom
    tool: `CustomToolStart` and `CustomToolArgs`, then its `content` as text for
    a successful result only. An error shows no text unless its details are
-   `ToolExecutionError`. Return typed `details`: with `details=None`, the live
+   `ToolExecutionError`. An error result without details (a
+   `ToolCallException`) sends a `CustomToolDelta` with `response_type`
+   `"error"` (`CUSTOM_TOOL_ERROR_RESPONSE_TYPE`) and no data, so the card shows
+   that the call failed; it sends no `error` packet, which would end the
+   widget's stream. A call whose approval request ended without an approval
+   (`ToolRenderer.approval_resolved`) gets no marker: its card shows the
+   decision. Return typed `details`: with `details=None`, the live
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed arguments
    show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):

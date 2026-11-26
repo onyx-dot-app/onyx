@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} 无法连接到其服务器"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} 失败"
         }
       },
       "customToolAuth": {
@@ -12785,6 +12788,50 @@
             "failed": {
               "status": "发布失败"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "正在读取技能 {name}",
+            "done": "已读取技能 {name}",
+            "failed": "无法读取技能 {name}",
+            "runningUnnamed": "正在读取技能",
+            "doneUnnamed": "已读取技能",
+            "failedUnnamed": "无法读取技能"
+          },
+          "load": {
+            "running": "正在加载技能 {name}",
+            "done": "已加载技能 {name}",
+            "failed": "无法加载技能 {name}",
+            "runningUnnamed": "正在加载技能",
+            "doneUnnamed": "已加载技能",
+            "failedUnnamed": "无法加载技能"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "正在启动子代理 {name}",
+            "done": "已启动子代理 {name}",
+            "failed": "无法启动子代理 {name}",
+            "runningUnnamed": "正在启动子代理",
+            "doneUnnamed": "已启动子代理",
+            "failedUnnamed": "无法启动子代理"
+          },
+          "send": {
+            "running": "正在向 {name} 发送消息",
+            "done": "已向 {name} 发送消息",
+            "failed": "无法向 {name} 发送消息",
+            "runningUnnamed": "正在向子代理发送消息",
+            "doneUnnamed": "已向子代理发送消息",
+            "failedUnnamed": "无法向子代理发送消息"
+          },
+          "interrupt": {
+            "running": "正在中断 {name}",
+            "done": "已中断 {name}",
+            "failed": "无法中断 {name}",
+            "runningUnnamed": "正在中断子代理",
+            "doneUnnamed": "已中断子代理",
+            "failedUnnamed": "无法中断子代理"
           }
         }
       },

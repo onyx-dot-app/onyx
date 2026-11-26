@@ -4,16 +4,12 @@ import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { Button, Collapsible, Text, Tooltip } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
+import { Section } from "@opal/layouts";
 import { cn, stripBidiControls } from "@opal/utils";
-import {
-  SvgCheckSquare,
-  SvgChevronDown,
-  SvgClock,
-  SvgLoader,
-  SvgX,
-} from "@opal/icons";
+import { SvgChevronDown, SvgLoader } from "@opal/icons";
 import CometEdge from "@/refresh-components/CometEdge";
+import { RunStep } from "@/lib/timeline/components/RunStep";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import type {
   ApprovalStatus,
   ApprovalSubmitDecision,
@@ -45,7 +41,10 @@ export interface ApprovalCardProps {
   onDecide: (decision: ApprovalSubmitDecision) => Promise<void>;
 }
 
-/** A pending request shows its details and decisions; a decided one, one line. */
+/**
+ * A pending request shows its details and decisions; a decided one, a
+ * timeline step whose body holds the details.
+ */
 export default function ApprovalCard({
   actions: rawActions,
   appName: rawAppName,
@@ -119,47 +118,39 @@ export default function ApprovalCard({
   const single = actions.length === 1;
 
   const details = (
-    // Indented under the header text, past the spinner.
-    <div className="ps-9 pe-3 pb-2">
-      <Section gap={1.5} alignItems="stretch" height="auto">
-        {single
-          ? action?.description && (
-              <Text
-                font="secondary-body"
-                color="text-03"
-                wordWrap="wrap-anywhere"
-              >
-                {action.description}
-              </Text>
-            )
-          : actions.map((item) => (
-              <Text
-                key={item.id}
-                font="secondary-body"
-                color="text-04"
-                wordWrap="wrap-anywhere"
-              >
-                {item.description
-                  ? t("actionWithDescription", {
-                      action: item.name,
-                      description: item.description,
-                    })
-                  : item.name}
-              </Text>
-            ))}
-        <PayloadView payload={payload} />
-        {error && (
-          <Text
-            as="p"
-            role="alert"
-            font="secondary-body"
-            color="status-error-05"
-          >
-            {t("submitError")}
-          </Text>
-        )}
-      </Section>
-    </div>
+    <Section gap={1.5} alignItems="stretch" height="auto">
+      {single
+        ? action?.description && (
+            <Text
+              font="secondary-body"
+              color="text-03"
+              wordWrap="wrap-anywhere"
+            >
+              {action.description}
+            </Text>
+          )
+        : actions.map((item) => (
+            <Text
+              key={item.id}
+              font="secondary-body"
+              color="text-04"
+              wordWrap="wrap-anywhere"
+            >
+              {item.description
+                ? t("actionWithDescription", {
+                    action: item.name,
+                    description: item.description,
+                  })
+                : item.name}
+            </Text>
+          ))}
+      <PayloadView payload={payload} />
+      {error && (
+        <Text as="p" role="alert" font="secondary-body" color="status-error-05">
+          {t("submitError")}
+        </Text>
+      )}
+    </Section>
   );
 
   return (
@@ -171,19 +162,12 @@ export default function ApprovalCard({
         </Text>
       </div>
       {record !== null ? (
-        <div aria-hidden>
-          <Content
-            font="main-ui-muted"
-            icon={
-              status === "approved" || status === "approvedForSession"
-                ? SvgCheckSquare
-                : status === "rejected" || status === "disabled"
-                  ? SvgX
-                  : SvgClock
-            }
-            title={record}
-          />
-        </div>
+        <RunStep
+          status="done"
+          icon={STEP_ICONS.request}
+          title={record}
+          body={details}
+        />
       ) : (
         <CometEdge active tone="info" speedSeconds={3.6}>
           <div className="rounded-08 border border-status-info-03 overflow-hidden bg-background-neutral-00">
@@ -220,7 +204,10 @@ export default function ApprovalCard({
                   )}
                 />
               </Collapsible.Trigger>
-              <Collapsible.Content>{details}</Collapsible.Content>
+              <Collapsible.Content>
+                {/* Indented under the header text, past the spinner. */}
+                <div className="ps-9 pe-3 pb-2">{details}</div>
+              </Collapsible.Content>
             </Collapsible.Root>
             <div className="px-3 pb-3 pt-1">
               <Section

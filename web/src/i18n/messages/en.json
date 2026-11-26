@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} could not reach its server"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} failed"
         }
       },
       "customToolAuth": {
@@ -12785,6 +12788,50 @@
             "failed": {
               "status": "Publish failed"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "Reading skill {name}",
+            "done": "Read skill {name}",
+            "failed": "Could not read skill {name}",
+            "runningUnnamed": "Reading skill",
+            "doneUnnamed": "Read skill",
+            "failedUnnamed": "Could not read skill"
+          },
+          "load": {
+            "running": "Loading skill {name}",
+            "done": "Loaded skill {name}",
+            "failed": "Could not load skill {name}",
+            "runningUnnamed": "Loading skill",
+            "doneUnnamed": "Loaded skill",
+            "failedUnnamed": "Could not load skill"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Spawning subagent {name}",
+            "done": "Spawned subagent {name}",
+            "failed": "Could not spawn subagent {name}",
+            "runningUnnamed": "Spawning subagent",
+            "doneUnnamed": "Spawned subagent",
+            "failedUnnamed": "Could not spawn subagent"
+          },
+          "send": {
+            "running": "Sending message to {name}",
+            "done": "Sent message to {name}",
+            "failed": "Could not send message to {name}",
+            "runningUnnamed": "Sending message to subagent",
+            "doneUnnamed": "Sent message to subagent",
+            "failedUnnamed": "Could not send message to subagent"
+          },
+          "interrupt": {
+            "running": "Interrupting {name}",
+            "done": "Interrupted {name}",
+            "failed": "Could not interrupt {name}",
+            "runningUnnamed": "Interrupting subagent",
+            "doneUnnamed": "Interrupted subagent",
+            "failedUnnamed": "Could not interrupt subagent"
           }
         }
       },

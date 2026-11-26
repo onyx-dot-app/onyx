@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} não conseguiu alcançar o servidor"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} falhou"
         }
       },
       "customToolAuth": {
@@ -12785,6 +12788,50 @@
             "failed": {
               "status": "Falha ao publicar"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "Lendo a habilidade {name}",
+            "done": "Habilidade {name} lida",
+            "failed": "Não foi possível ler a habilidade {name}",
+            "runningUnnamed": "Lendo a habilidade",
+            "doneUnnamed": "Habilidade lida",
+            "failedUnnamed": "Não foi possível ler a habilidade"
+          },
+          "load": {
+            "running": "Carregando a habilidade {name}",
+            "done": "Habilidade {name} carregada",
+            "failed": "Não foi possível carregar a habilidade {name}",
+            "runningUnnamed": "Carregando a habilidade",
+            "doneUnnamed": "Habilidade carregada",
+            "failedUnnamed": "Não foi possível carregar a habilidade"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Iniciando o subagente {name}",
+            "done": "Subagente {name} iniciado",
+            "failed": "Não foi possível iniciar o subagente {name}",
+            "runningUnnamed": "Iniciando o subagente",
+            "doneUnnamed": "Subagente iniciado",
+            "failedUnnamed": "Não foi possível iniciar o subagente"
+          },
+          "send": {
+            "running": "Enviando mensagem para {name}",
+            "done": "Mensagem enviada para {name}",
+            "failed": "Não foi possível enviar a mensagem para {name}",
+            "runningUnnamed": "Enviando mensagem para o subagente",
+            "doneUnnamed": "Mensagem enviada para o subagente",
+            "failedUnnamed": "Não foi possível enviar a mensagem para o subagente"
+          },
+          "interrupt": {
+            "running": "Interrompendo {name}",
+            "done": "{name} interrompido",
+            "failed": "Não foi possível interromper {name}",
+            "runningUnnamed": "Interrompendo o subagente",
+            "doneUnnamed": "Subagente interrompido",
+            "failedUnnamed": "Não foi possível interromper o subagente"
           }
         }
       },

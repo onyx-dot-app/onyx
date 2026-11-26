@@ -131,7 +131,7 @@ describe("Session approval eligibility", () => {
   });
 });
 
-test("expired outcomes leave a one-line neutral record", () => {
+test("expired outcomes leave a neutral step with no decisions", () => {
   const { container } = render(
     <ApprovalCard
       approval={{ ...approval, decision: "EXPIRED", is_live: false }}
@@ -142,6 +142,12 @@ test("expired outcomes leave a one-line neutral record", () => {
   );
   expect(container.querySelector(".craft-comet")).toBeNull();
   expect(container.querySelector(".border-status-error-03")).toBeNull();
-  expect(screen.queryByRole("button")).not.toBeInTheDocument();
-  expect(screen.queryByText("No payload.")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /approve.*once/i })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", {
+      name: "Expand Timed out: Send message in Slack",
+    })
+  ).toHaveAttribute("aria-expanded", "false");
 });

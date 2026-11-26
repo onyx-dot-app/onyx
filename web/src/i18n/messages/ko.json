@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} 실패"
         }
       },
       "customToolAuth": {
@@ -12785,6 +12788,50 @@
             "failed": {
               "status": "게시 실패"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "스킬 {name} 읽는 중",
+            "done": "스킬 {name} 읽음",
+            "failed": "스킬 {name}을(를) 읽을 수 없음",
+            "runningUnnamed": "스킬 읽는 중",
+            "doneUnnamed": "스킬 읽음",
+            "failedUnnamed": "스킬을 읽을 수 없음"
+          },
+          "load": {
+            "running": "스킬 {name} 불러오는 중",
+            "done": "스킬 {name} 불러옴",
+            "failed": "스킬 {name}을(를) 불러올 수 없음",
+            "runningUnnamed": "스킬 불러오는 중",
+            "doneUnnamed": "스킬 불러옴",
+            "failedUnnamed": "스킬을 불러올 수 없음"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "하위 에이전트 {name} 시작 중",
+            "done": "하위 에이전트 {name} 시작함",
+            "failed": "하위 에이전트 {name}을(를) 시작할 수 없음",
+            "runningUnnamed": "하위 에이전트 시작 중",
+            "doneUnnamed": "하위 에이전트 시작함",
+            "failedUnnamed": "하위 에이전트를 시작할 수 없음"
+          },
+          "send": {
+            "running": "{name}에게 메시지 보내는 중",
+            "done": "{name}에게 메시지 보냄",
+            "failed": "{name}에게 메시지를 보낼 수 없음",
+            "runningUnnamed": "하위 에이전트에게 메시지 보내는 중",
+            "doneUnnamed": "하위 에이전트에게 메시지 보냄",
+            "failedUnnamed": "하위 에이전트에게 메시지를 보낼 수 없음"
+          },
+          "interrupt": {
+            "running": "{name} 중단 중",
+            "done": "{name} 중단함",
+            "failed": "{name}을(를) 중단할 수 없음",
+            "runningUnnamed": "하위 에이전트 중단 중",
+            "doneUnnamed": "하위 에이전트 중단함",
+            "failedUnnamed": "하위 에이전트를 중단할 수 없음"
           }
         }
       },

@@ -930,7 +930,9 @@ test("a question waits with a header, then a typed answer shows as the user's me
       "Answered in the chat"
     );
     expect(
-      within(record).getByText("Which files should I change?")
+      within(record).getByRole("button", {
+        name: "Expand Answered in the chat",
+      })
     ).toBeInTheDocument();
     expect(screen.getByText("Only the README")).toBeInTheDocument();
     // The user's message comes after the record and before the answer.

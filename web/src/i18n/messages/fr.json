@@ -12278,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} n'a pas pu joindre son serveur"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} a échoué"
         }
       },
       "customToolAuth": {
@@ -12785,6 +12788,50 @@
             "failed": {
               "status": "Échec de la publication"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "Lecture de la compétence {name}",
+            "done": "Compétence {name} lue",
+            "failed": "Impossible de lire la compétence {name}",
+            "runningUnnamed": "Lecture de la compétence",
+            "doneUnnamed": "Compétence lue",
+            "failedUnnamed": "Impossible de lire la compétence"
+          },
+          "load": {
+            "running": "Chargement de la compétence {name}",
+            "done": "Compétence {name} chargée",
+            "failed": "Impossible de charger la compétence {name}",
+            "runningUnnamed": "Chargement de la compétence",
+            "doneUnnamed": "Compétence chargée",
+            "failedUnnamed": "Impossible de charger la compétence"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Lancement du sous-agent {name}",
+            "done": "Sous-agent {name} lancé",
+            "failed": "Impossible de lancer le sous-agent {name}",
+            "runningUnnamed": "Lancement du sous-agent",
+            "doneUnnamed": "Sous-agent lancé",
+            "failedUnnamed": "Impossible de lancer le sous-agent"
+          },
+          "send": {
+            "running": "Envoi du message à {name}",
+            "done": "Message envoyé à {name}",
+            "failed": "Impossible d'envoyer le message à {name}",
+            "runningUnnamed": "Envoi du message au sous-agent",
+            "doneUnnamed": "Message envoyé au sous-agent",
+            "failedUnnamed": "Impossible d'envoyer le message au sous-agent"
+          },
+          "interrupt": {
+            "running": "Interruption de {name}",
+            "done": "{name} interrompu",
+            "failed": "Impossible d'interrompre {name}",
+            "runningUnnamed": "Interruption du sous-agent",
+            "doneUnnamed": "Sous-agent interrompu",
+            "failedUnnamed": "Impossible d'interrompre le sous-agent"
           }
         }
       },

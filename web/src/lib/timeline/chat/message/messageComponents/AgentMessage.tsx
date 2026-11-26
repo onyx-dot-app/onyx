@@ -654,6 +654,11 @@ const AgentMessage = React.memo(function AgentMessage({
                           case "record":
                             return {
                               kind: "card",
+                              // A decided request is a step row, as in T3 Code.
+                              flush:
+                                segment.record.kind === "approval"
+                                  ? segment.record.status !== "pending"
+                                  : segment.record.status.kind !== "pending",
                               key:
                                 segment.record.kind === "approval"
                                   ? segment.record.request.approval_id

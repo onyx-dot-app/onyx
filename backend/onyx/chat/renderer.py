@@ -727,6 +727,10 @@ def question_resolved(
     )
 
 
+# The response type of a generic card's call that failed without details.
+CUSTOM_TOOL_ERROR_RESPONSE_TYPE = "error"
+
+
 class ToolRenderer:
     """Project tool progress and final results without sending private tool state."""
 
@@ -754,6 +758,11 @@ class ToolRenderer:
         self._finished = False
         # The end packet of a failed call, chosen with the start packet.
         self._own_end: OwnEndPacket | None = None
+        # The call shows on the generic tool card (CustomToolStart).
+        self._generic_display = False
+        # An approval request of the call ended without an approval, so its
+        # error result is that decision, not a failure.
+        self._not_approved = False
 
     def consume(
         self,
@@ -788,11 +797,18 @@ class ToolRenderer:
                 else tool_arguments_for_display(call),
             )
         else:
-            obj = packets.ToolApprovalResolved(
-                approval_id=event.request.request_id,
-                outcome=approval_outcome(event.answer),
+            obj = self.approval_resolved(
+                event.request.request_id, approval_outcome(event.answer)
             )
         return [packets.Packet(placement=self.placement, obj=obj)]
+
+    def approval_resolved(
+        self, approval_id: str, outcome: packets.ToolApprovalOutcome
+    ) -> packets.ToolApprovalResolved:
+        """The end of one of the call's approval requests, live or saved."""
+        if outcome not in ("approved", "approved_for_chat"):
+            self._not_approved = True
+        return packets.ToolApprovalResolved(approval_id=approval_id, outcome=outcome)
 
     def start(self) -> list[packets.Packet]:
         if self._started:
@@ -820,6 +836,7 @@ class ToolRenderer:
             else OWN_END_PACKETS.get(name)
         )
         if not objects:
+            self._generic_display = True
             objects = [
                 packets.CustomToolStart(
                     tool_name=name,
@@ -1208,11 +1225,30 @@ class ToolRenderer:
             return [
                 packets.Packet(placement=self.placement, obj=end(error=result.text))
             ]
-        if result is not None:
-            return self._detail_packets(
-                result.details, "" if result.is_error else result.text
-            )
-        return []
+        if result is None:
+            return []
+        if (
+            self._generic_display
+            and result.is_error
+            and result.details is None
+            and not self._not_approved
+        ):
+            # A rejected call (ToolCallException) has no public error details.
+            # Its text goes to the model and can be private, so the card gets
+            # only the failure. An error packet would end the widget's stream.
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.CustomToolDelta(
+                        tool_name=self.call.name,
+                        tool_id=self.tool_id,
+                        response_type=CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
+                    ),
+                )
+            ]
+        return self._detail_packets(
+            result.details, "" if result.is_error else result.text
+        )
 
     def amend(self, result: ToolResultFields) -> list[packets.Packet]:
         """Render the result that a release hook set for the call.
