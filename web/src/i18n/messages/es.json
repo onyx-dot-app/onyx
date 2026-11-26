@@ -12194,6 +12194,9 @@
       },
       "pendingUserInput": {
         "toast": "Responde primero a las solicitudes de aprobación o preguntas pendientes."
+      },
+      "fileDropOverlay": {
+        "label": "Suelta archivos para adjuntarlos"
       }
     },
     "messages": {

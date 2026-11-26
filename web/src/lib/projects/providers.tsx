@@ -29,6 +29,7 @@ import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
   uploadFiles as svcUploadFiles,
+  isUploadCancelled,
   getRecentFiles as svcGetRecentFiles,
   getFilesInProject as svcGetFilesInProject,
   getProject as svcGetProject,
@@ -42,6 +43,7 @@ import {
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
 } from "@/lib/projects/svc";
+import { trackUpload } from "@/lib/projects/uploadProgress";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { ChatFileType } from "@/app/app/types";
@@ -160,6 +162,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const currentMessageFilesRef = useRef<ProjectFile[]>([]);
   const pollIntervalRef = useRef<number | null>(null);
   const isPollingRef = useRef<boolean>(false);
+  // Cancelled uploads still being unlinked and deleted. The status poll does
+  // not refresh while one runs: its list could still hold the file, and the
+  // cleanup refreshes when it ends.
+  const pendingCleanupsRef = useRef(0);
   const [lastFailedFiles, setLastFailedFiles] = useState<ProjectFile[]>([]);
   const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
     new Set()
@@ -396,7 +402,17 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
-      svcUploadFiles(validFiles, projectId, tempIds, incognitoSessionId)
+      const upload = trackUpload(tempIds);
+      // The cleanup of cancelled files; the refresh waits for it, so it does
+      // not list a file that is still linked.
+      let cleanup: Promise<unknown> = Promise.resolve();
+      svcUploadFiles(
+        validFiles,
+        projectId,
+        tempIds,
+        incognitoSessionId,
+        upload.options
+      )
         .then((uploaded) => {
           if (
             incognitoSessionId &&
@@ -410,7 +426,41 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             );
             return;
           }
-          const uploadedFiles = uploaded.user_files || [];
+          // A file the user removed while its batch uploaded is deleted again.
+          const cancelledTempIds = new Set(
+            tempIds.filter((tempId) => upload.isCancelled(tempId))
+          );
+          const isCancelled = (f: ProjectFile) =>
+            Boolean(f.temp_id && cancelledTempIds.has(f.temp_id));
+          const cancelledFiles = (uploaded.user_files || []).filter(
+            isCancelled
+          );
+          if (cancelledFiles.length > 0) pendingCleanupsRef.current++;
+          cleanup = Promise.all(
+            cancelledFiles.map((f) =>
+              (async () => {
+                // The delete keeps a file that a project links, so a project
+                // upload is unlinked first.
+                if (projectId) {
+                  await svcUnlinkFileFromProject(projectId, f.id);
+                }
+                const result = await svcDeleteUserFile(f.id);
+                if (result.has_associations) {
+                  throw new Error("The cancelled upload is still linked");
+                }
+              })().catch((error: unknown) =>
+                console.error("Failed to delete a cancelled upload:", error)
+              )
+            )
+          ).finally(() => {
+            if (cancelledFiles.length > 0) pendingCleanupsRef.current--;
+          });
+          if (cancelledTempIds.size > 0) {
+            removeOptimisticFilesByTempIds(cancelledTempIds, projectId);
+          }
+          const uploadedFiles = (uploaded.user_files || []).filter(
+            (f) => !isCancelled(f)
+          );
           const tempIdToUploadedFileMap = new Map(
             uploadedFiles.map((f) => [f.temp_id, f])
           );
@@ -461,7 +511,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
             // A file that the server did not return was rejected.
             const failedTempIds = tempIds.filter(
-              (tempId) => !tempIdToUploadedFileMap.has(tempId)
+              (tempId) =>
+                !tempIdToUploadedFileMap.has(tempId) &&
+                !cancelledTempIds.has(tempId)
             );
             removeOptimisticFilesByTempIds(new Set(failedTempIds), projectId);
             if (failedTempIds.length > 0) {
@@ -475,9 +527,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
               return next;
             });
           }
-          onSuccess?.(uploaded);
+          onSuccess?.({ ...uploaded, user_files: uploadedFiles });
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           // Roll back optimistic inserts on failure
           const optimisticTempIds = new Set(
             optimisticFiles
@@ -487,15 +539,20 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
           removeOptimisticFilesByTempIds(optimisticTempIds, projectId);
 
-          toast.error(t("projects.uploads.failed.toast"));
+          if (!isUploadCancelled(err)) {
+            toast.error(t("projects.uploads.failed.toast"));
+          }
 
           onFailure?.(Array.from(optimisticTempIds));
         })
         .finally(() => {
-          if (projectId && currentProjectId === projectId) {
-            refreshCurrentProjectDetails();
-          }
-          refreshRecentFiles();
+          upload.finish();
+          void cleanup.then(() => {
+            if (projectId && currentProjectId === projectId) {
+              refreshCurrentProjectDetails();
+            }
+            refreshRecentFiles();
+          });
         });
       return optimisticFiles;
     },
@@ -770,7 +827,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         });
 
         // If all tracked uploads finished (completed or failed), do a single refresh
-        if (remaining.size === 0) {
+        if (remaining.size === 0 && pendingCleanupsRef.current === 0) {
           if (currentProjectId) {
             await refreshCurrentProjectDetails();
           }

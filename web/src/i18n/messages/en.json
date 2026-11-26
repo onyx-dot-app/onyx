@@ -12194,6 +12194,9 @@
       },
       "pendingUserInput": {
         "toast": "Answer the pending approval requests or questions first."
+      },
+      "fileDropOverlay": {
+        "label": "Drop files to attach"
       }
     },
     "messages": {

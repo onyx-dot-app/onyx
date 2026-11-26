@@ -12194,6 +12194,9 @@
       },
       "pendingUserInput": {
         "toast": "请先处理待处理的批准请求或问题。"
+      },
+      "fileDropOverlay": {
+        "label": "拖放文件以附加"
       }
     },
     "messages": {

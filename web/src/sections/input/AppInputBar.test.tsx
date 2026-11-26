@@ -27,6 +27,7 @@ import type { PickerSections } from "@/lib/skills/picker";
 import { useChatSkills } from "@/lib/skills/hooks";
 import type { ChatSkill } from "@/lib/skills/types";
 import { draftKey } from "@/hooks/useDraft";
+import { trackUpload } from "@/lib/projects/uploadProgress";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
 import {
   MAX_MENTIONS_PER_MESSAGE,
@@ -165,6 +166,9 @@ jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => mockProjectsContext,
 }));
 jest.mock("@/lib/projects/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/projects/hooks")>(
+    "@/lib/projects/hooks"
+  ),
   useProjects: () => ({ isLoading: false }),
   useActiveProject: () => null,
 }));
@@ -332,6 +336,26 @@ test("an immediate reload restores draft text and completed uploads", async () =
   expect(restoreFiles([])).toEqual([projectFile("draft-file"), processing]);
   const currentFiles = [projectFile("new-attachment")];
   expect(restoreFiles(currentFiles)).toBe(currentFiles);
+});
+
+test("an uploading file shows its progress, and its remove control cancels the upload", async () => {
+  const uploading = {
+    ...projectFile("temp_upload"),
+    status: UserFileStatus.UPLOADING,
+  };
+  const upload = trackUpload([uploading.id]);
+  act(() => upload.options.onProgress(0.42));
+  mockProjectsContext.currentMessageFiles = [uploading];
+  render(<Composer />);
+
+  expect(screen.getByText("42%")).toBeInTheDocument();
+  await setupUser().click(screen.getByRole("button", { name: "Remove" }));
+
+  expect(upload.options.signal.aborted).toBe(true);
+  const removeFile =
+    mockProjectsContext.setCurrentMessageFiles.mock.lastCall?.[0];
+  expect(removeFile([uploading])).toEqual([]);
+  upload.finish();
 });
 
 test("a composer for another chat drops the files a left composer kept", async () => {

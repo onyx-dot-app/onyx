@@ -61,6 +61,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
+import { cancelUpload } from "@/lib/projects/uploadProgress";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { isFilePending } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
@@ -831,6 +832,7 @@ const AppInputBar = React.memo(
 
     const handleRemoveMessageFile = useCallback(
       (fileId: string) => {
+        cancelUpload(fileId);
         setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== fileId));
       },
       [setCurrentMessageFiles]
@@ -1447,6 +1449,7 @@ const AppInputBar = React.memo(
                     key={file.id}
                     file={file}
                     removeFile={handleRemoveMessageFile}
+                    removableWhileUploading
                     onFileClick={handleFileClick}
                     compactImages={shouldCompactImages}
                   />

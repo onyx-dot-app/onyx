@@ -12194,6 +12194,9 @@
       },
       "pendingUserInput": {
         "toast": "Bearbeiten Sie zuerst die ausstehenden Genehmigungsanfragen oder Fragen."
+      },
+      "fileDropOverlay": {
+        "label": "Dateien zum Anhängen hier ablegen"
       }
     },
     "messages": {
