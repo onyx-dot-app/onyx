@@ -45,6 +45,7 @@ from onyx.chat.renderer import (
 from onyx.chat.response import response_record
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
+from onyx.db.models import StoredToolResult
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
@@ -916,6 +917,60 @@ def test_generic_card_marks_a_failed_call_without_details(
         if is_error
     )
     assert any(isinstance(packet.obj, SectionEnd) for packet in output)
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_app_tool_auth_error_names_its_integration(live: bool) -> None:
+    """An app tool has no tool row, so the chat opens the sign-in from the
+    delta's integration ID."""
+    call = ToolCall(id="call", name="app_7_list_issues", arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="HTTP 401",
+        is_error=True,
+        details=CustomToolCallSummary(
+            tool_name=call.name,
+            integration_id=7,
+            response_type="text",
+            tool_result="",
+            error=CustomToolErrorInfo(
+                status_code=401, message="auth failed", is_auth_error=True
+            ),
+        ),
+    )
+    if live:
+        renderer = ToolRenderer(call, Placement(turn_index=0))
+        output = renderer.start() + renderer.complete(result)
+    else:
+        record = ResponseRecord(
+            run_id="r",
+            status=RunStatus.COMPLETE,
+            steps=[
+                StepRecord(
+                    message=AssistantMessage(id="m", content=[call]),
+                    generation_status=ExecutionStatus.COMPLETE,
+                    tools={
+                        call.id: ToolExecutionRecord(
+                            status=ExecutionStatus.COMPLETE,
+                            result=StoredToolResult.model_validate_json(
+                                result.model_dump_json()
+                            ),
+                        )
+                    },
+                )
+            ],
+        )
+        output = replay_response(record, {}, {}, {})
+    deltas = [
+        (packet.obj.tool_id, packet.obj.integration_id, packet.obj.error)
+        for packet in output
+        if isinstance(packet.obj, CustomToolDelta)
+    ]
+    assert len(deltas) == 1
+    tool_id, integration_id, error = deltas[0]
+    assert (tool_id, integration_id) == (None, 7)
+    assert error is not None and error.is_auth_error
 
 
 @pytest.mark.parametrize("live", [False, True])
