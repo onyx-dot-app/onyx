@@ -220,27 +220,38 @@ func (b *Browser) launch(profile string, env []string) (*running, error) {
 		return nil, err
 	}
 	defer func() { _ = devNull.Close() }()
-	stderr := &tail{max: stderrTailBytes}
 	cmd := &exec.Cmd{
 		Path: b.cfg.Binary, Args: append([]string{b.cfg.Binary}, chromeArgs(profile, env)...),
-		Dir: "/", Env: env, Stdout: io.Discard, Stderr: stderr,
+		Env: env,
 		// Chrome reads DevTools messages from fd 3 and writes replies to fd 4.
 		ExtraFiles: []*os.File{pipeR, devNull},
 	}
-	b.prepare(g, cmd)
 	start := time.Now()
-	if err := cmd.Start(); err != nil {
+	p, err := b.startProc(g, cmd)
+	if err != nil {
 		_ = pipeW.Close()
 		_ = g.Close()
 		return nil, fmt.Errorf("start chrome: %w", err)
 	}
-	g.Started(cmd.Process.Pid)
-	r := &running{proc: proc{pid: cmd.Process.Pid, done: make(chan struct{}), stderr: stderr}, group: g, profile: profile, start: start, pipe: pipeW}
+	g.Started(p.pid)
+	return &running{proc: *p, group: g, profile: profile, start: start, pipe: pipeW}, nil
+}
+
+// startProc starts cmd in group g, as the command user, in "/" with stdout
+// discarded and the stderr tail kept.
+func (b *Browser) startProc(g execs.Group, cmd *exec.Cmd) (*proc, error) {
+	stderr := &tail{max: stderrTailBytes}
+	cmd.Dir, cmd.Stdout, cmd.Stderr = "/", io.Discard, stderr
+	b.prepare(g, cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	p := &proc{pid: cmd.Process.Pid, done: make(chan struct{}), stderr: stderr}
 	go func() {
 		_ = cmd.Wait()
-		close(r.done)
+		close(p.done)
 	}()
-	return r, nil
+	return p, nil
 }
 
 // prepare puts cmd in group g, as the command user.
