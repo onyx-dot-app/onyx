@@ -99,6 +99,8 @@ A user types their email address and Onyx sends a link. One click signs them in.
 - A new email address creates a new account. **Restrict Open Sign-Up** and **Allowed Email Domains** apply.
 - A new account counts as verified, because the click proves the email address.
 - An existing account signs in with the link too, whether it was created with a password or with SSO.
+  If **Sync Session Expiry with Identity Provider** is on and the account's SSO session has ended,
+  the link does not sign in. The error page sends the person to sign in with SSO.
 - With **Disable Password Login & Signup** on, the option is off, so everyone signs in through SSO.
 - Sign-in emails are not copied to `EMAIL_ARCHIVE_BCC_ADDRESSES`, because the link signs the recipient in.
 - A used or expired link shows an error page with a button to ask for a new link.
