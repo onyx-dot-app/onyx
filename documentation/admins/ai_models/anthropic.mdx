@@ -1,0 +1,33 @@
+---
+title: "Anthropic"
+description: "Configure Anthropic Claude models for Onyx"
+icon: "brain"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+import StandardAiModelConfigs from "/snippets/standard-ai-model-configs.mdx";
+
+## Guide
+
+<Steps>
+  <NavigateToAiModels />
+
+  <Step title="Connect Anthropic">
+    Under **Add Provider**, click **Connect** on the **Claude** (Anthropic) card.
+
+    Create an [API key](https://console.anthropic.com/dashboard)
+    in the Anthropic Console and paste it in the **API Key** field.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/anthropic_config.webp" alt="Anthropic provider setup dialog"/>
+  </Step>
+
+  <Step title="Select Models">
+    Onyx lists the recommended Claude models. Keep **Auto Update** on to add new Claude models when they are released.
+  </Step>
+
+  <StandardAiModelConfigs />
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the API key with one of the selected models before it saves the provider.
+  </Step>
+</Steps>

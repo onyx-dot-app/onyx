@@ -1,0 +1,56 @@
+---
+title: "Portkey"
+description: "Configure Portkey as a language model gateway for Onyx"
+icon: "server"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+import StandardAiModelConfigs from "/snippets/standard-ai-model-configs.mdx";
+
+## Guide
+
+Configure Onyx to use models served through [Portkey](https://portkey.ai/).
+
+<Note>
+  Portkey can route one endpoint to many vendors.
+  Onyx lists the models that your Portkey gateway exposes after you enter a valid base URL and API key.
+</Note>
+
+<Steps>
+  <Step title="Set Up Your Portkey Access">
+    Create a Portkey account or deploy a self-hosted Portkey gateway that the Onyx server can reach.
+
+    Create a Portkey **API Key** in the Portkey dashboard. Note your gateway **API Base URL** if you self-host.
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Connect Portkey">
+    Under **Gateways & Routers**, click **Connect** on the **Portkey** card.
+
+    Select the API that Onyx must call on the gateway:
+
+    - **Chat Completions API** (OpenAI-compatible, default)
+    - **Responses API** (OpenAI-compatible)
+    - **Messages API** (Anthropic-compatible)
+
+    Onyx fills in the matching Portkey **API Base URL** (`https://api.portkey.ai/v1` for the OpenAI-compatible APIs,
+    `https://api.portkey.ai` for the Messages API). Replace it with your own base URL if you self-host Portkey.
+
+    Paste your Portkey **API Key**.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/portkey_connect.webp" alt="Set up Portkey dialog with API Base URL, API Key, Display Name, and Models"/>
+  </Step>
+
+  <Step title="Load Your Models">
+    In the **Models** section, click **Refresh models**. Onyx lists the models that Portkey exposes.
+  </Step>
+
+  <StandardAiModelConfigs />
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the provider with one of the selected models before it saves it.
+  </Step>
+</Steps>
+
+See the [Portkey documentation](https://portkey.ai/docs) for account setup and billing details.

@@ -1,0 +1,48 @@
+---
+title: "S3 Access Keys"
+description: "Authorize the S3 connector using AWS Access Keys."
+---
+
+## AWS Access Keys Authorization
+
+<Steps>
+  <Step title="Create user">
+    In the AWS Management Console, open **IAM**. In the left sidebar, select **Users** and then **Create user**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/s3/iam.webp" alt="AWS IAM dashboard with Users section for creating a user"/>
+  </Step>
+
+  <Step title="Set user details">
+    Set a name for the new user, such as `OnyxS3Connector`, and select **Next**.
+  </Step>
+
+  <Step title="Attach policy">
+    Select **Attach policies directly** and search for **AmazonS3ReadOnlyAccess**, or a policy limited to your bucket.
+    Select the policy, select **Next**, then **Create user**.
+  </Step>
+
+  <Step title="Create access key">
+    On the **Users** page, open the user you created. In the summary section,
+    select **Create access key** and choose **Third-party service** as the use case.
+    Confirm the disclaimer and continue.
+  </Step>
+
+  <Step title="Copy keys">
+    Set a description tag if you want, then select **Create access key**.
+    Copy the Access Key ID and Secret Access Key at once. You cannot view the secret again.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/s3/accesskeyspage.webp" alt="AWS security credentials page"/>
+  </Step>
+</Steps>
+
+### Credential Entry in Onyx
+
+When you create the authentication account for the S3 connector in Onyx,
+select the **Access Key and Secret** tab and enter:
+
+- **AWS Access Key ID**: the Access Key ID you copied from AWS
+- **AWS Secret Access Key**: the Secret Access Key you copied from AWS
+
+<img className="rounded-image" src="/assets/admins/connectors/blob/s3/onyx-access-key.webp" alt="Onyx S3 connector configuration with Access Key ID and Secret fields"/>
+
+Then follow the [indexing steps in the overview](./overview#indexing) to configure your S3 connector.
