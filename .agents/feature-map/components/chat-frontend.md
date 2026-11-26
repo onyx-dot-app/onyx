@@ -249,14 +249,16 @@
   agent's `browser_open` tool in the open chat (not on reload or replay),
   and from the strip's "+" menu (shown when
   `settings.chat_browser_available`), which sends `newTab`. It closes when
-  the last page of a live browser closes. `ChatRightPanel` owns the stream
-  (`useBrowserStream`): its websocket
+  the last page of a live browser closes. `ChatRightPanel` gets the stream
+  and the page tabs from `useChatBrowserTabs`, which owns the stream
+  (`useBrowserStream`) and the download and error toasts: its websocket
   (`/api/chat/sessions/{id}/browser/ws`, cookie auth, owner only) is open
   while the panel and the chat's browser are open. One view
   (`sections/chat/browser/`, ported from T3 Code) serves all page tabs; only
   the viewer that controls the tab can send input or navigate, and the
   service adds a missing URL scheme. Close code 4403 shows the browser as
-  off, 4404 and 4503 as unavailable with a retry; other drops reconnect. A
+  off, 4404 and 4503 as unavailable with a retry; other drops reconnect,
+  and six connects in a row that do not open stop with a retry. A
   page's download goes to the sandbox's `downloads/`, not to Files: its toast
   downloads it from `/api/chat/sessions/{id}/browser/downloads/{name}`. The
   admin switch is "Browser" on the chat preferences page
@@ -695,12 +697,12 @@ Sources and the browser stand apart: `browserOpen` says whether the
 browser's pages show as tabs (`openBrowser`; `closeTab` of
 `RIGHT_PANEL_BROWSER_TAB` closes it), and `RIGHT_PANEL_BROWSER_TAB` is the
 active tab while the browser shows. The page list and the selected page come
-from the stream, not from this state; `ChatRightPanel` gives each page a
+from the stream, not from this state; `useChatBrowserTabs` gives each page a
 display tab ID `browser:<page id>`. `isFilesTab` excludes Sources and the
 browser. The browser protocol
 (`lib/chat/browser/types.ts`), the stream client and pure input mapping
 (`lib/chat/browser/stream.ts`), and the view's state
-(`lib/chat/browser/hooks.ts:useBrowserStream`) match the
+(`lib/chat/browser/hooks.ts:useBrowserStream`, `useChatBrowserTabs`) match the
 api_server's browser route. In dev, `next.config.js` rewrites the
 websocket to the backend, as Craft's HMR route. A file that the panel shows
 counts as seen
