@@ -8,6 +8,7 @@ import * as NodePath from "node:path";
 import { chromium } from "playwright-core";
 import { encodeJson, FrameDecoder, KIND_JPEG } from "../src/framing.ts";
 import { BrowserService } from "../src/service.ts";
+import type { Log } from "../src/service.ts";
 
 const findChrome = (): string => {
   const fromEnv = process.env.ONYX_TEST_CHROME;
@@ -87,7 +88,10 @@ export type Service = {
   readonly stop: () => Promise<void>;
 };
 
-export const startService = async (cdpUrl: string): Promise<Service> => {
+export const startService = async (
+  cdpUrl: string,
+  log: Log = () => {},
+): Promise<Service> => {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "onyx-browser-service-"));
   const socketPath = NodePath.join(dir, "service.sock");
   const sessionsRoot = NodePath.join(dir, "sessions");
@@ -95,7 +99,7 @@ export const startService = async (cdpUrl: string): Promise<Service> => {
   const browser = await chromium.connectOverCDP(cdpUrl);
   const context = browser.contexts()[0];
   if (!context) throw new Error("No default context.");
-  const service = new BrowserService({ context, sessionsRoot, log: () => {} });
+  const service = new BrowserService({ context, sessionsRoot, log });
   await service.start();
   const server = NodeNet.createServer({ allowHalfOpen: true }, (socket) => service.handleConnection(socket));
   await new Promise<void>((resolve) => server.listen(socketPath, resolve));

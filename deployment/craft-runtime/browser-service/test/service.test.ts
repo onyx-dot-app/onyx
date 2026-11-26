@@ -76,10 +76,11 @@ describe("browser service", () => {
   let chrome: Chrome;
   let service: Service;
   let site: Site;
+  const events: Array<{ readonly event: string; readonly chat: unknown }> = [];
 
   before(async () => {
     chrome = await launchChrome();
-    service = await startService(chrome.cdpUrl);
+    service = await startService(chrome.cdpUrl, (event, fields) => events.push({ event, chat: fields?.chat }));
     site = await startSite();
   });
 
@@ -570,6 +571,17 @@ describe("browser service", () => {
     } finally {
       viewer.close();
     }
+  });
+
+  test("the download budget counts the downloads that the chat already saved", async () => {
+    const chat = newChat();
+    const dir = NodePath.join(service.sessionsRoot, chat, "downloads");
+    await NodeFSP.mkdir(dir, { recursive: true });
+    for (let n = 0; n < 20; n += 1) await NodeFSP.writeFile(NodePath.join(dir, `saved-${n}.txt`), "x");
+    await ok(service.socketPath, chat, "open", { url: `${site.url}/download-page` });
+    await ok(service.socketPath, chat, "act", { action: "click", selector: "#dl" });
+    await waitUntil(() => events.some((e) => e.event === "download_refused" && e.chat === chat));
+    assert.equal((await NodeFSP.readdir(dir)).length, 20);
   });
 
   test("a popup joins its opener's chat", async () => {

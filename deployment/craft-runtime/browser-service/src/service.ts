@@ -3,6 +3,7 @@
 // apps/server/src/preview/ServerBrowser.ts and ServerBrowserStream.ts (MIT, see LICENSE-T3).
 
 import * as NodeCrypto from "node:crypto";
+import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -412,7 +413,17 @@ export class BrowserService {
   private chatFor(id: string): ChatState {
     let chat = this.chats.get(id);
     if (!chat) {
-      chat = { id, tabs: new Map(), current: null, viewers: new Set(), tabsScheduled: false, opening: 0, downloads: 0, downloadBytes: 0 };
+      const saved = this.savedDownloads(id);
+      chat = {
+        id,
+        tabs: new Map(),
+        current: null,
+        viewers: new Set(),
+        tabsScheduled: false,
+        opening: 0,
+        downloads: saved.length,
+        downloadBytes: saved.reduce((total, size) => total + size, 0),
+      };
       this.chats.set(id, chat);
     }
     return chat;
@@ -1033,6 +1044,18 @@ export class BrowserService {
   }
 
   // ---- downloads and file chooser ----
+
+  // A restarted service starts the budget from the downloads that the chat session restored.
+  private savedDownloads(chat: string): number[] {
+    const dir = NodePath.join(chatDir(this.sessionsRoot, chat), "downloads");
+    let names: string[];
+    try {
+      names = NodeFS.readdirSync(dir);
+    } catch {
+      return [];
+    }
+    return names.map((name) => NodeFS.lstatSync(NodePath.join(dir, name), { throwIfNoEntry: false })?.size ?? 0);
+  }
 
   private cancelDownload(guid: string) {
     void this.browserSession
