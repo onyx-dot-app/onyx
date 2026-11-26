@@ -78,7 +78,10 @@
   `loadOlderChatMessages`, up to 20 (`lib/chatFind/olderPages.ts`); past the
   cap the bar says how many messages it searched. A search starts at the top
   row of the view.
-  Enter and Shift+Enter step; Escape closes and returns focus.
+  Enter and Shift+Enter step; Escape closes and returns focus. The command
+  menu's Find item shows only while a bar is mounted (the store's `mounted`
+  count). The matcher skips a link as a citation chip only when its label is
+  plain text, as `MemoizedAnchor` does; keep the two rules the same.
 - **A user types or pastes with no field focused.** On the chat page, a
   printable key with no Ctrl, Cmd or Alt moves focus to the chat input, and
   the browser types the character there. A paste goes to the input too. Keys
