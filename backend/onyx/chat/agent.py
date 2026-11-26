@@ -32,10 +32,8 @@ from onyx.chat.models import (
     CitationMode,
     PersonaPromptConfig,
     PromptMetadata,
-    RunDocuments,
     StagedChatFiles,
 )
-from onyx.chat.presentation import message_documents, message_presentation
 from onyx.chat.prompt_utils import (
     SearchPassageCache,
     build_chat_prompt,
@@ -54,7 +52,7 @@ from onyx.configs.chat_configs import (
     MAX_LLM_CYCLES,
 )
 from onyx.context.models import UserMemoryContext
-from onyx.context.search.models import new_or_changed
+from onyx.context.search.models import SearchDoc, new_or_changed
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_request import estimate_text_tokens
@@ -597,15 +595,16 @@ class ChatFeature(AgentFeature):
         ]
         # Each step carries only the sources and documents that the run's
         # earlier steps lack, or a new copy of one; readers fold the steps
-        # back with RunDocuments.
-        attached = RunDocuments().add_steps(
-            (
-                message_presentation(message.metadata),
-                message_documents(message.metadata),
-            )
-            for message in state.messages
-            if isinstance(message.metadata, ChatMessageMetadata)
-        )
+        # back with RunDocuments. Compare with what earlier steps recorded,
+        # each citation number in its own copy, not with a display fold.
+        attached_sources: dict[int, SearchDoc] = {}
+        attached_documents: dict[str, SearchDoc] = {}
+        for message in state.messages:
+            if isinstance(message.metadata, ChatMessageMetadata):
+                attached_sources.update(message.metadata.sources)
+                attached_documents.update(
+                    (doc.document_id, doc) for doc in message.metadata.documents
+                )
         allowed_tool_names: frozenset[str] | None = None
         tool_choice = ToolChoiceOptions.AUTO
         available_tool_names = {
@@ -640,10 +639,10 @@ class ChatFeature(AgentFeature):
             ),
             output_metadata=ChatMessageMetadata(
                 sources=new_or_changed(
-                    self.citation_processor.citation_to_doc, attached.cited
+                    self.citation_processor.citation_to_doc, attached_sources
                 ),
                 documents=list(
-                    new_or_changed(self.gathered_documents, attached.shown).values()
+                    new_or_changed(self.gathered_documents, attached_documents).values()
                 ),
                 include_citations=self.include_citations,
                 elapsed_seconds=time.monotonic() - self.started,

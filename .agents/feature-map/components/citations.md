@@ -273,13 +273,14 @@ of only markers stays empty.
     folds the steps of its run so far, in order, with
     `chat/models.py:RunDocuments.add_steps`: `ResponsePresenter.consume`,
     `_project_response_display` and `replay_response` in
-    `chat/presentation.py`, and `ChatFeature._prepare_step` for what earlier steps
-    carry. `ResponsePresenter.replay` hands the replayed
+    `chat/presentation.py`. `ResponsePresenter.replay` hands the replayed
     runs' documents to the live stream that continues a suspended response.
     `db/chat_subagents.py:read_agent_completions` reads the citations of every
     step up to the output's. Readers that union every message's sources, such
     as `ChatFeature` for history numbers and `_collect_tool_history`, need no
-    fold. Saved steps that hold the
+    fold. `ChatFeature._prepare_step` compares with the union of what earlier
+    steps recorded, each citation number in its own copy, to find what a step
+    adds. Saved steps that hold the
     whole lists give the same result. Research steps hold only new
     `ResearchMessageMetadata.sources` too (`deep_research/models.py:new_sources`),
     except the report step: the parent and the final answer read its full

@@ -1683,6 +1683,42 @@ def test_steps_that_hold_whole_lists_show_each_document_once() -> None:
     assert _cited(replayed) == {1: "a", 3: "c"}
 
 
+def test_a_citation_keeps_its_own_copy_when_a_newer_copy_is_gathered() -> None:
+    """Two citation numbers can hold different copies of one document. A step
+    adds no source that an earlier step already carries in the same copy,
+    even when the gathered documents hold the newer copy."""
+    older, newer = _document("a", "Old A"), _document("a", "New A")
+    earlier = AssistantMessage(
+        id="run:0",
+        content=[ToolCall(id="search", name="echo", arguments={"value": "x"})],
+        metadata=ChatMessageMetadata(sources={1: older, 2: newer}, documents=[newer]),
+    )
+    result = ToolResultMessage(
+        id="run:0:result:search", tool_call_id="search", tool_name="echo", content="x"
+    )
+    _, feature = chat_agent(ScriptedLLM([]), [EchoTool()])
+    feature.gathered_documents = {"a": newer}
+    feature.citation_processor.update_citation_mapping({1: older, 2: newer})
+    prepared = feature._prepare_step(
+        StepInput(
+            history=(),
+            input_messages=(UserMessage(content="Find documents"),),
+            messages=(earlier, result),
+            step=AgentStep(index=1, limit=3),
+            previous=StepResult(
+                step=AgentStep(index=0, limit=3),
+                message=earlier,
+                tool_results=(result,),
+                options=GenerationOptions(),
+            ),
+        )
+    )
+    metadata = prepared.output_metadata
+    assert isinstance(metadata, ChatMessageMetadata)
+    assert metadata.sources == {}
+    assert metadata.documents == []
+
+
 def test_resumed_run_adds_only_new_documents_after_whole_list_steps() -> None:
     """A run that resumes after steps saved with whole lists adds only what
     those steps lack, and still shows every document once."""
