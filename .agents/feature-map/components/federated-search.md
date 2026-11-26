@@ -97,7 +97,8 @@ Slack API search for each expanded query.
 Chat sets `enable_slack_search` through
 `chat/execution.py:create_chat_agent`: true for the default
 agent with no source filter, or when the source filter includes Slack. The
-`/search` API (`server/features/search/api.py`) always sets it. After scope
+`/search` API (`server/features/search/api.py`) sets it unless the request
+sends `skip_federated_search`, as the MCP `search` tool does. After scope
 detection, `SearchTool.search` drops the Slack token when the resolved scope
 excludes `DocumentSource.SLACK`. The lane also needs `original_query`, and it is
 skipped when the primary model's cost check fails, because `slack_retrieval`
