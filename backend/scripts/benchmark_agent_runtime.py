@@ -29,6 +29,7 @@ import statistics
 import sys
 import threading
 import time
+from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
 from typing import override
@@ -71,6 +72,8 @@ from onyx.tools.ordering import ToolRank
 
 DOCUMENT_POOL = 4000
 DOCUMENTS_PER_SEARCH = 15
+# The serialized passages without content take about 1,600 characters.
+MIN_RESULT_CHARS = 3_000
 THINKING_CHARS = 1_500
 ANSWER_CHARS = 3_000
 DELTA_CHARS = 30
@@ -170,6 +173,7 @@ class BenchSearchTool(Tool):
     def __init__(self, latency_s: float, result_chars: int) -> None:
         self.latency_s = latency_s
         self.result_chars = result_chars
+        self.searches = 0
 
     @property
     def id(self) -> int:
@@ -223,18 +227,25 @@ class BenchSearchTool(Tool):
             for number in numbers
         ]
         first = context.next_citation_num
-        passage_chars = self.result_chars // DOCUMENTS_PER_SEARCH - 60
+        passages = SearchPassages(
+            results=[
+                SearchPassage(
+                    document=first + offset,
+                    content="",
+                    title=document.semantic_identifier,
+                )
+                for offset, document in enumerate(documents)
+            ]
+        )
+        # Budget the serialized result: keys, numbers and titles count too.
+        passage_chars = (
+            self.result_chars - len(passages.model_dump_json())
+        ) // DOCUMENTS_PER_SEARCH
+        for passage in passages.results:
+            passage.content = _text(rng, passage_chars)
+        self.searches += 1
         return ToolResult(
-            content=SearchPassages(
-                results=[
-                    SearchPassage(
-                        document=first + offset,
-                        content=_text(rng, passage_chars),
-                        title=document.semantic_identifier,
-                    )
-                    for offset, document in enumerate(documents)
-                ]
-            ).model_dump_json(),
+            content=passages.model_dump_json(),
             details=SearchDocsResponse(
                 search_docs=documents,
                 citation_mapping={
@@ -252,11 +263,15 @@ def run_chat(
     llm_latency_s: float,
     tool_latency_s: float,
 ) -> float:
-    """Run one chat to its answer and delivered stream; return its latency."""
+    """Run one chat to its answer and delivered stream; return its latency.
+
+    Raises when a search or the delivery failed, so a chat that skipped part
+    of the workload is never measured."""
     started = time.perf_counter()
+    search = BenchSearchTool(tool_latency_s, result_chars)
     agent = ChatAgent(
         messages=[],
-        tools=[BenchSearchTool(tool_latency_s, result_chars)],
+        tools=[search],
         custom_agent_prompt=None,
         base_system_prompt=_text(random.Random(index), 12_000),
         context_files=ExtractedContextFiles(
@@ -273,7 +288,9 @@ def run_chat(
     )
     delivery = ChatDelivery(None)
     presenter = ResponsePresenter(Emitter(delivery.publish))
-    reader = threading.Thread(target=lambda: list(delivery.reader), daemon=True)
+    reader = threading.Thread(
+        target=lambda: deque(delivery.reader, maxlen=0), daemon=True
+    )
     reader.start()
     run = agent.start(
         background=False,
@@ -287,6 +304,11 @@ def run_chat(
     delivery.finish()
     delivery.finished.result(timeout=600)
     reader.join(timeout=600)
+    if search.searches != steps - 1 or run.delivery_failed:
+        raise RuntimeError(
+            f"Chat {index} ran {search.searches} of {steps - 1} searches; "
+            f"delivery failed: {run.delivery_failed}"
+        )
     return time.perf_counter() - started
 
 
@@ -305,11 +327,13 @@ def main() -> None:
     args = parser.parse_args()
     if not 2 <= args.steps <= MAX_LLM_CYCLES:
         parser.error(f"--steps must be between 2 and MAX_LLM_CYCLES ({MAX_LLM_CYCLES})")
-    if not 1_000 <= args.result_chars <= DEFAULT_MAX_OUTPUT_CHARS:
+    if not MIN_RESULT_CHARS <= args.result_chars <= DEFAULT_MAX_OUTPUT_CHARS:
         parser.error(
-            "--result-chars must be between 1000 and DEFAULT_MAX_OUTPUT_CHARS "
-            f"({DEFAULT_MAX_OUTPUT_CHARS})"
+            f"--result-chars must be between {MIN_RESULT_CHARS} and "
+            f"DEFAULT_MAX_OUTPUT_CHARS ({DEFAULT_MAX_OUTPUT_CHARS})"
         )
+    if args.llm_latency < 0 or args.tool_latency < 0:
+        parser.error("--llm-latency and --tool-latency must not be negative")
 
     run_chat(-1, 3, args.result_chars, 0.0, 0.0)
     gc.collect()
