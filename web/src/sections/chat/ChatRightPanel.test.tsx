@@ -556,6 +556,8 @@ test("several files open, switch and close like Craft's tabs", async () => {
 
 test("only file tabs move, and the strip announces only real moves", async () => {
   renderChat([[REPORT, CHART]]);
+  update({ type: "showFiles" });
+  update({ type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB });
   act(() => openPublishedFileInChat(REPORT));
   act(() => openPublishedFileInChat(CHART));
   const fileTabs = () => panel().fileTabs;
@@ -609,6 +611,8 @@ test("tabs switch between Files, Sources and a file, and the Sources control ope
   renderChat([[REPORT]]);
   act(() => openPublishedFileInChat(REPORT));
   expect(await preview("Q3 report")).toBeVisible();
+  update({ type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB });
+  act(() => screen.getByRole("tab", { name: "Q3 report" }).click());
 
   act(() => screen.getByRole("tab", { name: "Sources" }).click());
   expect(screen.getByText("Cited documents")).toBeVisible();
@@ -1362,6 +1366,9 @@ describe("the chat's browser", () => {
 
   test("the agent's browser_open shows the browser, whose pages are tabs with a globe beside Files", () => {
     renderChat([[REPORT]]);
+    update({ type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB });
+    update({ type: "showFiles" });
+    update({ type: "closePanel" });
     // Another chat's packet does not open this chat's panel
     act(() => openBrowserInChat("another-session"));
     expect(panel().mode).toBe("closed");
@@ -1403,6 +1410,7 @@ describe("the chat's browser", () => {
 
   test("a browser tab selects its page, and the stream's selection marks the active tab", () => {
     renderChat([[REPORT]]);
+    update({ type: "showFiles" });
     act(() => openBrowserInChat("session"));
     act(() => socket().open());
     receive({ type: "tabs", tabs: [PAGE, DOCS_PAGE], selected: "t1" });
@@ -1463,6 +1471,33 @@ describe("the chat's browser", () => {
     );
     expect(panel().browserOpen).toBe(false);
     expect(socket().readyState).toBe(3);
+  });
+
+  test("Files and Sources stay beside the browser in a chat without files, and close with their close buttons", () => {
+    renderChat([]);
+    update({ type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB });
+    update({ type: "showFiles" });
+    act(() => openBrowserInChat("session"));
+    const strip = screen.getByRole("tablist");
+    const tabNames = () =>
+      within(strip)
+        .getAllByRole("tab")
+        .map((tab) => tab.getAttribute("aria-label") ?? tab.textContent);
+    expect(tabNames()).toEqual(["Files", "Sources", "Browser"]);
+
+    // Opening Files again shows its one tab
+    update({ type: "showFiles" });
+    expect(tabNames()).toEqual(["Files", "Sources", "Browser"]);
+    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    act(() => screen.getByRole("button", { name: "Close Files" }).click());
+    expect(tabNames()).toEqual(["Sources", "Browser"]);
+    act(() => screen.getByRole("button", { name: "Close Sources" }).click());
+    expect(tabNames()).toEqual(["Browser"]);
+    expect(panel().mode).not.toBe("closed");
   });
 
   test("an incognito chat's + menu offers no browser", async () => {

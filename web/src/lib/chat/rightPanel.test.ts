@@ -143,11 +143,8 @@ describe("rightPanelReducer", () => {
     );
   });
 
-  test("the Files list and Sources cannot close or move", () => {
+  test("the Files list and Sources cannot move", () => {
     const state = apply(openFile("a"));
-    expect(rightPanelReducer(state, closeTab(RIGHT_PANEL_FILES_TAB))).toBe(
-      state
-    );
     expect(
       rightPanelReducer(state, {
         type: "reorderTab",
@@ -195,14 +192,88 @@ describe("rightPanelReducer", () => {
     expect(rightPanelReducer(state, openFile("d")).seenFileIds).toContain("d");
   });
 
-  test("closing the last file tab shows the Files list, also after Sources", () => {
+  test("a file that opens the panel opens the Files list too; closing it shows the Files list", () => {
+    let state = apply(openFile("a"));
+    expect(state.filesOpen).toBe(true);
+    state = rightPanelReducer(state, closeTab(FILE_A));
+    expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+    expect(state.fileTabs).toEqual([]);
+  });
+
+  test("a file opened on Sources leaves the Files list closed", () => {
     let state = apply(
       { type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB },
       openFile("a")
     );
+    expect(state.filesOpen).toBe(false);
     state = rightPanelReducer(state, closeTab(FILE_A));
-    expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
-    expect(state.fileTabs).toEqual([]);
+    expect(state.activeId).toBe(RIGHT_PANEL_SOURCES_TAB);
+  });
+
+  describe("the Files list and Sources tabs", () => {
+    const showSources: ChatRightPanelAction = {
+      type: "showTab",
+      tabId: RIGHT_PANEL_SOURCES_TAB,
+    };
+
+    test("stay open while other tabs show", () => {
+      const state = apply(showFiles, showSources, openBrowser, openFile("a"));
+      expect(state.filesOpen).toBe(true);
+      expect(state.sourcesOpen).toBe(true);
+      expect(state.browserOpen).toBe(true);
+      expect(state.activeId).toBe(FILE_A);
+    });
+
+    test("open once: opening again shows the open tab", () => {
+      const state = apply(showFiles, showSources);
+      const files = rightPanelReducer(state, showFiles);
+      expect(files.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+      expect(files.history).toEqual([RIGHT_PANEL_FILES_TAB]);
+      expect(rightPanelReducer(files, showFiles)).toEqual(files);
+      const sources = rightPanelReducer(files, showSources);
+      expect(rightPanelReducer(sources, showSources)).toEqual(sources);
+    });
+
+    test("close as other tabs and open again", () => {
+      let state = apply(showFiles, showSources, openFile("a"), showFiles);
+      state = rightPanelReducer(state, closeTab(RIGHT_PANEL_FILES_TAB));
+      expect(state.filesOpen).toBe(false);
+      expect(state.activeId).toBe(FILE_A);
+      expect(state.history).toEqual([FILE_A]);
+
+      state = rightPanelReducer(state, closeTab(RIGHT_PANEL_SOURCES_TAB));
+      expect(state.sourcesOpen).toBe(false);
+      expect(state.activeId).toBe(FILE_A);
+      expect(rightPanelReducer(state, closeTab(RIGHT_PANEL_SOURCES_TAB))).toBe(
+        state
+      );
+
+      state = rightPanelReducer(state, showSources);
+      expect(state.sourcesOpen).toBe(true);
+      expect(state.activeId).toBe(RIGHT_PANEL_SOURCES_TAB);
+    });
+
+    test("closing the active one shows the last shown Files tab, else Sources, else the browser", () => {
+      let state = apply(openBrowser, showSources, showFiles);
+      state = rightPanelReducer(state, closeTab(RIGHT_PANEL_FILES_TAB));
+      expect(state.activeId).toBe(RIGHT_PANEL_SOURCES_TAB);
+      state = rightPanelReducer(state, closeTab(RIGHT_PANEL_SOURCES_TAB));
+      expect(state.activeId).toBe(RIGHT_PANEL_BROWSER_TAB);
+      expect(state.mode).toBe("medium");
+    });
+
+    test("closing the last tab closes the panel", () => {
+      let state = apply(showSources);
+      state = rightPanelReducer(state, closeTab(RIGHT_PANEL_SOURCES_TAB));
+      expect(state.mode).toBe("closed");
+
+      state = apply(showFiles, closeTab(RIGHT_PANEL_FILES_TAB));
+      expect(state.mode).toBe("closed");
+      // The panel toggle opens the Files list again
+      state = rightPanelReducer(state, showFiles);
+      expect(state.filesOpen).toBe(true);
+      expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+    });
   });
 
   test("showing Files after Sources restores the last Files tab", () => {
@@ -291,8 +362,11 @@ describe("rightPanelReducer", () => {
       expect(state.activeId).toBe(FILE_A);
       expect(state.mode).toBe("medium");
 
-      state = apply(openBrowser, closeTab(RIGHT_PANEL_BROWSER_TAB));
+      state = apply(showFiles, openBrowser, closeTab(RIGHT_PANEL_BROWSER_TAB));
       expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
+
+      state = apply(openBrowser, closeTab(RIGHT_PANEL_BROWSER_TAB));
+      expect(state.mode).toBe("closed");
     });
 
     test("closing it while hidden keeps the active tab", () => {

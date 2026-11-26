@@ -335,7 +335,8 @@
   the chat and the panel shows the panel over the page, without the size
   button. A panel over the page covers only the page column,
   not the sidebar, and the page under it cannot be focused. Files and Sources
-  lead the tab strip when they have content, or while they are active. A citation's Sources control opens the panel on Sources. The
+  lead the tab strip while they are open. Each has at most one tab, which
+  stays while other tabs show; opening it again shows that tab. A citation's Sources control opens the panel on Sources. The
   Files tab shows Craft's output tiles for the files published in the chat,
   on every branch, also by answers that are not loaded and by subagents: one
   tile per artifact, its newest version, newest artifact first (a new
@@ -356,8 +357,10 @@
   with a click or the arrow keys, reorder by drag or Alt+arrow among the
   file tabs (on a touch screen, a swipe scrolls the strip and a press and
   hold starts the drag), and closing
-  the active tab returns to the tab used before it, else to Files. Files and
-  Sources cannot close or move, and a file tab cannot move before them. File
+  the active tab returns to the tab used before it, else to Sources, else to
+  the browser; with no tab left, the panel closes. Files and Sources close
+  with their close buttons but cannot move, and a file tab cannot move
+  before them. File
   tabs of one shown name show their paths. An artifact has one tab, which
   follows its newest version: a reload's list or a live publish of a newer
   version updates an open tab. A card of an older version, or an artifact
@@ -726,11 +729,12 @@ packet, stripped where it renders.
 
 The panel's state and its transitions are one pure module,
 `lib/chat/rightPanel.ts:rightPanelReducer`, which owns the tabs: the mode
-(closed, medium or full, as Craft's), the open files (Files and Sources
-are fixed tabs, so only the active tab and the history name them), width,
+(closed, medium or full, as Craft's), the open files (`filesOpen` and
+`sourcesOpen` say whether Files and Sources have tabs; only the active tab
+and the history name them), width,
 search and seen files. The Files list and the file tabs follow the shared
 tab rules (`lib/outputPanel/tabs.ts:openPanelTab`, `closePanelTab`), with
-the Files list first, so closing the last file tab shows the Files list;
+the open Files list first;
 Sources and the browser stand apart: `browserOpen` says whether the
 browser's pages show as tabs (`openBrowser`; `closeTab` of
 `RIGHT_PANEL_BROWSER_TAB` closes it), and `RIGHT_PANEL_BROWSER_TAB` is the
