@@ -39,6 +39,14 @@ def _get_role_id(holder: Holder) -> str | None:
     return holder.get("value") or holder.get("parameter")
 
 
+def _get_group_name(holder: Holder) -> str | None:
+    """Group sync stores group names. On Cloud a group holder's `value` is the
+    group id and `parameter` is the name; Data Center sends only `parameter`."""
+    group = holder.get("group")
+    expanded_name = group.get("name") if isinstance(group, dict) else None
+    return holder.get("parameter") or expanded_name or holder.get("value")
+
+
 # Jira SDK resources expose fields as attributes, raw dicts, or nested raw payloads
 # depending on Jira version and endpoint.
 def _get_obj_value(obj: object, field: str) -> object | None:
@@ -536,7 +544,7 @@ def _build_external_access_from_holder_map(
     direct_groups: list[str] = []
     if HOLDER_TYPE_GROUP in holder_map:
         for group_holder in holder_map[HOLDER_TYPE_GROUP]:
-            group_name = _get_role_id(group_holder)
+            group_name = _get_group_name(group_holder)
             if group_name:
                 direct_groups.append(group_name)
             else:
