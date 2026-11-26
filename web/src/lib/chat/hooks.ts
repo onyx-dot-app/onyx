@@ -1030,6 +1030,7 @@ export function useChatSubagents(
   const url = sessionId ? SWR_KEYS.chatSessionAgents(sessionId) : "";
   const {
     data,
+    error,
     isValidating,
     mutate: reloadAgents,
   } = useSWR<ChatSubagent[], Error>(
@@ -1041,9 +1042,12 @@ export function useChatSubagents(
       onErrorRetry: skipRetryOnAuthError,
     }
   );
-  // A cached list from an earlier visit is stale until its first read here
+  // A cached list from an earlier visit is stale until a read here succeeds;
+  // SWR keeps the cached list after a failed read.
   const [loaded, setLoaded] = useState(false);
-  if (!loaded && data !== undefined && !isValidating) setLoaded(true);
+  if (!loaded && data !== undefined && !isValidating && error === undefined) {
+    setLoaded(true);
+  }
   const stopAgent = useCallback(
     async (agentId: string) => {
       if (!sessionId) return;
