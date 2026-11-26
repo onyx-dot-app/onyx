@@ -32,15 +32,12 @@ from onyx.db.models import (
     OAuthAccount,
     User,
 )
-from onyx.db.persona import upsert_persona
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connection_models import ConnectionState, read_oauth_client
 from onyx.integrations.connections import ConnectionProblem
-from onyx.integrations.models import EffectivePolicy, PersonaIntegrationLink
 from onyx.server.features.integrations import admin_api, api
 from onyx.server.features.integrations.models import (
     ConnectionFieldsRequest,
-    IntegrationActionsUpdate,
     IntegrationUpdate,
     McpServerConfigInput,
     OpenApiConfigInput,
@@ -444,53 +441,6 @@ def _rename(db_session: Session, admin: User, integration_id: int) -> None:
     )
 
 
-def _describe(db_session: Session, admin: User, integration_id: int) -> None:
-    admin_api.update_integration(
-        integration_id, IntegrationUpdate(description="Edited"), admin, db_session
-    )
-
-
-def _switch(db_session: Session, admin: User, integration_id: int) -> None:
-    for enabled in (False, True):
-        admin_api.update_integration(
-            integration_id, IntegrationUpdate(enabled=enabled), admin, db_session
-        )
-
-
-def _always_allow(db_session: Session, admin: User, integration_id: int) -> None:
-    admin_api.update_integration(
-        integration_id,
-        IntegrationUpdate(users_can_save_always_allow=False),
-        admin,
-        db_session,
-    )
-
-
-def _action_policy(db_session: Session, admin: User, integration_id: int) -> None:
-    admin_api.set_integration_actions(
-        integration_id,
-        IntegrationActionsUpdate(default_policy=EffectivePolicy.ASK),
-        admin,
-        db_session,
-    )
-
-
-def _agent_link(db_session: Session, admin: User, integration_id: int) -> None:
-    upsert_persona(
-        user=admin,
-        name=f"agent-{uuid4().hex[:8]}",
-        description="",
-        starter_messages=None,
-        system_prompt="",
-        task_prompt="",
-        datetime_aware=True,
-        is_public=True,
-        db_session=db_session,
-        tool_ids=None,
-        integration_links=[PersonaIntegrationLink(integration_id=integration_id)],
-    )
-
-
 def _same_config(db_session: Session, admin: User, integration_id: int) -> None:
     """Save the kind settings as the admin page sends them."""
     detail = admin_api.get_integration_admin(integration_id, admin, db_session)
@@ -513,11 +463,6 @@ def _same_config(db_session: Session, admin: User, integration_id: int) -> None:
 
 EDITS: dict[str, Callable[[Session, User, int], None]] = {
     "rename": _rename,
-    "description": _describe,
-    "enable_switch": _switch,
-    "always_allow": _always_allow,
-    "action_policy": _action_policy,
-    "agent_link": _agent_link,
     "kind_settings": _same_config,
 }
 
