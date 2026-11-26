@@ -278,6 +278,38 @@ test("offers the Onyx login sign-in for an MCP server", async () => {
   ).toBeInTheDocument();
 });
 
+test("offers Onyx login only when each user signs in", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "graphql",
+      auth_mode: "individual",
+      auth_method: "onyx_login",
+      oauth_client: null,
+      config: GRAPHQL_CONFIG,
+    }),
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const method = await view.findByRole("combobox", {
+    name: copy.signIn.method.title,
+  });
+  expect(method).toHaveValue(copy.signIn.method.onyxLogin);
+
+  await u.click(view.getByRole("combobox", { name: copy.signIn.mode.title }));
+  await u.click(
+    await screen.findByRole("option", { name: copy.signIn.mode.shared })
+  );
+
+  expect(method).toHaveValue(copy.signIn.method.oauth2);
+  await u.click(method);
+  expect(
+    (await screen.findAllByRole("option")).map((option) => option.textContent)
+  ).not.toContain(copy.signIn.method.onyxLogin);
+});
+
 test("sends a changed server URL with the configuration", async () => {
   const fetchMock = mockFetch({
     [URL_DETAIL]: makeDetail({ auth_mode: "none", auth_method: null }),

@@ -20,6 +20,18 @@ export const SIGN_IN_METHODS: Record<
   custom: ["api_key"],
 };
 
+/** The methods that fit a sign-in mode. Onyx login sends each user's own
+ * login, so the server accepts it only with `individual`. */
+export function methodsForMode(
+  methods: readonly AuthMethod[],
+  mode: AuthMode
+): AuthMethod[] {
+  if (mode === "none") return [];
+  return mode === "individual"
+    ? [...methods]
+    : methods.filter((method) => method !== "onyx_login");
+}
+
 export function presetAuthMethods(preset: IntegrationPreset): AuthMethod[] {
   return preset.auth_methods.flatMap((method) => (method ? [method] : []));
 }

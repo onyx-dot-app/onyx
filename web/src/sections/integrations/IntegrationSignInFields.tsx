@@ -15,6 +15,7 @@ import type {
   IntegrationShape,
 } from "@/lib/integrations/types";
 import {
+  methodsForMode,
   PROVIDER_MODES,
   signInErrors,
   type HeaderDraft,
@@ -50,7 +51,9 @@ export function SignInModeField({
   methods,
   disabled,
 }: IntegrationSignInFieldsProps) {
-  const authModes: readonly AuthMode[] = methods.length ? AUTH_MODES : ["none"];
+  const authModes = AUTH_MODES.filter(
+    (mode) => mode === "none" || methodsForMode(methods, mode).length > 0
+  );
   const t = useTranslations("admin.integrations.signIn");
   return (
     <InputVertical title={t("mode.title")} description={t("mode.description")}>
@@ -67,11 +70,14 @@ export function SignInModeField({
         onValueChange={(value) => {
           const mode = authModes.find((option) => option === value);
           if (!mode) return;
+          const fitting = methodsForMode(methods, mode);
           onChange({
             ...draft,
             authMode: mode,
             authMethod:
-              mode === "none" ? null : (draft.authMethod ?? methods[0] ?? null),
+              draft.authMethod && fitting.includes(draft.authMethod)
+                ? draft.authMethod
+                : (fitting[0] ?? null),
           });
         }}
       />
@@ -90,6 +96,7 @@ export function SignInMethodFields({
   disabled,
 }: IntegrationSignInFieldsProps) {
   const providerModes = PROVIDER_MODES[shape];
+  const fitting = methodsForMode(methods, draft.authMode);
   const t = useTranslations("admin.integrations.signIn");
   const errors = showErrors ? signInErrors(draft) : [];
   const variant = disabled ? "disabled" : "primary";
@@ -123,19 +130,19 @@ export function SignInMethodFields({
   if (draft.authMode === "none") return null;
   return (
     <Section gap={4} alignItems="stretch" height="auto">
-      {methods.length > 0 && (
+      {fitting.length > 0 && (
         <InputVertical title={t("method.title")}>
           <InputSingleSelect
             placeholder={t("method.title")}
             value={draft.authMethod ?? ""}
-            defaultOption={methods[0]}
+            defaultOption={fitting[0]}
             disabled={disabled}
-            options={methods.map((method) => ({
+            options={fitting.map((method) => ({
               value: method,
               title: methodLabels[method],
             }))}
             onValueChange={(value) => {
-              const method = methods.find((option) => option === value);
+              const method = fitting.find((option) => option === value);
               if (method) update({ authMethod: method });
             }}
           />
