@@ -31,6 +31,7 @@ from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 from tests.integration.connector_job_tests.google.google_drive_api_utils import (
     GoogleDriveManager,
@@ -117,7 +118,10 @@ def drive_sync_env(
             test_user_2=test_user_2,
         )
     finally:
-        GoogleDriveManager.cleanup_drive(drive_service, drive_id)
+        try:
+            GoogleDriveManager.cleanup_drive(drive_service, drive_id)
+        finally:
+            reset_all()
 
 
 def _index(env: DriveSyncEnv) -> None:
@@ -141,8 +145,10 @@ def _sync(
     """Run doc sync and group sync, wait for both, then for the changed docs to
     reach the index.
 
-    `changed_at` is when the test last changed Drive. Any sync that started after
-    it sees the change. The beat may start one right after indexing; the sync
+    `changed_at` is taken before the step's first Drive change. A doc sync
+    stamps its start time, so one stamped after `changed_at` saw every change.
+    A sync that applies a change before the step ends also stamps the doc after
+    `changed_at`. The beat may start a sync right after indexing; the sync
     request then finds it open and starts no other, so waiting for a sync newer
     than the request would wait for the next beat."""
     CCPairManager.sync(cc_pair=env.cc_pair, user_performing_action=env.admin_user)
@@ -177,11 +183,11 @@ def test_google_permission_sync(drive_sync_env: DriveSyncEnv) -> None:
     drive_service = env.drive_service
 
     # Baseline: only the drive's members (the admin) can read a new file.
+    changed_at = datetime.now(timezone.utc)
     file_1 = GoogleDriveManager.create_empty_doc(drive_service, env.drive_id)
     GoogleDriveManager.append_text_to_doc(
         drive_service, file_1, "The secret number is 12345"
     )
-    changed_at = datetime.now(timezone.utc)
     _index(env)
     doc_1 = _onyx_doc_id(env, file_1)
     _sync(env, changed_at, [doc_1])
@@ -191,6 +197,7 @@ def test_google_permission_sync(drive_sync_env: DriveSyncEnv) -> None:
     assert _readable(env.test_user_2, [doc_1]) == set()
 
     # A file-level grant reaches only that file.
+    changed_at = datetime.now(timezone.utc)
     GoogleDriveManager.update_file_permissions(
         drive_service=drive_service, file_id=file_1, email=TEST_USER_1_EMAIL
     )
@@ -198,7 +205,6 @@ def test_google_permission_sync(drive_sync_env: DriveSyncEnv) -> None:
     GoogleDriveManager.append_text_to_doc(
         drive_service, file_2, "The secret number is 67890"
     )
-    changed_at = datetime.now(timezone.utc)
     _index(env)
     doc_2 = _onyx_doc_id(env, file_2)
     _sync(env, changed_at, [doc_1, doc_2])
@@ -209,10 +215,11 @@ def test_google_permission_sync(drive_sync_env: DriveSyncEnv) -> None:
     assert _readable(env.test_user_2, both) == set()
 
     # Removing the grant removes access.
+    changed_at = datetime.now(timezone.utc)
     GoogleDriveManager.remove_file_permissions(
         drive_service=drive_service, file_id=file_1, email=TEST_USER_1_EMAIL
     )
-    _sync(env, datetime.now(timezone.utc), [doc_1])
+    _sync(env, changed_at, [doc_1])
 
     assert _readable(env.test_user_1, both) == set()
 
@@ -220,6 +227,10 @@ def test_google_permission_sync(drive_sync_env: DriveSyncEnv) -> None:
     GoogleDriveManager.update_file_permissions(
         drive_service=drive_service, file_id=env.drive_id, email=TEST_USER_1_EMAIL
     )
+    # A group sync stamps its end time, so the first one stamped after the change
+    # may have read the members before it. Group syncs of a pair do not overlap,
+    # so any group sync that ends after the first one started after the change.
+    _sync(env, datetime.now(timezone.utc))
     _sync(env, datetime.now(timezone.utc))
 
     assert _readable(env.test_user_1, both) == {doc_1, doc_2}
