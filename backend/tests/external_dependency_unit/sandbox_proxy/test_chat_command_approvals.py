@@ -147,12 +147,14 @@ def chat(
                 approvals.end(cancelled=False)
         cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
         # Every proxy wait that a test starts ends here, and leaves no wake.
+        unwoken: list[UUID] = []
         for request in held:
             if request.decision is None:
                 approval_cache.send_wake(
                     request.approval_id, ApprovalDecision.EXPIRED, cache
                 )
-                request.result()
+                if request.result() is None:
+                    unwoken.append(request.approval_id)
             cache.delete(approval_cache._wake_key(request.approval_id))
         for approvals in started:
             if approvals._command_id is not None:
@@ -161,6 +163,7 @@ def chat(
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session.id))
         db_session.commit()
         delete_integrations(db_session, [integration_id])
+        assert not unwoken, f"proxy waits that did not end: {unwoken}"
 
 
 def _matched(
