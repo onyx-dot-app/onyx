@@ -233,3 +233,10 @@ func TestChromeArgsProxy(t *testing.T) {
 		}
 	}
 }
+
+func TestNewDefaultsNodeNotServiceScript(t *testing.T) {
+	b := New(Config{})
+	if b.cfg.Node != DefaultNode || b.cfg.ServiceScript != "" {
+		t.Fatalf("node %q service script %q", b.cfg.Node, b.cfg.ServiceScript)
+	}
+}
