@@ -123,7 +123,8 @@ Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` conv
 `onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
 it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
 The chart takes `<version>` from `craft.hostAgent.rootfs.version` (default: the
-pinned `global.version`, else the pinned chart `appVersion`) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
+pinned `global.version`, else the chart `appVersion` from v6.0.0 on; `.github/workflows/helm-chart-releases.yml` stamps the newest stable
+Onyx tag there with `.github/scripts/chart-app-version.sh`) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
 and the template tag move together (`onyx.craftFcRootfsVersion`). An explicit
 `craft.hostAgent.rootfs.image.tag` needs an explicit `configMap.SANDBOX_FC_TEMPLATE`
 (without it, `firecracker` fails the render and `auto` renders no Firecracker parts); the operator keeps those two aligned. Without

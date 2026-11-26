@@ -49,6 +49,8 @@ jobs:
         with:
           # chart-releaser needs full history to resolve the release commit.
           fetch-depth: 0
+          # chart-app-version.sh reads the Onyx release tags.
+          fetch-tags: true
           # cr authenticates with CR_TOKEN, not the git credential helper.
           persist-credentials: false
 
@@ -84,7 +86,13 @@ jobs:
           set -euo pipefail
           helm dependency build "${CHART_DIR}"
           mkdir -p "${PACKAGE_DIR}"
-          helm package "${CHART_DIR}" --destination "${PACKAGE_DIR}"
+          # appVersion = the newest stable Onyx tag, the release behind the
+          # default global.version "latest". The Firecracker image tags
+          # follow it, so a default install needs no global.version pin.
+          app_version="$(.github/scripts/chart-app-version.sh)"
+          echo "appVersion ${app_version}"
+          helm package "${CHART_DIR}" --app-version "${app_version}" \
+            --destination "${PACKAGE_DIR}"
 
           # Derive the version from the artifact helm just wrote rather than by
           # parsing Chart.yaml, so the release, the index entry and the OCI tag

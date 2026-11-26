@@ -294,8 +294,7 @@ true
 {{/*
 craft.sandboxRuntime: "auto" (default), "firecracker", "pod" or "off".
 Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
-(global.version, or the api or celery_shared image tag) does not know
-"auto", so "auto" acts as "pod" there.
+(onyx.craftPreV6App) does not know "auto", so "auto" acts as "pod" there.
 */}}
 {{- define "onyx.craftSandboxRuntime" -}}
 {{- $runtime := lower (toString ((.Values.craft | default dict).sandboxRuntime | default "auto")) -}}
@@ -309,17 +308,26 @@ Mirrors Terraform craft_sandbox_runtime. An Onyx release before v6
 {{- end }}
 
 {{/*
-"true" when the backend runs a release before v6.0.0: global.version, or an
-api or celery_shared image tag that overrides it. Short tags such as 5 or
-5.1 count.
+"true" when the Onyx images are a release before v6.0.0: global.version,
+or the chart appVersion when global.version floats (latest, edge, beta),
+or an api or celery_shared image tag that overrides it.
+A published chart carries the newest stable tag as its appVersion
+(helm-chart-releases.yml), which is the release that "latest" points at.
 */}}
 {{- define "onyx.craftPreV6App" -}}
+{{- $v := toString .Values.global.version -}}
+{{- if not (include "onyx.craftFcPinned" $v) -}}{{- $v = toString .Chart.AppVersion -}}{{- end -}}
 {{- $old := false -}}
-{{- range list .Values.global.version (dig "image" "tag" "" (.Values.api | default dict)) (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}
-{{- $v := trimSuffix "-dev" (toString .) -}}
-{{- if and (regexMatch "^v?[0-9]+(\\.[0-9]+){0,2}(-[0-9A-Za-z.-]+)?$" $v) (semverCompare "<6.0.0-0" $v) -}}{{- $old = true -}}{{- end -}}
+{{- range list $v (dig "image" "tag" "" (.Values.api | default dict)) (dig "image" "tag" "" (.Values.celery_shared | default dict)) -}}
+{{- if include "onyx.craftPreV6Version" (toString .) -}}{{- $old = true -}}{{- end -}}
 {{- end -}}
 {{- if $old -}}true{{- end -}}
+{{- end }}
+
+{{/* "true" when the tag is a release before v6.0.0, also a short one such as 5 or 5.1. */}}
+{{- define "onyx.craftPreV6Version" -}}
+{{- $v := trimSuffix "-dev" . -}}
+{{- if and (regexMatch "^v?[0-9]+(\\.[0-9]+){0,2}(-[0-9A-Za-z.-]+)?$" $v) (semverCompare "<6.0.0-0" $v) -}}true{{- end -}}
 {{- end }}
 
 {{/*
@@ -466,11 +474,15 @@ locked
 {{/*
 Onyx release tag for the Craft Firecracker images, without the "-dev"
 suffix of the debug image twins: global.version when it is pinned, else the
-chart appVersion when it is pinned, else empty. Releases publish the agent
-and the root drive only under pinned tags (craft-runtime-release.yml).
+chart appVersion when it is pinned and v6.0.0 or later, else empty. Releases
+publish the agent and the root drive only under pinned tags
+(craft-runtime-release.yml), and only from v6 on for an appVersion.
 */}}
 {{- define "onyx.craftFcReleaseTag" -}}
-{{- include "onyx.craftFcReleaseTagOf" (toString .Values.global.version) | default (include "onyx.craftFcReleaseTagOf" (toString .Chart.AppVersion)) -}}
+{{- $app := toString .Chart.AppVersion -}}
+{{- $appTag := "" -}}
+{{- if not (include "onyx.craftPreV6Version" $app) -}}{{- $appTag = include "onyx.craftFcReleaseTagOf" $app -}}{{- end -}}
+{{- include "onyx.craftFcReleaseTagOf" (toString .Values.global.version) | default $appTag -}}
 {{- end }}
 
 {{/*
