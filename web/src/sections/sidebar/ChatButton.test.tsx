@@ -157,6 +157,12 @@ test("the menu opened from the row takes focus on its trigger", async () => {
   expect(screen.getByRole("button", { name: "Chat options" })).toHaveFocus();
 });
 
+test("the row menu shows every item without a scroll cap", async () => {
+  openContextMenu();
+  await screen.findByRole("menuitem", { name: "Delete" });
+  expect(screen.getByRole("menu")).not.toHaveClass("max-h-60");
+});
+
 test("hovering a row shows no tooltip", async () => {
   jest.useFakeTimers();
   try {
