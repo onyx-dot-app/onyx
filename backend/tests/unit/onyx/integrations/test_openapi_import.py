@@ -16,8 +16,11 @@ from onyx.integrations.openapi_endpoints import (
     apply_endpoint_lines,
     endpoint_lines,
 )
-from onyx.integrations.service import import_openapi_document
-from onyx.server.features.integrations.models import OpenApiEndpointsRequest
+from onyx.integrations.service import _openapi_document, import_openapi_document
+from onyx.server.features.integrations.models import (
+    OpenApiConfigInput,
+    OpenApiEndpointsRequest,
+)
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
@@ -521,6 +524,22 @@ def test_a_pasted_spec_has_the_size_limit_of_a_spec_url() -> None:
 
     with pytest.raises(OnyxError, match="larger than 5 MB"):
         _import(json.dumps(spec))
+
+
+def test_lines_that_grow_the_stored_spec_over_5_mb_are_refused() -> None:
+    spec = _callable_spec()
+    spec["info"]["description"] = "x" * (4 * 1024 * 1024)
+    lines = [f"GET /pets{i} Name{'y' * 2000}" for i in range(800)]
+
+    with pytest.raises(OnyxError) as error:
+        _openapi_document(
+            OpenApiConfigInput(base_url="https://pets.example.com", endpoints=lines),
+            json.dumps(spec),
+            title="Pets",
+            description=None,
+        )
+
+    assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
 
 
 def test_a_fetched_spec_with_a_query_in_its_server_url_is_refused() -> None:

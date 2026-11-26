@@ -510,6 +510,8 @@ def _openapi_document(
                 base_url=(config.base_url or "").strip(),
                 lines=config.endpoints,
             )
+            if document != stored:
+                check_api_document_size(document, "spec")
         spec = parse_openapi_document(document)
     except EndpointLinesError as e:
         raise OnyxError(
