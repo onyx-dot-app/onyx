@@ -909,7 +909,10 @@ default agent, is Blocked.
     spawn tool (`spawn_agent` or `agent`) and `send_message` calls started, directly or through
     their agents, at any status; those show in that call's card, with the
     agent's name (`ToolApprovalRequest.agent_name`). Every request shows the
-    arguments saved on its row, so a replayed card equals the live one. An
+    arguments saved on its row, and the kind of its integration
+    (`SavedToolApproval.integration_kind`, read by `load_chat_approvals`)
+    decides Approve for this chat by `always_asks`, so a replayed card equals
+    the live one. An
     agent's request never shows in a live stream: the client sees
     `approvals_version` change in the session status
     (`db/approval_request.py:approvals_version`, also on the session load) and

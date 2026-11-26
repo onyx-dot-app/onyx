@@ -40,6 +40,7 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
     IncognitoRecordMode,
+    IntegrationKind,
     QuestionAnsweredVia,
     QuestionOutcome,
 )
@@ -1151,6 +1152,9 @@ class SavedToolApproval(BaseModel):
     decision: ApprovalDecision | None
     decided_via: ApprovalDecidedVia | None
     decided_at: datetime | None
+    # The kind of the request's integration. None for a built-in action and
+    # after the integration is deleted.
+    integration_kind: IntegrationKind | None = None
 
 
 class SavedToolQuestion(BaseModel):

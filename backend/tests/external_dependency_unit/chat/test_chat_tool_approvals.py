@@ -26,7 +26,13 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentState, ExecutionCheckpoint, RunStatus
+from onyx.agents.models import (
+    AgentState,
+    ExecutionCheckpoint,
+    ExecutionStatus,
+    RunStatus,
+    StepRecord,
+)
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
@@ -41,8 +47,9 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatFeatureState,
     ChatInbox,
+    ResponseRecord,
 )
-from onyx.chat.presentation import ResponsePresenter
+from onyx.chat.presentation import ResponsePresenter, replay_response
 from onyx.chat.run_store import (
     RESUME_FAILED_MESSAGE,
     RESUME_UPDATED_MESSAGE,
@@ -56,6 +63,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.chat_inputs import read_chat_inbox
+from onyx.db.chat_response import load_chat_approvals
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import (
     ApprovalDecidedVia,
@@ -2158,6 +2166,40 @@ def _ask_for_request_tool(
     )
 
 
+def _replayed_request(
+    db_session: Session, chat: ApprovalChat, pending: PendingToolInput
+) -> ToolApprovalRequest:
+    """The card of the saved request, as a reload of the suspended response
+    shows it."""
+    [row] = [row for row in chat.rows(db_session) if str(row.id) == pending.request_id]
+    call = ToolCall(id=row.tool_call_id, name=row.tool_name, arguments={})
+    response = ResponseRecord(
+        run_id=str(chat.response_id),
+        status=RunStatus.SUSPENDED,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="message", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+    )
+    requests = load_chat_approvals(
+        db_session, chat.chat_session_id, [chat.response_id]
+    ).requests[chat.response_id]
+    [card] = [
+        packet.obj
+        for packet in replay_response(
+            response,
+            {},
+            {},
+            {},
+            approvals={(response.run_id, call.id): requests},
+        )
+        if isinstance(packet.obj, ToolApprovalRequest)
+    ]
+    return card
+
+
 def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
     db_session: Session, chat: ApprovalChat
 ) -> None:
@@ -2175,6 +2217,7 @@ def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
         first = _ask_for_request_tool(app_chat, WHOLE_DOMAIN_ACTION_TYPE)
         assert isinstance(first, PendingToolInput)
         assert not first.can_approve_for_chat
+        assert not _replayed_request(db_session, app_chat, first).can_approve_for_chat
 
         app_chat.decide(db_session, first.request_id, ApprovalChoice.APPROVE_SESSION)
 
@@ -2196,9 +2239,10 @@ def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
 
 
 def test_an_mcp_tool_named_like_the_request_tool_can_be_approved_for_the_chat(
-    chat: ApprovalChat,
+    db_session: Session, chat: ApprovalChat
 ) -> None:
     pending = _ask_for_request_tool(chat, WHOLE_DOMAIN_ACTION_TYPE)
 
     assert isinstance(pending, PendingToolInput)
     assert pending.can_approve_for_chat
+    assert _replayed_request(db_session, chat, pending).can_approve_for_chat
