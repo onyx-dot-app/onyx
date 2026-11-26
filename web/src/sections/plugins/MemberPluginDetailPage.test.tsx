@@ -512,3 +512,24 @@ test("the overview says why the switch of a required plugin is disabled", async 
     screen.getByRole("switch", { name: "Use review-kit" })
   ).toHaveAttribute("aria-disabled", "true");
 });
+
+test("the overview says which plugin holds the skill name of an off plugin", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    enabled: true,
+    name_held_by: ["company-kit"],
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Off: company-kit uses the same skill name")
+  ).toBeVisible();
+});

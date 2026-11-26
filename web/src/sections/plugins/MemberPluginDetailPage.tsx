@@ -141,11 +141,13 @@ function ManagedNote({ marketplace }: ManagedNoteProps) {
 
 /** The header shows the description and the switch, and the tabs count the
  * skills, so the overview lists only the other facts, and why the switch is
- * disabled. */
+ * disabled or the plugin is off. */
 function OverviewTab({ entry, plugin }: OverviewTabProps) {
   const t = useTranslations("plugins.member.detail.overview");
   const switchCopy = useTranslations("plugins.member.detail.switch");
+  const customizeCopy = useTranslations("customize");
   const { blocked } = pluginSwitch(entry);
+  const heldBy = entry.skills[0]?.name_held_by ?? [];
   const sections = useTranslations("plugins.member.sections");
   const unusedCopy = useTranslations("plugins.upload.unusedParts");
   const manifest = plugin?.manifest ?? null;
@@ -158,7 +160,16 @@ function OverviewTab({ entry, plugin }: OverviewTabProps) {
         facts={[
           ...(blocked
             ? [{ label: switchCopy("title"), value: switchCopy(blocked) }]
-            : []),
+            : heldBy.length > 0
+              ? [
+                  {
+                    label: switchCopy("title"),
+                    value: customizeCopy("plugins.nameHeld", {
+                      names: heldBy.join(", "),
+                    }),
+                  },
+                ]
+              : []),
           // The managed card names the marketplace of a synced plugin.
           ...(entry.marketplace
             ? []
