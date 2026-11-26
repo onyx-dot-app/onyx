@@ -76,9 +76,13 @@ export default function RestEndpointFields({
     try {
       const view = await importOpenApiSpec(body);
       const specUrl = "spec_url" in body ? body.spec_url : null;
+      // A file gives no URL to resolve a relative server against, so the
+      // Base URL stays.
       onChange({
         ...restDraftFrom(view),
-        baseUrl: specBaseUrl(view.base_url, specUrl) ?? view.base_url,
+        baseUrl:
+          specBaseUrl(view.base_url, specUrl) ??
+          (draft.baseUrl.trim() || view.base_url),
       });
       setSkipped(view.skipped);
       toast.success(t("import.done", { count: view.endpoints.length }));

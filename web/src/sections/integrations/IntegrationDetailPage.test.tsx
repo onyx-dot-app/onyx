@@ -410,6 +410,82 @@ test("resolves a relative server of a spec imported from a URL", async () => {
   );
 });
 
+test("sends the stored lines unchanged when only the Base URL changes", async () => {
+  // The backend keeps the operation of a line sent as shown, also one whose
+  // line does not parse back to it.
+  const config: OpenApiConfigView = {
+    ...OPENAPI_VIEW,
+    endpoints: ["GET /reports?search term List reports", "GET /ping "],
+  };
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config,
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const baseUrl = await view.findByRole("textbox", {
+    name: copy.add.rest.baseUrl.title,
+  });
+  await u.clear(baseUrl);
+  await u.type(baseUrl, "https://staging.example.com");
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
+      config: {
+        shape: "openapi",
+        openapi_document: config.openapi_document,
+        base_url: "https://staging.example.com",
+        endpoints: config.endpoints,
+      },
+    })
+  );
+});
+
+test("keeps the Base URL when an uploaded spec has a relative server", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": {
+      ...OPENAPI_VIEW,
+      endpoints: ["GET /pets List pets"],
+      base_url: "/",
+    },
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const endpoints = await view.findByRole("textbox", {
+    name: copy.add.rest.endpoints.title,
+  });
+  const input =
+    activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("No file input");
+  await u.upload(input, new File(['{"openapi": "3.0.0"}'], "openapi.json"));
+
+  await waitFor(() => expect(endpoints).toHaveValue("GET /pets List pets"));
+  expect(
+    view.getByRole("textbox", { name: copy.add.rest.baseUrl.title })
+  ).toHaveValue(OPENAPI_VIEW.base_url);
+});
+
 test("lists the operations that a reimported spec skipped", async () => {
   const skipped = "POST /reports: the request body is not JSON";
   mockFetch({
