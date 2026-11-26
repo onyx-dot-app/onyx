@@ -1,0 +1,42 @@
+---
+title: "XenForo"
+description: "Access forum threads from a XenForo forum"
+---
+
+## How it works
+
+The XenForo connector scrapes posts from a XenForo v2.2 forum. You give it a board URL or a thread URL.
+Onyx groups the posts of a thread into documents and links each document back to the thread.
+
+Each run re-reads the whole board or thread. There is no incremental update.
+
+The connector reads public pages only. It needs no credential.
+
+Permission sync is not available. **Document Access** can be **Everyone in Your Organization** or **Specific Groups**.
+**Specific Groups** is a paid feature: the Business and Enterprise tiers on Onyx Cloud,
+and the Enterprise Edition when self-hosted.
+
+The connector is available in all editions: Community Edition, Business, Enterprise, and Onyx Cloud.
+
+## Setting up
+
+### Authorization
+
+The forum pages must be reachable from the Onyx server without a login.
+
+### Indexing
+
+<Steps>
+  <Step title="Enter the URL">
+    In the Admin Panel, go to **Connectors** and select **XenForo**. In **URL**,
+    enter the board URL or thread URL to index.
+  </Step>
+
+  <Step title="Set access and create">
+    Under **Connector Settings**, choose **Document Access** and click **Create Connector**.
+  </Step>
+</Steps>
+
+## Managing the connector
+
+Because every run re-reads the forum, keep the refresh schedule long for large boards.

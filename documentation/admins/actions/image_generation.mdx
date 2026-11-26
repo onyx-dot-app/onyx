@@ -1,0 +1,69 @@
+---
+title: "Image Generation"
+description: "Enable image generation for your AI Agents in Onyx"
+icon: "image"
+---
+
+The Image Generation action lets your Agents create images from text prompts.
+The model can also edit an image the user attached, or one it generated earlier in the conversation,
+instead of generating a new one from scratch. Once an admin connects an image model and sets it as the default,
+any chat model in Onyx can invoke the action.
+
+## Supported Models
+
+Image models come from the LLM providers that you connected on the [AI Models](/admins/ai_models/overview)
+page (**Admin Panel → AI Models**). Onyx does not ask for an API key again.
+The settings of each provider list its recommended image models, for example GPT Image, Gemini image (Nano Banana),
+Imagen, and the Bedrock image models.
+
+<Note>
+  The default image model follows the access of its LLM provider.
+  If you make that provider private or restrict it to agents,
+  only the users and agents that can use the provider can generate images.
+</Note>
+
+## Configuration
+
+<Steps>
+  <Step title="Connect an LLM Provider">
+    Connect the provider on the **AI Models** page if it is not connected yet.
+    Image generation uses the credentials of that provider. When you rotate the provider key,
+    image generation uses the new key.
+  </Step>
+
+  <Step title="Select an Image Model">
+    On the **AI Models** page, open the settings of the provider. Under **Models**, select an image model,
+    then click **Update**. Image models have the **Image Generation** tag.
+    You can also select image models when you connect a new provider. If no default image model is set,
+    the model becomes the default. Clear the model and click **Update** to disconnect it.
+    This does not disconnect the LLM provider.
+  </Step>
+
+  <Step title="Set the Default Model">
+    Select the model in **Image Model** on the **AI Models** page. Only one model can be the default.
+    The provider card of the default model shows the **Default Image** tag.
+
+    To turn image generation off, select **No Default**. Image generation stays off until you set another default.
+  </Step>
+</Steps>
+
+Image models that you connected with their own credentials in an earlier Onyx version keep working,
+and you can select them as the default.
+
+## Enable Image Generation for Agents
+
+Image generation does not appear in chat until a default model is set, even if an Agent has the action turned on.
+
+- **Default Chat**: Go to **Admin Panel > Chat Preferences > Actions & Tools** and turn on **Image Generation**.
+- **Custom Agents**: In the [Agent editor](/admins/agents/overview), open **Actions** and turn on
+  **Image Generation**. The toggle stays disabled until an admin connects a model.
+
+## Using Image Generation
+
+When a user asks for an image, the Agent calls the default image model with a prompt it writes from the request.
+Generated images belong to the chat session that created them.
+
+To edit an image, the user attaches it to the message (or refers to an image generated earlier in the chat)
+and describes the change. The OpenAI and Azure OpenAI models accept up to 16 reference images;
+the Vertex AI models accept up to 14. Image edits work only on providers that support them, such as OpenAI, Azure,
+Google, Vertex AI, Bedrock, OpenRouter, and LiteLLM Proxy.

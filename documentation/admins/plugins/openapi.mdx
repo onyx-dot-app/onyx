@@ -1,0 +1,192 @@
+---
+title: "OpenAPI"
+description: "Turn a REST API with an OpenAPI schema into tools for Chat and custom agents"
+icon: "code"
+---
+
+An OpenAPI plugin connects Onyx to a REST API. You give Onyx an [OpenAPI](https://swagger.io/specification/) schema,
+and Onyx turns each operation in the schema into a tool.
+Agents read the operation descriptions and parameters to decide when and how to call the API.
+
+OpenAPI plugins work in default Chat and in custom agents. They are not available in Craft. For Craft,
+use an [MCP server](/admins/plugins/mcp) or a [custom Craft App](/admins/plugins/craft_apps#custom-apps).
+
+Users with the **Manage Actions** permission can add and edit OpenAPI plugins.
+Only full admins can change default Chat availability.
+
+Use an OpenAPI plugin for internal services, such as a ticket system or an inventory API, when no MCP server exists.
+
+## Add an OpenAPI plugin
+
+<Steps>
+  <Step title="Paste the schema">
+    Go to **Admin Panel → Integrations**, click **Add**, then select **OpenAPI App**. Click **Add schema**,
+    paste the schema, and click **Continue**. Onyx reads the schema and lists its operations.
+
+    The schema must include:
+
+    - A `servers` entry with the base URL of the API.
+    - An `operationId` for each operation. Onyx uses it as the tool name.
+    - A `summary` or `description` for each operation, so the agent knows when to use it.
+
+    The Onyx API server must be able to reach the server URL.
+  </Step>
+
+  <Step title="Name and describe the integration">
+    Enter a **Name** and a **Description**.
+    Users see the description in the integration list and on the integration page.
+    The agent reads the operations in the schema, not this description.
+  </Step>
+
+  <Step title="Set the sign-in">
+    Select a **Sign-in Mode** and a **Sign-in Method**. See [Sign-in](#sign-in).
+  </Step>
+
+  <Step title="Add the plugin">
+    Select the **Owner** if the page shows it, then click **Add**. To turn the integration on for each user,
+    so that default Chat uses it,
+    set its install setting to **Installed** or **Required** on **Admin Panel → Integrations**.
+    Only users with the organization-wide **Manage Actions** permission can change the install setting.
+  </Step>
+</Steps>
+
+## Sign-in
+
+| Sign-in Mode | Sign-in Method | Effect |
+| --- | --- | --- |
+| **No sign-in** | None | Onyx sends requests without credentials. |
+| **One account for the organization** | **API key** | Onyx adds the headers that you set, such as `Authorization: Bearer {api_key}`, to every request. An admin enters the values on the **Configuration** tab. All users share these credentials. |
+| **One account for the organization** | **OAuth** | An admin connects one account on the **Configuration** tab. |
+| **Each user signs in** | **API key** or **OAuth** | Each user connects their own account in [Customize → Integrations](/overview/core_features/plugins) before the agent can call the API for them. |
+| **Each user signs in** | **Onyx login** | Onyx sends the user's Onyx sign-in token to the API. Only an admin who manages actions for the whole organization can select it. |
+
+For **API key**, put each credential in braces in the **Header Value**. Each placeholder becomes a credential field.
+Click **Add Header** to send more headers.
+
+For **OAuth**, create an OAuth client in the provider with this redirect URI:
+
+```text
+https://<your-onyx-domain>/oauth-config/callback
+```
+
+Then enter the **Authorization URL**, **Token URL**, **Client ID**, and **Client Secret**. Optionally, enter **Scopes**.
+
+## Request placeholders
+
+Use these placeholders anywhere in the schema, for example in the server URL, a path, or a parameter default.
+Onyx replaces them with the values of the current request at call time.
+
+| Placeholder | Value |
+| --- | --- |
+| `CHAT_SESSION_ID` | The ID of the current chat session |
+| `MESSAGE_ID` | The ID of the current message |
+| `USER_ID` | The ID of the current user |
+| `USER_EMAIL` | The email address of the current user |
+
+## Manage the plugin
+
+| Tab | Contents |
+| --- | --- |
+| **Overview** | Name, description, owner, **Install Setting**, **Enabled**, and **Delete**. |
+| **Configuration** | The schema, the sign-in, and **Users Can Save Always Allow**. |
+| **Actions** | The operations that Onyx found in the schema, each with **Allow**, **Ask**, or **Blocked**. |
+
+<img className="rounded-image" src="/assets/admins/plugins/integration_openapi_actions_tab.webp" alt="The Actions tab with the operations from an OpenAPI schema"/>
+
+To add, remove, or change an operation, edit the schema on the **Configuration** tab.
+Onyx syncs the actions again when you save a changed schema.
+
+Changing the install setting of the integration does not remove it from custom agents.
+To remove the integration from all agents, delete it on the **Overview** tab.
+
+<Note>
+  In Terraform, `onyx_custom_tool.enabled` sets default Chat availability. It does not change custom-agent attachments.
+</Note>
+
+## Use the plugin in custom agents
+
+Open the agent editor and select **Add an integration** under **Actions**. See [Agents](/admins/agents/overview).
+
+## Example
+
+Use this schema to add a plugin that creates and gets agents in Onyx. Replace the server URL with your Onyx API URL.
+
+```json OpenAPI expandable
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Agents API",
+    "version": "1.0.0",
+    "description": "Minimal OpenAPI schema for creating and fetching agents in Onyx"
+  },
+  "servers": [
+    {
+      "url": "https://cloud.onyx.app/api"
+    }
+  ],
+  "paths": {
+    "/persona": {
+      "post": {
+        "summary": "Create Agent (Persona)",
+        "operationId": "create_persona",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "document_set_ids": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                  },
+                  "is_public": { "type": "boolean" },
+                  "tool_ids": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                  },
+                  "system_prompt": { "type": "string" },
+                  "task_prompt": { "type": "string" },
+                  "datetime_aware": { "type": "boolean" }
+                },
+                "required": [
+                  "name",
+                  "description",
+                  "document_set_ids",
+                  "is_public",
+                  "tool_ids",
+                  "system_prompt",
+                  "task_prompt",
+                  "datetime_aware"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Created" }
+        }
+      }
+    },
+    "/persona/{persona_id}": {
+      "get": {
+        "summary": "Get Agent (Persona) By ID",
+        "operationId": "get_persona",
+        "parameters": [
+          {
+            "name": "persona_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}
+```
