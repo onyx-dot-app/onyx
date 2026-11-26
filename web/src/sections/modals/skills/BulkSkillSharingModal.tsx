@@ -78,7 +78,9 @@ export default function BulkSkillSharingModal({
   const { data: users } = useShareableUsers({ includeApiKeys: true });
   const { data: groups } = useShareableGroups();
   // Publishing is one-way, so bulk can publish but never make skills private.
-  const [scope, setScope] = useState<"KEEP" | "PUBLIC">("KEEP");
+  const [stagedScope, setScope] = useState<"KEEP" | "PUBLIC">("KEEP");
+  // A selection that loses organization access drops a staged publish.
+  const scope = canChangeOrgAccess ? stagedScope : "KEEP";
   const [policy, setPolicy] = useState<typeof KEEP | PolicyChoice>(KEEP);
   const [permission, setPermission] = useState<SkillSharePermission>("VIEWER");
   const [stagedUsers, setStagedUsers] = useState<MinimalUserSnapshot[]>([]);

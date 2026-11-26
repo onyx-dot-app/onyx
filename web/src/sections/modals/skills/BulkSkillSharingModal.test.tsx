@@ -124,6 +124,45 @@ describe("BulkSkillSharingModal", () => {
       screen.getByRole("button", { name: "Apply to 2 skills" })
     ).toBeDisabled();
   });
+  it("drops a staged publish once the selection loses organization access", async () => {
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    const props = {
+      open: true,
+      saving: false,
+      onClose: jest.fn(),
+      onSave,
+    };
+    const { rerender } = render(
+      <BulkSkillSharingModal items={owned(2)} {...props} />
+    );
+    await user.click(screen.getByRole("button", { name: "Who can access" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: "Everyone in the organization" })
+    );
+    rerender(
+      <BulkSkillSharingModal
+        items={[
+          ...owned(1),
+          customFixture({ id: "locked", content_locked: true }),
+        ]}
+        {...props}
+      />
+    );
+    await user.type(
+      screen.getByRole("combobox", { name: "Add users, groups, and accounts" }),
+      "sub"
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: /subash@onyx\.app/ })
+    );
+    await user.click(screen.getByRole("button", { name: "Apply to 2 skills" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        user_shares: [{ user_id: "user-1", permission: "VIEWER" }],
+      })
+    );
+  });
   it("adds people picked from the suggestion list to every selected skill", async () => {
     const user = setupUser();
     const onSave = jest.fn().mockResolvedValue(undefined);
