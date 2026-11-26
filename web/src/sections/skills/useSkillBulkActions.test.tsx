@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import type { CustomSkill } from "@/lib/skills/types";
@@ -11,9 +12,13 @@ jest.mock("@/lib/skills/api", () => ({
 jest.mock("@/lib/skills/cache", () => ({
   refreshSkillListsChecked: () => Promise.resolve(true),
 }));
+const mockSharingDraftStarted = jest.fn();
 jest.mock("@/sections/modals/skills/BulkSkillSharingModal", () => ({
   __esModule: true,
-  default: () => null,
+  default: function SharingModal() {
+    useEffect(() => mockSharingDraftStarted(), []);
+    return null;
+  },
 }));
 
 const toggling = customFixture({ id: "toggling", name: "toggling" });
@@ -32,6 +37,9 @@ function Harness({ items }: { items: CustomSkill[] }) {
     <>
       <button onClick={() => bulk.select(new Set([toggling.id]))}>
         select toggling
+      </button>
+      <button onClick={() => bulk.select(new Set([toggling.id, target.id]))}>
+        select both
       </button>
       <button onClick={() => bulk.confirmDelete([target])}>
         delete target
@@ -79,4 +87,17 @@ test("a row delete keeps the selection of other plugins", async () => {
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull()
   );
   expect(screen.getByTestId("selection")).toHaveTextContent(toggling.id);
+});
+
+test("a selected plugin that leaves the list starts a new sharing draft", async () => {
+  const user = setupUser();
+  const { rerender } = render(<Harness items={[toggling, target]} />);
+  await user.click(screen.getByRole("button", { name: "select both" }));
+  mockSharingDraftStarted.mockClear();
+
+  rerender(<Harness items={[toggling]} />);
+  expect(mockSharingDraftStarted).toHaveBeenCalledTimes(1);
+
+  rerender(<Harness items={[toggling, target]} />);
+  expect(mockSharingDraftStarted).toHaveBeenCalledTimes(2);
 });
