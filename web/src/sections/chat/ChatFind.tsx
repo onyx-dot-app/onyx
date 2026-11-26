@@ -25,6 +25,7 @@ import {
 } from "@/lib/chatFind/match";
 import {
   closeChatFind,
+  mountChatFind,
   openChatFind,
   setChatFindQuery,
   useChatFindStore,
@@ -51,6 +52,7 @@ export default function ChatFind() {
     whileTyping: true,
     shouldHandle: () => !isModalOpen(),
   });
+  useEffect(() => mountChatFind(), []);
   // Find belongs to the chat it was opened in.
   useEffect(() => () => closeChatFind(), [sessionId]);
 
@@ -100,12 +102,13 @@ function ChatFindBar() {
   >("idle");
   const olderLoadStartedRef = useRef(false);
   const unmountedRef = useRef(false);
-  useEffect(
-    () => () => {
+  // Set in setup too: Strict Mode runs setup again after a cleanup.
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
       unmountedRef.current = true;
-    },
-    []
-  );
+    };
+  }, []);
   useEffect(() => {
     if (!searchedQuery || !olderMissing || !sessionId) return;
     if (olderLoadStartedRef.current) return;
@@ -118,14 +121,15 @@ function ChatFindBar() {
     );
   }, [searchedQuery, olderMissing, sessionId]);
 
-  // A new search starts at the view; a step picks an index. Each one gets a
+  // A new search starts at the view; a step picks a match. Each one gets a
   // new id, so its match is brought into view even when it is the same one.
   const [selection, setSelection] = useState<{
     /** The row at the top of the view when the search started. */
     fromRowId: string | null;
-    index: number | null;
+    /** The picked match, by scope: older pages that load shift indexes. */
+    picked: { scopeKey: string; occurrence: number } | null;
     id: number;
-  }>({ fromRowId: null, index: null, id: 0 });
+  }>({ fromRowId: null, picked: null, id: 0 });
   // By row id: older pages that load add messages above it.
   const fromMessage = Math.max(
     0,
@@ -136,10 +140,21 @@ function ChatFindBar() {
   const startIndex =
     results.entries.find((entry) => entry.messageIndex >= fromMessage)?.start ??
     0;
+  const { picked } = selection;
+  const pickedEntry =
+    picked &&
+    results.entries.find(
+      (entry) =>
+        entry.scopeKey === picked.scopeKey &&
+        picked.occurrence >= entry.occurrenceStart &&
+        picked.occurrence < entry.occurrenceStart + entry.count
+    );
   const activeIndex =
     results.total === 0
       ? 0
-      : Math.min(selection.index ?? startIndex, results.total - 1);
+      : pickedEntry && picked
+        ? pickedEntry.start + picked.occurrence - pickedEntry.occurrenceStart
+        : Math.min(startIndex, results.total - 1);
   const match = chatFindMatchAt(results.entries, activeIndex);
   // While a typed query waits for its search, the old results show but are
   // not brought into view.
@@ -174,16 +189,23 @@ function ChatFindBar() {
     setChatFindQuery(value);
     setSelection((previous) => ({
       fromRowId: topRowId(scrollContainerRef.current),
-      index: null,
+      picked: null,
       id: previous.id + 1,
     }));
   }
 
   function step(delta: number) {
     if (results.total === 0) return;
+    const next = chatFindMatchAt(
+      results.entries,
+      stepChatFindIndex(activeIndex, results.total, delta)
+    );
     setSelection((previous) => ({
       ...previous,
-      index: stepChatFindIndex(activeIndex, results.total, delta),
+      picked: next && {
+        scopeKey: next.scopeKey,
+        occurrence: next.occurrence,
+      },
       id: previous.id + 1,
     }));
   }
