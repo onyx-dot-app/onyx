@@ -163,7 +163,7 @@ func main() {
 	flag.StringVar(&f.tlsCert, "tls-cert", "", "server certificate file (PEM) for --listen")
 	flag.StringVar(&f.tlsKey, "tls-key", "", "server key file (PEM) for --listen")
 	flag.StringVar(&f.clientCA, "client-ca", "", "api_server client CA file (PEM); only clients it signed are accepted")
-	flag.StringVar(&f.dialPorts, "dial-ports", "3010", "guest vsock ports that Dial allows (never --daemon-port)")
+	flag.StringVar(&f.dialPorts, "dial-ports", "3010,3011", "guest vsock ports that Dial allows (never --daemon-port)")
 	flag.StringVar(&f.clientSANs, "client-allowed-sans", "", "comma-separated DNS or URI SANs; a client cert must have one (empty: any cert from --client-ca)")
 	flag.IntVar(&f.dialMax, "dial-max-streams", server.DefaultMaxDialsPerVM, "most open Dial streams per VM")
 	flag.UintVar(&f.daemonPort, "daemon-port", server.DefaultDaemonPort, "guest vsock port of the guest daemon (craft.sandboxd.v1.Sandboxd pass-through)")

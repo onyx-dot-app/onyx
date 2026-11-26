@@ -2,6 +2,7 @@ package guestd
 
 import (
 	"context"
+	"path/filepath"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -11,18 +12,22 @@ import (
 
 var errNoBrowser = status.Error(codes.Unimplemented, "this daemon has no browser")
 
-// BrowserStart implements pb.SandboxdServer. Chrome gets the env that a
-// command with no env of its own gets.
-func (s *Server) BrowserStart(ctx context.Context, _ *pb.BrowserStartRequest) (*pb.BrowserStartResponse, error) {
+// BrowserStart implements pb.SandboxdServer. Chrome and the service get the
+// env that a command with no env of its own gets. The profile is
+// <session dir>/chrome.
+func (s *Server) BrowserStart(ctx context.Context, req *pb.BrowserStartRequest) (*pb.BrowserStartResponse, error) {
 	b := s.cfg.Browser
 	if b == nil {
 		return nil, errNoBrowser
 	}
-	port, started, err := b.Start(ctx, s.commandEnv(nil))
+	dir, err := s.files.SessionDir(req.GetProfileSessionId())
 	if err != nil {
+		return nil, fileError(err)
+	}
+	if _, _, err := b.Start(ctx, filepath.Join(dir, "chrome"), s.commandEnv(nil)); err != nil {
 		return nil, apiError(pb.ErrorReason_BROWSER_START_FAILED, "%v", err)
 	}
-	return &pb.BrowserStartResponse{CdpPort: uint32(port), Started: started}, nil
+	return &pb.BrowserStartResponse{}, nil
 }
 
 // BrowserStop implements pb.SandboxdServer.
