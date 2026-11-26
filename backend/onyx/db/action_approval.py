@@ -3,7 +3,7 @@
 `try_record_decision`'s conditional UPDATE is the only race arbiter.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -17,9 +17,18 @@ from onyx.db.enums import (
     ApprovalDecision,
 )
 from onyx.db.models import ActionApproval, BuildSession, ChatSession
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def waiting_cutoff() -> datetime:
+    """Pending rows created before this wait on no proxy (the proxy's wait
+    timeout)."""
+    return datetime.now(timezone.utc) - timedelta(
+        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+    )
 
 
 def insert_action_approval(

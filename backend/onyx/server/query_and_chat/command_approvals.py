@@ -7,7 +7,6 @@ decision is written through `try_record_decision` and wakes the proxy. No
 run waits for it, so no response continues.
 """
 
-from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -24,7 +23,6 @@ from onyx.integrations.models import EffectivePolicy
 from onyx.integrations.policy import resolve_chat_action_policies
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.action_policies.models import ApprovalChoice
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.query_and_chat.models import ApprovalDecisionResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -108,9 +106,7 @@ def decide_command_approval(
         if choice == ApprovalChoice.REJECT
         else ApprovalDecision.APPROVED
     )
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    )
+    cutoff = action_approval.waiting_cutoff()
     decided_via = (
         ApprovalDecidedVia.POLICY
         if blocked

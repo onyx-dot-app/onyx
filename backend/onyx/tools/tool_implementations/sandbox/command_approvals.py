@@ -20,7 +20,6 @@ holds none, so the proxy refuses the command's Ask requests.
 """
 
 import threading
-from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -38,7 +37,6 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.llm.cancellation import AgentCancelled
 from onyx.sandbox_proxy import approval_cache
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.tools.tool_implementations.sandbox.models import (
     CommandApprovalOutcome,
     CommandApprovalRequest,
@@ -61,13 +59,6 @@ _WAITING_LOCK = threading.Lock()
 _waiting: dict[UUID, int] = {}
 # The commands whose cleanup runs; set when it is done.
 _cleaning: dict[UUID, threading.Event] = {}
-
-
-def _waiting_since() -> datetime:
-    """Older pending rows wait on no proxy (the proxy's wait timeout)."""
-    return datetime.now(timezone.utc) - timedelta(
-        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    )
 
 
 def _outcome(row: ActionApproval) -> CommandApprovalOutcome:
@@ -290,7 +281,7 @@ class CommandApprovals:
             db,
             chat_session_id=self._chat_session_id,
             command_id=command_id,
-            created_after=_waiting_since(),
+            created_after=action_approval.waiting_cutoff(),
         )
 
     def _poll(self, command_id: UUID) -> None:
