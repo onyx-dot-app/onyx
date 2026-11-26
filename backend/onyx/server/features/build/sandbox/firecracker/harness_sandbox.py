@@ -549,7 +549,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     def _browser_vm(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running VM with the browser up. The browser profile is the
         session named by the sandbox ID: its last save comes back once per
-        VM instance, like a chat session's, and the stop's saves keep it."""
+        VM instance, like a chat session's, and the stop's saves keep it.
+        The chat's own session is set up too: its downloads go there."""
+        self._session_vm(ref)
         profile = ref.model_copy(update={"session_id": ref.sandbox_id})
         placed, daemon = self._session_vm(profile)
         # Under the profile's setup lock: a clear holds it, so Chrome never

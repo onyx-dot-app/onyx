@@ -1,6 +1,7 @@
 """The chat browser's routes: the live view of a chat's tabs (a websocket
 pumped to the browser service in the user's sandbox VM), file uploads for
-its file chooser, and "clear browser data". Only the chat's owner reaches
+its file chooser, downloads of the files that it saved, and "clear browser
+data". Only the chat's owner reaches
 them, and only while harness sandboxes run and the `browser_enabled` setting
 is on.
 
@@ -11,34 +12,43 @@ message, and each viewer text message (up to 1 MiB; a larger one is
 dropped) as a JSON message, which the service checks. Before the VM answers
 it sends `{"type": "starting"}`.
 Close codes: 4403 forbidden or turned off, 4404 unknown chat, 4503 the
-sandbox or its browser did not open. The view checks the setting and the
-chat again after each lease renewal, and closes with 4403 or 4404 on a
-change. A view that drops after it opened (the VM, the service or this
+sandbox or its browser did not open. The view checks the session cookie,
+the user, the setting and the chat again after each lease renewal, and
+closes with 4403 or 4404 on a change. A view that drops after it opened (the VM, the service or this
 server went away) closes with 1012, which the viewer retries.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from typing import Final
 from uuid import UUID, uuid4
 
 from fastapi import (
     APIRouter,
     Depends,
+    Response,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
+from fastapi_users.authentication import Strategy
+from sqlalchemy.orm import Session
 from starlette.websockets import WebSocketState
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_user_from_websocket_cookie
+from onyx.auth.users import (
+    auth_backend,
+    current_user_from_websocket_cookie,
+    read_websocket_cookie_user,
+)
 from onyx.db.chat import get_owned_chat_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.sandbox import get_or_create_sandbox
+from onyx.db.sandbox import get_or_create_sandbox, get_sandbox_id_by_user_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.serving import build_content_disposition
 from onyx.microvm.agent_client import HostAgentError
 from onyx.microvm.browser_protocol import (
     BrowserFrame,
@@ -53,6 +63,8 @@ from onyx.server.features.build.sandbox.harness_base import (
     BrowserStream,
     HarnessSandbox,
     HarnessSandboxError,
+    SandboxFileNotFoundError,
+    SandboxFileTooLargeError,
     safe_file_name,
 )
 from onyx.server.features.build.sandbox.harness_factory import get_harness_sandbox
@@ -81,20 +93,46 @@ _MAX_CLOSE_REASON_BYTES = 123
 BROWSER_UPLOAD_MAX_FILES = 20
 BROWSER_UPLOAD_MAX_BYTES = 100 << 20
 _UPLOAD_TIMEOUT_SECONDS = 600.0
+# The browser saves downloads in this directory of the chat session
+# directory, up to this many bytes per chat (the browser service's budget).
+BROWSER_DOWNLOADS_DIR = "downloads"
+BROWSER_DOWNLOAD_MAX_BYTES = 256 << 20
+_MAX_DOWNLOAD_NAME_BYTES = 255
 
 
-def _browser_ref(chat_session_id: UUID, user: User) -> HarnessSandboxRef:
-    """The user's sandbox, seen from a chat that the user owns. Raises
-    OnyxError when the browser is off or the chat is not the user's."""
+def _check_browser_chat(chat_session_id: UUID, user: User, db_session: Session) -> None:
+    """Raises OnyxError when the browser is off or the chat is not the
+    user's."""
     if not HARNESS_SANDBOX_ENABLED or not load_settings().browser_enabled:
         raise OnyxError(OnyxErrorCode.FEATURE_DISABLED, "The browser is turned off.")
     if user.is_anonymous:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to use the browser.")
+    chat_session = get_owned_chat_session(chat_session_id, user.id, db_session)
+    if chat_session is None or chat_session.deleted:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found.")
+
+
+def _browser_ref(chat_session_id: UUID, user: User) -> HarnessSandboxRef:
+    """The user's sandbox, seen from a chat that the user owns (see
+    _check_browser_chat). Creates the sandbox row if needed."""
     with get_session_with_current_tenant() as db_session:
-        chat_session = get_owned_chat_session(chat_session_id, user.id, db_session)
-        if chat_session is None or chat_session.deleted:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found.")
+        _check_browser_chat(chat_session_id, user, db_session)
         sandbox_id = get_or_create_sandbox(db_session, user.id).id
+    return HarnessSandboxRef(
+        tenant_id=get_current_tenant_id(),
+        sandbox_id=sandbox_id,
+        session_id=chat_session_id,
+    )
+
+
+def _existing_browser_ref(chat_session_id: UUID, user: User) -> HarnessSandboxRef:
+    """Like _browser_ref, for reads: writes nothing, and raises NOT_FOUND
+    when the user has no sandbox."""
+    with get_session_with_current_tenant() as db_session:
+        _check_browser_chat(chat_session_id, user, db_session)
+        sandbox_id = get_sandbox_id_by_user_id(db_session, user.id)
+    if sandbox_id is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "The chat has no browser files.")
     return HarnessSandboxRef(
         tenant_id=get_current_tenant_id(),
         sandbox_id=sandbox_id,
@@ -124,12 +162,14 @@ async def _close_refused(websocket: WebSocket, e: OnyxError) -> None:
 
 
 async def _hold_browser_view(
-    sandbox: HarnessSandbox, ref: HarnessSandboxRef, user: User
+    sandbox: HarnessSandbox,
+    ref: HarnessSandboxRef,
+    read_user: Callable[[], Awaitable[User | None]],
 ) -> OnyxError:
     """Renew the viewer lease while the user may still view the chat (the
-    setting, the owner and the chat are checked again after each renewal);
-    returns the error that ends the view. A failed renewal only lets the
-    lease expire sooner."""
+    session, the user, the setting, the owner and the chat are checked again
+    after each renewal); returns the error that ends the view. A failed
+    renewal only lets the lease expire sooner."""
     while True:
         try:
             await asyncio.to_thread(sandbox.renew_browser_view, ref)
@@ -139,6 +179,11 @@ async def _hold_browser_view(
             )
         await asyncio.sleep(_VIEW_RENEW_SECONDS)
         try:
+            user = await read_user()
+            if user is None:
+                return OnyxError(
+                    OnyxErrorCode.UNAUTHENTICATED, "Your session has ended."
+                )
             await asyncio.to_thread(_browser_ref, ref.session_id, user)
         except OnyxError as e:
             return e
@@ -190,11 +235,15 @@ async def _pump(
     )
     from_service = asyncio.create_task(_service_to_viewer(websocket, stream))
     pumps = {from_viewer, from_service}
-    done, _ = await asyncio.wait({*pumps, lease}, return_when=asyncio.FIRST_COMPLETED)
-    pending = pumps - done
-    for task in pending:
-        task.cancel()
-    await asyncio.gather(*pending, return_exceptions=True)
+    try:
+        done, _ = await asyncio.wait(
+            {*pumps, lease}, return_when=asyncio.FIRST_COMPLETED
+        )
+    finally:
+        # Also on a cancel of this task: no pump outlives it.
+        for task in pumps:
+            task.cancel()
+        await asyncio.gather(*pumps, return_exceptions=True)
     if lease in done:
         await _close_refused(websocket, lease.result())
         return
@@ -217,6 +266,7 @@ async def chat_browser_live_view(
     websocket: WebSocket,
     chat_session_id: UUID,
     user: User = Depends(current_user_from_websocket_cookie),
+    strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
 ) -> None:
     """The live view of the chat's tabs."""
     # Accepted first, so that a refusal reaches the viewer with its code.
@@ -227,7 +277,11 @@ async def chat_browser_live_view(
         await _close_refused(websocket, e)
         return
     sandbox = get_harness_sandbox()
-    lease = asyncio.create_task(_hold_browser_view(sandbox, ref, user))
+    lease = asyncio.create_task(
+        _hold_browser_view(
+            sandbox, ref, lambda: read_websocket_cookie_user(websocket, strategy)
+        )
+    )
     try:
         await websocket.send_json({"type": "starting"})
         try:
@@ -302,3 +356,37 @@ def clear_chat_browser_data(
         get_harness_sandbox().clear_browser_data(ref)
     except (HarnessSandboxError, HostAgentError, SandboxDaemonError) as e:
         raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
+
+
+@router.get("/sessions/{chat_session_id}/browser/downloads/{name}")
+def download_chat_browser_file(
+    chat_session_id: UUID,
+    name: str,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> Response:
+    """A file that the browser downloaded for the chat, as an attachment.
+    `name` is its name in the chat's downloads directory."""
+    ref = _existing_browser_ref(chat_session_id, user)
+    if (
+        name in ("", ".", "..")
+        or any(char in name for char in "/\\\0")
+        or len(name.encode()) > _MAX_DOWNLOAD_NAME_BYTES
+    ):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Not a valid file name.")
+    try:
+        data = get_harness_sandbox().read_file(
+            ref,
+            f"{BROWSER_DOWNLOADS_DIR}/{name}",
+            max_bytes=BROWSER_DOWNLOAD_MAX_BYTES,
+        )
+    except SandboxFileNotFoundError as e:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Download not found.") from e
+    except SandboxFileTooLargeError as e:
+        raise OnyxError(OnyxErrorCode.PAYLOAD_TOO_LARGE, str(e)) from e
+    except (HarnessSandboxError, HostAgentError, SandboxDaemonError) as e:
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": build_content_disposition("attachment", name)},
+    )
