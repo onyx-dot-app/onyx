@@ -968,8 +968,10 @@ of the chat. `useSubagentNavigation().open` pushes the URL with
 parameters; `openParent` removes it. `views/AppPage.tsx` reads the parameter
 while a chat is open: it renders `SubagentView` in the ChatUI slot (no
 `ChatScrollContainer`, no `ChatFind`) and `SubagentBar` in place of
-`MultiModelSelector` and `AppInputBar`. The sidebar, header and right panel
-stay the parent chat's; subagents never open in the output panel.
+`MultiModelSelector` and `AppInputBar`. The sidebar and right panel stay the
+parent chat's; subagents never open in the output panel. The header title
+reads `{chat title} / {subagent name}` (`layouts/chromes/AppChrome.tsx:ChatTitle`),
+and the chat title gives way first on a narrow screen.
 `sections/chat/SubagentView.tsx:SubagentView` starts with T3 Code's "Subagent
 of · {chat title}" divider, a pill that opens the parent, then renders the
 agent's conversation read-only, as the shared view does (`HumanMessage`,
