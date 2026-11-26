@@ -787,17 +787,18 @@ def test_a_chat_session_takes_the_policies_of_its_chat(
     )
     db_session.add(chat)
     db_session.commit()
-    ctx = _sandbox(user).with_session(chat.id)
+    craft_ctx = _sandbox(user).with_session(chat.id)
+    chat_ctx = _sandbox(user).with_session(chat.id, chat_command_id=uuid4())
     addon = _addon()
 
-    def policy(method: str, path: str, from_chat: bool = True) -> ActionPolicy:
+    def policy(method: str, path: str, ctx: SessionContext = chat_ctx) -> ActionPolicy:
         matched = _evaluate(_request(f"https://{host}{path}", method=method), user)
         assert matched.target.api_app and matched.target.chat_tools
-        resolved = addon._resolve_request_policies(ctx, matched, from_chat)
+        resolved = addon._resolve_request_policies(ctx, matched)
         return resolved.governing_action.policy
 
     assert policy("GET", "/items/7") is ActionPolicy.DENY
-    assert policy("GET", "/items/7", from_chat=False) is ActionPolicy.ALWAYS
+    assert policy("GET", "/items/7", craft_ctx) is ActionPolicy.ALWAYS
     assert policy("POST", "/items") is ActionPolicy.DENY
     assert policy("DELETE", "/items/7") is ActionPolicy.ASK
     assert policy("GET", "/other") is ActionPolicy.ASK

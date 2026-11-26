@@ -569,7 +569,7 @@ class GateAddon:
         ):
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
-        current_actions = self._resolve_request_policies(ctx, recognized, from_chat)
+        current_actions = self._resolve_request_policies(ctx, recognized)
         if current_actions.governing_action.policy is ActionPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
@@ -714,13 +714,11 @@ class GateAddon:
                 flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             return None
 
-        session_id, from_chat, command_id = session
-        ctx = sandbox.with_session(
-            session_id, chat_command_id=command_id if from_chat else None
-        )
+        session_id, command_id = session
+        ctx = sandbox.with_session(session_id, chat_command_id=command_id)
         try:
             matched_actions = await asyncio.to_thread(
-                self._resolve_request_policies, ctx, matched_actions, from_chat
+                self._resolve_request_policies, ctx, matched_actions
             )
         except Exception:
             logger.exception("request_policy_failed tenant=%s", sandbox.tenant_id)
@@ -730,7 +728,7 @@ class GateAddon:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
         if (
-            from_chat
+            ctx.chat_command_id is not None
             and matched_actions.governing_action.policy is ActionPolicy.ASK
             and not await asyncio.to_thread(self._command_grant, ctx, matched_actions)
             and not await asyncio.to_thread(self._command_in_foreground, ctx)
@@ -761,9 +759,12 @@ class GateAddon:
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox, tag: str | None
     ) -> AllMatchedActions | McpProtocolRequest | None:
         try:
-            session_tag = parse_session_tag(tag)[0] if tag else None
+            session, command = parse_session_tag(tag) if tag else (None, None)
         except ValueError:
-            session_tag = None
+            session, command = None, None
+        # Only a chat's tag names a command; the chat's agent picks the
+        # integrations.
+        session_tag = session if command is not None else None
         return self._request_evaluator.evaluate(
             flow.request, sandbox.tenant_id, sandbox.user_id, session_tag
         )
@@ -772,7 +773,6 @@ class GateAddon:
         self,
         ctx: SessionContext,
         recognized_actions: AllMatchedActions,
-        from_chat: bool = False,
     ) -> AllMatchedActions:
         """Apply the current integration policies of the user. A request
         from a chat takes the policies of the agent of that chat."""
@@ -782,7 +782,9 @@ class GateAddon:
                 db,
                 recognized_actions=recognized_actions,
                 user_id=ctx.user_id,
-                chat_session_id=ctx.session_id if from_chat else None,
+                chat_session_id=ctx.session_id
+                if ctx.chat_command_id is not None
+                else None,
             )
         if MCP_UNCLASSIFIABLE_ACTION_TYPE in effective_policies:
             effective_policies[MCP_UNCLASSIFIABLE_ACTION_TYPE] = ActionPolicy.DENY
@@ -1438,10 +1440,10 @@ class GateAddon:
 
     def _resolve_gated_session(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox, tag: str | None
-    ) -> tuple[UUID, bool, UUID | None] | None:
+    ) -> tuple[UUID, UUID | None] | None:
         """Resolves the originating session from the Proxy-Authorization tag:
-        the session id, whether it is a chat (not a Craft session), and the
-        chat VM command that the tag names, if any.
+        the session id, and the chat VM command that the tag names. A tag
+        with a command is a chat's, a tag without one a Craft session's.
 
         Returns None (caller fails closed) if the tag is absent, malformed, or
         doesn't resolve to one of this user's sessions. DB errors propagate to
@@ -1465,14 +1467,15 @@ class GateAddon:
                 flow.request.host,
             )
             return None
-        exact = self._identity.resolve_session_by_id(
-            tagged_id, sandbox.user_id, sandbox.tenant_id
-        )
-        from_chat = exact is None
-        if exact is None:
-            exact = self._identity.resolve_chat_session(
+        exact = (
+            self._identity.resolve_session_by_id(
                 tagged_id, sandbox.user_id, sandbox.tenant_id
             )
+            if command_id is None
+            else self._identity.resolve_chat_session(
+                tagged_id, sandbox.user_id, sandbox.tenant_id
+            )
+        )
         if exact is None:
             # Stale, foreign, or tampered tag. Fail closed — do not guess.
             logger.warning(
@@ -1488,10 +1491,10 @@ class GateAddon:
             sandbox.tenant_id,
             sandbox_log_label(sandbox),
             short_log_id(exact),
-            from_chat,
+            command_id is not None,
             flow.request.host,
         )
-        return exact, from_chat, command_id
+        return exact, command_id
 
     def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
         """The originating session tag, or None.

@@ -274,9 +274,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    only for a session of the IP-resolved user. A forged tag can only move an
    approval to another session of the same user. The comment in
    `GateAddon._extract_session_tag` explains why signing the MCP session header
-   adds nothing. Keep the user check. A tag that is no build session can be
-   a chat: each chat VM command sends `<chat session>.<command ID>` as the
-   proxy URL user (`server/features/build/sandbox/firecracker/harness_sandbox.py:command_proxy_user`,
+   adds nothing. Keep the user check. A tag with a command ID is a chat's,
+   and a tag without one is a build session's: each chat VM command sends
+   `<chat session>.<command ID>` as the proxy URL user (`server/features/build/sandbox/firecracker/harness_sandbox.py:command_proxy_user`,
    parsed by `sandbox_proxy/addons/gate.py:parse_session_tag`), and `IdentityResolver.resolve_chat_session`
    accepts a chat of the owner that is not deleted. Such a request takes the
    agent policies of that chat (`integrations/policy.py:resolve_chat_action_policies`)

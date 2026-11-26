@@ -2042,32 +2042,6 @@ def _chat_policies(
     return chats
 
 
-@pytest.mark.asyncio
-async def test_an_ask_from_a_chat_is_refused_and_names_the_app_tool(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A tag with no command names no call that could show a card, so the
-    gate opens no approval."""
-    chat_id = UUID(_TAG_UUID)
-    chats = _chat_policies(monkeypatch, ActionPolicy.ASK)
-    addon = _build(
-        resolver=StubResolver(sandbox=make_resolved_sandbox(), chat_session=chat_id),
-        matcher=_StubMatcher(result=_MATCH),
-    )
-    spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
-    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
-
-    await addon.request(flow)
-
-    _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
-    assert flow.response is not None and flow.response.content is not None
-    assert (
-        "app__42__slack_messages_write" in json.loads(flow.response.content)["detail"]
-    )
-    assert chats == [chat_id]
-    assert not spy.persisted and not spy.awaited and not spy.dispatched
-
-
 @pytest.mark.parametrize(
     ("action_types", "api_app", "chat_tools", "hint"),
     [
@@ -2100,7 +2074,6 @@ async def test_an_ask_from_a_chat_names_the_tool_of_an_api_app(
     chat_tools: bool,
     hint: str,
 ) -> None:
-    _chat_policies(monkeypatch, ActionPolicy.ASK)
     match = AllMatchedActions(
         actions=tuple(
             MatchedAction(
@@ -2119,14 +2092,9 @@ async def test_an_ask_from_a_chat_names_the_tool_of_an_api_app(
             chat_tools=chat_tools,
         ),
     )
-    addon = _build(
-        resolver=StubResolver(
-            sandbox=make_resolved_sandbox(), chat_session=UUID(_TAG_UUID)
-        ),
-        matcher=_StubMatcher(result=match),
-    )
+    addon, _ = _command_gate(monkeypatch, match=match, foreground=False)
     _spy_pipeline(addon, monkeypatch)
-    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
     await addon.request(flow)
 
@@ -2146,7 +2114,7 @@ async def test_an_allowed_request_from_a_chat_gets_the_credential(
         matcher=_StubMatcher(result=_MATCH),
     )
     spy = _spy_pipeline(addon, monkeypatch)
-    flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
     await addon.request(flow)
 
@@ -2241,15 +2209,22 @@ def test_parse_session_tag() -> None:
 async def test_a_command_ask_without_a_foreground_call_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A background process: no call waits on its command, so no card."""
+    """A background process: no call waits on its command, so no card. The
+    refusal names the app tool that can ask instead."""
     addon, _ = _command_gate(monkeypatch, foreground=False)
+    chats = _chat_policies(monkeypatch, ActionPolicy.ASK)
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
     await addon.request(flow)
 
     _assert_403(flow, SandboxProxyError.APPROVAL_NEEDS_TOOL)
-    assert not spy.persisted and not spy.dispatched
+    assert flow.response is not None and flow.response.content is not None
+    assert (
+        "app__42__slack_messages_write" in json.loads(flow.response.content)["detail"]
+    )
+    assert chats == [UUID(_TAG_UUID)]
+    assert not spy.persisted and not spy.awaited and not spy.dispatched
 
 
 @pytest.mark.parametrize(
@@ -2298,7 +2273,6 @@ async def test_a_command_grant_covers_the_same_action_only(
     )
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     inserted = _spy_approval_insert(monkeypatch)
-    _approved_command_row(monkeypatch)
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
     await addon.request(flow)
@@ -2414,7 +2388,6 @@ async def test_a_command_grant_covers_the_command_after_it_leaves_the_foreground
     approval_cache.clear_command_foreground(_COMMAND, cache)
     spy = _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     inserted = _spy_approval_insert(monkeypatch)
-    _approved_command_row(monkeypatch)
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
 
     await addon.request(flow)
@@ -2462,7 +2435,6 @@ async def test_a_command_grant_row_stores_the_size_of_a_large_body(
     )
     _spy_pipeline(addon, monkeypatch, decision=ApprovalDecision.APPROVED)
     inserted = _spy_approval_insert(monkeypatch)
-    _approved_command_row(monkeypatch)
     flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG), raw_content=raw)
     flow.request.path = "/api/chat.postMessage"
 
