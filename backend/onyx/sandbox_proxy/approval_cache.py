@@ -1,7 +1,7 @@
 """Ephemeral cache signals for the approval rendezvous.
 
-The Postgres `action_approval` row is the source of truth; everything
-here is best-effort over `CacheBackend`. Two lists:
+The Postgres `action_approval` row is the source of truth for a decision;
+the signals here are best-effort over `CacheBackend`. Two lists:
 
 * `approval:announce:{session_id}` — proxy RPUSHes after committing the
   row; the chat-stream merger BLPOPs to emit the card on the live SSE
@@ -10,7 +10,9 @@ here is best-effort over `CacheBackend`. Two lists:
   recorded; the parked proxy BLPOPs to wake before the wait timeout.
 
 A command that a chat runs in its VM uses the announce list under its command
-ID, and four more keys:
+ID, and four more keys. These keys live only in the cache, with no row: a
+command grant must end with its command, and the ended mark that ends it is
+cache-only too. A lost grant only asks the user again.
 
 * `approval:command:{command_id}:foreground` — the chat session of a command
   that a call of the chat's run waits on. The call sets and renews it; the
