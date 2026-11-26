@@ -319,6 +319,24 @@ def test_unchanged_lines_keep_the_document_text(
     assert _view(db_session, admin, integration_id).openapi_document == document
 
 
+@pytest.mark.parametrize("suffix", ["?version=2", "#v2"])
+def test_a_base_url_with_a_query_or_fragment_is_refused(
+    db_session: Session, admin: User, created: list[int], suffix: str
+) -> None:
+    with pytest.raises(OnyxError) as error:
+        _create(
+            db_session,
+            admin,
+            created,
+            OpenApiConfigInput(
+                base_url=BASE_URL + suffix, endpoints=["GET /tickets List"]
+            ),
+        )
+    db_session.rollback()
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+    assert "query or a fragment" in error.value.detail
+
+
 def test_each_bad_line_gets_its_own_error(
     db_session: Session, admin: User, created: list[int]
 ) -> None:

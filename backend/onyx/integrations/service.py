@@ -5,6 +5,7 @@ import json
 from collections.abc import Collection, Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 import requests
@@ -434,6 +435,13 @@ def validate_openapi_definition(definition: dict[str, Any]) -> None:
     except (ValueError, TypeError, KeyError, AttributeError) as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
     server_url = openapi_to_url(definition)
+    parsed = urlparse(server_url)
+    if parsed.query or parsed.fragment:
+        # Tools append the endpoint path to the whole server URL.
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Server URL '{server_url}' cannot have a query or a fragment.",
+        )
     try:
         # No DNS at save time; each call resolves and checks again.
         validate_custom_tool_url(server_url, resolve_dns=False)
