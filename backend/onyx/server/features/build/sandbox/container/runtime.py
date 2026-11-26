@@ -81,6 +81,11 @@ class ContainerRuntime(abc.ABC):
     kind: ContainerRuntimeKind
 
     @abc.abstractmethod
+    def prepare(self) -> None:
+        """Make what every create needs (for example pull the image) before
+        a start's budget begins."""
+
+    @abc.abstractmethod
     def create(
         self, spec: ContainerSpec, credentials: DaemonCredentials, deadline: float
     ) -> str:

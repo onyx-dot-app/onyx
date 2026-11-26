@@ -207,14 +207,14 @@ class DockerRuntime(DockerSandboxOps, ContainerRuntime):
         self._publish = publish_daemon_port
         self._port = daemon_port
 
+    def prepare(self) -> None:
+        self._ensure_sandbox_image()
+        self._ensure_sandbox_network()
+
     def create(
         self, spec: ContainerSpec, credentials: DaemonCredentials, deadline: float
     ) -> str:
-        # A cold pull can take minutes; it does not count against the start.
-        pull_started = time.monotonic()
-        self._ensure_sandbox_image()
-        deadline += time.monotonic() - pull_started
-        self._ensure_sandbox_network()
+        self.prepare()
         kwargs = build_harness_container_kwargs(
             spec,
             image=self._image,

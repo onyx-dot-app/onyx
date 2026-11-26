@@ -124,7 +124,9 @@ def test_the_pod_overlay_sets_the_daemon_contract() -> None:
     assert mounts["ca"].mount_path == "/sandbox-ca"
     assert mounts["daemon-files"].mount_path == "/run/craft-fc/daemon"
     assert mounts["daemon-files"].read_only is True
+    assert mounts["workspaces"].mount_path == "/home/onyx/workspaces"
     volumes = {v.name: v for v in pod_spec.volumes}
+    assert volumes["workspaces"].empty_dir is not None
     secret = volumes["daemon-files"].secret
     assert secret.secret_name == daemon_secret_name(spec.name)
     assert secret.default_mode == 0o440

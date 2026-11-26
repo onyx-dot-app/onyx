@@ -63,12 +63,16 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_SANDBOX_KIND,
     SANDBOX_KIND_HARNESS,
 )
+from onyx.server.features.build.sandbox.models import SESSION_WORKSPACE_ROOT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 DAEMON_CONTAINER_NAME = "sandbox"
 _DAEMON_FILES_VOLUME = "daemon-files"
+# Session directories outlive a daemon (container) restart in the pod.
+_WORKSPACES_VOLUME = "workspaces"
+_OVERLAY_VOLUMES = frozenset({_DAEMON_FILES_VOLUME, _WORKSPACES_VOLUME})
 _ENTRYPOINT = "/usr/local/bin/sandbox-entrypoint"
 # The proxy hostname in the sandbox: the firewall blocks DNS, so the pod
 # gets the proxy's ClusterIP as a hostAlias (as Craft pods do).
@@ -81,8 +85,11 @@ _HARNESS_SELECTOR = (
 )
 
 
+_SECRET_SUFFIX = "-daemon"
+
+
 def daemon_secret_name(pod_name: str) -> str:
-    return f"{pod_name}-daemon"
+    return f"{pod_name}{_SECRET_SUFFIX}"
 
 
 def overlay_harness_pod(
@@ -123,15 +130,21 @@ def overlay_harness_pod(
     container.volume_mounts = [
         mount
         for mount in container.volume_mounts or []
-        if mount.name != _DAEMON_FILES_VOLUME
+        if mount.name not in _OVERLAY_VOLUMES
     ] + [
         client.V1VolumeMount(
             name=_DAEMON_FILES_VOLUME, mount_path=DAEMON_FILES_DIR, read_only=True
-        )
+        ),
+        client.V1VolumeMount(
+            name=_WORKSPACES_VOLUME, mount_path=SESSION_WORKSPACE_ROOT
+        ),
     ]
     spec.volumes = [
-        volume for volume in spec.volumes or [] if volume.name != _DAEMON_FILES_VOLUME
+        volume for volume in spec.volumes or [] if volume.name not in _OVERLAY_VOLUMES
     ] + [
+        client.V1Volume(
+            name=_WORKSPACES_VOLUME, empty_dir=client.V1EmptyDirVolumeSource()
+        ),
         client.V1Volume(
             name=_DAEMON_FILES_VOLUME,
             secret=client.V1SecretVolumeSource(
@@ -147,7 +160,7 @@ def overlay_harness_pod(
                     )
                 ],
             ),
-        )
+        ),
     ]
     # A daemon that exits restarts in the same pod (same IP); calls on its old
     # executions then end (ExecSessionEndedError).
@@ -210,6 +223,10 @@ class PodRuntime(SandboxPodOps, ContainerRuntime):
                 daemon_port=self._port,
             ),
         )
+
+    def prepare(self) -> None:
+        # The image prepuller and the kubelet pull images.
+        return None
 
     def create(
         self, spec: ContainerSpec, credentials: DaemonCredentials, deadline: float
@@ -310,10 +327,35 @@ class PodRuntime(SandboxPodOps, ContainerRuntime):
         logger.info("sandbox_pod_deleted name=%s", name)
 
     def list_containers(self, deadline: float) -> list[RuntimeContainer]:
-        return [
+        """The harness pods, and a failed entry for each daemon Secret whose
+        pod does not exist (a create that stopped between the two), so the
+        sweep deletes it."""
+        found = [
             self._runtime_container(pod)
             for pod in self._list_all_pages(
                 self._core_api.list_namespaced_pod, _HARNESS_SELECTOR, deadline
             )
             if isinstance(pod, client.V1Pod)
         ]
+        pods = {item.name for item in found}
+        for secret in self._list_all_pages(
+            self._core_api.list_namespaced_secret, _HARNESS_SELECTOR, deadline
+        ):
+            if not isinstance(secret, client.V1Secret):
+                continue
+            name = secret.metadata.name.removesuffix(_SECRET_SUFFIX)
+            if name in pods or not secret.metadata.name.endswith(_SECRET_SUFFIX):
+                continue
+            tenant_id, sandbox_id, attempt = parse_labels(secret.metadata.labels or {})
+            found.append(
+                RuntimeContainer(
+                    name=name,
+                    tenant_id=tenant_id,
+                    sandbox_id=sandbox_id,
+                    attempt=attempt,
+                    state=ContainerState.FAILED,
+                    address=None,
+                    created_at=secret.metadata.creation_timestamp or datetime.now(UTC),
+                )
+            )
+        return found

@@ -15,6 +15,7 @@ The host cannot reach pod IPs, so the test dials each pod through
 import os
 import re
 import subprocess
+import time
 from collections.abc import Generator, Iterator
 from uuid import uuid4
 
@@ -36,6 +37,7 @@ from onyx.server.features.build.sandbox.container.models import (
 from onyx.server.features.build.sandbox.container.pod_runtime import (
     PodRuntime,
     daemon_secret_name,
+    harness_pod_labels,
 )
 from onyx.server.features.build.sandbox.container.state import (
     get_container_record,
@@ -194,6 +196,7 @@ def sandbox(
         idle_timeout_seconds=0,
         start_timeout_seconds=_START_SECONDS,
         turn_end_save_interval_seconds=0,
+        orphan_grace_seconds=0,
     )
 
 
@@ -240,3 +243,32 @@ def test_a_pod_sandbox_runs_saves_stops_and_restores(
         assert restarted is not None and restarted.attempt == record.attempt + 1
     finally:
         sandbox.purge_sandbox(tenant_id=ref.tenant_id, sandbox_id=ref.sandbox_id)
+
+
+def test_the_sweep_deletes_a_daemon_secret_without_its_pod(
+    sandbox: ContainerHarnessSandbox, core_api: client.CoreV1Api, namespace: str
+) -> None:
+    """A create that stopped after the Secret leaves no pod; the sweep
+    deletes the Secret."""
+    spec = ContainerSpec(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA,
+        sandbox_id=uuid4(),
+        attempt=1,
+        name=f"harness-{uuid4()}-1",
+    )
+    secret_name = daemon_secret_name(spec.name)
+    core_api.create_namespaced_secret(
+        namespace=namespace,
+        body=client.V1Secret(
+            metadata=client.V1ObjectMeta(
+                name=secret_name, labels=harness_pod_labels(spec)
+            ),
+            string_data={"key": "k"},
+        ),
+    )
+    sandbox.sweep(time.monotonic() + 60)
+    names = [
+        s.metadata.name
+        for s in core_api.list_namespaced_secret(namespace=namespace).items
+    ]
+    assert secret_name not in names

@@ -371,6 +371,38 @@ def test_a_daemon_restart_is_a_new_generation(
         _run(sandbox.write_stdin(ref, running.session_id))
 
 
+def test_session_files_survive_a_daemon_restart(
+    sandbox: ContainerHarnessSandbox,
+    new_ref: NewRef,
+    tenant_cache: CacheBackend,
+    docker_client: DockerClient,
+) -> None:
+    """A restart keeps the files: no restore replaces them, and an idle stop
+    before the next call saves them."""
+    ref = new_ref()
+    sandbox.write_file(ref, "draft.txt", b"one")
+    _make_idle(tenant_cache, ref)
+    tenant_cache.delete(f"{WANTED_PREFIX}{ref.sandbox_id}")
+    assert (
+        sandbox.stop_if_idle(ref.tenant_id, ref.sandbox_id) is IdleStopOutcome.STOPPED
+    )
+    # The save has "one"; the new container changes the file, then restarts.
+    sandbox.write_file(ref, "draft.txt", b"two")
+    record = get_container_record(tenant_cache, ref.sandbox_id)
+    assert record is not None
+    docker_client.containers.get(record.name).restart(timeout=1)
+    assert sandbox.read_file(ref, "draft.txt", max_bytes=10) == b"two"
+
+    sandbox.write_file(ref, "draft.txt", b"three")
+    docker_client.containers.get(record.name).restart(timeout=1)
+    _make_idle(tenant_cache, ref)
+    tenant_cache.delete(f"{WANTED_PREFIX}{ref.sandbox_id}")
+    assert (
+        sandbox.stop_if_idle(ref.tenant_id, ref.sandbox_id) is IdleStopOutcome.STOPPED
+    )
+    assert sandbox.read_file(ref, "draft.txt", max_bytes=10) == b"three"
+
+
 def test_purge_deletes_the_session_and_the_sandbox(
     sandbox: ContainerHarnessSandbox,
     new_ref: NewRef,

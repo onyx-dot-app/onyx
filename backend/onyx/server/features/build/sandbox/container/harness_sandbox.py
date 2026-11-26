@@ -38,6 +38,7 @@ from onyx.server.features.build.sandbox.container.models import (
     ContainerRecord,
     ContainerSpec,
     ContainerState,
+    RuntimeContainer,
 )
 from onyx.server.features.build.sandbox.container.runtime import (
     ContainerRuntime,
@@ -116,6 +117,12 @@ class ContainerInstance(RunningInstance):
             daemon=daemon, attempt=record.attempt, generation=record.generation
         )
         self.record = record
+
+    @property
+    def files_identity(self) -> tuple[int, int]:
+        # Session files live as long as the container (Docker writable
+        # layer, pod emptyDir): a daemon restart keeps them.
+        return (self.attempt, 0)
 
 
 class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
@@ -220,11 +227,15 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
         return ContainerInstance(record, daemon)
 
     def _create(
-        self, tenant_cache: CacheBackend, sandbox: HarnessSandboxKey, deadline: float
+        self, tenant_cache: CacheBackend, sandbox: HarnessSandboxKey, lock: CacheLock
     ) -> ContainerInstance:
         """A new container (the next attempt) with a new key and certificate.
-        Hold the container lock."""
+        Hold the container lock. The start budget begins after the image
+        pull, which can take minutes."""
         sandbox_id = sandbox.sandbox_id
+        self.runtime.prepare()
+        _renew_lock(lock, _LOCK_LEASE_SECONDS)
+        deadline = time.monotonic() + self._start_timeout
         attempt = last_attempt(tenant_cache, sandbox_id) + 1
         record_attempt(tenant_cache, sandbox_id, attempt)
         credentials = new_daemon_credentials()
@@ -304,9 +315,9 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
                     return instance
                 found = self.runtime.inspect(record.name)
                 if found is not None and found.state is ContainerState.RUNNING:
-                    if found.address and found.address != record.address:
-                        record = record.model_copy(update={"address": found.address})
-                        set_container_record(tenant_cache, sandbox_id, record)
+                    record = (
+                        self._moved(tenant_cache, sandbox_id, record, found) or record
+                    )
                     instance = self._initialize(
                         tenant_cache, sandbox_id, record, deadline
                     )
@@ -318,7 +329,7 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
                     record.name,
                 )
                 self._discard(tenant_cache, sandbox_id, record.name, record.attempt)
-            return self._create(tenant_cache, sandbox, deadline)
+            return self._create(tenant_cache, sandbox, lock)
         finally:
             if lock.owned():
                 lock.release()
@@ -351,7 +362,29 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
             found = self.runtime.inspect(record.name)
             if found is None or found.state is ContainerState.FAILED:
                 return None
-            raise
+            moved = self._moved(tenant_cache, sandbox_id, record, found)
+            if moved is None:
+                raise
+            return self._probe(tenant_cache, sandbox_id, moved)
+
+    def _moved(
+        self,
+        tenant_cache: CacheBackend,
+        sandbox_id: UUID,
+        record: ContainerRecord,
+        found: RuntimeContainer,
+    ) -> ContainerRecord | None:
+        """The record with the container's new address (a restart can move a
+        published port); None when the address is the same."""
+        if not found.address or found.address == record.address:
+            return None
+        moved = record.model_copy(update={"address": found.address})
+        update_container_record(
+            tenant_cache,
+            sandbox_id,
+            lambda current: moved if current.name == record.name else None,
+        )
+        return moved
 
     def _transfer(self, instance: ContainerInstance) -> SessionTransfer | None:
         if self._file_archives is None:
@@ -374,14 +407,14 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
             if (
                 record is None
                 or record.name != instance.record.name
-                or (record.attempt, record.generation) != instance.identity
+                or record.attempt != instance.attempt
             ):
                 raise HarnessSandboxError(
                     "The sandbox stopped while this session was set up. "
                     "Run the call again."
                 )
             mark_session_on_instance(
-                tenant_cache, ref.sandbox_id, ref.session_id, instance.identity
+                tenant_cache, ref.sandbox_id, ref.session_id, instance.files_identity
             )
         finally:
             if lock.owned():
@@ -460,19 +493,21 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
             def cancelled() -> bool:
                 return wanted_since(tenant_cache, sandbox_id, since)
 
-            if cancelled() or self.is_busy(tenant_id=tenant_id, sandbox_id=sandbox_id):
+            if cancelled():
                 return IdleStopOutcome.BUSY
             try:
-                instance = self._instance_if_running(tenant_cache, sandbox_id)
-            except (HostAgentError, SandboxDaemonError):
+                # Before the busy check: it waits for a restarting daemon.
+                instance = self._instance_for_save(tenant_cache, sandbox_id, record)
+            except Exception:
                 logger.warning(
                     "sandbox_container_idle_check_failed sandbox=%s",
                     sandbox_id,
                     exc_info=True,
                 )
                 return IdleStopOutcome.KEPT
-            # No instance: the daemon restarted, so the sessions of the
-            # recorded instance are gone already.
+            if self.is_busy(tenant_id=tenant_id, sandbox_id=sandbox_id):
+                return IdleStopOutcome.BUSY
+            # No instance: the container is gone or failed, and its files with it.
             if instance is not None:
                 transfer = self._transfer(instance)
                 if transfer is None:
@@ -484,9 +519,11 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
                     transfer,
                     self._file_archives,
                     sandbox_id,
-                    sessions_on_instance(tenant_cache, sandbox_id, instance.identity),
+                    sessions_on_instance(
+                        tenant_cache, sandbox_id, instance.files_identity
+                    ),
                     cancelled=cancelled,
-                    renew_lease=lambda: _renew(lock),
+                    renew_lease=lambda: _renew_lock(lock, SESSION_SAVE_MAX_SECONDS),
                 ):
                     return IdleStopOutcome.KEPT
                 # A call, turn, approval or command that began during the saves.
@@ -504,6 +541,29 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
         finally:
             if lock.owned():
                 lock.release()
+
+    def _instance_for_save(
+        self, tenant_cache: CacheBackend, sandbox_id: UUID, record: ContainerRecord
+    ) -> ContainerInstance | None:
+        """The container's daemon for a stop's saves. A restarted daemon is
+        initialized again first: its files survived. None when the
+        container is gone or failed. Hold the container lock."""
+        try:
+            instance = self._probe(tenant_cache, sandbox_id, record)
+        except (HostAgentError, SandboxDaemonError):
+            instance = None
+        if instance is not None:
+            return instance
+        found = self.runtime.inspect(record.name)
+        if found is None or found.state is ContainerState.FAILED:
+            return None
+        record = self._moved(tenant_cache, sandbox_id, record, found) or record
+        instance = self._initialize(
+            tenant_cache, sandbox_id, record, time.monotonic() + self._start_timeout
+        )
+        if instance is None:
+            raise HarnessSandboxError(f"the daemon of {record.name} does not answer")
+        return instance
 
     def sweep(self, deadline: float) -> list[HarnessSandboxKey]:
         """Delete containers that no record names, after the grace time, and
@@ -546,8 +606,8 @@ class ContainerHarnessSandbox(DaemonHarnessSandbox[ContainerInstance]):
         return idle
 
 
-def _renew(lock: CacheLock) -> None:
-    """Raises when the stop lost its lock: no later commit."""
+def _renew_lock(lock: CacheLock, seconds: float) -> None:
+    """Raises when the lock was lost: no later write."""
     if not lock.owned():
-        raise CacheLockLostError("sandbox container lock lost during a stop")
-    lock.extend(SESSION_SAVE_MAX_SECONDS)
+        raise CacheLockLostError("sandbox container lock lost")
+    lock.extend(seconds)
