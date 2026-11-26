@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, memo, useContext, useMemo } from "react";
 import ReactMarkdown, {
   type Components,
   type ExtraProps,
@@ -20,10 +20,17 @@ import { ScrollableTable } from "@/lib/timeline/chat/message/messageComponents/m
 import { tableToCopyContent } from "@/lib/timeline/chat/message/tableCopyUtils";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
-import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
+import {
+  RESPONSE_CURSOR_ANCHOR_ATTRIBUTE,
+  rehypeStreamingCursor,
+} from "@/lib/rehypeStreamingCursor";
 import { useInResponse } from "@/lib/timeline/components/Response";
 import { CodeBlockBody } from "@/lib/timeline/components/bodies/CodeBlockBody";
 import { prepareAnswerMarkdown } from "@/lib/answerText/utils";
+import {
+  endsInOpenCodeFence,
+  splitMarkdownBlocks,
+} from "@/lib/answerText/streamBlocks";
 
 // Math is `$$…$$` only (see `prepareAnswerMarkdown`).
 const REMARK_PLUGINS: PluggableList = [
@@ -108,6 +115,29 @@ const BASE_COMPONENTS: Components = {
   ),
 };
 
+interface AnswerMarkdownBlockProps {
+  markdown: string;
+  components: Components;
+  rehypePlugins: PluggableList;
+}
+
+const AnswerMarkdownBlock = memo(function AnswerMarkdownBlock({
+  markdown,
+  components,
+  rehypePlugins,
+}: AnswerMarkdownBlockProps) {
+  return (
+    <ReactMarkdown
+      components={components}
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={rehypePlugins}
+      urlTransform={transformLinkUri}
+    >
+      {markdown}
+    </ReactMarkdown>
+  );
+});
+
 interface AnswerMarkdownProps {
   content: string;
   /** The text still grows: code highlights line by line and math fades in. */
@@ -125,6 +155,8 @@ interface AnswerMarkdownProps {
  * Answer text, the same in chat and Craft: one markdown pipeline (GFM, `$$`
  * math, per-block direction), one look (`prose prose-onyx` on the main
  * content font), code blocks as `CodeBlockBody`, and the streaming cursor.
+ * Each block renders on its own, so while streaming only the last block
+ * re-renders.
  */
 export function AnswerMarkdown({
   content,
@@ -133,33 +165,56 @@ export function AnswerMarkdown({
   components,
 }: AnswerMarkdownProps) {
   const inResponse = useInResponse();
-  const rehypePlugins = useMemo<PluggableList>(
-    () =>
-      cursor
-        ? [...REHYPE_PLUGINS, [rehypeStreamingCursor, { anchor: inResponse }]]
-        : REHYPE_PLUGINS,
-    [cursor, inResponse]
-  );
   const markdownComponents = useMemo<Components>(
     () => ({ ...BASE_COMPONENTS, ...components }),
     [components]
   );
   const markdown = useMemo(() => prepareAnswerMarkdown(content), [content]);
+  // Split finished answers too: a block that changes parent on completion
+  // remounts and loses its state, such as a code block's wrap choice.
+  const blocks = useMemo(
+    () => splitMarkdownBlocks(markdown) ?? [markdown],
+    [markdown]
+  );
+  // The cursor would sit under an open code block, as code never holds it.
+  const cursorHidden =
+    cursor && endsInOpenCodeFence(blocks[blocks.length - 1] ?? "");
+  const lastBlockRehypePlugins = useMemo<PluggableList>(
+    () =>
+      cursor && !cursorHidden
+        ? [...REHYPE_PLUGINS, [rehypeStreamingCursor, { anchor: inResponse }]]
+        : REHYPE_PLUGINS,
+    [cursor, cursorHidden, inResponse]
+  );
 
   return (
     <StreamingContext.Provider value={streaming}>
       {/* dir="auto" backstops renderers that do not forward the per-block
           dir stamped by rehypeDirection. */}
-      <div dir="auto" className={cn(streaming && "streaming-katex")}>
-        <ReactMarkdown
-          className="response-text prose prose-onyx font-main-content-body max-w-full wrap-break-word"
-          components={markdownComponents}
-          remarkPlugins={REMARK_PLUGINS}
-          rehypePlugins={rehypePlugins}
-          urlTransform={transformLinkUri}
-        >
-          {markdown}
-        </ReactMarkdown>
+      <div
+        dir="auto"
+        className={cn(
+          "response-text prose prose-onyx font-main-content-body max-w-full wrap-break-word",
+          streaming && "streaming-katex"
+        )}
+      >
+        {blocks.map((block, index) => (
+          <AnswerMarkdownBlock
+            key={index}
+            markdown={block}
+            components={markdownComponents}
+            rehypePlugins={
+              index === blocks.length - 1
+                ? lastBlockRehypePlugins
+                : REHYPE_PLUGINS
+            }
+          />
+        ))}
+        {/* The response's cursor fades out here instead of holding its
+            place above the code. */}
+        {cursorHidden && inResponse && (
+          <span hidden {...{ [RESPONSE_CURSOR_ANCHOR_ATTRIBUTE]: "hidden" }} />
+        )}
       </div>
     </StreamingContext.Provider>
   );

@@ -299,13 +299,17 @@ export const MessageTextRenderer: MessageRenderer<
     [displayedContent]
   );
 
-  // Stable-identity components for ReactMarkdown. Dynamic data (`state`)
-  // flows through a ref so the callback identities never change —
-  // otherwise every typewriter tick would invalidate React reconciliation
-  // on the markdown subtree.
+  // Components for ReactMarkdown. Their identities change only with `docs`
+  // and `citations`, so memoized blocks re-render on a citation update. The
+  // other `state` fields flow through a ref, so a typewriter tick does not
+  // invalidate reconciliation of the markdown subtree.
   const stateRef = useRef(state);
   // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   stateRef.current = state;
+  // Finished answer blocks are memoized and re-render only when these
+  // components change, so new citation data must change their identity.
+  const docs = state?.docs;
+  const citations = state?.citations;
 
   const markdownComponents = useMemo<Components>(
     () => ({
@@ -328,9 +332,9 @@ export const MessageTextRenderer: MessageRenderer<
           <MarkdownLinkContent>
             <MemoizedAnchor
               updatePresentingDocument={s?.setPresentingDocument || (() => {})}
-              docs={s?.docs || []}
+              docs={docs || []}
               userFiles={s?.userFiles || []}
-              citations={s?.citations}
+              citations={citations}
               href={href}
             >
               {children}
@@ -364,10 +368,7 @@ export const MessageTextRenderer: MessageRenderer<
               ? () =>
                   tableToCopyContent(
                     node,
-                    createCitationResolver(
-                      stateRef.current?.docs,
-                      stateRef.current?.citations
-                    )
+                    createCitationResolver(docs, citations)
                   )
               : undefined
           }
@@ -377,7 +378,7 @@ export const MessageTextRenderer: MessageRenderer<
         </ScrollableTable>
       ),
     }),
-    []
+    [docs, citations]
   );
 
   const shouldShowThinkingPlaceholder =
