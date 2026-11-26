@@ -10,6 +10,10 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.prompts.tool_prompts import (
+    WEB_SEARCH_DESCRIPTION,
+    WEB_SEARCH_SITE_DISABLED_GUIDANCE,
+)
 from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
 from onyx.tools.interface import (
     CITATIONS_PER_TOOL_CALL,
@@ -54,7 +58,14 @@ class WebSearchTool(Tool):
     merge_list_argument = "queries"
 
     NAME = WEB_SEARCH_TOOL_NAME
-    DESCRIPTION = "Search the web for information."
+    SUMMARY = (
+        "Search the web for information. Returns a list of search results with "
+        "titles, metadata, and snippets."
+    )
+    DESCRIPTION = WEB_SEARCH_DESCRIPTION
+    DESCRIPTION_NO_SITE_FILTER = (
+        f"{WEB_SEARCH_DESCRIPTION}\n{WEB_SEARCH_SITE_DISABLED_GUIDANCE}"
+    )
     DISPLAY_NAME = "Web Search"
 
     def __init__(self, tool_id: int) -> None:
@@ -98,7 +109,13 @@ class WebSearchTool(Tool):
 
     @property
     def description(self) -> str:
-        return self.DESCRIPTION
+        if self.supports_site_filter:
+            return self.DESCRIPTION
+        return self.DESCRIPTION_NO_SITE_FILTER
+
+    @property
+    def summary(self) -> str:
+        return self.SUMMARY
 
     @property
     def display_name(self) -> str:
@@ -123,10 +140,7 @@ class WebSearchTool(Tool):
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
-            self.name,
-            "Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
-            WebSearchArguments,
-            strict=True,
+            self.name, self.description, WebSearchArguments, strict=True
         )
 
     def _safe_execute_single_search(

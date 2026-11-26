@@ -402,7 +402,7 @@ def _profile_calls(
             [("internal_search", _round_queries(snippet, i, profile)) for i in rounds]
         )
 
-    return _code_mode_step(turn, run.function.name, program)
+    return _code_mode_step(turn, code_mode.wait_tool(by_name), program)
 
 
 def _code_profile_calls(
@@ -418,7 +418,7 @@ def _code_profile_calls(
     run = code_mode.run_tool(by_name)
     if run is None or "internal_search" not in code_mode.code_functions(run):
         raise ValueError(
-            "mock-profile-code-v1 needs code mode: offer exec or repl with an "
+            "mock-profile-code-v1 needs code mode: offer execute_code with an "
             "internal_search function"
         )
 
@@ -443,11 +443,11 @@ def _code_profile_calls(
             planned.failed,
         )
 
-    return _code_mode_step(turn, run.function.name, program)
+    return _code_mode_step(turn, code_mode.wait_tool(by_name), program)
 
 
 def _code_mode_step(
-    turn: list[ChatMessage], run_name: str, program: Callable[[int], str | None]
+    turn: list[ChatMessage], wait_name: str, program: Callable[[int], str | None]
 ) -> list[ToolCall]:
     """The next code mode step of the current turn: wait for a cell that the
     latest result left running, else run `program(n)`, where n counts the
@@ -459,15 +459,13 @@ def _code_mode_step(
     needs an input limit far below that of a real model."""
     cell = code_mode.running_cell(turn)
     if cell is not None:
-        return [
-            _new_call(code_mode.WAIT_TOOLS[run_name], json.dumps({"cell_id": cell}))
-        ]
+        return [_new_call(wait_name, json.dumps({"cell_id": cell}))]
     ran = 0
     for message in turn:
         if message.role != "assistant":
             continue
         for call in message.tool_calls or []:
-            if call.function.name != run_name:
+            if call.function.name != code_mode.RUN_TOOL:
                 continue
             mark = _PROGRAM_MARK_RE.match(
                 json.loads(call.function.arguments).get("code", "")
@@ -477,7 +475,11 @@ def _code_mode_step(
     code = program(ran)
     if code is None:
         return []
-    return [_new_call(run_name, json.dumps({"code": f"# mock program {ran}\n{code}"}))]
+    return [
+        _new_call(
+            code_mode.RUN_TOOL, json.dumps({"code": f"# mock program {ran}\n{code}"})
+        )
+    ]
 
 
 def _pick_tool(
@@ -566,7 +568,7 @@ def _pick_tool(
         def program(ran: int) -> str | None:
             return code_mode.search_program(searches) if ran == 0 and searches else None
 
-        return _code_mode_step(turn, run.function.name, program)
+        return _code_mode_step(turn, code_mode.wait_tool(by_name), program)
     if knobs.n_auto_tools > 0 and not has_tool_result:
         # Up to n_auto_tools retrieval tools in parallel; else the first tool.
         chosen = retrieval[: knobs.n_auto_tools]

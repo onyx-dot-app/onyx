@@ -1,7 +1,8 @@
 """The shapes of the code mode operations: run a program, wait on its cell,
-search the deferred functions, and describe one function. Each tool family
-names them and takes their arguments its own way; each shape's arguments
-normalize into the same requests, which the cells serve (code_mode/cells.py)."""
+search the deferred functions, and describe one function. Every tool family
+runs programs with `execute_code`; each family names the other operations and
+takes the arguments its own way. Each shape's arguments normalize into the
+same requests, which the cells serve (code_mode/cells.py)."""
 
 import inspect
 from collections.abc import Mapping
@@ -13,10 +14,9 @@ from onyx.llm.model_capabilities import ToolFamily
 from onyx.tools.constants import (
     DEFAULT_MAX_OUTPUT_CHARS,
     DEFAULT_MAX_OUTPUT_TOKENS,
-    EXEC_TOOL_NAME,
+    EXECUTE_CODE_TOOL_NAME,
     MAX_OUTPUT_TOKENS_DESCRIPTION,
     POLL_TOOL_NAME,
-    REPL_TOOL_NAME,
     WAIT_TOOL_NAME,
 )
 from onyx.tools.models import ToolArguments
@@ -58,7 +58,7 @@ class WaitRequest(NamedTuple):
     terminate: bool
 
 
-class ExecArguments(ToolArguments[RunRequest]):
+class OpenAIRunArguments(ToolArguments[RunRequest]):
     code: str = Field(description="The Python program to run.")
     yield_time_ms: int = Field(
         default=DEFAULT_EXECUTE_YIELD_MS,
@@ -78,7 +78,7 @@ class ExecArguments(ToolArguments[RunRequest]):
         )
 
 
-class ReplArguments(ToolArguments[RunRequest]):
+class ClaudeRunArguments(ToolArguments[RunRequest]):
     code: str = Field(description="The Python program to run.")
     timeout: int = Field(
         default=DEFAULT_EXECUTE_YIELD_MS,
@@ -217,9 +217,9 @@ class CodeModeShape(NamedTuple):
 
 
 OPENAI_CODE_MODE = CodeModeShape(
-    run_name=EXEC_TOOL_NAME,
+    run_name=EXECUTE_CODE_TOOL_NAME,
     wait_name=WAIT_TOOL_NAME,
-    run_arguments=ExecArguments,
+    run_arguments=OpenAIRunArguments,
     run_yield_argument="yield_time_ms",
     wait_arguments=WaitArguments,
     search_name="tool_search",
@@ -228,9 +228,9 @@ OPENAI_CODE_MODE = CodeModeShape(
 )
 # The shape Claude models are trained on.
 CLAUDE_CODE_MODE = CodeModeShape(
-    run_name=REPL_TOOL_NAME,
+    run_name=EXECUTE_CODE_TOOL_NAME,
     wait_name=POLL_TOOL_NAME,
-    run_arguments=ReplArguments,
+    run_arguments=ClaudeRunArguments,
     run_yield_argument="timeout",
     wait_arguments=PollArguments,
     search_name="search_tools",

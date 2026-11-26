@@ -1184,7 +1184,11 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
                 f"yield_control()\nawait tools.mcp__1__acme__{ACTION}(value='team')\n"
             )
             return AssistantMessage(
-                content=[ToolCall(id="program", name="exec", arguments={"code": code})]
+                content=[
+                    ToolCall(
+                        id="program", name="execute_code", arguments={"code": code}
+                    )
+                ]
             )
         if last.tool_call_id == "program":
             assert call_waits.wait(10)
@@ -1248,7 +1252,9 @@ def _program(
             _replies(
                 AssistantMessage(
                     content=[
-                        ToolCall(id="program", name="exec", arguments={"code": code})
+                        ToolCall(
+                            id="program", name="execute_code", arguments={"code": code}
+                        )
                     ]
                 )
             )
@@ -1405,7 +1411,7 @@ def test_a_park_refused_for_its_size_ends_the_request_and_does_not_block_sends(
                 content=[
                     ToolCall(
                         id="program",
-                        name="exec",
+                        name="execute_code",
                         arguments={
                             "code": f"await tools.mcp__1__acme__{ACTION}(value='team')\n"
                         },

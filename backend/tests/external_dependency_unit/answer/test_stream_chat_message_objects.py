@@ -25,7 +25,7 @@ def test_stream_chat_message_objects_without_web_search(
     code_mode: bool,
 ) -> None:
     """An assistant without web search excludes it from model requests, also from
-    the functions of `exec` programs."""
+    the functions of `execute_code` programs."""
 
     test_user: User = create_test_user(db_session, email_prefix="test_web_search")
 
@@ -64,7 +64,7 @@ def test_stream_chat_message_objects_without_web_search(
         raw = list(response_generator)
     tools = llm.requests[0]["tools"]
     # The user's memory tool keeps code mode in effect.
-    assert ("exec" in {tool["function"]["name"] for tool in tools}) == code_mode
+    assert ("execute_code" in {tool["function"]["name"] for tool in tools}) == code_mode
     assert "web_search" not in json.dumps(tools)
     assert final_answer(raw)
     assert any(isinstance(part, MessageResponseIDInfo) for part in raw)
