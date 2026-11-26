@@ -24,6 +24,7 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 )
 from onyx.tools.tool_implementations.custom.graphql_tool import (
     GraphQLTool,
+    graphql_action_parameters,
     graphql_root_fields,
     parse_graphql_schema,
 )
@@ -614,6 +615,7 @@ def test_a_graphql_response_with_errors_is_an_error(
         action_key="mutation.close",
         schema=schema,
         field=dict(graphql_root_fields(schema))["mutation.close"],
+        parameters=graphql_action_parameters(schema)["mutation.close"],
         endpoint_url="https://example.com/graphql",
         headers={},
         approval=None,

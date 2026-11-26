@@ -39,6 +39,7 @@ from onyx.tools.models import (
     ToolCallException,
 )
 from onyx.tools.tool_implementations.custom.custom_tool import ApiTool
+from onyx.tools.tool_implementations.custom.openapi_parsing import InlineBudget
 from onyx.tools.tool_name import custom_tool_name
 
 SELECTION = "selection"
@@ -90,17 +91,21 @@ def graphql_root_fields(schema: GraphQLSchema) -> list[tuple[str, GraphQLField]]
     ]
 
 
-def _input_schema(type_: object, depth: int) -> dict[str, JsonValue]:
+def _input_schema(
+    type_: object, depth: int, budget: InlineBudget
+) -> dict[str, JsonValue]:
     if isinstance(type_, GraphQLNonNull):
-        return _input_schema(type_.of_type, depth)
+        return _input_schema(type_.of_type, depth, budget)
+    budget.remaining -= 1
     if isinstance(type_, GraphQLList):
-        return {"type": "array", "items": _input_schema(type_.of_type, depth)}
+        return {"type": "array", "items": _input_schema(type_.of_type, depth, budget)}
     if isinstance(type_, GraphQLEnumType):
         return {"type": "string", "enum": list(type_.values)}
     if isinstance(type_, GraphQLInputObjectType):
-        if depth >= _MAX_INPUT_DEPTH:
+        # Shared input types expand at each use, which can grow exponentially.
+        if depth >= _MAX_INPUT_DEPTH or budget.remaining <= 0:
             return {"type": "object"}
-        return _object_schema(type_.fields, depth + 1)
+        return _object_schema(type_.fields, depth + 1, budget)
     if isinstance(type_, GraphQLScalarType):
         return dict(_SCALARS.get(type_.name, {}))
     return {}
@@ -113,11 +118,12 @@ def _is_required(field: GraphQLArgument | GraphQLInputField) -> bool:
 def _object_schema(
     fields: Mapping[str, GraphQLArgument] | Mapping[str, GraphQLInputField],
     depth: int,
+    budget: InlineBudget,
     extra: dict[str, JsonValue] | None = None,
 ) -> dict[str, JsonValue]:
     properties: dict[str, JsonValue] = {}
     for name, field in fields.items():
-        schema = _input_schema(field.type, depth)
+        schema = _input_schema(field.type, depth, budget)
         if field.description:
             schema["description"] = field.description
         properties[name] = schema
@@ -145,9 +151,12 @@ def default_selection(field: GraphQLField) -> str:
     return "{ __typename }"
 
 
-def graphql_tool_parameters(field: GraphQLField) -> dict[str, JsonValue]:
+def graphql_tool_parameters(
+    field: GraphQLField, budget: InlineBudget
+) -> dict[str, JsonValue]:
     """The field's arguments, and ``selection`` when it returns an object and
-    has no argument of that name."""
+    has no argument of that name. Past ``budget``, an input object takes any
+    object."""
     selection = default_selection(field)
     extra: dict[str, JsonValue] = (
         {
@@ -162,7 +171,17 @@ def graphql_tool_parameters(field: GraphQLField) -> dict[str, JsonValue]:
         if selection and SELECTION not in field.args
         else {}
     )
-    return _object_schema(field.args, 0, extra)
+    return _object_schema(field.args, 0, budget, extra)
+
+
+def graphql_action_parameters(schema: GraphQLSchema) -> dict[str, dict[str, JsonValue]]:
+    """The parameters of each root field by action key. One budget covers all
+    the fields, so the result does not depend on which actions are used."""
+    budget = InlineBudget()
+    return {
+        key: graphql_tool_parameters(field, budget)
+        for key, field in graphql_root_fields(schema)
+    }
 
 
 def graphql_request(
@@ -219,6 +238,7 @@ class GraphQLTool(ApiTool):
         action_key: str,
         schema: GraphQLSchema,
         field: GraphQLField,
+        parameters: dict[str, JsonValue],
         endpoint_url: str,
         headers: dict[str, str],
         approval: ToolApprovalScope | None,
@@ -232,7 +252,7 @@ class GraphQLTool(ApiTool):
             name=custom_tool_name(integration_id, action_key),
             display_name=field_name,
             description=field.description or f"The GraphQL {operation} {field_name}.",
-            parameters=graphql_tool_parameters(field),
+            parameters=parameters,
             base_url=endpoint_url,
             headers=headers,
             approval=approval,

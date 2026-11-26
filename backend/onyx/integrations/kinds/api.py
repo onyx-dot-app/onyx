@@ -61,8 +61,8 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 )
 from onyx.tools.tool_implementations.custom.graphql_tool import (
     GraphQLTool,
+    graphql_action_parameters,
     graphql_root_fields,
-    graphql_tool_parameters,
     parse_graphql_schema,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
@@ -109,6 +109,7 @@ def graphql_action_specs(sdl: str) -> list[IntegrationActionSpec]:
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     fields = graphql_root_fields(schema)
+    parameters = graphql_action_parameters(schema)
     if not fields:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -126,7 +127,7 @@ def graphql_action_specs(sdl: str) -> list[IntegrationActionSpec]:
                 if key.startswith("query.")
                 else IntegrationActionPolicyValue.ASK
             ),
-            input_schema=graphql_tool_parameters(field),
+            input_schema=parameters[key],
             http_method="POST",
         )
         for key, field in fields
@@ -333,12 +334,14 @@ class ApiKindHandler(IntegrationKindHandler):
         ):
             schema = parse_graphql_schema(config.graphql_schema)
             fields = dict(graphql_root_fields(schema))
+            parameters = graphql_action_parameters(schema)
             return [
                 GraphQLTool(
                     integration_id=integration.id,
                     action_key=action.key,
                     schema=schema,
                     field=fields[action.key],
+                    parameters=parameters[action.key],
                     endpoint_url=config.base_url,
                     headers=ctx.additional_headers,
                     approval=ctx.approval_for(action.key),

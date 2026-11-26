@@ -32,6 +32,7 @@ from onyx.sandbox_proxy.usable_integrations import (
     openapi_match_target,
 )
 from onyx.tools.models import IntegrationActionRef, ToolApprovalScope
+from onyx.tools.tool_implementations.custom import openapi_parsing
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -628,3 +629,36 @@ def test_graphql_schema_with_no_query_root_is_refused() -> None:
     """Each call would fail on it, so the save refuses it."""
     with pytest.raises(OnyxError, match="Query root type must be provided"):
         api_kind.graphql_action_specs("type Mutation { close(id: ID!): Boolean }")
+
+
+def _schema_nodes(value: object) -> int:
+    if isinstance(value, dict):
+        return 1 + sum(_schema_nodes(item) for item in value.values())
+    if isinstance(value, list):
+        return sum(_schema_nodes(item) for item in value)
+    return 0
+
+
+def test_graphql_shared_input_types_expand_within_one_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each input type uses the next one at each of its fields, so the
+    expanded schemas grow exponentially. One budget covers all the actions."""
+    monkeypatch.setattr(openapi_parsing, "_MAX_INLINED_NODES", 1_000)
+    width = 12
+    types = "\n".join(
+        f"input I{level} {{ "
+        + " ".join(f"f{i}: I{level + 1}" for i in range(width))
+        + " }"
+        for level in range(4)
+    )
+    roots = " ".join(f"q{i}(x: I0): Boolean" for i in range(10))
+    sdl = f"{types}\ninput I4 {{ v: Int }}\ntype Query {{ {roots} }}"
+
+    specs = api_kind.graphql_action_specs(sdl)
+
+    assert len(specs) == 10
+    assert sum(_schema_nodes(spec.input_schema) for spec in specs) < 1_500
+    last = specs[-1].input_schema
+    assert last is not None
+    assert last["properties"] == {"x": {"type": "object"}}
