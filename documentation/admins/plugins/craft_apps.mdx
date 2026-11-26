@@ -245,8 +245,9 @@ It does not have an action catalog.
 </Note>
 
 The upgrade to this release turns a custom App with one URL pattern of the form `https://host/path/*` into a custom REST
-API with the base URL `https://host/path`. The App keeps its agents, sign-ins and approval settings.
-A custom App with other URL patterns stays as it is.
+API with the base URL `https://host/path`. The App keeps its agents, sign-ins and approval settings,
+but starts with no endpoints. Add endpoints on the **Configuration** tab before Chat or Scheduled Tasks can use the App.
+Craft scripts still reach the App through the sandbox proxy. A custom App with other URL patterns stays as it is.
 
 You cannot change the URL patterns of an existing custom App. To change them,
 add the API again as a custom REST API and delete the custom App.
