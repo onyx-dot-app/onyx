@@ -1,0 +1,92 @@
+---
+title: "Overview & Auth before v4.7"
+description: "Overview of Onyx APIs in versions before v4.7"
+icon: "code"
+---
+
+<Info>
+  This page applies to Onyx versions before **v4.7**. For Onyx v4.7 and later,
+  see [Overview & Auth](/developers/overview).
+</Info>
+
+**Nearly every Onyx feature is accessible through the Onyx API.**
+
+Onyx APIs are built on REST principles with JSON request/response formats.
+
+Make API requests to:
+
+`https://cloud.onyx.app/api` or `https://your-self-hosted-onyx.com/api`
+
+## Authentication
+
+Every request authenticates with a Bearer token in the `Authorization` header.
+
+### API Keys
+
+API Keys are created by admins from the Admin Panel. Each key exists as a distinct user in Onyx,
+meaning you can trace activity, keep chat sessions private, and scope resources to a specific key.
+
+Each key is created with a role, and there are three:
+
+<AccordionGroup>
+  <Accordion title="Admin API Keys" icon="shield-check">
+    Can access all endpoints, including those pre-fixed with `admin/`.
+
+    **⚠️ Use with caution:** Admin keys have unrestricted access to your Onyx instance.
+  </Accordion>
+
+  <Accordion title="Basic API Keys" icon="key">
+    Can access the non-admin endpoints like Search, Chat, Agents, and Actions.
+
+    **✅ Recommended:** Most users should use Basic API Keys for application development.
+  </Accordion>
+
+  <Accordion title="Limited API Keys" icon="lock">
+    Read-only Agent access. Can post messages to Chat endpoints, but cannot read chat history.
+  </Accordion>
+</AccordionGroup>
+
+Only Admins can create and manage API keys. See [Service Accounts before v4.7](/admins/user_management/api_keys_legacy)
+for setup instructions.
+
+### Personal Access Tokens
+
+Personal Access Tokens (PATs) let any user authenticate API requests as themselves.
+
+To create a token, go to **Settings** > **Accounts & Access** and click **Create New Token**.
+Choose an expiration and choose its permissions:
+
+| Permissions | Behavior |
+|---|---|
+| Full access | The token inherits all of your permissions. |
+| Limited access | The token is capped to the scopes you select. |
+
+A limited token can pick from these scopes:
+
+| Scope | Permission | Allows |
+|---|---|---|
+| Search &mdash; Read | `read:search` | Use the search and web search endpoints. |
+| Chat &mdash; Read | `read:chat` | View chat sessions and messages. |
+| Chat &mdash; Write | `write:chat` | Create sessions and send messages. Includes Chat &mdash; Read. |
+
+<Warning>
+  Your token is displayed only once at creation. Copy it immediately and store it securely.
+</Warning>
+
+Use the token as a Bearer token in the `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer onyx_pat_..." \
+  https://cloud.onyx.app/api/chat/get-user-chat-sessions
+```
+
+## API Reference and Playground
+
+You can find all Onyx API endpoints in the built-in OpenAPI explorer:
+
+`https://cloud.onyx.app/api/docs` or `https://your-onyx-domain.com/api/docs`
+
+<Warning>
+  The explorer is purely for reference. It is not a fully-featured API client.
+  Ignore the tenant_id parameter and use your API key as a Bearer token.
+</Warning>

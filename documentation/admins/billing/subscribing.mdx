@@ -1,0 +1,51 @@
+---
+title: "Subscribe to a Plan"
+description: "How to subscribe to a paid Onyx plan on Cloud or Self-Hosted"
+icon: "credit-card"
+---
+
+## Getting Started
+
+<Steps>
+  <Step title="Select a plan">
+    Go to **Admin Panel > Plans & Billing** and click **Get Business Plan**,
+    or **Contact Sales** for Enterprise pricing.
+  </Step>
+
+  <Step title="Choose your billing cycle">
+    Select **Monthly** or **Annual** billing.
+  </Step>
+
+  <Step title="Set your seat count">
+    Enter the number of seats you need. The minimum is your current number of active users.
+    Service accounts and users who exist only for permission sync do not use a seat.
+  </Step>
+
+  <Step title="Complete payment">
+    Click **Continue to Payment** to open Stripe checkout.
+  </Step>
+</Steps>
+
+<Tip>
+  New Business subscriptions include a **1-month free trial**. You won't be charged until the trial ends. On Cloud,
+  add a payment method before the trial ends. You can also end the trial early with **Upgrade now**.
+</Tip>
+
+<Note>
+  Enterprise plans are managed through sales.
+  The billing page then shows **Your plan is managed through sales** with a link to contact billing for changes.
+</Note>
+
+## Self-Hosted License Activation
+
+On **Onyx Cloud**, your subscription is active immediately after checkout.
+
+On **self-hosted** deployments, a **license** is automatically claimed and stored on your instance after checkout.
+The license is cryptographically signed and validated locally,
+so your instance does not need to phone home on every request.
+
+<Note>
+  If your self-hosted deployment cannot reach the internet,
+  you can [upload a license file manually](/admins/billing/manage#air-gapped-license-activation)
+  instead of going through Stripe checkout.
+</Note>
