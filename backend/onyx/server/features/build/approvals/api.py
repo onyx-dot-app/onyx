@@ -250,10 +250,12 @@ def submit_decision(
             session_id=current.session_id,
             integration_id=current.integration_id,
         )
+        # Same rule as the gate: an old grant never covers an always-ask action.
         granted_actions = {
             action
             for row in grant_source_rows
             for action in actions_requiring_approval(row.actions)
+            if not always_asks(action)
         }
         pending_rows = action_approval.list_session_pending_action_approvals(
             db_session, current.session_id, created_after=cutoff, load_target=True

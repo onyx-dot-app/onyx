@@ -749,6 +749,53 @@ def test_unknown_external_action_can_only_be_approved_once(
     assert result.decision == ApprovalDecision.APPROVED
 
 
+def test_old_grant_of_unknown_action_does_not_approve_pending_calls(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    """A grant row from before ``unspecified`` always asked does not cover a
+    pending ``unspecified`` call, as the gate does not."""
+    _stub_send_wake_noop(monkeypatch)
+    user = make_user(db_session, email_prefix="old_grant")
+    session = build_session_with_user(user=user)
+    integration_id = make_mcp_integration(db_session, tools=("unspecified", "send"))[
+        0
+    ].id
+
+    def insert(action: str) -> ActionApproval:
+        return insert_action_approval(
+            db_session,
+            session_id=session.id,
+            actions=[action_entry(action)],
+            app_name="Custom",
+            payload={},
+            integration_id=integration_id,
+        )
+
+    old_grant = insert("unspecified")
+    try_record_decision(
+        db_session,
+        approval_id=old_grant.approval_id,
+        decision=ApprovalDecision.APPROVED,
+        decided_via=ApprovalDecidedVia.SESSION_GRANT,
+    )
+    current = insert("send")
+    pending = insert("unspecified")
+    db_session.commit()
+
+    submit_decision(
+        current.approval_id,
+        DecisionBody(decision=ApprovalChoice.APPROVE_SESSION),
+        user,
+        db_session,
+    )
+
+    db_session.refresh(pending)
+    assert pending.decision is None
+
+
 def test_history_keeps_all_live_requests_when_outcomes_exceed_limit(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
