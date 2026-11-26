@@ -198,7 +198,7 @@ models, or all others) names some operations and takes their arguments in the
 shape its models are trained on. One `Tool` class serves each operation; its
 owning module maps each family to a shape (a name and an arguments model whose
 pure `request()` gives the operation's typed input):
-`tools/tool_implementations/code_mode/shapes.py:CODE_MODE_SHAPES` (`repl`/`poll` or `exec`/`wait`),
+`tools/tool_implementations/code_mode/shapes.py:CODE_MODE_SHAPES` (`execute_code` with `poll` or `wait`),
 `tools/tool_implementations/sandbox/shapes.py:SHELL_SHAPES` (`bash(command, timeout, description,
 run_in_background)` or `exec_command(cmd, workdir, yield_time_ms,
 max_output_tokens)`, and `write_stdin` with `timeout` or `yield_time_ms` and
@@ -443,7 +443,7 @@ are plain `AgentTool` objects with no `Tool` row, and
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed arguments
    show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):
-   `run_python`, the code mode run tool (`exec` or `repl`) and `generate_image` stream argument deltas, the file tools
+   `run_python`, the code mode run tool (`execute_code`) and `generate_image` stream argument deltas, the file tools
    (`write`, `edit`, `apply_patch`) report `file_tool_progress`. Every stream
    is throttled
    ([[streaming-protocol]]). Code mode calls render with

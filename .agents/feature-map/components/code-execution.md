@@ -1,7 +1,7 @@
 # Code Execution
 
 > `run_python` sends Python code to an external Code Interpreter service.
-> Code mode's run tool (`exec`, or `repl` for Claude models) runs
+> Code mode's run tool (`execute_code`) runs
 > a Python program that calls the other chat tools in local Monty sandbox
 > workers, and the sandbox tools run commands, edit files and publish files
 > in the user's Firecracker VM.
@@ -19,13 +19,14 @@
   downloads. Files that the user attached to the chat are available to the code.
 - **With code mode on** (`CODE_MODE_ENABLED=true`), the chat model gets a
   run tool and a wait tool instead of the tools it can nest, when it has
-  any. Each tool family gets its own shape of them
-  (`backend/onyx/tools/tool_implementations/code_mode/shapes.py`): `exec` and `wait` for OpenAI and all other models, `repl` and
-  `poll` for Claude models. Deep research does not use code mode. A
+  any. Every model gets the run tool `execute_code`; each tool family gets its
+  own wait tool and argument shape
+  (`backend/onyx/tools/tool_implementations/code_mode/shapes.py`): `wait` for
+  OpenAI and all other models, `poll` for Claude models. Deep research does not use code mode. A
   preferred Action that became a function is named as one in the reminder. One program can run
   several searches and MCP calls in parallel and print only what the answer
   needs. Each program runs in a cell. When the cell still runs after
-  `yield_time_ms` (`timeout` for `repl`; default 30 s) or calls
+  `yield_time_ms` (`timeout` for Claude models; default 30 s) or calls
   `yield_control()`, the call returns the output so far and the cell keeps
   running. The model gets the rest with the wait tool, or stops the cell with
   `wait(terminate=true)` (`poll(terminate=true)`).
@@ -142,12 +143,13 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         function; and the describe function,
                                         if any.
                                         with_code_mode builds CodeCells(shape); the run and
-                                        wait tools and the cells read the shape there. OPENAI: exec
+                                        wait tools and the cells read the shape there. Every
+                                        shape's run tool is execute_code. OPENAI: run
                                         (code, yield_time_ms, max_output_tokens) / wait
                                         (cell_id, yield_time_ms, max_tokens, terminate),
                                         tool_search(query, limit); token budgets convert to
                                         characters through tool_implementations/utils.py:
-                                        output_chars_from_tokens. CLAUDE: repl
+                                        output_chars_from_tokens. CLAUDE: run
                                         (code, timeout) / poll (cell_id, timeout,
                                         terminate), search_tools(query, max) and
                                         describe_tool(name); DEFAULT_MAX_OUTPUT_CHARS. Each
@@ -207,7 +209,7 @@ run / wait tools (code mode; a cell per program, a store per chat)
     CodeCell                            a driver thread runs the program inside a
                                         code_mode_cell span (status, duration, call count,
                                         tool names); the call returns at its yield time
-                                        (yield_time_ms, or timeout for repl), at
+                                        (yield_time_ms, or timeout for Claude), at
                                         yield_control(), or at the end
       execute_program                   sandbox.py: checkout a new Monty worker (the wait
                                         observes Stop), feed the imports of IMPORTABLE_MODULES
@@ -250,8 +252,8 @@ run / wait tools (code mode; a cell per program, a store per chat)
                                         prompt.py:format_content (model text, cut once
                                         in the middle to the call's character budget:
                                         max_output_tokens / max_tokens times
-                                        APPROX_CHARS_PER_TOKEN for exec / wait, 40,000
-                                        by default and for repl / poll, at most
+                                        APPROX_CHARS_PER_TOKEN for OpenAI, 40,000
+                                        by default and for Claude, at most
                                         160,000) and
                                         CodeModeExecutionResult (each part cut to the
                                         same budget): a CellWindow
@@ -1289,8 +1291,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     a later message can edit it. Action preferences are advisory:
     `build_chat_prompt` asks each offered tool for `Tool.operation_names`, and
     `CodeModeTool` answers with its functions, so the reminder names a nested
-    tool as a function of the active model's run tool (`exec`, or `repl` for
-    Claude models).
+    tool as a function of the run tool (`execute_code`).
     Nested calls get the run's `before_tool_call` hook and approval gate as
     direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
     `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
@@ -1388,7 +1389,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     code mode result's documents and citations from its calls' search details,
     in every window; [[citations]] reads them through that accessor.
 16. `code-mode-store` **Only `store()` values outlive a program, and the
-    conversation holds them.** Each run call (`exec` or `repl`) runs in a fresh
+    conversation holds them.** Each run call (`execute_code`) runs in a fresh
     interpreter, so variables, functions and imports do not carry over. A
     program keeps JSON values with `store(key, value)` and reads them with
     `load(key)` (None when missing); both are plain functions, declared in
@@ -1516,8 +1517,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   Onyx and the model's tool stubs.
 - **A code mode program can outlive its step, as a Codex cell does.** A
   program that waits on slow tools or sleeps would otherwise hold the model
-  step until it ends. The run tool returns at its yield time (`exec`
-  `yield_time_ms`, `repl` `timeout`) and the cell keeps running; the model
+  step until it ends. The run tool returns at its yield time (`yield_time_ms`,
+  or `timeout` for Claude models) and the cell keeps running; the model
   works on and gets the rest with `wait` or `poll`. A cell
   never outlives its response: `CodeCells.finish` stops it, and a closing
   record saves what it did after its last observation, so the saved history

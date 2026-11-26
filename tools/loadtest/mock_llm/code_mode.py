@@ -1,10 +1,10 @@
 """Code mode wire contract: the programs the mock writes and the results it reads.
 
-With CODE_MODE_ENABLED, Onyx offers a run tool instead of retrieval tools: a
-model whose name contains "claude" gets `repl` and `poll`, every other model
-`exec` and `wait` (backend code_mode/shapes.py). The run tool's `code`
-argument is a Python program in which each tool is an async function of the
-`tools` namespace.
+With CODE_MODE_ENABLED, Onyx offers the run tool `execute_code` instead of
+retrieval tools, with the wait tool `poll` for a model whose name contains
+"claude" and `wait` for every other model (backend code_mode/shapes.py). The
+run tool's `code` argument is a Python program in which each tool is an async
+function of the `tools` namespace.
 The program's printed output, under an "Execution <status> in cell N" header,
 is the tool result that the model reads. A program that runs past its yield time
 returns "Execution running in cell N"; the wait tool with `cell_id=N`
@@ -18,11 +18,12 @@ from collections.abc import Sequence
 
 from mock_llm.models import ChatMessage, ToolDefinition, content_text
 
-# Each tool family's run tool, and the tool that waits on its cells. Onyx picks
-# the family from the model's names (LLMConfig.tool_family in
+# The run tool of every tool family, and each family's tool that waits on its
+# cells. Onyx picks the family from the model's names (LLMConfig.tool_family in
 # backend/onyx/llm/interfaces.py, model_capabilities.is_claude_model); keep in
 # sync with backend code_mode/shapes.py.
-WAIT_TOOLS = {"exec": "wait", "repl": "poll"}
+RUN_TOOL = "execute_code"
+WAIT_TOOLS = ("wait", "poll")
 # A planned program failure raises this message; the load client does not
 # count it as a failed turn (onyx_client/stream_parser.py).
 PLANNED_FAILURE = "mock_planned_failure"
@@ -46,8 +47,13 @@ def code_functions(tool: ToolDefinition) -> set[str]:
 
 
 def run_tool(by_name: dict[str, ToolDefinition]) -> ToolDefinition | None:
-    """The offered run tool of either family."""
-    return next((by_name[name] for name in WAIT_TOOLS if name in by_name), None)
+    """The offered run tool."""
+    return by_name.get(RUN_TOOL)
+
+
+def wait_tool(by_name: dict[str, ToolDefinition]) -> str:
+    """The name of the offered wait tool of either family."""
+    return next(name for name in WAIT_TOOLS if name in by_name)
 
 
 def _searches_head(searches: Sequence[tuple[str, Sequence[str]]]) -> str:

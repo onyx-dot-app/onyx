@@ -30,7 +30,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     SearchToolDocumentsDelta,
 )
-from onyx.tools.constants import EXEC_TOOL_NAME
+from onyx.tools.constants import EXECUTE_CODE_TOOL_NAME
 from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.search.constants import MAX_QUERIES_PER_CALL
 from tests.external_dependency_unit.answer.stream_test_utils import (
@@ -166,13 +166,13 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         for message in first.requests[0]["prompt"]
         if isinstance(message, SystemMessage)
     )
-    assert CODE_MODE_GUIDANCE.format(name=EXEC_TOOL_NAME) in system
+    assert CODE_MODE_GUIDANCE.format(name=EXECUTE_CODE_TOOL_NAME) in system
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in system
     # The real search tool's stub asks for one call per information need.
     [description] = [
         tool["function"]["description"]
         for tool in first.requests[0]["tools"]
-        if tool["function"]["name"] == "exec"
+        if tool["function"]["name"] == "execute_code"
     ]
     assert CODE_MODE_SEARCH_USAGE in description
     # The search tool's own guidance is in its stub, not the system prompt.

@@ -855,7 +855,8 @@ def test_the_names_of_different_operations_never_overlap() -> None:
     ]
     names = [name for operation in operations for name in operation]
     assert len(names) == len(set(names))
-    # Each family names each operation, and the families' names differ.
+    # Each family names each operation; outside code mode's shared run tool,
+    # the families' names differ.
     for family in ToolFamily:
         shape = CODE_MODE_SHAPES[family]
         assert shape.run_name in RUN_TOOL_NAMES
@@ -866,13 +867,34 @@ def test_the_names_of_different_operations_never_overlap() -> None:
         assert SKILL_READ_SHAPES[family].name in SKILLS_READ_TOOL_NAMES
         assert OPEN_URL_SHAPES[family].name in OPEN_URL_TOOL_NAMES
     for names_by_family in (
-        [shape.run_name for shape in CODE_MODE_SHAPES.values()],
         [shape.name for shape in SHELL_SHAPES.values()],
         [shape.spawn_name for shape in AGENT_SHAPES.values()],
         [shape.name for shape in SKILL_READ_SHAPES.values()],
         [shape.name for shape in OPEN_URL_SHAPES.values()],
     ):
         assert len(set(names_by_family)) == len(ToolFamily)
+
+
+def test_every_family_runs_programs_with_execute_code() -> None:
+    """Every family names the run tool `execute_code`; the wait tool and the
+    program functions keep each family's names."""
+    assert {
+        family: (
+            shape.run_name,
+            shape.wait_name,
+            shape.search_name,
+            shape.describe.name if shape.describe else None,
+        )
+        for family, shape in CODE_MODE_SHAPES.items()
+    } == {
+        ToolFamily.OPENAI: ("execute_code", "wait", "tool_search", None),
+        ToolFamily.CLAUDE: (
+            "execute_code",
+            "poll",
+            "search_tools",
+            "describe_tool",
+        ),
+    }
 
 
 def test_tool_search_matches_words_in_any_script() -> None:
