@@ -15,7 +15,13 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { SvgFiles, SvgGlobe, SvgSearchMenu, SvgSidebar } from "@opal/icons";
+import {
+  SvgDownload,
+  SvgFiles,
+  SvgGlobe,
+  SvgSearchMenu,
+  SvgSidebar,
+} from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
@@ -69,7 +75,9 @@ import {
 } from "@/sections/chat/PublishedFileViews";
 import type { PublishedFilesPanel } from "@/sections/chat/PublishedFileCards";
 import { BrowserPanel } from "@/sections/chat/browser/BrowserPanel";
+import { browserDownloadUrl } from "@/lib/chat/browser/api";
 import { useBrowserStream } from "@/lib/chat/browser/hooks";
+import { downloadFile } from "@/lib/download";
 import { browserPageTitle } from "@/lib/chat/browser/stream";
 import type { BrowserDownload } from "@/lib/chat/browser/types";
 
@@ -154,22 +162,21 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     [dispatch]
   );
   const onDownload = useCallback(
-    (download: BrowserDownload) => {
-      toast.info(tb("download.saved", { fileName: download.fileName }), {
+    ({ fileName }: BrowserDownload) => {
+      if (sessionId === null) return;
+      toast.info(tb("download.saved", { fileName }), {
         action: {
-          icon: SvgFiles,
-          label: tb("download.showFiles"),
-          onClick: showFilesList,
+          icon: SvgDownload,
+          label: tb("download.action"),
+          // An attachment link starts the download without leaving the page
+          onClick: () =>
+            downloadFile(fileName, {
+              url: browserDownloadUrl(sessionId, fileName),
+            }),
         },
       });
-      reloadFiles().catch((error: unknown) =>
-        console.error("Failed to reload the chat's files", {
-          sessionId,
-          error,
-        })
-      );
     },
-    [tb, showFilesList, reloadFiles, sessionId]
+    [tb, sessionId]
   );
   const browser = useBrowserStream({
     sessionId: browserSessionId,

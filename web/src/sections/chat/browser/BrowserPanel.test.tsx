@@ -328,3 +328,86 @@ test("Shift+Escape leaves the page and lets go of the keys held on it", () => {
     },
   ]);
 });
+
+test("the file chooser goes when the selected tab changes", () => {
+  renderPanel();
+  const tabs = [TAB, { ...TAB, id: "t2" }];
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs, selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
+    socket().receive({ type: "fileChooser", id: "f1", multiple: false });
+  });
+  expect(screen.getByText("The page asks for a file.")).toBeInTheDocument();
+  act(() => socket().receive({ type: "tabs", tabs, selected: "t2" }));
+  expect(
+    screen.queryByText("The page asks for a file.")
+  ).not.toBeInTheDocument();
+});
+
+test("the prompt overlay shows only while the page asks something", () => {
+  const { container } = renderPanel();
+  const overlay = () => container.querySelector("[data-browser-prompts]");
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
+  });
+  expect(overlay()).toBeNull();
+  act(() =>
+    socket().receive({ type: "fileChooser", id: "f1", multiple: false })
+  );
+  expect(overlay()).not.toBeNull();
+});
+
+test("a long paste goes to the page in chunks, in order", () => {
+  renderPanel();
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs: [TAB], selected: "t1" });
+    socket().receive({ type: "control", controller: "you" });
+  });
+  const text = "a".repeat(10_000) + "b".repeat(10_000) + "c";
+  fireEvent.paste(screen.getByRole("textbox", { name: "Browser page" }), {
+    clipboardData: { getData: () => text },
+  });
+  expect(socket().sent).toEqual([
+    { type: "text", text: "a".repeat(10_000) },
+    { type: "text", text: "b".repeat(10_000) },
+    { type: "text", text: "c" },
+  ]);
+});
+
+test("another selected tab hides the old page until its own frame comes", async () => {
+  const clearRect = jest.fn();
+  jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage: () => undefined,
+    clearRect,
+  } as unknown as CanvasRenderingContext2D);
+  Object.defineProperty(globalThis, "createImageBitmap", {
+    configurable: true,
+    writable: true,
+    value: async () => ({ width: 2, height: 2, close: () => undefined }),
+  });
+  const { container } = renderPanel();
+  const canvas = () => container.querySelector("canvas");
+  const frame = () =>
+    socket().dispatchEvent(
+      Object.assign(new Event("message"), { data: new ArrayBuffer(1) })
+    );
+  const tabs = [TAB, { ...TAB, id: "t2" }];
+  act(() => {
+    socket().open();
+    socket().receive({ type: "tabs", tabs, selected: "t1" });
+  });
+  await act(async () => frame());
+  expect(canvas()).not.toHaveClass("invisible");
+  // The same selection keeps the frame
+  act(() => socket().receive({ type: "tabs", tabs, selected: "t1" }));
+  expect(canvas()).not.toHaveClass("invisible");
+  act(() => socket().receive({ type: "tabs", tabs, selected: "t2" }));
+  expect(canvas()).toHaveClass("invisible");
+  expect(clearRect).toHaveBeenCalled();
+  await act(async () => frame());
+  expect(canvas()).not.toHaveClass("invisible");
+});

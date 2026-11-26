@@ -13673,8 +13673,8 @@
         "inputDescription": "按 Shift+Esc 离开浏览器页面。"
       },
       "download": {
-        "saved": "已将 {fileName} 下载到此聊天的文件中",
-        "showFiles": "显示文件"
+        "action": "下载",
+        "saved": "浏览器已下载 {fileName}"
       },
       "clearData": {
         "action": "清除浏览器数据",

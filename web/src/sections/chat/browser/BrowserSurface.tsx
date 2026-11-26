@@ -31,6 +31,7 @@ import {
   pagePointFromClient,
   type PagePoint,
   pressedButtonOf,
+  splitBrowserText,
   wheelDeltaUnit,
 } from "@/lib/chat/browser/stream";
 import type {
@@ -388,6 +389,11 @@ export function BrowserSurface({
     textarea.setSelectionRange(INPUT_SENTINEL.length, INPUT_SENTINEL.length);
   };
 
+  const sendText = (text: string) => {
+    for (const chunk of splitBrowserText(text))
+      send({ type: "text", text: chunk });
+  };
+
   const sendKeyPress = (key: KeyPress, modifiers = 0) => {
     send({ type: "key", action: "down", ...key, modifiers });
     send({ type: "key", action: "up", ...key, modifiers });
@@ -491,7 +497,7 @@ export function BrowserSurface({
     else if (inputType === "deleteContentForward") sendKeyPress(DELETE);
     else {
       const text = textarea.value.replace(/^​/, "");
-      if (text) send({ type: "text", text });
+      if (text) sendText(text);
     }
     resetInput(textarea);
   };
@@ -559,7 +565,7 @@ export function BrowserSurface({
         onInput={handleInput}
         onCompositionEnd={(event) => {
           const text = event.data.replace(/^​/, "");
-          if (text) send({ type: "text", text });
+          if (text) sendText(text);
           resetInput(event.currentTarget);
         }}
         onCopy={(event) => handleClipboard(COPY, event)}
@@ -567,7 +573,7 @@ export function BrowserSurface({
         onPaste={(event) => {
           event.preventDefault();
           const text = event.clipboardData.getData("text/plain");
-          if (text) send({ type: "text", text });
+          if (text) sendText(text);
         }}
       />
     </div>

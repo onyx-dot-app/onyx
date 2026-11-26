@@ -13673,8 +13673,8 @@
         "inputDescription": "Pressione Shift+Esc para sair da página do navegador."
       },
       "download": {
-        "saved": "{fileName} foi baixado para os arquivos deste chat",
-        "showFiles": "Mostrar arquivos"
+        "action": "Baixar",
+        "saved": "O navegador baixou {fileName}"
       },
       "clearData": {
         "action": "Limpar dados do navegador",

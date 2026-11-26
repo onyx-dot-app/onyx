@@ -13673,8 +13673,8 @@
         "inputDescription": "اضغط Shift+Escape لمغادرة صفحة المتصفح."
       },
       "download": {
-        "saved": "تم تنزيل {fileName} إلى ملفات هذه المحادثة",
-        "showFiles": "عرض الملفات"
+        "action": "تنزيل",
+        "saved": "نزّل المتصفح {fileName}"
       },
       "clearData": {
         "action": "مسح بيانات المتصفح",

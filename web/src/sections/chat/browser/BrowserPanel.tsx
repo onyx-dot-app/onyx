@@ -63,6 +63,8 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
       ? state.agentPointer.pointer
       : null;
   const controlling = control === "you";
+  // Only the controller answers the page's file chooser
+  const fileChooser = controlling ? state.fileChooser : null;
 
   // The URL bar shows the tab's URL until the user edits it; an edit stays
   // with its tab
@@ -193,41 +195,45 @@ export function BrowserPanel({ sessionId, stream }: BrowserPanelProps) {
             onNewTab={() => send({ type: "newTab" })}
           />
         ) : (
-          <Section
-            height="auto"
-            alignItems="stretch"
-            gap={2}
-            padding={2}
-            className="absolute inset-x-0 top-0 z-30"
-          >
-            {selectedTab.dialog && (
-              <DialogPrompt
-                // A new dialog starts with an empty answer
-                key={`${selectedTab.id}:${selectedTab.dialog.message}`}
-                dialog={selectedTab.dialog}
-                controlling={controlling}
-                onAnswer={(accept, promptText) => {
-                  const answer: BrowserViewerMessage = {
-                    type: "dialog",
-                    accept,
-                  };
-                  if (promptText !== undefined) answer.promptText = promptText;
-                  send(answer);
-                }}
-              />
-            )}
-            {state.fileChooser && controlling && (
-              <FileChooserPrompt
-                key={state.fileChooser.id}
-                sessionId={sessionId}
-                multiple={state.fileChooser.multiple}
-                onAnswer={(paths) =>
-                  state.fileChooser &&
-                  stream.answerFileChooser(state.fileChooser.id, paths)
-                }
-              />
-            )}
-          </Section>
+          // Shown only with a prompt, so it blocks no clicks on the page
+          (selectedTab.dialog || fileChooser) && (
+            <Section
+              height="auto"
+              alignItems="stretch"
+              gap={2}
+              padding={2}
+              className="absolute inset-x-0 top-0 z-30"
+              data-browser-prompts
+            >
+              {selectedTab.dialog && (
+                <DialogPrompt
+                  // A new dialog starts with an empty answer
+                  key={`${selectedTab.id}:${selectedTab.dialog.message}`}
+                  dialog={selectedTab.dialog}
+                  controlling={controlling}
+                  onAnswer={(accept, promptText) => {
+                    const answer: BrowserViewerMessage = {
+                      type: "dialog",
+                      accept,
+                    };
+                    if (promptText !== undefined)
+                      answer.promptText = promptText;
+                    send(answer);
+                  }}
+                />
+              )}
+              {fileChooser && (
+                <FileChooserPrompt
+                  key={fileChooser.id}
+                  sessionId={sessionId}
+                  multiple={fileChooser.multiple}
+                  onAnswer={(paths) =>
+                    stream.answerFileChooser(fileChooser.id, paths)
+                  }
+                />
+              )}
+            </Section>
+          )
         )}
       </div>
       {confirmingClear && (

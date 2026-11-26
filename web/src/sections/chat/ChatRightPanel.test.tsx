@@ -1518,6 +1518,31 @@ describe("the chat's browser", () => {
     expect(address()).toHaveValue("https://example.com/");
   });
 
+  test("a download's toast downloads the file from the chat's browser", () => {
+    const toastInfo = jest.spyOn(toast, "info");
+    const clicked: HTMLAnchorElement[] = [];
+    jest
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        clicked.push(this);
+      });
+    renderChat([[REPORT]]);
+    act(() => openBrowserInChat("session"));
+    act(() => socket().open());
+    receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
+    receive({ type: "download", fileName: "a b.csv" });
+    expect(toastInfo).toHaveBeenCalledTimes(1);
+    const [message, options] = toastInfo.mock.calls[0]!;
+    expect(message).toBe("The browser downloaded a b.csv");
+    expect(options?.action?.label).toBe("Download");
+    act(() => options?.action?.onClick());
+    expect(clicked).toHaveLength(1);
+    expect(clicked[0]!.getAttribute("href")).toBe(
+      "/api/chat/sessions/session/browser/downloads/a%20b.csv"
+    );
+    expect(clicked[0]!.download).toBe("a b.csv");
+  });
+
   test("a new page asked for before the connection does not go to another chat's browser", async () => {
     renderChat([[REPORT]]);
     update({ type: "showTab", tabId: "files" });

@@ -13673,8 +13673,8 @@
         "inputDescription": "Drücken Sie Umschalt+Esc, um die Browserseite zu verlassen."
       },
       "download": {
-        "saved": "{fileName} wurde in die Dateien dieses Chats heruntergeladen",
-        "showFiles": "Dateien anzeigen"
+        "action": "Herunterladen",
+        "saved": "Der Browser hat {fileName} heruntergeladen"
       },
       "clearData": {
         "action": "Browserdaten löschen",
