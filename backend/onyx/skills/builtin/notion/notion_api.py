@@ -18,7 +18,7 @@ _BASE = "https://api.notion.com"
 _NOTION_VERSION = "2025-09-03"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 100
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 _HEADERS = {
     "Notion-Version": _NOTION_VERSION,
     "Accept": "application/json",
