@@ -112,7 +112,9 @@ test("shows each integration with its type, sign-in, install setting and status"
     reportsRow.queryByText("Owned by owner@example.com")
   ).not.toBeInTheDocument();
   expect(
-    reportsRow.getByRole("combobox", { name: "Install setting of Reports API" })
+    reportsRow.getByRole("combobox", {
+      name: "Install setting of Reports API",
+    })
   ).toHaveValue(messages.skills.installationPolicy.NOT_AVAILABLE.label);
   expect(reportsRow.getByText(copy.status.needsSetup)).toBeInTheDocument();
 });
@@ -213,12 +215,20 @@ test("filters by kind and by search", async () => {
   expect(screen.queryByText("Linear")).not.toBeInTheDocument();
   expect(screen.getByText("Reports API")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: copy.filters.label }));
+  await user.click(
+    screen.getByRole("button", {
+      name: `${copy.filters.label}: ${copy.filters.api}`,
+    })
+  );
   await user.click(screen.getByRole("option", { name: copy.filters.mcp }));
   expect(screen.getByText("Linear")).toBeInTheDocument();
   expect(screen.queryByText("Reports API")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: copy.filters.label }));
+  await user.click(
+    screen.getByRole("button", {
+      name: `${copy.filters.label}: ${copy.filters.mcp}`,
+    })
+  );
   await user.click(screen.getByRole("option", { name: copy.filters.all }));
   await user.type(screen.getByRole("searchbox", { name: copy.search }), "week");
   expect(screen.getByText("Reports API")).toBeInTheDocument();

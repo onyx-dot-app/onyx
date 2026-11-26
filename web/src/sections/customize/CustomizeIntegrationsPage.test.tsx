@@ -169,7 +169,9 @@ test("the filter button shows MCP servers or apps only", async () => {
   expect(screen.queryByText("Linear")).not.toBeInTheDocument();
   expect(screen.getByText("GitHub")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Integration type" }));
+  await user.click(
+    screen.getByRole("button", { name: "Integration type: Apps" })
+  );
   await user.click(screen.getByRole("option", { name: "MCP servers" }));
   expect(screen.getByText("Linear")).toBeInTheDocument();
   expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
