@@ -154,12 +154,13 @@ OpenAPI integrations, not API apps without an OpenAPI tool.
    Write run status only through `sync_chat_run__no_commit` or a cancel.
    The turn can end on any API server after an approval, so nothing at the
    end of the executor alone may decide the status.
-5. `task-choices-default-ask` **Task authority lasts while the run is in
-   flight.** `chat_integrations` uses the task links only while the run is
-   RUNNING or AWAITING_APPROVAL and its response has not ended; later turns
-   use the agent. Saved Always allow choices do not apply to a task link
-   (`AgentIntegration.task_link`). The task's
-   settings are link settings: an admin Blocked stays final
+5. `task-choices-default-ask` **A run chat keeps the task's authority.**
+   `chat_integrations` uses the task's current links in the chat of a run,
+   also after the run ends, so a command that outlives the run never gains
+   the agent's integrations. A task edit applies to that chat too. Saved
+   Always allow choices do not apply to a task link
+   (`AgentIntegration.task_link`). The task's settings are link settings: an
+   admin Blocked stays final
    (`integrations/policy.py:resolve_action_policies`).
 6. `run-link-hides-chat` **The run link is what hides a scheduled chat.**
    History (`get_chat_sessions_by_user`), search and delete-all apply

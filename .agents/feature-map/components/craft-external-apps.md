@@ -113,11 +113,11 @@ session these are the integrations that are on for the user
 caches the integration ids of each user for 30 seconds, and the evaluator and
 the resolver share it. A request whose session tag is a chat of the owner
 reads, on each request and with no cache, the integrations of that chat
-(`integrations/policy.py:chat_session_integrations`): the agent links, or the
-task links while a scheduled run is in flight, narrowed by the chat's saved
-tool options (`apply_tool_options`), Required ones kept. These can include a
-linked integration that the user turned off. `UsableIntegrations` also
-caches, for 30 seconds per tenant, one
+(`integrations/policy.py:chat_session_integrations`): the agent links, or,
+in the chat of a scheduled run, the task's current links, also after the run
+ends, narrowed by the chat's saved tool options (`apply_tool_options`),
+Required ones kept. These can include a linked integration that the user
+turned off. `UsableIntegrations` also caches, for 30 seconds per tenant, one
 `IntegrationMatchTarget` (`sandbox_proxy/resolvers/mcp_matching.py`) for each
 enabled integration: the MCP server URL, the OpenAPI base URL or the app URL
 patterns. `load_match_targets` reads them with one query for each kind table.
