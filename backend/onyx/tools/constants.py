@@ -21,14 +21,12 @@ MEMORY_TOOL_ID = "MemoryTool"
 # Tool names as referenced by tool results / tool calls (read_file)
 FILE_READER_TOOL_NAME = "read_file"
 
-# The code mode run and wait tools of each shape (code_mode/shapes.py).
-EXEC_TOOL_NAME = "exec"
+# The code mode run tool of every shape, and the wait tool of each shape
+# (code_mode/shapes.py). Clients know the run tool's streamed code by its name
+# (web and mobile `CODE_MODE_TOOL_TYPE`).
+EXECUTE_CODE_TOOL_NAME = "execute_code"
 WAIT_TOOL_NAME = "wait"
-REPL_TOOL_NAME = "repl"
 POLL_TOOL_NAME = "poll"
-# The tool type that clients know the streamed code of a code mode run call
-# of every shape by (web and mobile `CODE_MODE_TOOL_TYPE`).
-CODE_MODE_STREAM_TOOL_TYPE = "execute_code"
 # The shell tools of each shape (sandbox/shapes.py SHELL_SHAPES).
 EXEC_COMMAND_TOOL_NAME = "exec_command"
 BASH_TOOL_NAME = "bash"

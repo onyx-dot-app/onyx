@@ -624,9 +624,12 @@ def _render_function(
         doc_lines.extend(f"    {p.python_name}: {p.description}" for p in documented)
     if returns:
         doc_lines.extend(["", "Returns:", f"    {returns}"])
-    # Escaped once here, so no part can end the docstring.
+    # Escaped once here, so no part can end the docstring; each line of a
+    # multi-line part is indented too.
     body = "\n".join(
-        f"        {_docstring_text(line)}" if line else "" for line in doc_lines
+        f"        {line}" if line else ""
+        for part in doc_lines
+        for line in _docstring_text(part).split("\n")
     )
     return (
         f"    async def {function_name}({signature}) -> {result_annotation}:\n"
