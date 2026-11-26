@@ -168,13 +168,16 @@ export default function CustomizeIntegrationPage({
                 })}
               />,
               // Disconnect stays while the integration is turned off.
-              ...(reason === null || state === "connected"
+              ...(reason === null ||
+              state === "connected" ||
+              state === "needs_reconnect"
                 ? [
                     <IntegrationConnectButton
                       key="connect"
                       integration={integration}
                       returnPath={returnPath}
                       allowDisconnect
+                      allowConnect={reason === null}
                     />,
                   ]
                 : []),

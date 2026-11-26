@@ -216,26 +216,34 @@ test("the header offers Disconnect after the API key form connects", async () =>
   ).toBeVisible();
 });
 
-test("a turned off integration keeps Disconnect for the user's connection", async () => {
-  const fetchMock = open(
-    makeMemberIntegration({
-      status: connected,
-      access: makeAccess({ state: "turned_off" }),
-    }),
-    { "DELETE /api/integrations/1/connection": { state: "not_connected" } }
-  );
-  expect(await screen.findByText("Turned off by an admin.")).toBeVisible();
-  await user().click(screen.getByRole("button", { name: "Disconnect Linear" }));
-  await waitFor(() =>
+test.each(["connected", "needs_reconnect"] as const)(
+  "a turned off integration keeps Disconnect for a %s connection",
+  async (state) => {
+    const fetchMock = open(
+      makeMemberIntegration({
+        status: { state, reason: null },
+        access: makeAccess({ state: "turned_off" }),
+      }),
+      { "DELETE /api/integrations/1/connection": { state: "not_connected" } }
+    );
+    expect(await screen.findByText("Turned off by an admin.")).toBeVisible();
     expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith("/api/integrations/1/connection") &&
-          init?.method === "DELETE"
-      )
-    ).toBe(true)
-  );
-});
+      screen.queryByRole("button", { name: "Reconnect Linear" })
+    ).not.toBeInTheDocument();
+    await user().click(
+      screen.getByRole("button", { name: "Disconnect Linear" })
+    );
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/api/integrations/1/connection") &&
+            init?.method === "DELETE"
+        )
+      ).toBe(true)
+    );
+  }
+);
 
 test("the overview shows why the user must reconnect", async () => {
   open(

@@ -23,6 +23,8 @@ interface IntegrationConnectButtonProps {
   /** Where the OAuth callback returns when no waiting tab closes it. */
   returnPath: string;
   allowDisconnect?: boolean;
+  /** False: no Connect or Reconnect, and a broken connection offers Disconnect. */
+  allowConnect?: boolean;
   onConnected?: () => void;
   /** Called when a connect attempt fails or is abandoned. */
   onConnectFailed?: () => void;
@@ -35,6 +37,7 @@ export default function IntegrationConnectButton({
   integration,
   returnPath,
   allowDisconnect = false,
+  allowConnect = true,
   onConnected,
   onConnectFailed,
   onRedirect,
@@ -45,7 +48,7 @@ export default function IntegrationConnectButton({
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const connectRef = useRef<HTMLSpanElement>(null);
   const { state } = integration.status;
-  const action = connectAction(integration);
+  const action = allowConnect ? connectAction(integration) : null;
   const name = integration.name;
 
   async function refresh() {
@@ -120,11 +123,11 @@ export default function IntegrationConnectButton({
             {t(`${action}.label`)}
           </Button>
         </span>
-      ) : needsAdmin(integration) ? (
+      ) : allowConnect && needsAdmin(integration) ? (
         <Text font="secondary-body" color="text-03">
           {t("askAdmin")}
         </Text>
-      ) : state === "connected" &&
+      ) : (state === "connected" || state === "needs_reconnect") &&
         allowDisconnect &&
         integration.auth_mode === "individual" ? (
         <Button
