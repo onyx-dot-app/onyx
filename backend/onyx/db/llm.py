@@ -7,9 +7,6 @@ from sqlalchemy.orm import Session, load_only, selectinload
 
 from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType, ModelRole
-from onyx.db.image_generation import (
-    unlink_image_generation_models_for_provider__no_commit,
-)
 from onyx.db.model_configuration import (
     fetch_model_configuration_by_provider_id_and_name,
 )
@@ -51,6 +48,7 @@ from onyx.server.manage.embedding.models import (
 )
 from onyx.server.manage.llm.models import (
     DecisionProviderUpsertRequest,
+    DefaultModel,
     LLMProviderUpsertRequest,
     LLMProviderView,
     SyncModelEntry,
@@ -715,9 +713,16 @@ def upsert_llm_provider(
         ]
     )
 
+    # A role the save moves or clears never holds its old model in place.
+    default_changes = llm_provider_upsert_request.default_changes
+    roles_by_model_id = {
+        model_id: roles - default_changes.keys()
+        for model_id, roles in fetch_roles_by_model_id(db_session).items()
+    }
+
     _validate_provider_model_defaults(
         existing_by_name=existing_by_name,
-        roles_by_model_id=fetch_roles_by_model_id(db_session),
+        roles_by_model_id=roles_by_model_id,
         removed_ids=removed_ids + [mc.id for mc in image_only_models],
         requested_visibility=requested_visibility,
         merged_capabilities=merged_capabilities,
@@ -811,6 +816,10 @@ def upsert_llm_provider(
         db_session, existing_llm_provider.id, new_models
     )
 
+    if default_changes:
+        db_session.flush()
+        apply_default_changes__no_commit(db_session, default_changes)
+
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
         llm_provider_id=existing_llm_provider.id,
@@ -822,13 +831,6 @@ def upsert_llm_provider(
         llm_provider_id=existing_llm_provider.id,
         persona_ids=llm_provider_upsert_request.personas,
     )
-    if (
-        not llm_provider_upsert_request.is_public
-        or llm_provider_upsert_request.personas
-    ):
-        unlink_image_generation_models_for_provider__no_commit(
-            db_session, existing_llm_provider.id
-        )
 
     try:
         db_session.commit()
@@ -1933,6 +1935,20 @@ def update_model_configuration__no_commit(
         )
 
     db_session.flush()
+
+
+def apply_default_changes__no_commit(
+    db_session: Session,
+    default_changes: dict[ModelRole, DefaultModel | None],
+) -> None:
+    """Moves each listed role to its model, or clears it (None)."""
+    for role, new_model in default_changes.items():
+        if new_model is None:
+            clear_role__no_commit(db_session, role)
+        else:
+            set_role_model__no_commit(
+                db_session, role, new_model.provider_id, new_model.model_name
+            )
 
 
 def set_role_model__no_commit(

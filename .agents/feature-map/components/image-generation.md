@@ -24,10 +24,12 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   models of each connected LLM provider. The recommended view, the default,
   shows the non-deprecated catalog image models; the full view shows every
   model on the provider. One click links a model to its LLM provider with no
-  credentials, and the first linked model becomes the default. Only public providers with no agent restrictions are listed
-  or can be linked, because the tool is available to all users and agents.
-  Making a linked provider private or agent-restricted unlinks its image
-  models. Configs made with their own credentials before this change
+  credentials, and the first linked model becomes the default. Any provider
+  can serve image models. The default image model follows its provider's
+  access: the tool and `POST /image-generation/generate` check it with
+  `db/image_generation.py:can_user_generate_images`, the rule a chat model
+  uses, so a user outside a private provider's groups, or an agent outside its
+  agent list, cannot generate images. Configs made with their own credentials before this change
   (legacy) show only while connected, and keep their edit form. A legacy model
   that the vendor withdrew shows a warning to switch. Onyx does not switch a
   saved config by itself.

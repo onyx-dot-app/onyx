@@ -13,8 +13,8 @@ from onyx.db.image_generation import (
     fetch_default_image_model_configuration_id,
     get_all_image_generation_configs,
     get_image_generation_config,
-    is_usable_for_image_generation,
     link_image_generation_model__no_commit,
+    rename_image_generation_model__no_commit,
     set_default_image_generation_config,
     unlink_image_generation_model__no_commit,
     unset_default_image_generation_config,
@@ -48,6 +48,7 @@ from onyx.llm.utils import collect_credential_values
 from onyx.server.manage.image_generation.models import (
     ImageGenerationConfigCreate,
     ImageGenerationConfigLink,
+    ImageGenerationConfigRename,
     ImageGenerationConfigUpdate,
     ImageGenerationConfigView,
     ImageGenerationCredentials,
@@ -190,7 +191,7 @@ def _create_image_gen_llm_provider__no_commit(
 @admin_router.post("/test")
 def test_image_generation(
     test_request: TestImageGenerationRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
 ) -> None:
     """Test if an API key is valid for image generation.
 
@@ -252,7 +253,7 @@ def test_image_generation(
 @admin_router.post("/config")
 def create_config(
     config_create: ImageGenerationConfigCreate,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationConfigView:
     """Create a new image generation configuration.
@@ -316,10 +317,11 @@ def _linked_image_provider_id(llm_provider_id: int, model_name: str) -> str:
 
 @admin_router.get("/llm-providers")
 def list_llm_provider_image_models(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[ImageGenerationLLMProvider]:
-    """Connected unrestricted LLM providers with every model they can serve. Catalog image
+    """Connected LLM providers with every model they can serve. A provider's
+    groups and agents also limit who can use its image models. Catalog image
     models are listed even when the provider's model list omits them, and are
     marked recommended."""
     connected_by_model_id = {
@@ -331,8 +333,6 @@ def list_llm_provider_image_models(
     for llm_provider in fetch_existing_llm_providers(
         db_session=db_session, flow_type_filter=[]
     ):
-        if not is_usable_for_image_generation(llm_provider):
-            continue
         catalog_models = set(
             iter_image_generation_models(llm_provider.provider, recommended_only=False)
         )
@@ -368,10 +368,30 @@ def list_llm_provider_image_models(
     return result
 
 
+@admin_router.get("/catalog/{provider}")
+def list_catalog_image_models(
+    provider: str,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+) -> list[ImageGenerationProviderModel]:
+    """The catalog's image models for a provider type (e.g. "openai"), for a
+    provider that is not saved yet. None of them is connected."""
+    return [
+        ImageGenerationProviderModel(
+            name=name,
+            display_name=None,
+            is_recommended=is_recommended_image_model(provider, name),
+            image_provider_id=None,
+        )
+        for name in sorted(
+            set(iter_image_generation_models(provider, recommended_only=False))
+        )
+    ]
+
+
 @admin_router.post("/config/link")
 def link_config(
     config_link: ImageGenerationConfigLink,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationConfigView:
     """Use a model on an existing LLM provider for image generation."""
@@ -387,12 +407,6 @@ def link_config(
             OnyxErrorCode.NOT_FOUND,
             f"LLM provider {config_link.llm_provider_id} not found",
         )
-    if not is_usable_for_image_generation(llm_provider):
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Only public LLM providers without agent restrictions can be used "
-            "for image generation",
-        )
 
     image_provider_id = _linked_image_provider_id(llm_provider.id, model_name)
     if get_image_generation_config(db_session, image_provider_id):
@@ -407,6 +421,33 @@ def link_config(
         llm_provider_id=llm_provider.id,
         model_name=model_name,
         is_default=config_link.is_default,
+        custom_display_name=config_link.custom_display_name,
+    )
+    db_session.commit()
+    invalidate_provider_listing_cache()
+    db_session.refresh(config)
+    return ImageGenerationConfigView.from_model(
+        config, fetch_default_image_model_configuration_id(db_session)
+    )
+
+
+@admin_router.patch("/config/{image_provider_id}")
+def rename_config(
+    image_provider_id: str,
+    rename: ImageGenerationConfigRename,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> ImageGenerationConfigView:
+    """Rename a connected image model."""
+    config = get_image_generation_config(db_session, image_provider_id)
+    if config is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
+        )
+    name = rename.custom_display_name
+    rename_image_generation_model__no_commit(
+        config, name.strip() if name and name.strip() else None
     )
     db_session.commit()
     invalidate_provider_listing_cache()
@@ -418,7 +459,7 @@ def link_config(
 
 @admin_router.get("/config")
 def get_all_configs(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[ImageGenerationConfigView]:
     """Get all image generation configurations."""
@@ -435,7 +476,7 @@ def get_all_configs(
 @admin_router.get("/config/{image_provider_id}/credentials")
 def get_config_credentials(
     image_provider_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationCredentials:
     """Get the credentials for an image generation config (for edit mode).
@@ -462,7 +503,7 @@ def get_config_credentials(
 def update_config(
     image_provider_id: str,
     config_update: ImageGenerationConfigUpdate,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationConfigView:
     """Update an image generation configuration.
@@ -563,7 +604,7 @@ def update_config(
 @admin_router.delete("/config/{image_provider_id}")
 def delete_config(
     image_provider_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Delete an image generation configuration and its associated LLM provider."""
@@ -601,7 +642,7 @@ def delete_config(
 @admin_router.post("/config/{image_provider_id}/default")
 def set_config_as_default(
     image_provider_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Set a configuration as the default for image generation."""
@@ -614,7 +655,7 @@ def set_config_as_default(
 @admin_router.delete("/config/{image_provider_id}/default")
 def unset_config_as_default(
     image_provider_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Unset a configuration as the default for image generation."""

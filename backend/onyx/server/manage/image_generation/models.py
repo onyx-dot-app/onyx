@@ -58,6 +58,14 @@ class ImageGenerationConfigLink(BaseModel):
     llm_provider_id: int
     model_name: str
     is_default: bool = False
+    # The admin's name for the model; None keeps the catalog name.
+    custom_display_name: str | None = None
+
+
+class ImageGenerationConfigRename(BaseModel):
+    """Rename a connected image model; None restores the catalog name."""
+
+    custom_display_name: str | None = None
 
 
 class ImageGenerationProviderModel(BaseModel):
