@@ -69,40 +69,43 @@ def test_two_searches_show_each_document_once_live_and_on_reload(
     )
 
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
-    response = ChatSessionManager.send_message(
-        chat_session_id=chat_session.id,
-        message=f"What do we know about {term}?",
-        user_performing_action=admin_user,
-    )
-    assert response.error is None
+    try:
+        response = ChatSessionManager.send_message(
+            chat_session_id=chat_session.id,
+            message=f"What do we know about {term}?",
+            user_performing_action=admin_user,
+        )
+        assert response.error is None
 
-    # Live: the answer shows every found document once.
-    live = _answer_documents(response.packets)
-    assert seeded_ids <= set(live)
-    assert len(live) == len(set(live))
-    assert [document.document_id for document in response.top_documents] == live
-    live_citations = {
-        packet["obj"]["citation_number"]: packet["obj"]["document_id"]
-        for packet in response.packets
-        if packet["obj"].get("type") == "citation_info"
-    }
-    assert set(live_citations) == {1, 2}
-    assert set(live_citations.values()) <= set(live)
+        # Live: the answer shows every found document once.
+        live = _answer_documents(response.packets)
+        assert seeded_ids <= set(live)
+        assert len(live) == len(set(live))
+        assert [document.document_id for document in response.top_documents] == live
+        live_citations = {
+            packet["obj"]["citation_number"]: packet["obj"]["document_id"]
+            for packet in response.packets
+            if packet["obj"].get("type") == "citation_info"
+        }
+        assert set(live_citations) == {1, 2}
+        assert set(live_citations.values()) <= set(live)
 
-    # Reload: the saved answer replays the same documents and citations.
-    loaded = client.get(
-        f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
-        headers=admin_user.headers,
-    )
-    loaded.raise_for_status()
-    session = loaded.json()
-    assistant = session["messages"][-1]
-    assert assistant["message_id"] == response.assistant_message_id
-    assert {
-        int(number): document for number, document in assistant["citations"].items()
-    } == live_citations
-    assert {document["document_id"] for document in assistant["context_docs"]} == set(
-        live
-    )
-    replayed = session["packets"][-1]
-    assert _answer_documents(replayed) == live
+        # Reload: the saved answer replays the same documents and citations.
+        loaded = client.get(
+            f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
+            headers=admin_user.headers,
+        )
+        loaded.raise_for_status()
+        session = loaded.json()
+        assistant = session["messages"][-1]
+        assert assistant["message_id"] == response.assistant_message_id
+        assert {
+            int(number): document for number, document in assistant["citations"].items()
+        } == live_citations
+        assert {
+            document["document_id"] for document in assistant["context_docs"]
+        } == set(live)
+        replayed = session["packets"][-1]
+        assert _answer_documents(replayed) == live
+    finally:
+        ChatSessionManager.delete(chat_session, admin_user)
