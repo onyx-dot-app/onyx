@@ -71,14 +71,14 @@ test("omits Integrations without action management access", () => {
   expect(links).toEqual(["/admin/agents"]);
 });
 
-test("shows Decision Models to an LLM manager", () => {
+test("shows AI Models to an LLM manager", () => {
   const links = buildItems([Permission.MANAGE_LLMS], flags, null).map(
     (item) => item.link
   );
-  expect(links).toContain("/admin/decision-models");
+  expect(links).toContain("/admin/ai-models");
 });
 
-test("marks only Decision Models as a beta entry", () => {
+test("marks no entry as beta", () => {
   const betaLinks = buildItems(
     [Permission.FULL_ADMIN_PANEL_ACCESS],
     flags,
@@ -86,7 +86,7 @@ test("marks only Decision Models as a beta entry", () => {
   )
     .filter((item) => item.beta)
     .map((item) => item.link);
-  expect(betaLinks).toEqual(["/admin/decision-models"]);
+  expect(betaLinks).toEqual([]);
 });
 
 test("Agents & Plugins holds Agents, Skills and Integrations, with Craft off too", () => {

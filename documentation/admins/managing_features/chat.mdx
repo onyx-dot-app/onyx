@@ -14,8 +14,6 @@ The page is available in all editions.
 ## Chat Settings
 
 - **Default Language**: UI language for users who have not set one in their own settings.
-- **Chat Naming Model**: The model that generates chat session titles. A fast, low-cost model works well.
-  Choose **Chat Default** to name each chat with the model that the user chats with.
 - **Multi-Model Generation**: Lets users run several models in parallel on the same message.
 - **Deep Research**: Agentic research across the web and connected sources.
   It uses many more tokens per query than normal chat.
@@ -31,7 +29,8 @@ The page is available in all editions.
 
 ## Search Settings
 
-**Search Decision Model** sets the model that picks the retrieved documents for an answer.
+**Search Decision Model**, on the [AI Models](/admins/ai_models/overview) page,
+sets the model that picks the retrieved documents for an answer.
 The same model decides how much of each document's surrounding text to add. The list shows your decision models first,
 then your language models.
 
@@ -42,7 +41,8 @@ then your language models.
 | **Chat Default** | The default chat model selects the documents. |
 
 A model that can work as both is listed in each section. Pick it under **Decision Models** to use the decision model,
-or under its provider to use it as a language model. To add a decision model, open **Admin Panel → Decision Models**.
+or under its provider to use it as a language model. To add a decision model,
+connect a provider under **Decisions** in **Add Provider** on the **AI Models** page.
 The selection on that page and **Search Decision Model** are the same setting.
 
 If a decision model request fails, search uses the chat's language model to pick the documents for that search.

@@ -89,7 +89,7 @@ export const FINAL_SETUP_CONFIG = [
     descriptionKey: "finalStep.imageGeneration.description",
     icon: SvgImage,
     buttonTextKey: "finalStep.imageGeneration.button.label",
-    buttonHref: ADMIN_ROUTES.IMAGE_GENERATION.path,
+    buttonHref: ADMIN_ROUTES.LLM_MODELS.path,
   },
   {
     titleKey: "finalStep.inviteTeam.title",

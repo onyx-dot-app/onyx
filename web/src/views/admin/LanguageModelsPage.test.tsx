@@ -16,7 +16,7 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
   useRouter: () => ({ back: jest.fn() }),
-  usePathname: () => "/admin/language-models",
+  usePathname: () => "/admin/ai-models",
 }));
 
 jest.mock("@/lib/adminNavLabels", () => ({
@@ -182,13 +182,12 @@ describe("LanguageModelsPage", () => {
     ).toBeInTheDocument();
   });
 
-  test("keeps task model settings out of Language Models and hidden models out of chat defaults", async () => {
+  test("keeps hidden models out of chat defaults", async () => {
     const user = setupUser();
     render(<LanguageModelsPage />);
     await screen.findByDisplayValue("GPT-6 Sol");
     expect(screen.queryByText("Task-specific models")).not.toBeInTheDocument();
     expect(screen.queryByText("Optional task models")).not.toBeInTheDocument();
-    expect(screen.queryByText("Chat Naming Model")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Search Selection Model")
     ).not.toBeInTheDocument();

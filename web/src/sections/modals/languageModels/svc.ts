@@ -10,10 +10,49 @@ import {
 } from "@/lib/analytics/utils";
 import {
   BaseLLMFormValues,
+  ImageModelChange,
   LlmModalsTranslator,
   TestApiKeyResult,
 } from "@/sections/modals/languageModels/utils";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import {
+  deleteImageGenerationConfig,
+  linkImageGenerationModel,
+  renameImageGenerationConfig,
+  setDefaultImageGenerationConfig,
+} from "@/lib/imageGeneration/svc";
+
+/**
+ * Applies a provider's staged image model changes. Disconnects run first,
+ * so swapping models never leaves two defaults.
+ */
+async function saveImageModelChanges(
+  llmProviderId: number,
+  changes: Record<string, ImageModelChange>
+): Promise<void> {
+  const entries = Object.entries(changes);
+  for (const [, change] of entries) {
+    if (!change.connect && change.imageProviderId) {
+      await deleteImageGenerationConfig(change.imageProviderId);
+    }
+  }
+  for (const [modelName, change] of entries) {
+    if (!change.connect) continue;
+    if (change.imageProviderId === null) {
+      await linkImageGenerationModel(
+        llmProviderId,
+        modelName,
+        change.makeDefault,
+        change.customDisplayName
+      );
+    } else if (change.customDisplayName !== undefined) {
+      await renameImageGenerationConfig(
+        change.imageProviderId,
+        change.customDisplayName
+      );
+    }
+  }
+}
 
 // ─── Test helpers ─────────────────────────────────────────────────────────
 
@@ -133,7 +172,14 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 }: SubmitProviderParams<T>): Promise<void> {
   setSubmitting(true);
 
-  const { test_model_name, api_key, name: rawName, ...rest } = values;
+  const {
+    test_model_name,
+    api_key,
+    name: rawName,
+    image_model_changes: imageModelChanges,
+    image_default_choice: imageDefaultChoice,
+    ...rest
+  } = values;
   const testModelName =
     test_model_name ||
     values.model_configurations.find((m) => m.is_visible)?.name ||
@@ -177,7 +223,9 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   };
 
   // Skip test on updates where api_key is absent (credentials not changing)
+  // A provider kept only for image models has no chat model to test with.
   if (
+    testModelName !== "" &&
     (!existingLlmProvider || apiKeyForRequest !== undefined) &&
     !isEqual(finalValues, initialValues)
   ) {
@@ -227,13 +275,16 @@ export async function submitProvider<T extends BaseLLMFormValues>({
     return;
   }
 
+  const savedProvider: LLMProviderView | null = await response
+    .json()
+    .catch(() => null);
+
   // ── Set as default ──────────────────────────────────────────────────
   if (shouldMarkAsDefault && testModelName) {
     try {
-      const newLlmProvider: LLMProviderView = await response.json();
       if (
-        newLlmProvider?.id != null &&
-        !newLlmProvider.model_configurations.some(
+        savedProvider?.id != null &&
+        !savedProvider.model_configurations.some(
           (model) =>
             model.name === testModelName && model.supports_chat === false
         )
@@ -242,7 +293,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            provider_id: newLlmProvider.id,
+            provider_id: savedProvider.id,
             model_name: testModelName,
           }),
         });
@@ -257,6 +308,26 @@ export async function submitProvider<T extends BaseLLMFormValues>({
       }
     } catch {
       toast.error(t("toasts.setNewDefaultFailed"));
+    }
+  }
+
+  // ── Image models ────────────────────────────────────────────────────
+  // A new provider's image models link to the id its save returned.
+  const savedProviderId = existingLlmProvider?.id ?? savedProvider?.id;
+  if (savedProviderId != null && (imageModelChanges || imageDefaultChoice)) {
+    try {
+      if (imageModelChanges) {
+        await saveImageModelChanges(savedProviderId, imageModelChanges);
+      }
+      if (imageDefaultChoice) {
+        await setDefaultImageGenerationConfig(imageDefaultChoice);
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.imageModelsUpdateFailed")
+      );
+      setSubmitting(false);
+      return;
     }
   }
 

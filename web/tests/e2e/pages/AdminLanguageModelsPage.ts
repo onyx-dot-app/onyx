@@ -1,6 +1,6 @@
 /**
  * Page Object Model for the Language Models admin page
- * (/admin/language-models): provider cards and the Cost Overrides panel.
+ * (/admin/ai-models): provider cards and the Cost Overrides panel.
  *
  * Provider and override cards are labelled with their bare names (a
  * provider's name, an override's model display name). An override card's

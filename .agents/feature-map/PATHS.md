@@ -352,8 +352,8 @@ covers new files that match it.
 | `web/src/sections/modals/AddPeoplePicker.tsx`, `web/src/sections/modals/TransferOwnershipView.tsx`, `web/src/sections/modals/ShareAccessRow.tsx`, `web/src/sections/modals/ShareModalPermissionControls.tsx` | agents-personas, skills |
 | `web/src/app/admin/chat-preferences/` | chat-preferences |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
-| `web/src/app/admin/language-models/`, `web/src/views/admin/LanguageModelsPage.tsx`, `web/src/sections/modals/languageModels/`, `web/src/lib/languageModels/`, `web/src/lib/hooks/useLLMProviderOptions.ts` | llm-providers |
-| `web/src/app/admin/decision-models/`, `web/src/views/admin/DecisionModelsPage.tsx`, `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | llm-providers |
+| `web/src/app/admin/ai-models/`, `web/src/views/admin/LanguageModelsPage.tsx`, `web/src/sections/modals/languageModels/`, `web/src/lib/languageModels/`, `web/src/lib/hooks/useLLMProviderOptions.ts` | llm-providers |
+| `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | llm-providers |
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
 | `web/src/app/admin/integrations/` | plugins |
@@ -374,7 +374,7 @@ covers new files that match it.
 | `web/src/lib/analytics/` | observability, editions-and-gating |
 | `web/src/app/ee/admin/theme/`, `web/src/lib/app/components/Logo.tsx`, `web/src/lib/app/components/LanguageSelect.tsx`, `web/src/lib/analytics/shared.tsx` | whitelabelling-and-theme |
 | `web/src/app/admin/web-search/`, `web/src/views/admin/WebSearchPage/`, `web/src/lib/webSearch/` | web-search |
-| `web/src/app/admin/image-generation/`, `web/src/views/admin/ImageGenerationPage/` | image-generation |
+| `web/src/lib/imageGeneration/` | image-generation |
 | `web/src/app/admin/code-interpreter/`, `web/src/views/admin/CodeInterpreterPage/`, `web/src/hooks/useCodeInterpreter.ts` | code-execution |
 
 ---

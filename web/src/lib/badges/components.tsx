@@ -72,17 +72,19 @@ export function LifecycleBadge({ lifecycle, tooltip }: LifecycleBadgeProps) {
 // ---------------------------------------------------------------------------
 
 /** A short fact about an item in a list, such as the default provider. */
-export type Label = "default";
+export type Label = "default" | "defaultChat" | "defaultImage";
 
 const LABEL_BADGES: Record<
   Label,
   {
     color: StatusColor;
     // The label's key under `common.badges.labels`.
-    copyKey: "default";
+    copyKey: "default" | "defaultChat" | "defaultImage";
   }
 > = {
   default: { color: "info", copyKey: "default" },
+  defaultChat: { color: "info", copyKey: "defaultChat" },
+  defaultImage: { color: "info", copyKey: "defaultImage" },
 };
 
 /** A label badge's props, for a `tag` or `badge` slot. */
@@ -108,27 +110,61 @@ export function LabelBadge({ label, tooltip }: LabelBadgeProps) {
 // Model type
 // ---------------------------------------------------------------------------
 
-/** What a language model can do beyond chat. */
-export type ModelType = "decision" | "vision";
+/** What a model can do. */
+export type ModelType = "chat" | "vision" | "decision" | "image";
 
-const MODEL_TYPE_BADGES: Record<
-  ModelType,
-  {
-    // The label's key under `common.badges.modelTypes`.
-    copyKey: "decision" | "vision";
-  }
-> = {
-  decision: { copyKey: "decision" },
-  vision: { copyKey: "vision" },
-};
-
-/** A model type badge's props, for a `tag` or `badge` slot. */
+/** A model type badge's props, for a `tag` or `badge` slot: a grey tag whose
+ *  label is the type's key under `common.badges.modelTypes`. */
 export function useModelTypeBadge(modelType: ModelType): BadgeProps {
   const t = useTranslations("common.badges.modelTypes");
-  return useMemo(() => {
-    const { copyKey } = MODEL_TYPE_BADGES[modelType];
-    return { title: t(copyKey), color: "default", size: 4 };
-  }, [t, modelType]);
+  return useMemo(
+    () => ({ title: t(modelType), color: "default", size: 4 }),
+    [t, modelType]
+  );
+}
+
+/** A deployment role a model can hold, as the backend's `ModelRole`. */
+export type ModelRoleName =
+  | "chat"
+  | "image_generation"
+  | "image_processing"
+  | "chat_naming"
+  | "search_selection"
+  | "decision"
+  | "craft";
+
+/** The role's key under `common.badges.defaultRoles`. */
+const DEFAULT_ROLE_COPY_KEYS: Record<
+  ModelRoleName,
+  | "chat"
+  | "imageGeneration"
+  | "imageProcessing"
+  | "chatNaming"
+  | "searchSelection"
+  | "decision"
+  | "craft"
+> = {
+  chat: "chat",
+  image_generation: "imageGeneration",
+  image_processing: "imageProcessing",
+  chat_naming: "chatNaming",
+  search_selection: "searchSelection",
+  decision: "decision",
+  craft: "craft",
+};
+
+/** The blue tags that say which roles a model holds, e.g. "Default Chat". */
+export function useDefaultRoleBadges(roles: ModelRoleName[]): BadgeProps[] {
+  const t = useTranslations("common.badges.defaultRoles");
+  return useMemo(
+    () =>
+      roles.map((role) => ({
+        title: t(DEFAULT_ROLE_COPY_KEYS[role]),
+        color: "info",
+        size: 4,
+      })),
+    [t, roles]
+  );
 }
 
 export interface ModelTypeBadgeProps {

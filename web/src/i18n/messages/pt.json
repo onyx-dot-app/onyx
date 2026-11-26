@@ -372,21 +372,16 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "Gerenciar configurações de chat em Modelos de linguagem",
+      "sharedModelSettings": "Gerenciar configurações de chat em Modelos de IA",
       "decisionModel": {
         "title": "Modelo de decisão",
         "openAiDecisionsModelName": "Decisões da OpenAI (GPT-6 Luna)",
         "description": "A pesquisa interna usa este modelo para classificar os resultados e decidir quanto contexto adicionar. Você também pode defini-lo em Preferências de chat.",
         "clear": "Limpar",
-        "notConfigured": "Não configurado",
         "saveFailed": "Não foi possível atualizar o modelo de decisão"
       },
-      "header": {
-        "title": "Modelos de decisão",
-        "description": "Gerencie os provedores e escolha um modelo de decisão opcional."
-      },
       "providers": {
-        "title": "Provedores",
+        "title": "Provedores de decisão",
         "description": "Conecte um provedor ou gerencie seus modelos de decisão.",
         "clearBeforeRemoval": "Limpe o modelo de decisão selecionado antes de remover este provedor.",
         "connect": "Conectar"
@@ -1361,9 +1356,6 @@
         "loadFailed": "Não foi possível carregar os modelos de tarefas",
         "retry": {
           "label": "Tentar novamente"
-        },
-        "addProvider": {
-          "label": "Adicionar provedor"
         },
         "chatDefault": {
           "label": "Padrão do chat"
@@ -5760,222 +5752,6 @@
         "endpointUrl": "https://seu-endpoint-api.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "Modelos de imagem dos seus provedores de LLM conectados. Conecte um para usá-lo no chat.",
-        "title": "Modelos disponíveis"
-      },
-      "configureSuccess": {
-        "message": "Provedor configurado com sucesso"
-      },
-      "connectButton": {
-        "label": "Conectar"
-      },
-      "connectedModels": {
-        "title": "Modelos conectados"
-      },
-      "deselectError": {
-        "message": "Falha ao desmarcar"
-      },
-      "disconnectButton": {
-        "ariaLabel": "Desconectar {title}"
-      },
-      "disconnectError": {
-        "message": "Falha ao desconectar"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "Conecte outro provedor para continuar usando a geração de imagens."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** é atualmente o modelo padrão de geração de imagens."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** é atualmente o modelo padrão de geração de imagens. O histórico das sessões será preservado."
-        },
-        "header": {
-          "description": "Isso vai remover as credenciais armazenadas deste provedor.",
-          "title": "Desconectar *{title}*"
-        },
-        "linkedHeader": {
-          "description": "O provedor de LLM e suas credenciais continuam conectados."
-        },
-        "noDefaultOption": {
-          "description": "(Desativar a geração de imagens)",
-          "label": "Sem padrão"
-        },
-        "nonDefault": {
-          "description": "Os modelos **{title}** não serão mais usados para gerar imagens."
-        },
-        "replacement": {
-          "label": "Definir novo padrão",
-          "placeholder": "Selecione um modelo substituto"
-        },
-        "sessionHistory": {
-          "description": "O histórico das sessões será preservado."
-        },
-        "submitButton": {
-          "label": "Desconectar"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "{title} desconectado"
-      },
-      "editButton": {
-        "ariaLabel": "Editar {title}"
-      },
-      "emptyState": {
-        "title": "Conecte um modelo de geração de imagens para usar no chat."
-      },
-      "form": {
-        "apiKey": {
-          "idle": "Insira sua chave de API.",
-          "label": "Chave de API",
-          "placeholder": "Insira sua chave de API",
-          "required": "A chave de API é obrigatória"
-        },
-        "apiKeyTest": {
-          "error": "Chave de API inválida",
-          "loading": "Testando a chave de API com {title}...",
-          "success": "A chave de API é válida. Configuração salva."
-        },
-        "apiKeyValidationFailed": {
-          "message": "Falha na validação da chave de API"
-        },
-        "authMethod": {
-          "idle": "Escolha como o {appName} deve se autenticar no Google Vertex AI.",
-          "label": "Método de autenticação",
-          "required": "O método de autenticação é obrigatório",
-          "serviceAccount": {
-            "description": "Envie um arquivo JSON de chave de conta de serviço do GCP",
-            "label": "JSON da conta de serviço"
-          },
-          "workloadIdentity": {
-            "description": "Usar as credenciais ambientes do GCP no pod (GKE Workload Identity)",
-            "label": "Workload Identity (GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "Cole sua <link>chave de API</link> do Azure OpenAI para acessar seus modelos."
-        },
-        "connectHeader": {
-          "title": "Conectar {title}"
-        },
-        "credentials": {
-          "idle": "Envie ou cole suas <link>credenciais de conta de serviço</link> do Google Cloud.",
-          "label": "Arquivo de credenciais",
-          "placeholder": "Envie ou cole suas credenciais",
-          "required": "O arquivo de credenciais é obrigatório"
-        },
-        "credentialsTest": {
-          "error": "Credenciais inválidas",
-          "loading": "Testando as credenciais com {title}...",
-          "success": "Credenciais válidas. Configuração salva."
-        },
-        "editHeader": {
-          "title": "Editar {title}"
-        },
-        "loading": {
-          "placeholder": "Carregando..."
-        },
-        "location": {
-          "idle": "A região do Google Cloud dos seus modelos Vertex AI. Consulte a <link>documentação do Google</link> para ver as regiões disponíveis.",
-          "label": "Localização",
-          "required": "A localização é obrigatória"
-        },
-        "projectId": {
-          "idle": "O projeto do GCP com o Vertex AI ativado. O {appName} se autentica com a conta de serviço vinculada ao pod (GKE Workload Identity).",
-          "label": "ID do projeto do GCP",
-          "required": "O ID do projeto é obrigatório"
-        },
-        "targetUri": {
-          "idle": "Cole o URI de destino do seu endpoint do <link>Azure OpenAI</link> (incluindo a base do endpoint da API, o nome da implantação e a versão da API).",
-          "invalid": "O URI de destino deve ser uma URL válida com api-version e o nome da implantação",
-          "label": "URI de destino",
-          "required": "O URI de destino é obrigatório"
-        },
-        "unknownError": {
-          "message": "Ocorreu um erro desconhecido"
-        }
-      },
-      "header": {
-        "description": "Configurações da geração de imagens no chat.",
-        "title": "Geração de imagens"
-      },
-      "linkError": {
-        "message": "Falha ao conectar o modelo"
-      },
-      "linkSuccess": {
-        "message": "{title} conectado"
-      },
-      "linkedModel": {
-        "description": "De {provider}"
-      },
-      "loadError": {
-        "message": "Falha ao carregar a configuração. Atualize a página."
-      },
-      "model": {
-        "description": "Selecione um modelo para gerar imagens no chat.",
-        "placeholder": "Selecione um modelo padrão",
-        "title": "Modelo de geração de imagens"
-      },
-      "modelFilter": {
-        "all": "Todos",
-        "recommended": "Recomendados"
-      },
-      "noImageModels": {
-        "description": "Conecte na página Modelos de linguagem um provedor de LLM que ofereça modelos de imagem. Para ver todos os modelos dos seus provedores conectados, abra a guia Todos.",
-        "title": "Nenhum modelo de imagem disponível"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "Modelo de geração de imagens GPT Image 1 hospedado no Microsoft Azure."
-        },
-        "azureGptImage15": {
-          "description": "Modelo de geração de imagens GPT Image 1.5 hospedado no Microsoft Azure."
-        },
-        "azureGptImage2": {
-          "description": "Modelo de geração de imagens GPT Image 2 hospedado no Microsoft Azure."
-        },
-        "azureGptImage25Flare": {
-          "description": "Modelo de geração de imagens GPT Image 2.5 Flare hospedado no Microsoft Azure."
-        },
-        "azureGptImage25Sunburst": {
-          "description": "Modelo de geração de imagens GPT Image 2.5 Sunburst hospedado no Microsoft Azure."
-        },
-        "gemini25FlashImage": {
-          "description": "O modelo Gemini 2.5 Flash Image (Nano Banana) foi projetado para velocidade e eficiência."
-        },
-        "gemini3ProImage": {
-          "description": "O Gemini 3 Pro Image (Nano Banana Pro) foi projetado para a produção profissional de ativos."
-        },
-        "gemini3ProImagePreview": {
-          "description": "Descontinuado pelo Google Cloud em 17 de julho de 2026. Mude para o Gemini 3 Pro Image."
-        },
-        "openaiGptImage1": {
-          "description": "Um modelo de geração de imagens competente da OpenAI, com forte aderência ao prompt."
-        },
-        "openaiGptImage15": {
-          "description": "O antigo modelo principal de geração de imagens da OpenAI."
-        },
-        "openaiGptImage2": {
-          "description": "O modelo de geração de imagens da geração anterior da OpenAI, com alta fidelidade ao prompt."
-        },
-        "openaiGptImage25Flare": {
-          "description": "O modelo de geração de imagens mais recente da OpenAI, com alta qualidade e geração rápida."
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "O modelo premium de geração de imagens da OpenAI, para as edições mais precisas."
-        }
-      },
-      "retiredModelWarning": {
-        "description": "Conecte outro modelo, defina-o como padrão e depois desconecte {title}.",
-        "title": "{title} não está mais disponível"
-      },
-      "setDefaultError": {
-        "message": "Falha ao definir o padrão"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "Opções avançadas",
@@ -6661,7 +6437,7 @@
       },
       "defaultModel": {
         "description": "Usado por padrão em novas sessões.",
-        "title": "Modelo padrão"
+        "title": "Modelo de chat"
       },
       "deleteModal": {
         "defaultProviderWarning": "Não é possível excluir o provedor padrão. Selecione outro provedor como padrão antes de excluir este.",
@@ -6682,6 +6458,9 @@
         },
         "selfHosted": {
           "title": "Auto-hospedados e personalizados"
+        },
+        "decisions": {
+          "title": "Decisões"
         }
       },
       "hideProviderGrouping": {
@@ -6927,7 +6706,7 @@
             "placeholder": "Insira o nome do modelo"
           },
           "autoUpdate": {
-            "description": "Atualize os modelos disponíveis quando novos modelos forem lançados.",
+            "description": "Adicione automaticamente os novos modelos de chat e remova os descontinuados.",
             "title": "Atualização automática"
           },
           "deselectAllButton": {
@@ -6937,30 +6716,24 @@
             "title": "Nenhum modelo disponível."
           },
           "field": {
-            "description": "Selecione os modelos que ficarão disponíveis para este provedor.",
+            "description": "Selecione os modelos que podem ser usados em todo o app.",
             "title": "Modelos"
           },
-          "foldButton": {
-            "label": "Recolher modelos"
-          },
-          "moreButton": {
-            "label": "Mais modelos"
+          "search": {
+            "empty": "Nenhum modelo corresponde à sua pesquisa.",
+            "placeholder": "Pesquisar modelos"
           },
           "refetch": {
             "label": "Atualizar modelos",
             "errorToast": "Falha ao buscar os modelos"
           },
           "row": {
-            "defaultLabel": "Modelo padrão",
             "decisionTag": {
               "decisionOnly": "Modelo de decisão. Não está disponível no seletor de modelos de chat.",
               "chatAndDecision": "Suporta tarefas de chat e de decisão."
             },
             "renameButton": {
               "tooltip": "Renomear"
-            },
-            "setDefaultButton": {
-              "label": "Definir como padrão"
             }
           },
           "selectAllButton": {
@@ -7078,11 +6851,12 @@
           },
           "submitButton": {
             "invalidTooltip": "Preencha todos os campos obrigatórios.",
-            "pristineTooltip": "Nenhuma alteração para salvar."
+            "pristineTooltip": "Nenhuma alteração para salvar.",
+            "noModelsTooltip": "Selecione pelo menos um modelo de chat ou de imagem"
           },
           "title": {
             "configure": "Configurar *{provider}*",
-            "create": "Configurar {product}"
+            "create": "Configure {product}"
           },
           "updateButton": {
             "label": "Atualizar"
@@ -7097,7 +6871,8 @@
           "setNewDefaultFailed": "Falha ao definir o novo provedor como padrão",
           "testApiKeyFailed": "Ocorreu um erro ao testar a chave de API.",
           "testCustomProviderFailed": "Ocorreu um erro ao testar o provedor personalizado.",
-          "testProviderFailed": "Ocorreu um erro ao testar o provedor."
+          "testProviderFailed": "Ocorreu um erro ao testar o provedor.",
+          "imageModelsUpdateFailed": "O provedor foi salvo, mas não foi possível atualizar seus modelos de imagem"
         },
         "validation": {
           "apiBaseRequired": "A URL base da API é obrigatória",
@@ -7202,6 +6977,46 @@
       "temperature": {
         "description": "Permitir que os usuários substituam a temperatura padrão do modelo em cada sessão.",
         "title": "Controle de temperatura"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "Modelo de imagem",
+          "description": "Usado para gerar imagens nas sessões.",
+          "error": "Não foi possível alterar o modelo de imagem padrão",
+          "noDefault": {
+            "label": "Sem padrão",
+            "description": "(Desativar a geração de imagens)"
+          }
+        }
+      },
+      "defaultChanges": {
+        "back": "Voltar",
+        "title": "Escolha novos padrões",
+        "description": "Esta alteração remove modelos que são padrão. Escolha um modelo para substituir cada um.",
+        "deleteDescription": "Este provedor tem modelos padrão. Escolha um modelo para substituir cada um.",
+        "confirm": "Continuar",
+        "cleared": "Nenhum outro modelo pode substituí-lo. O padrão é removido.",
+        "flows": {
+          "chat": {
+            "lost": "Nenhum outro modelo de chat está selecionado. O chat é desativado."
+          },
+          "decision": {
+            "lost": "Nenhum outro modelo de decisão está selecionado. As decisões são desativadas."
+          }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "Chat"
+        },
+        "imageGeneration": {
+          "empty": "Ative um modelo de imagem nas configurações de um provedor para gerar imagens.",
+          "title": "Geração de imagens"
+        },
+        "decisions": {
+          "empty": "Configure um provedor de LLM ou de decisões para usar as decisões.",
+          "title": "Decisões"
+        }
       }
     },
     "mcpActions": {
@@ -14219,10 +14034,23 @@
         "legacy": "legado"
       },
       "labels": {
-        "default": "Padrão"
+        "default": "Padrão",
+        "defaultChat": "Chat padrão",
+        "defaultImage": "Imagem padrão"
+      },
+      "defaultRoles": {
+        "chat": "Chat padrão",
+        "imageGeneration": "Imagem padrão",
+        "imageProcessing": "Processamento de imagens padrão",
+        "chatNaming": "Nomeação de chats padrão",
+        "searchSelection": "Decisão de pesquisa padrão",
+        "decision": "Decisão padrão",
+        "craft": "Craft padrão"
       },
       "modelTypes": {
+        "chat": "Chat",
         "decision": "Decisão",
+        "image": "Imagem",
         "vision": "Visão"
       }
     },
@@ -16528,17 +16356,11 @@
         "hookExtensions": {
           "label": "Extensões de hook"
         },
-        "imageGeneration": {
-          "label": "Geração de imagens"
-        },
         "indexSettings": {
           "label": "Configurações de índice"
         },
         "languageModels": {
-          "label": "Modelos de linguagem"
-        },
-        "decisionModels": {
-          "label": "Modelos de decisão"
+          "label": "Modelos de IA"
         },
         "llmGateway": {
           "label": "LLM Gateway"

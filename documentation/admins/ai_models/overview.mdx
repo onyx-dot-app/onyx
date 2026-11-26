@@ -18,8 +18,17 @@ choose which models users can see, set the default model, and control model sett
 
 The page has these sections:
 
-- **Default Model**: the model Onyx uses for new chat sessions unless a user or agent picks another one.
-- **Available Providers**: the providers you have connected. You cannot delete the provider that owns the default model.
+- **Chat Model**: the model Onyx uses for new chat sessions unless a user or agent picks another one.
+- **Chat Naming Model**: the model that generates chat session titles. A fast, low-cost model works well.
+  Choose **Chat Default** to name each chat with the model that the user chats with.
+- **Search Decision Model**: the model that picks the retrieved documents for an answer.
+  See [Search Settings](/admins/managing_features/chat#search-settings).
+- **Image Model**: the model the Image Generation action uses.
+  See [Image Generation](/admins/actions/image_generation).
+- **Available Providers**: the providers you have connected.
+  If you clear the model that holds a default, or delete its provider,
+  Onyx asks you to choose a model to take over that default. If no other model can take it over, the default is cleared.
+  For the chat default, chat turns off.
 - **Add Provider**, **Gateways & Routers**, and **Self-hosted & Custom**: the providers you can connect.
 
 ### Provider Types
@@ -103,12 +112,14 @@ Every provider dialog has a **Models** section. Use it to control what users see
 - Select the models that users can pick in chat. Hidden models stay configured but do not appear in the model picker.
 - Click **Refresh models** to reload the list from a provider that publishes one.
   Type a name and click **Add Model** to add one by hand.
-- **Auto Update** (OpenAI, Anthropic, Vertex AI) adds and selects new models when the vendor releases them,
-  and removes models the vendor retires. A retired model that an agent uses is hidden instead.
-  It does not change your selection of the other models or the **Default Model**.
-- **Set as Default** makes a model the workspace **Default Model**.
-- A **Vision** badge shows that a model accepts images.
-  A **Decision** badge shows that a model can run decision tasks.
+- **Auto Update** (OpenAI, Anthropic, Vertex AI) adds and selects new chat models when the vendor releases them,
+  and removes chat models the vendor retires. It does not change image models.
+  A retired model that an agent uses is hidden instead.
+  It does not change your selection of the other models or the **Chat Model**.
+- Tags beside a model's name show the defaults it holds, for example **Default Chat** or **Default Image**.
+  Set the defaults at the top of the **AI Models** page.
+- Tags under each model show what it can do: **Chat**, **Vision** (accepts images), **Decision** (runs
+  decision tasks) and **Image** (generates images).
 - **Model Settings** on a model row lets you rename it, set the default and maximum reasoning level,
   and set the default temperature. Reasoning models always run at temperature 1.
 
@@ -144,7 +155,7 @@ Some tasks use their own model setting instead of the default chat model:
 
 - **Chat Preferences**: set a **Chat Naming Model** for session titles and a **Search Decision Model**
   for picking retrieved documents. Both default to the chat model.
-  **Search Decision Model** can also use a decision model from **Admin Panel → Decision Models**.
+  **Search Decision Model** can also use a decision model from a provider you connect under **Decisions** on this page.
 - **Index Settings**:
   choose the model for [Contextual Retrieval](/admins/advanced_configs/search_configs#contextual-retrieval).
 - **Image Generation** and **Voice** have their own provider pages.

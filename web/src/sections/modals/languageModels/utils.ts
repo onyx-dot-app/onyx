@@ -1,5 +1,6 @@
 import {
   LLMProviderName,
+  type DefaultModel,
   type LLMProviderView,
   type WellKnownLLMProviderDescriptor,
   type ModelConfiguration,
@@ -139,6 +140,32 @@ export interface BaseLLMFormValues {
   /** The full model list with is_visible set directly by user interaction. */
   model_configurations: ModelConfiguration[];
   custom_config?: Record<string, string>;
+  /**
+   * Image models checked or cleared since the modal opened, by model name.
+   * Absent while nothing changed, so the form stays pristine. Saved after
+   * the provider, and never sent with it.
+   */
+  image_model_changes?: Record<string, ImageModelChange>;
+  /**
+   * Defaults this save moves or clears, by the backend's flow name, set by
+   * the confirmation that a save unchecking a default's model asks for.
+   * Sent with the provider.
+   */
+  default_changes?: Record<string, DefaultModel | null>;
+  /** The image default's new config, null when it is lost; never sent. */
+  image_default_choice?: string | null;
+}
+
+/** A staged change to one image model of the provider. */
+export interface ImageModelChange {
+  connect: boolean;
+  /** The config to remove when disconnecting. */
+  imageProviderId: string | null;
+  /** Make it the default image model: the first one connected. */
+  makeDefault: boolean;
+  /** A new name: a string, null to restore the catalog name, or undefined
+   *  when unchanged. */
+  customDisplayName?: string | null;
 }
 
 /** Bound stored policy by current capability, which can shrink after a save. */

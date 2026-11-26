@@ -41,6 +41,10 @@
   max-height: var(--opal-modal-available-height);
   z-index: var(--z-modal);
 }
+/* A modal opened from inside another sits above it, on the same backdrop. */
+.opal-modal-positioner[data-nested] {
+  z-index: calc(var(--z-modal) + var(--opal-modal-depth));
+}
 .opal-modal-positioner[data-viewport-centered] {
   @apply left-1/2;
 }
@@ -70,10 +74,44 @@
     transform: translateY(-0.25rem) scale(0.98);
   }
 }
+
+/* Stacking, as dropdown views do: a nested modal slides in from the end
+   side while the modal below slides out to the start side and fades; Back
+   reverses both. The cards travel one card width and a gap apart. */
+.opal-modal-positioner {
+  transition:
+    transform 200ms ease-in-out,
+    opacity 200ms ease-in-out;
+}
+.opal-modal-positioner[data-covered] {
+  @apply pointer-events-none;
+  opacity: 0;
+  transform: translateX(calc(-100% - 1rem));
+}
+.opal-modal-positioner[data-nested][data-state="open"] {
+  animation: opal-modal-in-forward 200ms ease-in-out;
+}
+.opal-modal-positioner[data-nested][data-state="closed"] {
+  animation: opal-modal-out-back 200ms ease-in-out forwards;
+}
+@keyframes opal-modal-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+}
+@keyframes opal-modal-out-back {
+  to {
+    opacity: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+}
+
 .opal-modal-positioner[data-state],
 .opal-modal-overlay[data-state] {
   @variant motion-reduce {
     animation: none;
+    transition: none;
   }
 }
 

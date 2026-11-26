@@ -1,10 +1,30 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import React, { useEffect, useRef, useState } from "react";
+import {
+  useImageGenerationConfigs,
+  useProviderImageModels,
+} from "@/lib/imageGeneration/hooks";
+import type { ImageGenerationProviderModel } from "@/lib/imageGeneration/types";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
-import type { FormikConfig } from "formik";
+import type { FormikConfig, FormikHelpers } from "formik";
+import {
+  DefaultChoiceRows,
+  buildDefaultChanges,
+  choicesComplete,
+  useCurrentDefaults,
+  useDefaultCandidates,
+  type CurrentDefault,
+  type DefaultChoices,
+} from "@/sections/modals/languageModels/defaults";
 import { cn, countryCodeToFlag } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
@@ -29,6 +49,7 @@ import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import {
   Content,
+  ContentIndent,
   InputDivider,
   InputHorizontal,
   InputPadder,
@@ -41,17 +62,12 @@ import {
   ModelSettingsPopover,
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
-import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
 import { getProvider } from "@/lib/languageModels/utils";
-import {
-  useAdminLanguageModels,
-  useModelDisplayName,
-} from "@/lib/languageModels/hooks";
+import { useModelDisplayName } from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
-import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
-  SvgChevronDown,
+  SvgChevronLeft,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
@@ -62,11 +78,20 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard, type BadgeProps } from "@opal/components";
-import { useModelTypeBadge } from "@/lib/badges/components";
+import {
+  Badge,
+  Card,
+  EmptyMessageCard,
+  ShadowDiv,
+  useCreateModal,
+  type BadgeProps,
+} from "@opal/components";
+import {
+  useDefaultRoleBadges,
+  useModelTypeBadge,
+  type ModelRoleName,
+} from "@/lib/badges/components";
 import { ContentAction } from "@opal/layouts";
-import type { ContentEditHandle } from "@opal/layouts";
-import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
@@ -74,6 +99,9 @@ import { useSettings } from "@/lib/settings/hooks";
 
 /** How long a save may run before the footer says it is taking a while. */
 const SLOW_SAVE_NOTICE_MS = 10_000;
+
+/** The provider type the open modal configures, e.g. "openai". */
+const ProviderNameContext = createContext("");
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -490,9 +518,6 @@ export function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 // ─── ModelsField ─────────────────────────────────────────────────────
 
-const FOLDED_MIN_MODELS = 3;
-const FOLDED_MAX_MODELS = 10;
-
 // ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
 
 function formatContextSize(tokens: number | null | undefined): string {
@@ -528,22 +553,31 @@ function inherentOrder(models: ModelConfiguration[]): string[] {
     .map((m) => m.name);
 }
 
+/** Whether a model's id or display name contains the search text. */
+function matchesModelQuery(
+  query: string,
+  name: string,
+  displayName: string | null | undefined
+): boolean {
+  const needle = query.trim().toLowerCase();
+  return (
+    needle === "" ||
+    name.toLowerCase().includes(needle) ||
+    (displayName ?? "").toLowerCase().includes(needle)
+  );
+}
+
 interface ModelListLayout {
   order: string[];
-  foldedCount: number;
   sortedByName: boolean;
 }
 
-/** Rows only move on open, fold and unfold, never on a checkbox change. */
-function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
-  const selected = models.filter((m) => m.is_visible).length;
+/** Rows only move when the list opens or refetches, never on a checkbox
+ *  change. */
+function sortedLayout(models: ModelConfiguration[]): ModelListLayout {
   return {
     order: inherentOrder(models),
     sortedByName: models.some((m) => hasModelMetadata(m)),
-    foldedCount: Math.min(
-      Math.max(selected, FOLDED_MIN_MODELS),
-      FOLDED_MAX_MODELS
-    ),
   };
 }
 
@@ -569,13 +603,37 @@ function buildModelDescription(
   return parts.length > 0 ? parts.join("  ·  ") : undefined;
 }
 
+interface CapabilityTagsProps {
+  badges: BadgeProps[];
+}
+
+/** A model row's capability tags, on their own line under its title. */
+function CapabilityTags({ badges }: CapabilityTagsProps) {
+  if (badges.length === 0) return null;
+  return (
+    <ContentIndent font="main-ui-action">
+      <OpalSection
+        flexDirection="row"
+        justifyContent="start"
+        height="auto"
+        gap={0.25}
+        wrap
+      >
+        {badges.map((badge) => (
+          <Badge key={String(badge.title)} {...badge} />
+        ))}
+      </OpalSection>
+    </ContentIndent>
+  );
+}
+
 interface ModelRowProps {
   model: ModelConfiguration;
-  isDefaultModel: boolean;
+  /** The deployment roles this model holds, shown beside its title. */
+  defaultRoles: ModelRoleName[];
   onToggleVisibility: (visible: boolean) => void;
   onRename: (value: string | null) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
-  onSetDefaultModel?: () => void;
 }
 
 /**
@@ -592,14 +650,12 @@ interface ModelRowProps {
  */
 function ModelRow({
   model,
-  isDefaultModel,
+  defaultRoles,
   onToggleVisibility,
   onRename,
   onSettingsChange,
-  onSetDefaultModel,
 }: ModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const editHandle = useRef<ContentEditHandle>(null);
   // Keeps the hover-revealed actions visible while the settings popover,
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -607,7 +663,10 @@ function ModelRow({
   const description = buildModelDescription(model, displayName);
   const decisionBadge = useModelTypeBadge("decision");
   const visionBadge = useModelTypeBadge("vision");
+  const chatBadge = useModelTypeBadge("chat");
   const modelTypeBadges: BadgeProps[] = [
+    ...(model.supports_chat !== false ? [chatBadge] : []),
+    ...(model.supports_image_input ? [visionBadge] : []),
     ...(model.supports_decisions
       ? [
           {
@@ -620,8 +679,8 @@ function ModelRow({
           },
         ]
       : []),
-    ...(model.supports_image_input ? [visionBadge] : []),
   ];
+  const roleBadges = useDefaultRoleBadges(defaultRoles);
   const isSelected = model.is_visible;
   const toggleVisibility = () => onToggleVisibility(!model.is_visible);
   // A click that blurs and commits an inline rename reaches the row after the
@@ -669,20 +728,25 @@ function ModelRow({
         }}
       >
         <Interactive.Container width="full" size="fit" rounding={3}>
-          <OpalSection alignItems="stretch" height="auto" padding={1.5}>
+          <OpalSection
+            alignItems="stretch"
+            height="auto"
+            padding={1.5}
+            gap={0.5}
+          >
             <ContentAction
               font="main-ui-action"
               color="interactive"
-              center
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
               description={description}
-              badge={modelTypeBadges}
+              badge={roleBadges}
               rightChildren={
                 <OpalSection
                   flexDirection="row"
                   width="fit"
                   height="auto"
+                  alignItems="start"
                   gap={1}
                 >
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
@@ -692,16 +756,6 @@ function ModelRow({
                       height="auto"
                       gap={1}
                     >
-                      <Button
-                        icon={SvgEdit}
-                        prominence="internal"
-                        size="sm"
-                        tooltip={t("models.row.renameButton.tooltip")}
-                        onClick={(e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          editHandle.current?.startEditing();
-                        }}
-                      />
                       {model.supports_chat !== false && (
                         <ModelSettingsPopover
                           model={model}
@@ -709,43 +763,243 @@ function ModelRow({
                           onOpenChange={setSettingsOpen}
                         />
                       )}
-                      {!isDefaultModel && onSetDefaultModel && (
-                        <Button
-                          prominence="internal"
-                          size="sm"
-                          onClick={(e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            onSetDefaultModel();
-                          }}
-                        >
-                          {t("models.row.setDefaultButton.label")}
-                        </Button>
-                      )}
                     </OpalSection>
                   </Hoverable.Item>
-                  {isDefaultModel && (
-                    <span className="px-1.5">
-                      <Text
-                        as="p"
-                        font="secondary-action"
-                        wordWrap="whitespace-nowrap"
-                        color="action-selection-05"
-                      >
-                        {t("models.row.defaultLabel")}
-                      </Text>
-                    </span>
-                  )}
                 </OpalSection>
               }
               editable
-              editHandle={editHandle}
+              editTooltip={t("models.row.renameButton.tooltip")}
               onTitleChange={(newTitle) => onRename(newTitle || null)}
               padding={0}
             />
+            <CapabilityTags badges={modelTypeBadges} />
           </OpalSection>
         </Interactive.Container>
       </Interactive.Stateful>
     </Hoverable.Root>
+  );
+}
+
+interface ImageModelRowProps {
+  model: ImageGenerationProviderModel;
+  checked: boolean;
+  /** The name shown, with any staged rename. */
+  title: string;
+  /** The deployment roles this model holds, shown beside its title. */
+  defaultRoles: ModelRoleName[];
+  onToggle: (connect: boolean) => void;
+  onRename: (value: string | null) => void;
+}
+
+/** One image model, laid out like a chat model's `ModelRow`. */
+function ImageModelRow({
+  model,
+  checked,
+  title,
+  defaultRoles,
+  onToggle,
+  onRename,
+}: ImageModelRowProps) {
+  const t = useTranslations("admin.languageModels.modals");
+  const imageBadge = useModelTypeBadge("image");
+  const roleBadges = useDefaultRoleBadges(defaultRoles);
+  const toggle = () => onToggle(!checked);
+  // A click that blurs and commits an inline rename reaches the row after the
+  // edit input unmounts, so the input's presence is sampled at pointerdown.
+  const renamingAtPointerDown = useRef(false);
+  // The rename button's clicks must not toggle the model.
+  const toggleFromRow = (e: React.MouseEvent) => {
+    if (renamingAtPointerDown.current) return;
+    const interactive = (e.target as HTMLElement).closest(
+      'button, input, textarea, [contenteditable="true"]'
+    );
+    if (interactive) return;
+    toggle();
+  };
+
+  return (
+    <Hoverable.Root group="image-model-row" data-model-name={model.name}>
+      <Interactive.Stateful
+        variant="select-heavy"
+        state={checked ? "selected" : "empty"}
+        onPointerDownCapture={(e: React.PointerEvent) => {
+          renamingAtPointerDown.current =
+            e.currentTarget.querySelector(".opal-content-title-row input") !=
+            null;
+        }}
+        onClick={toggleFromRow}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        }}
+      >
+        <Interactive.Container width="full" size="fit" rounding={3}>
+          <OpalSection
+            alignItems="stretch"
+            height="auto"
+            padding={1.5}
+            gap={0.5}
+          >
+            <ContentAction
+              font="main-ui-action"
+              color="interactive"
+              icon={() => <InputCheckbox checked={checked} />}
+              title={title}
+              description={title === model.name ? undefined : model.name}
+              badge={roleBadges}
+              rightChildren={
+                <OpalSection
+                  flexDirection="row"
+                  width="fit"
+                  height="auto"
+                  alignItems="start"
+                  gap={1}
+                ></OpalSection>
+              }
+              editable
+              editTooltip={t("models.row.renameButton.tooltip")}
+              onTitleChange={(newTitle) => onRename(newTitle || null)}
+              padding={0}
+            />
+            <CapabilityTags badges={[imageBadge]} />
+          </OpalSection>
+        </Interactive.Container>
+      </Interactive.Stateful>
+    </Hoverable.Root>
+  );
+}
+
+/**
+ * The image models the Models list shows for the modal's provider: the
+ * recommended ones and any already connected. A new provider gets the
+ * catalog's.
+ */
+function useListedImageModels(): ImageGenerationProviderModel[] {
+  const { values } = useFormikContext<BaseLLMFormValues>();
+  const providerName = useContext(ProviderNameContext);
+  const models = useProviderImageModels(values.id, providerName) ?? [];
+  return models.filter(
+    (model) => model.is_recommended || model.image_provider_id !== null
+  );
+}
+
+/**
+ * Stages image model changes in the form (`image_model_changes`), which
+ * saves them after the provider on Save; the first model connected becomes
+ * the default image model.
+ */
+function useImageModelStaging() {
+  const { values, setValues } = useFormikContext<BaseLLMFormValues>();
+  const { defaultConfig } = useImageGenerationConfigs();
+  const changes = values.image_model_changes ?? {};
+
+  const isChecked = (model: ImageGenerationProviderModel) =>
+    changes[model.name]?.connect ?? model.image_provider_id !== null;
+
+  /** A change back to what is saved drops it, and no staged change leaves
+   *  the field out, so the form is pristine again. */
+  function stage(
+    updates: {
+      model: ImageGenerationProviderModel;
+      connect?: boolean;
+      customDisplayName?: string | null;
+    }[]
+  ) {
+    const next = { ...changes };
+    for (const update of updates) {
+      const { model } = update;
+      const { [model.name]: previous, ...rest } = next;
+      const isConnected = model.image_provider_id !== null;
+      const connect = update.connect ?? previous?.connect ?? isConnected;
+      const rawName =
+        "customDisplayName" in update
+          ? update.customDisplayName
+          : previous?.customDisplayName;
+      // The saved name, as the listing shows it, is no change.
+      const customDisplayName =
+        rawName === undefined ||
+        (rawName ?? model.name) === (model.display_name || model.name)
+          ? undefined
+          : rawName;
+      delete next[model.name];
+      if (connect !== isConnected || customDisplayName !== undefined) {
+        next[model.name] = {
+          connect,
+          imageProviderId: model.image_provider_id,
+          makeDefault:
+            connect &&
+            !isConnected &&
+            defaultConfig === null &&
+            !Object.values(rest).some((change) => change.makeDefault),
+          ...(customDisplayName !== undefined && { customDisplayName }),
+        };
+      }
+    }
+    const { image_model_changes: _changes, ...others } = values;
+    void setValues(
+      Object.keys(next).length === 0
+        ? others
+        : { ...others, image_model_changes: next }
+    );
+  }
+
+  return { changes, defaultConfig, isChecked, stage };
+}
+
+interface ImageModelRowsProps {
+  models: ImageGenerationProviderModel[];
+}
+
+/**
+ * The roles each of the modal's saved models holds, by model name. Image
+ * models hold only the image generation role, so `image` picks which side.
+ */
+function useModelRoles(): (
+  modelName: string,
+  image: boolean
+) => ModelRoleName[] {
+  const { values } = useFormikContext<BaseLLMFormValues>();
+  const currentDefaults = useCurrentDefaults();
+  return (modelName, image) =>
+    values.id == null
+      ? []
+      : currentDefaults
+          .filter(
+            (current) =>
+              current.providerId === values.id &&
+              current.modelName === modelName &&
+              (current.role === "image_generation") === image
+          )
+          .map((current) => current.role);
+}
+
+/** The image models' rows in the Models list, after the chat models. */
+function ImageModelRows({ models }: ImageModelRowsProps) {
+  const { changes, isChecked, stage } = useImageModelStaging();
+  const rolesOf = useModelRoles();
+  return (
+    <>
+      {models.map((model) => (
+        <ImageModelRow
+          key={model.name}
+          model={model}
+          checked={isChecked(model)}
+          title={
+            changes[model.name]?.customDisplayName === undefined
+              ? model.display_name || model.name
+              : (changes[model.name]?.customDisplayName ?? model.name)
+          }
+          defaultRoles={rolesOf(model.name, true)}
+          onToggle={(connect) => stage([{ model, connect }])}
+          onRename={(value) => stage([{ model, customDisplayName: value }])}
+        />
+      ))}
+    </>
   );
 }
 
@@ -765,12 +1019,9 @@ export function ModelSelectionField({
 }: ModelSelectionFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
-  const { mutate } = useSWRConfig();
-  const { defaultText } = useAdminLanguageModels();
   const resolveDisplayName = useModelDisplayName();
-  const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [query, setQuery] = useState("");
   const models = formikProps.values.model_configurations;
   const [layout, setLayout] = useState<ModelListLayout | null>(null);
   // Models the admin types in stay where they appear; a refetch re-sorts.
@@ -783,7 +1034,7 @@ export function ModelSelectionField({
       layout.sortedByName !== models.some((m) => hasModelMetadata(m)) ||
       models.some((m) => !known.has(m.name) && !typedNames.has(m.name))
     ) {
-      setLayout(foldedLayout(models));
+      setLayout(sortedLayout(models));
     }
   }, [models, layout, typedNames]);
 
@@ -793,29 +1044,6 @@ export function ModelSelectionField({
       setTypedNames((prev) => new Set(prev).add(name));
       onAddModel(name);
     });
-
-  function toggleExpanded() {
-    if (isExpanded) {
-      setLayout(foldedLayout(models));
-    } else if (layout) {
-      // Rows already on screen keep their place; the rest go below them.
-      const known = new Set(layout.order);
-      const shown = [
-        ...layout.order.slice(0, layout.foldedCount),
-        ...models.map((m) => m.name).filter((name) => !known.has(name)),
-      ];
-      const shownSet = new Set(shown);
-      setLayout({
-        order: [
-          ...shown,
-          ...inherentOrder(models).filter((name) => !shownSet.has(name)),
-        ],
-        foldedCount: layout.foldedCount,
-        sortedByName: layout.sortedByName,
-      });
-    }
-    setIsExpanded(!isExpanded);
-  }
 
   useEffect(() => {
     const testModel = models.find((model) => model.is_visible)?.name;
@@ -838,11 +1066,6 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
-  async function setDefaultModel(modelName: string) {
-    if (providerId == null) return;
-    await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
-  }
-
   // A cleared name is null, as the API sends it, so clearing a new name is
   // not a change.
   function setCustomDisplayName(modelName: string, value: string | null) {
@@ -854,10 +1077,21 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
-  const allSelected = models.length > 0 && models.every((m) => m.is_visible);
+  const imageModels = useListedImageModels();
+  const rolesOf = useModelRoles();
+  const imageStaging = useImageModelStaging();
+  const hasAnyModel = models.length > 0 || imageModels.length > 0;
+  const allSelected =
+    hasAnyModel &&
+    models.every((m) => m.is_visible) &&
+    imageModels.every((m) => imageStaging.isChecked(m));
 
   function handleToggleSelectAll() {
     const nextVisible = !allSelected;
+    // Staging replaces the form values, so it runs before the field update.
+    imageStaging.stage(
+      imageModels.map((model) => ({ model, connect: nextVisible }))
+    );
     const updated = models.map((m) => ({
       ...m,
       is_visible: nextVisible,
@@ -866,167 +1100,158 @@ export function ModelSelectionField({
   }
 
   return (
-    <Card color="background-tint-00" border="none" padding={2}>
-      <Section gap={2}>
-        <InputHorizontal
-          title={t("models.field.title")}
-          description={t("models.field.description")}
-          center
-        >
-          <Section flexDirection="row" gap={0}>
-            <Button
-              disabled={models.length === 0}
-              prominence="tertiary"
-              size="md"
-              onClick={handleToggleSelectAll}
+    <>
+      <Card color="background-tint-00" border="none" padding={2}>
+        <Section gap={2} alignItems="stretch">
+          <InputHorizontal
+            title={t("models.field.title")}
+            description={t("models.field.description")}
+            center
+          >
+            <Section flexDirection="row" gap={0}>
+              <Button
+                disabled={!hasAnyModel}
+                prominence="tertiary"
+                size="md"
+                onClick={handleToggleSelectAll}
+              >
+                {allSelected
+                  ? t("models.deselectAllButton.label")
+                  : t("models.selectAllButton.label")}
+              </Button>
+              {onRefetch && <RefetchButton onRefetch={onRefetch} />}
+            </Section>
+          </InputHorizontal>
+
+          {hasAnyModel && (
+            <InputTypeIn
+              icon="search"
+              clearButton
+              placeholder={t("models.search.placeholder")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
+
+          {!hasAnyModel ? (
+            <EmptyMessageCard
+              title={emptyMessage ?? t("models.empty.title")}
+              padding={2}
+            />
+          ) : (
+            // The shadows span the card's full width; the rows keep the
+            // card's inset inside the scroll area.
+            <ShadowDiv
+              containerClassName="-mx-2"
+              className="max-h-[32rem] px-2"
+              variant={{ top: "shadow", bottom: "mask" }}
             >
-              {allSelected
-                ? t("models.deselectAllButton.label")
-                : t("models.selectAllButton.label")}
-            </Button>
-            {onRefetch && <RefetchButton onRefetch={onRefetch} />}
-          </Section>
-        </InputHorizontal>
-
-        {models.length === 0 ? (
-          <EmptyMessageCard
-            title={emptyMessage ?? t("models.empty.title")}
-            padding={2}
-          />
-        ) : (
-          <Section gap={1} alignItems="stretch">
-            {(() => {
-              const { order, foldedCount } = layout ?? foldedLayout(models);
-              const byName = new Map(models.map((m) => [m.name, m]));
-              const ordered = order.flatMap((name) => byName.get(name) ?? []);
-              // Models added since the last re-sort, e.g. a custom model.
-              const known = new Set(order);
-              const added = models.filter((m) => !known.has(m.name));
-              const isFoldable = ordered.length > foldedCount;
-              const shownModels = [
-                ...(isFoldable && !isExpanded
-                  ? ordered.slice(0, foldedCount)
-                  : ordered),
-                ...added,
-              ];
-              const defaultModelName =
-                providerId != null && defaultText?.provider_id === providerId
-                  ? defaultText.model_name
-                  : undefined;
-
-              return (
-                <>
-                  {shownModels.map((model) => (
-                    <ModelRow
-                      key={model.name}
-                      model={model}
-                      onToggleVisibility={(visible) =>
-                        setVisibility(model.name, visible)
-                      }
-                      onRename={(value) =>
-                        setCustomDisplayName(model.name, value)
-                      }
-                      onSettingsChange={(patch) =>
-                        setModelSettings(model.name, patch)
-                      }
-                      isDefaultModel={model.name === defaultModelName}
-                      onSetDefaultModel={
-                        providerId != null &&
-                        model.is_visible &&
-                        model.supports_chat !== false
-                          ? () => void setDefaultModel(model.name)
-                          : undefined
-                      }
-                    />
-                  ))}
-                  {isFoldable && (
-                    <Interactive.Stateless
-                      prominence="tertiary"
-                      onClick={toggleExpanded}
-                    >
-                      <Interactive.Container type="button" width="full">
-                        <Content
-                          font="secondary-body"
-                          title={
-                            isExpanded
-                              ? t("models.foldButton.label")
-                              : t("models.moreButton.label")
+              <Section gap={1} alignItems="stretch" height="auto">
+                {(() => {
+                  const { order } = layout ?? sortedLayout(models);
+                  const byName = new Map(models.map((m) => [m.name, m]));
+                  const ordered = order.flatMap(
+                    (name) => byName.get(name) ?? []
+                  );
+                  // Models added since the last re-sort, e.g. a custom model.
+                  const known = new Set(order);
+                  const added = models.filter((m) => !known.has(m.name));
+                  const shownModels = [...ordered, ...added].filter((m) =>
+                    matchesModelQuery(query, m.name, resolveDisplayName(m))
+                  );
+                  const shownImageModels = imageModels.filter((m) =>
+                    matchesModelQuery(query, m.name, m.display_name)
+                  );
+                  return (
+                    <>
+                      {shownModels.map((model) => (
+                        <ModelRow
+                          key={model.name}
+                          model={model}
+                          onToggleVisibility={(visible) =>
+                            setVisibility(model.name, visible)
                           }
-                          icon={() => (
-                            <SvgChevronDown
-                              className={cn(
-                                "transition-transform",
-                                isExpanded && "-rotate-180"
-                              )}
-                              size={14}
-                            />
-                          )}
+                          onRename={(value) =>
+                            setCustomDisplayName(model.name, value)
+                          }
+                          onSettingsChange={(patch) =>
+                            setModelSettings(model.name, patch)
+                          }
+                          defaultRoles={rolesOf(model.name, false)}
                         />
-                      </Interactive.Container>
-                    </Interactive.Stateless>
-                  )}
-                </>
-              );
-            })()}
-          </Section>
-        )}
+                      ))}
+                      <ImageModelRows models={shownImageModels} />
+                      {shownModels.length === 0 &&
+                        shownImageModels.length === 0 && (
+                          <EmptyMessageCard
+                            title={t("models.search.empty")}
+                            padding={2}
+                          />
+                        )}
+                    </>
+                  );
+                })()}
+              </Section>
+            </ShadowDiv>
+          )}
 
-        {onAddModel && (
-          <Section flexDirection="row" gap={2}>
-            <div className="flex-1">
-              <InputTypeIn
-                placeholder={t("models.addModelInput.placeholder")}
-                value={newModelName}
-                onChange={(e) => setNewModelName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newModelName.trim()) {
-                    e.preventDefault();
-                    const trimmed = newModelName.trim();
-                    if (!models.some((m) => m.name === trimmed)) {
-                      addModel?.(trimmed);
-                      setNewModelName("");
+          {onAddModel && (
+            <Section flexDirection="row" gap={2}>
+              <div className="flex-1">
+                <InputTypeIn
+                  placeholder={t("models.addModelInput.placeholder")}
+                  value={newModelName}
+                  onChange={(e) => setNewModelName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newModelName.trim()) {
+                      e.preventDefault();
+                      const trimmed = newModelName.trim();
+                      if (!models.some((m) => m.name === trimmed)) {
+                        addModel?.(trimmed);
+                        setNewModelName("");
+                      }
                     }
+                  }}
+                />
+              </div>
+              <Button
+                prominence="secondary"
+                icon={SvgPlusCircle}
+                type="button"
+                disabled={
+                  !newModelName.trim() ||
+                  models.some((m) => m.name === newModelName.trim())
+                }
+                onClick={() => {
+                  const trimmed = newModelName.trim();
+                  if (trimmed && !models.some((m) => m.name === trimmed)) {
+                    addModel?.(trimmed);
+                    setNewModelName("");
                   }
                 }}
-              />
-            </div>
-            <Button
-              prominence="secondary"
-              icon={SvgPlusCircle}
-              type="button"
-              disabled={
-                !newModelName.trim() ||
-                models.some((m) => m.name === newModelName.trim())
-              }
-              onClick={() => {
-                const trimmed = newModelName.trim();
-                if (trimmed && !models.some((m) => m.name === trimmed)) {
-                  addModel?.(trimmed);
-                  setNewModelName("");
-                }
-              }}
-            >
-              {t("models.addModelButton.label")}
-            </Button>
-          </Section>
-        )}
+              >
+                {t("models.addModelButton.label")}
+              </Button>
+            </Section>
+          )}
 
-        {shouldShowAutoUpdateToggle && (
-          <InputHorizontal
-            title={t("models.autoUpdate.title")}
-            description={t("models.autoUpdate.description")}
-            withLabel
-          >
-            <InputSwitch
-              checked={formikProps.values.is_auto_mode}
-              onCheckedChange={(checked) =>
-                formikProps.setFieldValue("is_auto_mode", checked)
-              }
-            />
-          </InputHorizontal>
-        )}
-      </Section>
-    </Card>
+          {shouldShowAutoUpdateToggle && (
+            <InputHorizontal
+              title={t("models.autoUpdate.title")}
+              description={t("models.autoUpdate.description")}
+              withLabel
+            >
+              <InputSwitch
+                checked={formikProps.values.is_auto_mode}
+                onCheckedChange={(checked) =>
+                  formikProps.setFieldValue("is_auto_mode", checked)
+                }
+              />
+            </InputHorizontal>
+          )}
+        </Section>
+      </Card>
+    </>
   );
 }
 
@@ -1054,12 +1279,106 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
   children,
   description,
 }: ModalWrapperProps<T>) {
+  const t = useTranslations("admin.languageModels");
+  const currentDefaults = useCurrentDefaults();
+  const { configs: imageConfigs } = useImageGenerationConfigs();
+  const confirmModal = useCreateModal();
+  // A save waiting for its defaults to be chosen, with what it touches.
+  const [pending, setPending] = useState<{
+    values: T;
+    helpers: FormikHelpers<T>;
+    affected: CurrentDefault[];
+  } | null>(null);
+  const [choices, setChoices] = useState<DefaultChoices>({});
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  const disconnecting = new Set(
+    Object.entries(pending?.values.image_model_changes ?? {})
+      .filter(([, change]) => !change.connect)
+      .map(([name]) => name)
+  );
+  const candidates = useDefaultCandidates({
+    override:
+      llmProvider && pending
+        ? {
+            ...llmProvider,
+            model_configurations: pending.values.model_configurations,
+          }
+        : undefined,
+    disconnecting,
+  });
+
+  /** The defaults a save takes from their models: a chat-side default whose
+   *  model it unchecks, or the image default whose model it disconnects. */
+  function affectedBy(values: T): CurrentDefault[] {
+    if (!llmProvider) return [];
+    const wasChecked = new Set(
+      initialValues.model_configurations
+        .filter((m) => m.is_visible)
+        .map((m) => m.name)
+    );
+    const isChecked = new Set(
+      values.model_configurations.filter((m) => m.is_visible).map((m) => m.name)
+    );
+    return currentDefaults.filter(
+      (current) =>
+        current.providerId === llmProvider.id &&
+        (current.role === "image_generation"
+          ? values.image_model_changes?.[current.modelName]?.connect === false
+          : wasChecked.has(current.modelName) &&
+            !isChecked.has(current.modelName))
+    );
+  }
+
+  const handleSubmit: FormikConfig<T>["onSubmit"] = (values, helpers) => {
+    const affected = affectedBy(values);
+    if (affected.length > 0) {
+      setChoices({});
+      setPending({ values, helpers, affected });
+      confirmModal.toggle(true);
+      helpers.setSubmitting(false);
+      return;
+    }
+    return onSubmit(values, helpers);
+  };
+
+  /** Closing the confirmation returns to the provider modal, as it was. */
+  function closeConfirmation() {
+    confirmModal.toggle(false);
+    setPending(null);
+  }
+
+  async function handleConfirm() {
+    if (!pending) return;
+    const { defaultChanges, imageDefault } = buildDefaultChanges(
+      pending.affected,
+      candidates,
+      choices,
+      imageConfigs ?? []
+    );
+    setIsConfirming(true);
+    try {
+      await onSubmit(
+        {
+          ...pending.values,
+          default_changes: defaultChanges,
+          image_default_choice: imageDefault,
+        },
+        pending.helpers
+      );
+    } finally {
+      setIsConfirming(false);
+      confirmModal.toggle(false);
+      setPending(null);
+    }
+  }
+
   return (
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
       validateOnMount
-      onSubmit={onSubmit}
+      onSubmit={handleSubmit}
     >
       {() => (
         <ModalWrapperInner
@@ -1068,6 +1387,58 @@ export function ModalWrapper<T extends BaseLLMFormValues = BaseLLMFormValues>({
           onClose={onClose}
           modelConfigurations={initialValues.model_configurations}
           description={description}
+          // Opened from inside the provider modal, the confirmation slides
+          // in over it, and Cancel slides back to it.
+          nested={
+            <confirmModal.Provider>
+              <Modal
+                open
+                // Cancel, the X and Escape return to the provider modal, as
+                // it was.
+                onOpenChange={(open) => !open && closeConfirmation()}
+              >
+                <Modal.Content width="md">
+                  <Modal.Header
+                    icon={SvgArrowExchange}
+                    title={t("defaultChanges.title")}
+                    description={t("defaultChanges.description")}
+                    onClose={closeConfirmation}
+                  />
+                  <Modal.Body alignItems="stretch">
+                    {pending && (
+                      <DefaultChoiceRows
+                        affected={pending.affected}
+                        candidates={candidates}
+                        choices={choices}
+                        onChange={(role, choice) =>
+                          setChoices((prev) => ({ ...prev, [role]: choice }))
+                        }
+                      />
+                    )}
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      prominence="secondary"
+                      icon={SvgChevronLeft}
+                      onClick={closeConfirmation}
+                    >
+                      {t("defaultChanges.back")}
+                    </Button>
+                    <Button
+                      disabled={
+                        isConfirming ||
+                        !pending ||
+                        !choicesComplete(pending.affected, candidates, choices)
+                      }
+                      onClick={() => void handleConfirm()}
+                    >
+                      {t("defaultChanges.confirm")}
+                    </Button>
+                  </Modal.Footer>
+                </Modal.Content>
+              </Modal>
+            </confirmModal.Provider>
+          }
         >
           {children}
         </ModalWrapperInner>
@@ -1083,6 +1454,8 @@ interface ModalWrapperInnerProps {
   modelConfigurations?: ModelConfiguration[];
   children: React.ReactNode;
   description?: string;
+  /** A modal opened from this one, e.g. a confirmation; it stacks above. */
+  nested?: React.ReactNode;
 }
 function ModalWrapperInner({
   providerName,
@@ -1091,10 +1464,33 @@ function ModalWrapperInner({
   modelConfigurations,
   children,
   description: descriptionOverride,
+  nested,
 }: ModalWrapperInnerProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
-    useFormikContext<BaseLLMFormValues>();
+  const {
+    isValid,
+    errors,
+    dirty,
+    isSubmitting,
+    status,
+    setFieldValue,
+    values,
+  } = useFormikContext<BaseLLMFormValues>();
+  const imageModels = useProviderImageModels(llmProvider?.id, providerName);
+  // A save needs at least one chat or image model checked, after the
+  // staged image changes.
+  const hasChatModel = values.model_configurations.some((m) => m.is_visible);
+  const hasImageModel = (imageModels ?? []).some(
+    (m) =>
+      values.image_model_changes?.[m.name]?.connect ??
+      m.image_provider_id !== null
+  );
+  const hasModel = hasChatModel || hasImageModel;
+  // Without a chat model there is nothing to test with, so the derived test
+  // model does not block an image-only provider.
+  const formValid = hasChatModel
+    ? isValid
+    : Object.keys(errors).every((key) => key === "test_model_name");
 
   // When SWR resolves after mount, populate model_configurations if still
   // empty. test_model_name is then derived automatically by
@@ -1126,11 +1522,13 @@ function ModalWrapperInner({
 
   const disabledTooltip = busy
     ? undefined
-    : !isValid
-      ? t("setup.submitButton.invalidTooltip")
-      : !dirty
-        ? t("setup.submitButton.pristineTooltip")
-        : undefined;
+    : !hasModel
+      ? t("setup.submitButton.noModelsTooltip")
+      : !formValid
+        ? t("setup.submitButton.invalidTooltip")
+        : !dirty
+          ? t("setup.submitButton.pristineTooltip")
+          : undefined;
 
   const providerEntry = getProvider(providerName);
   const providerIcon = providerEntry.icon;
@@ -1164,7 +1562,9 @@ function ModalWrapperInner({
             onClose={onClose}
           />
           <Modal.Body padding={2} gap={0}>
-            {children}
+            <ProviderNameContext.Provider value={providerName}>
+              {children}
+            </ProviderNameContext.Provider>
           </Modal.Body>
           <Modal.Footer>
             {saveIsSlow && (
@@ -1176,7 +1576,7 @@ function ModalWrapperInner({
               {t("setup.cancelButton.label")}
             </Button>
             <Button
-              disabled={!isValid || !dirty || busy}
+              disabled={!hasModel || !formValid || !dirty || busy}
               type="submit"
               icon={busy ? IconLoader : undefined}
               tooltip={disabledTooltip}
@@ -1187,6 +1587,7 @@ function ModalWrapperInner({
             </Button>
           </Modal.Footer>
         </Form>
+        {nested}
       </Modal.Content>
     </Modal>
   );

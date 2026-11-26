@@ -372,21 +372,16 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "Manage chat settings in Language Models",
+      "sharedModelSettings": "Manage chat settings in AI Models",
       "decisionModel": {
         "title": "Decision Model",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
         "description": "Internal search uses this model to rank results and choose how much context to add. You can also set it in Chat Preferences.",
         "clear": "Clear",
-        "notConfigured": "Not configured",
         "saveFailed": "Failed to update decision model"
       },
-      "header": {
-        "title": "Decision Models",
-        "description": "Manage decision model providers and choose an optional model."
-      },
       "providers": {
-        "title": "Providers",
+        "title": "Decision Providers",
         "description": "Connect a provider or manage its decision models.",
         "clearBeforeRemoval": "Clear the selected decision model before removing this provider.",
         "connect": "Connect"
@@ -1361,9 +1356,6 @@
         "loadFailed": "Could not load task models",
         "retry": {
           "label": "Retry"
-        },
-        "addProvider": {
-          "label": "Add Provider"
         },
         "chatDefault": {
           "label": "Chat Default"
@@ -5760,222 +5752,6 @@
         "endpointUrl": "https://your-api-endpoint.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "Image models on your connected LLM providers. Connect one to use it in chat.",
-        "title": "Available Models"
-      },
-      "configureSuccess": {
-        "message": "Provider configured successfully"
-      },
-      "connectButton": {
-        "label": "Connect"
-      },
-      "connectedModels": {
-        "title": "Connected Models"
-      },
-      "deselectError": {
-        "message": "Failed to deselect"
-      },
-      "disconnectButton": {
-        "ariaLabel": "Disconnect {title}"
-      },
-      "disconnectError": {
-        "message": "Failed to disconnect"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "Connect another provider to continue using image generation."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** is currently the default image generation model."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** is currently the default image generation model. Session history will be preserved."
-        },
-        "header": {
-          "description": "This will remove the stored credentials for this provider.",
-          "title": "Disconnect *{title}*"
-        },
-        "linkedHeader": {
-          "description": "The LLM provider and its credentials stay connected."
-        },
-        "noDefaultOption": {
-          "description": "(Disable Image Generation)",
-          "label": "No Default"
-        },
-        "nonDefault": {
-          "description": "**{title}** models will no longer be used to generate images."
-        },
-        "replacement": {
-          "label": "Set New Default",
-          "placeholder": "Select a replacement model"
-        },
-        "sessionHistory": {
-          "description": "Session history will be preserved."
-        },
-        "submitButton": {
-          "label": "Disconnect"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "{title} disconnected"
-      },
-      "editButton": {
-        "ariaLabel": "Edit {title}"
-      },
-      "emptyState": {
-        "title": "Connect an image generation model to use in chat."
-      },
-      "form": {
-        "apiKey": {
-          "idle": "Enter your API key.",
-          "label": "API Key",
-          "placeholder": "Enter your API key",
-          "required": "API Key is required"
-        },
-        "apiKeyTest": {
-          "error": "Invalid API key",
-          "loading": "Testing API key with {title}...",
-          "success": "API key is valid. Configuration saved."
-        },
-        "apiKeyValidationFailed": {
-          "message": "API key validation failed"
-        },
-        "authMethod": {
-          "idle": "Choose how {appName} should authenticate with Google Vertex AI.",
-          "label": "Authentication Method",
-          "required": "Authentication method is required",
-          "serviceAccount": {
-            "description": "Upload a GCP service account key JSON file",
-            "label": "Service Account JSON"
-          },
-          "workloadIdentity": {
-            "description": "Use the pod's ambient GCP credentials (GKE Workload Identity)",
-            "label": "Workload Identity (GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "Paste your <link>API key</link> from Azure OpenAI to access your models."
-        },
-        "connectHeader": {
-          "title": "Connect {title}"
-        },
-        "credentials": {
-          "idle": "Upload or paste your <link>service account credentials</link> from Google Cloud.",
-          "label": "Credentials File",
-          "placeholder": "Upload or paste your credentials",
-          "required": "Credentials file is required"
-        },
-        "credentialsTest": {
-          "error": "Invalid credentials",
-          "loading": "Testing credentials with {title}...",
-          "success": "Credentials valid. Configuration saved."
-        },
-        "editHeader": {
-          "title": "Edit {title}"
-        },
-        "loading": {
-          "placeholder": "Loading..."
-        },
-        "location": {
-          "idle": "The Google Cloud region for your Vertex AI models. See <link>Google's documentation</link> for available regions.",
-          "label": "Location",
-          "required": "Location is required"
-        },
-        "projectId": {
-          "idle": "The GCP project where Vertex AI is enabled. {appName} authenticates with the pod's bound service account (GKE Workload Identity).",
-          "label": "GCP Project ID",
-          "required": "Project ID is required"
-        },
-        "targetUri": {
-          "idle": "Paste your endpoint target URI from <link>Azure OpenAI</link> (including API endpoint base, deployment name, and API version).",
-          "invalid": "Target URI must be a valid URL with api-version and deployment name",
-          "label": "Target URI",
-          "required": "Target URI is required"
-        },
-        "unknownError": {
-          "message": "Unknown error occurred"
-        }
-      },
-      "header": {
-        "description": "Settings for in-chat image generation.",
-        "title": "Image Generation"
-      },
-      "linkError": {
-        "message": "Failed to connect model"
-      },
-      "linkSuccess": {
-        "message": "{title} connected"
-      },
-      "linkedModel": {
-        "description": "From {provider}"
-      },
-      "loadError": {
-        "message": "Failed to load configuration. Please refresh the page."
-      },
-      "model": {
-        "description": "Select a model to generate images in chat.",
-        "placeholder": "Select a default model",
-        "title": "Image Generation Model"
-      },
-      "modelFilter": {
-        "all": "All",
-        "recommended": "Recommended"
-      },
-      "noImageModels": {
-        "description": "Connect an LLM provider that serves image models on the Language Models page. To see every model on your connected providers, open the All tab.",
-        "title": "No image models available"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "GPT Image 1 image generation model hosted on Microsoft Azure."
-        },
-        "azureGptImage15": {
-          "description": "GPT Image 1.5 image generation model hosted on Microsoft Azure."
-        },
-        "azureGptImage2": {
-          "description": "GPT Image 2 image generation model hosted on Microsoft Azure."
-        },
-        "azureGptImage25Flare": {
-          "description": "GPT Image 2.5 Flare image generation model hosted on Microsoft Azure."
-        },
-        "azureGptImage25Sunburst": {
-          "description": "GPT Image 2.5 Sunburst image generation model hosted on Microsoft Azure."
-        },
-        "gemini25FlashImage": {
-          "description": "Gemini 2.5 Flash Image (Nano Banana) model is designed for speed and efficiency."
-        },
-        "gemini3ProImage": {
-          "description": "Gemini 3 Pro Image (Nano Banana Pro) is designed for professional asset production."
-        },
-        "gemini3ProImagePreview": {
-          "description": "Discontinued by Google Cloud on July 17, 2026. Switch to Gemini 3 Pro Image."
-        },
-        "openaiGptImage1": {
-          "description": "A capable image generation model from OpenAI with strong prompt adherence."
-        },
-        "openaiGptImage15": {
-          "description": "OpenAI's previous flagship Image Generation model."
-        },
-        "openaiGptImage2": {
-          "description": "OpenAI's previous-generation Image Generation model with high prompt fidelity."
-        },
-        "openaiGptImage25Flare": {
-          "description": "OpenAI's latest Image Generation model with high quality and fast generation."
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "OpenAI's premium Image Generation model for the most precise edits."
-        }
-      },
-      "retiredModelWarning": {
-        "description": "Connect another model and set it as the default, then disconnect {title}.",
-        "title": "{title} is no longer available"
-      },
-      "setDefaultError": {
-        "message": "Failed to set default"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "Advanced Options",
@@ -6661,7 +6437,7 @@
       },
       "defaultModel": {
         "description": "Used for new sessions by default.",
-        "title": "Default Model"
+        "title": "Chat Model"
       },
       "deleteModal": {
         "defaultProviderWarning": "Cannot delete the default provider. Select another provider as the default prior to deleting this one.",
@@ -6682,6 +6458,9 @@
         },
         "selfHosted": {
           "title": "Self-hosted & Custom"
+        },
+        "decisions": {
+          "title": "Decisions"
         }
       },
       "hideProviderGrouping": {
@@ -6927,7 +6706,7 @@
             "placeholder": "Enter model name"
           },
           "autoUpdate": {
-            "description": "Update the available models when new models are released.",
+            "description": "Add newly released chat models and remove retired ones automatically.",
             "title": "Auto Update"
           },
           "deselectAllButton": {
@@ -6937,30 +6716,24 @@
             "title": "No models available."
           },
           "field": {
-            "description": "Select models to make available for this provider.",
+            "description": "Select models to allow for usage throughout the app.",
             "title": "Models"
           },
-          "foldButton": {
-            "label": "Fold Models"
-          },
-          "moreButton": {
-            "label": "More Models"
+          "search": {
+            "empty": "No models match your search.",
+            "placeholder": "Search models"
           },
           "refetch": {
             "label": "Refresh models",
             "errorToast": "Failed to fetch models"
           },
           "row": {
-            "defaultLabel": "Default Model",
             "decisionTag": {
               "decisionOnly": "Decision model. Not available in the chat model picker.",
               "chatAndDecision": "Supports both chat and decision tasks."
             },
             "renameButton": {
               "tooltip": "Rename"
-            },
-            "setDefaultButton": {
-              "label": "Set as Default"
             }
           },
           "selectAllButton": {
@@ -7078,11 +6851,12 @@
           },
           "submitButton": {
             "invalidTooltip": "Please fill in all required fields.",
-            "pristineTooltip": "No changes to save."
+            "pristineTooltip": "No changes to save.",
+            "noModelsTooltip": "Select at least one chat or image model"
           },
           "title": {
             "configure": "Configure *{provider}*",
-            "create": "Set up {product}"
+            "create": "Configure {product}"
           },
           "updateButton": {
             "label": "Update"
@@ -7097,7 +6871,8 @@
           "setNewDefaultFailed": "Failed to set new provider as default",
           "testApiKeyFailed": "An error occurred while testing the API key.",
           "testCustomProviderFailed": "An error occurred while testing the custom provider.",
-          "testProviderFailed": "An error occurred while testing the provider."
+          "testProviderFailed": "An error occurred while testing the provider.",
+          "imageModelsUpdateFailed": "Saved the provider, but could not update its image models"
         },
         "validation": {
           "apiBaseRequired": "API Base URL is required",
@@ -7202,6 +6977,46 @@
       "temperature": {
         "description": "Allow users to override the default model temperature per session.",
         "title": "Temperature Control"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "Image Model",
+          "description": "Used to generate images in sessions.",
+          "error": "Could not change the default image model",
+          "noDefault": {
+            "label": "No Default",
+            "description": "(Disable Image Generation)"
+          }
+        }
+      },
+      "defaultChanges": {
+        "back": "Back",
+        "title": "Choose New Defaults",
+        "description": "This change removes models that hold defaults. Choose a model to take over each one.",
+        "deleteDescription": "This provider holds defaults. Choose a model to take over each one.",
+        "confirm": "Continue",
+        "cleared": "No other model can take this over. The default is cleared.",
+        "flows": {
+          "chat": {
+            "lost": "No other chat model is selected. Chat turns off."
+          },
+          "decision": {
+            "lost": "No other decision model is selected. Decisions turn off."
+          }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "Chat"
+        },
+        "imageGeneration": {
+          "empty": "Turn on an image model in a provider's settings to generate images.",
+          "title": "Image Generation"
+        },
+        "decisions": {
+          "empty": "Set up an LLM or decision provider to use decisions.",
+          "title": "Decisions"
+        }
       }
     },
     "mcpActions": {
@@ -14219,10 +14034,23 @@
         "legacy": "legacy"
       },
       "labels": {
-        "default": "Default"
+        "default": "Default",
+        "defaultChat": "Default Chat",
+        "defaultImage": "Default Image"
+      },
+      "defaultRoles": {
+        "chat": "Default Chat",
+        "imageGeneration": "Default Image",
+        "imageProcessing": "Default Image Processing",
+        "chatNaming": "Default Chat Naming",
+        "searchSelection": "Default Search Decision",
+        "decision": "Default Decision",
+        "craft": "Default Craft"
       },
       "modelTypes": {
+        "chat": "Chat",
         "decision": "Decision",
+        "image": "Image",
         "vision": "Vision"
       }
     },
@@ -16528,17 +16356,11 @@
         "hookExtensions": {
           "label": "Hook Extensions"
         },
-        "imageGeneration": {
-          "label": "Image Generation"
-        },
         "indexSettings": {
           "label": "Index Settings"
         },
         "languageModels": {
-          "label": "Language Models"
-        },
-        "decisionModels": {
-          "label": "Decision Models"
+          "label": "AI Models"
         },
         "llmGateway": {
           "label": "LLM Gateway"

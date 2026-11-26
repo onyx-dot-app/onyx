@@ -372,21 +372,16 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "Chat-Einstellungen unter Sprachmodelle verwalten",
+      "sharedModelSettings": "Chat-Einstellungen unter KI-Modelle verwalten",
       "decisionModel": {
         "title": "Entscheidungsmodell",
         "openAiDecisionsModelName": "OpenAI-Entscheidungen (GPT-6 Luna)",
         "description": "Die interne Suche nutzt dieses Modell, um Ergebnisse zu ordnen und den Umfang des Kontexts festzulegen. Sie können es auch in den Chat-Einstellungen festlegen.",
         "clear": "Löschen",
-        "notConfigured": "Nicht konfiguriert",
         "saveFailed": "Entscheidungsmodell konnte nicht aktualisiert werden"
       },
-      "header": {
-        "title": "Entscheidungsmodelle",
-        "description": "Verwalten Sie Anbieter und wählen Sie optional ein Entscheidungsmodell."
-      },
       "providers": {
-        "title": "Anbieter",
+        "title": "Entscheidungsanbieter",
         "description": "Verbinden Sie einen Anbieter oder verwalten Sie seine Entscheidungsmodelle.",
         "clearBeforeRemoval": "Löschen Sie die Auswahl des Entscheidungsmodells, bevor Sie diesen Anbieter entfernen.",
         "connect": "Verbinden"
@@ -1361,9 +1356,6 @@
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
         "retry": {
           "label": "Erneut versuchen"
-        },
-        "addProvider": {
-          "label": "Anbieter hinzufügen"
         },
         "chatDefault": {
           "label": "Chat-Standard"
@@ -5760,222 +5752,6 @@
         "endpointUrl": "https://ihr-api-endpunkt.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "Bildmodelle Ihrer verbundenen LLM-Anbieter. Verbinden Sie eines, um es im Chat zu verwenden.",
-        "title": "Verfügbare Modelle"
-      },
-      "configureSuccess": {
-        "message": "Anbieter erfolgreich konfiguriert"
-      },
-      "connectButton": {
-        "label": "Verbinden"
-      },
-      "connectedModels": {
-        "title": "Verbundene Modelle"
-      },
-      "deselectError": {
-        "message": "Auswahl konnte nicht aufgehoben werden"
-      },
-      "disconnectButton": {
-        "ariaLabel": "{title} trennen"
-      },
-      "disconnectError": {
-        "message": "Trennung fehlgeschlagen"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "Verbinden Sie einen anderen Anbieter, um die Bilderzeugung weiterhin zu verwenden."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** ist derzeit das Standardmodell für die Bilderzeugung."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** ist derzeit das Standardmodell für die Bilderzeugung. Der Sitzungsverlauf bleibt erhalten."
-        },
-        "header": {
-          "description": "Dadurch werden die gespeicherten Anmeldedaten für diesen Anbieter entfernt.",
-          "title": "*{title}* trennen"
-        },
-        "linkedHeader": {
-          "description": "Der LLM-Anbieter und seine Zugangsdaten bleiben verbunden."
-        },
-        "noDefaultOption": {
-          "description": "(Bilderzeugung deaktivieren)",
-          "label": "Kein Standard"
-        },
-        "nonDefault": {
-          "description": "**{title}**-Modelle werden nicht mehr zur Bilderzeugung verwendet."
-        },
-        "replacement": {
-          "label": "Neuen Standard festlegen",
-          "placeholder": "Wählen Sie ein Ersatzmodell"
-        },
-        "sessionHistory": {
-          "description": "Der Sitzungsverlauf bleibt erhalten."
-        },
-        "submitButton": {
-          "label": "Trennen"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "{title} getrennt"
-      },
-      "editButton": {
-        "ariaLabel": "{title} bearbeiten"
-      },
-      "emptyState": {
-        "title": "Verbinden Sie ein Modell zur Bilderzeugung, um es im Chat zu verwenden."
-      },
-      "form": {
-        "apiKey": {
-          "idle": "Geben Sie Ihren API-Schlüssel ein.",
-          "label": "API-Schlüssel",
-          "placeholder": "Geben Sie Ihren API-Schlüssel ein",
-          "required": "API-Schlüssel ist erforderlich"
-        },
-        "apiKeyTest": {
-          "error": "Ungültiger API-Schlüssel",
-          "loading": "API-Schlüssel wird mit {title} getestet...",
-          "success": "Der API-Schlüssel ist gültig. Konfiguration gespeichert."
-        },
-        "apiKeyValidationFailed": {
-          "message": "Die Prüfung des API-Schlüssels ist fehlgeschlagen"
-        },
-        "authMethod": {
-          "idle": "Wählen Sie, wie sich {appName} bei Google Vertex AI authentifizieren soll.",
-          "label": "Authentifizierungsmethode",
-          "required": "Authentifizierungsmethode ist erforderlich",
-          "serviceAccount": {
-            "description": "Laden Sie eine JSON-Schlüsseldatei für ein GCP-Dienstkonto hoch",
-            "label": "Dienstkonto-JSON"
-          },
-          "workloadIdentity": {
-            "description": "Verwenden Sie die vorhandenen GCP-Anmeldedaten des Pods (GKE Workload Identity)",
-            "label": "Workload Identity (GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "Fügen Sie Ihren <link>API-Schlüssel</link> von Azure OpenAI ein, um auf Ihre Modelle zuzugreifen."
-        },
-        "connectHeader": {
-          "title": "{title} verbinden"
-        },
-        "credentials": {
-          "idle": "Laden Sie Ihre <link>Dienstkonto-Anmeldedaten</link> von Google Cloud hoch oder fügen Sie sie ein.",
-          "label": "Anmeldedatei",
-          "placeholder": "Laden Sie Ihre Anmeldedaten hoch oder fügen Sie sie ein",
-          "required": "Anmeldedatei ist erforderlich"
-        },
-        "credentialsTest": {
-          "error": "Ungültige Anmeldedaten",
-          "loading": "Anmeldedaten werden mit {title} getestet...",
-          "success": "Anmeldedaten gültig. Konfiguration gespeichert."
-        },
-        "editHeader": {
-          "title": "{title} bearbeiten"
-        },
-        "loading": {
-          "placeholder": "Wird geladen..."
-        },
-        "location": {
-          "idle": "Die Google Cloud-Region für Ihre Vertex AI-Modelle. Verfügbare Regionen finden Sie in der <link>Dokumentation von Google</link>.",
-          "label": "Standort",
-          "required": "Standort ist erforderlich"
-        },
-        "projectId": {
-          "idle": "Das GCP-Projekt, in dem Vertex AI aktiviert ist. {appName} authentifiziert sich mit dem an den Pod gebundenen Dienstkonto (GKE Workload Identity).",
-          "label": "GCP-Projekt-ID",
-          "required": "Projekt-ID ist erforderlich"
-        },
-        "targetUri": {
-          "idle": "Fügen Sie die Ziel-URI Ihres Endpunkts aus <link>Azure OpenAI</link> ein (einschließlich API-Endpunkt-Basis, Bereitstellungsname und API-Version).",
-          "invalid": "Die Ziel-URI muss eine gültige URL mit api-version und Bereitstellungsnamen sein",
-          "label": "Ziel-URI",
-          "required": "Ziel-URI ist erforderlich"
-        },
-        "unknownError": {
-          "message": "Ein unbekannter Fehler ist aufgetreten"
-        }
-      },
-      "header": {
-        "description": "Einstellungen für die Bilderzeugung im Chat.",
-        "title": "Bilderzeugung"
-      },
-      "linkError": {
-        "message": "Modell konnte nicht verbunden werden"
-      },
-      "linkSuccess": {
-        "message": "{title} verbunden"
-      },
-      "linkedModel": {
-        "description": "Von {provider}"
-      },
-      "loadError": {
-        "message": "Die Konfiguration konnte nicht geladen werden. Bitte laden Sie die Seite neu."
-      },
-      "model": {
-        "description": "Wählen Sie ein Modell, um Bilder im Chat zu erzeugen.",
-        "placeholder": "Standardmodell auswählen",
-        "title": "Modell zur Bilderzeugung"
-      },
-      "modelFilter": {
-        "all": "Alle",
-        "recommended": "Empfohlen"
-      },
-      "noImageModels": {
-        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt. Öffnen Sie den Tab „Alle“, um jedes Modell Ihrer verbundenen Anbieter zu sehen.",
-        "title": "Keine Bildmodelle verfügbar"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "Bilderzeugungsmodell GPT Image 1, gehostet auf Microsoft Azure."
-        },
-        "azureGptImage15": {
-          "description": "Bilderzeugungsmodell GPT Image 1.5, gehostet auf Microsoft Azure."
-        },
-        "azureGptImage2": {
-          "description": "Bilderzeugungsmodell GPT Image 2, gehostet auf Microsoft Azure."
-        },
-        "azureGptImage25Flare": {
-          "description": "Bilderzeugungsmodell GPT Image 2.5 Flare, gehostet auf Microsoft Azure."
-        },
-        "azureGptImage25Sunburst": {
-          "description": "Bilderzeugungsmodell GPT Image 2.5 Sunburst, gehostet auf Microsoft Azure."
-        },
-        "gemini25FlashImage": {
-          "description": "Das Modell Gemini 2.5 Flash Image (Nano Banana) ist auf Geschwindigkeit und Effizienz ausgelegt."
-        },
-        "gemini3ProImage": {
-          "description": "Gemini 3 Pro Image (Nano Banana Pro) ist für die professionelle Asset-Produktion ausgelegt."
-        },
-        "gemini3ProImagePreview": {
-          "description": "Von Google Cloud am 17. Juli 2026 eingestellt. Wechseln Sie zu Gemini 3 Pro Image."
-        },
-        "openaiGptImage1": {
-          "description": "Ein leistungsfähiges Bilderzeugungsmodell von OpenAI, das Prompts genau befolgt."
-        },
-        "openaiGptImage15": {
-          "description": "Das bisherige Flaggschiff-Bilderzeugungsmodell von OpenAI."
-        },
-        "openaiGptImage2": {
-          "description": "Das Bilderzeugungsmodell der vorherigen Generation von OpenAI mit hoher Prompt-Treue."
-        },
-        "openaiGptImage25Flare": {
-          "description": "Das neueste Bilderzeugungsmodell von OpenAI mit hoher Qualität und schneller Erzeugung."
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "Das Premium-Bilderzeugungsmodell von OpenAI für die präzisesten Bearbeitungen."
-        }
-      },
-      "retiredModelWarning": {
-        "description": "Verbinden Sie ein anderes Modell, legen Sie es als Standard fest und trennen Sie dann {title}.",
-        "title": "{title} ist nicht mehr verfügbar"
-      },
-      "setDefaultError": {
-        "message": "Der Standard konnte nicht festgelegt werden"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "Erweiterte Optionen",
@@ -6661,7 +6437,7 @@
       },
       "defaultModel": {
         "description": "Wird standardmäßig für neue Sitzungen verwendet.",
-        "title": "Standardmodell"
+        "title": "Chatmodell"
       },
       "deleteModal": {
         "defaultProviderWarning": "Der Standardanbieter kann nicht gelöscht werden. Wählen Sie einen anderen Anbieter als Standard, bevor Sie diesen löschen.",
@@ -6682,6 +6458,9 @@
         },
         "selfHosted": {
           "title": "Selbst gehostet & Benutzerdefiniert"
+        },
+        "decisions": {
+          "title": "Entscheidungen"
         }
       },
       "hideProviderGrouping": {
@@ -6927,7 +6706,7 @@
             "placeholder": "Modellnamen eingeben"
           },
           "autoUpdate": {
-            "description": "Die verfügbaren Modelle aktualisieren, wenn neue Modelle erscheinen.",
+            "description": "Neue Chat-Modelle automatisch hinzufügen und eingestellte Modelle entfernen.",
             "title": "Automatisch aktualisieren"
           },
           "deselectAllButton": {
@@ -6937,30 +6716,24 @@
             "title": "Keine Modelle verfügbar."
           },
           "field": {
-            "description": "Wählen Sie die Modelle aus, die für diesen Anbieter verfügbar sein sollen.",
+            "description": "Wählen Sie die Modelle aus, die in der gesamten App verwendet werden dürfen.",
             "title": "Modelle"
           },
-          "foldButton": {
-            "label": "Modelle einklappen"
-          },
-          "moreButton": {
-            "label": "Weitere Modelle"
+          "search": {
+            "empty": "Keine Modelle entsprechen Ihrer Suche.",
+            "placeholder": "Modelle durchsuchen"
           },
           "refetch": {
             "label": "Modelle aktualisieren",
             "errorToast": "Die Modelle konnten nicht abgerufen werden"
           },
           "row": {
-            "defaultLabel": "Standardmodell",
             "decisionTag": {
               "decisionOnly": "Entscheidungsmodell. Nicht in der Chat-Modellauswahl verfügbar.",
               "chatAndDecision": "Unterstützt Chat- und Entscheidungsaufgaben."
             },
             "renameButton": {
               "tooltip": "Umbenennen"
-            },
-            "setDefaultButton": {
-              "label": "Als Standard festlegen"
             }
           },
           "selectAllButton": {
@@ -7078,11 +6851,12 @@
           },
           "submitButton": {
             "invalidTooltip": "Bitte füllen Sie alle Pflichtfelder aus.",
-            "pristineTooltip": "Keine Änderungen zum Speichern."
+            "pristineTooltip": "Keine Änderungen zum Speichern.",
+            "noModelsTooltip": "Wählen Sie mindestens ein Chat- oder Bildmodell aus"
           },
           "title": {
             "configure": "*{provider}* konfigurieren",
-            "create": "{product} einrichten"
+            "create": "{product} konfigurieren"
           },
           "updateButton": {
             "label": "Aktualisieren"
@@ -7097,7 +6871,8 @@
           "setNewDefaultFailed": "Der neue Anbieter konnte nicht als Standard festgelegt werden",
           "testApiKeyFailed": "Beim Testen des API-Schlüssels ist ein Fehler aufgetreten.",
           "testCustomProviderFailed": "Beim Testen des benutzerdefinierten Anbieters ist ein Fehler aufgetreten.",
-          "testProviderFailed": "Beim Testen des Anbieters ist ein Fehler aufgetreten."
+          "testProviderFailed": "Beim Testen des Anbieters ist ein Fehler aufgetreten.",
+          "imageModelsUpdateFailed": "Der Anbieter wurde gespeichert, aber seine Bildmodelle konnten nicht aktualisiert werden"
         },
         "validation": {
           "apiBaseRequired": "Die API-Basis-URL ist erforderlich",
@@ -7202,6 +6977,46 @@
       "temperature": {
         "description": "Nutzern erlauben, die Standardtemperatur des Modells pro Sitzung zu überschreiben.",
         "title": "Temperatursteuerung"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "Bildmodell",
+          "description": "Wird zum Erstellen von Bildern in Sitzungen verwendet.",
+          "error": "Das Standard-Bildmodell konnte nicht geändert werden",
+          "noDefault": {
+            "label": "Kein Standard",
+            "description": "(Bildgenerierung deaktivieren)"
+          }
+        }
+      },
+      "defaultChanges": {
+        "back": "Zurück",
+        "title": "Neue Standards wählen",
+        "description": "Diese Änderung entfernt Modelle, die Standards halten. Wählen Sie für jeden ein Ersatzmodell.",
+        "deleteDescription": "Dieser Anbieter hält Standards. Wählen Sie für jeden ein Ersatzmodell.",
+        "confirm": "Weiter",
+        "cleared": "Kein anderes Modell kann dies übernehmen. Der Standard wird entfernt.",
+        "flows": {
+          "chat": {
+            "lost": "Kein anderes Chatmodell ist ausgewählt. Der Chat wird deaktiviert."
+          },
+          "decision": {
+            "lost": "Kein anderes Entscheidungsmodell ist ausgewählt. Entscheidungen werden deaktiviert."
+          }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "Chat"
+        },
+        "imageGeneration": {
+          "empty": "Aktivieren Sie ein Bildmodell in den Einstellungen eines Anbieters, um Bilder zu generieren.",
+          "title": "Bildgenerierung"
+        },
+        "decisions": {
+          "empty": "Richten Sie einen LLM- oder Entscheidungsanbieter ein, um Entscheidungen zu nutzen.",
+          "title": "Entscheidungen"
+        }
       }
     },
     "mcpActions": {
@@ -14219,10 +14034,23 @@
         "legacy": "legacy"
       },
       "labels": {
-        "default": "Standard"
+        "default": "Standard",
+        "defaultChat": "Standard-Chat",
+        "defaultImage": "Standard-Bild"
+      },
+      "defaultRoles": {
+        "chat": "Standard-Chat",
+        "imageGeneration": "Standardbild",
+        "imageProcessing": "Standard-Bildverarbeitung",
+        "chatNaming": "Standard-Chatbenennung",
+        "searchSelection": "Standard-Suchentscheidung",
+        "decision": "Standardentscheidung",
+        "craft": "Standard-Craft"
       },
       "modelTypes": {
+        "chat": "Chat",
         "decision": "Entscheidung",
+        "image": "Bild",
         "vision": "Vision"
       }
     },
@@ -16528,17 +16356,11 @@
         "hookExtensions": {
           "label": "Hook-Erweiterungen"
         },
-        "imageGeneration": {
-          "label": "Bilderzeugung"
-        },
         "indexSettings": {
           "label": "Index-Einstellungen"
         },
         "languageModels": {
-          "label": "Sprachmodelle"
-        },
-        "decisionModels": {
-          "label": "Entscheidungsmodelle"
+          "label": "KI-Modelle"
         },
         "llmGateway": {
           "label": "LLM Gateway"

@@ -127,7 +127,7 @@ describe("filterModelConfigurations", () => {
     ).toEqual([2, 3]);
     expect(
       filterModelConfigurations(providers, {
-        includeDecisionOnly: true,
+        capabilities: ["chat", "decision"],
       })[0]?.model_configurations.map((model) => model.id)
     ).toEqual([1, 2, 3]);
     expect(findLlmOptionById(providers, 1)?.modelName).toBe("decisions");
@@ -139,7 +139,7 @@ describe("filterModelConfigurations", () => {
     expect(
       buildModelSelectOptions(providers, {
         grouped: false,
-        includeDecisionOnly: true,
+        capabilities: ["chat", "decision"],
       }).map((option) => ("value" in option ? option.value : null))
     ).toEqual(["1", "2", "3"]);
   });
@@ -194,14 +194,21 @@ describe("filterModelConfigurations", () => {
   });
 
   test("keeps only image-input models and drops providers left empty", () => {
-    const filtered = filterModelConfigurations(providers, { imageInput: true });
+    const filtered = filterModelConfigurations(providers, {
+      capabilities: ["vision"],
+    });
     expect(filtered.map((p) => p.id)).toEqual([1]);
     expect(ids(filtered)).toEqual([11]);
   });
 
   test("keeps the current value regardless of the other rules", () => {
     expect(
-      ids(filterModelConfigurations(providers, { imageInput: true, keep: 12 }))
+      ids(
+        filterModelConfigurations(providers, {
+          capabilities: ["vision"],
+          keep: 12,
+        })
+      )
     ).toEqual([11, 12]);
   });
 });

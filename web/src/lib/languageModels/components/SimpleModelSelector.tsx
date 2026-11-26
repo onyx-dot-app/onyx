@@ -3,6 +3,7 @@
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { usePendingAction } from "@opal/hooks";
 import {
   InputSingleSelect,
   type InputSingleSelectProps,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/languageModels/options";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import type {
+  ModelCapability,
   ModelOptionProvider,
   ModelPaging,
 } from "@/lib/languageModels/types";
@@ -29,6 +31,10 @@ const GLOBAL_DEFAULT_SELECT_VALUE = "global-default";
 /** Prefixes a decision-section row's select value, so a model listed among
  *  both decision and language models has two distinct rows. */
 const DECISION_SELECT_PREFIX = "decision:";
+
+/** Stable, so the default does not rebuild the options on every render. */
+const DEFAULT_CAPABILITIES: readonly ModelCapability[] = ["chat"];
+const DECISION_CAPABILITIES: readonly ModelCapability[] = ["decision"];
 
 /** A keystroke storm settles before a search leaves for the server. */
 export const SERVER_SEARCH_DEBOUNCE_MS = 300;
@@ -68,8 +74,9 @@ export interface DecisionSection {
   providers: ModelOptionProvider[];
   /** True when `value` is one of this section's models. */
   selected: boolean;
-  /** Called instead of `onChange` when a row of this section is picked. */
-  onChange: (modelConfigurationId: number) => void;
+  /** Called instead of `onChange` when a row of this section is picked.
+   *  A returned promise holds the select disabled, as `onChange`'s does. */
+  onChange: (modelConfigurationId: number) => void | Promise<void>;
 }
 
 /** What `onChange` emits: only a nullable selector can emit null. */
@@ -77,13 +84,25 @@ type EmittedModelConfigurationId<Nullable extends boolean> =
   Nullable extends true ? number | null : number;
 
 export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
-  includeDecisionOnly?: boolean;
+  /**
+   * Offer models with any of these capabilities: `["chat"]` (the default)
+   * for a setting that needs a model to chat with, `["vision"]` for one that
+   * reads images, `["decision"]` for decisions, `["image"]` for image
+   * generation. An image model is listed only when `providers` carries it,
+   * i.e. a listing fetched with `include_image_gen`.
+   */
+  capabilities?: readonly ModelCapability[];
   providers: ModelOptionProvider[];
   /** The chosen model configuration id; null shows the placeholder. */
   value: number | null;
+  /**
+   * Called with the picked model. Return the save's promise: until it
+   * settles the select is disabled and ignores further picks, so a second
+   * pick cannot race the first.
+   */
   onChange: (
     modelConfigurationId: EmittedModelConfigurationId<Nullable>
-  ) => void;
+  ) => void | Promise<void>;
   /**
    * When true, null is a real state the user can return to: re-picking the
    * chosen model clears it. Otherwise a chosen model is a floor, a re-pick
@@ -146,7 +165,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   onChange,
   nullable,
   grouped = true,
-  includeDecisionOnly = false,
+  capabilities = DEFAULT_CAPABILITIES,
   globalDefault,
   disabled,
   isError,
@@ -160,6 +179,9 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
   const providerNames = useProviderNames();
+  // Every pick runs through one pending action: while a save is in flight
+  // the select is disabled, whatever the caller passes as `disabled`.
+  const pick = usePendingAction((save: () => void | Promise<void>) => save());
   const decisionTitle = decisionSection?.title;
   const decisionProviders = decisionSection?.providers;
   const decisionRows = useMemo(
@@ -168,7 +190,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         ? buildModelSelectOptions(decisionProviders, {
             grouped: false,
             providerNames,
-            includeDecisionOnly: true,
+            capabilities: DECISION_CAPABILITIES,
           }).flatMap((option): SelectOption[] =>
             "options" in option
               ? []
@@ -185,10 +207,10 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       buildModelSelectOptions(providers, {
         grouped,
         providerNames,
-        includeDecisionOnly,
         labelSingleGroup: hasDecisionRows,
+        capabilities,
       }),
-    [providers, grouped, providerNames, includeDecisionOnly, hasDecisionRows]
+    [providers, grouped, providerNames, hasDecisionRows, capabilities]
   );
   const fallbackRow =
     selectedFallback?.value === toSelectValue(value) &&
@@ -299,18 +321,26 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     [modelPaging, trimmedQuery, providerIdByValue]
   );
 
-  const selectValue =
-    decisionSection?.selected && value !== null
+  // Disabled by its caller, or with no model to offer, the select shows the
+  // placeholder rather than a value or the Global Default row. A pending
+  // save keeps showing the value it saves.
+  const showPlaceholder =
+    disabled || (models.length === 0 && decisionRows.length === 0);
+  const selectValue = showPlaceholder
+    ? ""
+    : decisionSection?.selected && value !== null
       ? DECISION_SELECT_PREFIX + value
       : toSelectValue(value);
 
   // The Global Default row is what null shows as; otherwise a non-nullable
   // field's own value is its floor. Either way a re-pick is a no-op.
-  const defaultOption = globalDefault
-    ? GLOBAL_DEFAULT_SELECT_VALUE
-    : nullable || value === null
-      ? undefined
-      : selectValue;
+  const defaultOption = showPlaceholder
+    ? undefined
+    : globalDefault
+      ? GLOBAL_DEFAULT_SELECT_VALUE
+      : nullable || value === null
+        ? undefined
+        : selectValue;
 
   return (
     <InputSingleSelect
@@ -318,14 +348,18 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       search
       value={selectValue}
       defaultOption={defaultOption}
-      disabled={disabled}
+      disabled={disabled || pick.isPending}
       isError={isError}
       onValueChange={(next) => {
         if (decisionSection && next.startsWith(DECISION_SELECT_PREFIX)) {
           const decisionId = fromSelectValue(
             next.slice(DECISION_SELECT_PREFIX.length)
           );
-          if (decisionId !== null) decisionSection.onChange(decisionId);
+          if (decisionId !== null) {
+            pick
+              .run(() => decisionSection.onChange(decisionId))
+              .catch(console.error);
+          }
           return;
         }
         const id = fromSelectValue(next);
@@ -333,9 +367,13 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         // nothing is chosen changes nothing; the family cannot tell, since
         // the select's own value is empty then.
         if (id === null && value === null) return;
-        // SAFETY: a non-nullable select never emits an empty value, since
-        // its own value is the default option.
-        onChange(id as EmittedModelConfigurationId<Nullable>);
+        pick
+          .run(() =>
+            // SAFETY: a non-nullable select never emits an empty value,
+            // since its own value is the default option.
+            onChange(id as EmittedModelConfigurationId<Nullable>)
+          )
+          .catch(console.error);
       }}
       placeholder={placeholder ?? t("placeholder")}
       aria-label={ariaLabel}
