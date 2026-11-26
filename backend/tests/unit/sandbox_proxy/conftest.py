@@ -128,6 +128,7 @@ def make_flow(
     peername: tuple[str, int] | None = ("10.0.0.1", 12345),
     raw_content: bytes | None = b"{}",
     port: int = 443,
+    scheme: str = "https",
     method: str = "POST",
     path_components: tuple[str, ...] = (),
     conn_id: str = "conn-default",
@@ -142,6 +143,7 @@ def make_flow(
     flow.request = MagicMock()
     flow.request.host = host
     flow.request.port = port
+    flow.request.scheme = scheme
     flow.request.method = method
     flow.request.path_components = path_components
     flow.request.raw_content = raw_content

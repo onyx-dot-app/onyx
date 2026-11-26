@@ -409,9 +409,9 @@ if your admin sets them to keep no content. There, a tool that needs approval do
 
 The agent can run a command or script in the chat's sandbox that calls an app.
 When the command sends a request with the **Ask** policy, the request waits, and an approval card shows on the command.
-The card shows the app, the action, and the method, path, and body of the request.
-For a large body or a body that is not JSON, for example a file upload, the card shows only the size of the body.
-The command waits while the card waits.
+The card shows the app, the action, and the method, origin (for example `https://api.github.com`), path,
+and body of the request. For a large body or a body that is not JSON, for example a file upload,
+the card shows only the size of the body. The command waits while the card waits.
 
 | Option | Effect |
 | --- | --- |

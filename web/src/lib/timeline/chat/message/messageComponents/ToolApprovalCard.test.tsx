@@ -502,7 +502,11 @@ describe("A command's app request", () => {
   const commandRequest: ToolApprovalRequest = {
     ...request,
     tool_name: "create_issue",
-    arguments: { method: "POST", path: "/repos/acme/app/issues" },
+    arguments: {
+      method: "POST",
+      origin: "https://api.github.com",
+      path: "/repos/acme/app/issues",
+    },
     can_approve_for_chat: false,
     can_approve_for_command: true,
     app_name: "GitHub",
@@ -533,6 +537,7 @@ describe("A command's app request", () => {
       })
     ).toBeInTheDocument();
     expect(screen.getByText("/repos/acme/app/issues")).toBeVisible();
+    expect(screen.getByText("https://api.github.com")).toBeVisible();
     expect(
       screen.queryByRole("button", { name: copy.approveChat.tooltip })
     ).not.toBeInTheDocument();

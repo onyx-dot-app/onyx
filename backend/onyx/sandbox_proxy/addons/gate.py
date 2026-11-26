@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from mitmproxy import connection, http
+from mitmproxy.net.http import url
 from mitmproxy.proxy import server_hooks
 from sqlalchemy.orm import Session
 
@@ -1548,13 +1549,17 @@ _CARD_BODY_MAX_BYTES = 64 * 1024
 def _approval_payload(
     flow: http.HTTPFlow, ctx: SessionContext, matched_actions: AllMatchedActions
 ) -> dict[str, Any]:
-    """What the card shows. A chat card also names the method and path, and
-    shows the size of a body it does not show."""
+    """What the card shows. A chat card also names the method, origin and
+    path, since one app can send to several hosts, and shows the size of a
+    body it does not show."""
     if ctx.chat_command_id is None:
         return matched_actions.payload
+    request = flow.request
+    host = f"[{request.host}]" if ":" in request.host else request.host
     payload: dict[str, Any] = {
-        "method": flow.request.method,
-        "path": flow.request.path,
+        "method": request.method,
+        "origin": f"{request.scheme}://{url.hostport(request.scheme, host, request.port)}",
+        "path": request.path,
     }
     raw_bytes = len(flow.request.raw_content or b"")
     # The size check runs on the event loop: a body far over the budget is

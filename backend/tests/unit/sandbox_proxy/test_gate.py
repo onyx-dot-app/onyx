@@ -2447,6 +2447,7 @@ async def test_a_command_grant_row_stores_the_size_of_a_large_body(
     assert inserted[0]["decided_via"] == ApprovalDecidedVia.COMMAND_GRANT
     assert inserted[0]["payload"] == {
         "method": "POST",
+        "origin": "https://slack.com",
         "path": "/api/chat.postMessage",
         "body_bytes": len(raw),
     }
@@ -2610,6 +2611,7 @@ def test_a_command_row_names_the_request_and_is_announced_to_the_call(
     assert inserted[0]["command_id"] == _COMMAND
     assert inserted[0]["payload"] == {
         "method": "POST",
+        "origin": "https://slack.com",
         "path": "/api/chat.postMessage?x=1",
         "body": {"text": "hi"},
     }
@@ -2648,7 +2650,31 @@ def test_a_command_card_shows_the_size_of_a_body_that_is_not_json() -> None:
 
     payload = gate._approval_payload(flow, ctx, make_matched_actions(payload={}))
 
-    assert payload == {"method": "POST", "path": "/upload", "body_bytes": 300}
+    assert payload == {
+        "method": "POST",
+        "origin": "https://slack.com",
+        "path": "/upload",
+        "body_bytes": 300,
+    }
+
+
+@pytest.mark.parametrize(
+    ("scheme", "host", "port", "origin"),
+    [
+        ("https", "files.slack.com", 8443, "https://files.slack.com:8443"),
+        ("http", "::1", 80, "http://[::1]"),
+    ],
+)
+def test_a_command_card_names_the_origin_of_the_request(
+    scheme: str, host: str, port: int, origin: str
+) -> None:
+    """One app can send to several hosts, so the card names the one."""
+    ctx = _ctx().model_copy(update={"chat_command_id": _COMMAND})
+    flow = make_flow(scheme=scheme, host=host, port=port)
+
+    payload = gate._approval_payload(flow, ctx, make_matched_actions(payload={}))
+
+    assert payload["origin"] == origin
 
 
 class _RecordingMatcher(_StubMatcher):
