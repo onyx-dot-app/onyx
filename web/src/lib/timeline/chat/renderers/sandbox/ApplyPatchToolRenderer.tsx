@@ -118,9 +118,9 @@ export function ApplyPatchToolRenderer({
           .join("\n")
       : "";
 
-  // One panel: each file's diff, then the output band, which waits with a
-  // loading shimmer while the patch applies, then lists the changed files or
-  // shows the error.
+  // One panel: each file's diff. The output band shows only when it adds
+  // something: the error, or the changed files when no diff could be shown.
+  const showOutput = error !== null || !parsed?.files.length;
   const content = (
     <SandboxCallContent renderType={renderType}>
       {parsed?.files.map((file, index) => (
@@ -146,13 +146,15 @@ export function ApplyPatchToolRenderer({
           ]}
         />
       )}
-      <CommandBody
-        command=""
-        output={changedFiles}
-        error={error ?? undefined}
-        outputLoading={!isComplete}
-        emptyLabel=""
-      />
+      {showOutput && (
+        <CommandBody
+          command=""
+          output={changedFiles}
+          error={error ?? undefined}
+          outputLoading={!isComplete}
+          emptyLabel=""
+        />
+      )}
     </SandboxCallContent>
   );
 
