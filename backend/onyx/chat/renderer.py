@@ -49,7 +49,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.constants import CODE_MODE_STREAM_TOOL_TYPE, WRITE_STDIN_TOOL_NAME
+from onyx.tools.constants import WRITE_STDIN_TOOL_NAME
 from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import (
     CustomToolCallSummary,
@@ -135,8 +135,6 @@ SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, *RUN_TOOL_NAMES})
 # Tools whose prompt argument streams to the browser while the model writes it.
 PROMPT_ARGUMENT_TOOLS = frozenset({ImageGenerationTool.NAME})
-# The `tool_type` that clients see on those streamed arguments.
-CODE_ARGUMENT_STREAM_TYPES = frozenset({PythonTool.NAME, CODE_MODE_STREAM_TOOL_TYPE})
 
 
 class FileToolArguments(NamedTuple):
@@ -507,11 +505,7 @@ class MessageRenderer:
             )
             if report is not None:
                 self._argument_streams[event.content_index] = _ArgumentStream(
-                    event.tool_call_id,
-                    CODE_MODE_STREAM_TOOL_TYPE
-                    if event.tool_name in RUN_TOOL_NAMES
-                    else event.tool_name,
-                    report,
+                    event.tool_call_id, event.tool_name, report
                 )
             if event.tool_name in HIDDEN_TOOLS:
                 return result

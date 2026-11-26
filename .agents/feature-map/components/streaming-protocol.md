@@ -224,9 +224,9 @@ response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python` and the code mode run tool of
 every shape), and the prompt of the tools in `chat/renderer.py:PROMPT_ARGUMENT_TOOLS`
-(`generate_image`), while the model writes it, with the tool name as `tool_type`; a code
-mode run tool (`exec` or `repl`) always streams as
-`execute_code` (backend `tools/constants.py:CODE_MODE_STREAM_TOOL_TYPE`), the type that clients know (client `CODE_MODE_TOOL_TYPE`). The image step shows
+(`generate_image`), while the model writes it, with the tool name as `tool_type`; the code
+mode run tool of every shape is `execute_code` (backend
+`tools/constants.py:EXECUTE_CODE_TOOL_NAME`), the type that clients know (client `CODE_MODE_TOOL_TYPE`). The image step shows
 the prompt until the revised prompts arrive. Native model reasoning streams
 as reasoning packets.
 
@@ -270,7 +270,7 @@ lists `stored_keys`, the keys the program saved with `store()`, and
 `tool_call_count`, the calls the cell started so far (the model's text reports
 the same count). Each call of the run or wait tool is its own code
 mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
-arguments (`None` and 0 for the run tool, `exec` or `repl`, the cell id and
+arguments (`None` and 0 for the run tool, `execute_code`, the cell id and
 1 for the wait tool, `wait` or `poll`, whose `code` is empty), so live and replay send the same start.
 The final delta of a saved observation carries the exact `cell_id` and
 `observation`; a call that failed or was cancelled before it saved one leaves

@@ -1164,7 +1164,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
-        if tool["function"]["name"] == "exec"
+        if tool["function"]["name"] == "execute_code"
     ]
     assert (
         f"call each by the name in its stub):\n  - {namespace}: Greets people "

@@ -153,7 +153,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
       name: conversation,
       conditions: { prompt_contains: [nonce] },
       replies: [
-        // Code mode calls the tools from an exec program.
+        // Code mode calls the tools from an execute_code program.
         slowSibling
           ? mockLlmToolCallReply(
               [
