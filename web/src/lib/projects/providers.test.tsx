@@ -14,6 +14,7 @@ const mockToastWarning = jest.fn();
 const mockToastError = jest.fn();
 const mockGetUserFileStatuses = jest.fn();
 const mockDeleteUserFile = jest.fn();
+const mockUnlinkFileFromProject = jest.fn();
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -71,7 +72,8 @@ jest.mock("@/lib/projects/svc", () => {
     deleteUserFile: (...args: unknown[]) => mockDeleteUserFile(...args),
     getUserFileStatuses: (...args: unknown[]) =>
       mockGetUserFileStatuses(...args),
-    unlinkFileFromProject: jest.fn(),
+    unlinkFileFromProject: (...args: unknown[]) =>
+      mockUnlinkFileFromProject(...args),
     linkFileToProject: jest.fn(),
   };
 });
@@ -540,6 +542,71 @@ describe("ProjectsContext beginUpload cancel", () => {
     await waitFor(() =>
       expect(mockDeleteUserFile).toHaveBeenCalledWith("user-sent")
     );
+    expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
+      tempId
+    );
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it("unlinks a cancelled project upload before it deletes it", async () => {
+    let finishUpload: (value: unknown) => void = () => {};
+    let uploadOptions: UploadFilesOptions = {};
+    mockUploadFiles.mockImplementation(
+      (
+        _files: File[],
+        _projectId: number | null,
+        _tempIds: string[],
+        _incognito: string | null,
+        options: UploadFilesOptions
+      ) =>
+        new Promise((resolve) => {
+          uploadOptions = options;
+          finishUpload = resolve;
+        })
+    );
+    const calls: string[] = [];
+    mockUnlinkFileFromProject.mockReset();
+    mockUnlinkFileFromProject.mockImplementation(async () => {
+      calls.push("unlink");
+    });
+    mockDeleteUserFile.mockReset();
+    mockDeleteUserFile.mockImplementation(async () => {
+      calls.push("delete");
+      return { has_associations: false };
+    });
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [new File(["a"], "sent.txt", { type: "text/plain" })],
+        7
+      );
+    });
+    const tempId = optimisticFiles[0]?.temp_id ?? "";
+    act(() => uploadOptions.onProgress?.(1));
+    act(() => cancelUpload(tempId));
+
+    expect(uploadOptions.signal?.aborted).toBe(false);
+    await act(async () => {
+      finishUpload({
+        user_files: [
+          {
+            ...optimisticFiles[0],
+            id: "user-sent",
+            temp_id: tempId,
+            status: UserFileStatus.PROCESSING,
+          },
+        ],
+        rejected_files: [],
+      });
+    });
+
+    await waitFor(() =>
+      expect(mockDeleteUserFile).toHaveBeenCalledWith("user-sent")
+    );
+    expect(mockUnlinkFileFromProject).toHaveBeenCalledWith(7, "user-sent");
+    expect(calls).toEqual(["unlink", "delete"]);
     expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
       tempId
     );
