@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.tools import ToolProgress
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session, delete_chat_session
@@ -441,6 +442,33 @@ def test_the_end_reports_a_decision_that_the_watcher_did_not_read(
 
     assert held.result() == ApprovalDecision.APPROVED
     assert reports.outcomes() == {str(held.approval_id): "approved"}
+
+
+def test_the_end_of_a_call_ends_the_announcement_wait_of_its_watcher(
+    chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The call's result does not wait for the watcher's poll timeout."""
+    waiting = threading.Event()
+    # Each wait's BLPOP result: None for a wait that timed out.
+    results: list[tuple[bytes, bytes] | None] = []
+
+    def recording_pop(
+        session_id: UUID, timeout_s: int, cache: CacheBackend
+    ) -> UUID | None:
+        waiting.set()
+        results.append(
+            cache.blpop([approval_cache.announce_key(session_id)], timeout_s)
+        )
+        return None
+
+    monkeypatch.setattr(approval_cache, "pop_announcement", recording_pop)
+    _command_id, _reports, approvals = _command(chat)
+    assert waiting.wait(_WAIT_S)
+
+    approvals.end(cancelled=False)
+
+    assert approvals._thread is not None and not approvals._thread.is_alive()
+    assert any(result is not None for result in results)
 
 
 def test_a_call_that_ends_leaves_the_requests_to_another_call_of_the_command(

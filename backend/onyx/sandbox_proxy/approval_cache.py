@@ -322,6 +322,12 @@ def drop_command_grants(command_id: UUID, cache: CacheBackend) -> None:
         cache.delete_prefix(_command_grant_prefix(command_id))
 
 
+def end_announcement_wait(session_id: UUID, cache: CacheBackend) -> None:
+    """Return a `pop_announcement` that waits now, or the next one, at once."""
+    cache.rpush(announce_key(session_id), "end")
+    cache.expire(announce_key(session_id), ANNOUNCE_TTL_S)
+
+
 def pop_announcement(
     session_id: UUID, timeout_s: int, cache: CacheBackend
 ) -> UUID | None:

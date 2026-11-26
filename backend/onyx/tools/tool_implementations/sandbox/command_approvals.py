@@ -48,9 +48,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# The watcher blocks this long on the announce list, then renews the
-# foreground mark and reads the command's waiting requests and the decisions
-# of the cards it shows.
+# The watcher blocks this long on the announce list (`end` ends the wait),
+# then renews the foreground mark and reads the command's waiting requests and
+# the decisions of the cards it shows.
 _POLL_SECONDS = 1
 _JOIN_SECONDS = 5.0
 
@@ -167,9 +167,16 @@ class CommandApprovals:
         """The call returned. When no other call waits on the command, it
         leaves the foreground and its requests that wait end."""
         self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=_JOIN_SECONDS)
         command_id = self._command_id
+        if self._thread is not None:
+            if command_id is not None:
+                try:
+                    # The watcher's wait for an announcement ends now, not at
+                    # its timeout.
+                    approval_cache.end_announcement_wait(command_id, self._cache())
+                except Exception:
+                    logger.exception("command_watch_wake_failed command=%s", command_id)
+            self._thread.join(timeout=_JOIN_SECONDS)
         if command_id is None:
             return
         decision = ApprovalDecision.REJECTED if cancelled else ApprovalDecision.EXPIRED
