@@ -12777,6 +12777,9 @@
               "patching": {
                 "status": "{count, plural, =0 {جارٍ تصحيح الملفات…} one {جارٍ تصحيح ملف واحد…} two {جارٍ تصحيح ملفين…} few {جارٍ تصحيح # ملفات…} many {جارٍ تصحيح # ملفًا…} other {جارٍ تصحيح # ملف…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {حذف الملف} other {ملف فارغ}}"
             }
           },
           "stopped": {
@@ -15060,6 +15063,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, one {# إضافة} other {# إضافات}}، {removed, plural, one {# حذف} other {# عمليات حذف}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# سطر دون تغيير} other {# أسطر دون تغيير}}"
         },

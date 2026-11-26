@@ -12777,6 +12777,9 @@
               "patching": {
                 "status": "{count, plural, =0 {Aplicando patch aos arquivos…} one {Aplicando patch a # arquivo…} other {Aplicando patch a # arquivos…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {Excluir arquivo} other {Arquivo vazio}}"
             }
           },
           "stopped": {
@@ -15060,6 +15063,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, one {# adição} other {# adições}}, {removed, plural, one {# exclusão} other {# exclusões}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# linha inalterada} other {# linhas inalteradas}}"
         },

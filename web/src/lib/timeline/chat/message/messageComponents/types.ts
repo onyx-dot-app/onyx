@@ -51,6 +51,8 @@ export interface RendererResult {
    * header's text; a live header that changes often keeps one key.
    */
   statusKey?: string;
+  /** Shown at the end of the step's header, such as a file edit's line counts. */
+  headerAccessory?: React.ReactNode;
   /** The step's body; `null` while it has nothing to show, so the step
    *  cannot open onto an empty body. */
   content: JSX.Element | null;

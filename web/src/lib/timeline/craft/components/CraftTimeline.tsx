@@ -6,6 +6,7 @@ import { RunCard } from "@/lib/timeline/components/RunCard";
 import { RunStep } from "@/lib/timeline/components/RunStep";
 import TaskBody from "@/lib/timeline/craft/components/tool-cards/TaskBody";
 import SkillBadge from "@/lib/timeline/craft/components/tool-cards/SkillBadge";
+import { TextDiffStat } from "@/lib/timeline/components/bodies/DiffStat";
 import {
   ThinkingBody,
   splitThinkingTitle,
@@ -91,9 +92,17 @@ function CraftTimelineStep({ entry }: CraftTimelineStepProps) {
           : undefined
       }
       headerAccessory={
-        toolCall.skillName && toolCall.toolName !== "skill" ? (
-          <SkillBadge name={toolCall.skillName} />
-        ) : undefined
+        <>
+          {toolCall.kind === "edit" && toolCall.status !== "failed" && (
+            <TextDiffStat
+              oldText={toolCall.oldContent ?? ""}
+              newText={toolCall.newContent ?? ""}
+            />
+          )}
+          {toolCall.skillName && toolCall.toolName !== "skill" && (
+            <SkillBadge name={toolCall.skillName} />
+          )}
+        </>
       }
       body={hasToolCallBody(toolCall) ? renderToolCallBody(toolCall) : null}
     />

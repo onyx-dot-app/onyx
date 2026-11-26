@@ -41,7 +41,10 @@ export function TimelineStepComposer({
             titleKey={result.statusKey}
             defaultExpanded={result.isExpanded}
             body={result.content}
-            headerAccessory={index === 0 ? headerAccessory : undefined}
+            headerAccessory={
+              result.headerAccessory ??
+              (index === 0 ? headerAccessory : undefined)
+            }
           />
         )
       )}

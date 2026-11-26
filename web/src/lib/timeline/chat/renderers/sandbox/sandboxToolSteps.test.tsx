@@ -429,14 +429,65 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     expect(screen.getAllByText("old.py → moved.py")).toHaveLength(2);
     expect(screen.getAllByText("print('hi')")).toHaveLength(2);
     expect(screen.getAllByText("a = 2")).toHaveLength(2);
-    // The applied patch lists the files it changed, with their change.
-    expect(
-      screen.getByText("A new.py M old.py → moved.py")
-    ).toBeInTheDocument();
+    // The diffs name the changed files, so no file list repeats them.
+    expect(view.container).not.toHaveTextContent(/A new\.py/);
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(
       screen.getByText("Failed to find expected lines in old.py")
     ).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a patch shows its line counts in the header, and a failed one does not", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const rejected = at({ turn_index: 1, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [
+          { path: "new.py", change: "add", move_path: null },
+          { path: "old.py", change: "update", move_path: "moved.py" },
+        ],
+        error: null,
+      }),
+      applied(sectionEnd),
+      rejected({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
+      rejected({
+        type: PacketType.APPLY_PATCH_END,
+        files: [],
+        error: "Failed to find expected lines in old.py",
+      }),
+      rejected(sectionEnd),
+      ...answer(2),
+    ])
+  );
+  try {
+    await expandTimeline();
+    // The patch adds two lines and removes one. Only the applied step's
+    // header shows the total; each file's panel shows its own counts, in
+    // both steps.
+    expect(
+      screen.getAllByRole("group", { name: "2 additions, 1 deletion" })
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByRole("group", { name: "1 addition, 1 deletion" })
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("group", { name: "1 addition, 0 deletions" })
+    ).toHaveLength(2);
+    expect(screen.getAllByText("print('hi')").length).toBeGreaterThan(0);
   } finally {
     view.unmount();
   }
@@ -623,7 +674,7 @@ test("sandbox text is isolated in markup, and paths show without bidi controls",
     }
     await openRun();
     // The patch's file header and the published file's chip.
-    expect(screen.getByText("ab.py", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("ab.py", { selector: "p" })).toBeInTheDocument();
     expect(screen.getByText("notes")).toBeInTheDocument();
     // The patch and the error keep the sandbox's text, inside an isolate.
     expect(screen.getByText("x").closest("[dir]")).toHaveAttribute(
@@ -859,7 +910,7 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
     expect(screen.getByText("3 passed")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/Exit code/);
     expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
-    expect(screen.getByText("D gone.py")).toBeInTheDocument();
+    expect(view.container).toHaveTextContent("a = 2");
     expect(view.container).not.toHaveTextContent(/await run/);
   } finally {
     view.unmount();
@@ -1240,6 +1291,91 @@ test("input that ends the command with a failure names it in a red title", async
       "error"
     );
     expect(view.container).not.toHaveTextContent("Sent input to session 4");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a deleted file's panel names the operation", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "*** Begin Patch\n*** Delete File: gone.py\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [{ path: "gone.py", change: "delete", move_path: null }],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("gone.py")).toBeInTheDocument();
+    expect(screen.getByText("Delete file")).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent(/D gone\.py/);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("an empty new file's panel says it is empty", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "*** Begin Patch\n*** Add File: empty.txt\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [{ path: "empty.txt", change: "add", move_path: null }],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("empty.txt")).toBeInTheDocument();
+    expect(screen.getByText("Empty file")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("files the preview did not read show in the changed-files list", async () => {
+  const applied = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch:
+          "*** Begin Patch\n*** Add File: a.txt\n+one\n  *** Add File: b.txt\n+two\n*** End Patch",
+        tool_name: "apply_patch",
+      }),
+      applied({
+        type: PacketType.APPLY_PATCH_END,
+        files: [
+          { path: "a.txt", change: "add", move_path: null },
+          { path: "b.txt", change: "add", move_path: null },
+        ],
+        error: null,
+      }),
+      applied(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(view.container).toHaveTextContent("A b.txt");
   } finally {
     view.unmount();
   }

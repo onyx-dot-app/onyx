@@ -56,7 +56,8 @@
   per agent, and users cannot pick or force them. Commands run in the user's
   private VM, in the chat's session directory, whose files stay for later
   turns. The user sees each command and its output as it streams, and the
-  files that each patch, edit or write changed, on the same patch card. While
+  files that each patch, edit or write changed, on the same patch card: one
+  diff per file, with `+N -M` line counts in the step header. While
   the model writes a `write` or `edit` call, the card names the file; an
   `apply_patch` card names the files and counts them. With
   `library_create_library_file` the model gives files from the VM to the user

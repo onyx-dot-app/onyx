@@ -12777,6 +12777,9 @@
               "patching": {
                 "status": "{count, plural, =0 {파일 패치 중…} one {파일 #개 패치 중…} other {파일 #개 패치 중…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {파일 삭제} other {빈 파일}}"
             }
           },
           "stopped": {
@@ -15060,6 +15063,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, other {#줄 추가}}, {removed, plural, other {#줄 삭제}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {변경되지 않은 줄 #개} other {변경되지 않은 줄 #개}}"
         },
