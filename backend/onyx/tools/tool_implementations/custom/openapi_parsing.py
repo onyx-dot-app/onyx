@@ -84,6 +84,12 @@ class MethodSpec(BaseModel):
     method: str
     spec: dict[str, Any]
 
+    @property
+    def display_name(self) -> str:
+        """The name an admin sees: the operation summary, or the original
+        operationId."""
+        return self.spec.get("summary") or self.raw_name
+
     def get_request_body_schema(self) -> dict[str, Any]:
         content = self.spec.get("requestBody", {}).get("content", {})
         if "application/json" in content:

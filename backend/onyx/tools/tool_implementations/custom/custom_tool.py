@@ -305,9 +305,7 @@ class CustomTool(ApiTool):
             integration_id=integration_id,
             action_key=action_key,
             name=custom_tool_name(integration_id, method_spec.raw_name),
-            # The action's name, as the admin sees it: the operation summary, or
-            # the original operationId (e.g. "ServiceNow.GetIncident").
-            display_name=method_spec.spec.get("summary") or method_spec.raw_name,
+            display_name=method_spec.display_name,
             description=method_spec.summary,
             parameters=method_spec.to_tool_definition().parameters,
             base_url=base_url,
