@@ -8,11 +8,13 @@ run waits for it, so no response continues.
 """
 
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
+from onyx.chat.tool_approvals import action_now_blocked
 from onyx.db import action_approval
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import ActionApproval
@@ -39,16 +41,42 @@ def _response(
     )
 
 
+def _now_blocked(
+    db_session: Session, row: ActionApproval, chat_session_id: UUID, user_id: UUID
+) -> bool:
+    """True when the current policies block one of the request's actions,
+    as the proxy's final check finds."""
+    return any(
+        action_now_blocked(
+            db_session,
+            integration_id=row.integration_id,
+            action_id=action["action_type"],
+            user_id=user_id,
+            chat_session_id=chat_session_id,
+        )
+        for action in row.actions
+        if isinstance(action.get("action_type"), str)
+    )
+
+
 def decide_command_approval(
-    db_session: Session, row: ActionApproval, choice: ApprovalChoice
+    db_session: Session, row: ActionApproval, choice: ApprovalChoice, user_id: UUID
 ) -> ApprovalDecisionResponse:
     """Approve the request once or for the rest of its command, or reject
     it. Approving for the command also approves the command's other waiting
-    requests that the grant covers. Repeating a saved decision returns it;
-    a different one, or a request that no longer waits, is a conflict."""
+    requests that the grant covers. Approving a request that the current
+    policies block saves a rejection by the policy. Repeating a saved
+    decision returns it; a different one, or a request that no longer waits,
+    is a conflict."""
     command_id = row.command_id
-    if row.chat_session_id is None or command_id is None:
+    chat_session_id = row.chat_session_id
+    if chat_session_id is None or command_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
+    blocked = choice != ApprovalChoice.REJECT and _now_blocked(
+        db_session, row, chat_session_id, user_id
+    )
+    if blocked:
+        choice = ApprovalChoice.REJECT
     if choice == ApprovalChoice.APPROVE_SESSION:
         # Clients that know no command scope offer a chat approval; the proxy
         # keeps no chat grants, so it is a single approval.
@@ -67,7 +95,11 @@ def decide_command_approval(
         else ApprovalDecision.APPROVED
     )
     decided_via = (
-        ApprovalDecidedVia.COMMAND_GRANT if for_command else ApprovalDecidedVia.USER
+        ApprovalDecidedVia.POLICY
+        if blocked
+        else ApprovalDecidedVia.COMMAND_GRANT
+        if for_command
+        else ApprovalDecidedVia.USER
     )
     cutoff = datetime.now(timezone.utc) - timedelta(
         seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
@@ -114,7 +146,7 @@ def decide_command_approval(
     if for_command and integration_id is not None and cache is not None:
         for other in action_approval.list_pending_command_action_approvals(
             db_session,
-            chat_session_id=row.chat_session_id,
+            chat_session_id=chat_session_id,
             command_id=command_id,
             created_after=cutoff,
         ):

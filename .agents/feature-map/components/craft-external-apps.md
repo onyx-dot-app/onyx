@@ -386,7 +386,10 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     scope), `approve_command` (`decided_via` COMMAND_GRANT, a cache set
     of `integration:action` per command that the gate checks before it holds,
     which also approves the command's other waiting rows that the command's
-    grants together cover), or reject. The decision commits its own row, then
+    grants together cover), or reject. An approval of a request that the
+    current policies block (`chat/tool_approvals.py:action_now_blocked`) saves
+    a rejection by the policy (`decided_via` POLICY) and grants nothing.
+    The decision commits its own row, then
     saves the grant, then scans the waiting rows: a request that misses the
     grant committed its row before that check, and two decisions never lock
     each other's rows. A grant applies only in the foreground, never to an

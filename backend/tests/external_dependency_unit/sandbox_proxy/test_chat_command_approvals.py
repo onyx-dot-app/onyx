@@ -25,15 +25,24 @@ from sqlalchemy.orm import Session
 from onyx.agents.tools import ToolProgress
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.postgres_backend import PostgresCacheBackend
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session, delete_chat_session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
+    IntegrationActionPolicyValue,
     IntegrationKind,
+    PluginInstallationPolicy,
 )
-from onyx.db.models import ActionApproval, CacheStore, ChatSession, User
+from onyx.db.models import (
+    ActionApproval,
+    CacheStore,
+    ChatSession,
+    Integration,
+    User,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
@@ -67,7 +76,11 @@ from tests.external_dependency_unit.craft.db_helpers import (
     app_integration_id,
     make_external_app,
 )
-from tests.external_dependency_unit.integration_helpers import delete_integrations
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    give_access,
+    set_policy,
+)
 
 _WAIT_S = 10.0
 
@@ -88,9 +101,17 @@ def chat(
 ) -> Generator[_Chat, None, None]:
     user = create_test_user(db_session, "chat_command_approvals")
     app = make_external_app(db_session, auth_template={})
-    db_session.commit()
     integration_id = app_integration_id(db_session, app)
-    chat_session = create_chat_session(db_session, "command", user.id, None)
+    # The default agent uses each integration the user runs.
+    integration = db_session.get(Integration, integration_id)
+    assert integration is not None
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    db_session.commit()
+    chat_session = create_chat_session(
+        db_session, "command", user.id, DEFAULT_PERSONA_ID
+    )
     # Every call that a test begins ends here, also when the test fails.
     started: list[CommandApprovals] = []
     begin = CommandApprovals.begin
@@ -560,6 +581,48 @@ def test_a_command_grant_for_a_decided_request_grants_nothing(
         with pytest.raises(OnyxError) as conflict:
             _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_COMMAND)
         assert conflict.value.error_code is OnyxErrorCode.CONFLICT
+        assert not approval_cache.command_grants_cover(
+            command_id, chat.integration_id, ["issues.create"], cache
+        )
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
+
+
+@pytest.mark.parametrize(
+    "choice", [ApprovalChoice.APPROVE_ONCE, ApprovalChoice.APPROVE_COMMAND]
+)
+def test_approving_a_request_that_the_policies_now_block_saves_a_rejection(
+    db_session: Session, chat: _Chat, choice: ApprovalChoice
+) -> None:
+    """The proxy refuses a request whose action an admin blocked while its
+    card was open, so its approval is a rejection by the policy and grants
+    nothing."""
+    command_id = uuid4()
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, command_id), _matched(chat.integration_id), {}
+    )
+    set_policy(
+        db_session,
+        chat.integration_id,
+        "issues.create",
+        IntegrationActionPolicyValue.BLOCKED,
+    )
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    try:
+        response = decide_approval(
+            approval_id,
+            ChatApprovalDecisionRequest(decision=choice),
+            request=MagicMock(),
+            user=chat.user,
+            db_session=db_session,
+        )
+        assert (response.decision, response.decided_via) == (
+            ApprovalDecision.REJECTED,
+            ApprovalDecidedVia.POLICY,
+        )
+        db_session.expire_all()
+        row = db_session.get(ActionApproval, approval_id)
+        assert row is not None and row.decision == ApprovalDecision.REJECTED
         assert not approval_cache.command_grants_cover(
             command_id, chat.integration_id, ["issues.create"], cache
         )

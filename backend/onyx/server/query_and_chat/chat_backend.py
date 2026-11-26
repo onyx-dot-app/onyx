@@ -2202,7 +2202,9 @@ def decide_approval(
         )
         if command_approval is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
-        return decide_command_approval(db_session, command_approval, body.decision)
+        return decide_command_approval(
+            db_session, command_approval, body.decision, user.id
+        )
     if body.decision == ApprovalChoice.APPROVE_COMMAND:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "A tool call has no command to approve for"
