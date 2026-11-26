@@ -63,14 +63,14 @@ def parse_openapi_document(document: str) -> dict[str, Any]:
             parsed = yaml.load(document, Loader=_OpenApiYamlLoader)  # noqa: S506
         except yaml.YAMLError as e:
             raise ValueError(f"The OpenAPI document is not JSON or YAML: {e}") from e
+        try:
+            json.dumps(parsed)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"The OpenAPI document has a value that is not JSON: {e}"
+            ) from e
     if not isinstance(parsed, dict):
         raise ValueError("The OpenAPI document is not an object.")
-    try:
-        json.dumps(parsed)
-    except (TypeError, ValueError) as e:
-        raise ValueError(
-            f"The OpenAPI document has a value that is not JSON: {e}"
-        ) from e
     return parsed
 
 
