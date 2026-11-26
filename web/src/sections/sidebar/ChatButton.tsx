@@ -577,6 +577,8 @@ const ChatButton = memo(
         </div>
         <Dropdown.Data
           label={t("chatButton.options.label")}
+          // The default 15rem cap hides "Delete" below a scroll.
+          maxHeight="none"
           items={menuItems}
           views={{ move: moveView }}
         />
