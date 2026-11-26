@@ -741,28 +741,3 @@ class TestRetrieveAdjacentChunks:
         assert censor.call_args.args[1] is user
         assert [chunk.chunk_id for chunk in above] == [1, 2]
         assert [chunk.chunk_id for chunk in below] == [5]
-
-
-def test_expansion_without_llm_fallback_raises_when_the_decision_call_fails() -> None:
-    chunk = MagicMock(semantic_identifier="Doc", content="text")
-    section = MagicMock(center_chunk=chunk, combined_content="text", chunks=[chunk])
-    with (
-        patch.object(search_utils, "_retrieve_adjacent_chunks", return_value=([], [])),
-        patch.object(
-            search_utils,
-            "decide_context_expansion",
-            side_effect=RuntimeError("decision model down"),
-        ),
-        patch.object(search_utils, "classify_section_relevance") as classify,
-        pytest.raises(RuntimeError),
-    ):
-        search_utils.expand_section_with_context(
-            section=section,
-            user_query="query",
-            llm=MagicMock(),
-            document_index=MagicMock(),
-            user=MagicMock(),
-            decision_client=MagicMock(),
-            llm_fallback=False,
-        )
-    classify.assert_not_called()

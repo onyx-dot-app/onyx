@@ -376,7 +376,7 @@
       "decisionModel": {
         "title": "판단 모델",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "내부 검색은 이 모델로 결과의 순위를 매기고 추가할 컨텍스트의 양을 정합니다. 채팅 환경설정에서도 설정할 수 있습니다.",
+        "description": "아직 사용되지 않습니다. 곧 제공됩니다.",
         "clear": "해제",
         "saveFailed": "판단 모델을 업데이트하지 못했습니다"
       },
@@ -1348,9 +1348,8 @@
         "title": "채팅 이름 지정 모델"
       },
       "searchDecisionModel": {
-        "description": "검색된 문서를 선택하고 추가할 컨텍스트의 양을 결정합니다. 판단 모델은 한 번의 호출로 순위를 매깁니다. 언어 모델은 이전처럼 선택합니다.",
-        "title": "검색 판단 모델",
-        "decisionSection": "판단 모델"
+        "description": "검색된 문서를 선택하고 추가할 컨텍스트의 양을 결정합니다.",
+        "title": "검색 판단 모델"
       },
       "taskModels": {
         "loadFailed": "작업 모델을 불러오지 못했습니다",

@@ -376,7 +376,7 @@
       "decisionModel": {
         "title": "Entscheidungsmodell",
         "openAiDecisionsModelName": "OpenAI-Entscheidungen (GPT-6 Luna)",
-        "description": "Die interne Suche nutzt dieses Modell, um Ergebnisse zu ordnen und den Umfang des Kontexts festzulegen. Sie können es auch in den Chat-Einstellungen festlegen.",
+        "description": "Wird noch nicht verwendet. Demnächst verfügbar.",
         "clear": "Löschen",
         "saveFailed": "Entscheidungsmodell konnte nicht aktualisiert werden"
       },
@@ -1348,9 +1348,8 @@
         "title": "Modell für Chat-Benennung"
       },
       "searchDecisionModel": {
-        "description": "Wählt gefundene Dokumente aus und entscheidet, wie viel Kontext hinzukommt. Ein Entscheidungsmodell ordnet sie in einem Aufruf. Ein Sprachmodell wählt sie wie bisher aus.",
-        "title": "Such-Entscheidungsmodell",
-        "decisionSection": "Entscheidungsmodelle"
+        "description": "Wählt abgerufene Dokumente aus und entscheidet, wie viel Kontext hinzugefügt wird.",
+        "title": "Such-Entscheidungsmodell"
       },
       "taskModels": {
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",

@@ -970,8 +970,8 @@ export default function LanguageModelsPage() {
             >
               <Card border="solid" rounding={4}>
                 <Section alignItems="stretch">
-                  <DecisionModelSetting />
                   <SearchDecisionModelSetting />
+                  <DecisionModelSetting />
                 </Section>
               </Card>
             </Disabled>

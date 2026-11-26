@@ -146,7 +146,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Section (`InferenceSection`) | Adjacent chunks from one document, joined again. The unit the LLM reads. See [[internal-search]]. |
 | Lane | One parallel retrieval job inside `SearchTool.search`. Lanes fuse with weighted RRF. See [[internal-search]]. |
 | Expansion | Two meanings. **Query expansion** rewrites one query into several. **Section expansion** pulls the chunks around a selected section. |
-| Selection | The stage that picks which retrieved sections to expand: one LLM call, or a decision-model rerank when a decision model is set ([[internal-search#decision-path-gate]]). Onyx uses it instead of a cross-encoder. |
+| Selection | The stage that picks which retrieved sections to expand: one LLM call. Onyx uses it instead of a cross-encoder. |
 | Content provider | The web-search backend that fetches page content for `open_url`. It is separate from the search provider that returns result lists. See [[web-search]]. |
 
 ## Ingestion vocabulary

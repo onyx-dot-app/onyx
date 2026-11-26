@@ -18,10 +18,8 @@ from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.factory import (
     _build_provider_extra_headers,
-    get_decision_client,
     get_default_llm,
     get_default_utility_llm,
     get_llm,
@@ -38,7 +36,6 @@ from onyx.llm.well_known_providers.constants import (
     LM_STUDIO_API_KEY_CONFIG_KEY,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
-from onyx.utils.sensitive import SensitiveValue
 
 
 def test_build_provider_extra_headers_adds_bearer_for_lm_studio_api_key() -> None:
@@ -193,50 +190,6 @@ def test_search_selection_unset_does_not_use_naming_designation() -> None:
     )
     build.assert_not_called()
     cost.assert_not_called()
-
-
-def test_decision_client_unset_has_no_fallback() -> None:
-    with (
-        patch("onyx.llm.factory.get_session_with_current_tenant") as sessions,
-        patch("onyx.llm.factory.fetch_role_model", return_value=None) as fetch,
-        patch("onyx.llm.factory.get_default_llm") as fallback,
-        patch("onyx.llm.factory.DecisionClient") as client,
-    ):
-        assert get_decision_client() is None
-    fetch.assert_called_once_with(
-        sessions.return_value.__enter__.return_value, ModelRole.DECISION
-    )
-    fallback.assert_not_called()
-    client.assert_not_called()
-
-
-def test_decision_client_uses_selected_provider_and_model() -> None:
-    model = ModelConfiguration(id=22, name="typesafe/jev-latest", is_visible=False)
-    LLMProviderModel(
-        id=12,
-        provider="openrouter",
-        api_key=SensitiveValue(
-            encrypted_bytes=b"test-key", decrypt_fn=lambda value: value.decode()
-        ),
-        api_base="https://openrouter.ai/api/v1",
-        model_configurations=[model],
-    )
-    with (
-        patch("onyx.llm.factory.get_session_with_current_tenant"),
-        patch("onyx.llm.factory.fetch_role_model", return_value=model),
-        patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as cost,
-        patch(
-            "onyx.llm.decisions.factory.DecisionClient", wraps=DecisionClient
-        ) as build,
-    ):
-        client = get_decision_client(additional_headers={"X-Test": "value"})
-    assert client is not None
-    assert client.model == "typesafe/jev-latest"
-    assert client.url == "https://openrouter.ai/api/alpha/decisions"
-    assert build.call_args.kwargs["api_key"] == "test-key"
-    assert build.call_args.kwargs["extra_headers"]["X-Test"] == "value"
-    assert build.call_args.kwargs["extra_headers"]["HTTP-Referer"] == "https://onyx.app"
-    cost.assert_called_once()
 
 
 @pytest.mark.parametrize(

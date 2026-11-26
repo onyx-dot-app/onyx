@@ -24,7 +24,7 @@ restricting a provider to groups needs EE.
   saved. The page runs this test, not the save API.
 - **An admin** sets up decision providers at Admin > Decision Models and may
   select one decision model. It starts unset and never inherits the chat model.
-  When it is set, internal search ranks and expands sections with it.
+  No product feature uses it yet.
 - **A user** picks a model per chat, or keeps the agent's model, or the
   workspace default. Tokens and, where the model supports it, reasoning stream
   in. A short network failure before the first token retries without notice.
@@ -109,10 +109,9 @@ the search settings ([[document-index]]).
 | `get_default_utility_llm` (CHAT_NAMING, SEARCH_SELECTION) | returns `None`; caller uses its own model |
 | `get_search_selection_llm` | returns the caller's `fallback`, never the naming model |
 | `get_contextual_rag_llm_for_search_settings` | not a role; returns `None` when neither these nor the PRESENT search settings name a model |
-| `get_decision_client` (DECISION) | returns `None` |
 
-`get_default_utility_llm` and `get_decision_client` run the managed-key cost
-check themselves and skip the user access check. An admin designation applies
+`get_default_utility_llm` runs the managed-key cost check itself and skips the
+user access check. An admin designation applies
 to every user.
 
 **Setting a role.** `db/llm.py:set_role_model` upserts the role's row after
@@ -177,10 +176,9 @@ providers (the `DecisionProvider` enum in `llm/decisions/models.py`) save
 through `db/llm.py:upsert_decision_provider`. Of the flow rows, it adds or
 removes only DECISION rows. It keeps chat settings, defaults, visibility and
 access, and adds new models hidden. The selection is the DECISION default row.
-It is opt-in and never chosen by discovery or provider creation. Internal
-search is the product caller of `get_decision_client`
-([[internal-search#decision-path-gate]]); the admin and Zoom test endpoints
-build their own clients.
+It is opt-in and never chosen by discovery or provider creation. No product
+feature uses the selected decision model yet. Only the admin and Zoom test
+endpoints build decision clients, to check credentials.
 
 ---
 
