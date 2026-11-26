@@ -57,6 +57,9 @@ type Config struct {
 	// Browser serves BrowserStart and BrowserStop. Nil: they return
 	// UNIMPLEMENTED.
 	Browser *browser.Browser
+	// BrowserRelay is true when vsock port browser.RelayPort relays to the
+	// browser service.
+	BrowserRelay bool
 	// Reclaimer drops the guest page cache when the VM is idle. Nil: off.
 	Reclaimer *Reclaimer
 	// Files serves the file calls and session saves. Nil means a store

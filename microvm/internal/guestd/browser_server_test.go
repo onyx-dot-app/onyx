@@ -101,3 +101,42 @@ func TestBrowserStartProfileSession(t *testing.T) {
 		t.Fatalf("chrome does not use the session profile: %v", err)
 	}
 }
+
+// service_protocol tells a client that port 3011 serves the service. It is
+// 0 when the daemon has no service or no relay.
+func TestBrowserStartServiceProtocol(t *testing.T) {
+	for name, tc := range map[string]struct {
+		service bool
+		relay   bool
+		want    uint32
+	}{
+		"service and relay": {service: true, relay: true, want: browser.ServiceProtocol},
+		"no relay":          {service: true},
+		"no service":        {relay: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fs, err := files.New(files.Config{SessionsRoot: filepath.Join(t.TempDir(), "sessions")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg := browser.Config{Binary: browsertest.Binary(t), Isolator: execs.ProcessGroups{}, StartTimeout: 10 * time.Second}
+			if tc.service {
+				dir, err := os.MkdirTemp("", "ob")
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = os.RemoveAll(dir) })
+				cfg.ServiceScript, cfg.Node, cfg.SocketDir = browsertest.ServiceScript, browsertest.Binary(t), filepath.Join(dir, "run")
+			}
+			b := browser.New(cfg)
+			t.Cleanup(func() { _, _ = b.Stop() })
+			h := newHarness(t, execs.Config{}, Config{Browser: b, BrowserRelay: tc.relay, Files: fs,
+				BaseEnv: map[string]string{browsertest.EnvMode: browsertest.ModeServe}})
+			c := h.initialized()
+			resp, err := c.BrowserStart(keyed(context.Background()), &pb.BrowserStartRequest{ProfileSessionId: "sbx-1"})
+			if err != nil || resp.GetServiceProtocol() != tc.want {
+				t.Fatalf("service protocol %d, want %d (err %v)", resp.GetServiceProtocol(), tc.want, err)
+			}
+		})
+	}
+}

@@ -47,8 +47,8 @@ func checkBrowserOutlivesCommands(ctx context.Context, t *testing.T, c pb.Sandbo
 	t.Helper()
 	const profileSession = "0b7c6f9e-4a1d-4d2b-9a57-3f1e2c8d9a10"
 	req := &pb.BrowserStartRequest{ProfileSessionId: profileSession}
-	if _, err := c.BrowserStart(ctx, req); err != nil {
-		t.Fatalf("browser start: %v", err)
+	if resp, err := c.BrowserStart(ctx, req); err != nil || resp.GetServiceProtocol() != browser.ServiceProtocol {
+		t.Fatalf("browser start: %v %v", resp, err)
 	}
 	profile, err := run(ctx, c, &pb.Command{Argv: []string{"head", "-n1", "/home/onyx/workspaces/" + profileSession + "/chrome/DevToolsActivePort"}})
 	port, perr := strconv.Atoi(strings.TrimSpace(profile.stdout))

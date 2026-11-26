@@ -256,7 +256,7 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	base := baseEnv(os.Environ(), ident)
 	srv, err := guestd.NewServer(guestd.Config{
 		Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Managed: managed, Browser: br,
-		Reclaimer: reclaimer, Files: fstore, Log: log,
+		BrowserRelay: br != nil && listen == "", Reclaimer: reclaimer, Files: fstore, Log: log,
 	}, sys, m)
 	if err != nil {
 		return err

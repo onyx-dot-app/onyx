@@ -875,6 +875,10 @@ message BrowserStartResponse {
   // Was cdp_port and started; do not reuse.
   reserved 1, 2;
   reserved "cdp_port", "started";
+  // Version of the browser service protocol that vsock port 3011 relays
+  // (1). 0: no service or no relay, for example an older daemon. A client
+  // must not dial port 3011 when it is 0.
+  uint32 service_protocol = 3;
 }
 
 message BrowserStopRequest {}

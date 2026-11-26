@@ -39,6 +39,10 @@ const DefaultServiceScript = "/opt/onyx/browser-service/main.ts"
 // socket.
 const RelayPort = 3011
 
+// ServiceProtocol is the version of the service protocol that RelayPort
+// relays: BrowserStartResponse.service_protocol.
+const ServiceProtocol = 1
+
 // socketName is the service socket in Config.SocketDir.
 const socketName = "service.sock"
 
@@ -130,6 +134,11 @@ func New(cfg Config) *Browser {
 		cfg.SocketDir = defaultSocketDir
 	}
 	return &Browser{cfg: cfg, client: &http.Client{Timeout: probeTimeout}}
+}
+
+// HasService reports whether Start also starts the service.
+func (b *Browser) HasService() bool {
+	return b.cfg.ServiceScript != ""
 }
 
 // SocketPath is the service socket.
