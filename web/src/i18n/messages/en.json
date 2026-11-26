@@ -12773,6 +12773,9 @@
             },
             "noLines": {
               "label": "{change, select, delete {Delete file} other {Empty file}}"
+            },
+            "movedFrom": {
+              "label": "Moved from {path}"
             }
           },
           "stopped": {

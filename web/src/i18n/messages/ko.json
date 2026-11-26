@@ -12773,6 +12773,9 @@
             },
             "noLines": {
               "label": "{change, select, delete {파일 삭제} other {빈 파일}}"
+            },
+            "movedFrom": {
+              "label": "{path}에서 이동됨"
             }
           },
           "stopped": {

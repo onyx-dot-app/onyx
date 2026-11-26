@@ -12773,6 +12773,9 @@
             },
             "noLines": {
               "label": "{change, select, delete {ファイルを削除} other {空のファイル}}"
+            },
+            "movedFrom": {
+              "label": "{path} から移動"
             }
           },
           "stopped": {

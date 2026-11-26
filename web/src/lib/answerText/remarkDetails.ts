@@ -7,6 +7,21 @@ const DETAILS_OPEN = /^<details(\s+open)?\s*>$/i;
 // closing tag must not end an outer disclosure.
 const ANY_DETAILS_OPEN = /^<details\b[^>]*>$/i;
 const SUMMARY = /^<summary>([\s\S]*?)<\/summary>$/i;
+// A summary the stream has not closed yet
+const PARTIAL_SUMMARY = /^<summary>((?:(?!<\/summary>)[\s\S])*)$/i;
+const DETAILS_TAGS = ["<details>", "</details>", "<summary>"];
+const NO_SUMMARY: [string, string] = ["", ""];
+
+/** A details tag the stream has not finished, such as `<summ` or `</det`. */
+function isUnfinishedTag(value: string): boolean {
+  const tag = value.toLowerCase();
+  return (
+    tag.startsWith("<") &&
+    DETAILS_TAGS.some(
+      (full) => full.length > tag.length && full.startsWith(tag)
+    )
+  );
+}
 const DETAILS_CLOSE = /^<\/details>$/i;
 // Tags inside these regions are text, so a block that holds one stays whole.
 const RAW_TEXT_REGION = /<(?:pre|script|style|textarea)\b|<!--/i;
@@ -40,6 +55,24 @@ function decodeReferences(text: string): string {
 
 function htmlValue(node: MarkdownAstNode | undefined): string {
   return node?.type === "html" ? (node.value ?? "").trim() : "";
+}
+
+/**
+ * A node's text when it can hold an unfinished tag: raw HTML, or a paragraph
+ * of plain text, which a lone `<` after a blank line becomes.
+ */
+function tailValue(node: MarkdownAstNode | undefined): string {
+  const only =
+    node?.type === "paragraph" && node.children?.length === 1
+      ? node.children[0]
+      : undefined;
+  return only?.type === "text" ? (only.value ?? "").trim() : htmlValue(node);
+}
+
+/** A paragraph whose last line ends the disclosure: `**Step one**</details>`. */
+function closesInline(node: MarkdownAstNode | undefined): boolean {
+  const end = node?.type === "paragraph" ? node.children?.at(-1) : undefined;
+  return end?.type === "html" && DETAILS_CLOSE.test((end.value ?? "").trim());
 }
 
 /**
@@ -77,25 +110,53 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     if (!node) continue;
+    const last = nodes.length - 1;
+    // A streaming answer can end in a tag: it shows once the tag is whole
+    if (i === last && isUnfinishedTag(tailValue(node))) continue;
     const open = DETAILS_OPEN.exec(htmlValue(node));
-    const summary = SUMMARY.exec(htmlValue(nodes[i + 1]));
+    const next = htmlValue(nodes[i + 1]);
+    // ...or at the opener, or inside the summary
+    const complete = SUMMARY.exec(next);
+    const partial =
+      complete === null && i + 1 === last
+        ? (PARTIAL_SUMMARY.exec(next) ??
+          (isUnfinishedTag(tailValue(nodes[i + 1])) ? NO_SUMMARY : null))
+        : null;
+    const summary = complete ?? partial ?? (i === last ? NO_SUMMARY : null);
     let close = -1;
+    let inlineClose = false;
     if (open && summary) {
       let depth = 1;
       for (let j = i + 2; j < nodes.length && close < 0; j++) {
         const tag = htmlValue(nodes[j]);
         if (ANY_DETAILS_OPEN.test(tag)) depth++;
         else if (DETAILS_CLOSE.test(tag) && --depth === 0) close = j;
+        else if (closesInline(nodes[j]) && --depth === 0) {
+          close = j;
+          inlineClose = true;
+        }
       }
+      // Unclosed, it runs to the end of its container, as in HTML, so a
+      // streaming answer shows a disclosure before its closing tag arrives
+      if (close < 0) close = nodes.length;
     }
-    if (!open || !summary || close < 0) {
+    if (!open || !summary) {
       out.push(node);
       continue;
     }
-    const title = decodeReferences(
-      // Only real tags go; a comparison such as `x < 5 > 3` stays text.
-      (summary[1] ?? "").replace(/<\/?[a-z][^<>]*>/gi, "").trim()
-    );
+    // Only real tags go; a comparison such as `x < 5 > 3` stays text.
+    let rawTitle = (summary[1] ?? "").replace(/<\/?[a-z][^<>]*>/gi, "");
+    // A summary still streaming can end in a closing tag it has not finished
+    if (partial !== null) rawTitle = rawTitle.replace(/<\/?[a-z]*$/i, "");
+    const title = decodeReferences(rawTitle.trim());
+    const closing = nodes[close];
+    const body =
+      inlineClose && closing
+        ? [
+            ...nodes.slice(i + 2, close),
+            { ...closing, children: closing.children?.slice(0, -1) },
+          ]
+        : nodes.slice(i + 2, close);
     out.push({
       type: "details",
       data: {
@@ -110,7 +171,7 @@ function groupDetails(nodes: MarkdownAstNode[]): MarkdownAstNode[] {
             hChildren: [{ type: "text", value: title }],
           },
         },
-        ...groupDetails(nodes.slice(i + 2, close)),
+        ...groupDetails(body),
       ],
     });
     i = close;

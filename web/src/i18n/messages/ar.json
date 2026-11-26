@@ -12773,6 +12773,9 @@
             },
             "noLines": {
               "label": "{change, select, delete {حذف الملف} other {ملف فارغ}}"
+            },
+            "movedFrom": {
+              "label": "نُقل من {path}"
             }
           },
           "stopped": {
