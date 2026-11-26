@@ -10380,7 +10380,6 @@
             "error": "올바른 서버 URL을 입력하세요."
           },
           "probe": {
-            "checking": "서버 확인 중…",
             "public": "{count, plural, one {도구 #개} other {도구 #개}}를 찾았습니다. 이 서버는 로그인이 필요 없습니다.",
             "oauth": "이 서버는 OAuth 로그인을 사용합니다.",
             "authUnknown": "이 서버는 로그인이 필요합니다. API 키 헤더 또는 OAuth를 추가하세요.",

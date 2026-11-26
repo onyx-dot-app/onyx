@@ -10380,7 +10380,6 @@
             "error": "Geben Sie eine gültige Server-URL ein."
           },
           "probe": {
-            "checking": "Server wird geprüft …",
             "public": "{count, plural, one {# Tool gefunden} other {# Tools gefunden}}. Der Server benötigt keine Anmeldung.",
             "oauth": "Der Server verwendet die OAuth-Anmeldung.",
             "authUnknown": "Der Server benötigt eine Anmeldung. Fügen Sie einen API-Schlüssel-Header oder OAuth hinzu.",

@@ -10380,7 +10380,6 @@
             "error": "Insira uma URL de servidor válida."
           },
           "probe": {
-            "checking": "Verificando o servidor…",
             "public": "{count, plural, one {# ferramenta encontrada} other {# ferramentas encontradas}}. O servidor não exige login.",
             "oauth": "O servidor usa login com OAuth.",
             "authUnknown": "O servidor exige login. Adicione um cabeçalho de chave de API ou OAuth.",

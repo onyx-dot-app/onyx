@@ -10380,7 +10380,6 @@
             "error": "Saisissez une URL de serveur valide."
           },
           "probe": {
-            "checking": "Vérification du serveur…",
             "public": "{count, plural, one {# outil trouvé} other {# outils trouvés}}. Le serveur ne nécessite aucune connexion.",
             "oauth": "Le serveur utilise la connexion OAuth.",
             "authUnknown": "Le serveur nécessite une connexion. Ajoutez un en-tête de clé API ou OAuth.",

@@ -10380,7 +10380,6 @@
             "error": "请输入有效的服务器 URL。"
           },
           "probe": {
-            "checking": "正在检查服务器…",
             "public": "找到 {count, plural, one {# 个工具} other {# 个工具}}。该服务器无需登录。",
             "oauth": "该服务器使用 OAuth 登录。",
             "authUnknown": "该服务器需要登录。请添加 API 密钥请求头或 OAuth。",

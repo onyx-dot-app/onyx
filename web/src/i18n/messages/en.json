@@ -10380,7 +10380,6 @@
             "error": "Enter a valid server URL."
           },
           "probe": {
-            "checking": "Checking the server…",
             "public": "Found {count, plural, one {# tool} other {# tools}}. The server needs no sign-in.",
             "oauth": "The server uses OAuth sign-in.",
             "authUnknown": "The server needs sign-in. Add an API key header or OAuth.",
