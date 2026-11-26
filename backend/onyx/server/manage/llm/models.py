@@ -985,7 +985,7 @@ class VercelAIGatewayFinalModelResponse(BaseModel):
 
 # Atlas Cloud dynamic models fetch
 class AtlasCloudModelsRequest(BaseModel):
-    # The catalog is public, so api_base alone is enough to list models.
+    # Defaults to the gateway base; the catalog itself requires an API key.
     api_base: str | None = None
     api_key: str | None = None
     # Existing provider id; syncs fetched models on edit

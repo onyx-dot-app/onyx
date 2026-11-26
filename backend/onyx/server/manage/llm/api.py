@@ -3112,8 +3112,8 @@ def get_vercel_ai_gateway_available_models(
 ) -> list[VercelAIGatewayFinalModelResponse]:
     """Fetch available models from the Vercel AI Gateway catalog.
 
-    The catalog needs no credentials and carries richer metadata than LiteLLM's
-    static map, so it drives every field here.
+    The catalog carries richer metadata than LiteLLM's static map, so it drives
+    every field here. The gateway answers 401 without a valid API key.
     """
     api_base = (
         (request.api_base or VERCEL_AI_GATEWAY_DEFAULT_API_BASE).strip().rstrip("/")

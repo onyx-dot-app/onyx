@@ -198,7 +198,7 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
         LlmProviderNames.LM_STUDIO,
         LlmProviderNames.BIFROST,
         LlmProviderNames.OPENAI_COMPATIBLE,
-        # Atlas Cloud's public catalog supplies display names, so keep them
+        # Atlas Cloud's catalog supplies display names, so keep them
         # instead of re-deriving names from LiteLLM's static map.
         LlmProviderNames.ATLASCLOUD,
     }

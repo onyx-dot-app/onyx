@@ -47,8 +47,9 @@ function AtlasCloudModalInternals({
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<AtlasCloudModalValues>();
 
-  // The catalog is public, so models list before a key is entered.
-  const isFetchDisabled = !formikProps.values.api_base;
+  // The gateway's /v1/models answers 401 without a valid key, so listing needs one.
+  const isFetchDisabled =
+    !formikProps.values.api_base || !formikProps.values.api_key;
 
   const handleFetchModels = async () => {
     const { models: fetched, error } = await fetchAtlasCloudModels({

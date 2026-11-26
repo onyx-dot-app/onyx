@@ -28,7 +28,7 @@ VERCEL_AI_GATEWAY_PROVIDER_NAME = "vercel_ai_gateway"
 VERCEL_AI_GATEWAY_DEFAULT_API_BASE = "https://ai-gateway.vercel.sh/v1"
 
 ATLASCLOUD_PROVIDER_NAME = "atlascloud"
-# Public, unauthenticated catalog: the model list loads before a key is entered.
+# Default gateway base; /v1/models answers 401 without a valid key.
 ATLASCLOUD_DEFAULT_API_BASE = "https://api.atlascloud.ai/v1"
 
 PORTKEY_PROVIDER_NAME = "portkey"

@@ -75,7 +75,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
         VERCEL_AI_GATEWAY_PROVIDER_NAME: [],  # Dynamic - fetched from the public catalog
-        ATLASCLOUD_PROVIDER_NAME: [],  # Dynamic - fetched from the public catalog
+        ATLASCLOUD_PROVIDER_NAME: [],  # Dynamic - fetched from the Atlas Cloud /v1/models catalog
     }
 
 

@@ -37,6 +37,9 @@ OPENAI_COMPATIBLE_SURFACES = frozenset(
 _STATIC_SURFACES: dict[str, LlmApiSurface] = {
     LlmProviderNames.OPENAI_COMPATIBLE: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
     LlmProviderNames.NEBIUS_TOKENFACTORY: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
+    # LiteLLM has no `atlascloud` provider, so the gateway is reached as an
+    # OpenAI-compatible endpoint (`custom_llm_provider="openai"`, bare model id).
+    LlmProviderNames.ATLASCLOUD: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
 }
 
 # Admin-selected surfaces: {provider: (config_key, {stored value: surface}, default)}

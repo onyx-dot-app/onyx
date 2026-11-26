@@ -917,8 +917,8 @@ export const fetchVercelAIGatewayModels = async (
 };
 
 /**
- * Fetches models from the Atlas Cloud catalog. The catalog is public, so this
- * works before an API key is entered.
+ * Fetches models from the Atlas Cloud catalog. The gateway's /v1/models returns
+ * 401 without a valid API key, so an API key is required.
  */
 export const fetchAtlasCloudModels = async (
   params: AtlasCloudFetchParams
