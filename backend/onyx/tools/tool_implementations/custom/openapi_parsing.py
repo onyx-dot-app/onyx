@@ -110,6 +110,10 @@ class MethodSpec(BaseModel):
             url = url.format(**encoded_path_params)
         except KeyError as e:
             raise ValueError(f"Missing path parameter: {e}") from e
+        except IndexError as e:
+            raise ValueError(
+                f"The path {self.path} has a parameter that is a number or empty."
+            ) from e
         if query_params:
             url += f"?{urlencode(query_params)}"
         return url

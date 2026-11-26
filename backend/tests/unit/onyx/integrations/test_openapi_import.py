@@ -533,3 +533,19 @@ def test_lines_save_over_a_spec_with_an_operation_id_that_is_not_text() -> None:
     saved = _apply(spec, ["GET /pets/{petId}?verbose Read a pet", "GET /cats Cats"])
 
     assert "/cats" in saved["paths"]
+
+
+def test_import_skips_an_operation_with_a_numbered_path_parameter() -> None:
+    spec = _callable_spec()
+    spec["paths"]["/{0}"] = {
+        "get": {
+            "operationId": "byNumber",
+            "summary": "By number",
+            "parameters": [{"name": "0", "in": "path", "required": True, "schema": {}}],
+        }
+    }
+
+    view = _import(json.dumps(spec))
+
+    assert [line.split(":")[0] for line in view.skipped] == ["GET /{0}"]
+    assert json.loads(view.openapi_document) == _callable_spec()
