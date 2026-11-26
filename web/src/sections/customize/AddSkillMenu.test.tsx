@@ -32,7 +32,7 @@ test.each([
   ["/app/customize/plugins", "/app/customize/plugins#marketplaces"],
   ["/admin/plugins", "/admin/plugins#marketplaces"],
 ])(
-  "on %s an added marketplace opens the Marketplaces section",
+  "on %s an added marketplace opens the Marketplaces section and refreshes the plugin list",
   async (path, target) => {
     window.history.replaceState(null, "", path);
     render(<AddSkillMenu upload="plugin" />);
@@ -47,18 +47,6 @@ test.each([
     await waitFor(() =>
       expect(window.location.pathname + window.location.hash).toBe(target)
     );
+    await waitFor(() => expect(mockRefreshSkillLists).toHaveBeenCalled());
   }
 );
-
-test("an added marketplace refreshes the plugin list", async () => {
-  render(<AddSkillMenu upload="plugin" />);
-  const user = setupUser();
-
-  await user.click(screen.getByRole("button", { name: "Add" }));
-  await user.click(
-    await screen.findByRole("menuitem", { name: "Add marketplace" })
-  );
-  await user.click(screen.getByRole("button", { name: "Finish add" }));
-
-  await waitFor(() => expect(mockRefreshSkillLists).toHaveBeenCalled());
-});
