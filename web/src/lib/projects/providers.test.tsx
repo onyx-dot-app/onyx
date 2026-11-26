@@ -717,4 +717,108 @@ describe("ProjectsContext beginUpload cancel", () => {
     );
     expect(mockToastError).not.toHaveBeenCalled();
   });
+
+  it("a kept file that finishes during the cleanup does not refresh before it", async () => {
+    let finishUpload: (value: unknown) => void = () => {};
+    let uploadOptions: UploadFilesOptions = {};
+    mockUploadFiles.mockImplementation(
+      (
+        _files: File[],
+        _projectId: number | null,
+        _tempIds: string[],
+        _incognito: string | null,
+        options: UploadFilesOptions
+      ) =>
+        new Promise((resolve) => {
+          uploadOptions = options;
+          finishUpload = resolve;
+        })
+    );
+    const calls: string[] = [];
+    mockUnlinkFileFromProject.mockReset();
+    let finishUnlink: () => void = () => {};
+    mockUnlinkFileFromProject.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishUnlink = () => {
+            calls.push("unlink");
+            resolve();
+          };
+        })
+    );
+    mockDeleteUserFile.mockReset();
+    mockDeleteUserFile.mockImplementation(async () => {
+      calls.push("delete");
+      return { has_associations: false };
+    });
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [
+          new File(["a"], "sent.txt", { type: "text/plain" }),
+          new File(["b"], "kept.txt", { type: "text/plain" }),
+        ],
+        7
+      );
+    });
+    const tempId = optimisticFiles[0]?.temp_id ?? "";
+    const keptTempId = optimisticFiles[1]?.temp_id ?? "";
+    // The kept file has finished processing by the first status poll.
+    mockGetUserFileStatuses.mockResolvedValue([
+      {
+        ...optimisticFiles[1],
+        id: "user-kept",
+        status: UserFileStatus.COMPLETED,
+      },
+    ]);
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).includes("/api/user/files/recent")) {
+          calls.push("refresh");
+        }
+        return new Response("[]", { status: 200 });
+      });
+    act(() => uploadOptions.onProgress?.(1));
+    act(() => cancelUpload(tempId));
+
+    expect(uploadOptions.signal?.aborted).toBe(false);
+    await act(async () => {
+      finishUpload({
+        user_files: [
+          {
+            ...optimisticFiles[0],
+            id: "user-sent",
+            temp_id: tempId,
+            status: UserFileStatus.PROCESSING,
+          },
+          {
+            ...optimisticFiles[1],
+            id: "user-kept",
+            temp_id: keptTempId,
+            status: UserFileStatus.PROCESSING,
+          },
+        ],
+        rejected_files: [],
+      });
+    });
+
+    // The poll sees the kept file finish, but no refresh runs while the
+    // cancelled file is still being unlinked.
+    await waitFor(() =>
+      expect(mockUnlinkFileFromProject).toHaveBeenCalledWith(7, "user-sent")
+    );
+    await waitFor(() => expect(mockGetUserFileStatuses).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(calls).toEqual([]);
+    await act(async () => finishUnlink());
+    await waitFor(() => expect(calls).toEqual(["unlink", "delete", "refresh"]));
+    fetchSpy.mockRestore();
+    expect(result.current.allRecentFiles.map((f) => f.temp_id)).not.toContain(
+      tempId
+    );
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
 });
