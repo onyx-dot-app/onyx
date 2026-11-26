@@ -1047,6 +1047,12 @@ class ChatTurnSetup(BaseModel):
     # under a new stream ID; None for a turn that starts a response.
     resumed_response_id: int | None = None
 
+    @property
+    def is_deep_research(self) -> bool:
+        """Whether the turn runs deep research: one model with the request's
+        deep research option."""
+        return len(self.responses) == 1 and self.new_msg_req.deep_research
+
 
 class ResponseOwner(BaseModel):
     token: UUID

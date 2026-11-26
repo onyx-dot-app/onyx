@@ -3,7 +3,7 @@ private sandbox (`server/features/build/sandbox/harness_base.py:HarnessSandbox`)
 `SANDBOX_TOOLS` gives the set that a turn's model gets.
 
 They have no tool row: a chat turn builds them when it offers the sandbox
-(`chat/execution.py:create_chat_agent`), and they share a `SandboxTurn`. The
+(`chat/execution.py:construct_chat_tools`), and they share a `SandboxTurn`. The
 sandbox is the isolation, so calls need no approval; only a delete of a
 published file asks (ARTIFACTS_DELETE_APPROVAL).
 """

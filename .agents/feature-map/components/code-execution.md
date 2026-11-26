@@ -301,7 +301,7 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         Slack or Discord bot turns (MessageOrigin
                                         SLACKBOT / DISCORDBOT; the chat route sets
                                         DISCORDBOT from the bot's service API key)
-  chat/execution.py:create_chat_agent   builds the tools with one SandboxTurn for every
+  chat/execution.py:construct_chat_tools builds the tools with one SandboxTurn for every
                                         agent, as it adds the skill tools; a durable resume
                                         prepares the turn again and builds them the same way.
                                         SANDBOX_TOOLS[family] (a SandboxToolset) gives the
@@ -1032,9 +1032,9 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         search again in a later turn.
                                         No [files] line names them; a chat purge
                                         deletes them with the working directory
-  Agent.on_drained (root chat agent)    SandboxTurn.end: create_chat_agent passes it to the
-                                        root chat agent only (bind_run_store: also to a
-                                        restored root), not to subagents or deep research
+  Agent.on_drained (root chat agent)    SandboxTurn.end: create_chat_agent passes it to a
+                                        new root chat agent and bind_run_store to a
+                                        restored root, not to subagents or deep research
                                         (which gets no sandbox tools). end_turn after each
                                         finish or suspension of the root run, once its work
                                         (tool threads, program calls, foreground children)

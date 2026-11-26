@@ -24,9 +24,9 @@ document does not repeat it.
 
 **Who calls it.**
 - [[core-chat-loop]]: `chat/execution.py:create_chat_agent` builds a
-  `ChatFeature` or a `DeepResearchFeature` for each response and, with its
-  `agent()`, the `Agent` that runs it. The response thread starts that agent
-  with `background=False` ([[#context-captured-at-start]]).
+  `ChatFeature` or a `DeepResearchFeature` for each new response and, with
+  its `agent()`, the `Agent` that runs it. The response thread starts that
+  agent with `background=False` ([[#context-captured-at-start]]).
 - **Child agents.** The deep research step starts the agent of a
   `deep_research/research_agent.py:ResearchFeature` through
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
@@ -113,8 +113,9 @@ Agent (history, checkpoint, tools, feature, on_drained)
 
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
   (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
-  passes `ChatFeature.max_steps`: `MAX_LLM_CYCLES`, or `CODE_MODE_MAX_LLM_CYCLES`
-  when code mode applies (`ChatFeature.code_cells` is set).
+  passes `ChatFeature.max_steps`, and the run store's follow-up runs use the
+  same limit: `chat/agent.py:chat_max_steps` gives `MAX_LLM_CYCLES`, or
+  `CODE_MODE_MAX_LLM_CYCLES` when code mode applies.
 - `RunHooks.on_finish`, when a feature supplies it, runs once at the end of
   the run, without the execution lock, with the run's recorded tool results.
   `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
@@ -153,7 +154,8 @@ Agent (history, checkpoint, tools, feature, on_drained)
   run end does. It cannot change results. Errors, `AgentCancelled`
   included, are logged and the run still becomes idle and reusable. Only the
   root `chat/agent.py:ChatFeature` installs it, to end per-run tool state
-  (`create_chat_agent` passes it to the root only), such as the sandbox turn
+  (`create_chat_agent` passes it to a new root, and `bind_run_store` to a
+  restored root), such as the sandbox turn
   ([[code-execution]]); subagents share the root's tools and install none.
   `chat/presentation.py:ResponsePresenter` renders each amendment with
   `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
