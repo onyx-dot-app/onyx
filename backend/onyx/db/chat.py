@@ -3043,16 +3043,18 @@ def get_selected_branch(
     )
     # Follow only IDs; queue checks do not need response content or tool results.
     # The join gives the deepest message, when it is a response, in the same
-    # statement as the IDs.
-    deepest = select(func.max(branch.c.depth)).scalar_subquery()
+    # statement as the IDs. It names one ID, so it is one index lookup and not
+    # a lookup for each message of the branch.
+    newest_first = (branch.c.depth.desc(), branch.c.id.desc())
+    deepest_id = select(branch.c.id).order_by(*newest_first).limit(1).scalar_subquery()
     rows = session.execute(
         select(branch.c.id, ChatMessage)
         .outerjoin(
             ChatMessage,
             and_(
                 ChatMessage.id == branch.c.id,
+                ChatMessage.id == deepest_id,
                 ChatMessage.message_type == MessageType.ASSISTANT,
-                branch.c.depth == deepest,
             ),
         )
         .options(
@@ -3063,7 +3065,7 @@ def get_selected_branch(
                 ChatMessage.response_status,
             )
         )
-        .order_by(branch.c.depth.desc())
+        .order_by(*newest_first)
     ).all()
     message_ids: list[int] = [row[0] for row in rows]
     selected: ChatMessage | None = rows[0][1] if rows else None
