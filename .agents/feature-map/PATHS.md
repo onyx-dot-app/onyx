@@ -272,7 +272,7 @@ covers new files that match it.
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
 | `web/next.config.js` | chat-frontend, plugins |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts`, `web/src/hooks/useContentEditable.ts` | chat-frontend |
-| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/chatScroll/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/shortcuts/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
+| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/chatScroll/`, `web/src/lib/chatFind/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/shortcuts/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
 | `web/src/lib/timeline/` | chat-frontend, craft-frontend |
 | `web/src/lib/outputPanel/`, `web/src/sections/output-panel/` | chat-frontend, craft-frontend |
@@ -304,7 +304,7 @@ covers new files that match it.
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
 | `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts` | mobile-app, streaming-protocol |
-| `desktop/`, `desktop-v2/`, `widget/`, `extensions/` | desktop-widget-extensions |
+| `desktop/`, `widget/`, `extensions/` | desktop-widget-extensions |
 
 ## Frontend: Craft
 

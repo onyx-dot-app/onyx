@@ -1,5 +1,5 @@
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 
 from pydantic import JsonValue
@@ -7,16 +7,16 @@ from pydantic import JsonValue
 from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import (
     AgentState,
-    CompactionCheckpoint,
     PreparedStep,
     ReleaseFailed,
+    RunHooks,
     StepInput,
     StepResult,
     ToolCallContext,
     ToolResultAmendment,
     ToolResultContext,
 )
-from onyx.agents.runtime import Agent, RestorableFeature
+from onyx.agents.runtime import Agent, AgentFeature
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
@@ -35,6 +35,7 @@ from onyx.chat.models import (
     StagedChatFiles,
 )
 from onyx.chat.prompt_utils import (
+    SearchPassageCache,
     build_chat_prompt,
     callable_tools,
     prepare_prompt,
@@ -51,6 +52,7 @@ from onyx.configs.chat_configs import (
     MAX_LLM_CYCLES,
 )
 from onyx.context.models import UserMemoryContext
+from onyx.context.search.models import SearchDoc, new_or_changed
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_request import estimate_text_tokens
@@ -73,7 +75,12 @@ from onyx.prompts.chat_prompts import (
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile, ToolContext, ToolPreference
+from onyx.tools.models import (
+    ChatFile,
+    CodeModeExposure,
+    ToolContext,
+    ToolPreference,
+)
 from onyx.tools.ordering import tool_order
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     CodeModeTool,
@@ -141,8 +148,19 @@ def _offered_preference(
     return preference
 
 
-class ChatAgent(Agent, RestorableFeature):
-    """Chat step preparation and result handling for the shared runtime."""
+def chat_max_steps(tools: list[Tool], code_mode: bool) -> int:
+    """The step limit of a chat agent with `tools`. Programs batch tool
+    calls, so code mode gets its own cap when a tool runs inside programs."""
+    if code_mode and any(
+        tool.code_mode_exposure is not CodeModeExposure.DIRECT for tool in tools
+    ):
+        return CODE_MODE_MAX_LLM_CYCLES
+    return MAX_LLM_CYCLES
+
+
+class ChatFeature(AgentFeature):
+    """Chat step preparation and result handling for the shared runtime: an
+    AgentFeature. `agent` builds the agent that runs it."""
 
     def __init__(
         self,
@@ -155,29 +173,24 @@ class ChatAgent(Agent, RestorableFeature):
         user_memory_context: UserMemoryContext | None,
         llm: LLM,
         preferred_tool: ToolPreference | None = None,
-        user_identity: LLMUserIdentity | None = None,
         chat_files: list[ChatFile] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         include_citations: bool = True,
         all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
         inject_memories_in_prompt: bool = True,
         reminders_enabled: bool = True,
-        checkpoint: CompactionCheckpoint | None = None,
-        previous_run_id: str | None = None,
-        agent_id: str | None = None,
         additional_context: str | None = None,
         code_mode: bool = False,
         is_subagent: bool = False,
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
-        on_drained: Callable[[], None] | None = None,
         question_tool: Callable[[QuestionShape], QuestionTool] | None = None,
     ) -> None:
-        """`on_drained`: see Agent; a root agent's runs end per-run tool state
-        there (subagents share the root's tools and pass none). Only a root
+        """`messages` is the history that the agent starts with. Only a root
         agent gets a question tool: `question_tool` builds it in the given
         shape. The model's tool family (LLMConfig.tool_family) selects the
         shapes of the code mode tools, the agent tools and the question tool."""
+        self.llm = llm
         tool_family = llm.config.tool_family
         agent_shape = AGENT_SHAPES[tool_family]
         # The fixed system block for the agent's role: a subagent, or a root
@@ -215,10 +228,7 @@ class ChatAgent(Agent, RestorableFeature):
         self.skills_catalog_message = skills_catalog_message(
             self.configured_tools, llm.config.max_input_tokens, self.called_name
         )
-        # Programs batch tool calls, so code mode gets its own cap when it applies.
-        self.max_steps = (
-            CODE_MODE_MAX_LLM_CYCLES if self.code_cells is not None else MAX_LLM_CYCLES
-        )
+        self.max_steps = chat_max_steps(self.configured_tools, code_mode)
         self.include_citations = include_citations
         self.reasoning_effort = reasoning_effort
         self.memory = user_memory_context
@@ -242,6 +252,8 @@ class ChatAgent(Agent, RestorableFeature):
         self.stages_files = self._sandbox_turn is None and any(
             tool.name == PYTHON_TOOL_NAME for tool in self.configured_tools
         )
+        # Each step's deduplicated search results, for later requests.
+        self.search_passage_cache: SearchPassageCache = {}
         self.citation_processor = DynamicCitationProcessor(
             citation_mode=CitationMode.HYPERLINK
             if include_citations
@@ -259,7 +271,11 @@ class ChatAgent(Agent, RestorableFeature):
         self.citation_processor.update_citation_mapping(
             self.initial_citations, update_duplicate_keys=True
         )
-        self.gathered_documents = list(self.initial_citations.values())
+        # By document ID, in the order first gathered; a later copy of a
+        # document replaces the earlier one.
+        self.gathered_documents = {
+            doc.document_id: doc for doc in self.initial_citations.values()
+        }
         self.citation_mapping = {
             number: doc.document_id
             for number, doc in self.citation_processor.citation_to_doc.items()
@@ -293,10 +309,9 @@ class ChatAgent(Agent, RestorableFeature):
                     else [
                         WaitAgentTool(
                             agent_shape,
-                            open_cell_wait_name=lambda: (
-                                self.code_cells.shape.wait_name
-                                if self.code_cells is not None
-                                and self.code_cells.has_open
+                            open_cell_wait_name=lambda cells=self.code_cells: (
+                                cells.shape.wait_name
+                                if cells is not None and cells.has_open
                                 else None
                             ),
                         )
@@ -371,21 +386,39 @@ class ChatAgent(Agent, RestorableFeature):
             if self._sandbox_turn is not None and not is_subagent
             else frozenset()
         )
-        super().__init__(
-            llm,
-            tools=[tool.bind(self._tool_context) for tool in self.application_tools],
+
+    def agent(
+        self,
+        state: AgentState,
+        *,
+        agent_id: str | None = None,
+        previous_run_id: str | None = None,
+        user_identity: LLMUserIdentity | None = None,
+        on_drained: Callable[[], None] | None = None,
+    ) -> Agent:
+        """The agent that runs this feature with the same model, from `state`,
+        whose messages are the history this feature started with.
+        `on_drained`: see RunConfig; a root agent's runs end per-run tool
+        state there (subagents share the root's tools and pass none)."""
+        return Agent(
+            self.llm,
+            feature=self,
+            state=state,
             agent_id=agent_id,
             previous_run_id=previous_run_id,
-            state=AgentState(
-                messages=messages,
-                checkpoint=checkpoint,
-            ),
-            restoration=self,
-            prepare_step=self._prepare_step,
-            after_step=self._after_step,
             generation_context=GenerationContext(
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
+            on_drained=on_drained,
+        )
+
+    def bind(self) -> RunHooks:
+        return RunHooks(
+            tools=tuple(
+                tool.bind(self._tool_context) for tool in self.application_tools
+            ),
+            prepare_step=self._prepare_step,
+            after_step=self._after_step,
             after_tool_call=self._finalize_tool,
             # In a chat with a sandbox, large results go to a file in the VM.
             prepare_tool_result=partial(
@@ -396,7 +429,7 @@ class ChatAgent(Agent, RestorableFeature):
             unknown_tool_hint=self._unknown_tool_hint,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
-            on_drained=on_drained,
+            capture_state=self.capture_state,
         )
 
     def _unknown_tool_hint(self, name: str) -> str | None:
@@ -463,7 +496,7 @@ class ChatAgent(Agent, RestorableFeature):
             elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
-            gathered_documents=self.gathered_documents,
+            gathered_documents=list(self.gathered_documents.values()),
             chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
             has_called_search_tool=self.has_called_search_tool,
             search_context=self.search_context,
@@ -472,34 +505,19 @@ class ChatAgent(Agent, RestorableFeature):
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
         saved = ChatFeatureState.model_validate(state)
-        if (
-            saved.persona != self.persona
-            or saved.context_files != SavedContextFiles.capture(self.context_files)
-            or saved.file_metadata != self.file_metadata
-            or saved.memory != self.memory
-            or saved.reasoning_effort != self.reasoning_effort
-            or saved.include_citations != self.include_citations
-            or saved.inject_memories != self.inject_memories
-            or _offered_preference(saved.preferred_tool, self.configured_tools)
-            != self.preferred_tool
-            or saved.code_mode != self.code_mode
-            or saved.base_prompt != self.base_system_prompt
-            or saved.custom_prompt != self.custom_agent_prompt
-            or saved.request_context != self.additional_context
-            or saved.reminders_enabled != self.reminders_enabled
-        ):
-            raise ValueError("Chat restoration configuration does not match")
         self.search_context = saved.search_context
         self.started = time.monotonic() - saved.elapsed_seconds
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
-        self.gathered_documents = saved.gathered_documents
+        self.gathered_documents = {
+            doc.document_id: doc for doc in saved.gathered_documents
+        }
         self.chat_files = [file.restore() for file in saved.chat_files]
         self.has_called_search_tool = saved.has_called_search_tool
         if self.code_cells is not None:
             self.code_cells.restore(saved.code_cells)
 
-    def _update_tool_context(self, responses: list[ToolResultMessage]) -> None:
+    def _update_tool_context(self, responses: Sequence[ToolResultMessage]) -> None:
         """Apply accepted tool results to the next request's context policy."""
         for response in responses:
             data = response.details
@@ -510,7 +528,8 @@ class ChatAgent(Agent, RestorableFeature):
                 self.has_called_search_tool = True
             sources = tool_result_sources(data)
             if sources is not None:
-                self.gathered_documents.extend(sources.documents)
+                for document in sources.documents:
+                    self.gathered_documents[document.document_id] = document
             if isinstance(data, StagedChatFiles):
                 self.chat_files = merged_chat_files(self.chat_files, data.staged_files)
             if sources is None:
@@ -529,7 +548,7 @@ class ChatAgent(Agent, RestorableFeature):
             next_citation_num=self.citation_processor.get_next_citation_number(),
             skip_search_query_expansion=self.has_called_search_tool,
             chat_files=list(self.chat_files),
-            url_snippet_map=extract_url_snippet_map(self.gathered_documents),
+            url_snippet_map=extract_url_snippet_map(self.gathered_documents.values()),
             called_name=self.called_name,
             inject_memories_in_prompt=self.inject_memories,
             python_stages_search_files=self.stages_files,
@@ -545,7 +564,9 @@ class ChatAgent(Agent, RestorableFeature):
                 self.code_cells.reopen()
             self.search_context = SearchContext()
             self.started = time.monotonic()
-            self.gathered_documents = list(self.initial_citations.values())
+            self.gathered_documents = {
+                doc.document_id: doc for doc in self.initial_citations.values()
+            }
             assistant = None
             for message in state.history:
                 if isinstance(message, AssistantMessage):
@@ -558,20 +579,27 @@ class ChatAgent(Agent, RestorableFeature):
             state.received_inputs, self.citation_processor.citation_to_doc
         )
         if received.new_citations:
-            known_documents = {
-                document.document_id for document in self.gathered_documents
-            }
             self.citation_processor.update_citation_mapping(received.new_citations)
             for number, document in received.new_citations.items():
                 self.citation_mapping[number] = document.document_id
-                if document.document_id not in known_documents:
-                    known_documents.add(document.document_id)
-                    self.gathered_documents.append(document)
+                self.gathered_documents.setdefault(document.document_id, document)
         results = [
             message
             for message in state.messages
             if isinstance(message, ToolResultMessage)
         ]
+        # Each step carries only the sources and documents that the run's
+        # earlier steps lack, or a new copy of one; readers fold the steps
+        # back with RunDocuments. Compare with what earlier steps recorded,
+        # each citation number in its own copy, not with a display fold.
+        attached_sources: dict[int, SearchDoc] = {}
+        attached_documents: dict[str, SearchDoc] = {}
+        for message in state.messages:
+            if isinstance(message.metadata, ChatMessageMetadata):
+                attached_sources.update(message.metadata.sources)
+                attached_documents.update(
+                    (doc.document_id, doc) for doc in message.metadata.documents
+                )
         allowed_tool_names: frozenset[str] | None = None
         tool_choice = ToolChoiceOptions.AUTO
         available_tool_names = {
@@ -605,13 +633,18 @@ class ChatAgent(Agent, RestorableFeature):
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),
             output_metadata=ChatMessageMetadata(
-                sources=dict(self.citation_processor.citation_to_doc),
-                documents=list(self.gathered_documents),
+                sources=new_or_changed(
+                    self.citation_processor.citation_to_doc, attached_sources
+                ),
+                documents=list(
+                    new_or_changed(self.gathered_documents, attached_documents).values()
+                ),
                 include_citations=self.include_citations,
                 elapsed_seconds=time.monotonic() - self.started,
             ),
             assemble_messages=partial(
                 prepare_prompt,
+                search_passage_cache=self.search_passage_cache,
                 agent_instructions=self.agent_instructions,
                 system_prompt=prompt.system_prompt,
                 user_info_prompt=prompt.user_info_prompt,
@@ -668,10 +701,13 @@ class ChatAgent(Agent, RestorableFeature):
         if not self.stages_files:
             return result
         known = {file.file_id for file in self.chat_files if file.file_id is not None}
-        result.details = staged_result_details(
-            result.details, known, build_python_chat_files_from_search_docs
+        return result.model_copy(
+            update={
+                "details": staged_result_details(
+                    result.details, known, build_python_chat_files_from_search_docs
+                )
+            }
         )
-        return result
 
     def _finished_cells(
         self, results: list[ToolResultMessage]
@@ -725,14 +761,14 @@ def build_chat_agent(
     depth: int = 0,
     on_drained: Callable[[], None] | None = None,
     question_tool: Callable[[QuestionShape], QuestionTool] | None = None,
-) -> ChatAgent:
+) -> tuple[Agent, ChatFeature]:
     """Build a chat conversation independently of the current root's feature.
 
     `with_subagents` adds the agent tools. Only callers that deliver follow-up
     responses, such as the web chat, enable them. `depth` counts levels below
     the root; an agent at `MAX_CHILD_DEPTH` cannot start agents.
     """
-    return ChatAgent(
+    feature = ChatFeature(
         create_subagent=chat_subagent_factory(
             setup=setup,
             llm=llm,
@@ -743,11 +779,8 @@ def build_chat_agent(
         if with_subagents
         else None,
         can_spawn=depth < MAX_CHILD_DEPTH,
-        agent_id=agent_id,
         is_subagent=is_subagent,
         messages=state.messages,
-        checkpoint=state.checkpoint,
-        previous_run_id=previous_run_id,
         tools=tools,
         code_mode=CODE_MODE_ENABLED,
         custom_agent_prompt=setup.custom_agent_prompt,
@@ -758,15 +791,21 @@ def build_chat_agent(
         user_memory_context=setup.user_memory_context,
         llm=llm,
         preferred_tool=preferred_tool,
-        user_identity=setup.user_identity,
         chat_files=setup.chat_files_for_tools,
         reasoning_effort=setup.reasoning_effort,
         include_citations=setup.new_msg_req.include_citations,
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
-        on_drained=on_drained,
         question_tool=question_tool,
     )
+    agent = feature.agent(
+        state,
+        agent_id=agent_id,
+        previous_run_id=previous_run_id,
+        user_identity=setup.user_identity,
+        on_drained=on_drained,
+    )
+    return agent, feature
 
 
 def chat_subagent_factory(
@@ -776,10 +815,9 @@ def chat_subagent_factory(
     tools: list[Tool],
     inject_memories: bool,
     depth: int,
-) -> Callable[[], ChatAgent]:
+) -> Callable[[], Agent]:
     """Build children at `depth` as saved children are restored; children can start children."""
-    return partial(
-        build_chat_agent,
+    return lambda: build_chat_agent(
         AgentState(),
         None,
         None,
@@ -790,4 +828,4 @@ def chat_subagent_factory(
         with_subagents=True,
         is_subagent=True,
         depth=depth,
-    )
+    )[0]

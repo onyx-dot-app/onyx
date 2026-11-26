@@ -59,8 +59,9 @@ owns the rules.
   See [[chat-persistence]].
 
 **"Agent"** means three things: a `Persona`; an `agents/runtime.py:Agent` of
-the shared runtime, such as `ChatAgent`, `DeepResearchAgent` or `ResearchAgent`
-([[agent-runtime]]); or the AI assistant in general.
+the shared runtime, which runs a feature such as `ChatFeature`,
+`DeepResearchFeature` or `ResearchFeature` ([[agent-runtime]]); or the AI
+assistant in general.
 
 **"Flow"** means two things.
 - `LLMModelFlowType` (`backend/onyx/db/enums.py`) and the `LLMModelFlow`

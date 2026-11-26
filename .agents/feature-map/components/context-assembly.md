@@ -78,7 +78,7 @@ Neighbours:
 
 ## Architecture
 
-`chat/agent.py:ChatAgent._prepare_step` calls
+`chat/agent.py:ChatFeature._prepare_step` calls
 `chat/prompt_utils.py:build_chat_prompt` to pick the instructions and the
 reminder. The runtime then calls `chat/prompt_utils.py:prepare_prompt` on the
 working history, after it applies any compaction checkpoint, and again for each
@@ -128,7 +128,8 @@ the messages it receives and never changes recorded history. Within one step it
 replaces a search passage that repeats an earlier result's passage (same
 document and text) with a pointer to that result
 (`chat/prompt_utils.py:_deduplicate_search_passages`), so a change to the
-search result JSON must keep that parse working. Later turns retain saved tool-result
+search result JSON must keep that parse working. Each agent passes its
+`search_passage_cache`, so each step's results are parsed once per agent. Later turns retain saved tool-result
 content until compaction or truncation moves the cutoff past it. A placeholder is used when a legacy record has missing or empty output.
 Compaction controls history growth; starting a new user turn does not rewrite
 previous evidence. A code mode result keeps what a later turn needs in its own
@@ -263,7 +264,7 @@ counts what is sent, not the stored token counts.
    the reminder. Only the image-drop notice can follow it. The head prompt must
    not change between steps, so the provider prefix cache holds. It must not depend on
    the tool results so far, the tools offered this step or the last-step flag.
-   Tool guidance uses the agent's configured tools (`ChatAgent.application_tools`),
+   Tool guidance uses the agent's configured tools (`ChatFeature.application_tools`),
    not the step's tools. The date has day precision.
 2. `no-citation-guidance-in-system-prompt` **Citation guidance is never in the
    live system prompt.** A `{{CITATION_GUIDANCE}}` tag in the base or agent
@@ -311,9 +312,9 @@ counts what is sent, not the stored token counts.
    missing tool, or search for an unindexed file, makes the model guess or
    search the web.
 8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
-   several callers.** `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`
+   several callers.** `ChatFeature`, `DeepResearchFeature` and `ResearchFeature`
    call it with their own arguments, such as no custom agent
-   prompt. Only `ChatAgent` passes `available_tool_names`, so a deep research
+   prompt. Only `ChatFeature` passes `available_tool_names`, so a deep research
    file notice names no tool. Check all callers after you change the signature or order.
 9. `replace-base-drops-user-block` **Replacing the base prompt drops the
    per-user block.** With `replace_base_system_prompt`, or with an empty default
@@ -337,11 +338,10 @@ counts what is sent, not the stored token counts.
     while its content-free rows keep the picks without text; a restored agent
     reads the user's current chat skills for its catalog. Add request-only context through
     `prepare_prompt`, outside recorded history. Compaction cutoffs identify
-    recorded messages; they must not reference request-only context. A resumed turn rebuilds `ChatAgent` only from
+    recorded messages; they must not reference request-only context. A resumed turn rebuilds `ChatFeature` only from
     `chat/models.py:ChatFeatureState` (`chat/restoration.py:restore_chat_agent`),
     not from the current persona or settings. A new prompt input that is not in
-    that state, `ChatAgent.capture_state` and `ChatAgent.restore_state` is lost
-    on resume or makes the restore fail.
+    that state and `chat/restoration.py:restore_chat_agent` is lost on resume.
 12. `usage-only-history-shape` **A usage-only session retains complete input groups.**
     `chat/history_store.py:RedisChatHistoryStore.prepare_messages` combines
     the selected branch of temporary history with the accepted question and its

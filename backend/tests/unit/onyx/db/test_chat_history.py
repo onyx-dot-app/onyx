@@ -191,10 +191,7 @@ class TestConvertChatHistory:
         ]
 
 
-@pytest.mark.parametrize("copy_messages", [True, False])
-def test_replay_preserves_completed_tools_and_drops_partial_arguments(
-    copy_messages: bool,
-) -> None:
+def test_replay_preserves_completed_tools_and_drops_partial_arguments() -> None:
     completed_call = AssistantMessage(
         content=[ToolCall(id="reused", name="lookup", arguments={})]
     )
@@ -209,18 +206,14 @@ def test_replay_preserves_completed_tools_and_drops_partial_arguments(
         stop_reason="aborted",
     )
 
-    replay = messages_for_model(
-        [completed_call, completed_result, partial], copy_messages=copy_messages
-    )
+    replay = messages_for_model([completed_call, completed_result, partial])
 
     assert replay[:2] == [completed_call, completed_result]
     assert replay[-1].text == "Checking another source"
     assert isinstance(replay[-1], AssistantMessage)
     assert replay[-1].tool_calls == []
     assert len(partial.tool_calls) == 1
-    assert isinstance(replay[1], ToolResultMessage)
-    replay[1].content = "Updated result"
-    assert completed_result.content == ("Found" if copy_messages else "Updated result")
+    assert replay[1] is completed_result
 
 
 def test_saved_response_history_preserves_generation_content() -> None:

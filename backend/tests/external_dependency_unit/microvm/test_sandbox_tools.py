@@ -36,7 +36,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat import execution, process_message
 from onyx.chat import files as chat_files
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatFeature
 from onyx.chat.chat_processing_checker import get_processing_stream
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.incognito_context import teardown_incognito_session
@@ -106,7 +106,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.skill import delete_skill
 from onyx.db.tools import get_builtin_tool
 from onyx.db.users import fetch_user_by_id
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
 from onyx.document_index.factory import build_opensearch_document_index
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -2150,15 +2150,15 @@ def test_every_agent_gets_the_sandbox_tools_when_harness_sandboxes_run(
     enabled: bool,
 ) -> None:
     monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", enabled)
-    built: list[ChatAgent | DeepResearchAgent] = []
+    built: list[tuple[Agent, ChatFeature | DeepResearchFeature]] = []
     create_chat_agent = execution.create_chat_agent
 
     def recorded_create_chat_agent(
         *args: Any, **kwargs: Any
-    ) -> ChatAgent | DeepResearchAgent:
-        agent = create_chat_agent(*args, **kwargs)
-        built.append(agent)
-        return agent
+    ) -> tuple[Agent, ChatFeature | DeepResearchFeature]:
+        created = create_chat_agent(*args, **kwargs)
+        built.append(created)
+        return created
 
     monkeypatch.setattr(execution, "create_chat_agent", recorded_create_chat_agent)
     no_tools = upsert_persona(
@@ -2185,8 +2185,10 @@ def test_every_agent_gets_the_sandbox_tools_when_harness_sandboxes_run(
         assert SANDBOX_NAMES & offered == (SANDBOX_NAMES if enabled else set())
 
     assert len(built) == 2
-    for agent in built:
-        tools = [tool for tool in agent.application_tools if tool.name in SANDBOX_NAMES]
+    for agent, feature in built:
+        tools = [
+            tool for tool in feature.application_tools if tool.name in SANDBOX_NAMES
+        ]
         if enabled:
             # The three tools have no tool row; the root's runs end their turn.
             assert sorted(tool.name for tool in tools) == sorted(SANDBOX_NAMES)
@@ -2222,13 +2224,13 @@ def test_a_deep_research_turn_offers_no_sandbox(
         )
     try:
         assert not setup.sandbox_tools
-        agent = execution.create_chat_agent(
+        agent, feature = execution.create_chat_agent(
             setup, user, 0, CancellationSignal(), False, with_subagents=False
         )
     finally:
         setup.admission.release()
-    assert isinstance(agent, DeepResearchAgent)
-    assert not {tool.name for tool in agent.application_tools} & SANDBOX_NAMES
+    assert isinstance(feature, DeepResearchFeature)
+    assert not {tool.name for tool in feature.application_tools} & SANDBOX_NAMES
     assert agent.on_drained is None
 
 

@@ -804,6 +804,16 @@ export const useHasOlderMessages = () =>
     return currentSession?.hasOlderMessages ?? false;
   });
 
+/** An older page of the open chat failed to load, so older messages are missing. */
+export const useOlderMessagesFailed = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.olderMessagesFailed ?? false;
+  });
+
 /** The open chat is loading a page of older messages. */
 export const useIsLoadingOlderMessages = () =>
   useChatSessionStore((state) => {

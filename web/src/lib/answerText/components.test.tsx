@@ -1,5 +1,92 @@
-import { render, screen } from "@tests/setup/test-utils";
+import type { Components } from "react-markdown";
+import { render, screen, setupUser } from "@tests/setup/test-utils";
 import { AnswerMarkdown } from "@/lib/answerText/components";
+import { ResponseCursorScope } from "@/lib/timeline/components/Response";
+
+const OPEN_CODE = "Intro.\n\n```python\nx = 1";
+
+test("the cursor marker hides while the last block is open code", () => {
+  const { container, rerender } = render(
+    <ResponseCursorScope working>
+      <AnswerMarkdown content={OPEN_CODE} streaming cursor />
+    </ResponseCursorScope>
+  );
+  const kinds = () =>
+    Array.from(container.querySelectorAll("[data-response-cursor]")).map(
+      (marker) => marker.getAttribute("data-response-cursor")
+    );
+  expect(kinds()).toEqual(["hidden"]);
+
+  rerender(
+    <ResponseCursorScope working>
+      <AnswerMarkdown
+        content={`${OPEN_CODE}\n\`\`\`\n\nMore`}
+        streaming
+        cursor
+      />
+    </ResponseCursorScope>
+  );
+  expect(kinds()).toEqual(["text"]);
+});
+
+test.each([
+  ["a table with an empty last cell", "| a | b |\n| - | - |\n| 1 |"],
+  ["a table with only its header", "| a | b |\n| - | - |"],
+  ["a list with an empty last item", "- one\n-"],
+])("the cursor stays in valid HTML at the end of %s", (_, content) => {
+  const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const { container } = render(
+      <AnswerMarkdown content={content} streaming cursor />
+    );
+    expect(container.querySelectorAll(".animate-pulse")).toHaveLength(1);
+    expect(
+      container.querySelector(
+        ":is(table, thead, tbody, tfoot, tr, ul, ol) > span"
+      )
+    ).toBeNull();
+    expect(
+      errors.mock.calls.some((call) =>
+        call.some((arg) => /cannot (be a child|contain)/.test(String(arg)))
+      )
+    ).toBe(false);
+  } finally {
+    errors.mockRestore();
+  }
+});
+
+test("the inline cursor hides while the last block is open code", () => {
+  const { container } = render(
+    <AnswerMarkdown content={OPEN_CODE} streaming cursor />
+  );
+  expect(container.querySelector(".animate-pulse")).toBeNull();
+});
+
+test("finished blocks do not re-render while the answer streams", () => {
+  const rendered: string[] = [];
+  const components: Components = {
+    p: ({ children }) => {
+      rendered.push(String(children));
+      return <p>{children}</p>;
+    },
+  };
+  const { rerender } = render(
+    <AnswerMarkdown
+      content={"First.\n\nSecond"}
+      streaming
+      components={components}
+    />
+  );
+  rendered.length = 0;
+  rerender(
+    <AnswerMarkdown
+      content={"First.\n\nSecond more"}
+      streaming
+      components={components}
+    />
+  );
+  expect(rendered).toEqual(["Second more"]);
+});
 
 test("a fenced code block opts out of the answer's prose styles", async () => {
   render(
@@ -12,4 +99,66 @@ test("a fenced code block opts out of the answer's prose styles", async () => {
   // Prose styles tables; the code panel draws its lines as a table.
   expect(block).toHaveClass("not-prose");
   expect(block.closest(".prose")).not.toBeNull();
+});
+
+test("a streaming answer renders the same text as a finished one", () => {
+  const content = [
+    "# Results",
+    "The first paragraph has **bold** text.",
+    "The second paragraph follows.",
+    "- one\n- two\n\n  more of two\n- three",
+    "| a | b |\n| - | - |\n| 1 | 2 |",
+    "```python\nx = 1\n\n\ny = 2\n```",
+    "$$\na^2\n\n+ b^2\n$$",
+    "The end.",
+  ].join("\n\n");
+
+  const { container: streamed } = render(
+    <AnswerMarkdown content={content} streaming />
+  );
+  const { container: finished } = render(<AnswerMarkdown content={content} />);
+
+  // One parse puts newline text between top-level blocks; split blocks do not.
+  const text = (element: HTMLElement) =>
+    (element.textContent ?? "").replace(/\s+/g, "");
+  expect(text(streamed)).toBe(text(finished));
+  expect(streamed.querySelectorAll(".prose")).toHaveLength(1);
+});
+
+test("a fence title names the code block", async () => {
+  render(
+    <AnswerMarkdown content={'```ts title="src/a.ts"\nconst a = 1;\n```\n'} />
+  );
+
+  const block = await screen.findByTestId("answer-code-block");
+  expect(block).toHaveTextContent("src/a.ts");
+});
+
+test("a code block keeps its wrap choice when the answer finishes", async () => {
+  const user = setupUser();
+  const content = "Intro.\n\n```python\nprint(1)\n```\n\nThe end.";
+  const { rerender } = render(<AnswerMarkdown content={content} streaming />);
+
+  await user.click(screen.getByRole("button", { name: "Unwrap" }));
+  rerender(<AnswerMarkdown content={content} />);
+
+  expect(screen.getByRole("button", { name: "Wrap" })).toBeInTheDocument();
+});
+
+test.each([
+  ["closed", "<details>\n<summary>More</summary>\n\nBody text\n\n</details>"],
+  [
+    "open",
+    "<details open>\n<summary>More</summary>\n\nBody text\n\n</details>",
+  ],
+])("the cursor marker for a trailing %s details block", (state, content) => {
+  const { container } = render(
+    <ResponseCursorScope working>
+      <AnswerMarkdown content={content} streaming cursor />
+    </ResponseCursorScope>
+  );
+  const marker = container.querySelector("[data-response-cursor]");
+  expect(marker).not.toBeNull();
+  const inside = container.querySelector("details")?.contains(marker);
+  expect(inside).toBe(state === "open");
 });

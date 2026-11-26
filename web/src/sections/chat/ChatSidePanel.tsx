@@ -41,13 +41,14 @@ type ChatSidePanelProps = ChatSidePanelPlacement & {
 type PanelShape = "closed" | "beside" | "covers";
 
 /**
- * A chat side panel (Sources, Files) that slides open. A closed panel is
- * inert and hidden once it has slid shut: not focusable and not announced.
+ * A chat side panel (Sources, Files). A closed panel is inert and hidden
+ * once it has shut: not focusable and not announced.
  * Escape in it calls `onEscape`, and closing returns focus to the element
  * that had it when the panel opened, or that last switched what it shows.
- * The width slides only on a change of shape (open, close, beside or over
- * the page); a change of width within a shape, such as the row's or a drag
- * of the edge, applies at once.
+ * Without a reserve, the width slides on open and close. With one, every
+ * change applies in one frame, as T3 Code's panels do by default: a slide
+ * would lay out the page beside the panel, and the panel's content, again on
+ * each frame.
  */
 export function ChatSidePanel({
   open,
@@ -64,7 +65,7 @@ export function ChatSidePanel({
   const [sliding, setSliding] = useState(false);
   if (slidShape !== shape) {
     setSlidShape(shape);
-    setSliding(true);
+    setSliding(reserve === undefined);
   }
   const endSlide = (event: TransitionEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget && event.propertyName === "width")
@@ -156,14 +157,7 @@ export function ChatSidePanel({
   );
   if (reserve === undefined) return panel;
   return (
-    <div
-      className={cn(
-        "h-full",
-        sliding &&
-          "transition-[width] ease-in-out duration-300 motion-reduce:transition-none"
-      )}
-      style={{ width: open ? reserve : 0 }}
-    >
+    <div className="h-full" style={{ width: open ? reserve : 0 }}>
       {panel}
     </div>
   );

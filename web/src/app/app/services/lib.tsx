@@ -447,9 +447,12 @@ export async function removeChatFeedback(messageId: number) {
   return response;
 }
 
+/** A `null` name asks the server to generate one; `regenerate` replaces a
+ * saved name too. */
 export async function renameChatSession(
   chatSessionId: string,
-  newName: string
+  newName: string | null,
+  regenerate = false
 ) {
   const response = await fetch(`/api/chat/rename-chat-session`, {
     method: "PUT",
@@ -459,6 +462,7 @@ export async function renameChatSession(
     body: JSON.stringify({
       chat_session_id: chatSessionId,
       name: newName,
+      regenerate,
     }),
   });
   return response;

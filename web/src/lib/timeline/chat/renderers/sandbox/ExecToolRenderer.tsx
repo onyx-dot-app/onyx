@@ -11,6 +11,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/lib/timeline/chat/message/messageComponents/types";
 import { stripAnsi } from "@/lib/sandbox/ansi";
+import { terminalOutputNodes } from "@/lib/sandbox/TerminalOutput";
 import {
   didExecFail,
   isExpectedInterrupt,
@@ -70,7 +71,12 @@ export function ExecToolRenderer({
     stopPacketSeen,
     onComplete
   );
-  const output = stripAnsi(end === null ? liveOutput : (end.output ?? ""));
+  const rawOutput = end === null ? liveOutput : (end.output ?? "");
+  const output = useMemo(() => stripAnsi(rawOutput), [rawOutput]);
+  const coloredOutput = useMemo(
+    () => terminalOutputNodes(rawOutput),
+    [rawOutput]
+  );
 
   // A call replayed from history starts at the top of its output.
   const [followOutput] = useState(!isComplete);
@@ -129,7 +135,7 @@ export function ExecToolRenderer({
   // finished command with no output says so, and its exit code closes the
   // panel.
   const panelOutput =
-    output ||
+    (output ? coloredOutput : "") ||
     (end !== null && error === null && !end.session_id
       ? t("sandbox.noOutput.text")
       : "");

@@ -340,3 +340,28 @@ def test_owned_nullable_arguments_survive_gemini_translation(
     translated = result[0]["function_declarations"][0]["parameters"]
     assert translated["properties"]["value"] == expected
     assert translated["required"] == ["value"]
+
+
+def test_provider_schema_changes_do_not_reach_tool_definitions() -> None:
+    """LiteLLM's Vertex AI route rewrites a tool schema in place; the request
+    gets its own copy, so the run's tool definitions stay unchanged."""
+    from litellm.llms.vertex_ai.common_utils import _build_vertex_schema
+
+    definition = ToolDefinition(
+        name="lookup",
+        description="Look up a value.",
+        parameters={
+            "type": "object",
+            "$defs": {"Query": {"type": "string"}},
+            "properties": {"query": {"$ref": "#/$defs/Query"}},
+        },
+    )
+    original = deepcopy(definition.parameters)
+    [tool] = serialize_tools([definition])
+    function = tool["function"]
+    assert isinstance(function, dict)
+    parameters = function["parameters"]
+    assert isinstance(parameters, dict)
+    _build_vertex_schema(parameters)
+    assert "$defs" not in parameters
+    assert definition.parameters == original

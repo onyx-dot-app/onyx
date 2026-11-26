@@ -1,0 +1,36 @@
+name: Desktop downloads
+
+# Sums the download_count of the desktop assets on GitHub releases and writes
+# a Markdown table to the job summary. Pull requests that change the script
+# run its tests only.
+on:
+  schedule:
+    - cron: "0 14 * * 1" # Mondays 14:00 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/scripts/desktop-downloads.py"
+      - ".github/scripts/test_desktop_downloads.py"
+      - ".github/workflows/desktop-downloads.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  downloads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Test the report
+        run: python3 -m unittest discover -s .github/scripts -p test_desktop_downloads.py -v
+
+      - name: Write the report
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/desktop-downloads.py >> "${GITHUB_STEP_SUMMARY}"

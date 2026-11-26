@@ -58,6 +58,7 @@ def test_stable_prefix_precedes_file_notices(with_history: bool) -> None:
         token_counter=len,
         all_injected_file_metadata={"old": forgotten},
         available_tool_names={"read_file"},
+        search_passage_cache={},
     )
     assert all(prompt_metadata(message).should_cache for message in prepared[:-3])
     assert all(not prompt_metadata(message).should_cache for message in prepared[-3:])
@@ -173,6 +174,7 @@ def test_followup_preserves_complete_prefix_with_project_text_and_images() -> No
             reminder_message=None,
             token_counter=len,
             llm_config=config,
+            search_passage_cache={},
         )
 
     first = assemble(history, "First request context")

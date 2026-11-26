@@ -166,7 +166,7 @@ test("overlapping preference saves keep each other, and a failed one shows the s
   await loginAsRandomUser(page);
   const preferences = new SettingsChatPreferencesPage(page);
   await preferences.goto();
-  await preferences.expectCollapseLargePastes(false);
+  await preferences.expectCollapseLargePastes(true);
 
   // The first save stays in flight while the second completes.
   const pastes = await preferences.holdNextCollapseLargePastesSave();
@@ -175,16 +175,16 @@ test("overlapping preference saves keep each other, and a failed one shows the s
   await preferences.setSendBehavior("Interrupt current work");
   pastes.release();
   await pastes.delivered;
-  await preferences.expectCollapseLargePastes(true);
+  await preferences.expectCollapseLargePastes(false);
   await expect(preferences.sendBehavior).toHaveValue("Interrupt current work");
 
   // A failed save shows what the server holds and keeps the other change.
   await preferences.failNextSendBehaviorSave();
   await preferences.chooseSendBehavior("After the current step");
   await expect(preferences.sendBehavior).toHaveValue("Interrupt current work");
-  await preferences.expectCollapseLargePastes(true);
+  await preferences.expectCollapseLargePastes(false);
 
   await preferences.goto();
-  await preferences.expectCollapseLargePastes(true);
+  await preferences.expectCollapseLargePastes(false);
   await expect(preferences.sendBehavior).toHaveValue("Interrupt current work");
 });

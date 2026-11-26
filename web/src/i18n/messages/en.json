@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "Uploaded attachment"
-        }
+        },
+        "next": "Next image",
+        "position": "{current} / {total}",
+        "previous": "Previous image"
       },
       "inMessageImage": {
         "downloadButton": {
@@ -11977,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "Subagents working",
         "attachFilesButton": {
           "tooltip": "Attach Files"
         },
@@ -12030,9 +12032,6 @@
           "interruptLabel": "Interrupt",
           "waitHint": "Wait for the response to finish.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "Stop subagents"
         },
         "questionAttachmentsHint": "Answers to the agent's questions can't include files. Remove the files to answer."
       },
@@ -12180,8 +12179,7 @@
         "withdrawFailed": "Could not remove the pending message.",
         "loadFailed": "Could not load pending messages.",
         "alreadyAccepted": "This message was already accepted and is no longer pending.",
-        "interruptFailed": "Could not send this message now. It remains pending.",
-        "stopSubagentsFailed": "Could not stop the subagents."
+        "interruptFailed": "Could not send this message now. It remains pending."
       },
       "pendingToolApproval": {
         "toast": "Approve or reject the pending tool calls first."
@@ -12191,6 +12189,16 @@
       },
       "pendingUserInput": {
         "toast": "Answer the pending approval requests or questions first."
+      },
+      "fileDropOverlay": {
+        "label": "Drop files to attach"
+      },
+      "editMessageBanner": {
+        "label": "Editing in the composer",
+        "cancelButton": {
+          "label": "Cancel",
+          "ariaLabel": "Cancel editing message"
+        }
       }
     },
     "messages": {
@@ -12205,11 +12213,24 @@
       "agentResults": {
         "received": "Subagent results received"
       },
-      "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "Copied!",
-          "label": "Copy"
+      "callout": {
+        "note": {
+          "title": "Note"
         },
+        "tip": {
+          "title": "Tip"
+        },
+        "important": {
+          "title": "Important"
+        },
+        "warning": {
+          "title": "Warning"
+        },
+        "caution": {
+          "title": "Caution"
+        }
+      },
+      "codeBlock": {
         "wrapButton": {
           "unwrapLabel": "Unwrap",
           "wrapLabel": "Wrap"
@@ -12257,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName} could not reach its server"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} failed"
         }
       },
       "customToolAuth": {
@@ -12373,14 +12397,6 @@
         },
         "artifactError": {
           "message": "This file is not available."
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "Cancel"
-        },
-        "submitButton": {
-          "label": "Submit"
         }
       },
       "messageSwitcher": {
@@ -12536,6 +12552,9 @@
           "runningCommand": {
             "label": "Running command..."
           },
+          "runningProgram": {
+            "label": "Running {program}..."
+          },
           "editingFiles": {
             "label": "Editing files..."
           },
@@ -12544,48 +12563,6 @@
           },
           "browsing": {
             "label": "Browsing web pages..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "Doing some work...",
-              "done": "Did some work"
-            },
-            "crunchingDetails": {
-              "working": "Crunching the details...",
-              "done": "Crunched the details"
-            },
-            "connectingDots": {
-              "working": "Connecting the dots...",
-              "done": "Connected the dots"
-            },
-            "runningNumbers": {
-              "working": "Running the numbers...",
-              "done": "Ran the numbers"
-            },
-            "fillingGaps": {
-              "working": "Filling in the gaps...",
-              "done": "Filled in the gaps"
-            },
-            "sortingThingsOut": {
-              "working": "Sorting things out...",
-              "done": "Sorted things out"
-            },
-            "gatheringPieces": {
-              "working": "Gathering the pieces...",
-              "done": "Gathered the pieces"
-            },
-            "workingThroughIt": {
-              "working": "Working through it...",
-              "done": "Worked through it"
-            },
-            "ironingOutDetails": {
-              "working": "Ironing out the details...",
-              "done": "Ironed out the details"
-            },
-            "roundingThingsOut": {
-              "working": "Rounding things out...",
-              "done": "Rounded things out"
-            }
           }
         },
         "internalSearch": {
@@ -12612,9 +12589,6 @@
             "before": "before {date}",
             "between": "from {start} to {end}"
           }
-        },
-        "interruptedThinking": {
-          "label": "Interrupted Thinking"
         },
         "memory": {
           "default": {
@@ -12737,10 +12711,10 @@
           "label": "{count, plural, one {# step} other {# steps}}"
         },
         "thoughtDuration": {
-          "label": "Thought for {duration}"
+          "label": "Worked for {duration}"
         },
         "thoughtUnknownDuration": {
-          "label": "Thought for some time"
+          "label": "Worked"
         },
         "toggleRow": {
           "ariaLabel": "Toggle timeline"
@@ -12799,6 +12773,9 @@
               "patching": {
                 "status": "{count, plural, =0 {Patching files…} one {Patching # file…} other {Patching # files…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {Delete file} other {Empty file}}"
             }
           },
           "stopped": {
@@ -12811,6 +12788,50 @@
             "failed": {
               "status": "Publish failed"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "Reading skill {name}",
+            "done": "Read skill {name}",
+            "failed": "Could not read skill {name}",
+            "runningUnnamed": "Reading skill",
+            "doneUnnamed": "Read skill",
+            "failedUnnamed": "Could not read skill"
+          },
+          "load": {
+            "running": "Loading skill {name}",
+            "done": "Loaded skill {name}",
+            "failed": "Could not load skill {name}",
+            "runningUnnamed": "Loading skill",
+            "doneUnnamed": "Loaded skill",
+            "failedUnnamed": "Could not load skill"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "Spawning subagent {name}",
+            "done": "Spawned subagent {name}",
+            "failed": "Could not spawn subagent {name}",
+            "runningUnnamed": "Spawning subagent",
+            "doneUnnamed": "Spawned subagent",
+            "failedUnnamed": "Could not spawn subagent"
+          },
+          "send": {
+            "running": "Sending message to {name}",
+            "done": "Sent message to {name}",
+            "failed": "Could not send message to {name}",
+            "runningUnnamed": "Sending message to subagent",
+            "doneUnnamed": "Sent message to subagent",
+            "failedUnnamed": "Could not send message to subagent"
+          },
+          "interrupt": {
+            "running": "Interrupting {name}",
+            "done": "Interrupted {name}",
+            "failed": "Could not interrupt {name}",
+            "runningUnnamed": "Interrupting subagent",
+            "doneUnnamed": "Interrupted subagent",
+            "failedUnnamed": "Could not interrupt subagent"
           }
         }
       },
@@ -13579,22 +13600,33 @@
       },
       "agents": {
         "title": "Agents",
+        "titleRunning": "Agents · {count} running",
         "status": {
-          "starting": "Starting",
-          "running": "Running",
-          "suspended": "Waiting",
           "complete": "Done",
           "limit": "Hit step limit",
           "cancelled": "Cancelled",
           "stopped": "Stopped",
           "error": "Failed"
         },
-        "finished": "Previous agents"
+        "finished": "Previous agents",
+        "stop": "Stop {name}",
+        "stopTooltip": "Stop agent",
+        "stopFailed": "Could not stop the agent."
       },
       "files": {
         "title": "Files",
         "viewAll": "{count, plural, one {View # file} other {View all # files}}"
       }
+    },
+    "find": {
+      "capped": "Searched the last {count, plural, one {# message} other {# messages}}",
+      "close": "Close find",
+      "count": "{current} of {total}",
+      "label": "Find in session",
+      "loadingOlder": "Loading older messages…",
+      "next": "Next match",
+      "placeholder": "Find in session",
+      "previous": "Previous match"
     }
   },
   "common": {
@@ -15082,6 +15114,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, one {# addition} other {# additions}}, {removed, plural, one {# deletion} other {# deletions}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {# unchanged line} other {# unchanged lines}}"
         },
@@ -16678,6 +16713,12 @@
       "deleteError": {
         "message": "Failed to delete chat. Please try again."
       },
+      "markRead": {
+        "label": "Mark as read"
+      },
+      "markUnread": {
+        "label": "Mark as unread"
+      },
       "moveToProject": {
         "label": "Move to Project"
       },
@@ -16686,6 +16727,12 @@
       },
       "projectSearchInput": {
         "placeholder": "Search Projects"
+      },
+      "regenerateTitle": {
+        "label": "Regenerate title"
+      },
+      "regenerateTitleError": {
+        "message": "Failed to regenerate the title. Please try again."
       },
       "removeFromProject": {
         "label": "Remove from {projectName}"
@@ -16710,9 +16757,11 @@
           "label": "Working"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "Share"
+      },
+      "updatedNow": {
+        "label": "now"
       }
     },
     "chatSearch": {
@@ -16758,6 +16807,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "Change Model"
+        },
+        "findInChat": {
+          "label": "Find in Session"
         },
         "nextChat": {
           "label": "Next Session"

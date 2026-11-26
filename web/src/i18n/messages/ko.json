@@ -11953,7 +11953,10 @@
       "fullImageModal": {
         "image": {
           "alt": "업로드된 첨부 파일"
-        }
+        },
+        "next": "다음 이미지",
+        "position": "{current} / {total}",
+        "previous": "이전 이미지"
       },
       "inMessageImage": {
         "downloadButton": {
@@ -11977,7 +11980,6 @@
     },
     "input": {
       "appInputBar": {
-        "subagentsWorking": "하위 에이전트 작업 중",
         "attachFilesButton": {
           "tooltip": "파일 첨부"
         },
@@ -12030,9 +12032,6 @@
           "interruptLabel": "중단",
           "waitHint": "응답이 끝날 때까지 기다리세요.",
           "ctrlKey": "Ctrl"
-        },
-        "stopSubagentsButton": {
-          "label": "하위 에이전트 중지"
         },
         "questionAttachmentsHint": "에이전트의 질문에 대한 답변에는 파일을 포함할 수 없습니다. 답변하려면 파일을 제거하세요."
       },
@@ -12180,8 +12179,7 @@
         "withdrawFailed": "대기 중인 메시지를 삭제하지 못했습니다.",
         "loadFailed": "대기 중인 메시지를 불러오지 못했습니다.",
         "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
-        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다.",
-        "stopSubagentsFailed": "하위 에이전트를 중지할 수 없습니다."
+        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다."
       },
       "pendingToolApproval": {
         "toast": "먼저 대기 중인 도구 호출을 승인하거나 거부하세요."
@@ -12191,6 +12189,16 @@
       },
       "pendingUserInput": {
         "toast": "먼저 대기 중인 승인 요청이나 질문을 처리하세요."
+      },
+      "fileDropOverlay": {
+        "label": "파일을 놓아 첨부"
+      },
+      "editMessageBanner": {
+        "label": "입력창에서 편집 중",
+        "cancelButton": {
+          "label": "취소",
+          "ariaLabel": "메시지 편집 취소"
+        }
       }
     },
     "messages": {
@@ -12205,11 +12213,24 @@
       "agentResults": {
         "received": "하위 에이전트 결과를 받았습니다"
       },
-      "codeBlock": {
-        "copyButton": {
-          "copiedLabel": "복사됨!",
-          "label": "복사"
+      "callout": {
+        "note": {
+          "title": "참고"
         },
+        "tip": {
+          "title": "팁"
+        },
+        "important": {
+          "title": "중요"
+        },
+        "warning": {
+          "title": "경고"
+        },
+        "caution": {
+          "title": "주의"
+        }
+      },
+      "codeBlock": {
         "wrapButton": {
           "unwrapLabel": "줄 바꿈 해제",
           "wrapLabel": "줄 바꿈"
@@ -12257,6 +12278,9 @@
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
+        },
+        "callFailedStatus": {
+          "text": "{toolName} 실패"
         }
       },
       "customToolAuth": {
@@ -12373,14 +12397,6 @@
         },
         "artifactError": {
           "message": "이 파일을 사용할 수 없습니다."
-        }
-      },
-      "messageEditing": {
-        "cancelButton": {
-          "label": "취소"
-        },
-        "submitButton": {
-          "label": "제출"
         }
       },
       "messageSwitcher": {
@@ -12536,6 +12552,9 @@
           "runningCommand": {
             "label": "명령 실행 중..."
           },
+          "runningProgram": {
+            "label": "{program} 실행 중..."
+          },
           "editingFiles": {
             "label": "파일 편집 중..."
           },
@@ -12544,48 +12563,6 @@
           },
           "browsing": {
             "label": "웹 페이지 탐색 중..."
-          },
-          "runPhrases": {
-            "doingWork": {
-              "working": "작업 중...",
-              "done": "작업을 마쳤습니다"
-            },
-            "crunchingDetails": {
-              "working": "세부 사항을 분석하는 중...",
-              "done": "세부 사항을 분석했습니다"
-            },
-            "connectingDots": {
-              "working": "점들을 연결하는 중...",
-              "done": "점들을 연결했습니다"
-            },
-            "runningNumbers": {
-              "working": "숫자를 계산하는 중...",
-              "done": "숫자를 계산했습니다"
-            },
-            "fillingGaps": {
-              "working": "빈 곳을 채우는 중...",
-              "done": "빈 곳을 채웠습니다"
-            },
-            "sortingThingsOut": {
-              "working": "정리하는 중...",
-              "done": "정리했습니다"
-            },
-            "gatheringPieces": {
-              "working": "조각을 모으는 중...",
-              "done": "조각을 모았습니다"
-            },
-            "workingThroughIt": {
-              "working": "해결하는 중...",
-              "done": "해결했습니다"
-            },
-            "ironingOutDetails": {
-              "working": "세부 사항을 다듬는 중...",
-              "done": "세부 사항을 다듬었습니다"
-            },
-            "roundingThingsOut": {
-              "working": "마무리하는 중...",
-              "done": "마무리했습니다"
-            }
           }
         },
         "internalSearch": {
@@ -12612,9 +12589,6 @@
             "before": "{date} 이전",
             "between": "{start}부터 {end}까지"
           }
-        },
-        "interruptedThinking": {
-          "label": "중단된 사고"
         },
         "memory": {
           "default": {
@@ -12737,10 +12711,10 @@
           "label": "{count, plural, one {#단계} other {#단계}}"
         },
         "thoughtDuration": {
-          "label": "{duration} 동안 생각함"
+          "label": "{duration} 동안 작업함"
         },
         "thoughtUnknownDuration": {
-          "label": "잠시 생각함"
+          "label": "작업함"
         },
         "toggleRow": {
           "ariaLabel": "타임라인 전환"
@@ -12799,6 +12773,9 @@
               "patching": {
                 "status": "{count, plural, =0 {파일 패치 중…} one {파일 #개 패치 중…} other {파일 #개 패치 중…}}"
               }
+            },
+            "noLines": {
+              "label": "{change, select, delete {파일 삭제} other {빈 파일}}"
             }
           },
           "stopped": {
@@ -12811,6 +12788,50 @@
             "failed": {
               "status": "게시 실패"
             }
+          }
+        },
+        "skill": {
+          "read": {
+            "running": "스킬 {name} 읽는 중",
+            "done": "스킬 {name} 읽음",
+            "failed": "스킬 {name}을(를) 읽을 수 없음",
+            "runningUnnamed": "스킬 읽는 중",
+            "doneUnnamed": "스킬 읽음",
+            "failedUnnamed": "스킬을 읽을 수 없음"
+          },
+          "load": {
+            "running": "스킬 {name} 불러오는 중",
+            "done": "스킬 {name} 불러옴",
+            "failed": "스킬 {name}을(를) 불러올 수 없음",
+            "runningUnnamed": "스킬 불러오는 중",
+            "doneUnnamed": "스킬 불러옴",
+            "failedUnnamed": "스킬을 불러올 수 없음"
+          }
+        },
+        "agentTool": {
+          "spawn": {
+            "running": "하위 에이전트 {name} 시작 중",
+            "done": "하위 에이전트 {name} 시작함",
+            "failed": "하위 에이전트 {name}을(를) 시작할 수 없음",
+            "runningUnnamed": "하위 에이전트 시작 중",
+            "doneUnnamed": "하위 에이전트 시작함",
+            "failedUnnamed": "하위 에이전트를 시작할 수 없음"
+          },
+          "send": {
+            "running": "{name}에게 메시지 보내는 중",
+            "done": "{name}에게 메시지 보냄",
+            "failed": "{name}에게 메시지를 보낼 수 없음",
+            "runningUnnamed": "하위 에이전트에게 메시지 보내는 중",
+            "doneUnnamed": "하위 에이전트에게 메시지 보냄",
+            "failedUnnamed": "하위 에이전트에게 메시지를 보낼 수 없음"
+          },
+          "interrupt": {
+            "running": "{name} 중단 중",
+            "done": "{name} 중단함",
+            "failed": "{name}을(를) 중단할 수 없음",
+            "runningUnnamed": "하위 에이전트 중단 중",
+            "doneUnnamed": "하위 에이전트 중단함",
+            "failedUnnamed": "하위 에이전트를 중단할 수 없음"
           }
         }
       },
@@ -13579,22 +13600,33 @@
       },
       "agents": {
         "title": "에이전트",
+        "titleRunning": "에이전트 · {count}개 실행 중",
         "status": {
-          "starting": "시작 중",
-          "running": "실행 중",
-          "suspended": "대기 중",
           "complete": "완료",
           "limit": "단계 한도 도달",
           "cancelled": "취소됨",
           "stopped": "중지됨",
           "error": "실패"
         },
-        "finished": "이전 에이전트"
+        "finished": "이전 에이전트",
+        "stop": "{name} 중지",
+        "stopTooltip": "에이전트 중지",
+        "stopFailed": "에이전트를 중지할 수 없습니다."
       },
       "files": {
         "title": "파일",
         "viewAll": "{count, plural, other {파일 #개 모두 보기}}"
       }
+    },
+    "find": {
+      "capped": "최근 {count, plural, other {#개의 메시지}}를 검색했습니다",
+      "close": "찾기 닫기",
+      "count": "{current}/{total}",
+      "label": "세션에서 찾기",
+      "loadingOlder": "이전 메시지를 불러오는 중…",
+      "next": "다음 일치 항목",
+      "placeholder": "세션에서 찾기",
+      "previous": "이전 일치 항목"
     }
   },
   "common": {
@@ -15082,6 +15114,9 @@
         }
       },
       "diff": {
+        "stat": {
+          "label": "{added, plural, other {#줄 추가}}, {removed, plural, other {#줄 삭제}}"
+        },
         "unchangedLines": {
           "label": "{count, plural, one {변경되지 않은 줄 #개} other {변경되지 않은 줄 #개}}"
         },
@@ -16678,6 +16713,12 @@
       "deleteError": {
         "message": "채팅을 삭제하지 못했습니다. 다시 시도하세요."
       },
+      "markRead": {
+        "label": "읽음으로 표시"
+      },
+      "markUnread": {
+        "label": "읽지 않음으로 표시"
+      },
       "moveToProject": {
         "label": "프로젝트로 이동"
       },
@@ -16686,6 +16727,12 @@
       },
       "projectSearchInput": {
         "placeholder": "프로젝트 검색"
+      },
+      "regenerateTitle": {
+        "label": "제목 다시 생성"
+      },
+      "regenerateTitleError": {
+        "message": "제목을 다시 생성하지 못했습니다. 다시 시도해 주세요."
       },
       "removeFromProject": {
         "label": "{projectName}에서 제거"
@@ -16710,9 +16757,11 @@
           "label": "작업 중"
         }
       },
-      "runStatusTooltip": "{title} · {status}",
       "share": {
         "label": "공유"
+      },
+      "updatedNow": {
+        "label": "방금"
       }
     },
     "chatSearch": {
@@ -16758,6 +16807,9 @@
       "shortcuts": {
         "changeModel": {
           "label": "모델 변경"
+        },
+        "findInChat": {
+          "label": "세션에서 찾기"
         },
         "nextChat": {
           "label": "다음 세션"

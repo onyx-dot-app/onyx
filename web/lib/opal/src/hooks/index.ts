@@ -30,6 +30,7 @@ export {
   type UseSearchableGridOptions,
   type UseSearchableGridReturn,
 } from "@opal/hooks/useSearchableGrid";
+export { default as useNowMinute } from "@opal/hooks/useNowMinute";
 export { default as useOnMount } from "@opal/hooks/useOnMount";
 export { default as useOverflow } from "@opal/hooks/useOverflow";
 export {

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestRunDesktopScript_installsAtTheRootThenRunsNpm(t *testing.T) {
+func TestRunDesktopScript_installsWebAndDesktopThenRunsNpm(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
@@ -22,9 +22,12 @@ func TestRunDesktopScript_installsAtTheRootThenRunsNpm(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			binDir := devtoolBinDir(t)
 			root := devtoolRepo(t)
+			webDir := filepath.Join(root, "web")
 			desktopDir := filepath.Join(root, "desktop")
-			if err := os.MkdirAll(desktopDir, 0o755); err != nil {
-				t.Fatal(err)
+			for _, dir := range []string{webDir, desktopDir} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
 			}
 			calls := desktopSharedCallLog(t, binDir, "bun", "npm")
 
@@ -32,10 +35,10 @@ func TestRunDesktopScript_installsAtTheRootThenRunsNpm(t *testing.T) {
 				t.Fatalf("runDesktopScript failed: %v", err)
 			}
 
-			// desktop is a root workspace member, so dependencies install at the root
-			// before npm runs the script.
+			// desktop/ reads Opal from web/, so both install before npm runs the script.
 			want := []devtoolCall{
-				{Dir: root, Args: []string{"bun", "install", "--frozen-lockfile"}},
+				{Dir: webDir, Args: []string{"bun", "install", "--frozen-lockfile"}},
+				{Dir: desktopDir, Args: []string{"bun", "install", "--frozen-lockfile"}},
 				{Dir: desktopDir, Args: append([]string{"npm"}, c.want...)},
 			}
 			if got := devtoolCalls(t, calls); !reflect.DeepEqual(got, want) {
@@ -59,7 +62,10 @@ func TestRunDesktopScript_failures(t *testing.T) {
 
 	t.Run("bun install fails", func(t *testing.T) {
 		binDir := devtoolBinDir(t)
-		devtoolRepo(t)
+		root := devtoolRepo(t)
+		if err := os.MkdirAll(filepath.Join(root, "web"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		devtoolFakeTool(t, binDir, "bun", "exit 3")
 		npmCalls := devtoolFakeTool(t, binDir, "npm", "")
 

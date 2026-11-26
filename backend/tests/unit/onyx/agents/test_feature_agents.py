@@ -13,6 +13,7 @@ from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolEndEvent
 from onyx.agents.models import (
     AgentCompletion,
+    AgentState,
     InputMessageMetadata,
     InputSource,
     PreparedStep,
@@ -32,13 +33,13 @@ from onyx.chat.run_store import agent_result_message
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.agent import DeepResearchAgent
+from onyx.deep_research.agent import DeepResearchFeature
 from onyx.deep_research.models import (
     ResearchAgentCallResult,
     ResearchMessageMetadata,
     ResearchPhase,
 )
-from onyx.deep_research.research_agent import ResearchAgent
+from onyx.deep_research.research_agent import ResearchFeature
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
@@ -112,11 +113,11 @@ def test_research_search_steps_are_bounded_and_report_is_generated(
     presentation = (
         ResponsePresenter(Emitter(queue.Queue[Packet]().put_nowait)) if render else None
     )
-    feature = ResearchAgent(
+    agent = ResearchFeature(
         [ResearchWebSearchStub()], llm, len, None, "", ReasoningEffort.LOW
-    )
+    ).agent()
     result = run_agent(
-        feature,
+        agent,
         runs=runs,
         max_steps=3,
         messages=[UserMessage(content="Find facts")],
@@ -128,7 +129,7 @@ def test_research_search_steps_are_bounded_and_report_is_generated(
         len(
             [
                 message
-                for message in feature.state.messages
+                for message in agent.state.messages
                 if message.role == "tool_result"
             ]
         )
@@ -165,7 +166,7 @@ def test_research_executes_only_allowed_tools_and_records_results() -> None:
             side_effect=AssertionError("Internal search was not requested")
         ),
     )
-    feature = ResearchAgent(
+    feature = ResearchFeature(
         [ResearchWebSearchStub(), EchoTool(), search],
         llm,
         len,
@@ -174,7 +175,7 @@ def test_research_executes_only_allowed_tools_and_records_results() -> None:
         ReasoningEffort.LOW,
     )
     result = run_agent(
-        feature,
+        feature.agent(),
         runs=runs,
         max_steps=3,
         messages=[UserMessage(content="Find facts")],
@@ -220,8 +221,7 @@ def test_deep_research_composes_plan_child_and_report() -> None:
     )
     output: queue.Queue[Packet] = queue.Queue()
     identity = LLMUserIdentity(user_id="researcher", session_id="session")
-    feature = DeepResearchAgent(
-        messages=[],
+    agent = DeepResearchFeature(
         allowed_tools=[],
         llm=llm,
         token_counter=len,
@@ -230,15 +230,15 @@ def test_deep_research_composes_plan_child_and_report() -> None:
         reasoning_effort=ReasoningEffort.LOW,
         all_injected_file_metadata=None,
         skip_clarification=True,
-    )
-    feature.generation_context.stall_timeout_s = 11
+    ).agent(AgentState())
+    agent.generation_context.stall_timeout_s = 11
     coordinator = AgentCoordinator()
     project = partial(
         project_response,
         tool_ids={RESEARCH_AGENT_TOOL_NAME: 7},
     )
     run_agent(
-        feature,
+        agent,
         runs=runs,
         coordinator=coordinator,
         messages=[UserMessage(content="Research")],
@@ -340,8 +340,7 @@ def test_deep_research_prelude_cancellation_keeps_partial_output(
                     signal.cancel()
                     signal.check()
 
-    feature = DeepResearchAgent(
-        [],
+    agent = DeepResearchFeature(
         [],
         InterruptedLLM([Delta(content="Partial prelude")], 128000),
         len,
@@ -350,7 +349,7 @@ def test_deep_research_prelude_cancellation_keeps_partial_output(
         ReasoningEffort.LOW,
         None,
         skip_clarification=skip_clarification,
-    )
+    ).agent(AgentState())
 
     coordinator = AgentCoordinator()
     project = partial(
@@ -359,7 +358,7 @@ def test_deep_research_prelude_cancellation_keeps_partial_output(
     )
     with pytest.raises(AgentCancelled):
         run_agent(
-            feature,
+            agent,
             runs=runs,
             coordinator=coordinator,
             messages=[UserMessage(content="Research")],
@@ -382,8 +381,7 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
         ],
         128000,
     )
-    feature = DeepResearchAgent(
-        [],
+    agent = DeepResearchFeature(
         [],
         llm,
         len,
@@ -392,9 +390,9 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
         ReasoningEffort.LOW,
         None,
         skip_clarification=True,
-    )
+    ).agent(AgentState())
     result = run_agent(
-        feature,
+        agent,
         runs=runs,
         coordinator=AgentCoordinator(),
         messages=[UserMessage(content="Research")],
@@ -407,7 +405,7 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
     assert len(llm.requests) == 3
     assert [
         message.text
-        for message in feature.state.messages
+        for message in agent.state.messages
         if isinstance(message, UserMessage)
     ] == ["Research"]
 
@@ -462,9 +460,8 @@ def test_research_receives_background_evidence_with_distinct_citations(
             metadata=ChatMessageMetadata(sources={1: existing}),
         )
     ]
-    feature = (
-        DeepResearchAgent(
-            messages=history,
+    agent = (
+        DeepResearchFeature(
             allowed_tools=[],
             llm=llm,
             token_counter=len,
@@ -473,10 +470,9 @@ def test_research_receives_background_evidence_with_distinct_citations(
             reasoning_effort=ReasoningEffort.LOW,
             all_injected_file_metadata=None,
             skip_clarification=True,
-        )
+        ).agent(AgentState(messages=history))
         if deep_research
-        else ResearchAgent(
-            messages=history,
+        else ResearchFeature(
             sources={1: existing},
             tools=[],
             llm=llm,
@@ -484,7 +480,7 @@ def test_research_receives_background_evidence_with_distinct_citations(
             user_identity=None,
             language_section="",
             reasoning_effort=ReasoningEffort.LOW,
-        )
+        ).agent(AgentState(messages=history))
     )
     read_ids: set[str] = set()
 
@@ -504,7 +500,7 @@ def test_research_receives_background_evidence_with_distinct_citations(
     )
     try:
         result = run_agent(
-            feature,
+            agent,
             messages=[UserMessage(content="Use the background evidence")],
             max_steps=3 if deep_research else 2,
             coordinator=coordinator,
@@ -514,7 +510,7 @@ def test_research_receives_background_evidence_with_distinct_citations(
         assert result.output.metadata.sources == {1: existing, 2: incoming}
         accepted = [
             message
-            for message in feature.state.messages
+            for message in agent.state.messages
             if message.id == completion.message_id
         ]
         assert len(accepted) == 1
@@ -537,14 +533,14 @@ def test_child_failure_is_a_failed_tool_result(
     monkeypatch: pytest.MonkeyPatch, error: Exception
 ) -> None:
     runs: list[Run] = []
-    original_prepare = ResearchAgent._prepare_step
+    original_prepare = ResearchFeature._prepare_step
 
-    def fail_child(self: ResearchAgent, state: StepInput) -> PreparedStep:
+    def fail_child(self: ResearchFeature, state: StepInput) -> PreparedStep:
         if state.input_messages[0].text == "unavailable":
             raise error
         return original_prepare(self, state)
 
-    monkeypatch.setattr(ResearchAgent, "_prepare_step", fail_child)
+    monkeypatch.setattr(ResearchFeature, "_prepare_step", fail_child)
     llm = ScriptedLLM(
         [
             Delta(content="Plan"),
@@ -554,8 +550,7 @@ def test_child_failure_is_a_failed_tool_result(
         ],
         128000,
     )
-    feature = DeepResearchAgent(
-        [],
+    agent = DeepResearchFeature(
         [],
         llm,
         len,
@@ -564,9 +559,9 @@ def test_child_failure_is_a_failed_tool_result(
         ReasoningEffort.LOW,
         None,
         skip_clarification=True,
-    )
+    ).agent(AgentState())
     result = run_agent(
-        feature,
+        agent,
         runs=runs,
         coordinator=AgentCoordinator(),
         messages=[UserMessage(content="Research")],
@@ -574,7 +569,7 @@ def test_child_failure_is_a_failed_tool_result(
     )
     assert result.output.text == "Report with remaining evidence"
     tool_results = [
-        message for message in feature.state.messages if message.role == "tool_result"
+        message for message in agent.state.messages if message.role == "tool_result"
     ]
     assert tool_results[0].is_error
     snapshot = runs[-1].snapshot()
@@ -602,16 +597,16 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
         )
         for topic in ("first", "second")
     }
-    original_prepare = ResearchAgent._prepare_step
+    original_prepare = ResearchFeature._prepare_step
 
-    def child_prepare(child: ResearchAgent, state: StepInput) -> PreparedStep:
+    def child_prepare(child: ResearchFeature, state: StepInput) -> PreparedStep:
         prepared = original_prepare(child, state)
         metadata = prepared.output_metadata
         assert isinstance(metadata, ResearchMessageMetadata)
         metadata.sources = {9: documents[state.input_messages[0].text]}
         return prepared
 
-    monkeypatch.setattr(ResearchAgent, "_prepare_step", child_prepare)
+    monkeypatch.setattr(ResearchFeature, "_prepare_step", child_prepare)
 
     def allocate_citations(
         answer_text: str,
@@ -681,8 +676,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
             ]
         )
 
-    feature = DeepResearchAgent(
-        [],
+    agent = DeepResearchFeature(
         [],
         FakeModelClient(reply),
         len,
@@ -691,7 +685,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
         ReasoningEffort.LOW,
         None,
         skip_clarification=True,
-    )
+    ).agent(AgentState())
     coordinator = AgentCoordinator()
     project = partial(
         project_response,
@@ -707,7 +701,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
             final_events.append(event)
 
     run_agent(
-        feature,
+        agent,
         runs=runs,
         coordinator=coordinator,
         messages=[UserMessage(content="Parent")],
@@ -716,7 +710,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
     )
     accepted = [
         message
-        for message in feature.state.messages
+        for message in agent.state.messages
         if isinstance(message, ToolResultMessage)
         and message.tool_name == RESEARCH_AGENT_TOOL_NAME
     ]
@@ -753,15 +747,15 @@ def test_repeated_runs_use_new_input_and_restore_tool_execution() -> None:
         )
 
     llm = FakeModelClient(generate)
-    feature = ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
+    agent = ResearchFeature([], llm, len, None, "", ReasoningEffort.LOW).agent()
     first = run_agent(
-        feature,
+        agent,
         runs=runs,
         max_steps=2,
         messages=[UserMessage(content="First question")],
     )
     second = run_agent(
-        feature,
+        agent,
         runs=runs,
         max_steps=2,
         messages=[UserMessage(content="Second question")],
@@ -813,18 +807,18 @@ def test_restored_research_preserves_history_and_source_numbers(
     else:
         messages.append(AssistantMessage(content=[TextContent(text="Evidence [4]")]))
     llm = ScriptedLLM([Delta(content="The evidence supports this [4].")], 128000)
-    feature = ResearchAgent(
+    feature = ResearchFeature(
         tools=[],
         llm=llm,
         token_counter=len,
         user_identity=None,
         language_section="",
         reasoning_effort=ReasoningEffort.LOW,
-        messages=messages,
         sources=None if from_tool_result else {4: document},
     )
+    agent = feature.agent(AgentState(messages=messages))
     result = run_agent(
-        feature,
+        agent,
         runs=runs,
         max_steps=1,
         messages=[UserMessage(content="Continue")],
@@ -832,7 +826,7 @@ def test_restored_research_preserves_history_and_source_numbers(
     assert isinstance(result.output.metadata, ResearchMessageMetadata)
     assert result.output.metadata.sources == {4: document}
     assert feature.citation_processor.get_next_citation_number() == 5
-    assert feature.state.messages[0].text == "Find evidence"
+    assert agent.state.messages[0].text == "Find evidence"
     assert feature.citation_mapping == {4: "reference"}
 
 
@@ -849,10 +843,9 @@ def test_empty_final_response_fails_at_step_limit(feature_name: str) -> None:
 
     llm = FakeModelClient(reply)
     if feature_name == "research":
-        feature = ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
+        agent = ResearchFeature([], llm, len, None, "", ReasoningEffort.LOW).agent()
     else:
-        feature = DeepResearchAgent(
-            [],
+        agent = DeepResearchFeature(
             [],
             llm,
             len,
@@ -861,12 +854,12 @@ def test_empty_final_response_fails_at_step_limit(feature_name: str) -> None:
             ReasoningEffort.LOW,
             None,
             skip_clarification=True,
-        )
+        ).agent(AgentState())
     runs: list[Run] = []
     budget = 2 if feature_name == "deep_research" else 1
     with pytest.raises(RunFailed) as failure:
         run_agent(
-            feature,
+            agent,
             messages=[UserMessage(content="Task")],
             max_steps=budget,
             runs=runs,
@@ -890,15 +883,15 @@ def test_research_result_failure_returns_tool_error_and_preserves_child(
         raise ValueError("Invalid citation mapping")
 
     if missing_metadata:
-        original_prepare = ResearchAgent._prepare_step
+        original_prepare = ResearchFeature._prepare_step
 
         def prepare_without_metadata(
-            agent: ResearchAgent, state: StepInput
+            agent: ResearchFeature, state: StepInput
         ) -> PreparedStep:
             prepared = original_prepare(agent, state)
             return prepared.model_copy(update={"output_metadata": None})
 
-        monkeypatch.setattr(ResearchAgent, "_prepare_step", prepare_without_metadata)
+        monkeypatch.setattr(ResearchFeature, "_prepare_step", prepare_without_metadata)
     else:
         monkeypatch.setattr(
             "onyx.deep_research.agent.collapse_citations", fail_conversion
@@ -919,8 +912,7 @@ def test_research_result_failure_returns_tool_error_and_preserves_child(
             )
         return AssistantMessage(content=[TextContent(text="Completed report")])
 
-    feature = DeepResearchAgent(
-        [],
+    feature = DeepResearchFeature(
         [],
         FakeModelClient(reply),
         len,
@@ -932,7 +924,7 @@ def test_research_result_failure_returns_tool_error_and_preserves_child(
     )
     runs: list[Run] = []
     result = run_agent(
-        feature,
+        feature.agent(AgentState()),
         messages=[UserMessage(content="Parent task")],
         max_steps=3,
         runs=runs,
