@@ -16794,7 +16794,6 @@
       "share": {
         "label": "공유"
       },
-      "updatedAt": "업데이트 {date}",
       "updatedNow": {
         "label": "방금"
       }

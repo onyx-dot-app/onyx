@@ -16794,7 +16794,6 @@
       "share": {
         "label": "共有"
       },
-      "updatedAt": "更新日時 {date}",
       "updatedNow": {
         "label": "今"
       }
