@@ -31,6 +31,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Iterator
+from functools import cache
 from pathlib import Path
 from typing import override
 
@@ -78,16 +79,21 @@ THINKING_CHARS = 1_500
 ANSWER_CHARS = 3_000
 DELTA_CHARS = 30
 
-_WORDS = random.Random(7)
-CORPUS = " ".join(
-    "".join(_WORDS.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(6))
-    for _ in range(400_000)
-)
+
+@cache
+def _corpus() -> str:
+    """The random words that scripted text is cut from, built on first use."""
+    words = random.Random(7)
+    return " ".join(
+        "".join(words.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(6))
+        for _ in range(400_000)
+    )
 
 
 def _text(rng: random.Random, length: int) -> str:
-    start = rng.randrange(0, len(CORPUS) - length)
-    return CORPUS[start : start + length]
+    corpus = _corpus()
+    start = rng.randrange(0, len(corpus) - length)
+    return corpus[start : start + length]
 
 
 class BenchLLM(LitellmLLM):
