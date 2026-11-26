@@ -63,8 +63,11 @@ bounded deque. It takes no lock and does no I/O. A full queue drops the event.
 The daemon thread enrolls at `/v1/enroll` before its first batch, so startup
 never waits for the database or the network. The service reply settles each
 batch. The sender does not resend rejected events, and resends events the
-service could not store at most `_MAX_RETRIES` times. Each heartbeat carries
-the drop, reject and invalid counts.
+service could not store at most `_MAX_RETRIES` times. Events over the service's
+ingress budget (`retry` with code `customer_ingress_budget_exceeded`) are the
+exception: like a 429, they stay pending without using a retry. Backoff is
+jittered and waits at least `Retry-After`, capped at 300 seconds. Each heartbeat
+carries the drop, reject and invalid counts.
 
 **Emit points in application code.**
 - Query timing: `utils/fleet_query_telemetry.py:telemetry_chat` wraps the chat
@@ -127,11 +130,27 @@ revision, so later passes repeat its ID and the service keeps the final state
 (`utils/fleet_telemetry_collector.py:_send_finished`). Index attempt and job
 state reach the fleet only from this pass.
 
+**Usage and history.** At the end of a successful pass,
+`utils/fleet_telemetry_collector.py:collect_usage` sends `usage` and `setup`
+counts about once an hour, and the next 4 weeks of `usage_week` history, from
+the week of the first question to the last completed week. Due times and the
+history position live in the cache backend, with random jitter, so Cloud
+tenants do not read at the same time. The reads in `db/fleet_telemetry.py`
+(`usage_counts`, `setup_counts`, `usage_week_rows`) are aggregate SQL. Each
+runs in its own savepoint, so a statement timeout adds to `usage_errors` and
+does not stop the other reads. `chat_message` has no index on `time_sent`, so
+`message_id_at` finds the ID bound of a time window by a binary search over
+the primary key.
+
 **Identity.** `utils/fleet_telemetry.py:deployment_key` reads a random key from
 `KVStore` (`db/fleet_enrollment.py:get_or_create_deployment_key`). Under
 `MULTI_TENANT` it derives the key from `WEB_DOMAIN`, and
 `BoundedTelemetry._envelope` reports each tenant as its own customer unless the
 event is marked `shared`.
+Enrollment also sends `legacy_customer_uuid` (`legacy_customer_uuid()`, the pre-v5
+instance UUID read by `db/fleet_enrollment.py:get_legacy_customer_uuid`, never
+created) so the service can link an upgraded deployment to its pre-v5 records.
+A 422 makes the same call enroll again at once without the field.
 
 ---
 
@@ -173,7 +192,7 @@ event is marked `shared`.
    start a sender stops collection with no error.
 7. `source-schema-change-silent` **A schema change in a table the pass reads
    fails no application test.** The pass catches the error and only counts it
-   in the heartbeat (`source_errors`). When you rename or drop a column read
+   in the heartbeat (`source_errors`, or `usage_errors` for the usage reads). When you rename or drop a column read
    in `db/fleet_telemetry.py`, run the collector tests in
    `backend/tests/external_dependency_unit/telemetry/`.
 8. `telemetry-chat-keyword-args` **`telemetry_chat` reads its inputs from
@@ -236,7 +255,7 @@ event is marked `shared`.
 - [[cc-pairs-and-creds]]: owns the connector rows in the inventory.
 - [[permission-sync]]: owns the permission sync attempt rows the pass reads.
 - [[auth-and-identity]]: owns the user rows behind the signup-domain values and the user count.
-- [[chat-persistence]]: owns the feedback write that emits the answer vote.
+- [[chat-persistence]]: owns the feedback write that emits the answer vote, and the chat rows behind the usage counts and the weekly history.
 - [[billing]]: owns the license row behind license presence.
 - [[document-index]]: reports OpenSearch health and written chunks.
 
