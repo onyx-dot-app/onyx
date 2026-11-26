@@ -3,7 +3,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import englishMessages from "@/i18n/messages/en.json";
 import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
-import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import {
+  type ProjectFile,
+  type UserFileDeleteResult,
+  UserFileStatus,
+} from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/types";
 import type { UploadFilesOptions } from "@/lib/projects/svc";
 import { cancelUpload } from "@/lib/projects/uploadProgress";
@@ -77,6 +81,12 @@ jest.mock("@/lib/projects/svc", () => {
     linkFileToProject: jest.fn(),
   };
 });
+
+const DELETED: UserFileDeleteResult = {
+  has_associations: false,
+  project_names: [],
+  assistant_names: [],
+};
 
 const wrapper = ({ children }: PropsWithChildren) => (
   <NextIntlClientProvider locale="en" messages={englishMessages}>
@@ -446,7 +456,7 @@ describe("ProjectsContext beginUpload cancel", () => {
         })
     );
     mockDeleteUserFile.mockReset();
-    mockDeleteUserFile.mockResolvedValue({ deleted: true });
+    mockDeleteUserFile.mockResolvedValue(DELETED);
     const { result } = renderHook(() => useProjectsContext(), { wrapper });
     const onSuccess = jest.fn();
 
@@ -510,7 +520,7 @@ describe("ProjectsContext beginUpload cancel", () => {
         })
     );
     mockDeleteUserFile.mockReset();
-    mockDeleteUserFile.mockResolvedValue({ deleted: true });
+    mockDeleteUserFile.mockResolvedValue(DELETED);
     const { result } = renderHook(() => useProjectsContext(), { wrapper });
 
     let optimisticFiles: ProjectFile[] = [];
