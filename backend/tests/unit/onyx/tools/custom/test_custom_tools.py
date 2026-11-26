@@ -1098,7 +1098,7 @@ def test_graphql_and_spec_fetches_refuse_blocked_hosts(
     monkeypatch.setattr(service, "get_security_settings", lambda: settings)
     with patch("onyx.utils.url._pinned_request") as pinned:
         with pytest.raises(OnyxError):
-            service._graphql_config(
+            service._graphql_endpoint_url(
                 GraphQLConfigInput(
                     endpoint_url=url, graphql_schema="type Query { a: Int }"
                 )

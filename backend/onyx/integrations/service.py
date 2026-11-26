@@ -583,7 +583,8 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
     return view
 
 
-def _graphql_config(config: GraphQLConfigInput) -> GraphQLConfigInput:
+def _graphql_endpoint_url(config: GraphQLConfigInput) -> str:
+    """The stripped endpoint URL. Raises ``OnyxError`` for a blocked host."""
     endpoint_url = config.endpoint_url.strip()
     try:
         # No DNS at save time; each call resolves and checks again.
@@ -593,9 +594,7 @@ def _graphql_config(config: GraphQLConfigInput) -> GraphQLConfigInput:
             OnyxErrorCode.VALIDATION_ERROR,
             f"Endpoint URL '{endpoint_url}' is not allowed: {e}",
         ) from e
-    return GraphQLConfigInput(
-        endpoint_url=endpoint_url, graphql_schema=config.graphql_schema
-    )
+    return endpoint_url
 
 
 def introspect_graphql_endpoint(
@@ -923,8 +922,10 @@ def create_integration__no_commit(
         if isinstance(config, OpenApiConfigInput)
         else None
     )
-    graphql = (
-        _graphql_config(config) if isinstance(config, GraphQLConfigInput) else None
+    graphql_endpoint_url = (
+        _graphql_endpoint_url(config)
+        if isinstance(config, GraphQLConfigInput)
+        else None
     )
     mcp_actions: list[IntegrationActionSpec] | None = None
     if (
@@ -964,10 +965,10 @@ def create_integration__no_commit(
             openapi_spec=openapi[1],
             db_session=db_session,
         ).id
-    elif graphql is not None:
+    elif isinstance(config, GraphQLConfigInput) and graphql_endpoint_url is not None:
         api_app_id = create_graphql_app_row__no_commit(
-            endpoint_url=graphql.endpoint_url,
-            graphql_schema=graphql.graphql_schema,
+            endpoint_url=graphql_endpoint_url,
+            graphql_schema=config.graphql_schema,
             db_session=db_session,
         ).id
     elif preset is not None:
@@ -1065,12 +1066,12 @@ def _apply_config(
         write_openapi_document__no_commit(integration, document, spec, db_session)
         return True
     if isinstance(config, GraphQLConfigInput):
-        graphql = _graphql_config(config)
+        endpoint_url = _graphql_endpoint_url(config)
         api_app = get_api_app_for_integration(integration.id, db_session)
         if api_app is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "The GraphQL app is missing.")
-        api_app.base_url = graphql.endpoint_url
-        api_app.graphql_schema = graphql.graphql_schema
+        api_app.base_url = endpoint_url
+        api_app.graphql_schema = config.graphql_schema
         return True
     app = get_external_app_for_integration(integration.id, db_session)
     if app is None:
