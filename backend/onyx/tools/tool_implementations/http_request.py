@@ -1,5 +1,6 @@
-"""The one HTTP sender for the chat tools that call an API integration: the
-OpenAPI tools and the app action tools."""
+"""The one HTTP sender for the API integration tools (OpenAPI, GraphQL and
+app action tools) and for the GraphQL introspection call of the
+integration service."""
 
 from email.message import Message
 from enum import Enum
@@ -117,7 +118,7 @@ class ToolResponse(BaseModel):
 def failed_tool_result(
     *,
     tool_name: str,
-    integration_id: int | None,
+    integration_id: int,
     message: str,
     status_code: int | None = None,
     is_unreachable: bool = False,
