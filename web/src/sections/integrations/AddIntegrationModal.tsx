@@ -101,6 +101,20 @@ type Detection =
   | { shape: "preset"; preset: IntegrationPreset }
   | DetectedApi;
 
+/** The URL that Onyx calls for a detected API; null for no API. */
+function apiUrlOf(api: Detection | null): string | null {
+  switch (api?.shape) {
+    case "openapi":
+      return api.view.base_url;
+    case "rest":
+      return api.baseUrl;
+    case "graphql":
+      return api.config.endpoint_url;
+    default:
+      return null;
+  }
+}
+
 const TRANSPORTS: readonly McpTransport[] = ["STREAMABLE_HTTP", "SSE"];
 
 /** Sign-in from the probe. The method is set even with no sign-in, so a
@@ -295,14 +309,17 @@ export default function AddIntegrationModal({
       return;
     }
     if (detected.shape === "openapi") setBaseUrl(detected.view.base_url);
-    // Endpoint lines typed for one API must not be saved against another.
-    if (
-      detected.shape === "rest" &&
-      (detection?.shape !== "rest" || detection.baseUrl !== detected.baseUrl)
-    )
-      setEndpoints("");
+    // Endpoint lines and sign-in set for one API must not be saved against
+    // another.
+    const sameApi =
+      detection?.shape === detected.shape &&
+      apiUrlOf(detection) === apiUrlOf(detected);
+    if (detected.shape === "rest" && !sameApi) setEndpoints("");
     // Most APIs take a key; the method is ready for a later choice of sign-in.
-    enterSetup(detected, { ...DEFAULT_SIGN_IN, authMethod: "api_key" });
+    enterSetup(
+      detected,
+      sameApi ? signIn : { ...DEFAULT_SIGN_IN, authMethod: "api_key" }
+    );
   }
 
   function pickPreset(preset: IntegrationPreset) {

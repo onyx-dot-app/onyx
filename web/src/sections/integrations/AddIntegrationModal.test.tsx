@@ -710,7 +710,7 @@ describe("Custom API", () => {
     );
   });
 
-  test("keeps the REST endpoints after Back only for the same base URL", async () => {
+  test("keeps the REST endpoints and sign-in after Back only for the same base URL", async () => {
     mockFetch({
       "POST /api/admin/integrations/openapi-import": () => failure(400),
       "POST /api/admin/integrations/graphql-introspect": () => failure(400),
@@ -726,12 +726,21 @@ describe("Custom API", () => {
       name: add.rest.endpoints.title,
     });
     await user.type(lines, "GET /invoices List invoices");
+    await user.click(
+      screen.getByRole("combobox", { name: copy.signIn.mode.title })
+    );
+    await user.click(
+      await screen.findByRole("option", { name: copy.signIn.mode.individual })
+    );
 
     await user.click(screen.getByRole("button", { name: add.back }));
     await user.click(screen.getByRole("button", { name: add.continue }));
     expect(
       await screen.findByRole("textbox", { name: add.rest.endpoints.title })
     ).toHaveValue("GET /invoices List invoices");
+    expect(
+      screen.getByRole("combobox", { name: copy.signIn.mode.title })
+    ).toHaveValue(copy.signIn.mode.individual);
 
     await user.click(screen.getByRole("button", { name: add.back }));
     const url = screen.getByRole("textbox", { name: add.api.url.title });
@@ -741,6 +750,9 @@ describe("Custom API", () => {
     expect(
       await screen.findByRole("textbox", { name: add.rest.endpoints.title })
     ).toHaveValue("");
+    expect(
+      screen.getByRole("combobox", { name: copy.signIn.mode.title })
+    ).toHaveValue(copy.signIn.mode.none);
   });
 
   test("a failed check is an error, not a REST base URL", async () => {
