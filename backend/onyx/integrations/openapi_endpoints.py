@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 from typing import Any
+from urllib.parse import quote, unquote
 
 import yaml
 from pydantic import BaseModel
@@ -25,6 +26,8 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 _PATH_PARAM = re.compile(r"\{([^{}]*)\}")
 _PARAM_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-]*")
 _QUERY_NAME = re.compile(r"[^\s&?=#]+")
+# The characters of a query name that a line writes as %XX.
+_LINE_ESCAPED = re.compile(r"[\s&?=#%]")
 
 
 class EndpointLineError(BaseModel):
@@ -110,7 +113,10 @@ def _remove_operation(paths: dict[str, Any], path: str, method_key: str) -> None
 def _endpoint_line(
     spec: dict[str, Any], method: str, path: str, operation: dict[str, Any]
 ) -> str:
-    query = _query_names(spec, _path_item(spec, path), operation)
+    query = [
+        _LINE_ESCAPED.sub(lambda m: quote(m.group()), name)
+        for name in _query_names(spec, _path_item(spec, path), operation)
+    ]
     query_text = f"?{'&'.join(query)}" if query else ""
     return f"{method} {path}{query_text} {_line_name(operation)}"
 
@@ -147,6 +153,7 @@ def _parse_line(text: str) -> tuple[str, str, list[str], str]:
             raise ValueError(
                 f"'{name}' is not a valid query parameter. Write ?a&b, with no values."
             )
+    query = [unquote(name) for name in query]
     if len(set(path_params)) != len(path_params) or len(set(query)) != len(query):
         raise ValueError("Each parameter needs a different name.")
     return method, path, query, parts[2].strip()

@@ -299,16 +299,16 @@ def test_a_line_edit_keeps_the_rest_of_an_imported_yaml_spec(
     assert actions[patch_key].admin_policy is None
 
 
-def test_an_operation_whose_line_cannot_be_written_imports_and_creates(
+def test_a_query_name_with_a_space_survives_a_label_edit(
     db_session: Session, admin: User, created: list[int]
 ) -> None:
-    """A query name with a space does not parse back from its line. Add sends
-    the imported line back unchanged, so the operation stays."""
+    """The line writes a space in a query name as %20, so a line with an
+    edited label keeps the parameter."""
     search = {
         "operationId": "searchTickets",
         "summary": "Search",
         "parameters": [
-            {"name": "filter mode", "in": "query", "schema": {"type": "string"}}
+            {"name": "filter mode", "in": "query", "schema": {"type": "integer"}}
         ],
         "responses": {"200": {"description": "OK"}},
     }
@@ -318,7 +318,7 @@ def test_an_operation_whose_line_cannot_be_written_imports_and_creates(
         OpenApiEndpointsRequest(openapi_document=json.dumps(spec)), admin
     )
     assert imported.skipped == []
-    assert "GET /search?filter mode Search" in imported.endpoints
+    assert "GET /search?filter%20mode Search" in imported.endpoints
 
     integration_id = _create(
         db_session,
@@ -330,10 +330,23 @@ def test_an_operation_whose_line_cannot_be_written_imports_and_creates(
             endpoints=imported.endpoints,
         ),
     )
-
     view = _view(db_session, admin, integration_id)
     assert _operations(view.openapi_document)["searchTickets"] == search
-    assert "searchTickets" in _action_keys(db_session, admin, integration_id)
+
+    admin_api.update_integration(
+        integration_id,
+        IntegrationUpdate(
+            config=OpenApiConfigInput(
+                base_url=BASE_URL,
+                endpoints=[line.replace("Search", "Find") for line in view.endpoints],
+            )
+        ),
+        admin,
+        db_session,
+    )
+    edited = _operations(_view(db_session, admin, integration_id).openapi_document)
+    assert edited["searchTickets"]["parameters"] == search["parameters"]
+    assert edited["searchTickets"]["summary"] == "Find"
 
 
 def test_unchanged_lines_keep_the_document_text(

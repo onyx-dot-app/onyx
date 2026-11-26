@@ -366,8 +366,9 @@ def test_the_base_url_replaces_each_imported_server() -> None:
 
 def test_a_line_sent_as_shown_keeps_an_operation_it_cannot_write() -> None:
     """A stored operation can have a line that does not parse back to it,
-    such as a query name with a space or no name. A save that sends its line
-    unchanged keeps it as stored, also when other lines change."""
+    such as one with no name. A save that sends its line unchanged keeps it
+    as stored, also when other lines change. A space in a query name shows as
+    %20."""
     spec = _callable_spec()
     reports = {
         "get": {
@@ -382,7 +383,7 @@ def test_a_line_sent_as_shown_keeps_an_operation_it_cannot_write() -> None:
     spec["paths"]["/reports"] = reports
     spec["paths"]["/ping"] = unnamed
     lines = endpoint_lines(spec)
-    assert "GET /reports?search term List reports" in lines
+    assert "GET /reports?search%20term List reports" in lines
 
     base_url_only = _apply(spec, lines)
     assert base_url_only["paths"]["/reports"] == reports
