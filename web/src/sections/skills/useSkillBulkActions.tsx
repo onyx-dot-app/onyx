@@ -34,9 +34,10 @@ import type { SkillEnablement } from "@/lib/skills/hooks";
 import { canShareSkill } from "@/lib/skills/sharing";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
-import BulkSkillSharingModal, {
-  type BulkSkillNoun,
-} from "@/sections/modals/skills/BulkSkillSharingModal";
+import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
+
+/** What the selected rows are: the copy names them. */
+export type BulkSkillNoun = "skill" | "plugin";
 
 type BulkAction = "share" | "enable" | "disable" | "delete";
 
@@ -243,7 +244,7 @@ export function useSkillBulkActions({
         // A new selection starts a new draft: a staged publish must not carry
         // over to other skills.
         key={[...selectedIds].sort().join(",")}
-        noun={noun}
+        nounCopy={nounCopy}
         items={selectedItems}
         open={sharingOpen}
         saving={busy}

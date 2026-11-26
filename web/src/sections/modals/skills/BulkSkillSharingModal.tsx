@@ -37,12 +37,13 @@ import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 
 const KEEP = "KEEP";
 
-/** What the selected rows are: the copy names them. */
-export type BulkSkillNoun = "skill" | "plugin";
+/** The strings that name the rows, as "skill" or "plugin". The skill strings
+ * hold every key of the plugin strings. */
+export type BulkNounCopy = ReturnType<typeof useTranslations<"plugins.bulk">>;
 
 interface BulkSkillSharingModalProps {
-  /** @default "skill" */
-  noun?: BulkSkillNoun;
+  /** @default the skill strings */
+  nounCopy?: BulkNounCopy;
   /** The selected skills. */
   items: readonly CustomSkill[];
   open: boolean;
@@ -52,7 +53,7 @@ interface BulkSkillSharingModalProps {
 }
 
 export default function BulkSkillSharingModal({
-  noun = "skill",
+  nounCopy: givenNounCopy,
   items,
   open,
   saving,
@@ -60,9 +61,7 @@ export default function BulkSkillSharingModal({
   onSave,
 }: BulkSkillSharingModalProps) {
   const bulkCopy = useTranslations("skills.bulk");
-  const pluginCopy = useTranslations("plugins.bulk");
-  // Strings that name the rows; the plugin catalog has only those.
-  const nounCopy = noun === "plugin" ? pluginCopy : bulkCopy;
+  const nounCopy = givenNounCopy ?? bulkCopy;
   const shareCopy = useTranslations("skills.modals.share");
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
