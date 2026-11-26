@@ -34,10 +34,14 @@ annotations:
     - kind: added
       description: auth.sandboxNodeRegistration is on by default. With no
         value and no existingSecret, the chart makes a random value on
-        install and keeps it on upgrade.
+        install and keeps it on upgrade. Renders without cluster access
+        (helm template, Argo CD) make a new value each time, so set
+        existingSecret or a value there.
     - kind: changed
       description: The Firecracker image tags fall back to a pinned chart
-        appVersion when global.version is latest, edge or beta.
+        appVersion when global.version is latest, edge or beta. Only
+        stable, beta and nightly-latest release tags give Firecracker image
+        tags; dev builds need explicit image tags.
     - kind: changed
       description: craft.firecrackerPreflight is on by default and checks
         only onyx.app/kvm=true nodes.
