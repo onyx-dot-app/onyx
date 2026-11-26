@@ -258,10 +258,9 @@ pub async fn login(
     let epoch = state.epoch();
     let token = state.api.login(&server, &email, &password).await?;
     // Fails if the user changed server, signed out or finished SSO meanwhile.
-    let committed = state.commit_sign_in(&server, &token, epoch).map_err(|e| {
-        log::warn!("could not save the password sign-in: {e}");
-        e
-    })?;
+    let committed = state
+        .commit_sign_in(&server, &token, epoch)
+        .inspect_err(|e| log::warn!("could not save the password sign-in: {e}"))?;
     if !committed {
         return Err("Sign-in was cancelled.".into());
     }

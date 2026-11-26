@@ -202,6 +202,11 @@ pub(crate) fn window_failure(
     earlier_app_evidence: bool,
     dialog_open: bool,
 ) -> WindowFailure {
+    // The hidden launcher at startup: the user did not ask for it, and the
+    // other windows may open fine, so no dialog (not even the one that quits).
+    if window == FailedWindow::LauncherPreload {
+        return WindowFailure::LogOnly;
+    }
     if shows_close_older(webview_error, earlier_app_evidence) {
         return WindowFailure::OlderVersion;
     }
@@ -767,7 +772,12 @@ mod tests {
         );
         // Only while a dialog is open are other failures logged only.
         assert_eq!(window_failure(W::Onboarding, true, false, true), F::LogOnly);
-        // The hidden launcher at startup is never a dialog.
+        // The hidden launcher at startup is never a dialog, also with
+        // evidence of the earlier app.
+        assert_eq!(
+            window_failure(W::LauncherPreload, true, true, false),
+            F::LogOnly
+        );
         assert_eq!(
             window_failure(W::LauncherPreload, true, false, false),
             F::LogOnly
