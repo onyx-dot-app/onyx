@@ -144,9 +144,13 @@ export function SignInMethodFields({
   };
 
   if (draft.authMode === "none") return null;
+  // A saved method outside the list keeps the selector, so it can be changed.
+  const choosable =
+    fitting.length > 1 ||
+    (draft.authMethod !== null && draft.authMethod !== fitting[0]);
   return (
     <Section gap={4} alignItems="stretch" height="auto">
-      {fitting.length > 1 && (
+      {choosable && (
         <InputVertical title={t("method.title")}>
           <InputSingleSelect
             placeholder={t("method.title")}
