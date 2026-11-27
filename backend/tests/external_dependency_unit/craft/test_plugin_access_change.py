@@ -250,7 +250,8 @@ def test_scoped_manager_cannot_lift_the_member_rule_with_self_granted_editor(
     test_user: User,  # noqa: ARG001
 ) -> None:
     """Editor rights that a scoped manager can grant to themselves do not let
-    them share with a user outside their groups."""
+    them share with a user outside their groups. A managed group's editor share
+    on a published skill, which they cannot grant, does."""
     group = make_group(db_session)
     manager = _manager_of(db_session, group)
     outsider = make_user(db_session, standard_account=True)
@@ -300,6 +301,24 @@ def test_scoped_manager_cannot_lift_the_member_rule_with_self_granted_editor(
         db_session, skill.id, manager.id, SkillSharePermission.EDITOR
     )
     share_with(outsider, SkillSharePermission.VIEWER)
+
+    published = make_skill(db_session, is_public=True, author_user_id=author.id)
+    share_plugin_with_group(
+        db_session, published.id, group.id, SkillSharePermission.EDITOR
+    )
+    apply_plugin_access_change__no_commit(
+        [published.id],
+        PluginAccessChange(
+            user_grants=(
+                PluginUserGrant(
+                    user_id=outsider.id, permission=SkillSharePermission.VIEWER
+                ),
+            ),
+            mode=PluginAccessMode.ADD_ONLY,
+        ),
+        manager,
+        db_session,
+    ).raise_first_failure()
 
 
 def test_owner_removing_a_group_share_keeps_its_setting(

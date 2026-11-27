@@ -1361,13 +1361,14 @@ def _check_user_shares_in_managed_scope(
     only with members of those groups. Another user share moves the plugin out
     of their scope. Removing a share stays allowed. Editor rights the manager
     can grant to themselves (a user share or a managed group's share) do not
-    lift this rule."""
+    lift this rule. A published plugin is never in their scope, so they edit it
+    only through editor rights that someone else granted."""
     added_user_ids = {
         user_id
         for user_id, permission in (locked.new_user_grants or {}).items()
         if locked.user_grants.get(user_id) != permission
     }
-    if not added_user_ids:
+    if not added_user_ids or locked.published:
         return
     editor = SkillSharePermission.EDITOR
     granted_editor_by_others = (
