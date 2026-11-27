@@ -570,7 +570,7 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
     GraphQL endpoint that only takes POST."""
     if request.openapi_document is not None:
         check_api_document_size(request.openapi_document, "spec")
-        return _checked_import(_imported_view(request.openapi_document))
+        return _checked_import(_imported_view(request.openapi_document), fetched=False)
     if request.spec_url is None:
         raise RuntimeError("Bug: the model requires the spec text or a URL.")
     spec_url = request.spec_url.strip()
@@ -618,14 +618,23 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY, "Onyx could not connect to the spec URL."
         ) from e
-    return _checked_import(_imported_view(body.decode("utf-8", errors="replace")))
+    return _checked_import(
+        _imported_view(body.decode("utf-8", errors="replace")), fetched=True
+    )
 
 
-def _checked_import(view: OpenApiConfigView) -> OpenApiConfigView:
+def _checked_import(view: OpenApiConfigView, *, fetched: bool) -> OpenApiConfigView:
     # The client hides the base URL field for the single server URL of a
     # spec, so the admin cannot correct it after the import. The client
-    # resolves a relative URL against the spec URL, which Onyx fetched.
-    _check_server_url(view.base_url.strip(), allow_relative=True)
+    # resolves a relative URL against the spec URL of a fetched spec. For an
+    # uploaded spec, the admin's base URL replaces a relative URL.
+    base_url = view.base_url.strip()
+    try:
+        relative = not urlparse(base_url).scheme
+    except ValueError:
+        relative = False
+    if fetched or not relative:
+        _check_server_url(base_url, allow_relative=True)
     return view
 
 

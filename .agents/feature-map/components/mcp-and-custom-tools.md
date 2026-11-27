@@ -441,7 +441,7 @@ cannot save Always allow on an action whose admin value is not Ask.
   with the acting user's credential, the update saves no actions until a
   refresh, so the old server's actions do not stay. Their admin policies stay
   and apply again when a refresh finds the actions. A refresh that the server
-  answers with no actions deletes those policies. No code reads MCP `tool`
+  answers without an action deletes the policy of that action. No code reads MCP `tool`
   rows.
 - Agents: `PersonaUpsertRequest.integrations` replaces the
   `persona__integration` links (null keeps them). An editor adds only an

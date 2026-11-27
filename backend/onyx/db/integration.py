@@ -415,13 +415,19 @@ def replace_integration_actions__no_commit(
             .where(IntegrationAction.id.in_(stale.values()))
             .execution_options(synchronize_session="fetch")
         )
-    if stale and not keep_policies:
-        # A policy of a removed action must not come back with the action.
+    if not keep_policies:
+        # A policy of a removed action must not come back with the action,
+        # also when an earlier sync kept the policy without the action.
+        live_keys = kept_keys | {
+            key for key, action in existing_by_key.items() if action.source != source
+        }
         db_session.execute(
             delete(IntegrationActionPolicy)
             .where(
                 IntegrationActionPolicy.integration_id == integration_id,
-                IntegrationActionPolicy.action.in_(stale.keys()),
+                # The "" row is the default for new actions.
+                IntegrationActionPolicy.action != "",
+                IntegrationActionPolicy.action.not_in(live_keys),
             )
             .execution_options(synchronize_session="fetch")
         )
