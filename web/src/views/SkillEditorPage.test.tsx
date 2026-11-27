@@ -462,6 +462,32 @@ describe("SkillEditorPage", () => {
     mockToastError.mockRestore();
   });
 
+  it("checks a refused name again after the sharing changes", async () => {
+    const user = setupUser();
+    const mockToastError = jest.spyOn(toast, "error");
+    mockCreateCustomSkillFromEditor.mockRejectedValueOnce(
+      new FetchError("Taken", 409, {
+        error_code: "CONFLICT",
+        taken_name: "report-writer",
+      })
+    );
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Create" })).toBeDisabled()
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    await user.click(
+      screen.getByRole("button", { name: "Choose organization access" })
+    );
+
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    mockToastError.mockRestore();
+  });
+
   it("keeps the confirmation open when disabled creation fails", async () => {
     const user = setupUser();
     const consoleError = jest.spyOn(console, "error").mockImplementation();

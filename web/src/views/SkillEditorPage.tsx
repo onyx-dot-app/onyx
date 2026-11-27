@@ -344,7 +344,12 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       <ShareSkillModal
         mode="create"
         draft={sharingDraft}
-        onSaveDraft={setCreationSharing}
+        onSaveDraft={(draft) => {
+          // A taken name is taken in one marketplace; new sharing can
+          // change the marketplace, so the server checks the name again.
+          setCreationSharing(draft);
+          setTakenNames([]);
+        }}
         open={shareOpen}
         onClose={() => setShareOpen(false)}
       />
