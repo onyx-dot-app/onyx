@@ -275,26 +275,35 @@ def frontmatter_for_jsonb(document: SkillDocument) -> dict[str, JsonValue]:
     return converted
 
 
-def serialize_skill_md(
-    frontmatter: Mapping[str, Any],
-    instructions_markdown: str,
-) -> str:
-    serialized_frontmatter = yaml.dump(
+def _dump_frontmatter(frontmatter: Mapping[str, Any]) -> str:
+    return yaml.dump(
         dict(frontmatter),
         Dumper=_SkillMdDumper,
         sort_keys=False,
         allow_unicode=True,
     ).strip()
+
+
+def serialize_skill_md(
+    frontmatter: Mapping[str, Any],
+    instructions_markdown: str,
+) -> str:
+    serialized_frontmatter = _dump_frontmatter(frontmatter)
     return f"---\n{serialized_frontmatter}\n---\n\n{instructions_markdown.strip()}\n"
 
 
 def with_skill_md_name(skill_md: str, name: str) -> str:
-    """The SKILL.md with frontmatter ``name`` set to ``name``. Unchanged when
-    it already holds that name."""
-    frontmatter, instructions_markdown = parse_skill_md_frontmatter(
-        skill_md.encode("utf-8")
-    )
+    """The SKILL.md with frontmatter ``name`` set to ``name``. The rest of
+    the text is kept as is. Unchanged when it already holds that name."""
+    frontmatter, _ = parse_skill_md_frontmatter(skill_md.encode("utf-8"))
     if frontmatter.get("name") == name:
         return skill_md
     frontmatter["name"] = name
-    return serialize_skill_md(frontmatter, instructions_markdown)
+    match = _FRONTMATTER_REGEX.match(skill_md)
+    if match is None:
+        raise RuntimeError("Bug: parsed SKILL.md has no frontmatter")
+    return (
+        skill_md[: match.start("frontmatter")]
+        + _dump_frontmatter(frontmatter)
+        + skill_md[match.end("frontmatter") :]
+    )
