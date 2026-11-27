@@ -171,7 +171,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
             id: RIGHT_PANEL_FILES_TAB,
             label: t("filesTab.label"),
             icon: SvgFiles,
-            closable: true,
             movable: false,
           },
         ]
@@ -182,7 +181,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
             id: RIGHT_PANEL_SOURCES_TAB,
             label: t("sourcesTab.label"),
             icon: SvgSearchMenu,
-            closable: true,
             movable: false,
           },
         ]
@@ -192,7 +190,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
         id: tab.id,
         label: tab.title ?? t("browserTab.label"),
         icon: SvgGlobe,
-        closable: true,
         movable: false,
       })
     ),
@@ -209,7 +206,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       const tab = {
         id,
         icon: getFileIcon(file.name),
-        closable: true,
         movable: true,
       };
       if (newest.file_id === file.file_id) return { ...tab, label: name };
