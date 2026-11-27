@@ -123,6 +123,26 @@ describe("skills API", () => {
     expect((error as FetchError).info).toBeNull();
   });
 
+  it("reports a validation error message for each failed bulk skill", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(422, { detail: [{ msg: "Invalid sharing policy." }] })
+    );
+
+    const result = await bulkUpdateSkills({
+      action: "share",
+      skill_ids: ["skill-1", "skill-2"],
+      sharing: { public_permission: "VIEWER" },
+    });
+
+    expect(result).toEqual({
+      succeeded: [],
+      failed: [
+        { skill_id: "skill-1", detail: "Invalid sharing policy." },
+        { skill_id: "skill-2", detail: "Invalid sharing policy." },
+      ],
+    });
+  });
+
   it("accepts an empty response to a delete", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
 

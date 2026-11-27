@@ -63,6 +63,21 @@ export function fetchErrorDetail(error: unknown): string | null {
   return typeof detail === "string" && detail !== "" ? detail : null;
 }
 
+/**
+ * The backend's text `detail`, or else the first `msg` of a validation-error
+ * `detail` list; `null` when it gave neither.
+ */
+function fetchErrorReason(error: FetchError): string | null {
+  const textDetail = fetchErrorDetail(error);
+  if (textDetail !== null) return textDetail;
+  const detail: unknown = error.info?.detail;
+  const first: unknown = Array.isArray(detail) ? detail[0] : null;
+  if (typeof first !== "object" || first === null || !("msg" in first)) {
+    return null;
+  }
+  return typeof first.msg === "string" && first.msg !== "" ? first.msg : null;
+}
+
 const DEFAULT_AUTH_ERROR_MSG =
   "An error occurred while fetching the data, related to the user's authentication status.";
 
@@ -117,7 +132,7 @@ async function parseFetcherResponse<T>(res: Response): Promise<T> {
   if (res.status === 403) {
     const error = await fetchErrorFrom(res, DEFAULT_AUTH_ERROR_MSG);
     throw new RedirectError(
-      fetchErrorDetail(error) ?? error.message,
+      fetchErrorReason(error) ?? error.message,
       error.status,
       error.info
     );
@@ -125,7 +140,7 @@ async function parseFetcherResponse<T>(res: Response): Promise<T> {
 
   if (!res.ok) {
     const error = await fetchErrorFrom(res, DEFAULT_ERROR_MSG);
-    error.message = fetchErrorDetail(error) ?? error.message;
+    error.message = fetchErrorReason(error) ?? error.message;
     throw error;
   }
 
