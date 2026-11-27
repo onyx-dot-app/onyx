@@ -130,7 +130,7 @@ def _with_session_paths(
     return {**params, **update}
 
 
-class _BrowserTool[ArgumentsT: BrowserArguments](Tool):
+class BrowserTool[ArgumentsT: BrowserArguments](Tool):
     """What the browser tools share: one browser call per tool call, taken
     in turns, since the calls of one step act on the same tabs. A read runs
     again after a lost server (RUNS_AGAIN); a call that changes a tab does
@@ -154,6 +154,10 @@ class _BrowserTool[ArgumentsT: BrowserArguments](Tool):
             self.interrupted_result = ToolResult(
                 content=_INTERRUPTED_BROWSER_MESSAGE, is_error=True
             )
+
+    @property
+    def target(self) -> BrowserTarget:
+        return self._backend.target
 
     @property
     def name(self) -> str:
@@ -219,7 +223,7 @@ class _BrowserTool[ArgumentsT: BrowserArguments](Tool):
         )
 
 
-class BrowserStatusTool(_BrowserTool[BrowserStatusArguments]):
+class BrowserStatusTool(BrowserTool[BrowserStatusArguments]):
     NAME = "browser_status"
     DISPLAY_NAME = "Browser Status"
     DESCRIPTION = BROWSER_STATUS_DESCRIPTION
@@ -228,7 +232,7 @@ class BrowserStatusTool(_BrowserTool[BrowserStatusArguments]):
     RUNS_AGAIN = True
 
 
-class BrowserOpenTool(_BrowserTool[BrowserOpenArguments]):
+class BrowserOpenTool(BrowserTool[BrowserOpenArguments]):
     # The web panel opens itself on a call of this name.
     NAME = "browser_open"
     DISPLAY_NAME = "Open Page"
@@ -238,7 +242,7 @@ class BrowserOpenTool(_BrowserTool[BrowserOpenArguments]):
     METHOD = "open"
 
 
-class BrowserNavigateTool(_BrowserTool[BrowserNavigateArguments]):
+class BrowserNavigateTool(BrowserTool[BrowserNavigateArguments]):
     NAME = "browser_navigate"
     DISPLAY_NAME = "Navigate Page"
     DESCRIPTION = BROWSER_NAVIGATE_DESCRIPTION
@@ -246,7 +250,7 @@ class BrowserNavigateTool(_BrowserTool[BrowserNavigateArguments]):
     METHOD = "navigate"
 
 
-class BrowserSnapshotTool(_BrowserTool[BrowserSnapshotArguments]):
+class BrowserSnapshotTool(BrowserTool[BrowserSnapshotArguments]):
     NAME = "browser_snapshot"
     DISPLAY_NAME = "Read Page"
     DESCRIPTION = BROWSER_SNAPSHOT_DESCRIPTION
@@ -264,7 +268,7 @@ class BrowserSnapshotTool(_BrowserTool[BrowserSnapshotArguments]):
         return f"{super()._content(rest)}\n{text}"
 
 
-class BrowserActTool(_BrowserTool[BrowserActArguments]):
+class BrowserActTool(BrowserTool[BrowserActArguments]):
     NAME = "browser_act"
     DISPLAY_NAME = "Use Page"
     DESCRIPTION = BROWSER_ACT_DESCRIPTION
@@ -272,7 +276,7 @@ class BrowserActTool(_BrowserTool[BrowserActArguments]):
     METHOD = "act"
 
 
-class BrowserWaitForTool(_BrowserTool[BrowserWaitForArguments]):
+class BrowserWaitForTool(BrowserTool[BrowserWaitForArguments]):
     NAME = "browser_wait_for"
     DISPLAY_NAME = "Wait For Page"
     DESCRIPTION = BROWSER_WAIT_FOR_DESCRIPTION
@@ -281,7 +285,7 @@ class BrowserWaitForTool(_BrowserTool[BrowserWaitForArguments]):
     RUNS_AGAIN = True
 
 
-class BrowserEvaluateTool(_BrowserTool[BrowserEvaluateArguments]):
+class BrowserEvaluateTool(BrowserTool[BrowserEvaluateArguments]):
     NAME = "browser_evaluate"
     DISPLAY_NAME = "Run Page Script"
     DESCRIPTION = BROWSER_EVALUATE_DESCRIPTION
@@ -289,7 +293,7 @@ class BrowserEvaluateTool(_BrowserTool[BrowserEvaluateArguments]):
     METHOD = "evaluate"
 
 
-class BrowserDialogTool(_BrowserTool[BrowserDialogArguments]):
+class BrowserDialogTool(BrowserTool[BrowserDialogArguments]):
     NAME = "browser_dialog"
     DISPLAY_NAME = "Answer Page Dialog"
     DESCRIPTION = BROWSER_DIALOG_DESCRIPTION
@@ -299,7 +303,7 @@ class BrowserDialogTool(_BrowserTool[BrowserDialogArguments]):
 
 # The browser tools; browser_open carries the use. Within their rank the
 # turn orders them by name (onyx/tools/ordering.py).
-BROWSER_TOOLS: tuple[type[_BrowserTool], ...] = (
+BROWSER_TOOLS: tuple[type[BrowserTool], ...] = (
     BrowserOpenTool,
     BrowserNavigateTool,
     BrowserSnapshotTool,
@@ -311,7 +315,7 @@ BROWSER_TOOLS: tuple[type[_BrowserTool], ...] = (
 )
 
 
-def browser_tools_for(target: BrowserTarget) -> tuple[type[_BrowserTool], ...]:
+def browser_tools_for(target: BrowserTarget) -> tuple[type[BrowserTool], ...]:
     """The tools that a browser offers. The user's Chrome runs no page
     scripts: the extension refuses them, so the model does not get the tool."""
     if target is BrowserTarget.CHROME:

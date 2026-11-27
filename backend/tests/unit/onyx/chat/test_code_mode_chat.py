@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from onyx.agents.models import (
     AgentState,
@@ -105,6 +105,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.browser_tools import (
+    BrowserBackend,
     SandboxBrowser,
     build_browser_tools,
 )
@@ -673,6 +674,45 @@ def _sandbox_turn(family: ToolFamily, *, chat_files: bool = False) -> SandboxTur
         copy_vm_chat_files=False,
         shell=SANDBOX_TOOLS[family].shell,
     )
+
+
+class _ChromeStub(BrowserBackend):
+    target = BrowserTarget.CHROME
+
+    def call(
+        self, method: str, params: dict[str, JsonValue], *, timeout_seconds: float
+    ) -> dict[str, JsonValue]:
+        raise NotImplementedError
+
+
+@pytest.mark.parametrize("target", list(BrowserTarget))
+def test_only_vm_browser_results_carry_the_file_status(target: BrowserTarget) -> None:
+    """The VM browser starts the chat's file copies, so its direct results
+    end with the copy status line, as the sandbox tools' do. The user's
+    Chrome copies no files."""
+    turn = _sandbox_turn(ToolFamily.OPENAI, chat_files=True)
+    backend = SandboxBrowser(turn) if target is BrowserTarget.SANDBOX else _ChromeStub()
+    browser_tools = build_browser_tools(backend)
+    feature = ChatFeature(
+        messages=[],
+        tools=[
+            *(tool(turn) for tool in SANDBOX_TOOLS[ToolFamily.OPENAI].tools),
+            *browser_tools,
+        ],
+        code_mode=False,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=_context_files(),
+        persona=None,
+        user_memory_context=None,
+        llm=ScriptedLLM([]),
+    )
+
+    browser_names = {tool.name for tool in browser_tools}
+    if target is BrowserTarget.SANDBOX:
+        assert browser_names <= feature._file_status_tools
+    else:
+        assert not browser_names & feature._file_status_tools
 
 
 @pytest.mark.parametrize("family", list(ToolFamily))
