@@ -314,11 +314,14 @@
   (`RIGHT_PANEL_CHROME_TAB`, the "+" menu when
   `settings.chrome_browser_available`). `ChatRightPanel` reads
   `/api/chat/sessions/{id}/browser/chrome` (`useChromeBrowserState`, polled
-  while the Chrome tab is open) and passes it to `ChromeBrowserPanel`: connect the extension, share tabs (Chrome shows the consent
-  window), or the shared tabs with Stop. The user's tab is the live view, so
-  there is no stream. While the chat has a share, `ChatRightPanel` keeps the
-  sandbox browser closed and turns its opening (for example on
-  `browser_open`) into the Chrome tab.
+  while the Chrome tab is open, a request waits, or a share lives) and passes
+  it to `ChromeBrowserPanel`: connect the extension, share tabs (Chrome shows
+  the consent window), or the shared tabs with Stop. The user's tab is the
+  live view, so there is no stream. A turn picks its browser when it starts
+  (`backend/onyx/chat/process_message.py`), so while the chat has a share, `ChatRightPanel`
+  turns a sandbox browser opening (for example on `browser_open`) into the
+  Chrome tab. A sandbox browser that was open before the share stays until
+  the next user message starts a turn (`userMessageCount`).
 - **A chat has a right panel, with a toggle at the far end of its header**
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the

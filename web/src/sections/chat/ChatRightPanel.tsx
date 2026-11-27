@@ -100,6 +100,9 @@ interface ChatRightPanelProps {
   browserAvailable?: boolean;
   // The "+" menu offers the user's own Chrome
   chromeAvailable?: boolean;
+  // The chat's user messages so far; each starts a turn, and a turn picks
+  // its browser when it starts
+  userMessageCount?: number;
 }
 
 /**
@@ -125,6 +128,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   reloadFiles,
   browserAvailable = false,
   chromeAvailable = false,
+  userMessageCount = 0,
 }: ChatRightPanelProps) {
   const t = useTranslations("chat.rightPanel");
   // Each tab's shown file, with the name that the list gives its artifact,
@@ -167,14 +171,17 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // A failed refresh does not count as a share: the next turn may not use it
   const grant = chrome.error ? undefined : chrome.data?.grant;
   const chromeShared = !!grant && grant.expires_at * 1000 > Date.now();
-  // A sandbox browser that was open before the share began belongs to a
-  // turn that still uses the sandbox, so it stays. A browser that opens
-  // during the share is the agent's Chrome.
-  const [sandboxBeforeShare, setSandboxBeforeShare] = useState(false);
-  if (!state.browserOpen && sandboxBeforeShare) setSandboxBeforeShare(false);
-  if (state.browserOpen && !chromeShared && !sandboxBeforeShare)
-    setSandboxBeforeShare(true);
-  const redirectBrowser = chromeShared && !sandboxBeforeShare;
+  // A turn picks its browser when it starts. A sandbox browser that was open
+  // before the share began belongs to a turn that still uses the sandbox,
+  // so it stays until the next message starts a turn, which uses Chrome.
+  // The count of user messages when the sandbox browser was last open
+  // unshared; null: none open.
+  const [sandboxTurn, setSandboxTurn] = useState<number | null>(null);
+  if (!state.browserOpen && sandboxTurn !== null) setSandboxTurn(null);
+  if (state.browserOpen && !chromeShared && sandboxTurn !== userMessageCount)
+    setSandboxTurn(userMessageCount);
+  const redirectBrowser =
+    chromeShared && (sandboxTurn === null || userMessageCount > sandboxTurn);
   const browser = useChatBrowserTabs({
     sessionId,
     open,
@@ -819,6 +826,17 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const reloadFiles = useCallback(async () => {
     if (sessionId !== null) await reloadChatPublishedFiles(sessionId);
   }, [sessionId]);
+  const userMessageCount = useChatSessionStore((store) => {
+    const tree =
+      sessionId === null
+        ? undefined
+        : store.sessions.get(sessionId)?.messageTree;
+    let count = 0;
+    tree?.forEach((message) => {
+      if (message.type === "user") count += 1;
+    });
+    return count;
+  });
   return (
     <ChatRightPanel
       {...props}
@@ -829,6 +847,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
       reloadFiles={reloadFiles}
       browserAvailable={browserAvailable}
       chromeAvailable={chromeAvailable}
+      userMessageCount={userMessageCount}
     />
   );
 }
