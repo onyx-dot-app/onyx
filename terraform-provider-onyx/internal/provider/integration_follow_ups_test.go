@@ -83,23 +83,39 @@ func TestApplyFollowUpsSkipsRefreshWithoutCredentialsOrServerChange(t *testing.T
 	}
 }
 
-func TestUpdateSendsCredentialsForANewVersionOrAConnectionThatNeedsReconnect(t *testing.T) {
-	base := integrationResourceModel{OrganizationCredentialsWOVersion: types.Int64Value(1)}
+func TestUpdateSendsCredentialsForANewVersionOrAMovedServerWithoutAWorkingConnection(t *testing.T) {
+	base := integrationResourceModel{
+		ServerURL:                        types.StringValue("https://mcp.example.com/mcp"),
+		OpenAPIDocument:                  types.StringNull(),
+		OrganizationCredentialsWOVersion: types.Int64Value(1),
+	}
 	newVersion := base
 	newVersion.OrganizationCredentialsWOVersion = types.Int64Value(2)
-	connected := &client.Integration{OrganizationStatus: &client.IntegrationStatus{State: "connected"}}
-	needsReconnect := &client.Integration{OrganizationStatus: &client.IntegrationStatus{State: "needs_reconnect"}}
+	newURL := base
+	newURL.ServerURL = types.StringValue("https://mcp2.example.com/mcp")
+	newDocument := base
+	newDocument.OpenAPIDocument = types.StringValue(`{"openapi":"3.0.0"}`)
+	status := func(state string) *client.Integration {
+		return &client.Integration{OrganizationStatus: &client.IntegrationStatus{State: state}}
+	}
 
-	if !sendsOrganizationCredentials(newVersion, base, connected) {
-		t.Error("a new credentials version does not send the credentials")
+	cases := []struct {
+		name    string
+		plan    integrationResourceModel
+		updated *client.Integration
+		want    bool
+	}{
+		{"a new credentials version", newVersion, status("connected"), true},
+		{"a new server URL that needs reconnect", newURL, status("needs_reconnect"), true},
+		{"a new server URL with no connection yet", newURL, status("not_set_up"), true},
+		{"a new OpenAPI document that needs reconnect", newDocument, status("needs_reconnect"), true},
+		{"a new OpenAPI document that keeps the connection", newDocument, status("connected"), false},
+		{"an unrelated update of a rejected key", base, status("needs_reconnect"), false},
+		{"a new server URL with no shared sign-in", newURL, &client.Integration{}, false},
 	}
-	if !sendsOrganizationCredentials(base, base, needsReconnect) {
-		t.Error("a connection that needs reconnect does not get the credentials again")
-	}
-	if sendsOrganizationCredentials(base, base, connected) {
-		t.Error("an update that keeps the connection sends the credentials")
-	}
-	if sendsOrganizationCredentials(base, base, &client.Integration{}) {
-		t.Error("an integration with no organization connection gets the credentials")
+	for _, c := range cases {
+		if got := sendsOrganizationCredentials(c.plan, base, c.updated); got != c.want {
+			t.Errorf("%s: sends = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

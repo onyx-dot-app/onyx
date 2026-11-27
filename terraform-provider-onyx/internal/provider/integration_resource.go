@@ -436,9 +436,19 @@ func (r *integrationResource) ImportState(ctx context.Context, req resource.Impo
 }
 
 // sendsOrganizationCredentials reports whether Update sends the configured
-// shared credentials: for a new credentials version, or when the update left
-// the connection Needs reconnect, as a new credential destination does.
+// shared credentials: for a new credentials version, or when a new server URL
+// or OpenAPI document left the organization without a working connection.
 func sendsOrganizationCredentials(plan, state integrationResourceModel, updated *client.Integration) bool {
-	return writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) ||
-		(updated.OrganizationStatus != nil && updated.OrganizationStatus.State == "needs_reconnect")
+	if writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) {
+		return true
+	}
+	destinationChanged := !plan.ServerURL.Equal(state.ServerURL) || !plan.OpenAPIDocument.Equal(state.OpenAPIDocument)
+	if !destinationChanged || updated.OrganizationStatus == nil {
+		return false
+	}
+	switch updated.OrganizationStatus.State {
+	case "needs_reconnect", "not_set_up":
+		return true
+	}
+	return false
 }
