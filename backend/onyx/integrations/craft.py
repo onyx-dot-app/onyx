@@ -22,7 +22,6 @@ from onyx.db.integration_policy import (
 from onyx.db.models import ExternalApp, Integration, IntegrationAction, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
@@ -33,6 +32,7 @@ from onyx.integrations.models import (
     UsableIntegrationIds,
 )
 from onyx.integrations.policy import (
+    always_asks,
     parse_action_settings,
     resolve_action_policies,
 )
@@ -117,12 +117,6 @@ def resolve_craft_action_policies(
     return _interactive_policies(
         db_session, integration, actions, action_keys, user_id, ActionSettings()
     )
-
-
-def always_asks(kind: IntegrationKind, action_key: str) -> bool:
-    """The sandbox proxy asks for each request that matches no action of an
-    API integration, whatever the policy is, unless the policy is Blocked."""
-    return kind is IntegrationKind.API and action_key == WHOLE_DOMAIN_ACTION_TYPE
 
 
 def _shown_policy(

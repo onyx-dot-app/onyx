@@ -13,6 +13,9 @@ The order, for each action:
 4. The user's saved Always allow turns Ask into Allow, unless locked.
 5. "Approve for this chat" turns Ask into Allow. It never changes Blocked.
 6. With no approver, Ask is Blocked. In a run without questions, Ask runs.
+
+An action that always asks (``always_asks``) skips steps 4 to 6: it asks
+when a person can answer, and it is Blocked in each other run.
 """
 
 from collections.abc import Collection, Mapping, Sequence
@@ -22,8 +25,12 @@ from pydantic import BaseModel, InstanceOf, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.db.enums import IntegrationActionPolicyValue, PluginInstallationPolicy
-from onyx.db.integration import list_integrations_by_ids
+from onyx.db.enums import (
+    IntegrationActionPolicyValue,
+    IntegrationKind,
+    PluginInstallationPolicy,
+)
+from onyx.db.integration import get_integration_by_id, list_integrations_by_ids
 from onyx.db.integration_access import load_user_integration_states
 from onyx.db.integration_policy import (
     get_chat_session_persona_id,
@@ -33,6 +40,7 @@ from onyx.db.integration_policy import (
     list_persona_integration_links,
 )
 from onyx.db.models import Integration, IntegrationAction
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.models import (
     ActionSettings,
@@ -82,6 +90,25 @@ def parse_action_settings(raw: Mapping[str, object] | None) -> ActionSettings:
     except ValidationError:
         logger.warning("Invalid action_settings %s; blocking the link", raw)
         return ActionSettings(default=LinkValue.BLOCKED)
+
+
+def always_asks(kind: IntegrationKind, action_key: str) -> bool:
+    """A request to an API app that matches no action (the request tool)
+    asks each time, unless the policy is Blocked. No setting, chat grant or
+    run mode makes it Allow. An MCP tool with the same name is a usual
+    action."""
+    return kind is IntegrationKind.API and action_key == WHOLE_DOMAIN_ACTION_TYPE
+
+
+def integration_action_always_asks(
+    db_session: Session, integration_id: int | None, action_key: str
+) -> bool:
+    """``always_asks`` for the integration with the ID. False for a built-in
+    action (no integration) and for a deleted integration."""
+    if integration_id is None:
+        return False
+    integration = get_integration_by_id(integration_id, db_session)
+    return integration is not None and always_asks(integration.kind, action_key)
 
 
 def action_default_policy(action: IntegrationAction | None) -> EffectivePolicy:
@@ -136,6 +163,7 @@ def decide_action_policy(
     action: IntegrationAction | None,
     rows: PolicyRows,
     *,
+    kind: IntegrationKind,
     users_can_save_always_allow: bool,
     link: ActionSettings | None,
     granted: bool,
@@ -143,12 +171,20 @@ def decide_action_policy(
 ) -> EffectivePolicy:
     """The policy of one action from the loaded values. ``action`` is None
     for a key with no stored action. ``link`` is the settings of the agent or
-    task link of the integration; None (no link) blocks."""
+    task link of the integration; None (no link) blocks. For an action that
+    ``always_asks``, no setting, grant or mode makes it Allow, so a run with
+    no person to answer does not get it."""
     if link is None:
         return EffectivePolicy.BLOCKED
     admin = admin_policy(rows.admin, key, action)
     locked = admin is EffectivePolicy.BLOCKED or not users_can_save_always_allow
     policy = _with_link(admin, locked, link.value_for(key))
+    if always_asks(kind, key) and policy is not EffectivePolicy.BLOCKED:
+        return (
+            EffectivePolicy.ASK
+            if approval_mode is ApprovalMode.INTERACTIVE
+            else EffectivePolicy.BLOCKED
+        )
 
     if policy is EffectivePolicy.ASK and not locked:
         user_value = rows.user.get(key, rows.user.get(DEFAULT_ACTION_KEY))
@@ -207,6 +243,7 @@ def resolve_action_policies(
             key,
             by_key.get(key),
             rows,
+            kind=integration.kind,
             users_can_save_always_allow=integration.users_can_save_always_allow,
             link=link_settings,
             granted=key in granted,
@@ -340,18 +377,20 @@ def persona_link_settings(
     }
 
 
-def resolve_chat_action_policy(
+def resolve_chat_action_policies(
     db_session: Session,
     *,
     integration: Integration,
-    action_key: str,
+    action_keys: Collection[str],
     user_id: UUID,
     chat_session_id: UUID,
-) -> EffectivePolicy:
-    """The current policy of one action for the agent of a chat, before the
-    chat grants. The approval check uses it to see that an action is not
-    Blocked now. It reads the integrations that chat tool construction reads,
-    so an integration the user cannot use on the agent is Blocked."""
+) -> dict[str, EffectivePolicy]:
+    """The current policy of each action for the agent of a chat, before the
+    chat grants and with no run mode: an Ask stays Ask. The approval check
+    uses it to see that an action is not Blocked now, and the sandbox proxy
+    uses it for a request from the VM of the chat. It reads the integrations
+    that chat tool construction reads, so an integration the user cannot use
+    on the agent is Blocked."""
     persona_id = get_chat_session_persona_id(db_session, chat_session_id)
     held = (
         chat_integrations(
@@ -368,9 +407,9 @@ def resolve_chat_action_policy(
         db_session,
         integration=integration,
         actions=integration_actions(integration.id, db_session),
-        action_keys=[action_key],
+        action_keys=action_keys,
         user_id=None if held is not None and held.task_link else user_id,
         link_settings=held.settings if held is not None else None,
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=None,
-    )[action_key]
+    )

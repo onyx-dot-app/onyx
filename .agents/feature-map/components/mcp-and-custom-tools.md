@@ -48,7 +48,9 @@
   `awaiting_user`, and the response waits, saved, with no server holding
   it and no time limit. The user picks Approve once, Approve for this chat, or
   Reject. Approve once runs the exact call. Approve for this chat also runs
-  later calls of that tool in the chat session with no card. Reject gives the
+  later calls of that tool in the chat session with no card. An action that
+  always asks (`integrations/policy.py:always_asks`) has no Approve for this
+  chat, and `decide_approval` refuses it. Reject gives the
   model a "did not run" result. Once no request of the response waits, the
   response continues in a new stream, on any server, and the answer continues.
   A policy change applies from the next message.
@@ -331,16 +333,22 @@ admin value is not Ask.
   the agent uses for the user. Share and publish refuse an integration that
   is not private with 400.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
-  kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
-  preset or URL patterns), then the `integration` row with exactly one of
-  `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client
-  and the actions. It writes no plugin row. An OpenAPI integration also gets
+  kind row (`mcp_server`, the OpenAPI `tool` row, the GraphQL `api_app` row,
+  or the preset `external_app`), then the `integration` row with exactly one
+  of `mcp_server_id`, `tool_id`, `api_app_id` or `external_app_id`, the OAuth
+  client and the actions. It writes no plugin row. Users cannot create a
+  URL-pattern app (a CUSTOM `external_app`). Only legacy ones exist: migration
+  `933a21d46472` made each one with a single `https://host/path/*` pattern a
+  REST app and kept the others. An OpenAPI integration also gets
   an `api_app` row (`integration.api_app_id`) with the spec as JSON text and
   its server URL. For one release each create and spec change writes both
   the `tool` row and the `api_app` row
-  (`db/integration.py:write_openapi_document__no_commit`); the readers still
-  read the `tool` row, and nothing reads `api_app` yet. Migration
-  `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
+  (`db/integration.py:write_openapi_document__no_commit`). The `tool` copy
+  has path-level parameters copied into each operation and server variable
+  defaults filled into the server URL
+  (`tools/tool_implementations/custom/openapi_parsing.py:inline_path_parameters`), the shape the previous
+  release reads. The readers read
+  `api_app` only. Migration `c2caf6a8285c` copied the existing rows. See [TECH-DEBT.md](../TECH-DEBT.md). The creator is the owner. "For the organization"
   sets the install setting AVAILABLE; else the integration is private and
   starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
@@ -354,9 +362,9 @@ admin value is not Ask.
   constant
   (`backend/tests/external_dependency_unit/integrations/test_list_query_counts.py`).
   These lists skip an integration with no known shape and log a warning
-  (`_shapes(..., skip_unknown=True)`), so a row that a later release wrote,
-  e.g. an `api_app` with no `tool` row, does not break them after a rollback.
-  A direct read of that integration still gives 404
+  (`_shapes(..., skip_unknown=True)`), so a row that a later release wrote
+  does not break them after a rollback. An `api_app` row with no `tool` row
+  is a GraphQL app here. A direct read of an unknown row still gives 404
   (`backend/tests/external_dependency_unit/integrations/test_unknown_shape_in_lists.py`).
 - Delete (`db/integration.py:delete_integration__no_commit`) deletes the
   integration, then its kind row and its `api_app` row. A deleted kind row deletes its integration by cascade.
@@ -426,10 +434,12 @@ admin value is not Ask.
 checks every request the MCP SDK makes, redirects included, at the admin SSRF
 Protection level. `MCP_SERVER_ALLOW_PRIVATE_NETWORK` and
 `MCP_SERVER_ALLOW_LOOPBACK` only seed that level's default. OpenAPI tools use
-`tools/tool_implementations/custom/custom_tool.py:custom_tool_ssrf_params`:
+`tools/tool_implementations/http_request.py:tool_request_ssrf_params`:
 self-hosted allows private targets at every level and loopback only at
 `DISABLED`, cloud blocks all internal targets, and `ssrf_safe_request` does not
-follow redirects.
+follow redirects. `send_tool_request` also ends the body read at the read
+timeout through `utils/url.py:read_bounded_body`, which open_url shares, so a
+server that sends a few bytes at a time gives a timeout failure.
 
 **Action policies.** `PUT /admin/integrations/{id}/actions` writes the admin
 rows through `backend/onyx/db/integration.py:set_policy_rows__no_commit` under
@@ -636,8 +646,9 @@ default agent, is Blocked.
    [[craft-scheduled-tasks#task-choices-default-ask]]).
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
    setting resets connections.** `integrations/connections.py:sign_in_settings_for`
-   includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL, the
-   app URL patterns and the preset host values. An admin PATCH that changes it
+   includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL
+   (without a trailing slash, which older releases kept), the
+   GraphQL endpoint URL, the app URL patterns and the preset host values. An admin PATCH that changes it
    sets every connection to Needs reconnect. A new destination must never
    receive credentials that were given for the old one. Only a global action
    manager can change the destination or headers of an Onyx login

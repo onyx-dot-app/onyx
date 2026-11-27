@@ -70,8 +70,19 @@ def _linear_actions(body: object) -> list[str]:
             {"query": "{ viewer { id } }"},
             {"query": 'mutation { issueDelete(id: "x") { success } }'},
         ],
+        [
+            {"query": "{ viewer { id } }"},
+            {"extensions": {"persistedQuery": {"sha256Hash": "abc"}}},
+        ],
+        [{"query": "{ viewer { id } }"}, {"query": "mutation {"}],
     ],
-    ids=["two_operations", "two_root_fields", "batch"],
+    ids=[
+        "two_operations",
+        "two_root_fields",
+        "batch",
+        "batch_with_persisted_query",
+        "batch_with_unreadable_document",
+    ],
 )
 def test_unknown_graphql_field_next_to_a_known_one_asks(body: object) -> None:
     actions = _linear_actions(body)
@@ -84,3 +95,37 @@ def test_known_graphql_fields_of_one_action_do_not_ask() -> None:
         {"query": '{ issues { nodes { id } } issue(id: "x") { id } }'}
     )
     assert actions == ["linear.issues.read"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("DELETE", "/repos/o/r/issues/comments/1"),
+        ("POST", "/repos/o/r/issues/comments/1"),
+        ("GET", "/graphql"),
+    ],
+)
+def test_a_graphql_body_matches_only_a_post_to_the_graphql_endpoint(
+    method: str, path: str
+) -> None:
+    matched = recognize_actions(
+        ExternalAppType.GITHUB,
+        ProxiedRequest(
+            method=method,
+            path=path,
+            body=json.dumps({"query": "{ viewer { id } }"}).encode(),
+        ),
+    )
+    assert [action.action_type for action in matched] == [WHOLE_DOMAIN_ACTION_TYPE]
+
+
+def test_a_query_string_keeps_the_graphql_endpoint() -> None:
+    matched = recognize_actions(
+        ExternalAppType.LINEAR,
+        ProxiedRequest(
+            method="POST",
+            path="/graphql?tenant=acme",
+            body=json.dumps({"query": "{ viewer { id } }"}).encode(),
+        ),
+    )
+    assert [action.action_type for action in matched] == ["linear.viewer.read"]

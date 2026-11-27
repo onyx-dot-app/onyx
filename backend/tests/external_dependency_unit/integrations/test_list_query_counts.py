@@ -2,6 +2,7 @@
 for all integrations, so their query count does not grow with the number of
 integrations."""
 
+import json
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -84,7 +85,9 @@ def _add_integrations(
                 auth_mode=IntegrationAuthMode.SHARED,
                 auth_method=IntegrationAuthMethod.API_KEY,
                 header_template={"X-Api-Key": "{api_key}"},
-                config=OpenApiConfigInput(openapi_spec=_openapi_spec(name)),
+                config=OpenApiConfigInput(
+                    openapi_document=json.dumps(_openapi_spec(name))
+                ),
             ),
             admin,
             db_session,

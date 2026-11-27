@@ -5,6 +5,7 @@ and ``sync_integration_actions__no_commit`` must write ``integration_action``
 rows that a second run leaves alone."""
 
 import datetime
+import json
 from collections.abc import Generator
 from copy import deepcopy
 from typing import Any
@@ -27,13 +28,16 @@ from onyx.db.integration import (
     create_openapi_tool_row__no_commit,
     list_integration_actions,
     replace_integration_actions__no_commit,
+    write_openapi_document__no_commit,
 )
 from onyx.db.models import (
+    ApiApp,
     ExternalApp,
     Integration,
     IntegrationAction,
     Tool,
 )
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.kinds.api import (
     ApiKindHandler,
@@ -82,6 +86,7 @@ class Created:
         self.integration_ids: list[int] = []
         self.tool_ids: list[int] = []
         self.external_app_ids: list[int] = []
+        self.api_app_ids: list[int] = []
 
 
 @pytest.fixture
@@ -102,6 +107,8 @@ def created(
         db_session.execute(
             delete(Integration).where(Integration.id.in_(rows.integration_ids))
         )
+    if rows.api_app_ids:
+        db_session.execute(delete(ApiApp).where(ApiApp.id.in_(rows.api_app_ids)))
     db_session.commit()
 
 
@@ -138,6 +145,14 @@ def _openapi_tool(db_session: Session, created: Created) -> tuple[Integration, T
     integration = _integration(
         db_session, created, IntegrationKind.API, tool_id=tool.id
     )
+    if tool.openapi_schema is None:
+        raise AssertionError("tool has no schema")
+    write_openapi_document__no_commit(
+        integration, json.dumps(tool.openapi_schema), tool.openapi_schema, db_session
+    )
+    if integration.api_app_id is None:
+        raise AssertionError("integration has no api_app")
+    created.api_app_ids.append(integration.api_app_id)
     db_session.commit()
     return integration, tool
 
@@ -224,7 +239,9 @@ def test_openapi_sync_writes_updates_and_deletes(
         raise AssertionError("tool has no schema")
     del schema["paths"]["/orders/{order_id}"]
     schema["paths"]["/orders"]["get"]["summary"] = "List all orders"
-    tool.openapi_schema = schema
+    write_openapi_document__no_commit(
+        integration, json.dumps(schema), schema, db_session
+    )
     db_session.commit()
     _sync(db_session, integration)
 
@@ -253,7 +270,9 @@ def test_openapi_sync_reads_the_settings_committed_before_its_lock(
         if schema is None:
             raise AssertionError("tool has no schema")
         del schema["paths"]["/orders/{order_id}"]
-        other_tool.openapi_schema = schema
+        write_openapi_document__no_commit(
+            other_integration, json.dumps(schema), schema, other_session
+        )
         _sync(other_session, other_integration)
 
     _sync(db_session, integration)
@@ -273,13 +292,17 @@ def test_preset_discover_actions_equal_the_catalog(
 
     specs = ApiKindHandler().discover_actions(integration, db_session)
 
+    # The catalog, then the action for each request that is none of them.
+    *catalog_specs, other = specs
     catalog = get_endpoint_catalog(ExternalAppType.LINEAR)
-    assert [(s.key, s.display_name, s.description) for s in specs] == [
+    assert [(s.key, s.display_name, s.description) for s in catalog_specs] == [
         (e.id.value, e.normalised_name, e.description) for e in catalog
     ]
-    assert [s.read_only for s in specs] == [
+    assert [s.read_only for s in catalog_specs] == [
         e.default_policy is ActionPolicy.ALWAYS for e in catalog
     ]
+    assert other.key == WHOLE_DOMAIN_ACTION_TYPE
+    assert other.default_policy is IntegrationActionPolicyValue.ASK
 
 
 def test_preset_sync_is_idempotent(db_session: Session, created: Created) -> None:
@@ -291,7 +314,7 @@ def test_preset_sync_is_idempotent(db_session: Session, created: Created) -> Non
 
     assert set(first) == {
         e.id.value for e in get_endpoint_catalog(ExternalAppType.LINEAR)
-    }
+    } | {WHOLE_DOMAIN_ACTION_TYPE}
     assert all(
         a.source is IntegrationActionSource.EXTERNAL_APP
         for a in list_integration_actions(integration.id, db_session)

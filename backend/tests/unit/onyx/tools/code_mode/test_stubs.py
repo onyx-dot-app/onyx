@@ -75,6 +75,7 @@ from onyx.tools.tool_implementations.subagents.subagent_tools import (
     InterruptAgentTool,
     ListAgentsTool,
 )
+from tests.unit.fakes import NO_CREDENTIALS
 from tests.unit.onyx.tools.code_mode.fakes import (
     FakeImageGenerationTool,
     FakeMCPTool,
@@ -1100,7 +1101,15 @@ def test_tool_search_matches_openapi_query_parameter_descriptions() -> None:
             },
         }
     )
-    tool = CustomTool(integration_id=1, method_spec=method, base_url="http://x")
+    tool = CustomTool(
+        integration_id=1,
+        method_spec=method,
+        base_url="http://x",
+        headers={},
+        approval=None,
+        action_key=method.raw_name,
+        credentials=NO_CREDENTIALS,
+    )
     stubs = build_tool_stubs(OPENAI_CODE_MODE, [tool])
 
     assert "sev: Severity bucket of the outage." in stubs.functions[tool.name].stub

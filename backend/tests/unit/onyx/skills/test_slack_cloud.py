@@ -76,7 +76,7 @@ def test_govslack_provider_resolves_every_host(cloud: Cloud) -> None:
         "api_url": "https://slack-gov.com/api/",
         "files_host": "files.slack-gov.com",
     }
-    assert "api.slack-gov.com/apps" in provider.spec.descriptor.setup_instructions
+    assert provider.spec.descriptor.setup_url == "https://api.slack-gov.com/apps"
 
 
 def test_commercial_provider_is_unchanged(cloud: Cloud) -> None:

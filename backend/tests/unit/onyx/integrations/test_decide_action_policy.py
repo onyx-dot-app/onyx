@@ -5,8 +5,13 @@ task setting, the user's Always allow, the chat grant and the approval mode."""
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from onyx.db.enums import IntegrationActionPolicyValue, IntegrationActionSource
+from onyx.db.enums import (
+    IntegrationActionPolicyValue,
+    IntegrationActionSource,
+    IntegrationKind,
+)
 from onyx.db.models import IntegrationAction
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.models import (
     ActionSettings,
     ApprovalMode,
@@ -187,6 +192,7 @@ def test_each_step_of_the_policy_order(name: str) -> None:
             admin=_rows(case.admin_action, case.admin_default),
             user=_rows(case.user_action, case.user_default),
         ),
+        kind=IntegrationKind.MCP,
         users_can_save_always_allow=case.users_can_save,
         link=link,
         granted=case.chat_grant,
@@ -203,6 +209,7 @@ def _decide(
         ACTION,
         action,
         PolicyRows(admin={}, user={}),
+        kind=IntegrationKind.MCP,
         users_can_save_always_allow=True,
         link=link,
         granted=False,
@@ -229,3 +236,65 @@ def test_stored_settings_parse_and_a_bad_row_blocks() -> None:
     assert parse_action_settings({"default": "sometimes"}) == ActionSettings(
         default=LinkValue.BLOCKED
     )
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        (ApprovalMode.INTERACTIVE, E_ASK),
+        (ApprovalMode.NO_APPROVER, E_BLOCKED),
+        (ApprovalMode.RUN_WITHOUT_ASKING, E_BLOCKED),
+    ],
+)
+def test_an_action_that_always_asks_never_runs_with_no_question(
+    mode: ApprovalMode, expected: EffectivePolicy
+) -> None:
+    """A link Allow, a saved Always allow and a chat grant do not apply."""
+    result = decide_action_policy(
+        WHOLE_DOMAIN_ACTION_TYPE,
+        None,
+        PolicyRows(
+            admin={},
+            user={WHOLE_DOMAIN_ACTION_TYPE: IntegrationActionPolicyValue.ALLOW},
+        ),
+        kind=IntegrationKind.API,
+        users_can_save_always_allow=True,
+        link=ActionSettings(actions={WHOLE_DOMAIN_ACTION_TYPE: LinkValue.ALLOW}),
+        granted=True,
+        approval_mode=mode,
+    )
+    assert result is expected
+
+
+def test_an_action_that_always_asks_stays_blocked() -> None:
+    result = decide_action_policy(
+        WHOLE_DOMAIN_ACTION_TYPE,
+        None,
+        PolicyRows(
+            admin={WHOLE_DOMAIN_ACTION_TYPE: IntegrationActionPolicyValue.BLOCKED},
+            user={},
+        ),
+        kind=IntegrationKind.API,
+        users_can_save_always_allow=True,
+        link=ActionSettings(),
+        granted=False,
+        approval_mode=ApprovalMode.INTERACTIVE,
+    )
+    assert result is E_BLOCKED
+
+
+def test_an_mcp_tool_named_like_the_request_action_follows_its_policy() -> None:
+    result = decide_action_policy(
+        WHOLE_DOMAIN_ACTION_TYPE,
+        None,
+        PolicyRows(
+            admin={WHOLE_DOMAIN_ACTION_TYPE: IntegrationActionPolicyValue.ALLOW},
+            user={},
+        ),
+        kind=IntegrationKind.MCP,
+        users_can_save_always_allow=True,
+        link=ActionSettings(),
+        granted=False,
+        approval_mode=ApprovalMode.INTERACTIVE,
+    )
+    assert result is EffectivePolicy.ALLOW

@@ -10,12 +10,13 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    ApiAppType,
     ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationAuthMode,
     IntegrationKind,
 )
-from onyx.db.models import ExternalApp, Integration, IntegrationAction, Tool
+from onyx.db.models import ApiApp, ExternalApp, Integration, IntegrationAction
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
@@ -31,6 +32,7 @@ from onyx.sandbox_proxy.usable_integrations import (
     openapi_match_target,
 )
 from onyx.tools.models import IntegrationActionRef, ToolApprovalScope
+from onyx.tools.tool_implementations.custom import openapi_parsing
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -80,22 +82,31 @@ OPENAPI_SPEC: dict[str, Any] = {
 }
 
 
-def _integration(tool_id: int | None, external_app_id: int | None) -> Integration:
+def _integration(api_app_id: int | None, external_app_id: int | None) -> Integration:
     return Integration(
         id=21,
         kind=IntegrationKind.API,
         name="Orders API",
         auth_mode=IntegrationAuthMode.NONE,
-        tool_id=tool_id,
+        api_app_id=api_app_id,
         external_app_id=external_app_id,
+    )
+
+
+def _api_app(app_id: int, spec: dict[str, Any]) -> ApiApp:
+    return ApiApp(
+        id=app_id,
+        api_type=ApiAppType.REST,
+        base_url=spec["servers"][0]["url"],
+        openapi_document=json.dumps(spec),
     )
 
 
 def _use_openapi_tool(
     monkeypatch: pytest.MonkeyPatch, spec: dict[str, Any] = OPENAPI_SPEC
 ) -> tuple[Integration, IntegrationMatchTarget]:
-    """Patch the tool getter and the stored actions that the sync writes."""
-    tool = Tool(id=5, name="orders", openapi_schema=spec)
+    """Patch the api_app getter and the stored actions that the sync writes."""
+    app = _api_app(5, spec)
     rows = [
         IntegrationAction(**action.model_dump())
         for action in (
@@ -103,11 +114,11 @@ def _use_openapi_tool(
             for method_spec in openapi_to_method_specs(spec)
         )
     ]
-    monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
+    monkeypatch.setattr(api_kind, "get_api_app_for_integration", lambda *_: app)
     monkeypatch.setattr(api_kind, "list_integration_actions", lambda *_: rows)
-    target = openapi_match_target(21, spec)
+    target = openapi_match_target(21, json.dumps(spec))
     assert target is not None
-    return _integration(tool_id=tool.id, external_app_id=None), target
+    return _integration(api_app_id=app.id, external_app_id=None), target
 
 
 def _use_external_app(
@@ -121,7 +132,9 @@ def _use_external_app(
         auth_template={},
     )
     monkeypatch.setattr(api_kind, "get_external_app_for_integration", lambda *_: app)
-    return _integration(tool_id=None, external_app_id=app.id), app_match_target(21, app)
+    return _integration(api_app_id=None, external_app_id=app.id), app_match_target(
+        21, app
+    )
 
 
 def _request(method: str, url: str, body: Any = None) -> ProxiedRequest:
@@ -141,7 +154,6 @@ def test_openapi_config(monkeypatch: pytest.MonkeyPatch) -> None:
     integration, target = _use_openapi_tool(monkeypatch)
     config = HANDLER.load_config(integration, DB)
     assert config.shape is ApiShape.OPENAPI
-    assert config.tool_id == 5
     assert config.base_url == "https://api.orders.example.com/v1"
 
 
@@ -175,9 +187,9 @@ def test_openapi_operation_cannot_take_a_builtin_action_key(
             }
         },
     }
-    tool = Tool(id=5, name="files", openapi_schema=spec)
-    monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
-    integration = _integration(tool_id=tool.id, external_app_id=None)
+    app = _api_app(5, spec)
+    monkeypatch.setattr(api_kind, "get_api_app_for_integration", lambda *_: app)
+    integration = _integration(api_app_id=app.id, external_app_id=None)
 
     with pytest.raises(OnyxError) as error:
         HANDLER.discover_actions(integration, DB)
@@ -394,9 +406,11 @@ def test_openapi_build_chat_tools_keeps_names_placeholders_and_approval(
     tools = HANDLER.build_chat_tools(integration, actions, ctx, DB)
 
     assert all(isinstance(t, CustomTool) for t in tools)
-    by_key = {t.display_name: t for t in tools}
+    by_key = {t.name.removeprefix("custom__21__"): t for t in tools}
     assert set(by_key) == {"getOrder", "createOrder"}
     get_order = by_key["getOrder"]
+    # The chat shows the action's name: the summary, else the operationId.
+    assert get_order.display_name == "Get one order for pat@example.com"
     assert get_order.name == "custom__21__getOrder"
     assert get_order.approval == scope
     assert by_key["createOrder"].approval is None
@@ -417,9 +431,9 @@ def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id
         "servers": [{"url": "https://api.me.example.com"}],
         "paths": {"/me": {"get": {"operationId": "get_USER_ID", "summary": "Me"}}},
     }
-    tool = Tool(id=6, name="me", openapi_schema=spec)
-    monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
-    integration = _integration(tool_id=tool.id, external_app_id=None)
+    app = _api_app(6, spec)
+    monkeypatch.setattr(api_kind, "get_api_app_for_integration", lambda *_: app)
+    integration = _integration(api_app_id=app.id, external_app_id=None)
     scope = ToolApprovalScope(integration_id=21, action_id="get_USER_ID")
     ctx = ChatToolContext(
         user_id=uuid4(),
@@ -518,17 +532,53 @@ def test_preset_match_on_another_host_is_none(
     )
 
 
-def test_preset_build_chat_tools_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    integration, target = _use_external_app(
+def test_preset_build_chat_tools_gives_one_tool_for_each_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    integration, _ = _use_external_app(
         monkeypatch, ExternalAppType.GITHUB, [r"https://api\.github\.com/.*"]
     )
-    actions = [IntegrationAction(key="github.user.read")]
-    assert (
-        HANDLER.build_chat_tools(
-            integration, actions, ChatToolContext(credentials=_credentials({})), DB
-        )
-        == []
+    actions = [
+        IntegrationAction(key="github.user.read", display_name="Read the user"),
+        IntegrationAction(key="unspecified", display_name="Any other request"),
+        # The catalog no longer has this action.
+        IntegrationAction(key="github.removed", display_name="Removed"),
+    ]
+
+    tools = HANDLER.build_chat_tools(
+        integration,
+        actions,
+        ChatToolContext(
+            credentials=_credentials({}),
+            approval_for=lambda key: (
+                ToolApprovalScope(integration_id=21, action_id=key)
+                if key == "unspecified"
+                else None
+            ),
+        ),
+        DB,
     )
+
+    assert [tool.name for tool in tools] == [
+        "app__21__github_user_read",
+        "app__21__request",
+    ]
+    assert tools[0].approval is None
+    assert tools[1].approval == ToolApprovalScope(
+        integration_id=21, action_id="unspecified"
+    )
+
+
+def test_preset_discovers_the_action_for_each_other_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    integration, _ = _use_external_app(
+        monkeypatch, ExternalAppType.LINEAR, [r"https://api\.linear\.app/.*"]
+    )
+    specs = HANDLER.discover_actions(integration, DB)
+    assert specs[-1].key == "unspecified"
+    assert specs[-1].default_policy is IntegrationActionPolicyValue.ASK
+    assert "linear.issues.create" in {spec.key for spec in specs}
 
 
 # Custom apps
@@ -554,9 +604,61 @@ def test_custom_match_whole_domain(monkeypatch: pytest.MonkeyPatch) -> None:
     assert HANDLER.load_config(integration, DB).shape is ApiShape.CUSTOM
 
 
+def test_custom_build_chat_tools_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    integration, _ = _use_external_app(
+        monkeypatch, ExternalAppType.CUSTOM, ["https://internal.example.com/**"]
+    )
+    actions = [IntegrationAction(key="unspecified", display_name="Internal")]
+    assert (
+        HANDLER.build_chat_tools(
+            integration, actions, ChatToolContext(credentials=_credentials({})), DB
+        )
+        == []
+    )
+
+
 def test_match_request_without_url_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
     integration, target = _use_external_app(
         monkeypatch, ExternalAppType.CUSTOM, ["https://internal.example.com/**"]
     )
     request = ProxiedRequest(method="GET", path="/a")
     assert HANDLER.match_request(integration, target, request, DB) is None
+
+
+def test_graphql_schema_with_no_query_root_is_refused() -> None:
+    """Each call would fail on it, so the save refuses it."""
+    with pytest.raises(OnyxError, match="Query root type must be provided"):
+        api_kind.graphql_action_specs("type Mutation { close(id: ID!): Boolean }")
+
+
+def _schema_nodes(value: object) -> int:
+    if isinstance(value, dict):
+        return 1 + sum(_schema_nodes(item) for item in value.values())
+    if isinstance(value, list):
+        return sum(_schema_nodes(item) for item in value)
+    return 0
+
+
+def test_graphql_shared_input_types_expand_within_one_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each input type uses the next one at each of its fields, so the
+    expanded schemas grow exponentially. One budget covers all the actions."""
+    monkeypatch.setattr(openapi_parsing, "_MAX_INLINED_NODES", 1_000)
+    width = 12
+    types = "\n".join(
+        f"input I{level} {{ "
+        + " ".join(f"f{i}: I{level + 1}" for i in range(width))
+        + " }"
+        for level in range(4)
+    )
+    roots = " ".join(f"q{i}(x: I0): Boolean" for i in range(10))
+    sdl = f"{types}\ninput I4 {{ v: Int }}\ntype Query {{ {roots} }}"
+
+    specs = api_kind.graphql_action_specs(sdl)
+
+    assert len(specs) == 10
+    assert sum(_schema_nodes(spec.input_schema) for spec in specs) < 1_500
+    last = specs[-1].input_schema
+    assert last is not None
+    assert last["properties"] == {"x": {"type": "object"}}

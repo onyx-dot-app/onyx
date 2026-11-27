@@ -14,7 +14,8 @@ link here from **Known issues** and do not restate the entry.
   `api_app` row and also the parsed document to the `tool` row. The
   integration keeps both `tool_id` and `api_app_id`.
 - **Why:** The previous release reads the spec from `tool`. The readers move to
-  `api_app` in the next PR of this stack, in the same release as this table.
+  `api_app` one release after this table, so every app has its `api_app` row
+  before they do.
   Writing `tool` for one more release keeps a version rollback working: the
   old release still finds every app that was created or changed.
 - **Where:** `backend/onyx/db/integration.py:write_openapi_document__no_commit`;
@@ -24,18 +25,6 @@ link here from **Known issues** and do not restate the entry.
   stop the writes to `tool`, drop `integration.tool_id` for API apps and the
   OpenAPI columns of `tool`, and change the check constraint to name
   `api_app_id`.
-- **Owner:** rohoswagger. **Added:** 2026-11-24.
-
-## Rolling-deploy gap of `api_app`
-
-- **What:** During a rolling deploy the old release writes OpenAPI apps to
-  `tool` only. The `api_app` row of such an app can be missing or stale until
-  the next admin save of its spec.
-- **Why:** Accepted for the deploy window. It matters from the PR that moves
-  the readers to `api_app`; until then nothing reads the row. The next spec
-  save adds or corrects the row ([[mcp-and-custom-tools]]).
-- **Where:** `backend/onyx/db/integration.py:write_openapi_document__no_commit`.
-- **Ends when:** The dual write above ends.
 - **Owner:** rohoswagger. **Added:** 2026-11-24.
 
 ## Usage-limit counters accept only `CALENDAR_WEEK`

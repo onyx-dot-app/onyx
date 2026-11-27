@@ -2,6 +2,7 @@
 optional OAuth client and actions, its access, an agent link, and policy
 rows."""
 
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID, uuid4
@@ -215,7 +216,9 @@ def make_openapi_integration(
         header_template=header_template,
         tool_id=tool.id,
     )
-    write_openapi_document__no_commit(integration, openapi_schema, db_session)
+    write_openapi_document__no_commit(
+        integration, json.dumps(openapi_schema), openapi_schema, db_session
+    )
     sync_integration_actions__no_commit(integration, db_session)
     db_session.commit()
     return integration, tool

@@ -2,6 +2,7 @@
 the permissions, the agent integrations, the public tool aliases and the removed
 routes."""
 
+import json
 from collections.abc import Generator
 from typing import Any
 from uuid import uuid4
@@ -36,7 +37,7 @@ def _openapi_body(
         "auth_mode": auth_mode,
         "auth_method": "api_key",
         "header_template": {"X-Api-Key": "{api_key}"},
-        "config": {"shape": "openapi", "openapi_spec": OPENAPI_SPEC},
+        "config": {"shape": "openapi", "openapi_document": json.dumps(OPENAPI_SPEC)},
     }
 
 
@@ -75,13 +76,7 @@ def test_admin_create_read_update_delete(
     created.remove(detail.id)
 
 
-def _craft_available(user: DATestUser) -> bool:
-    response = client.get(f"{API_SERVER_URL}/settings", headers=user.headers)
-    response.raise_for_status()
-    return bool(response.json()["onyx_craft_available"])
-
-
-def test_create_each_shape(admin_user: DATestUser, created: list[int]) -> None:
+def test_create_each_shape(admin_user: DATestUser) -> None:
     custom_body: dict[str, Any] = {
         "name": f"custom-{uuid4().hex[:8]}",
         "auth_mode": "none",
@@ -90,16 +85,16 @@ def test_create_each_shape(admin_user: DATestUser, created: list[int]) -> None:
             "upstream_url_patterns": ["https://api.custom.example.com/*"],
         },
     }
-    presets = {preset.id for preset in IntegrationManager.presets(admin_user)}
-    if _craft_available(admin_user):
-        custom = IntegrationManager.create(custom_body, admin_user)
-        created.append(custom.id)
-        assert custom.shape.value == "custom"
-        assert "GITHUB" in presets
-    else:
-        # Only Craft runs an external app.
-        assert IntegrationManager.create_raw(custom_body, admin_user).status_code == 400
-        assert presets == set()
+    # A URL-pattern app can no longer be added.
+    assert IntegrationManager.create_raw(custom_body, admin_user).status_code == 422
+    presets = {preset.id: preset for preset in IntegrationManager.presets(admin_user)}
+    # An external app does not need Craft: chat runs it.
+    github = presets["GITHUB"]
+    # The setup panel shows the redirect URI the sign-in sends.
+    assert github.callback_url is not None
+    assert github.callback_url.endswith("/craft/v1/apps/oauth/callback")
+    assert github.scopes == ["repo", "read:org", "read:user"]
+    assert github.setup_steps
 
     # Onyx loads the actions of a server with no sign-in before it saves
     # anything, so an unreachable server is refused.

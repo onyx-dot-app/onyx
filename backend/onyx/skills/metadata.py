@@ -14,7 +14,7 @@ from pydantic import JsonValue, ValidationError
 from pydantic_core import ErrorDetails
 from yaml.constructor import ConstructorError
 from yaml.events import AliasEvent
-from yaml.nodes import MappingNode, Node, ScalarNode
+from yaml.nodes import Node, ScalarNode
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -23,6 +23,7 @@ from onyx.skills.models import (
     SkillDocument,
     SkillMetadata,
 )
+from onyx.utils.unique_key_yaml import UniqueKeySafeLoader
 
 SKILLS_DIR: Final = "skills"
 
@@ -50,7 +51,7 @@ class OversizedYamlInt:
         return hash(self.text)
 
 
-class _UniqueKeySafeLoader(yaml.SafeLoader):
+class _UniqueKeySafeLoader(UniqueKeySafeLoader):
     def compose_node(self, parent: Node | None, index: int) -> Node | None:
         if self.check_event(AliasEvent):
             raise ConstructorError(
@@ -60,34 +61,6 @@ class _UniqueKeySafeLoader(yaml.SafeLoader):
                 self.get_mark(),
             )
         return super().compose_node(parent, index)
-
-    def construct_mapping(
-        self,
-        node: MappingNode,
-        deep: bool = False,
-    ) -> dict[Any, Any]:
-        self.flatten_mapping(node)
-        mapping: dict[Any, Any] = {}
-        for key_node, value_node in node.value:
-            key = self.construct_object(key_node, deep=deep)
-            try:
-                is_duplicate = key in mapping
-            except TypeError as exc:
-                raise ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    "found unhashable key",
-                    key_node.start_mark,
-                ) from exc
-            if is_duplicate:
-                raise ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    f"found duplicate key {key!r}",
-                    key_node.start_mark,
-                )
-            mapping[key] = self.construct_object(value_node, deep=deep)
-        return mapping
 
 
 def _construct_int(loader: yaml.SafeLoader, node: Node) -> int | OversizedYamlInt:

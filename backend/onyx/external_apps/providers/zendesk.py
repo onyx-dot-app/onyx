@@ -369,25 +369,15 @@ class ZendeskProvider(OAuthExternalAppProvider):
                     secret=True,
                 ),
             ],
-            setup_instructions=(
-                "In Zendesk, open Admin Center → APIs → OAuth clients and add a client. "
-                "Set Client kind to Confidential. Onyx uses PKCE together with the client secret. "
-                "Add these allowed scopes to the client: "
-                f"{', '.join(_SCOPES)}. "
-                "The read scope allows reading all Zendesk data and is required for search and ticket audits. "
-                "The tickets:write scope allows creating, updating, and deleting tickets. "
-                "The hc:write scope allows Help Center changes, side_conversations:write allows ticket side conversations, "
-                "and macros:write allows saved reply changes. "
-                "Onyx asks for approval before writes by default. "
-                "Help Center and side conversations also require the relevant Zendesk features and user permissions. "
-                "All listed scopes must be allowed, even if you do not use every feature. "
-                "After changing allowed scopes, reconnect Zendesk in Onyx to grant them. "
-                "Set the Redirect URL to this Onyx instance's full callback URL "
-                "(https://<your-onyx-domain>/craft/v1/apps/oauth/callback). "
-                "Copy the Secret when Zendesk shows it; it is shown only once. "
-                "Then enter your subdomain, the client's Unique identifier, and the Secret below. "
-                "The subdomain selects the Zendesk account this app can access."
-            ),
+            setup_steps=[
+                "In Admin Center, open APIs → OAuth clients, then add a client.",
+                "Set Client kind to Confidential.",
+                "Allow all the scopes, also those for features you do not use.",
+                "Set the Redirect URL to the callback URL.",
+                "Save, then copy the Secret. Zendesk shows it only one time.",
+                "Enter your subdomain, the Unique identifier and the Secret into the fields.",
+                "After you change the allowed scopes, reconnect Zendesk in Onyx.",
+            ],
         ),
         endpoint_catalog=_ENDPOINTS,
     )

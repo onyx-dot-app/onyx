@@ -49,7 +49,6 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
-from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.model_capabilities import ToolFamily
@@ -97,6 +96,7 @@ from onyx.tools.tool_implementations.subagents.shapes import AGENT_SHAPES
 from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
+from tests.unit.fakes import NO_CREDENTIALS
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
@@ -1307,6 +1307,10 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
                 spec={},
             ),
             base_url="https://example.com",
+            headers={},
+            approval=None,
+            action_key="list_agents",
+            credentials=NO_CREDENTIALS,
         )
         if custom
         else MCPTool(
@@ -1316,13 +1320,7 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
             server_url="https://example.com",
             transport=None,
             acting_user_id=None,
-            credentials=CallCredentials(
-                integration_id=42,
-                auth_method=None,
-                connection_id=None,
-                connection_user_id=None,
-                headers={},
-            ),
+            credentials=NO_CREDENTIALS,
             tool_name="list_agents",
             tool_description="List remote agents",
             tool_definition={"type": "object", "properties": {}},

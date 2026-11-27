@@ -30,6 +30,7 @@ from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,
     _normalize_parameters_schema,
 )
+from tests.unit.fakes import NO_CREDENTIALS
 
 
 class TestNormalizeParametersSchema:
@@ -200,7 +201,13 @@ class TestMCPToolLLMNames:
         )
         custom_tools = [
             CustomTool(
-                integration_id=id, method_spec=method, base_url="https://example.com"
+                integration_id=id,
+                method_spec=method,
+                base_url="https://example.com",
+                headers={},
+                approval=None,
+                action_key=method.raw_name,
+                credentials=NO_CREDENTIALS,
             )
             for id in (1, 2)
         ]
@@ -247,6 +254,10 @@ class TestMCPToolLLMNames:
                         integration_id=1,
                         method_spec=method,
                         base_url="https://example.com",
+                        headers={},
+                        approval=None,
+                        action_key=method.raw_name,
+                        credentials=NO_CREDENTIALS,
                     ),
                     _make_tool({}, tool_name=name, server_name="server" * 20),
                 ]

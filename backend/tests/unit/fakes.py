@@ -4,6 +4,7 @@ import builtins
 from collections.abc import Collection
 
 from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.integrations.models import CallCredentials
 
 
 class FakeLock(CacheLock):
@@ -154,3 +155,13 @@ class FakeCache(CacheBackend):
 
     def blpop(self, keys: list[str], timeout: int = 0) -> tuple[bytes, bytes] | None:
         raise NotImplementedError
+
+
+# The credential of an integration with no sign-in.
+NO_CREDENTIALS = CallCredentials(
+    integration_id=0,
+    auth_method=None,
+    connection_id=None,
+    connection_user_id=None,
+    headers={},
+)

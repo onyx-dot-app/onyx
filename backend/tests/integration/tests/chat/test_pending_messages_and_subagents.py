@@ -583,24 +583,26 @@ def test_turns_the_server_starts_use_the_saved_tool_options(
             "auth_method": None,
             "config": {
                 "shape": "openapi",
-                "openapi_spec": {
-                    "openapi": "3.0.0",
-                    "info": {
-                        "title": "Ping",
-                        "description": "Ping",
-                        "version": "1.0.0",
-                    },
-                    "servers": [{"url": "https://example.com"}],
-                    "paths": {
-                        "/ping": {
-                            "get": {
-                                "summary": "Ping the service",
-                                "operationId": "ping",
-                                "responses": {"200": {"description": "ok"}},
+                "openapi_document": json.dumps(
+                    {
+                        "openapi": "3.0.0",
+                        "info": {
+                            "title": "Ping",
+                            "description": "Ping",
+                            "version": "1.0.0",
+                        },
+                        "servers": [{"url": "https://example.com"}],
+                        "paths": {
+                            "/ping": {
+                                "get": {
+                                    "summary": "Ping the service",
+                                    "operationId": "ping",
+                                    "responses": {"200": {"description": "ok"}},
+                                }
                             }
-                        }
-                    },
-                },
+                        },
+                    }
+                ),
             },
         },
         admin_user,

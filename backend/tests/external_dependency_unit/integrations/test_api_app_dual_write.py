@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ApiAppType, IntegrationAuthMethod, IntegrationAuthMode
 from onyx.db.integration import get_openapi_tool_for_integration
 from onyx.db.models import ApiApp, Integration, Tool, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.integrations import admin_api
 from onyx.server.features.integrations.models import (
     IntegrationCreate,
@@ -19,6 +21,7 @@ from onyx.server.features.integrations.models import (
 )
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import CustomToolCreate
+from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from tests.external_dependency_unit.conftest import MakeTestUser
 
 
@@ -68,7 +71,9 @@ def test_create_update_and_delete_write_the_api_app_row(
             auth_method=IntegrationAuthMethod.API_KEY,
             header_template={"X-Api-Key": "{api_key}"},
             config=OpenApiConfigInput(
-                openapi_spec=_spec("https://weather.example.com", "get_forecast")
+                openapi_document=json.dumps(
+                    _spec("https://weather.example.com", "get_forecast")
+                )
             ),
         ),
         admin,
@@ -82,7 +87,9 @@ def test_create_update_and_delete_write_the_api_app_row(
         detail.id,
         IntegrationUpdate(
             config=OpenApiConfigInput(
-                openapi_spec=_spec("https://v2.weather.example.com", "get_v2")
+                openapi_document=json.dumps(
+                    _spec("https://v2.weather.example.com", "get_v2")
+                )
             )
         ),
         admin,
@@ -111,7 +118,9 @@ def test_a_spec_change_adds_the_row_that_older_code_did_not_write(
             name=f"weather-{uuid4().hex[:8]}",
             auth_mode=IntegrationAuthMode.NONE,
             config=OpenApiConfigInput(
-                openapi_spec=_spec("https://weather.example.com", "get_forecast")
+                openapi_document=json.dumps(
+                    _spec("https://weather.example.com", "get_forecast")
+                )
             ),
         ),
         admin,
@@ -129,7 +138,9 @@ def test_a_spec_change_adds_the_row_that_older_code_did_not_write(
             detail.id,
             IntegrationUpdate(
                 config=OpenApiConfigInput(
-                    openapi_spec=_spec("https://v2.weather.example.com", "get_v2")
+                    openapi_document=json.dumps(
+                        _spec("https://v2.weather.example.com", "get_v2")
+                    )
                 )
             ),
             admin,
@@ -164,3 +175,70 @@ def test_the_legacy_tool_route_writes_the_api_app_row(
     tool_api.delete_custom_tool(snapshot.id, db_session, admin)
     db_session.expire_all()
     assert db_session.get(ApiApp, app.id) is None
+
+
+def test_the_tool_row_copy_reads_with_the_previous_release(
+    db_session: Session, admin: User
+) -> None:
+    spec = _spec("https://weather.example.com/{version}", "get_forecast")
+    spec["servers"][0]["variables"] = {"version": {"default": "v2"}}
+    spec["paths"] = {
+        "/cities/{city}": {
+            "summary": "One city",
+            "parameters": [
+                {"name": "city", "in": "path", "schema": {"type": "string"}}
+            ],
+            "get": {"operationId": "get_city", "summary": "Get a city"},
+        }
+    }
+    detail = admin_api.create_integration(
+        IntegrationCreate(
+            name=f"weather-{uuid4().hex[:8]}",
+            auth_mode=IntegrationAuthMode.NONE,
+            config=OpenApiConfigInput(openapi_document=json.dumps(spec)),
+        ),
+        admin,
+        db_session,
+    )
+    tool = get_openapi_tool_for_integration(detail.id, db_session)
+    assert tool is not None and tool.openapi_schema is not None
+
+    # The previous release's openapi_to_method_specs: every key of a path
+    # item is an operation, and an operation lists all its own parameters.
+    definitions = [
+        MethodSpec(
+            name=operation["operationId"],
+            raw_name=operation["operationId"],
+            summary=operation["summary"],
+            path=path,
+            method=method,
+            spec=operation,
+        ).to_tool_definition()
+        for path, path_item in tool.openapi_schema["paths"].items()
+        for method, operation in path_item.items()
+    ]
+    assert [definition.name for definition in definitions] == ["get_city"]
+    properties = definitions[0].parameters["properties"]
+    assert isinstance(properties, dict) and "city" in properties
+    # The previous release reads servers[].url only, without variables.
+    assert tool.openapi_schema["servers"][0]["url"] == "https://weather.example.com/v2"
+
+
+def test_create_refuses_an_unpaired_surrogate(db_session: Session, admin: User) -> None:
+    spec = _spec("https://weather.example.com", "get_forecast")
+    spec["info"]["description"] = "\ud800"
+
+    with pytest.raises(OnyxError, match="unpaired Unicode surrogate") as error:
+        admin_api.create_integration(
+            IntegrationCreate(
+                name=f"weather-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.SHARED,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"X-Api-Key": "{api_key}"},
+                config=OpenApiConfigInput(openapi_document=json.dumps(spec)),
+            ),
+            admin,
+            db_session,
+        )
+
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
