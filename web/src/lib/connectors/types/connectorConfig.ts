@@ -86,6 +86,11 @@ export interface JiraConfig {
   jql_query?: string;
 }
 
+export interface JiraServiceManagementConfig {
+  project_key: string;
+  include_internal_comments?: boolean;
+}
+
 export interface SalesforceConfig {
   requested_objects?: string[];
 }

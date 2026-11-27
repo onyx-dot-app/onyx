@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian-Service-Desk-Anfragen"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -3281,6 +3284,24 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira-Service-Management-Konnektor konfigurieren",
+          "subtext": "Konfigurieren Sie, welche Jira-Service-Management-Inhalte indexiert werden. Onyx indexiert die Anfragen eines Serviceprojekts.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site-URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "project_key": {
+              "label": "Projektschlüssel",
+              "description": "Der Schlüssel des Serviceprojekts, das indexiert werden soll (z. B. 'ITSM')."
+            },
+            "include_internal_comments": {
+              "label": "Interne Kommentare einschließen",
+              "description": "Interne Kommentare (nur für Agenten) zusätzlich zu öffentlichen Kommentaren indexieren."
             }
           }
         },

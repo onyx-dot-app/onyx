@@ -1122,6 +1122,41 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira_service_management.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jira_service_management.fields.jira_base_url.label",
+        name: "jira_base_url",
+        optional: false,
+        placeholder:
+          "connectors.jira_service_management.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      {
+        type: "text",
+        label: "connectors.jira_service_management.fields.project_key.label",
+        name: "project_key",
+        optional: false,
+        description:
+          "connectors.jira_service_management.fields.project_key.description",
+      },
+      {
+        type: "checkbox",
+        label:
+          "connectors.jira_service_management.fields.include_internal_comments.label",
+        description:
+          "connectors.jira_service_management.fields.include_internal_comments.description",
+        name: "include_internal_comments",
+        optional: true,
+        default: false,
+        asCheckbox: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [

@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian サービスデスクのリクエスト"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -3281,6 +3284,24 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクターを設定",
+          "subtext": "インデックスする Jira Service Management のコンテンツを設定します。Onyx は 1 つのサービスプロジェクトのリクエストをインデックスします。",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "インデックスするサービスプロジェクトのキー(例: 'ITSM')。"
+            },
+            "include_internal_comments": {
+              "label": "内部コメントを含める",
+              "description": "公開コメントに加えて、内部コメント(エージェントのみ)もインデックスします。"
             }
           }
         },

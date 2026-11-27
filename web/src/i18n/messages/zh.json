@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian 服务台请求"
+        },
         "productboard": {
           "description": "产品管理"
         },
@@ -3281,6 +3284,24 @@
             "comment_email_blacklist": {
               "label": "评论邮箱黑名单",
               "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "配置要索引的 Jira Service Management 内容。Onyx 索引一个服务项目的请求。",
+          "fields": {
+            "jira_base_url": {
+              "label": "站点 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "project_key": {
+              "label": "项目键",
+              "description": "要索引的服务项目的键（例如 “ITSM”）。"
+            },
+            "include_internal_comments": {
+              "label": "包含内部评论",
+              "description": "除公开评论外，还索引内部评论（仅代理可见）。"
             }
           }
         },
