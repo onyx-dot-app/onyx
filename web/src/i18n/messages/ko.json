@@ -10819,6 +10819,46 @@
         },
         "dismiss": "닫기"
       }
+    },
+    "sandboxStatus": {
+      "page": {
+        "description": "채팅 샌드박스 도구가 실행되는 위치와 채팅에서 도구를 사용할 수 없는 이유를 보여 줍니다.",
+        "loadFailed": "샌드박스 상태를 불러올 수 없습니다.",
+        "refreshFailed": "샌드박스 상태를 새로 고칠 수 없습니다",
+        "refreshFailedDescription": "마지막으로 읽은 상태를 표시합니다. 20초마다 다시 시도합니다."
+      },
+      "summary": {
+        "toolsOffered": "채팅 샌드박스 도구가 켜져 있습니다",
+        "toolsOff": "채팅 샌드박스 도구가 꺼져 있습니다",
+        "toolsOfferedDescription": "하나 이상의 샌드박스 노드가 활성 상태이며 샌드박스 템플릿이 있습니다.",
+        "runtime": "런타임: {runtime}",
+        "template": "템플릿: {template}",
+        "noTemplate": "템플릿: 설정되지 않음",
+        "toolsOfferedAlwaysDescription": "런타임이 firecracker이므로 채팅은 항상 도구를 사용합니다. 처리할 노드가 없으면 샌드박스가 시작되지 않습니다."
+      },
+      "reasons": {
+        "runtimeWithoutFirecracker": "샌드박스 런타임이 Firecracker가 아닙니다. KVM 노드가 있는 클러스터에서 런타임을 auto 또는 firecracker로 설정하세요.",
+        "templateNotConfigured": "샌드박스 템플릿이 설정되지 않았습니다(SANDBOX_FC_TEMPLATE).",
+        "noRegisteredNode": "등록된 샌드박스 노드가 없습니다. 레이블 onyx.app/kvm=true를 붙인 KVM 노드를 추가하세요.",
+        "noLiveNodeWithTemplate": "샌드박스 템플릿이 있는 활성 노드가 없습니다. 호스트 에이전트 파드와 보고를 확인하세요.",
+        "nodeStateUnreadable": "샌드박스 노드 상태를 읽을 수 없습니다."
+      },
+      "nodes": {
+        "title": "노드",
+        "empty": "등록된 샌드박스 노드가 없습니다.",
+        "live": "활성",
+        "stale": "보고 없음",
+        "draining": "드레인 중",
+        "hasTemplate": "템플릿 준비됨",
+        "noTemplate": "템플릿 없음",
+        "neverReported": "아직 보고 없음",
+        "lastReport": "마지막 보고: {seconds, plural, other {#초}} 전",
+        "agentVersion": "에이전트 버전: {version}",
+        "vms": "{count, plural, other {VM #개}}",
+        "vmsOfCap": "{count, plural, other {VM #개}} / {cap}",
+        "templates": "템플릿: {templates}",
+        "noTemplates": "템플릿 없음"
+      }
     }
   },
   "agents": {
@@ -16643,6 +16683,9 @@
         },
         "serviceStatus": {
           "label": "서비스 상태"
+        },
+        "sandboxStatus": {
+          "label": "샌드박스 상태"
         }
       },
       "sections": {

@@ -56,6 +56,7 @@ export type AdminNavItemId =
   | "tracing"
   | "exportLogs"
   | "serviceStatus"
+  | "sandboxStatus"
   | "upgradePlan";
 
 /**
@@ -119,6 +120,7 @@ export const NAV_ITEM_IDS: Record<
   QUERY_HISTORY: "queryHistory",
   TRACING: "tracing",
   EXPORT_LOGS: "exportLogs",
+  SANDBOX_STATUS: "sandboxStatus",
   SERVICE_STATUS: "serviceStatus",
   STANDARD_ANSWERS: null,
   DOCUMENTS: null,

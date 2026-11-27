@@ -377,6 +377,7 @@ covers new files that match it.
 | `web/src/app/admin/web-search/`, `web/src/views/admin/WebSearchPage/`, `web/src/lib/webSearch/` | web-search |
 | `web/src/app/admin/image-generation/`, `web/src/views/admin/ImageGenerationPage/` | image-generation |
 | `web/src/app/admin/code-interpreter/`, `web/src/views/admin/CodeInterpreterPage/`, `web/src/hooks/useCodeInterpreter.ts` | code-execution |
+| `web/src/app/admin/sandbox/`, `web/src/views/admin/SandboxStatusPage/`, `web/src/lib/sandbox-status/` | craft-sandboxes |
 
 ---
 

@@ -52,6 +52,7 @@ export function useAdminNavLabels(): Record<AdminNavItemId, string> {
       tracing: t("adminNav.items.tracing.label"),
       exportLogs: t("adminNav.items.exportLogs.label"),
       serviceStatus: t("adminNav.items.serviceStatus.label"),
+      sandboxStatus: t("adminNav.items.sandboxStatus.label"),
       upgradePlan: t("adminNav.items.upgradePlan.label"),
     }),
     [t]

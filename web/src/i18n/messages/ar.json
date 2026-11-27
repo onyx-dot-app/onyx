@@ -10819,6 +10819,46 @@
         },
         "dismiss": "تجاهل"
       }
+    },
+    "sandboxStatus": {
+      "page": {
+        "description": "يعرض مكان تشغيل أدوات بيئة العزل في الدردشة، وسبب عدم حصول الدردشات عليها.",
+        "loadFailed": "تعذر تحميل حالة بيئة العزل.",
+        "refreshFailed": "تعذر تحديث حالة بيئة العزل",
+        "refreshFailedDescription": "تعرض الصفحة آخر حالة تمت قراءتها. وتعيد المحاولة كل 20 ثانية."
+      },
+      "summary": {
+        "toolsOffered": "أدوات بيئة العزل في الدردشة مفعّلة",
+        "toolsOff": "أدوات بيئة العزل في الدردشة متوقفة",
+        "toolsOfferedDescription": "عقدة واحدة على الأقل لبيئة العزل نشطة ولديها قالب بيئة العزل.",
+        "runtime": "بيئة التشغيل: {runtime}",
+        "template": "القالب: {template}",
+        "noTemplate": "القالب: غير محدد",
+        "toolsOfferedAlwaysDescription": "بيئة التشغيل هي firecracker، لذا تحصل الدردشات دائمًا على الأدوات. لا تبدأ بيئة العزل عندما لا تخدمها أي عقدة."
+      },
+      "reasons": {
+        "runtimeWithoutFirecracker": "بيئة تشغيل بيئة العزل ليست Firecracker. اضبط بيئة التشغيل على auto أو firecracker في مجموعة تحتوي على عقد KVM.",
+        "templateNotConfigured": "لم يتم تحديد قالب لبيئة العزل (SANDBOX_FC_TEMPLATE).",
+        "noRegisteredNode": "لا توجد عقدة مسجلة لبيئة العزل. أضف عقد KVM بالتسمية onyx.app/kvm=true.",
+        "noLiveNodeWithTemplate": "لا توجد عقدة نشطة لديها قالب بيئة العزل. تحقق من حاويات وكيل المضيف وتقاريرها.",
+        "nodeStateUnreadable": "تعذرت قراءة حالة عقد بيئة العزل."
+      },
+      "nodes": {
+        "title": "العقد",
+        "empty": "لا توجد عقدة مسجلة لبيئة العزل.",
+        "live": "نشطة",
+        "stale": "لا توجد تقارير",
+        "draining": "قيد التفريغ",
+        "hasTemplate": "القالب جاهز",
+        "noTemplate": "لا يوجد قالب",
+        "neverReported": "لا يوجد تقرير بعد",
+        "lastReport": "آخر تقرير قبل {seconds, plural, zero {# ثانية} one {ثانية واحدة} two {ثانيتين} few {# ثوانٍ} many {# ثانية} other {# ثانية}}",
+        "agentVersion": "إصدار الوكيل: {version}",
+        "vms": "{count, plural, zero {# جهاز افتراضي} one {جهاز افتراضي واحد} two {جهازان افتراضيان} few {# أجهزة افتراضية} many {# جهازًا افتراضيًا} other {# جهاز افتراضي}}",
+        "vmsOfCap": "{count, plural, zero {# جهاز افتراضي} one {جهاز افتراضي واحد} two {جهازان افتراضيان} few {# أجهزة افتراضية} many {# جهازًا افتراضيًا} other {# جهاز افتراضي}} من {cap}",
+        "templates": "القوالب: {templates}",
+        "noTemplates": "لا توجد قوالب"
+      }
     }
   },
   "agents": {
@@ -16643,6 +16683,9 @@
         },
         "serviceStatus": {
           "label": "حالة الخدمة"
+        },
+        "sandboxStatus": {
+          "label": "حالة بيئة العزل"
         }
       },
       "sections": {
