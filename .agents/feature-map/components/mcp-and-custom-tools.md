@@ -345,11 +345,10 @@ cannot save Always allow on an action whose admin value is not Ask.
   `GET`/`PUT /integrations/{id}/access` reads and replaces the shares of a
   private integration (a user for whom `manages_integration` is true; the
   share rules of plugins apply through `db/plugin.py:check_access_change`),
-  `POST /integrations/{id}/publish` sets a private integration to AVAILABLE
-  (organization-wide manage-actions, no review; the shares stay), and
-  `GET /integrations/agents/{id}` gives the integration ids that a chat of
-  the agent uses for the user. Share and publish refuse an integration that
-  is not private with 400.
+  and `GET /integrations/agents/{id}` gives the integration ids that a chat
+  of the agent uses for the user. Share refuses an integration that is not
+  private with 400. Publish to Org has no route of its own: it sends
+  AVAILABLE to the installation-policy route, and the shares stay.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
   kind row (`mcp_server`, the OpenAPI `tool` row, the GraphQL `api_app` row,
   or the preset `external_app`), then the `integration` row with exactly one
