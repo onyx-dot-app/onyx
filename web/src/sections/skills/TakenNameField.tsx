@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { InputTypeIn } from "@opal/components";
-import { InputVertical } from "@opal/layouts";
+import { InputPadder, InputVertical } from "@opal/layouts";
 
 const NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const NAME_MAX_LENGTH = 64;
@@ -37,19 +37,21 @@ export default function TakenNameField({
       ? t("invalid", { max: NAME_MAX_LENGTH })
       : undefined;
   return (
-    <InputVertical
-      withLabel
-      title={t("title")}
-      description={t("description")}
-      error={error}
-      disabled={disabled}
-    >
-      <InputTypeIn
-        aria-label={t("title")}
-        value={value}
-        variant={disabled ? "disabled" : error ? "error" : "primary"}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </InputVertical>
+    <InputPadder>
+      <InputVertical
+        withLabel
+        title={t("title")}
+        description={t("description")}
+        error={error}
+        disabled={disabled}
+      >
+        <InputTypeIn
+          aria-label={t("title")}
+          value={value}
+          variant={disabled ? "disabled" : error ? "error" : "primary"}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </InputVertical>
+    </InputPadder>
   );
 }
