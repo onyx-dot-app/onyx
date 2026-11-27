@@ -609,7 +609,7 @@ rejection by the policy. A built-in action's row also has no integration, and
 an `onyx:` action key (`tools/models.py:is_builtin_action`): no policy blocks
 it, and its session grant matches rows with no integration and the same key
 (`db/integration_policy.py:list_session_granted_actions`,
-`db/approval_request.py:record_approval_decision__no_commit`). No
+`db/approval_request.py:grant_session_to_pending_requests__no_commit`). No
 integration action key starts with `onyx:`: `IntegrationActionSpec` refuses
 an MCP tool or OpenAPI operation with that name, so a deleted integration's
 row never matches a built-in grant. The code that builds a built-in tool must
@@ -630,8 +630,12 @@ Ask into Allow. (6) `ApprovalMode.NO_APPROVER` turns Ask into Blocked;
 blocks each action. `integrations/policy.py:decide_action_policy` applies the
 order to loaded values; `resolve_action_policies` loads the rows for the actions
 that its caller passes. The approval re-check
-(`chat/tool_approvals.py:action_now_blocked`, also in the decision route) uses
-no chat grant. It reads the agent links that construction reads
+(`chat/tool_approvals.py:action_now_blocked`, also in the decision route) and
+the command approval re-check
+(`server/query_and_chat/command_approvals.py:_command_choice`) both use
+`integrations/policy.py:current_chat_action_policies` and `recheck_approval`
+(Blocked, or an action that asks now but did not ask before), with no chat
+grant. It reads the agent links that construction reads
 (`integrations/policy.py:agent_link_settings_by_integration`), so an
 integration that the user has no access to, or that the user turned off on the
 default agent, is Blocked.
@@ -949,7 +953,10 @@ default agent, is Blocked.
     returns 200; the model reads that the tool is disabled, and the card's
     outcome is `disabled`. A decision that repeats the saved one returns 200
     with the row's `decided_via`, also after the response ends or the policy
-    changes. An `approve_session` on a row the user approved once upgrades it
+    changes. The chat and command decisions share this rule
+    (`server/features/action_policies/models.py:ApprovalChoice.saved_answer`,
+    `ApprovalChoice.outcome` maps a choice to its decision and `decided_via`).
+    An `approve_session` on a row the user approved once upgrades it
     to a session grant; every request that a grant decides ends with the
     outcome `approved_for_chat` (`HumanToolAnswer.standing`).
 17. `chat-approval-records-replay` **A saved response shows the records its

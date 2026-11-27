@@ -941,6 +941,38 @@ def test_approving_a_request_that_the_policies_now_block_saves_a_rejection(
         cache.delete_prefix(f"approval:command:{command_id}:")
 
 
+def test_a_saved_approval_repeated_after_the_policies_block_returns_it(
+    db_session: Session, chat: _Chat
+) -> None:
+    """A retry whose first attempt saved the approval, but lost its HTTP
+    response, gets the saved approval, also after an admin blocks the action,
+    as a chat tool approval does. A different decision is a conflict."""
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, uuid4()), _matched(chat.integration_id), {}
+    )
+    assert (
+        _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_ONCE)
+        == ApprovalDecidedVia.USER
+    )
+    set_policy(
+        db_session,
+        chat.integration_id,
+        "issues.create",
+        IntegrationActionPolicyValue.BLOCKED,
+    )
+
+    assert (
+        _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_ONCE)
+        == ApprovalDecidedVia.USER
+    )
+    with pytest.raises(OnyxError) as conflict:
+        _decide(db_session, chat, approval_id, ApprovalChoice.REJECT)
+    assert conflict.value.error_code is OnyxErrorCode.CONFLICT
+    db_session.expire_all()
+    row = db_session.get(ActionApproval, approval_id)
+    assert row is not None and row.decision == ApprovalDecision.APPROVED
+
+
 def test_the_card_of_a_request_that_the_policies_now_block_ends_disabled(
     db_session: Session, chat: _Chat
 ) -> None:
