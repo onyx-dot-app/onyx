@@ -219,7 +219,8 @@ Users cannot approve it for the session or save **Always allow** for it.
 ### Scheduled Tasks
 
 A [Scheduled Task](/overview/core_features/scheduled_tasks) runs in chat and can use built-in Apps, MCP servers,
-and OpenAPI integrations. A custom App with URL patterns has no tools in chat, so a task cannot use it.
+and OpenAPI integrations. A custom App with URL patterns has no tools in chat and does not appear in the task form.
+If a task already has one linked, its sandbox commands can still call it through the sandbox proxy.
 
 ## Skills for Apps
 
