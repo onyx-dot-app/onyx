@@ -10,6 +10,7 @@ so two credentials for one server never share a session.
 
 import os
 import socket
+import sys
 import threading
 import weakref
 from collections.abc import Callable
@@ -561,6 +562,9 @@ def _enable_keepalive(connection: Connection) -> None:
         return
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        # The timing options are Linux names. Without them the OS defaults apply.
+        if sys.platform != "linux":
+            return
         sock.setsockopt(
             socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, _KEEPALIVE_IDLE_SECONDS
         )
@@ -568,6 +572,5 @@ def _enable_keepalive(connection: Connection) -> None:
             socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, _KEEPALIVE_INTERVAL_SECONDS
         )
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, _KEEPALIVE_PROBES)
-    except (OSError, AttributeError):
-        # The options are Linux names. Without them the connection still works.
+    except OSError:
         logger.debug("TCP keepalive is not available", exc_info=True)
