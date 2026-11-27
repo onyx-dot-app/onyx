@@ -62,8 +62,14 @@ def parse_openapi_document(document: str) -> dict[str, Any]:
     """An OpenAPI document stored as JSON or YAML text."""
     try:
         parsed = _load_openapi_document(document)
+        # JSON can escape an unpaired surrogate, which UTF-8 cannot encode.
+        json.dumps(parsed, ensure_ascii=False).encode()
     except RecursionError as e:
         raise ValueError("The OpenAPI document is nested too deeply.") from e
+    except UnicodeEncodeError as e:
+        raise ValueError(
+            "The OpenAPI document has an unpaired Unicode surrogate."
+        ) from e
     if not isinstance(parsed, dict):
         raise ValueError("The OpenAPI document is not an object.")
     return parsed
