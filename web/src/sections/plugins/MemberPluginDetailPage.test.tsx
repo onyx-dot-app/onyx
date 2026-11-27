@@ -619,10 +619,9 @@ describe("a plugin deleted in another tab", () => {
       [`/api/skills/${PLUGIN_ID}`]: plugin,
       [route]: () => {
         deleted = true;
-        return new Response(
-          JSON.stringify({ detail: "Skill is not visible." }),
-          { status: 404 }
-        );
+        return new Response(JSON.stringify({ detail: "Skill not found" }), {
+          status: 404,
+        });
       },
     });
   }
