@@ -4,6 +4,14 @@ import {
 } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 
+// Hop-by-hop request headers that Node fetch refuses to send.
+const UNFORWARDED_REQUEST_HEADERS = [
+  "expect",
+  "keep-alive",
+  "transfer-encoding",
+  "upgrade",
+];
+
 /* NextJS is annoying and makes use use a separate function for
 each request type >:( */
 
@@ -92,6 +100,9 @@ async function handleRequest(request: NextRequest, path: string[]) {
 
     // Build headers, optionally injecting debug auth cookie
     const headers = new Headers(request.headers);
+    for (const name of UNFORWARDED_REQUEST_HEADERS) {
+      headers.delete(name);
+    }
     if (
       process.env.DEBUG_AUTH_COOKIE &&
       process.env.NODE_ENV === "development"
