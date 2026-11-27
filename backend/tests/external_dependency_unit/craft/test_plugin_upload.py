@@ -26,6 +26,7 @@ from onyx.db.models import (
     Integration__UserGroup,
     PermissionGrant,
     Plugin,
+    Plugin__UserGroup,
     PluginVersion,
     User,
     User__UserGroup,
@@ -845,6 +846,66 @@ def test_a_plugin_manager_uploads_a_new_version_of_another_users_plugin(
             delete(User__UserGroup).where(User__UserGroup.user_group_id == group_id)
         )
         db_session.execute(delete(UserGroup).where(UserGroup.id == group_id))
+        db_session.commit()
+
+
+def test_a_group_manager_uploads_a_new_version_of_a_plugin_in_scope(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    """The scope is checked on the plugin the upload names, so a share of
+    another plugin with another group does not take the plugin out of scope."""
+    author, manager, _ = users
+    managed = make_group(db_session)
+    other = make_group(db_session)
+    group_ids = [managed.id, other.id]
+    db_session.add(
+        User__UserGroup(user_id=manager.id, user_group_id=managed.id, is_manager=True)
+    )
+    recompute_user_permissions__no_commit(manager.id, db_session)
+    db_session.commit()
+    db_session.refresh(manager)
+    try:
+        in_scope_id = _save(
+            author, _plugin_zip("scoped-kit", ["one"]), db_session
+        ).plugin.id
+        outside_id = _save(
+            author, _plugin_zip("outside-kit", ["one"]), db_session
+        ).plugin.id
+        _save(author, _plugin_zip("private-kit", ["one"]), db_session)
+        for plugin_id, group_id in ((in_scope_id, managed.id), (outside_id, other.id)):
+            db_session.add(
+                Plugin__UserGroup(
+                    plugin_id=plugin_id,
+                    user_group_id=group_id,
+                    permission=SkillSharePermission.VIEWER,
+                )
+            )
+        db_session.commit()
+
+        in_scope = _save(manager, _plugin_zip("scoped-kit", ["one", "two"]), db_session)
+        private = _save(manager, _plugin_zip("private-kit", ["one", "two"]), db_session)
+
+        assert (in_scope.plugin.id, in_scope.target.kind) == (
+            in_scope_id,
+            "new_version",
+        )
+        assert (private.target.kind, private.plugin.author_user_id) == (
+            "new_plugin",
+            manager.id,
+        )
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(Plugin__UserGroup).where(
+                Plugin__UserGroup.user_group_id.in_(group_ids)
+            )
+        )
+        db_session.execute(
+            delete(User__UserGroup).where(User__UserGroup.user_group_id.in_(group_ids))
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id.in_(group_ids)))
         db_session.commit()
 
 
