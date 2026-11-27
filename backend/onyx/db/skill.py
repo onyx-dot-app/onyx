@@ -584,7 +584,7 @@ def enable_new_skill_if_name_available__no_commit(
             return True
         if selection.other_skills_named(state.skill_names, plugin.id):
             return False
-    with check_skill_limit(db_session, [plugin.id], user_id):
+    with check_skill_limit(db_session, user_id):
         set_plugin_preferences__no_commit(user_id, [plugin.id], True, db_session)
     return True
 
@@ -600,7 +600,7 @@ def create_custom_skill__no_commit(
     the caller's transaction. The skill starts in the author's "My uploads".
     Returns the plugin and the users the access change affects."""
     plugin_id = uuid4()
-    with check_skill_limit(db_session, [plugin_id], user.id):
+    with check_skill_limit(db_session, user.id):
         plugin = create_plugin__no_commit(
             plugin_id, ingested.canonical_name, ingested.content, user, db_session
         )
@@ -623,7 +623,7 @@ def create_uploaded_plugin__no_commit(
     if content.manifest is None:
         raise RuntimeError("Bug: an uploaded plugin has a manifest.")
     plugin_id = uuid4()
-    with check_skill_limit(db_session, [plugin_id], user.id):
+    with check_skill_limit(db_session, user.id):
         plugin = create_plugin__no_commit(
             plugin_id, content.manifest.name, content, user, db_session
         )
@@ -652,7 +652,7 @@ def _add_plugin_version_for_user__no_commit(
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
     refuse_if_synced(plugin)
-    with check_skill_limit(db_session, [plugin.id], user.id):
+    with check_skill_limit(db_session, user.id):
         version = add_plugin_version__no_commit(
             plugin=plugin,
             content=content,
@@ -757,7 +757,7 @@ def replace_skill_bundle(
     puts the acting user past the skill limit is refused with 413.
     """
     lock_skill_for_save(skill, user, db_session)
-    with check_skill_limit(db_session, [skill.id], user.id):
+    with check_skill_limit(db_session, user.id):
         return add_plugin_version__no_commit(
             plugin=skill,
             content=ingested.content,
@@ -929,7 +929,7 @@ def set_skill_enabled_for_user(
         raise OnyxError(
             OnyxErrorCode.CONFLICT, "This skill changed. Reload and try again."
         )
-    with check_skill_limit(db_session, locked_plugin_ids, user.id):
+    with check_skill_limit(db_session, user.id):
         set_plugin_preferences__no_commit(
             user.id,
             [plugin_id for plugin_id in locked_plugin_ids if plugin_id != skill.id],

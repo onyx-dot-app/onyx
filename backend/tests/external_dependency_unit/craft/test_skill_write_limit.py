@@ -23,6 +23,7 @@ from onyx.db.skill import (
     replace_skill_bundle,
     set_skill_enabled_for_user,
 )
+from onyx.db.skill_limit import check_skill_limit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -85,6 +86,25 @@ def test_a_plugin_that_loses_its_name_does_not_count(db_session: Session) -> Non
     usage = skill_usage_by_user(load_user_plugin_states([user.id], db_session))
 
     assert usage[user.id] == SkillUsage(bytes=3 * _MB, files=7)
+
+
+def test_a_write_that_lets_a_same_name_loser_run_is_checked(
+    db_session: Session,
+) -> None:
+    """Turning off the winner adds the loser's usage, though the write does
+    not touch the loser."""
+    user = make_user(db_session, standard_account=True)
+    winner = make_skill(db_session, name="same-name", author_user_id=user.id)
+    loser = make_skill(db_session, name="same-name", author_user_id=user.id)
+    set_plugin_preferences__no_commit(user.id, [winner.id, loser.id], True, db_session)
+    _set_size(db_session, winner.id, _MB, 1)
+    _set_size(db_session, loser.id, SKILL_WRITE_MAX_BYTES + _MB, 1)
+
+    with pytest.raises(OnyxError) as error:
+        with check_skill_limit(db_session, user.id):
+            set_plugin_preferences__no_commit(user.id, [winner.id], False, db_session)
+
+    assert error.value.error_code == OnyxErrorCode.SKILL_LIMIT_EXCEEDED
 
 
 def _wait_for_lock_waiter(blocker_pid: int, timeout: float = 10.0) -> bool:
