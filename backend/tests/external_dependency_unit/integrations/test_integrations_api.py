@@ -2298,6 +2298,12 @@ def test_a_spec_with_a_blocked_server_url_is_refused_on_import() -> None:
         )
     assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
 
+    relative = {**OPENAPI_SPEC, "servers": [{"url": "/api/v3"}]}
+    view = import_openapi_document(
+        OpenApiEndpointsRequest(openapi_document=json.dumps(relative))
+    )
+    assert view.base_url == "/api/v3"
+
 
 def test_a_key_is_trimmed_and_a_key_that_a_header_cannot_carry_is_refused(
     db_session: Session, admin: User, member: User, created: Created

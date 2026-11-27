@@ -616,8 +616,9 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
 
 def _checked_import(view: OpenApiConfigView) -> OpenApiConfigView:
     # The client hides the base URL field for the single server URL of a
-    # spec, so the admin cannot correct it after the import.
-    if view.base_url.strip():
+    # spec, so the admin cannot correct it after the import. The client
+    # resolves a relative URL against the spec URL, which Onyx fetched.
+    if urlparse(view.base_url.strip()).scheme:
         _check_server_url(view.base_url)
     return view
 
