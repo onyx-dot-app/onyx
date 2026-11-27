@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "Der Upload konnte nicht gelesen werden.",
-          "folderRoot": "{upload, select, plugin {Der ausgewählte Ordner muss auf oberster Ebene SKILL.md oder ein plugin.json-Manifest enthalten.} other {Der ausgewählte Ordner muss auf oberster Ebene SKILL.md enthalten.}}"
+          "folderRoot": "{upload, select, plugin {Der ausgewählte Ordner muss auf oberster Ebene SKILL.md oder ein plugin.json-Manifest enthalten.} other {Der ausgewählte Ordner muss auf oberster Ebene SKILL.md enthalten.}}",
+          "unsupportedFile": "{name} ist keine ZIP- oder SKILL.md-Datei. Laden Sie eine ZIP-Datei, eine SKILL.md-Datei oder einen Skill-Ordner hoch."
         }
       }
     },

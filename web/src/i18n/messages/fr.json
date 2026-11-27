@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "Impossible de lire le fichier téléversé.",
-          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}"
+          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}",
+          "unsupportedFile": "{name} n'est pas un fichier ZIP ou SKILL.md. Importez un ZIP, un fichier SKILL.md ou un dossier de skill."
         }
       }
     },

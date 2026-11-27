@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "تعذّرت قراءة الملف المرفوع.",
-          "folderRoot": "{upload, select, plugin {يجب أن يحتوي المجلد المحدد على SKILL.md أو ملف بيان plugin.json في المستوى الأعلى.} other {يجب أن يحتوي المجلد المحدد على SKILL.md في المستوى الأعلى.}}"
+          "folderRoot": "{upload, select, plugin {يجب أن يحتوي المجلد المحدد على SKILL.md أو ملف بيان plugin.json في المستوى الأعلى.} other {يجب أن يحتوي المجلد المحدد على SKILL.md في المستوى الأعلى.}}",
+          "unsupportedFile": "{name} ليس ملف ZIP أو SKILL.md. ارفع ملف ZIP أو ملف SKILL.md أو مجلد مهارة."
         }
       }
     },
