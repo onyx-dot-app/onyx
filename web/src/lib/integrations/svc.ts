@@ -221,7 +221,7 @@ export async function completeIntegrationOAuth(
   return res.json();
 }
 
-/** Saves the user's "Always allow" choices: "allow" saves one, null clears it. */
+/** Saves the user's "Don't ask me" choices: "allow" saves one, null clears it. */
 export async function saveAlwaysAllow(
   id: number,
   actions: Record<string, "allow" | null>

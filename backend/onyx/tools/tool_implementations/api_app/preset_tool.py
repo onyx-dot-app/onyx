@@ -16,15 +16,14 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     recognize_actions,
     url_matches_patterns,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.matching.rules import graphql_endpoint_matches
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.external_apps.providers.actions import GraphQLOp, MatchRule
 from onyx.external_apps.providers.registry import get_endpoint_catalog
-from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.models import CallCredentials
 from onyx.llm.models import ToolDefinition, ToolResult
@@ -35,6 +34,7 @@ from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolErrorInfo,
     IntegrationActionRef,
+    ToolApprovalDetails,
     ToolApprovalScope,
     ToolContext,
 )
@@ -51,12 +51,12 @@ from onyx.tools.tool_implementations.http_request import (
     send_tool_request,
     tool_request_ssrf_params,
 )
-from onyx.tools.tool_name import app_action_tool_name
+from onyx.tools.tool_name import preset_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-APP_ACTION_MAX_RESPONSE_BYTES = 1024 * 1024
+PRESET_TOOL_MAX_RESPONSE_BYTES = 1024 * 1024
 # The request headers that the model can set. Each other header, and each
 # header that the credential sets, comes from the server only.
 _MODEL_HEADERS = frozenset(
@@ -84,7 +84,7 @@ def _shown_rule(rule: MatchRule) -> str:
     return f"{rule.method.upper()} {rule.path}"
 
 
-class AppActionSettings(BaseModel):
+class PresetToolSettings(BaseModel):
     """What the tools of one app share."""
 
     model_config = ConfigDict(frozen=True)
@@ -123,15 +123,16 @@ def _path_problem(path: str) -> str | None:
     return None
 
 
-class AppActionTool(Tool):
+class PresetActionTool(Tool):
     """One action of a preset app. The action ``unspecified`` is
-    the request tool: each request in the URL scope that is no other action."""
+    the other-request action: each request in the URL scope that is no other
+    action."""
 
     rank = ToolRank.INTEGRATION
 
     def __init__(
         self,
-        settings: AppActionSettings,
+        settings: PresetToolSettings,
         *,
         action_key: str,
         display_name: str,
@@ -147,9 +148,9 @@ class AppActionTool(Tool):
         self._credentials = settings.credentials
         self._action_key = action_key
         self._display_name = display_name
-        self._name = app_action_tool_name(settings.integration_id, action_key)
+        self._name = preset_tool_name(settings.integration_id, action_key)
         scope = ", ".join(_shown_url_scope(regex) for regex in settings.url_regexes)
-        if action_key == WHOLE_DOMAIN_ACTION_TYPE:
+        if action_key == OTHER_REQUEST_ACTION_KEY:
             accepts = (
                 "Accepts a request that no other tool of "
                 f"{settings.integration_name} covers."
@@ -181,6 +182,13 @@ class AppActionTool(Tool):
     @property
     def display_name(self) -> str:
         return f"{self._settings.integration_name}: {self._display_name}"
+
+    def approval_details(
+        self,
+        arguments: dict[str, JsonValue],  # noqa: ARG002
+    ) -> ToolApprovalDetails | None:
+        # The card names the integration on its own.
+        return ToolApprovalDetails(display_name=self._display_name)
 
     def tool_definition(self) -> ToolDefinition:
         return ToolDefinition(
@@ -234,7 +242,7 @@ class AppActionTool(Tool):
         """Which tools the request is for. An action with no tool is not
         available in this chat."""
         tools = [
-            app_action_tool_name(self._settings.integration_id, key)
+            preset_tool_name(self._settings.integration_id, key)
             if key in self._settings.offered_keys
             else "a tool that is not available"
             for key in sorted(matched)
@@ -296,7 +304,7 @@ class AppActionTool(Tool):
                 ),
                 ssrf=tool_request_ssrf_params(),
                 json_body=body,
-                max_response_bytes=APP_ACTION_MAX_RESPONSE_BYTES,
+                max_response_bytes=PRESET_TOOL_MAX_RESPONSE_BYTES,
             )
         except ToolRequestError as e:
             logger.warning("%s request failed: %s", self._name, e.failure.value)
@@ -313,7 +321,7 @@ class AppActionTool(Tool):
         if response.truncated:
             tool_result = (
                 response.text
-                + f"\n... [response cut at {APP_ACTION_MAX_RESPONSE_BYTES} bytes]"
+                + f"\n... [response cut at {PRESET_TOOL_MAX_RESPONSE_BYTES} bytes]"
             )
         else:
             try:
@@ -356,77 +364,4 @@ class AppActionTool(Tool):
                     else None
                 ),
             ),
-        )
-
-
-class AppConnectTool(Tool):
-    """The one tool of an app that the user can use on the agent and has no
-    usable sign-in for. A call tells the model why the app does not work,
-    and the chat shows the user a card that opens the sign-in."""
-
-    rank = ToolRank.INTEGRATION
-
-    def __init__(
-        self,
-        *,
-        integration_id: int,
-        integration_name: str,
-        problem: ConnectionProblem,
-        shared: bool,
-    ) -> None:
-        self._integration_id = integration_id
-        self._integration_name = integration_name
-        # Only an admin can fix a shared sign-in.
-        self._user_can_connect = (
-            not shared and problem.code is not ConnectionState.NOT_SET_UP
-        )
-        self._reason = problem.reason
-        self._name = app_action_tool_name(integration_id, "connect")
-
-    @property
-    def id(self) -> int | None:
-        return None
-
-    @property
-    def code_mode_exposure(self) -> CodeModeExposure:
-        return CodeModeExposure.DEFERRED
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def description(self) -> str:
-        return (
-            f"{self._integration_name} is available to the user but is not "
-            "connected, so you have no other tool for it. Call this tool when "
-            f"the user asks for something that needs {self._integration_name}: "
-            "it asks the user to connect."
-        )
-
-    @property
-    def display_name(self) -> str:
-        return self._integration_name
-
-    def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self._name,
-            description=self.description,
-            parameters={"type": "object", "properties": {}},
-        )
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        message = (
-            f"{self._integration_name} is not connected. The user now sees a "
-            "card to connect it. Tell the user to connect and then to send the "
-            "request again. Do not call this tool again in this response."
-            if self._user_can_connect
-            else f"{self._integration_name} cannot sign in: {self._reason} "
-            "Tell the user that an admin must fix its sign-in."
-        )
-        return failed_tool_result(
-            tool_name=self._name,
-            integration_id=self._integration_id,
-            message=message,
-            is_auth_error=self._user_can_connect,
         )

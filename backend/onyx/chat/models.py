@@ -1155,6 +1155,8 @@ class SavedToolApproval(BaseModel):
     # The kind of the request's integration. None for a built-in action and
     # after the integration is deleted.
     integration_kind: IntegrationKind | None = None
+    # The integration's name; None when it is gone or the loader skips it.
+    app_name: str | None = None
 
 
 class SavedToolQuestion(BaseModel):

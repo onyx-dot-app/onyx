@@ -32,7 +32,7 @@ from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     validate_openapi_schema,
 )
 from onyx.tools.tool_implementations.api_app.rest_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
+    build_rest_tools,
 )
 from tests.unit.fakes import NO_CREDENTIALS
 
@@ -205,7 +205,7 @@ def test_schema_references_are_inlined_into_the_tool() -> None:
     }
     assert "$ref" not in json.dumps(inline_path_parameters(spec)["paths"])
 
-    (tool,) = build_custom_tools_from_openapi_schema_and_headers(
+    (tool,) = build_rest_tools(
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
@@ -319,7 +319,7 @@ def test_a_spec_that_expands_too_far_keeps_its_tools_and_later_refs() -> None:
     spec["paths"]["/other"] = {"post": copy.deepcopy(spec["paths"]["/things"]["post"])}
     spec["paths"]["/other"]["post"]["operationId"] = "addOther"
 
-    tools = build_custom_tools_from_openapi_schema_and_headers(
+    tools = build_rest_tools(
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),
@@ -349,7 +349,7 @@ def test_server_variables_take_their_defaults() -> None:
     ]
 
     assert _import(json.dumps(spec)).base_url == "https://pets.example.com/v2"
-    tools = build_custom_tools_from_openapi_schema_and_headers(
+    tools = build_rest_tools(
         1,
         spec,
         dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=None),

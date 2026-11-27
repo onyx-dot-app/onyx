@@ -134,10 +134,11 @@ or a slug reserved by a built-in Skill or App.
 
 Users can upload a Claude Code or Codex plugin on **Customize → Plugins** with **Add → Upload plugin**.
 Admins can also open **Admin Panel → Plugins** (`/admin/plugins`) and click **Add → Upload plugin**.
-That page lists every plugin, including the private plugins of other members, with the on/off switch,
-**Share** in the row menu, and a status filter. It does not list the plugins of another member's personal marketplace.
-Only the member who added a personal marketplace gets its plugins. Select a plugin to open its page,
-with **Delete Plugin** and **Upload New Version** in the **...** menu.
+That page lists uploaded and synced plugins, including private uploads from other members, with an on/off switch,
+**Share** in the row menu, and a status filter. Only the member who added a personal marketplace sees its plugins,
+and those plugins have no **Share** in the row menu. Select a plugin to open its page. For an uploaded plugin,
+the **...** menu shows **Upload New Version** if you can edit it and **Delete Plugin** if you can delete it.
+To update a synced plugin, change it in GitHub and sync its marketplace.
 The plugin ZIP uses the same limits as a Skill bundle. Onyx uses only two parts of a plugin:
 
 - the Skills in `skills/<name>/SKILL.md`,
@@ -166,7 +167,7 @@ See [Upload a plugin](/overview/core_features/plugins#upload-a-plugin).
 A marketplace is a GitHub repository with a `.claude-plugin/marketplace.json` file. Each entry becomes one plugin.
 Users add one on **Customize → Plugins** with **Add → Add marketplace**.
 Admins can also open **Admin Panel → Plugins** and click **Add → Add marketplace**. After you add the first marketplace,
-a **Marketplaces** section shows below the plugins, with its own **Add marketplace** button.
+a **Marketplaces** section shows below the plugins. To add another marketplace, use **Add → Add marketplace** again.
 The section shows the personal marketplaces that you added and each company marketplace, with **Sync now**,
 **Default Access**, **Replace login** and **Remove** in the row menu. Members see each company marketplace read-only,
 with no row menu.

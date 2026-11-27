@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "Integraciones",
-      "description": "Conecta servidores MCP y aplicaciones. Cada integración tiene un propietario, una configuración de instalación y sus propios accesos compartidos.",
+      "description": "Conecta servidores MCP y aplicaciones.",
       "search": "Buscar integraciones",
       "open": "Abrir {name}",
       "loadFailed": "No se pudieron cargar las integraciones.",
@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "Servidor MCP",
-          "customApi": "API personalizada"
+          "customApi": "API personalizada",
+          "fromCatalog": "Desde el catálogo"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "Agrega la URL de la API. La especificación no la indica."
           },
           "upload": {
-            "label": "Subir openapi.json, openapi.yaml o schema.graphql",
+            "label": "Subir un archivo de especificación",
             "chosen": "Especificación: {file}",
             "remove": "Quitar la especificación"
           },
@@ -10512,6 +10513,7 @@
       },
       "filters": {
         "label": "Tipo de integración",
+        "selected": "Tipo de integración: {type}",
         "all": "Todos los tipos",
         "mcp": "Servidores MCP",
         "api": "Apps"
@@ -10533,7 +10535,7 @@
         "mcp_server": "Servidor MCP",
         "openapi": "App REST",
         "preset": "App",
-        "custom": "App personalizada",
+        "custom": "App de patrones de URL",
         "graphql": "App GraphQL"
       },
       "signInSummary": "{mode, select, none {Sin inicio de sesión} shared {{method, select, oauth2 {Cuenta de la organización (OAuth)} api_key {Clave de API de la organización} onyx_login {Inicio de sesión de Onyx} managed {Administrado por Onyx} other {Cuenta de la organización}}} individual {{method, select, oauth2 {Cada usuario (OAuth)} api_key {Cada usuario (clave de API)} onyx_login {Inicio de sesión de Onyx} managed {Administrado por Onyx} other {Cada usuario}}} other {Desconocido}}",
@@ -10611,7 +10613,6 @@
         "overview": {
           "readOnly": "Puedes ver esta integración, pero no puedes cambiarla.",
           "noDescription": "Sin descripción",
-          "type": "Tipo",
           "signIn": "Inicio de sesión",
           "createdBy": "Agregada por",
           "needsSetup": "Requiere configuración",
@@ -10701,11 +10702,11 @@
           },
           "usesDefault": "Usa el predeterminado",
           "setByAdmin": "Definido por el administrador",
-          "alwaysAsks": "Craft pregunta antes de cada solicitud que no coincide con ninguna otra acción. No puede establecer Permitir.",
+          "alwaysAsks": "Onyx pregunta antes de cada solicitud que no coincide con ninguna otra acción. No puede establecer Permitir.",
           "useDefaults": "Usar predeterminados",
-          "readOnly": "Acciones de solo lectura ({count})",
-          "write": "Acciones de escritura ({count})",
-          "other": "Otras acciones ({count})",
+          "readOnly": "Acciones de solo lectura",
+          "write": "Acciones de escritura",
+          "other": "Otras acciones",
           "empty": "Esta integración no tiene acciones.",
           "connectFirst": {
             "title": "Conecta primero el servidor",
@@ -10722,7 +10723,7 @@
         "saveFailed": "No se pudo guardar la configuración de instalación.",
         "title": "Configuración de Instalación",
         "description": "Quién recibe esta integración en la organización.",
-        "notAvailable": "Privada. Solo la usan el propietario, las personas con quienes se comparte y los grupos con su propia configuración.",
+        "notAvailable": "Privada. Solo la usan el propietario y las personas con quienes se comparte.",
         "required": "Los miembros que inician sesión con su propia cuenta deben conectarla antes de usar el chat y Craft."
       },
       "ownedBy": "Propiedad de {owner}",
@@ -11071,7 +11072,7 @@
         "loadFailed": "No se pudieron cargar las integraciones.",
         "lock": {
           "adminBlocked": "Permitir no está disponible: un administrador bloqueó esta acción.",
-          "alwaysAsks": "Permitir no está disponible: Craft pide aprobación para cada una de estas solicitudes.",
+          "alwaysAsks": "Permitir no está disponible: Onyx pide aprobación para cada una de estas solicitudes.",
           "adminFinal": "Permitir no está disponible: la configuración del administrador de esta integración es definitiva."
         },
         "noActions": "Esta integración aún no tiene acciones.",
@@ -14472,7 +14473,8 @@
       },
       "deadline": "Aprobar antes de {time}",
       "header": {
-        "required": "Aprobación solicitada: {headline}"
+        "required": "Aprobación solicitada: {headline}",
+        "requiredBy": "Aprobación solicitada: {headline}. Aprobar antes de {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# acción} other {# acciones}} en {app}",
@@ -17378,7 +17380,7 @@
           "title": "Empezar desde cero"
         },
         "trigger": {
-          "label": "Crear habilidad"
+          "label": "Crear una habilidad"
         },
         "upload": {
           "description": "Importa un archivo SKILL.md, un archivo ZIP o una carpeta de habilidad.",
@@ -17611,17 +17613,13 @@
           "versions": "Versiones"
         },
         "overview": {
-          "noDescription": "Sin descripción.",
           "location": "Ubicación",
           "owner": "Propietario",
-          "skills": "Habilidades",
-          "description": "Descripción",
           "version": "Versión en plugin.json",
           "author": "Autor",
           "homepage": "Página web",
           "license": "Licencia",
-          "notUsed": "No se usa en Onyx",
-          "marketplace": "Marketplace {name}, {scope, select, personal {personal} other {empresa}} ({repository})"
+          "notUsed": "No se usa en Onyx"
         },
         "skills": {
           "off": "Desactivada",
@@ -17635,11 +17633,7 @@
           "title": "Usar este plugin",
           "label": "Usar {name}",
           "required": "Tu administrador hizo obligatorio este plugin. No puedes desactivarlo.",
-          "unavailable": "No puedes activar ni desactivar este plugin.",
-          "failed": "No se pudo cambiar el plugin.",
-          "on": "Activado. El agente predeterminado puede usar este plugin.",
-          "off": "Desactivado. Actívalo para que el agente predeterminado pueda usar este plugin.",
-          "nameHeld": "Desactivado porque {names} usa el mismo nombre de habilidad. Activa este plugin para usarlo en su lugar."
+          "unavailable": "No puedes activar ni desactivar este plugin."
         },
         "actions": {
           "share": "Compartir",
@@ -17655,7 +17649,6 @@
           "done": "Se eliminó {name}.",
           "failed": "No se pudo eliminar el plugin."
         },
-        "syncedFrom": "Sincronizado desde {repository}",
         "managed": {
           "title": "Lo gestiona el marketplace {name}",
           "description": "Onyx sincroniza este plugin desde {repository}. Cámbielo en GitHub y luego sincronice el marketplace.",
@@ -17695,7 +17688,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "Acciones",
         "description": "Tu administrador define cómo se ejecuta cada acción. Activa «No preguntarme» para ejecutar sin aviso una acción que pide aprobación.",
         "loadFailed": "No se pudieron cargar las acciones.",
         "saveFailed": "No se pudo guardar. Inténtelo de nuevo.",
@@ -17770,10 +17762,7 @@
         "not_supported": "No compatible"
       },
       "note": {
-        "askAdmin": "Pregunta a un admin",
-        "turnedOff": "Desactivado por tu admin",
-        "moreThanOne": "Coincide más de una integración",
-        "notSupported": "No compatible con Onyx"
+        "askAdmin": "Pregunta a un admin"
       },
       "localServer": "Servidor local",
       "noUrl": "Sin URL de servidor",
@@ -17925,7 +17914,8 @@
         "duplicate": {
           "personal": "Ya agregaste este marketplace.",
           "company": "Tu organización ya recibe este marketplace."
-        }
+        },
+        "advanced": "Avanzado"
       },
       "sync": {
         "now": "Sincronizar ahora",
@@ -18138,7 +18128,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Desactivada",
+        "off": "Apagado",
         "required": "Obligatoria",
         "pending": "Pendiente de revisión",
         "invalid": "No válida"
@@ -18176,7 +18166,8 @@
       "open": "Abrir {name}",
       "empty": {
         "title": "Aún no hay integraciones",
-        "description": "Pide a tu administrador que añada una integración."
+        "description": "Pide a tu administrador que añada una integración.",
+        "descriptionCanAdd": "Añade una o explora el catálogo."
       },
       "noMatches": {
         "title": "No hay integraciones que coincidan",
@@ -18190,14 +18181,13 @@
       },
       "empty": {
         "title": "Aún no hay plugins",
-        "description": "Suba un plugin, agregue un marketplace de GitHub o cree una habilidad. Cada habilidad es un plugin.",
+        "description": "Suba un plugin o agregue un marketplace de GitHub.",
         "upload": "Subir plugin"
       },
       "noMatches": {
         "title": "No hay plugins que coincidan",
         "clear": "Mostrar todos los plugins"
       },
-      "intro": "Un plugin es un conjunto de skills e indica las integraciones que esas skills necesitan. Suba un plugin de Claude Code o Codex, agregue un marketplace de GitHub o agregue una habilidad. Un plugin que solo contiene un SKILL.md en su raíz está en la pestaña Habilidades.",
       "integrations": "{available} de {needed} integraciones disponibles",
       "nameHeld": "Desactivado: {names} usa el mismo nombre de habilidad"
     },
@@ -18265,26 +18255,19 @@
       "loadFailed": "Esta integración no está disponible para ti.",
       "tabs": {
         "overview": "Resumen",
-        "configuration": "Configuración",
         "actions": "Acciones"
       },
       "overview": {
-        "description": "Descripción",
-        "noDescription": "Sin descripción.",
         "type": "Tipo",
         "signIn": "Inicio de sesión",
         "url": "URL del servidor",
         "owner": "Propietario",
         "organization": "Organización",
-        "status": "Estado",
         "switch": {
           "title": "Usar Esta Integración",
           "description": "Cuando está activada, puedes usarla en los chats y en Craft.",
           "required": "Tu administrador hizo obligatoria esta integración. No puedes desactivarla."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Tu conexión con esta integración. Solo tú la usas.} shared {La cuenta de esta integración. Todas las personas con acceso la usan.} other {Esta integración no necesita inicio de sesión.}}"
       }
     },
     "pluginPage": {

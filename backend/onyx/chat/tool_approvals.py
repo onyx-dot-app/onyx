@@ -110,6 +110,12 @@ def open_tool_approval(
             display_name=details.display_name,
             arguments=arguments if details.payload is None else details.payload,
         )
+        integration = (
+            get_integration_by_id(scope.integration_id, db_session)
+            if scope.integration_id is not None
+            else None
+        )
+        app_name = integration.name if integration is not None else None
         db_session.commit()
     return PendingToolInput(
         request_id=str(approval_id),
@@ -117,6 +123,7 @@ def open_tool_approval(
         mode=InputMode.EXECUTE,
         display_name=details.display_name,
         display_arguments=details.payload,
+        app_name=app_name,
         can_approve_for_chat=can_approve_for_chat,
     )
 

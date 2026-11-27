@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "Integrations",
-      "description": "Connect MCP servers and apps. Each integration has an owner, an install setting and its own shares.",
+      "description": "Connect MCP servers and apps.",
       "search": "Search integrations",
       "open": "Open {name}",
       "loadFailed": "Could not load the integrations.",
@@ -10446,8 +10446,9 @@
           }
         },
         "menu": {
-          "mcpServer": "MCP Server",
-          "customApi": "Custom API"
+          "mcpServer": "MCP server",
+          "customApi": "Custom API",
+          "fromCatalog": "From catalog"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "Add the URL of the API. The spec does not give one."
           },
           "upload": {
-            "label": "Upload openapi.json, openapi.yaml or schema.graphql",
+            "label": "Upload a spec file",
             "chosen": "Spec: {file}",
             "remove": "Remove the spec"
           },
@@ -10512,6 +10513,7 @@
       },
       "filters": {
         "label": "Integration type",
+        "selected": "Integration type: {type}",
         "all": "All types",
         "mcp": "MCP servers",
         "api": "Apps"
@@ -10533,7 +10535,7 @@
         "mcp_server": "MCP server",
         "openapi": "REST app",
         "preset": "App",
-        "custom": "Custom app",
+        "custom": "URL-pattern app",
         "graphql": "GraphQL app"
       },
       "signInSummary": "{mode, select, none {No sign-in} shared {{method, select, oauth2 {Organization account (OAuth)} api_key {Organization API key} onyx_login {Onyx login} managed {Managed by Onyx} other {Organization account}}} individual {{method, select, oauth2 {Each user (OAuth)} api_key {Each user (API key)} onyx_login {Onyx login} managed {Managed by Onyx} other {Each user}}} other {Unknown}}",
@@ -10611,7 +10613,6 @@
         "overview": {
           "readOnly": "You can see this integration. You cannot change it.",
           "noDescription": "No description",
-          "type": "Type",
           "signIn": "Sign-in",
           "createdBy": "Added by",
           "needsSetup": "Needs setup",
@@ -10701,11 +10702,11 @@
           },
           "usesDefault": "Uses default",
           "setByAdmin": "Set by admin",
-          "alwaysAsks": "Craft asks before each request that matches no other action. You cannot set Allow.",
+          "alwaysAsks": "Onyx asks before each request that matches no other action. You cannot set Allow.",
           "useDefaults": "Use defaults",
-          "readOnly": "Read-Only Actions ({count})",
-          "write": "Write Actions ({count})",
-          "other": "Other Actions ({count})",
+          "readOnly": "Read-Only Actions",
+          "write": "Write Actions",
+          "other": "Other Actions",
           "empty": "This integration has no actions.",
           "connectFirst": {
             "title": "Connect the server first",
@@ -10722,7 +10723,7 @@
         "saveFailed": "Could not save the install setting.",
         "title": "Install Setting",
         "description": "Who in the organization gets this integration.",
-        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it.",
+        "notAvailable": "Private. Only the owner and the people it is shared with use it.",
         "required": "Members who sign in with their own account must connect it before they can use chat and Craft."
       },
       "ownedBy": "Owned by {owner}",
@@ -11071,7 +11072,7 @@
         "loadFailed": "Could not load the integrations.",
         "lock": {
           "adminBlocked": "Allow is not available: an admin blocked this action.",
-          "alwaysAsks": "Allow is not available: Craft asks for approval for each of these requests.",
+          "alwaysAsks": "Allow is not available: Onyx asks for approval for each of these requests.",
           "adminFinal": "Allow is not available: the admin setting of this integration is final."
         },
         "noActions": "This integration has no actions yet.",
@@ -14472,7 +14473,8 @@
       },
       "deadline": "Approve by {time}",
       "header": {
-        "required": "Approval requested: {headline}"
+        "required": "Approval requested: {headline}",
+        "requiredBy": "Approval requested: {headline}. Approve by {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# action} other {# actions}} in {app}",
@@ -17378,7 +17380,7 @@
           "title": "Start from scratch"
         },
         "trigger": {
-          "label": "Create skill"
+          "label": "Create a skill"
         },
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",
@@ -17611,17 +17613,13 @@
           "versions": "Versions"
         },
         "overview": {
-          "noDescription": "No description.",
           "location": "Location",
           "owner": "Owner",
-          "skills": "Skills",
-          "description": "Description",
           "version": "Version in plugin.json",
           "author": "Author",
           "homepage": "Homepage",
           "license": "License",
-          "notUsed": "Not used in Onyx",
-          "marketplace": "{name} marketplace, {scope, select, personal {personal} other {company}} ({repository})"
+          "notUsed": "Not used in Onyx"
         },
         "skills": {
           "off": "Off",
@@ -17635,11 +17633,7 @@
           "title": "Use this plugin",
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
-          "unavailable": "You cannot turn this plugin on or off.",
-          "failed": "Could not change the plugin.",
-          "on": "On. The default agent can use this plugin.",
-          "off": "Off. Turn it on to let the default agent use this plugin.",
-          "nameHeld": "Off because {names} uses the same skill name. Turn this plugin on to use it instead."
+          "unavailable": "You cannot turn this plugin on or off."
         },
         "actions": {
           "share": "Share",
@@ -17655,7 +17649,6 @@
           "done": "Deleted {name}.",
           "failed": "Could not delete the plugin."
         },
-        "syncedFrom": "Synced from {repository}",
         "managed": {
           "title": "Managed by the {name} marketplace",
           "description": "Onyx syncs this plugin from {repository}. Change it in GitHub, then sync the marketplace.",
@@ -17695,7 +17688,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "Actions",
         "description": "Your admin sets how each action runs. Turn on Don't ask me to run an action that asks without a prompt.",
         "loadFailed": "Could not load the actions.",
         "saveFailed": "Could not save. Try again.",
@@ -17770,10 +17762,7 @@
         "not_supported": "Not supported"
       },
       "note": {
-        "askAdmin": "Ask an admin",
-        "turnedOff": "Turned off by your admin",
-        "moreThanOne": "More than one integration matches",
-        "notSupported": "Not supported in Onyx"
+        "askAdmin": "Ask an admin"
       },
       "localServer": "Local server",
       "noUrl": "No server URL",
@@ -17925,7 +17914,8 @@
         "duplicate": {
           "personal": "You already added this marketplace.",
           "company": "Your organization already gets this marketplace."
-        }
+        },
+        "advanced": "Advanced"
       },
       "sync": {
         "now": "Sync now",
@@ -18138,7 +18128,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Disabled",
+        "off": "Off",
         "required": "Required",
         "pending": "Pending review",
         "invalid": "Not valid"
@@ -18176,7 +18166,8 @@
       "open": "Open {name}",
       "empty": {
         "title": "No integrations yet",
-        "description": "Ask your admin to add an integration."
+        "description": "Ask your admin to add an integration.",
+        "descriptionCanAdd": "Add one, or browse the catalog."
       },
       "noMatches": {
         "title": "No matching integrations",
@@ -18190,14 +18181,13 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin.",
-        "upload": "Upload Plugin"
+        "description": "Upload a plugin or add a marketplace from GitHub.",
+        "upload": "Upload plugin"
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin is a set of skills, and it lists the integrations that those skills need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. A plugin that holds only a SKILL.md at its root is on the Skills tab.",
       "integrations": "{available} of {needed} integrations available",
       "nameHeld": "Off: {names} uses the same skill name"
     },
@@ -18265,26 +18255,19 @@
       "loadFailed": "This integration is not available to you.",
       "tabs": {
         "overview": "Overview",
-        "configuration": "Configuration",
         "actions": "Actions"
       },
       "overview": {
-        "description": "Description",
-        "noDescription": "No description.",
         "type": "Type",
         "signIn": "Sign-in",
         "url": "Server URL",
         "owner": "Owner",
         "organization": "Organization",
-        "status": "Status",
         "switch": {
           "title": "Use This Integration",
           "description": "When this is on, you can use it in chats and in Craft.",
           "required": "Your admin made this integration required. You cannot turn it off."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Your connection to this integration. Only you use it.} shared {The account of this integration. Everyone with access uses it.} other {This integration needs no sign-in.}}"
       }
     },
     "pluginPage": {

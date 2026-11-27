@@ -14,9 +14,10 @@ from onyx.db.enums import (
 )
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
-from onyx.external_apps.models import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.external_apps.providers.actions import EndpointSpec, GraphQLOp
 from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.integrations.models import ApiShape
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -43,10 +44,9 @@ class GatedTarget(BaseModel):
     integration_id: int
     kind: IntegrationKind
     app_name: str
-    # An OpenAPI or GraphQL app: its chat tools are named by ``custom_tool_name``.
-    api_app: bool = False
-    # False for an app with no chat tools: a CUSTOM external app.
-    chat_tools: bool = True
+    # The shape of an API integration; None for an MCP server. The chat tool
+    # hint of the gate reads it (``kinds/api.py:chat_tool_name``).
+    api_shape: ApiShape | None = None
 
 
 class AllMatchedActions(BaseModel):
@@ -176,8 +176,8 @@ def recognize_actions(
     if not matched or _has_unknown_graphql_field(matched_endpoints, context):
         matched.append(
             MatchedAction(
-                action_type=WHOLE_DOMAIN_ACTION_TYPE,
-                display_name="Perform action",
+                action_type=OTHER_REQUEST_ACTION_KEY,
+                display_name="Any other request",
                 description=f"{request.method} {request.path}",
                 policy=ActionPolicy.ASK,
             )

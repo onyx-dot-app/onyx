@@ -257,6 +257,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     StreamCursor,
+    ToolApprovalRequest,
     UserMessagePacket,
     heartbeat_packet,
 )
@@ -606,7 +607,8 @@ def get_chat_session(
     )
     if is_shared:
         # A shared view shows no skills the owner picked: not on questions and
-        # not on messages accepted during a response.
+        # not on messages accepted during a response. It also names no
+        # integration on an approval card, as the viewer may not have access.
         chat_message_details = [
             detail.model_copy(update={"mentions": []})
             for detail in chat_message_details
@@ -617,6 +619,10 @@ def get_chat_session(
                     update={"obj": packet.obj.model_copy(update={"mentions": []})}
                 )
                 if isinstance(packet.obj, UserMessagePacket)
+                else packet.model_copy(
+                    update={"obj": packet.obj.model_copy(update={"app_name": None})}
+                )
+                if isinstance(packet.obj, ToolApprovalRequest)
                 else packet
                 for packet in packets
             ]

@@ -111,7 +111,7 @@ test("with no plugins and no marketplaces, one empty state offers upload and add
   render(<CustomizePluginsPage />);
 
   expect(
-    await screen.findByRole("button", { name: "Upload Plugin" })
+    await screen.findByRole("button", { name: "Upload plugin" })
   ).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Add marketplace" })
@@ -132,7 +132,7 @@ test("the empty state offers add marketplace only once the marketplaces load", a
   render(<CustomizePluginsPage />);
 
   expect(
-    await screen.findByRole("button", { name: "Upload Plugin" })
+    await screen.findByRole("button", { name: "Upload plugin" })
   ).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Add marketplace" })
@@ -147,11 +147,12 @@ test("the Marketplaces section shows a loader while the marketplaces load", asyn
   });
   render(<CustomizePluginsPage />);
 
-  await screen.findByRole("button", { name: "Upload Plugin" });
-  expect(document.getElementById("marketplaces")).not.toBeNull();
+  await waitFor(() =>
+    expect(document.getElementById("marketplaces")).not.toBeNull()
+  );
 });
 
-test("the Marketplaces section lists marketplaces and Add marketplace opens the add dialog", async () => {
+test("the Marketplaces section lists marketplaces and the Add menu opens the add dialog", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
     "/api/skills": { builtins: [], customs: [] },
@@ -168,8 +169,17 @@ test("the Marketplaces section lists marketplaces and Add marketplace opens the 
     screen.queryByRole("link", { name: "Marketplaces" })
   ).not.toBeInTheDocument();
 
-  await setupUser().click(
-    screen.getByRole("button", { name: "Add marketplace" })
+  // The Add menu holds Add marketplace; a plugin has no Create a skill.
+  expect(
+    screen.queryByRole("button", { name: "Add marketplace" })
+  ).not.toBeInTheDocument();
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: "Add" }));
+  expect(
+    screen.queryByRole("menuitem", { name: /Create a skill/ })
+  ).not.toBeInTheDocument();
+  await user.click(
+    await screen.findByRole("menuitem", { name: /Add marketplace/ })
   );
   expect(
     await screen.findByRole("dialog", { name: /^Add Marketplace\b/ })
@@ -308,9 +318,6 @@ describe("admin page", () => {
     expect(screen.queryByText("lone-skill")).not.toBeInTheDocument();
     expect(
       await screen.findByRole("table", { name: "Marketplaces" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Add marketplace" })
     ).toBeInTheDocument();
 
     await setupUser().click(screen.getByRole("row", { name: "Open my-kit" }));

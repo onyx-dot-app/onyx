@@ -283,8 +283,8 @@ then picks the integrations
   sign-in.
 - An integration that is Required for the user stays when the tool options
   leave its id out.
-- Only integrations with `enabled = true`. An old URL-glob custom app (a CUSTOM
-  `external_app`) gives no chat tool. An agent has one link for each integration.
+- Only integrations with `enabled = true`. An old URL-pattern app (a CUSTOM
+  `external_app`; `ApiShape.has_chat_tools` is false) gives no chat tool. An agent has one link for each integration.
 
 For each integration, `integrations/call_credentials.py:resolve_call_credentials`
 calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
@@ -301,23 +301,23 @@ For OAuth2 on a non-SSE transport, construction reads the server settings
 (`mcp_oauth_server`), and each call passes `make_integration_oauth_provider` with
 `IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401 on
 an API key connection sets it to Needs reconnect (`mark_api_key_rejected`).
-`RestTool`, `GraphQLTool` and `AppActionTool` do the same refresh and mark
+`RestTool`, `GraphQLTool` and `PresetActionTool` do the same refresh and mark
 through `fresh_call_credentials` and `note_rejected_credential`
 (`tools/tool_implementations/http_request.py`).
 Request MCP headers do not stand in for a missing connection. The kind handler (`build_chat_tools`) builds the tools:
 `MCPTool` for an MCP server, one `RestTool` per operation for an OpenAPI spec,
 one `GraphQLTool` (`tools/tool_implementations/api_app/graphql_tool.py`, an
 `ApiTool` that writes a one-root-field document with variables and an
-optional `selection`) per root field of a GraphQL app, and one `AppActionTool` (`tools/tool_implementations/app_action/app_action_tool.py`)
-per catalog action of a preset, plus `app__<id>__request` for the `unspecified`
-action. An app action tool sends a raw request only when the URL is in the
+optional `selection`) per root field of a GraphQL app, and one `PresetActionTool` (`tools/tool_implementations/api_app/preset_tool.py`)
+per catalog action of a preset, plus `app__<id>__request` for the other-request (`unspecified`)
+action. A preset tool sends a raw request only when the URL is in the
 preset's URL scope and the request matches only its own action. The
 `unspecified` action always asks (`integrations/policy.py:always_asks`): no
 setting, chat grant or run mode makes it Allow, it is Blocked with no person to
 answer, and its card offers no approval for the whole chat. `ApiTool` (REST and GraphQL) and
-`AppActionTool` send through `tools/tool_implementations/http_request.py:send_tool_request`,
+`PresetActionTool` send through `tools/tool_implementations/http_request.py:send_tool_request`,
 which refuses redirects and caps the response. A preset, REST or GraphQL app whose
-credential does not resolve gives one `AppConnectTool` (`app__<id>__connect`):
+credential does not resolve gives one `AppConnectTool` (`tools/tool_implementations/api_app/connect_tool.py`, `app__<id>__connect`):
 a call tells the model to ask the user to connect, and its auth error opens the
 connect card for the integration. Tool names use the integration id
 (`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>` (or `custom__<id>__<query|mutation>.<field>`, sanitized),
@@ -1063,10 +1063,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   no integration, so chat offers none of its actions.
 - The temporary shapes of API apps are in the tech debt register:
   [the dual write to `tool`](../TECH-DEBT.md#dual-write-of-openapi-apps-to-tool) and
-  [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps).
+  [URL-pattern apps](../TECH-DEBT.md#url-pattern-apps).
 
 - Schema placeholders are a plain string replace.
-  `build_custom_tools_from_openapi_schema_and_headers` replaces
+  `build_rest_tools` replaces
   `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` and `USER_EMAIL` anywhere in the
   JSON, descriptions included. Headers are not templated. An anonymous user's
   email is substituted as `anonymous` (`tools/tool_constructor.py`).

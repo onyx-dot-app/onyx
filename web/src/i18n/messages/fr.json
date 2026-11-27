@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "Intégrations",
-      "description": "Connectez des serveurs MCP et des applications. Chaque intégration a un propriétaire, un paramètre d'installation et ses propres partages.",
+      "description": "Connectez des serveurs MCP et des applications.",
       "search": "Rechercher des intégrations",
       "open": "Ouvrir {name}",
       "loadFailed": "Impossible de charger les intégrations.",
@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "Serveur MCP",
-          "customApi": "API personnalisée"
+          "customApi": "API personnalisée",
+          "fromCatalog": "Depuis le catalogue"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "Ajoutez l'URL de l'API. La spécification n'en donne pas."
           },
           "upload": {
-            "label": "Importer openapi.json, openapi.yaml ou schema.graphql",
+            "label": "Importer un fichier de spécification",
             "chosen": "Spécification : {file}",
             "remove": "Retirer la spécification"
           },
@@ -10512,6 +10513,7 @@
       },
       "filters": {
         "label": "Type d’intégration",
+        "selected": "Type d’intégration : {type}",
         "all": "Tous les types",
         "mcp": "Serveurs MCP",
         "api": "Applications"
@@ -10533,7 +10535,7 @@
         "mcp_server": "Serveur MCP",
         "openapi": "App REST",
         "preset": "Application",
-        "custom": "Application personnalisée",
+        "custom": "Application à modèles d'URL",
         "graphql": "App GraphQL"
       },
       "signInSummary": "{mode, select, none {Aucune connexion} shared {{method, select, oauth2 {Compte de l’organisation (OAuth)} api_key {Clé API de l’organisation} onyx_login {Connexion Onyx} managed {Géré par Onyx} other {Compte de l’organisation}}} individual {{method, select, oauth2 {Chaque utilisateur (OAuth)} api_key {Chaque utilisateur (clé API)} onyx_login {Connexion Onyx} managed {Géré par Onyx} other {Chaque utilisateur}}} other {Inconnu}}",
@@ -10611,7 +10613,6 @@
         "overview": {
           "readOnly": "Vous pouvez voir cette intégration, mais pas la modifier.",
           "noDescription": "Aucune description",
-          "type": "Type",
           "signIn": "Connexion",
           "createdBy": "Ajoutée par",
           "needsSetup": "Configuration requise",
@@ -10701,11 +10702,11 @@
           },
           "usesDefault": "Valeur par défaut",
           "setByAdmin": "Défini par l’administrateur",
-          "alwaysAsks": "Craft demande avant chaque requête qui ne correspond à aucune autre action. Vous ne pouvez pas définir Autoriser.",
+          "alwaysAsks": "Onyx demande avant chaque requête qui ne correspond à aucune autre action. Vous ne pouvez pas définir Autoriser.",
           "useDefaults": "Utiliser les valeurs par défaut",
-          "readOnly": "Actions en lecture seule ({count})",
-          "write": "Actions d’écriture ({count})",
-          "other": "Autres actions ({count})",
+          "readOnly": "Actions en lecture seule",
+          "write": "Actions d’écriture",
+          "other": "Autres actions",
           "empty": "Cette intégration n’a aucune action.",
           "connectFirst": {
             "title": "Connectez d’abord le serveur",
@@ -10722,7 +10723,7 @@
         "saveFailed": "Impossible d'enregistrer le paramètre d'installation.",
         "title": "Paramètre d'Installation",
         "description": "Qui reçoit cette intégration dans l’organisation.",
-        "notAvailable": "Privée. Seuls le propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent.",
+        "notAvailable": "Privée. Seuls le propriétaire et les personnes avec qui elle est partagée l’utilisent.",
         "required": "Les membres qui se connectent avec leur propre compte doivent la connecter avant d'utiliser le chat et Craft."
       },
       "ownedBy": "Propriété de {owner}",
@@ -11071,7 +11072,7 @@
         "loadFailed": "Impossible de charger les intégrations.",
         "lock": {
           "adminBlocked": "Autoriser n'est pas disponible : un administrateur a bloqué cette action.",
-          "alwaysAsks": "Autoriser n'est pas disponible : Craft demande une approbation pour chacune de ces requêtes.",
+          "alwaysAsks": "Autoriser n'est pas disponible : Onyx demande une approbation pour chacune de ces requêtes.",
           "adminFinal": "Autoriser n'est pas disponible : le réglage administrateur de cette intégration est définitif."
         },
         "noActions": "Cette intégration n'a pas encore d'actions.",
@@ -14472,7 +14473,8 @@
       },
       "deadline": "Approuver avant {time}",
       "header": {
-        "required": "Approbation demandée : {headline}"
+        "required": "Approbation demandée : {headline}",
+        "requiredBy": "Approbation demandée : {headline}. Approuver avant {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
@@ -17378,7 +17380,7 @@
           "title": "Partir de zéro"
         },
         "trigger": {
-          "label": "Créer une compétence"
+          "label": "Créez une compétence"
         },
         "upload": {
           "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
@@ -17611,17 +17613,13 @@
           "versions": "Versions"
         },
         "overview": {
-          "noDescription": "Aucune description.",
           "location": "Emplacement",
           "owner": "Propriétaire",
-          "skills": "Compétences",
-          "description": "Description",
           "version": "Version dans plugin.json",
           "author": "Auteur",
           "homepage": "Page d'accueil",
           "license": "Licence",
-          "notUsed": "Non utilisé dans Onyx",
-          "marketplace": "Marketplace {name}, {scope, select, personal {personnel} other {entreprise}} ({repository})"
+          "notUsed": "Non utilisé dans Onyx"
         },
         "skills": {
           "off": "Désactivée",
@@ -17635,11 +17633,7 @@
           "title": "Utiliser ce plugin",
           "label": "Utiliser {name}",
           "required": "Votre administrateur a rendu ce plugin obligatoire. Vous ne pouvez pas le désactiver.",
-          "unavailable": "Vous ne pouvez pas activer ou désactiver ce plugin.",
-          "failed": "Impossible de modifier le plugin.",
-          "on": "Activé. L’agent par défaut peut utiliser ce plugin.",
-          "off": "Désactivé. Activez-le pour que l’agent par défaut puisse utiliser ce plugin.",
-          "nameHeld": "Désactivé, car {names} utilise le même nom de compétence. Activez ce plugin pour l’utiliser à la place."
+          "unavailable": "Vous ne pouvez pas activer ou désactiver ce plugin."
         },
         "actions": {
           "share": "Partager",
@@ -17655,7 +17649,6 @@
           "done": "{name} a été supprimé.",
           "failed": "Impossible de supprimer le plugin."
         },
-        "syncedFrom": "Synchronisé depuis {repository}",
         "managed": {
           "title": "Géré par la marketplace {name}",
           "description": "Onyx synchronise ce plugin depuis {repository}. Modifiez-le dans GitHub, puis synchronisez la marketplace.",
@@ -17695,7 +17688,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "Actions",
         "description": "Votre administrateur définit comment chaque action s’exécute. Activez « Ne pas me demander » pour exécuter sans invite une action qui demande une approbation.",
         "loadFailed": "Impossible de charger les actions.",
         "saveFailed": "Enregistrement impossible. Réessayez.",
@@ -17770,10 +17762,7 @@
         "not_supported": "Non pris en charge"
       },
       "note": {
-        "askAdmin": "Demandez à un admin",
-        "turnedOff": "Désactivé par votre admin",
-        "moreThanOne": "Plusieurs intégrations correspondent",
-        "notSupported": "Non pris en charge dans Onyx"
+        "askAdmin": "Demandez à un admin"
       },
       "localServer": "Serveur local",
       "noUrl": "Aucune URL de serveur",
@@ -17925,7 +17914,8 @@
         "duplicate": {
           "personal": "Vous avez déjà ajouté ce marketplace.",
           "company": "Votre organisation reçoit déjà ce marketplace."
-        }
+        },
+        "advanced": "Avancé"
       },
       "sync": {
         "now": "Synchroniser maintenant",
@@ -18138,7 +18128,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Désactivée",
+        "off": "Désactivé",
         "required": "Obligatoire",
         "pending": "En attente de révision",
         "invalid": "Non valide"
@@ -18176,7 +18166,8 @@
       "open": "Ouvrir {name}",
       "empty": {
         "title": "Aucune intégration pour le moment",
-        "description": "Demandez à votre administrateur d’ajouter une intégration."
+        "description": "Demandez à votre administrateur d’ajouter une intégration.",
+        "descriptionCanAdd": "Ajoutez-en une, ou parcourez le catalogue."
       },
       "noMatches": {
         "title": "Aucune intégration correspondante",
@@ -18190,14 +18181,13 @@
       },
       "empty": {
         "title": "Aucun plugin pour le moment",
-        "description": "Importez un plugin, ajoutez une marketplace depuis GitHub ou créez une compétence. Chaque compétence est un plugin.",
+        "description": "Importez un plugin ou ajoutez une marketplace depuis GitHub.",
         "upload": "Importer un plugin"
       },
       "noMatches": {
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
       },
-      "intro": "Un plugin est un ensemble de skills qui indique les intégrations dont ces skills ont besoin. Importez un plugin Claude Code ou Codex, ajoutez une marketplace depuis GitHub ou ajoutez une compétence. Un plugin qui ne contient qu’un fichier SKILL.md à sa racine se trouve dans l’onglet Compétences.",
       "integrations": "{available} intégrations disponibles sur {needed}",
       "nameHeld": "Désactivé : {names} utilise le même nom de compétence"
     },
@@ -18265,26 +18255,19 @@
       "loadFailed": "Cette intégration ne vous est pas disponible.",
       "tabs": {
         "overview": "Aperçu",
-        "configuration": "Configuration",
         "actions": "Actions"
       },
       "overview": {
-        "description": "Description",
-        "noDescription": "Aucune description.",
         "type": "Type",
         "signIn": "Connexion",
         "url": "URL du serveur",
         "owner": "Propriétaire",
         "organization": "Organisation",
-        "status": "Statut",
         "switch": {
           "title": "Utiliser Cette Intégration",
           "description": "Lorsque cette option est activée, vous pouvez l'utiliser dans les chats et dans Craft.",
           "required": "Votre administrateur a rendu cette intégration obligatoire. Vous ne pouvez pas la désactiver."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Votre connexion à cette intégration. Vous seul l’utilisez.} shared {Le compte de cette intégration. Toutes les personnes qui y ont accès l’utilisent.} other {Cette intégration ne nécessite pas de connexion.}}"
       }
     },
     "pluginPage": {

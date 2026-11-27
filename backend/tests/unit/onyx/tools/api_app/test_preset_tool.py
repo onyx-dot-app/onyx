@@ -1,4 +1,4 @@
-"""The app action tool sends a request only when it is the action of the
+"""The preset tool sends a request only when it is the action of the
 tool, inside the URL scope of the app, and it adds the credential itself."""
 
 import json
@@ -17,10 +17,10 @@ from onyx.llm.models import ToolResult
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.models import CustomToolCallSummary, ToolContext
 from onyx.tools.tool_implementations import http_request
-from onyx.tools.tool_implementations.app_action.app_action_tool import (
-    APP_ACTION_MAX_RESPONSE_BYTES,
-    AppActionSettings,
-    AppActionTool,
+from onyx.tools.tool_implementations.api_app.preset_tool import (
+    PRESET_TOOL_MAX_RESPONSE_BYTES,
+    PresetActionTool,
+    PresetToolSettings,
 )
 
 _SEND = "onyx.tools.tool_implementations.http_request.ssrf_safe_request"
@@ -40,10 +40,10 @@ def _tool(
     app_type: ExternalAppType = ExternalAppType.GITHUB,
     regexes: tuple[str, ...] = (r"https://api\.github\.com/.*",),
     offered: tuple[str, ...] = _GITHUB_KEYS,
-) -> AppActionTool:
+) -> PresetActionTool:
     rules = {e.id.value: e.matches for e in get_endpoint_catalog(app_type)}
-    return AppActionTool(
-        AppActionSettings(
+    return PresetActionTool(
+        PresetToolSettings(
             integration_id=7,
             integration_name="GitHub",
             app_type=app_type,
@@ -75,7 +75,7 @@ def _response(body: bytes = b'{"ok": true}', status: int = 200) -> MagicMock:
     return response
 
 
-def _run(tool: AppActionTool, **arguments: Any) -> ToolResult:
+def _run(tool: PresetActionTool, **arguments: Any) -> ToolResult:
     result = tool.run(
         ToolInvocation(
             call_id="call",
@@ -122,7 +122,7 @@ def test_sends_the_request_of_its_action_with_the_credential() -> None:
             {"method": "POST", "url": "https://api.github.com/repos/o/r/issues"},
             "app__7__github_issues_create",
         ),
-        # A request that is no catalog action goes to the request tool.
+        # A request that is no catalog action goes to the other-request action.
         (
             {"method": "DELETE", "url": "https://api.github.com/repos/o/r"},
             "app__7__request",
@@ -301,7 +301,7 @@ def test_a_blocked_action_is_not_named() -> None:
 
 
 def test_a_long_response_is_cut() -> None:
-    body = b"x" * (APP_ACTION_MAX_RESPONSE_BYTES + 10)
+    body = b"x" * (PRESET_TOOL_MAX_RESPONSE_BYTES + 10)
     with patch(_SEND, return_value=_response(body)):
         result = _run(
             _tool("github.issues.read"),
@@ -309,7 +309,7 @@ def test_a_long_response_is_cut() -> None:
             url="https://api.github.com/repos/o/r/issues",
         )
     assert "response cut" in result.content
-    assert len(result.content) < APP_ACTION_MAX_RESPONSE_BYTES + 100
+    assert len(result.content) < PRESET_TOOL_MAX_RESPONSE_BYTES + 100
 
 
 def test_a_redirect_is_refused() -> None:
@@ -374,3 +374,12 @@ def test_only_a_rejected_sign_in_asks_the_user_to_connect(
     assert isinstance(result.details, CustomToolCallSummary)
     assert (result.details.error is not None) is expected
     assert result.details.integration_id == 7
+
+
+def test_the_approval_card_names_the_action_without_the_integration() -> None:
+    """The card shows the integration name apart from the action."""
+    tool = _tool("github.issues.create")
+    assert tool.display_name == "GitHub: github.issues.create"
+    details = tool.approval_details({"method": "POST", "url": "https://x"})
+    assert details is not None
+    assert details.display_name == "github.issues.create"

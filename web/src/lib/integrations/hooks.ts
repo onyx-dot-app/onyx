@@ -55,7 +55,7 @@ export function useMemberIntegrations() {
   );
 }
 
-/** The user's "Always allow" choices. Pass `null` to skip the request. */
+/** The user's "Don't ask me" choices. Pass `null` to skip the request. */
 export function useMemberActionPolicies(id: number | null) {
   return useSWR<MemberActionPolicies, Error>(
     id === null ? null : SWR_KEYS.integrationActionPolicies(id),

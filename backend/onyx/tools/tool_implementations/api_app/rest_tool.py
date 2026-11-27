@@ -51,14 +51,14 @@ from onyx.tools.tool_implementations.http_request import (
     send_tool_request,
     tool_request_ssrf_params,
 )
-from onyx.tools.tool_name import custom_tool_name
+from onyx.tools.tool_name import api_app_tool_name
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import validate_outbound_http_url
 
 logger = setup_logger()
 
 
-def validate_custom_tool_url(url: str, *, resolve_dns: bool = True) -> None:
+def validate_api_app_url(url: str, *, resolve_dns: bool = True) -> None:
     """Raises ``SSRFException`` or ``ValueError`` for a blocked destination."""
     params = tool_request_ssrf_params()
     validate_outbound_http_url(
@@ -231,7 +231,7 @@ class ApiTool(Tool):
                 message=f"{self._name} action failed because of authentication error",
             )
             logger.warning(
-                "Auth error from custom tool '%s': HTTP %s",
+                "Auth error from REST tool '%s': HTTP %s",
                 self._name,
                 response.status_code,
             )
@@ -305,7 +305,7 @@ class RestTool(ApiTool):
         super().__init__(
             integration_id=integration_id,
             action_key=action_key,
-            name=custom_tool_name(integration_id, method_spec.raw_name),
+            name=api_app_tool_name(integration_id, action_key),
             display_name=method_spec.display_name,
             description=method_spec.summary,
             parameters=method_spec.to_tool_definition().parameters,
@@ -353,7 +353,7 @@ class RestTool(ApiTool):
         return self._method_spec.method, url, arguments.get(REQUEST_BODY)
 
 
-def build_custom_tools_from_openapi_schema_and_headers(
+def build_rest_tools(
     integration_id: int,
     openapi_schema: dict[str, Any],
     dynamic_schema_info: DynamicSchemaInfo,

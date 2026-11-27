@@ -38,6 +38,11 @@ export class AdminIntegrationDetailPage {
     await this.page.goto(`/admin/integrations/${id}${query}`);
   }
 
+  /** Reload the page, e.g. to check that a saved change persists. */
+  async reload(): Promise<void> {
+    await this.page.reload();
+  }
+
   async expectLoaded(name: string): Promise<void> {
     await expect(
       this.page.getByLabel("admin-page-title").getByText(name, { exact: true })
@@ -167,6 +172,18 @@ export class AdminIntegrationDetailPage {
       .getByRole("textbox", { name: "Endpoints", exact: true })
       .fill(endpoints.join("\n"));
     await this.saveConfiguration();
+  }
+
+  /** Replaces the base URL of a REST app on the Configuration tab and saves
+   * it. */
+  async replaceBaseUrl(baseUrl: string): Promise<void> {
+    await this.openTab("Configuration");
+    await this.field("Base URL").fill(baseUrl);
+    await this.saveConfiguration();
+  }
+
+  async expectBaseUrl(baseUrl: string): Promise<void> {
+    await expect(this.field("Base URL")).toHaveValue(baseUrl);
   }
 
   async expectEndpoints(endpoints: string[]): Promise<void> {

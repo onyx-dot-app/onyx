@@ -18,7 +18,7 @@ from onyx.integrations.actions import integration_actions
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.craft import (
-    list_runnable_integrations,
+    list_turned_on_integrations,
     resolve_craft_action_policies,
 )
 from onyx.integrations.models import EffectivePolicy
@@ -66,7 +66,7 @@ def resolve_craft_mcp_servers(
     emitting it only buys a permanently failed MCP client. A Blocked action
     is a disabled tool."""
     configs: list[CraftMCPServerConfig] = []
-    for integration in list_runnable_integrations(db_session, user.id):
+    for integration in list_turned_on_integrations(db_session, user.id):
         if integration.kind is not IntegrationKind.MCP:
             continue
         server = get_mcp_server_for_integration(integration.id, db_session)

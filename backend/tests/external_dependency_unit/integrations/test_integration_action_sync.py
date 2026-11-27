@@ -37,7 +37,7 @@ from onyx.db.models import (
     IntegrationAction,
     Tool,
 )
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.kinds.api import (
     ApiKindHandler,
@@ -301,7 +301,7 @@ def test_preset_discover_actions_equal_the_catalog(
     assert [s.read_only for s in catalog_specs] == [
         e.default_policy is ActionPolicy.ALWAYS for e in catalog
     ]
-    assert other.key == WHOLE_DOMAIN_ACTION_TYPE
+    assert other.key == OTHER_REQUEST_ACTION_KEY
     assert other.default_policy is IntegrationActionPolicyValue.ASK
 
 
@@ -314,14 +314,14 @@ def test_preset_sync_is_idempotent(db_session: Session, created: Created) -> Non
 
     assert set(first) == {
         e.id.value for e in get_endpoint_catalog(ExternalAppType.LINEAR)
-    } | {WHOLE_DOMAIN_ACTION_TYPE}
+    } | {OTHER_REQUEST_ACTION_KEY}
     assert all(
         a.source is IntegrationActionSource.EXTERNAL_APP
         for a in list_integration_actions(integration.id, db_session)
     )
 
 
-def test_custom_app_sync_writes_one_whole_domain_action(
+def test_custom_app_sync_writes_one_other_request_action(
     db_session: Session, created: Created
 ) -> None:
     integration, _app = _external_app(

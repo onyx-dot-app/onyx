@@ -39,7 +39,7 @@ Admins add Craft Apps in **Admin Panel → Integrations**. Users connect their a
 Each built-in App defines its actions, such as **Read messages** or **Post a message**.
 Admins set an approval policy for each action. See [Set action policies](#set-action-policies).
 
-A [custom App](#custom-apps) gives Craft credentials and network access for any other public HTTP API.
+A [URL-pattern App](#url-pattern-apps) gives Craft credentials and network access for any other public HTTP API.
 
 ### Craft Apps compared to MCP servers
 
@@ -219,7 +219,7 @@ Users cannot approve it for the session or save **Always allow** for it.
 ### Scheduled Tasks
 
 A [Scheduled Task](/overview/core_features/scheduled_tasks) runs in chat and can use built-in Apps, MCP servers,
-and OpenAPI and GraphQL integrations. A custom App with URL patterns has no tools in chat,
+and OpenAPI and GraphQL integrations. A URL-pattern App has no tools in chat,
 and users cannot turn it on for a new task. If a task already has one turned on, the task form still shows it,
 but runs cannot use it. Each request to the App needs approval. A command in a run cannot stop for an approval card,
 and the App has no chat tool that could ask instead. Onyx refuses the request.
@@ -234,26 +234,26 @@ To teach Craft more about an App, for example which Slack channels to read first
 create a custom Skill and share it with the users of the App. A custom Skill is not linked to an App. It loads,
 and counts toward the Skill limits, also for users who have not connected the App.
 
-## Custom Apps
+## URL-pattern Apps
 
-A custom App with URL patterns gives Craft credentials and network access for an HTTP API.
-It does not have an action catalog.
+A URL-pattern App gives Craft credentials and network access for an HTTP API. It does not have an action catalog.
 
 <Note>
-  Onyx no longer adds custom Apps with URL patterns. To connect an API that no built-in App covers,
+  Onyx no longer adds URL-pattern Apps. To connect an API that no built-in App covers,
   add a custom REST API with one action for each endpoint. See [OpenAPI](/admins/plugins/openapi).
-  Craft calls a custom REST API through the sandbox proxy, as it calls a custom App.
-  An existing custom App keeps working in Craft, but Chat does not use it.
+  Craft calls a custom REST API through the sandbox proxy, as it calls a URL-pattern App.
+  An existing URL-pattern App keeps working in Craft, but Chat does not use it.
   Its **Overview** tab asks you to replace it with a custom REST API for each host that it reaches.
 </Note>
 
-The upgrade to this release turns a custom App with one URL pattern of the form `https://host/path/*` into a custom REST
-API with the base URL `https://host/path`. The App keeps its agents, sign-ins and approval settings,
+The upgrade to this release turns a URL-pattern App with one URL pattern of the form `https://host/path/*` into a custom
+REST API with the base URL `https://host/path`. The App keeps its agents, sign-ins and approval settings,
 but starts with no endpoints. Add endpoints on the **Configuration** tab before Chat or Scheduled Tasks can use the App.
-Craft scripts still reach the App through the sandbox proxy. A custom App with other URL patterns stays as it is.
+Craft scripts still reach the App through the sandbox proxy. A URL-pattern App with other URL patterns stays as it is.
 
-You cannot change the URL patterns of an existing custom App. To change them, replace the App with a custom REST API.
-The new API does not get the connections, shares or approval settings of the old App. To replace the App:
+You cannot change the URL patterns of an existing URL-pattern App. To change them,
+replace the App with a custom REST API. The new API does not get the connections,
+shares or approval settings of the old App. To replace the App:
 
 1. Add a custom REST API for each host that the App's URL patterns reach. A custom REST API has one base URL.
    See [OpenAPI](/admins/plugins/openapi).
@@ -263,13 +263,13 @@ The new API does not get the connections, shares or approval settings of the old
    See [Access and install setting](/admins/plugins/overview#access-and-install-setting).
 4. Add it to the same agents and scheduled tasks.
 5. Review its action policies. See [Approvals](/admins/plugins/overview#approvals).
-6. Turn off the custom App with the switch in its page header. When both match a request, the App with the lower ID
+6. Turn off the URL-pattern App with the switch in its page header. When both match a request, the App with the lower ID
    handles it, so a test can pass on the old App. Then, as an affected user,
    send a request in Chat and in Craft that uses the API, and make sure that it works. If it fails,
-   turn the custom App on again and fix the new API.
-7. Delete the custom App.
+   turn the URL-pattern App on again and fix the new API.
+7. Delete the URL-pattern App.
 
-You can change the sign-in settings of a custom App on its **Configuration** tab.
+You can change the sign-in settings of a URL-pattern App on its **Configuration** tab.
 
 For example:
 
@@ -281,7 +281,7 @@ For example:
 
 ### Define URL patterns narrowly
 
-Custom Apps use URL globs. Each pattern must start with `http://` or `https://`, and its host must be literal.
+URL-pattern Apps use URL globs. Each pattern must start with `http://` or `https://`, and its host must be literal.
 Wildcards are allowed only after the host.
 
 ```text
@@ -296,7 +296,7 @@ https://*.example.com/*
 ```
 
 <Warning>
-  Custom Apps cannot be used to reach private, loopback, link-local, cloud metadata,
+  URL-pattern Apps cannot be used to reach private, loopback, link-local, cloud metadata,
   or other non-public network addresses.
   The sandbox proxy blocks internal destinations even when a URL pattern includes them.
   Expose only a deliberately secured, publicly routable HTTPS endpoint if Craft must call a custom service.
@@ -325,19 +325,19 @@ They are not copied into the custom bundle or sandbox workspace. After a request
 the sandbox proxy injects the rendered headers on the way out.
 
 <Warning>
-  A custom App has no action catalog. Every request that matches its URL patterns requires approval.
+  A URL-pattern App has no action catalog. Every request that matches its URL patterns requires approval.
   On the **Actions** tab, you cannot set its requests to **Allow**, and users cannot save **Always allow** for them.
-  Set them to **Blocked**, or turn off **Enabled** on the **Overview** tab, to stop all use of a custom App.
+  Set them to **Blocked**, or turn off the switch in the App page header, to stop all use of a URL-pattern App.
 </Warning>
 
 ## Manage Apps
 
 | Action | Effect |
 | --- | --- |
-| **Turn off Enabled** | On the **Overview** tab. Hides the App from users and stops credential injection. Onyx keeps the configuration and user connections. |
-| **Delete** | On the **Overview** tab, click **Delete**. Onyx removes the App, its policies, and user credentials. |
+| **Turn off** | Turn off the switch in the page header. Hides the App from users and stops credential injection. Onyx keeps the configuration and user connections. |
+| **Delete** | In the page header, open **More actions** and click **Delete**. Onyx removes the App, its policies, and user credentials. |
 
-Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
+Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off the header switch instead.
 
 ## Troubleshooting
 
@@ -349,8 +349,9 @@ Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
   </Accordion>
 
   <Accordion title="An enabled app does not appear to users">
-    Confirm that **Enabled** is on, that the user has access to the App (check its install setting and shares),
-    that the user turned the App on, and that the user has Craft access.
+    Confirm that the switch in the App page header is on,
+    that the user has access to the App (check its install setting and shares), that the user turned the App on,
+    and that the user has Craft access.
   </Accordion>
 
   <Accordion title="A user connected successfully but an action is blocked">

@@ -53,11 +53,9 @@ Onyx has three plugin types. Each type connects to a different kind of external 
   <Step title="Select what to add">
     Go to **Admin Panel → Integrations** and click **Add**. Select one of these:
 
-    - **MCP Server**: a remote MCP server.
+    - **MCP server**: a remote MCP server.
     - **Custom API**: any REST or GraphQL API. See [OpenAPI](/admins/plugins/openapi).
-
-    For a built-in App, such as GitHub, or a suggested MCP server, such as Linear,
-    go to **Browse the Catalog** at the bottom of the Integrations page and click **Browse**. Then select the item.
+    - **From catalog**: a built-in App, such as GitHub, or a suggested MCP server, such as Linear.
   </Step>
 
   <Step title="Enter a name and a URL">
@@ -92,7 +90,7 @@ An integration that needs setup comes first and shows **Needs setup**. Point to 
 for example a missing organization connection or OAuth client.
 
 Deleting an integration removes it from each agent and scheduled task, and deletes its connections and action settings.
-To keep an integration but stop all use of it, turn off **Enabled** on its **Overview** tab instead.
+To keep an integration but stop all use of it, turn off the switch in its page header instead.
 
 ## Access and install setting
 
@@ -161,7 +159,7 @@ Click an integration to open its detail page.
 
 | Tab | Settings |
 | --- | --- |
-| **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Group Access**, **Enabled**, and **Delete** |
+| **Overview** | Name, description, type, sign-in, owner, **Install Setting**, and **Group Access**. The page header holds the on/off switch and, under **More actions**, **Edit details** and **Delete** |
 | **Configuration** | Server URL, **Import a Spec** with the base URL and endpoints, or GraphQL endpoint and schema, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
 | **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
 
@@ -183,8 +181,8 @@ path, and body of the request, or only the size of a large body or a body that i
 approve for the rest of the command, or reject. A command that runs in the background, or a chat without a live answer,
 gets no card. Onyx refuses the request, and the agent calls the tool of the action instead.
 The tool shows the approval card. If the user approved the action for the rest of the command,
-the request runs without a card. A [custom App](/admins/plugins/craft_apps#custom-apps) has no tools in Chat,
-so a refused request of a custom App cannot run.
+the request runs without a card. A [URL-pattern App](/admins/plugins/craft_apps#url-pattern-apps) has no tools in Chat,
+so a refused request of a URL-pattern App cannot run.
 
 | Policy | Effect |
 | --- | --- |

@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "集成",
-      "description": "连接 MCP 服务器和应用。每个集成都有所有者、安装设置和自己的共享。",
+      "description": "连接 MCP 服务器和应用。",
       "search": "搜索集成",
       "open": "打开 {name}",
       "loadFailed": "无法加载集成。",
@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "MCP 服务器",
-          "customApi": "自定义 API"
+          "customApi": "自定义 API",
+          "fromCatalog": "从目录"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "请添加 API 的 URL。规范中没有提供。"
           },
           "upload": {
-            "label": "上传 openapi.json、openapi.yaml 或 schema.graphql",
+            "label": "上传规范文件",
             "chosen": "规范：{file}",
             "remove": "移除规范"
           },
@@ -10512,6 +10513,7 @@
       },
       "filters": {
         "label": "集成类型",
+        "selected": "集成类型：{type}",
         "all": "所有类型",
         "mcp": "MCP 服务器",
         "api": "应用"
@@ -10533,7 +10535,7 @@
         "mcp_server": "MCP 服务器",
         "openapi": "REST 应用",
         "preset": "应用",
-        "custom": "自定义应用",
+        "custom": "URL 模式应用",
         "graphql": "GraphQL 应用"
       },
       "signInSummary": "{mode, select, none {无需登录} shared {{method, select, oauth2 {组织账户 (OAuth)} api_key {组织 API 密钥} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {组织账户}}} individual {{method, select, oauth2 {每个用户 (OAuth)} api_key {每个用户 (API 密钥)} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {每个用户}}} other {未知}}",
@@ -10611,7 +10613,6 @@
         "overview": {
           "readOnly": "您可以查看此集成，但无法更改。",
           "noDescription": "无描述",
-          "type": "类型",
           "signIn": "登录",
           "createdBy": "添加者",
           "needsSetup": "需要设置",
@@ -10701,11 +10702,11 @@
           },
           "usesDefault": "使用默认值",
           "setByAdmin": "由管理员设置",
-          "alwaysAsks": "对于不匹配任何其他操作的每个请求，Craft 都会先询问。您无法设置为允许。",
+          "alwaysAsks": "对于不匹配任何其他操作的每个请求，Onyx 都会先询问。您无法设置为允许。",
           "useDefaults": "使用默认值",
-          "readOnly": "只读操作 ({count})",
-          "write": "写入操作 ({count})",
-          "other": "其他操作 ({count})",
+          "readOnly": "只读操作",
+          "write": "写入操作",
+          "other": "其他操作",
           "empty": "此集成没有操作。",
           "connectFirst": {
             "title": "请先连接服务器",
@@ -10722,7 +10723,7 @@
         "saveFailed": "无法保存安装设置。",
         "title": "安装设置",
         "description": "组织中谁可以使用此集成。",
-        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。",
+        "notAvailable": "私有。只有所有者和共享对象可以使用。",
         "required": "使用自己账号登录的成员必须先连接它，才能使用聊天和 Craft。"
       },
       "ownedBy": "所有者：{owner}",
@@ -11071,7 +11072,7 @@
         "loadFailed": "无法加载集成。",
         "lock": {
           "adminBlocked": "无法选择允许：管理员已阻止此操作。",
-          "alwaysAsks": "无法使用允许：Craft 会为每个此类请求请求批准。",
+          "alwaysAsks": "无法使用允许：Onyx 会为每个此类请求请求批准。",
           "adminFinal": "无法选择允许：此集成的管理员设置为最终设置。"
         },
         "noActions": "此集成还没有操作。",
@@ -14472,7 +14473,8 @@
       },
       "deadline": "请在 {time} 前批准",
       "header": {
-        "required": "已请求批准：{headline}"
+        "required": "已请求批准：{headline}",
+        "requiredBy": "已请求批准：{headline}。请在 {time} 前批准"
       },
       "headline": {
         "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
@@ -17378,7 +17380,7 @@
           "title": "从头开始"
         },
         "trigger": {
-          "label": "创建技能"
+          "label": "创建一个技能"
         },
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
@@ -17611,17 +17613,13 @@
           "versions": "版本"
         },
         "overview": {
-          "noDescription": "无描述。",
           "location": "位置",
           "owner": "所有者",
-          "skills": "技能",
-          "description": "描述",
           "version": "plugin.json 中的版本",
           "author": "作者",
           "homepage": "主页",
           "license": "许可证",
-          "notUsed": "Onyx 不使用的部分",
-          "marketplace": "{name} 市场，{scope, select, personal {个人} other {公司}}（{repository}）"
+          "notUsed": "Onyx 不使用的部分"
         },
         "skills": {
           "off": "已关闭",
@@ -17635,11 +17633,7 @@
           "title": "使用此插件",
           "label": "使用 {name}",
           "required": "管理员已将此插件设为必需。你无法将其关闭。",
-          "unavailable": "你无法开启或关闭此插件。",
-          "failed": "无法更改插件。",
-          "on": "已开启。默认智能体可以使用此插件。",
-          "off": "已关闭。开启后，默认智能体即可使用此插件。",
-          "nameHeld": "已关闭，因为 {names} 使用了相同的技能名称。开启此插件即可改用它。"
+          "unavailable": "你无法开启或关闭此插件。"
         },
         "actions": {
           "share": "分享",
@@ -17655,7 +17649,6 @@
           "done": "已删除 {name}。",
           "failed": "无法删除插件。"
         },
-        "syncedFrom": "同步自 {repository}",
         "managed": {
           "title": "由 {name} 市场管理",
           "description": "Onyx 从 {repository} 同步此插件。请在 GitHub 中更改，然后同步市场。",
@@ -17695,7 +17688,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "操作",
         "description": "管理员设置每个操作的运行方式。开启“不要询问我”后，需要审批的操作将直接运行，不再提示。",
         "loadFailed": "无法加载操作。",
         "saveFailed": "无法保存。请重试。",
@@ -17770,10 +17762,7 @@
         "not_supported": "不支持"
       },
       "note": {
-        "askAdmin": "请询问管理员",
-        "turnedOff": "已被您的管理员关闭",
-        "moreThanOne": "有多个集成匹配",
-        "notSupported": "Onyx 不支持"
+        "askAdmin": "请询问管理员"
       },
       "localServer": "本地服务器",
       "noUrl": "无服务器 URL",
@@ -17925,7 +17914,8 @@
         "duplicate": {
           "personal": "你已添加此市场。",
           "company": "你的组织已经在使用此市场。"
-        }
+        },
+        "advanced": "高级"
       },
       "sync": {
         "now": "立即同步",
@@ -18138,7 +18128,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "已停用",
+        "off": "已关闭",
         "required": "必需",
         "pending": "待审核",
         "invalid": "无效"
@@ -18176,7 +18166,8 @@
       "open": "打开 {name}",
       "empty": {
         "title": "还没有集成",
-        "description": "请让管理员添加集成。"
+        "description": "请让管理员添加集成。",
+        "descriptionCanAdd": "添加一个，或浏览目录。"
       },
       "noMatches": {
         "title": "没有匹配的集成",
@@ -18190,14 +18181,13 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "上传插件、从 GitHub 添加市场，或创建技能。每个技能都是一个插件。",
+        "description": "上传插件，或从 GitHub 添加市场。",
         "upload": "上传插件"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件是一组技能，并列出这些技能需要的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。根目录中仅有一个 SKILL.md 的插件显示在“技能”标签页中。",
       "integrations": "{needed} 个集成中有 {available} 个可用",
       "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },
@@ -18265,26 +18255,19 @@
       "loadFailed": "你无法使用此集成。",
       "tabs": {
         "overview": "概览",
-        "configuration": "配置",
         "actions": "操作"
       },
       "overview": {
-        "description": "描述",
-        "noDescription": "没有描述。",
         "type": "类型",
         "signIn": "登录",
         "url": "服务器 URL",
         "owner": "所有者",
         "organization": "组织",
-        "status": "状态",
         "switch": {
           "title": "使用此集成",
           "description": "开启后，你可以在对话和 Craft 中使用它。",
           "required": "管理员已将此集成设为必需。你无法将其关闭。"
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {你与此集成的连接。只有你使用它。} shared {此集成的账户。所有有权访问的人都使用它。} other {此集成无需登录。}}"
       }
     },
     "pluginPage": {

@@ -200,11 +200,16 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
     ];
   }
 
+  // The source repeats the name for a marketplace named after its repository.
+  const sourceLine = (row: MarketplaceSummary) => {
+    const source = marketplaceSource(row);
+    return source === row.name ? undefined : source;
+  };
   const nameCell = (row: MarketplaceSummary) => (
     <Content
       title={row.name}
       titleMaxLines={1}
-      description={marketplaceSource(row)}
+      description={sourceLine(row)}
       descriptionMaxLines={1}
       badge={{ title: t(`scope.${row.scope}`) }}
     />
@@ -239,20 +244,30 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
       field: "name",
       title: t("columns.marketplace"),
       weight: 100,
-      cell: (_name, row) => (
-        <Content
-          title={row.name}
-          titleMaxLines={1}
-          description={`${marketplaceSource(row)} · ${t("items", {
-            count: row.plugin_count,
-          })}`}
-          descriptionMaxLines={1}
-          badge={{
-            title: t(`sync.state.${marketplaceSyncState(row)}`),
-            color: SYNC_STATE_COLOR[marketplaceSyncState(row)],
-          }}
-        />
-      ),
+      cell: (_name, row) => {
+        // Attention lists only the failed rows that the user can manage.
+        const failure =
+          !row.can_manage && marketplaceSyncState(row) === "failed"
+            ? row.last_error
+            : null;
+        return (
+          <Content
+            title={row.name}
+            titleMaxLines={1}
+            description={
+              failure ??
+              [sourceLine(row), t("items", { count: row.plugin_count })]
+                .filter(Boolean)
+                .join(" · ")
+            }
+            descriptionMaxLines={failure ? 2 : 1}
+            badge={{
+              title: t(`sync.state.${marketplaceSyncState(row)}`),
+              color: SYNC_STATE_COLOR[marketplaceSyncState(row)],
+            }}
+          />
+        );
+      },
     },
     actionsColumn,
   ];
@@ -270,7 +285,10 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
       id: "sync",
       title: t("columns.sync"),
       width: { weight: 40 },
-      cell: (row) => <MarketplaceSyncStatus marketplace={row} />,
+      // The Attention cards give the reason only for rows the user can manage.
+      cell: (row) => (
+        <MarketplaceSyncStatus marketplace={row} showError={!row.can_manage} />
+      ),
     },
     {
       kind: "data",

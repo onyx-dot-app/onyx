@@ -3,7 +3,7 @@ from typing import Any
 from pydantic import BaseModel
 
 # action_type for a domain-matched request that hit no catalog action.
-WHOLE_DOMAIN_ACTION_TYPE = "unspecified"
+OTHER_REQUEST_ACTION_KEY = "unspecified"
 
 
 class PresetGrant(BaseModel):

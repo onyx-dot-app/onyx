@@ -124,9 +124,10 @@ export default function IntegrationsPage({
           title={name}
           description={
             accessCopy.reason(row) ??
-            (row.access.owner_email
-              ? t("ownedBy", { owner: row.access.owner_email })
-              : (row.description ?? undefined))
+            (row.description ||
+              (row.access.owner_email
+                ? t("ownedBy", { owner: row.access.owner_email })
+                : undefined))
           }
           titleMaxLines={1}
           descriptionMaxLines={1}

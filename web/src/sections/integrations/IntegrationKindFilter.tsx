@@ -27,9 +27,13 @@ export default function IntegrationKindFilter({
           prominence="tertiary"
           icon={SvgFilter}
           interaction={value === "all" ? "rest" : "hover"}
-          aria-label={t("label")}
+          aria-label={
+            value === "all" ? t("label") : t("selected", { type: t(value) })
+          }
           tooltip={t("label")}
-        />
+        >
+          {value === "all" ? undefined : t(value)}
+        </Button>
       </Dropdown.Trigger>
       <Dropdown.Data
         label={t("label")}

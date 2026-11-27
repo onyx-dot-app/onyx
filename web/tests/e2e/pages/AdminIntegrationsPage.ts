@@ -2,7 +2,7 @@ import { type Locator, type Page, expect } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 /** The rows of the Add menu on an integrations list. */
-export type AddIntegrationKind = "MCP Server" | "Custom API";
+export type AddIntegrationKind = "MCP server" | "Custom API";
 
 /** The integration catalog at /admin/integrations and its add modal. */
 export class AdminIntegrationsPage {
@@ -85,7 +85,7 @@ export class AdminIntegrationsPage {
   /** Uploads a spec file in step 1 of a custom API. */
   async uploadSpec(fileName: string, spec: string): Promise<void> {
     await this.addForm
-      .getByLabel("Upload openapi.json, openapi.yaml or schema.graphql", {
+      .getByLabel("Upload a spec file", {
         exact: true,
       })
       .setInputFiles({
@@ -113,17 +113,42 @@ export class AdminIntegrationsPage {
     await this.endpointsInput.fill(details.endpoints.join("\n"));
   }
 
-  /** Adds a custom GraphQL API: an endpoint URL and an uploaded schema. */
-  async fillGraphQLApi(details: {
+  /** Fills step 1 of a custom API with a URL, a spec file or both, and
+   * waits for the kind of API that Onyx found, for example
+   * "REST API, 2 endpoints". */
+  async fillDetectedApi(details: {
     name: string;
-    endpointUrl: string;
-    schema: string;
+    url?: string;
+    spec?: { fileName: string; text: string };
+    detected: string;
   }): Promise<void> {
     await this.nameInput.fill(details.name);
-    await this.apiUrlInput.fill(details.endpointUrl);
-    await this.uploadSpec("schema.graphql", details.schema);
+    if (details.url) await this.apiUrlInput.fill(details.url);
+    if (details.spec)
+      await this.uploadSpec(details.spec.fileName, details.spec.text);
     await this.continueAdd();
-    await expect(this.addForm.getByText(/^GraphQL API, /)).toBeVisible();
+    await expect(
+      this.addForm.getByText(details.detected, { exact: true })
+    ).toBeVisible();
+  }
+
+  /** Opens the catalog from the Add menu and picks one app. */
+  async pickFromCatalog(app: string): Promise<void> {
+    await this.addButton.click();
+    await this.page
+      .getByRole("menuitem", { name: "From catalog", exact: true })
+      .click();
+    await expect(this.addForm).toBeVisible();
+    await this.addForm.getByRole("button", { name: app, exact: true }).click();
+    await expect(
+      this.addForm.getByRole("button", { name: "Add", exact: true })
+    ).toBeVisible();
+  }
+
+  /** Fills the organization settings of a catalog app by field label. */
+  async fillPresetCredentials(fields: Record<string, string>): Promise<void> {
+    for (const [label, value] of Object.entries(fields))
+      await this.addForm.getByLabel(label, { exact: true }).fill(value);
   }
 
   /** Opens the Advanced section of step 2 when it is closed. */

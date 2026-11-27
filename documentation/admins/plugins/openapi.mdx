@@ -37,7 +37,7 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     loopback, and link-local addresses. For an API on a private host,
     upload the schema file or select **Allow Private Network**.
 
-    To use a schema file, click **Upload openapi.json, openapi.yaml or schema.graphql** and select a JSON or YAML file.
+    To use a schema file, click **Upload a spec file** and select a JSON or YAML file.
     If the schema does not give one full server URL, enter the base URL of the API in **URL**. If you do not,
     Onyx stays on this step and shows "Add the URL of the API. The spec does not give one." Onyx shows what it found,
     for example "REST API, 12 endpoints".
@@ -105,8 +105,8 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
 For a GraphQL API, enter the endpoint URL as the **URL**.
 Onyx sends an introspection query with no credentials and loads the schema.
 Onyx shows the number of queries and mutations that it found.
-If the endpoint does not allow introspection without sign-in, click **Upload openapi.json,
-openapi.yaml or schema.graphql** and select the schema as a `.graphql` file in GraphQL SDL.
+If the endpoint does not allow introspection without sign-in,
+click **Upload a spec file** and select the schema as a `.graphql` file in GraphQL SDL.
 
 Each query and mutation root field becomes an action, with the key `query.<field>` or `mutation.<field>`.
 A query starts at **Allow** and a mutation starts at **Ask**. Subscriptions are not actions.
@@ -156,7 +156,7 @@ Onyx replaces them with the values of the current request at call time.
 
 | Tab | Contents |
 | --- | --- |
-| **Overview** | Name, description, owner, **Install Setting**, **Enabled**, and **Delete**. |
+| **Overview** | Name, description, owner, and **Install Setting**. The page header holds the on/off switch and, under **More actions**, **Edit details** and **Delete**. |
 | **Configuration** | **Import a Spec**, the base URL and the endpoints (or the endpoint URL and schema of a GraphQL API), the sign-in, and **Users Can Save Always Allow**. |
 | **Actions** | The operations that Onyx found in the schema, each with **Allow**, **Ask**, or **Blocked**. |
 
@@ -170,7 +170,7 @@ upload or import the changed schema in **Import a Spec**. Onyx fills in the base
 Onyx syncs the actions again when you save. A schema can be at most 5 MB.
 
 Changing the install setting of the integration does not remove it from custom agents.
-To remove the integration from all agents, delete it on the **Overview** tab.
+To remove the integration from all agents, delete it from **More actions** in the page header.
 
 <Note>
   In Terraform, `onyx_custom_tool.enabled` sets default Chat availability. It does not change custom-agent attachments.

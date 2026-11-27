@@ -31,8 +31,8 @@ from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     validate_openapi_schema,
 )
 from onyx.tools.tool_implementations.api_app.rest_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
-    validate_custom_tool_url,
+    build_rest_tools,
+    validate_api_app_url,
 )
 from onyx.tools.tool_implementations.http_request import (
     TOOL_REQUEST_TIMEOUT,
@@ -161,7 +161,7 @@ class TestCustomTool(unittest.TestCase):
         # Mock the response object
         mock_request.return_value = _response({"id": "123", "name": "Test Assistant"})
 
-        tools = build_custom_tools_from_openapi_schema_and_headers(
+        tools = build_rest_tools(
             integration_id=-1,
             openapi_schema=self.openapi_schema,
             dynamic_schema_info=self.dynamic_schema_info,
@@ -207,7 +207,7 @@ class TestCustomTool(unittest.TestCase):
             {"id": "456", "name": "Created Assistant"}
         )
 
-        tools = build_custom_tools_from_openapi_schema_and_headers(
+        tools = build_rest_tools(
             integration_id=-1,
             openapi_schema=self.openapi_schema,
             dynamic_schema_info=self.dynamic_schema_info,
@@ -253,7 +253,7 @@ class TestCustomTool(unittest.TestCase):
         # Mock the response object
         mock_request.return_value = _response({"id": "123"})
 
-        tools = build_custom_tools_from_openapi_schema_and_headers(
+        tools = build_rest_tools(
             integration_id=-1,
             openapi_schema=self.openapi_schema,
             headers={
@@ -342,7 +342,7 @@ class TestCustomTool(unittest.TestCase):
         }
         validate_openapi_schema(schema)
 
-        tools = build_custom_tools_from_openapi_schema_and_headers(
+        tools = build_rest_tools(
             integration_id=-1,
             openapi_schema=schema,
             headers={
@@ -412,7 +412,7 @@ class TestCustomTool(unittest.TestCase):
         }
         validate_openapi_schema(schema)
 
-        tools = build_custom_tools_from_openapi_schema_and_headers(
+        tools = build_rest_tools(
             integration_id=-1,
             openapi_schema=schema,
             dynamic_schema_info=DynamicSchemaInfo(
@@ -557,7 +557,7 @@ if __name__ == "__main__":
 
 @pytest.mark.parametrize("status_code", [200, 401, 403, 500])
 def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> None:
-    tools = build_custom_tools_from_openapi_schema_and_headers(
+    tools = build_rest_tools(
         integration_id=1,
         dynamic_schema_info=_NO_PLACEHOLDERS,
         openapi_schema={
@@ -649,7 +649,7 @@ def test_a_graphql_response_with_errors_is_an_error(
 def test_custom_tool_file_response_is_serialized_for_llm(
     content_type: str, response_type: str
 ) -> None:
-    tools = build_custom_tools_from_openapi_schema_and_headers(
+    tools = build_rest_tools(
         integration_id=1,
         dynamic_schema_info=_NO_PLACEHOLDERS,
         openapi_schema={
@@ -747,7 +747,7 @@ def test_metadata_url_blocked_at_every_level(
 ) -> None:
     _set_ssrf_level(monkeypatch, level, multi_tenant)
     with pytest.raises(SSRFException):
-        validate_custom_tool_url(url, resolve_dns=False)
+        validate_api_app_url(url, resolve_dns=False)
 
 
 @pytest.mark.parametrize("level", list(SSRFProtectionLevel))
@@ -756,7 +756,7 @@ def test_private_url_allowed_on_self_hosted(
     monkeypatch: pytest.MonkeyPatch, url: str, level: SSRFProtectionLevel
 ) -> None:
     _set_ssrf_level(monkeypatch, level)
-    validate_custom_tool_url(url, resolve_dns=False)
+    validate_api_app_url(url, resolve_dns=False)
 
 
 @pytest.mark.parametrize("level", _BELOW_DISABLED_LEVELS)
@@ -765,14 +765,14 @@ def test_loopback_blocked_on_self_hosted_below_disabled(
 ) -> None:
     _set_ssrf_level(monkeypatch, level)
     with pytest.raises(SSRFException):
-        validate_custom_tool_url(_LOOPBACK_URL, resolve_dns=False)
+        validate_api_app_url(_LOOPBACK_URL, resolve_dns=False)
 
 
 def test_loopback_allowed_on_self_hosted_when_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_ssrf_level(monkeypatch, SSRFProtectionLevel.DISABLED)
-    validate_custom_tool_url(_LOOPBACK_URL, resolve_dns=False)
+    validate_api_app_url(_LOOPBACK_URL, resolve_dns=False)
 
 
 _LINK_LOCAL_URLS = [
@@ -794,7 +794,7 @@ def test_link_local_blocked_at_every_level(
 ) -> None:
     _set_ssrf_level(monkeypatch, level, multi_tenant)
     with pytest.raises(SSRFException):
-        validate_custom_tool_url(url, resolve_dns=False)
+        validate_api_app_url(url, resolve_dns=False)
     with patch("onyx.utils.url._pinned_request") as pinned:
         _assert_failed(_run_ping(url), status_code=None)
         pinned.assert_not_called()
@@ -807,7 +807,7 @@ def test_private_and_loopback_blocked_on_cloud(
 ) -> None:
     _set_ssrf_level(monkeypatch, level, multi_tenant=True)
     with pytest.raises(SSRFException):
-        validate_custom_tool_url(url, resolve_dns=False)
+        validate_api_app_url(url, resolve_dns=False)
 
 
 def test_save_rejects_metadata_server_url() -> None:
@@ -849,7 +849,7 @@ def test_custom_tool_route_rejects_a_spec_with_no_operations() -> None:
 
 
 def _run_ping(server_url: str) -> ToolResult:
-    tool = build_custom_tools_from_openapi_schema_and_headers(
+    tool = build_rest_tools(
         integration_id=1,
         openapi_schema=_schema(server_url),
         dynamic_schema_info=_NO_PLACEHOLDERS,
@@ -1048,7 +1048,7 @@ def _items_tool(path: str) -> Any:
             }
         },
     }
-    return build_custom_tools_from_openapi_schema_and_headers(
+    return build_rest_tools(
         integration_id=1,
         openapi_schema=schema,
         dynamic_schema_info=_NO_PLACEHOLDERS,

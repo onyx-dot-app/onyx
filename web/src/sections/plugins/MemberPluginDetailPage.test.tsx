@@ -104,7 +104,7 @@ test("an uploaded plugin lists its needs and turning it on shows the ones not on
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
   expect(
-    await screen.findByRole("tab", { name: "Integrations · 1" })
+    await screen.findByRole("tab", { name: "Integrations · 2" })
   ).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Skills · 2" })).toBeInTheDocument();
 
@@ -112,7 +112,7 @@ test("an uploaded plugin lists its needs and turning it on shows the ones not on
   const dialog = await screen.findByRole("dialog");
   expect(within(dialog).getByText("review-kit is on")).toBeInTheDocument();
   expect(within(dialog).getByText("Not added")).toBeInTheDocument();
-  expect(within(dialog).getByText("Not supported in Onyx")).toBeInTheDocument();
+  expect(within(dialog).getByText("Not supported")).toBeInTheDocument();
 });
 
 test("turning on a plugin whose skill name is taken asks to switch", async () => {
@@ -279,11 +279,8 @@ test("the owner shares, uploads a new version and deletes the plugin from its pa
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
   expect(
-    await screen.findByText(
-      "Off because company-kit uses the same skill name. Turn this plugin on to use it instead."
-    )
+    await screen.findByRole("button", { name: "Share" })
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "More actions" }));
   expect(
     await screen.findByRole("menuitem", { name: "Upload New Version" })
@@ -340,7 +337,7 @@ test("the Skills tab opens the instructions of one skill", async () => {
   expect(await screen.findByText("Write the plan first.")).toBeInTheDocument();
 });
 
-test("a synced plugin names its repository and hides restore and publish", async () => {
+test("a synced plugin says it changes in GitHub and hides restore and publish", async () => {
   window.history.replaceState(
     null,
     "",
@@ -389,9 +386,6 @@ test("a synced plugin names its repository and hides restore and publish", async
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
   expect(
-    await screen.findByText("Synced from acme/plugins")
-  ).toBeInTheDocument();
-  expect(
     await screen.findByText(
       "This plugin syncs from GitHub, so you change it in GitHub."
     )
@@ -432,9 +426,8 @@ test("a synced plugin names its marketplace and says that GitHub holds it", asyn
   expect(
     await screen.findByText("Managed by the acme-tools marketplace")
   ).toBeInTheDocument();
-  expect(
-    screen.getByText("acme-tools marketplace, personal (acme/plugins)")
-  ).toBeInTheDocument();
+  // The managed card names the marketplace, so no Location fact repeats it.
+  expect(screen.queryByText("Location")).toBeNull();
   expect(
     screen.getByRole("link", { name: "Open Marketplaces" })
   ).toHaveAttribute("href", "/app/customize/plugins#marketplaces");
@@ -491,4 +484,52 @@ test("in the admin panel the back link returns to the admin plugin list", async 
     "href",
     "/admin/plugins"
   );
+});
+
+test("the overview says why the switch of a required plugin is disabled", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    enabled: true,
+    can_toggle: false,
+    required_for_user: true,
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText(
+      "Your admin made this plugin required. You cannot turn it off."
+    )
+  ).toBeVisible();
+  expect(
+    screen.getByRole("switch", { name: "Use review-kit" })
+  ).toHaveAttribute("aria-disabled", "true");
+});
+
+test("the overview says which plugin holds the skill name of an off plugin", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    enabled: true,
+    name_held_by: ["company-kit"],
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Off: company-kit uses the same skill name")
+  ).toBeVisible();
 });

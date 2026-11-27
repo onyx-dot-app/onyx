@@ -84,7 +84,7 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
 from onyx.file_store.file_store import (
     FileStore,
@@ -2203,7 +2203,7 @@ def _replayed_request(
 def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
     db_session: Session, chat: ApprovalChat
 ) -> None:
-    """The request tool of an app (`unspecified`) asks each time: an
+    """The other-request action of an app (`unspecified`) asks each time: an
     approval for the chat is saved as a single approval, and the next call
     asks again."""
     integration, _ = make_app_integration(
@@ -2214,7 +2214,7 @@ def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
     )
     app_chat = _saved_turn(db_session, chat.user, integration.id)
     try:
-        first = _ask_for_request_tool(app_chat, WHOLE_DOMAIN_ACTION_TYPE)
+        first = _ask_for_request_tool(app_chat, OTHER_REQUEST_ACTION_KEY)
         assert isinstance(first, PendingToolInput)
         assert not first.can_approve_for_chat
         assert not _replayed_request(db_session, app_chat, first).can_approve_for_chat
@@ -2227,7 +2227,7 @@ def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
             ApprovalDecidedVia.USER,
         )
         assert isinstance(
-            _ask_for_request_tool(app_chat, WHOLE_DOMAIN_ACTION_TYPE),
+            _ask_for_request_tool(app_chat, OTHER_REQUEST_ACTION_KEY),
             PendingToolInput,
         )
     finally:
@@ -2241,7 +2241,7 @@ def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
 def test_an_mcp_tool_named_like_the_request_tool_can_be_approved_for_the_chat(
     db_session: Session, chat: ApprovalChat
 ) -> None:
-    pending = _ask_for_request_tool(chat, WHOLE_DOMAIN_ACTION_TYPE)
+    pending = _ask_for_request_tool(chat, OTHER_REQUEST_ACTION_KEY)
 
     assert isinstance(pending, PendingToolInput)
     assert pending.can_approve_for_chat

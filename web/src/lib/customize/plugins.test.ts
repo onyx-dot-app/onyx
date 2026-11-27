@@ -25,7 +25,18 @@ const ENTRIES = [
     ownerEmail: "admin@example.com",
   }),
   entry({ id: "shared", section: "shared", ownerEmail: "other@example.com" }),
-  entry({ id: "synced", section: "marketplace", ownerEmail: ME }),
+  entry({
+    id: "synced",
+    section: "marketplace",
+    ownerEmail: ME,
+    marketplace: {
+      id: "m1",
+      name: "Team Tools",
+      kind: "github",
+      repository: "team/tools",
+      personal: false,
+    },
+  }),
   entry({ id: "private", section: "private", ownerEmail: "other@example.com" }),
   entry({
     id: "off",
@@ -93,4 +104,8 @@ test("the status filter follows the switch and the search matches names", () => 
 test("the search also matches the owner and the shared groups", () => {
   expect(ids({ query: "admin@example" }).organization).toEqual(["org"]);
   expect(ids({ query: "design" }).shared).toEqual(["off"]);
+});
+
+test("the search matches a plugin's marketplace name", () => {
+  expect(ids({ query: "team tools" }).marketplace).toEqual(["synced"]);
 });

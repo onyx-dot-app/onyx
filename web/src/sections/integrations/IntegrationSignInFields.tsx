@@ -144,9 +144,13 @@ export function SignInMethodFields({
   };
 
   if (draft.authMode === "none") return null;
+  // A saved method outside the list keeps the selector, so it can be changed.
+  const choosable =
+    fitting.length > 1 ||
+    (draft.authMethod !== null && draft.authMethod !== fitting[0]);
   return (
     <Section gap={4} alignItems="stretch" height="auto">
-      {fitting.length > 0 && (
+      {choosable && (
         <InputVertical title={t("method.title")}>
           <InputSingleSelect
             placeholder={t("method.title")}
@@ -346,18 +350,21 @@ export function SignInMethodFields({
               </InputVertical>
             </>
           )}
-          <InputVertical
-            title={t("oauth.scopes.title")}
-            description={t("oauth.scopes.description")}
-          >
-            <InputTypeIn
-              aria-label={t("oauth.scopes.title")}
-              placeholder={t("oauth.scopes.placeholder")}
-              value={draft.scopes}
-              variant={variant}
-              onChange={(event) => update({ scopes: event.target.value })}
-            />
-          </InputVertical>
+          {/* A preset's setup panel lists its scopes. */}
+          {draft.providerMode !== "preset" && (
+            <InputVertical
+              title={t("oauth.scopes.title")}
+              description={t("oauth.scopes.description")}
+            >
+              <InputTypeIn
+                aria-label={t("oauth.scopes.title")}
+                placeholder={t("oauth.scopes.placeholder")}
+                value={draft.scopes}
+                variant={variant}
+                onChange={(event) => update({ scopes: event.target.value })}
+              />
+            </InputVertical>
+          )}
         </>
       )}
     </Section>

@@ -107,13 +107,27 @@ test("shows each integration with its type, sign-in, install setting and status"
   );
   expect(reportsRow.getByText(copy.shape.openapi)).toBeInTheDocument();
   expect(reportsRow.getByText("Organization API key")).toBeInTheDocument();
+  expect(reportsRow.getByText("Weekly reports")).toBeInTheDocument();
   expect(
-    reportsRow.getByText("Owned by owner@example.com")
-  ).toBeInTheDocument();
+    reportsRow.queryByText("Owned by owner@example.com")
+  ).not.toBeInTheDocument();
   expect(
-    reportsRow.getByRole("combobox", { name: "Install setting of Reports API" })
+    reportsRow.getByRole("combobox", {
+      name: "Install setting of Reports API",
+    })
   ).toHaveValue(messages.skills.installationPolicy.NOT_AVAILABLE.label);
   expect(reportsRow.getByText(copy.status.needsSetup)).toBeInTheDocument();
+});
+
+test("shows the owner when the integration has no description", async () => {
+  mockFetch({
+    "/api/admin/integrations": [{ ...reports, description: "" }],
+  });
+  render(<IntegrationsPage />);
+
+  expect(
+    await screen.findByText("Owned by owner@example.com")
+  ).toBeInTheDocument();
 });
 
 test("on a phone the list shows only the name and the status", async () => {
@@ -201,12 +215,20 @@ test("filters by kind and by search", async () => {
   expect(screen.queryByText("Linear")).not.toBeInTheDocument();
   expect(screen.getByText("Reports API")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: copy.filters.label }));
+  await user.click(
+    screen.getByRole("button", {
+      name: `${copy.filters.label}: ${copy.filters.api}`,
+    })
+  );
   await user.click(screen.getByRole("option", { name: copy.filters.mcp }));
   expect(screen.getByText("Linear")).toBeInTheDocument();
   expect(screen.queryByText("Reports API")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: copy.filters.label }));
+  await user.click(
+    screen.getByRole("button", {
+      name: `${copy.filters.label}: ${copy.filters.mcp}`,
+    })
+  );
   await user.click(screen.getByRole("option", { name: copy.filters.all }));
   await user.type(screen.getByRole("searchbox", { name: copy.search }), "week");
   expect(screen.getByText("Reports API")).toBeInTheDocument();
@@ -235,7 +257,7 @@ test("hides Add without manage:actions", async () => {
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 
-test("the Add menu has MCP Server and Custom API", async () => {
+test("the Add menu has MCP server, Custom API and the catalog", async () => {
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   mockList();
   render(<IntegrationsPage />);
@@ -244,7 +266,28 @@ test("the Add menu has MCP Server and Custom API", async () => {
   await user.click(screen.getByRole("button", { name: copy.add.label }));
   expect(
     (await screen.findAllByRole("menuitem")).map((item) => item.textContent)
-  ).toEqual([copy.add.menu.mcpServer, copy.add.menu.customApi]);
+  ).toEqual([
+    copy.add.menu.mcpServer,
+    copy.add.menu.customApi,
+    copy.add.menu.fromCatalog,
+  ]);
+});
+
+test("From catalog in the Add menu opens the catalog", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  mockList({ "/api/admin/integrations/presets": [] });
+  render(<IntegrationsPage />);
+  await screen.findByText("Linear");
+
+  await user.click(screen.getByRole("button", { name: copy.add.label }));
+  await user.click(
+    await screen.findByRole("menuitem", { name: copy.add.menu.fromCatalog })
+  );
+  expect(
+    await screen.findByRole("dialog", {
+      name: new RegExp(`^${copy.add.modal.catalog.title}`),
+    })
+  ).toBeInTheDocument();
 });
 
 test("the catalog section at the foot opens the catalog", async () => {

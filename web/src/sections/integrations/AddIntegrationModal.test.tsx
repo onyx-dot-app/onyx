@@ -533,7 +533,7 @@ describe("Catalog", () => {
 
     expect(
       screen.getByRole("dialog", { name: /^Add GitHub/ })
-    ).toHaveAccessibleDescription(copy.shape.preset);
+    ).not.toHaveAccessibleDescription();
 
     expect(
       screen.getByRole("heading", {
@@ -557,6 +557,25 @@ describe("Catalog", () => {
         name: add.setup.open.replace("{name}", "GitHub"),
       })
     ).toHaveAttribute("href", "https://github.com/settings/developers");
+  });
+
+  test("a preset with one method hides the method and scopes in Advanced", async () => {
+    mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
+    const { user } = open({ kind: "catalog" });
+    await user.click(await screen.findByRole("button", { name: "GitHub" }));
+    await user.click(
+      screen.getByRole("button", { name: `Expand ${add.advanced}` })
+    );
+
+    expect(
+      await screen.findByRole("combobox", { name: add.owner.title })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: copy.signIn.method.title })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: copy.signIn.oauth.scopes.title })
+    ).not.toBeInTheDocument();
   });
 
   test("offers only no sign-in for a preset with no sign-in method", async () => {
@@ -624,7 +643,7 @@ describe("Catalog", () => {
     expect(mockProbe.mock.calls[0]?.[0]).toBe("https://mcp.linear.app/mcp");
     expect(
       screen.getByRole("dialog", { name: /^Add Linear/ })
-    ).toHaveAccessibleDescription(copy.shape.mcp_server);
+    ).not.toHaveAccessibleDescription();
     await user.click(screen.getByRole("button", { name: add.back }));
     expect(
       await screen.findByRole("button", { name: "Linear" })
@@ -990,11 +1009,19 @@ describe("Custom API", () => {
         "The spec cannot be added: No methods found in OpenAPI schema"
       )
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("textbox", { name: add.api.url.title })
-    ).toBeInTheDocument();
     // A spec that fails is not a GraphQL endpoint or a REST base URL.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A new URL clears the error.
+    await user.type(
+      screen.getByRole("textbox", { name: add.api.url.title }),
+      "x"
+    );
+    expect(
+      screen.queryByText(
+        "The spec cannot be added: No methods found in OpenAPI schema"
+      )
+    ).not.toBeInTheDocument();
   });
 
   test("a URL with no spec and no GraphQL is a REST base URL", async () => {

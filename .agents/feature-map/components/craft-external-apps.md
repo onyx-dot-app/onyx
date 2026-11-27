@@ -141,7 +141,7 @@ over an MCP server on a shared host, and the lowest id wins between API
 integrations. For an external app, `external_apps/matching/engine.py:url_matches_patterns`
 full-matches the URL against the app's patterns and `recognize_actions` maps
 the request to catalog actions. A request that matches no catalog action gets
-one synthetic `unspecified` action. A GraphQL request that also invokes a root
+the other-request action (`unspecified`). A GraphQL request that also invokes a root
 field no matched action covers gets `unspecified` next to the matched actions,
 so an unknown mutation cannot ride on a known read's Allow. A custom GraphQL
 app matches the same way under its endpoint URL
@@ -175,9 +175,12 @@ does not match an integration that the chat turned off, unless it is
 Required: the proxy injects no credential and applies no policy, so a
 request to a public API still goes out without the app's credentials. An
 action that the chat turned off on an integration that still matches is
-Blocked. A chat Ask gets `approval_needs_tool`. Its detail names
+Blocked. A chat Ask from a foreground command that a client streams waits
+for an approval card (see the command approvals below); a command grant of
+the command also covers an Ask after its call stops waiting; any other chat
+Ask gets `approval_needs_tool`. Its detail names
 the chat tools to call instead, and the connect tool for a user with no
-sign-in, or says that the app has no tool for the request, as for a custom app (`sandbox_proxy/addons/gate.py:_app_tool_hint`). `AllMatchedActions` sorts actions
+sign-in, or says that the app has no tool for the request, as for a URL-pattern app (`sandbox_proxy/addons/gate.py:_chat_tool_hint`, which asks `integrations/kinds/api.py:chat_tool_name` for each action; `GatedTarget.api_shape` gives the shape, None for an MCP server). `AllMatchedActions` sorts actions
 strictest first, and `governing_action` decides the verdict.
 
 **Approvals.** For an Ask verdict, `GateAddon._apply_session_grant` first looks
@@ -205,7 +208,7 @@ request and stashes the context to answer it in the cache
 permission on the sandbox: allow for connected, reject for declined.
 
 **Craft catalog.** Craft uses the integrations that are on for the user
-(`integrations/craft.py:list_runnable_integrations`).
+(`integrations/craft.py:list_turned_on_integrations`).
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
@@ -284,7 +287,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    Ask is held only while a call of the chat waits on the command
    ([[#chat-command-approvals]]); otherwise, as for a background process, it is
    refused with `approval_needs_tool`, which names the chat tool
-   (`sandbox_proxy/addons/gate.py:_app_tool_hint`: `custom__<id>__<action key>` for a REST or GraphQL app,
+   (`integrations/kinds/api.py:chat_tool_name`: `custom__<id>__<action key>` for a REST or GraphQL app,
    `app__<id>__<action>` for a preset), or says that the app has no tool for
    the request, as for a request that matches only `unspecified`. The command ID is a same-user hint like
    the session tag: a process of the VM can send another command's ID. The initial IP listing fails loudly when
@@ -459,7 +462,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   integration row until the integration routes replace them, so the proxy does
   not match it.
 - The tech debt register holds
-  [URL-pattern custom apps](../TECH-DEBT.md#url-pattern-custom-apps) and the
+  [URL-pattern apps](../TECH-DEBT.md#url-pattern-apps) and the
   [Linear and Notion presets hidden from the catalog](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog).
 
 ---

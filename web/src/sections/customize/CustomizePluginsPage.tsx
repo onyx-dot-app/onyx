@@ -20,7 +20,6 @@ import {
 import {
   SvgCheckCircle,
   SvgPlug,
-  SvgPlus,
   SvgShare,
   SvgUploadCloud,
   SvgXCircle,
@@ -35,7 +34,7 @@ import {
   type PluginGroup,
 } from "@/lib/customize/plugins";
 import { usePanel } from "@/lib/customize/hooks";
-import { pluginHref } from "@/lib/customize/paths";
+import { marketplacesHref, pluginHref } from "@/lib/customize/paths";
 import type { SkillStatusFilter } from "@/lib/customize/skills";
 import {
   memberPluginEntries,
@@ -277,7 +276,14 @@ export default function CustomizePluginsPage() {
       allLabel={t("plugins.filter.all")}
     />
   );
-  const addMenu = <AddSkillMenu key="add" upload="plugin" />;
+  const addMenu = (
+    <AddSkillMenu
+      key="add"
+      upload="plugin"
+      onUploadPlugin={() => setUploading(true)}
+      onAddMarketplace={() => setAddingMarketplace(true)}
+    />
+  );
 
   const marketplaces = (
     <>
@@ -295,17 +301,6 @@ export default function CustomizePluginsPage() {
             title={marketplaceCopy("page.title")}
             description={marketplaceCopy("page.description")}
             padding={0}
-            rightChildren={
-              marketplaceList.isLoading ? undefined : (
-                <Button
-                  prominence="secondary"
-                  icon={SvgPlus}
-                  onClick={() => setAddingMarketplace(true)}
-                >
-                  {marketplaceCopy("add.menuItem")}
-                </Button>
-              )
-            }
           />
           <MarketplacesTable list={marketplaceList} />
         </Section>
@@ -316,6 +311,10 @@ export default function CustomizePluginsPage() {
         onAdded={(marketplace) => {
           setAddingMarketplace(false);
           onMarketplaceAdded(marketplace);
+          navigation.go(marketplacesHref(panel));
+          // A hash change does not scroll; the section scrolls itself only
+          // when it mounts.
+          document.getElementById("marketplaces")?.scrollIntoView();
         }}
       />
     </>
@@ -502,9 +501,6 @@ export default function CustomizePluginsPage() {
         </>
       }
     >
-      <Text as="p" font="secondary-body" color="text-03">
-        {t("plugins.intro")}
-      </Text>
       {list}
       {marketplaces}
     </CustomizeLayout>

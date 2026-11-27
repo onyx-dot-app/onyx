@@ -136,7 +136,7 @@ test.describe("MCP OAuth flows", () => {
     serverName = `PW MCP OAuth ${Date.now()}`;
     const integrations = new AdminIntegrationsPage(page);
     await integrations.goto();
-    await integrations.openAdd("MCP Server");
+    await integrations.openAdd("MCP server");
     await integrations.fillMcpServer({
       name: serverName,
       url: serverUrl,
@@ -155,7 +155,7 @@ test.describe("MCP OAuth flows", () => {
 
     // MCP actions load after a connection, so the admin connects first.
     const member = new CustomizeIntegrationPage(page);
-    await member.goto(integrationId, "Configuration");
+    await member.goto(integrationId);
     await member.expectStatus("Not connected");
     await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
       member.startConnect(serverName)
@@ -188,7 +188,7 @@ test.describe("MCP OAuth flows", () => {
     await customize.search(serverName);
     await customize.openIntegration(serverName);
     const detail = new CustomizeIntegrationPage(page);
-    await detail.openTab("Configuration");
+    await detail.expectLoaded();
     if (await detail.connectButton(serverName).isVisible()) {
       await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
         detail.startConnect(serverName)

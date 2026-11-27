@@ -16,13 +16,22 @@ import {
   summaryFixture,
 } from "@/sections/marketplaces/__fixtures__/marketplace";
 
+let mockIsMobile = false;
+jest.mock("@/hooks/useScreenSize", () => ({
+  __esModule: true,
+  default: () => ({ isMobile: mockIsMobile }),
+}));
+
 const DETAIL_URL = `/api/marketplaces/${MARKETPLACE_ID}`;
 
 function user() {
   return setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
 }
 
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  mockIsMobile = false;
+});
 
 function Table() {
   return <MarketplacesTable list={useMarketplaces()} />;
@@ -48,6 +57,14 @@ test("lists each marketplace with its source, plugins and sync", async () => {
   expect(within(table).getByText(/^Last sync /)).toBeInTheDocument();
 });
 
+test("a marketplace named after its repository shows no source line", async () => {
+  mockFetch({ "/api/marketplaces": { marketplaces: [summaryFixture()] } });
+  render(<Table />);
+
+  const table = await screen.findByRole("table", { name: "Marketplaces" });
+  expect(within(table).getAllByText("acme/plugins")).toHaveLength(1);
+});
+
 test("a failed sync shows its reason and offers Sync now", async () => {
   const error = "The GitHub connection of me@example.com is gone.";
   const fetchMock = mockFetch({
@@ -61,7 +78,8 @@ test("a failed sync shows its reason and offers Sync now", async () => {
   expect(
     await screen.findByText("The last sync of acme/plugins failed")
   ).toBeInTheDocument();
-  expect(screen.getAllByText(error).length).toBeGreaterThan(0);
+  // The attention card gives the reason; the Sync cell gives the time.
+  expect(screen.getAllByText(error)).toHaveLength(1);
   expect(screen.getByText("Sync failed")).toBeInTheDocument();
 
   await user().click(screen.getByRole("button", { name: "Sync now" }));
@@ -207,6 +225,28 @@ test("a member sees a company marketplace with no actions", async () => {
   ).not.toBeInTheDocument();
 });
 
+test("a failed marketplace the user cannot manage shows its reason in the table", async () => {
+  const error = "The GitHub connection of admin@example.com is gone.";
+  mockFetch({
+    "/api/marketplaces": {
+      marketplaces: [
+        summaryFixture({
+          scope: "company",
+          can_manage: false,
+          last_error: error,
+        }),
+      ],
+    },
+  });
+  render(<Table />);
+
+  const table = await screen.findByRole("table", { name: "Marketplaces" });
+  expect(within(table).getByText(error)).toBeInTheDocument();
+  expect(
+    screen.queryByText("The last sync of acme/plugins failed")
+  ).not.toBeInTheDocument();
+});
+
 test("Replace login warns when the new login has no GitHub connection", async () => {
   mockFetch({
     "/api/marketplaces": { marketplaces: [summaryFixture()] },
@@ -229,4 +269,24 @@ test("Replace login warns when the new login has no GitHub connection", async ()
       expect.stringContaining("you have not connected GitHub")
     )
   );
+});
+
+test("a failed marketplace the user cannot manage shows its reason at phone width", async () => {
+  mockIsMobile = true;
+  const error = "The GitHub connection of admin@example.com is gone.";
+  mockFetch({
+    "/api/marketplaces": {
+      marketplaces: [
+        summaryFixture({
+          scope: "company",
+          can_manage: false,
+          last_error: error,
+        }),
+      ],
+    },
+  });
+  render(<Table />);
+
+  const table = await screen.findByRole("table", { name: "Marketplaces" });
+  expect(within(table).getByText(error)).toBeInTheDocument();
 });

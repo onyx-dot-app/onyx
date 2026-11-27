@@ -775,7 +775,7 @@ export interface ToolApprovalRequest extends BaseObj {
   /** An app request of a command that the call waits on: the card offers
    * "approve for this command" in place of "approve for this chat". */
   can_approve_for_command?: boolean;
-  /** The app of a command's request. */
+  /** The integration of a chat tool call's request, or the app of a command's. */
   app_name?: string | null;
   /** When a command's request expires. */
   expires_at?: string | null;

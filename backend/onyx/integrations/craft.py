@@ -28,6 +28,7 @@ from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.models import (
     ActionSettings,
+    ApiShape,
     ApprovalMode,
     EffectivePolicy,
     UsableIntegrationIds,
@@ -41,7 +42,9 @@ from onyx.server.features.build.models import TaskActionView, TaskIntegrationVie
 from onyx.tools.models import IntegrationLinkConfiguration
 
 
-def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integration]:
+def list_turned_on_integrations(
+    db_session: Session, user_id: UUID
+) -> list[Integration]:
     """The integrations that are on for the user, in integration order."""
     return list_enabled_integrations_by_id(
         db_session,
@@ -72,7 +75,7 @@ def list_connectable_apps(db_session: Session, user: User) -> list[ExternalApp]:
     still connect: Not connected or Needs reconnect. The agent offers to
     connect them."""
     apps: list[ExternalApp] = []
-    for integration in list_runnable_integrations(db_session, user.id):
+    for integration in list_turned_on_integrations(db_session, user.id):
         if integration.kind is not IntegrationKind.API:
             continue
         app = get_external_app_for_integration(integration.id, db_session)
@@ -149,7 +152,7 @@ def _integration_view(
             if settings is not None
             else None
         ),
-        runnable=_chat_runnable(integration, app),
+        runnable=_has_chat_tools(integration, app),
         actions=[
             TaskActionView(
                 key=action.key,
@@ -165,14 +168,18 @@ def _integration_view(
     )
 
 
-def _chat_runnable(integration: Integration, app: ExternalApp | None) -> bool:
-    """Chat runs an API integration through its ``api_app`` or its preset
-    (``build_integration_chat_tools``)."""
-    return integration.enabled and not (
-        integration.kind is IntegrationKind.API
-        and integration.api_app_id is None
-        and (app is None or app.app_type == ExternalAppType.CUSTOM)
-    )
+def _has_chat_tools(integration: Integration, app: ExternalApp | None) -> bool:
+    """An enabled integration whose actions are chat tools
+    (``build_integration_chat_tools``): each one but a URL-pattern app, or an
+    API integration with neither an ``api_app`` nor an ``external_app``."""
+    if not integration.enabled:
+        return False
+    if (
+        integration.kind is not IntegrationKind.API
+        or integration.api_app_id is not None
+    ):
+        return True
+    return app is not None and ApiShape.of_external_app(app.app_type).has_chat_tools
 
 
 def _known_actions(settings: ActionSettings, keys: set[str]) -> ActionSettings:
@@ -221,7 +228,7 @@ def list_task_integration_views(
         if integration.id in links
         or (
             states[integration.id].on
-            and _chat_runnable(integration, apps.get(integration.id))
+            and _has_chat_tools(integration, apps.get(integration.id))
         )
     ]
     return sorted(views, key=lambda view: (view.name.lower(), view.id))

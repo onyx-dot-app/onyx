@@ -1576,6 +1576,7 @@ def load_chat_approvals(
             ChatMessage.chat_session_id,
             ChatSession.agent_name,
             Integration.kind,
+            Integration.name,
         )
         .join(ChatMessage, ChatMessage.id == ApprovalRequest.chat_message_id)
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
@@ -1588,10 +1589,10 @@ def load_chat_approvals(
         )
         .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
     ).all()
-    for request, session_id, agent_name, integration_kind in rows:
+    for request, session_id, agent_name, integration_kind, app_name in rows:
         approvals.requests.setdefault(request.chat_message_id, []).append(
             SavedToolApproval.model_validate(request).model_copy(
-                update={"integration_kind": integration_kind}
+                update={"integration_kind": integration_kind, "app_name": app_name}
             )
         )
         if session_id != chat_session_id:

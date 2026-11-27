@@ -127,8 +127,10 @@ integrations with the task's settings, also those the owner turned off, and
 also after the run ends, so a VM command that outlives the run never gains
 the agent's integrations. Tool construction, the approval check and the
 sandbox proxy all read it. The
-catalog (`list_task_integration_views`) lists what chat can run: MCP and
-OpenAPI integrations, not API apps without an OpenAPI tool.
+catalog (`list_task_integration_views`) lists what chat can run
+(`integrations/craft.py:_has_chat_tools`): MCP, OpenAPI and GraphQL
+integrations and built-in Craft Apps, not URL-pattern apps, which have no chat
+tools.
 
 ---
 

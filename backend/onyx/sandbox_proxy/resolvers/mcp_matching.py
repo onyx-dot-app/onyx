@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import ExternalAppType, IntegrationKind
 from onyx.external_apps.matching.engine import url_matches_patterns
+from onyx.integrations.models import ApiShape
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -53,7 +54,7 @@ class IntegrationMatchTarget(BaseModel):
     """What the proxy needs to find the integrations a request can be for,
     with no query. ``endpoint`` is the server URL of an MCP server, the base
     URL of an OpenAPI spec, or the endpoint of a GraphQL app (``graphql``).
-    ``url_regexes`` are the URL patterns of a preset or custom app.
+    ``url_regexes`` are the URL patterns of a preset or URL-pattern app.
     ``load_error`` tells that the stored settings could not be read; such a
     target blocks each request of a user who can use it."""
 
@@ -66,6 +67,17 @@ class IntegrationMatchTarget(BaseModel):
     app_type: ExternalAppType | None = None
     url_regexes: tuple[str, ...] = ()
     load_error: str | None = None
+
+    @property
+    def api_shape(self) -> ApiShape | None:
+        """None for an MCP server."""
+        if self.kind is not IntegrationKind.API:
+            return None
+        if self.endpoint is not None:
+            return ApiShape.GRAPHQL if self.graphql else ApiShape.OPENAPI
+        if self.app_type is None:
+            return ApiShape.PRESET
+        return ApiShape.of_external_app(self.app_type)
 
 
 def may_match(target: IntegrationMatchTarget, request: http.Request) -> bool:

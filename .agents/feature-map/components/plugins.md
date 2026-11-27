@@ -15,11 +15,13 @@ Group or user restriction needs EE.
 
 - **An admin** opens the Agents & Plugins sidebar section. Admin >
   Integrations (`/admin/integrations`) lists the MCP servers and apps from
-  `GET /admin/integrations`, with Name (and the owner of a private one, or the
-  "No access" reason for a manager with no access of its own), Type, Sign-in,
+  `GET /admin/integrations`, with Name (under it the "No access" reason for a
+  manager with no access of its own, else the description, else the owner of a
+  private one), Type, Sign-in,
   Install Setting and Status, a type filter, search and "Needs setup". The "Add"
-  menu (here and on the Customize Integrations tab) has MCP Server and Custom
-  API. "Browse the Catalog" at the foot of both lists opens the catalog: presets
+  menu (here and on the Customize Integrations tab) has MCP server, Custom API
+  and From catalog. From catalog, and "Browse the Catalog" at the foot of both
+  lists, open the catalog: presets
   and suggested MCP servers in one grid, with or without Craft, where a suggested MCP server replaces
   the preset of its service
   ([TECH-DEBT.md](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog)).
@@ -61,12 +63,14 @@ Group or user restriction needs EE.
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
-  row menu (Turn on/off, Share). The list leaves out skill-kind entries (one
+  row menu (Turn on/off, Share). Its Add menu has Upload plugin and Add
+  marketplace, with no Create a skill. The list leaves out skill-kind entries (one
   SKILL.md at the bundle root; they are on Skills), and an admin's list
   leaves out the plugins that are not `member_visible`. The plugin page
   (`sections/plugins/MemberPluginDetailPage.tsx`) has Share, a "..." menu
   (Upload New Version through `sections/modals/plugins/UploadPluginFlow.tsx`,
-  Delete Plugin) and the switch in its header. A needed integration that is
+  Delete Plugin) and the switch in its header. When the switch is disabled
+  (`pluginSwitch` blocked), Overview says why as text. A needed integration that is
   not added links an organization-wide manager to `/admin/integrations/new`
   with the owner set to the organization and `return_to` the plugin page.
   Admin Panel → Plugins (`/admin/plugins`, full admin panel access) renders the
@@ -109,14 +113,17 @@ Group or user restriction needs EE.
   EE, no permission picker, `PUT /integrations/{id}/access`) and Publish to Org
   (`POST /integrations/{id}/publish`, off without global manage:actions). A row opens
   `/app/customize/integrations/[id]` (`sections/customize/CustomizeIntegrationPage.tsx`):
-  the status, Connect and the "..." menu in the header, then Overview (type,
-  sign-in, owner, state, and the "Use This Integration" switch),
-  Configuration (the user's connection, Disconnect)
-  and Actions (each action with the admin's Allow, Ask or Blocked, and the
-  user's Always allow switch when the admin allows it). The admin sets the
+  the connection status, Connect or Disconnect (also while turned off, for the
+  user's own connection) and the "..." menu in the header, then Overview (type,
+  sign-in, owner, a needs-reconnect reason as text, and the "Use This
+  Integration" switch) and Actions (each action with the admin's Allow, Ask or
+  Blocked, and the user's "Don't ask me" switch when the admin allows it).
+  There is no Configuration tab; an old `?tab=configuration` link opens
+  Overview. On a phone a Turned off row shows the short state; a No access row
+  keeps its reason, since it opens no page. The admin sets the
   policy only on `/admin/integrations/[id]`. A plugin that holds one skill
   opens that skill's page. When the admin lets users save it, each action that asks offers
-  "Always allow". A member with manage:actions adds a private integration
+  "Don't ask me" (saved as Always allow). A member with manage:actions adds a private integration
   ("For me" only) from the Integrations Add menu.
 - **In chat**, the tools popover lists the current agent's integrations
   (`sections/plugins/ChatIntegrationsPopover.tsx`) and switches each one; the
@@ -195,8 +202,8 @@ and does not redirect to the skill page. The admin skills table leaves out
 shows each need: `lib/plugins/needs.ts:liveNeedState` reads the state of the
 matched integration from `GET /integrations`, so a row follows a switch or a
 sign-in at once, and `needAction` maps the state to one action (Turn on,
-Connect, Add for your team with `newIntegrationHref` filling the add modal, or a
-note). `lib/plugins/directory.ts:pluginSwitch` gives its switch
+Connect, Add for your team with `newIntegrationHref` filling the add modal, or
+the "Ask an admin" note; other states have only the badge). `lib/plugins/directory.ts:pluginSwitch` gives its switch
 (`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:useSkillEnablement`,
 so a skill name conflict asks to switch in `SkillSwitchModal`); when the response leaves a supported need not
 on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integration row carries `access`; its
@@ -204,8 +211,8 @@ on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integr
 included). `sections/plugins/ShareIntegrationModal.tsx` reads and replaces the
 shares through `/integrations/{id}/access`; it reuses `AddPeoplePicker` with
 no permission menu.
-`sections/plugins/IntegrationConnectionRow.tsx` shows the
-status of one integration and its action; the API key form
+`sections/plugins/IntegrationConnectModal.tsx` shows the
+status of each integration and its action; the API key form
 (`web/src/sections/plugins/IntegrationCredentialsModal.tsx`, which the Craft
 setup card also opens) renders `CredentialFieldInputs` from `credential_fields`
 and calls `PUT /integrations/{id}/connection`; Disconnect is `DELETE` on the same path.
@@ -327,7 +334,7 @@ only the configuration of a chat that does not exist yet.
    (`user_integration_preference`).
    Craft does not read `enabled_in_craft`: the sandbox proxy and the Craft
    MCP config use the integrations that are on for the user
-   (`integrations/craft.py:list_runnable_integrations`).
+   (`integrations/craft.py:list_turned_on_integrations`).
 5. `openapi-enabled-default-chat-only` **OpenAPI tools use `Tool.enabled` only
    for Default Chat.** `server/features/tool/models.py:CustomToolCreate`
    rejects `enabled=false`. A row stored with `enabled=false`
@@ -340,7 +347,7 @@ only the configuration of a chat that does not exist yet.
    never writes `Persona__Tool` or agent settings. A new action follows the
    admin default row and the agent's `default` setting.
 7. `no-workspace-enable-from-url` **A URL never turns an integration on.**
-   Only the admin's Enabled switch on the Overview tab (`PATCH
+   Only the admin's Enabled switch in the detail page header (`PATCH
    /admin/integrations/{id}` with `enabled`) changes it. A query flag alone must
    never enable tools for the whole workspace.
 8. `connection-status-is-credential-state` **`connection_status` is credential
@@ -429,3 +436,8 @@ only the configuration of a chat that does not exist yet.
 - Playwright: `web/tests/e2e/mcp/`: the default agent, connecting from a
   plugin page and from the chat prompt (API key and OAuth), plugin access, and
   Always allow (`web/tests/e2e/mcp/mcp_tool_approval.spec.ts`).
+  `web/tests/e2e/integrations/` covers custom API apps against a local mock
+  upstream (`web/tests/e2e/utils/apiAppUpstream.ts`): the add flow from a spec
+  URL, a YAML upload and GraphQL introspection, a catalog app's member
+  sign-in, and Allow and Ask actions in chat with the member's key
+  (`web/tests/e2e/integrations/api_app_chat.spec.ts`).

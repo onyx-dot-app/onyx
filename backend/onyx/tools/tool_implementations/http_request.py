@@ -1,6 +1,5 @@
-"""The one HTTP sender for the API integration tools (OpenAPI, GraphQL and
-app action tools) and for the GraphQL introspection call of the
-integration service."""
+"""The one HTTP sender for the API app tools (REST, GraphQL and preset
+tools) and for the GraphQL introspection call of the integration service."""
 
 from email.message import Message
 from enum import Enum

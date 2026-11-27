@@ -10356,7 +10356,7 @@
     },
     "integrations": {
       "title": "연동",
-      "description": "MCP 서버와 앱을 연결합니다. 각 통합에는 소유자, 설치 설정, 자체 공유가 있습니다.",
+      "description": "MCP 서버와 앱을 연결합니다.",
       "search": "연동 검색",
       "open": "{name} 열기",
       "loadFailed": "연동을 불러올 수 없습니다.",
@@ -10447,7 +10447,8 @@
         },
         "menu": {
           "mcpServer": "MCP 서버",
-          "customApi": "사용자 지정 API"
+          "customApi": "사용자 지정 API",
+          "fromCatalog": "카탈로그에서"
         },
         "modal": {
           "mcp_server": {
@@ -10478,7 +10479,7 @@
             "needed": "API의 URL을 추가하세요. 사양에 URL이 없습니다."
           },
           "upload": {
-            "label": "openapi.json, openapi.yaml 또는 schema.graphql 업로드",
+            "label": "사양 파일 업로드",
             "chosen": "사양: {file}",
             "remove": "사양 제거"
           },
@@ -10512,6 +10513,7 @@
       },
       "filters": {
         "label": "연동 유형",
+        "selected": "연동 유형: {type}",
         "all": "모든 유형",
         "mcp": "MCP 서버",
         "api": "앱"
@@ -10533,7 +10535,7 @@
         "mcp_server": "MCP 서버",
         "openapi": "REST 앱",
         "preset": "앱",
-        "custom": "사용자 지정 앱",
+        "custom": "URL 패턴 앱",
         "graphql": "GraphQL 앱"
       },
       "signInSummary": "{mode, select, none {로그인 없음} shared {{method, select, oauth2 {조직 계정(OAuth)} api_key {조직 API 키} onyx_login {Onyx 로그인} managed {Onyx에서 관리} other {조직 계정}}} individual {{method, select, oauth2 {각 사용자(OAuth)} api_key {각 사용자(API 키)} onyx_login {Onyx 로그인} managed {Onyx에서 관리} other {각 사용자}}} other {알 수 없음}}",
@@ -10611,7 +10613,6 @@
         "overview": {
           "readOnly": "이 연동을 볼 수는 있지만 변경할 수는 없습니다.",
           "noDescription": "설명 없음",
-          "type": "유형",
           "signIn": "로그인",
           "createdBy": "추가한 사람",
           "needsSetup": "설정 필요",
@@ -10701,11 +10702,11 @@
           },
           "usesDefault": "기본값 사용 중",
           "setByAdmin": "관리자가 설정함",
-          "alwaysAsks": "Craft는 다른 작업과 일치하지 않는 각 요청 전에 확인합니다. 허용으로 설정할 수 없습니다.",
+          "alwaysAsks": "Onyx는 다른 작업과 일치하지 않는 각 요청 전에 확인합니다. 허용으로 설정할 수 없습니다.",
           "useDefaults": "기본값 사용",
-          "readOnly": "읽기 전용 액션({count})",
-          "write": "쓰기 액션({count})",
-          "other": "기타 액션({count})",
+          "readOnly": "읽기 전용 액션",
+          "write": "쓰기 액션",
+          "other": "기타 액션",
           "empty": "이 연동에는 액션이 없습니다.",
           "connectFirst": {
             "title": "먼저 서버를 연결하세요",
@@ -10722,7 +10723,7 @@
         "saveFailed": "설치 설정을 저장할 수 없습니다.",
         "title": "설치 설정",
         "description": "조직에서 이 통합을 받는 사람입니다.",
-        "notAvailable": "비공개입니다. 소유자, 공유받은 사람, 자체 설정이 있는 그룹만 사용합니다.",
+        "notAvailable": "비공개입니다. 소유자와 공유받은 사람만 사용합니다.",
         "required": "자신의 계정으로 로그인하는 멤버는 채팅과 Craft를 사용하기 전에 연결해야 합니다."
       },
       "ownedBy": "소유자: {owner}",
@@ -11071,7 +11072,7 @@
         "loadFailed": "통합을 불러오지 못했습니다.",
         "lock": {
           "adminBlocked": "허용을 사용할 수 없습니다: 관리자가 이 작업을 차단했습니다.",
-          "alwaysAsks": "허용을 사용할 수 없습니다: Craft는 이러한 요청마다 승인을 요청합니다.",
+          "alwaysAsks": "허용을 사용할 수 없습니다: Onyx는 이러한 요청마다 승인을 요청합니다.",
           "adminFinal": "허용을 사용할 수 없습니다: 이 통합의 관리자 설정은 확정되어 있습니다."
         },
         "noActions": "이 통합에는 아직 작업이 없습니다.",
@@ -14472,7 +14473,8 @@
       },
       "deadline": "{time}까지 승인",
       "header": {
-        "required": "승인 요청됨: {headline}"
+        "required": "승인 요청됨: {headline}",
+        "requiredBy": "승인 요청됨: {headline}. {time}까지 승인"
       },
       "headline": {
         "multiAction": "{app}의 {count, plural, one {작업 #개} other {작업 #개}}",
@@ -17378,7 +17380,7 @@
           "title": "처음부터 만들기"
         },
         "trigger": {
-          "label": "스킬 만들기"
+          "label": "스킬 생성"
         },
         "upload": {
           "description": "SKILL.md 파일, ZIP 파일 또는 스킬 폴더를 가져오세요.",
@@ -17611,17 +17613,13 @@
           "versions": "버전"
         },
         "overview": {
-          "noDescription": "설명이 없습니다.",
           "location": "위치",
           "owner": "소유자",
-          "skills": "스킬",
-          "description": "설명",
           "version": "plugin.json의 버전",
           "author": "작성자",
           "homepage": "홈페이지",
           "license": "라이선스",
-          "notUsed": "Onyx에서 사용하지 않음",
-          "marketplace": "{name} 마켓플레이스, {scope, select, personal {개인} other {회사}} ({repository})"
+          "notUsed": "Onyx에서 사용하지 않음"
         },
         "skills": {
           "off": "꺼짐",
@@ -17635,11 +17633,7 @@
           "title": "이 플러그인 사용",
           "label": "{name} 사용",
           "required": "관리자가 이 플러그인을 필수로 지정했습니다. 끌 수 없습니다.",
-          "unavailable": "이 플러그인을 켜거나 끌 수 없습니다.",
-          "failed": "플러그인을 변경할 수 없습니다.",
-          "on": "켜짐. 기본 에이전트가 이 플러그인을 사용할 수 있습니다.",
-          "off": "꺼짐. 켜면 기본 에이전트가 이 플러그인을 사용할 수 있습니다.",
-          "nameHeld": "{names}이(가) 같은 스킬 이름을 사용하므로 꺼져 있습니다. 대신 이 플러그인을 사용하려면 켜세요."
+          "unavailable": "이 플러그인을 켜거나 끌 수 없습니다."
         },
         "actions": {
           "share": "공유",
@@ -17655,7 +17649,6 @@
           "done": "{name}을(를) 삭제했습니다.",
           "failed": "플러그인을 삭제할 수 없습니다."
         },
-        "syncedFrom": "{repository}에서 동기화됨",
         "managed": {
           "title": "{name} 마켓플레이스에서 관리합니다",
           "description": "Onyx는 이 플러그인을 {repository}에서 동기화합니다. GitHub에서 변경한 다음 마켓플레이스를 동기화하세요.",
@@ -17695,7 +17688,6 @@
         }
       },
       "alwaysAllow": {
-        "title": "작업",
         "description": "관리자가 각 작업의 실행 방식을 설정합니다. 승인을 요청하는 작업을 확인 없이 실행하려면 '묻지 않기'를 켜세요.",
         "loadFailed": "작업을 불러올 수 없습니다.",
         "saveFailed": "저장할 수 없습니다. 다시 시도하세요.",
@@ -17770,10 +17762,7 @@
         "not_supported": "지원되지 않음"
       },
       "note": {
-        "askAdmin": "관리자에게 문의하세요",
-        "turnedOff": "관리자가 껐습니다",
-        "moreThanOne": "두 개 이상의 통합이 일치합니다",
-        "notSupported": "Onyx에서 지원되지 않음"
+        "askAdmin": "관리자에게 문의하세요"
       },
       "localServer": "로컬 서버",
       "noUrl": "서버 URL 없음",
@@ -17925,7 +17914,8 @@
         "duplicate": {
           "personal": "이 마켓플레이스를 이미 추가했습니다.",
           "company": "조직에서 이미 이 마켓플레이스를 받고 있습니다."
-        }
+        },
+        "advanced": "고급"
       },
       "sync": {
         "now": "지금 동기화",
@@ -18138,7 +18128,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "사용 안 함",
+        "off": "꺼짐",
         "required": "필수",
         "pending": "검토 대기 중",
         "invalid": "유효하지 않음"
@@ -18176,7 +18166,8 @@
       "open": "{name} 열기",
       "empty": {
         "title": "아직 통합이 없습니다",
-        "description": "관리자에게 통합 추가를 요청하세요."
+        "description": "관리자에게 통합 추가를 요청하세요.",
+        "descriptionCanAdd": "통합을 추가하거나 카탈로그를 둘러보세요."
       },
       "noMatches": {
         "title": "일치하는 통합이 없습니다",
@@ -18190,14 +18181,13 @@
       },
       "empty": {
         "title": "아직 플러그인이 없습니다",
-        "description": "플러그인을 업로드하거나, GitHub에서 마켓플레이스를 추가하거나, 스킬을 만드세요. 각 스킬은 하나의 플러그인입니다.",
+        "description": "플러그인을 업로드하거나 GitHub에서 마켓플레이스를 추가하세요.",
         "upload": "플러그인 업로드"
       },
       "noMatches": {
         "title": "일치하는 플러그인이 없습니다",
         "clear": "모든 플러그인 보기"
       },
-      "intro": "플러그인은 스킬 묶음이며, 해당 스킬에 필요한 통합을 나열합니다. Claude Code 또는 Codex 플러그인을 업로드하거나, GitHub에서 마켓플레이스를 추가하거나, 스킬을 추가하세요. 루트에 SKILL.md 하나만 있는 플러그인은 스킬 탭에 표시됩니다.",
       "integrations": "{needed}개 중 {available}개 통합 사용 가능",
       "nameHeld": "꺼짐: {names}이(가) 같은 스킬 이름을 사용합니다"
     },
@@ -18265,26 +18255,19 @@
       "loadFailed": "이 통합을 사용할 수 없습니다.",
       "tabs": {
         "overview": "개요",
-        "configuration": "구성",
         "actions": "작업"
       },
       "overview": {
-        "description": "설명",
-        "noDescription": "설명이 없습니다.",
         "type": "유형",
         "signIn": "로그인",
         "url": "서버 URL",
         "owner": "소유자",
         "organization": "조직",
-        "status": "상태",
         "switch": {
           "title": "이 통합 사용",
           "description": "켜져 있으면 채팅과 Craft에서 사용할 수 있습니다.",
           "required": "관리자가 이 통합을 필수로 설정했습니다. 끌 수 없습니다."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {이 통합에 대한 내 연결입니다. 나만 사용합니다.} shared {이 통합의 계정입니다. 접근 권한이 있는 모든 사람이 사용합니다.} other {이 통합은 로그인이 필요하지 않습니다.}}"
       }
     },
     "pluginPage": {

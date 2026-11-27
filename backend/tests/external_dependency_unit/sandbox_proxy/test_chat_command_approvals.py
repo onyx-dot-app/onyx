@@ -53,6 +53,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
+from onyx.integrations.models import ApiShape
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -184,6 +185,7 @@ def _matched(
             integration_id=integration_id,
             kind=IntegrationKind.API,
             app_name="Tracker",
+            api_shape=ApiShape.PRESET,
         ),
         payload={},
     )

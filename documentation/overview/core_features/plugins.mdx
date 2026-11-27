@@ -70,16 +70,14 @@ Click a plugin to open it. The plugin page has these tabs. A tab with nothing to
 
 | Tab | What it shows |
 | --- | --- |
-| **Overview** | Whether the plugin is on and why, the description, the group, the owner, and for an uploaded plugin the version in `plugin.json`, the author, the license and the parts that Onyx does not use |
+| **Overview** | The group, the owner, and for an uploaded plugin the version in `plugin.json`, the author, the license and the parts that Onyx does not use. For a plugin from a marketplace, the marketplace replaces the group. |
 | **Skills** | The skills of the plugin. Click **Read** to read the instructions of a skill. |
-| **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action. The count in the tab counts only the integrations that Onyx supports. |
+| **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action. The count in the tab counts each integration, also one that Onyx does not support. |
 | **Versions** | The versions of a plugin that you own or can edit, with the version in `plugin.json`. Click a version to see its skills and integrations. |
 
 If you own or can edit the plugin, the page header has **Share** and a **...** menu with **Upload New Version**.
 If you can delete the plugin, the menu also has **Delete Plugin**. You can delete a plugin that you added,
 until it is published. Only an admin can delete a published plugin.
-
-A plugin from a marketplace shows **Synced from *owner/repo*** below its title.
 
 ## Upload a plugin
 
@@ -158,7 +156,7 @@ a dialog lists the integrations with their states and actions.
 
 ### Turn a plugin on or off
 
-The plugin page has the **Use this plugin** switch in its header. The **Overview** tab shows whether the plugin is on.
+The plugin page has the **Use this plugin** switch in its header. The switch shows whether the plugin is on.
 In the **Plugins** tab, a plugin that is off shows **Turn on**, and the row menu has **Turn on** or **Turn off**.
 The default agent uses only the plugins that you turn on.
 
@@ -250,7 +248,7 @@ its plugins and its sync:
 | Column | What it shows |
 | --- | --- |
 | **Marketplace** | The name, the source as `owner/repo`, with the folder and `@ref` when you set them, and **Personal** or **Company** |
-| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Not synced**, with the time of the last sync or the reason of the failure |
+| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Not synced**, with the time of the last sync. A failed marketplace that you cannot manage also shows the reason of the failure |
 | **Items** | The number of plugins |
 
 Click a row to see the source, the GitHub login, the last commit and each entry with its state.
@@ -271,8 +269,8 @@ One sync of a marketplace runs at a time. A sync applies these changes:
 - An entry that is gone deletes its plugin, with its shares and settings.
 - A blocked or not supported entry keeps its plugin and its versions.
 
-If a sync fails, the section shows the reason above the list. The plugins stay as they are. Fix the cause,
-then click **Sync now**.
+If a sync of a marketplace that you manage fails, the section shows the reason above the list.
+The plugins stay as they are. Fix the cause, then click **Sync now**.
 
 ### Plugins from a marketplace
 
@@ -301,19 +299,25 @@ and its switch is locked. An **Installed** integration is on until you turn it o
 An **Available** integration is off until you turn it on. A custom agent uses each integration that it links to,
 with the switch on or off, if you have access and are signed in.
 
-Click an integration to open its page, with the tabs **Overview** (the type, the sign-in, the owner, the state,
-and the **Use This Integration** switch), **Configuration** (your connection) and **Actions** (how each action runs).
+Click an integration to open its page, with the tabs **Overview** (the type, the sign-in, the owner,
+and the **Use This Integration** switch) and **Actions** (how each action runs).
 
 ## Connect an integration
 
-The **Configuration** tab of an integration page shows the status of your connection:
+The header of an integration page shows the status of your connection:
 
 | Status | What you see | Who fixes it |
 | --- | --- | --- |
-| **Connected** | A check mark | Nobody |
+| **Connected** | **Connected** | Nobody |
 | **Not connected** | **Connect** | You |
-| **Needs reconnect** | The reason, for example a change to the sign-in settings, and **Reconnect** | You |
+| **Needs reconnect** | **Reconnect**. The **Overview** tab shows the reason, for example a change to the sign-in settings | You |
 | **Not set up** | **Ask your admin** | An admin, or the owner of a personal integration |
+
+If an integration that uses your Onyx login needs a reconnect, the header shows no **Reconnect**.
+Sign out of Onyx and sign in again.
+
+If an integration that needs a reconnect is turned off for you, the header shows **Disconnect** and not **Reconnect**.
+You can reconnect after an admin turns it on again.
 
 <img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Actions tab of the Support Desk integration with actions set to Allow, Ask, and Blocked, and a Don't ask me switch on each action that asks"/>
 
@@ -338,8 +342,8 @@ Some actions always ask, and their switch stays off with the reason. An action s
 
 ### Disconnect
 
-Click **Disconnect** on an integration that you connected with your own account. Onyx deletes your connection.
-The integration stays available to you.
+Click **Disconnect** in the header of an integration that you connected with your own account.
+Onyx deletes your connection. The integration stays available to you.
 
 ## Add your own integration
 
@@ -377,9 +381,9 @@ Until you connect an integration, the agent does not get its actions. You can co
 ### Approve tool calls
 
 Your admin sets an approval policy for each MCP tool. When the agent calls a tool with the **Ask** policy,
-the answer pauses. An approval card shows **Approval requested** with the tool name and the arguments of the call.
-The card shows below the last message of the chat. If more cards wait, they show in the order of the requests.
-When you compare models, each card names its model. Select one of these options:
+the answer pauses. An approval card shows the tool and its integration, for example **Create issue in GitHub**,
+and the arguments of the call. The card shows below the last message of the chat. If more cards wait,
+they show in the order of the requests. When you compare models, each card names its model. Select one of these options:
 
 | Option | Effect |
 | --- | --- |

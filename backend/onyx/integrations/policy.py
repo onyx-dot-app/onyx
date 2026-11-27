@@ -41,7 +41,7 @@ from onyx.db.integration_policy import (
 )
 from onyx.db.models import Integration, IntegrationAction
 from onyx.db.persona import user_can_access_persona
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.models import (
     ActionSettings,
@@ -98,7 +98,7 @@ def always_asks(kind: IntegrationKind, action_key: str) -> bool:
     asks each time, unless the policy is Blocked. No setting, chat grant or
     run mode makes it Allow. An MCP tool with the same name is a usual
     action."""
-    return kind is IntegrationKind.API and action_key == WHOLE_DOMAIN_ACTION_TYPE
+    return kind is IntegrationKind.API and action_key == OTHER_REQUEST_ACTION_KEY
 
 
 def integration_action_always_asks(
