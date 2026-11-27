@@ -51,8 +51,8 @@ mark and the fold control.
 
 ### `SidebarLayouts.Rail`
 
-A thin column of window tabs, passed to `Root` as `rail`. It renders the fold
-toggle above `footer`.
+A thin column of window tabs, passed to `Root` as `rail`. Hover or keyboard
+focus on the logo shows the fold button in its place.
 
 | Prop       | Type        | Default | Description                                       |
 | ---------- | ----------- | ------- | ------------------------------------------------- |

@@ -1139,14 +1139,14 @@ specific routes under `web/src/app/api/` take precedence over this one.
 
 **The rail and the sidebar.** The app shell is a thin rail of windows and a
 sidebar beside it. `web/src/sections/sidebar/AppRail.tsx:AppRail` is the rail:
-the logo mark, then Chat, Agents and Customize, then the fold toggle, the admin
-gear (admins only) and the account menu. `lib/sidebar/utils.ts:sidebarWindow`
+the logo mark (hover shows the fold button in its place), then Chat, Agents and
+Customize, then the admin gear (admins only) and the account menu. `lib/sidebar/utils.ts:sidebarWindow`
 maps the path to a window, and the sidebar shows that window's content:
 Chat (`/app`, scheduled tasks, `/nrf`), Agents (`/app/agents/**`, pinned
 agents), Customize (`/app/customize/**`), Settings (`/app/settings/**`) and
 Admin (`/admin/**`, `AdminSidebar`). `AppSidebar` and `AdminSidebar` both pass
 `AppRail` as the `rail` of `SidebarLayouts.Root`, so the rail is the same on app
-and admin pages. Fold (⌘E or the rail toggle) hides the sidebar fully and keeps
+and admin pages. Fold (⌘E or the button over the rail logo) hides the sidebar fully and keeps
 the rail. On a phone both open as one overlay.
 
 Each section (agents, projects, recents) shows Opal's `SidebarLoader` until its

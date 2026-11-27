@@ -81,7 +81,38 @@
 }
 
 .opal-sidebar-rail__logo {
-  @apply flex shrink-0 items-center justify-center;
+  @apply relative flex shrink-0 items-center justify-center;
+}
+
+.opal-sidebar-rail__mark {
+  @apply flex;
+  transition: opacity var(--duration-sidebar-fold) ease-in-out;
+}
+
+.opal-sidebar-rail__fold-button {
+  @apply absolute inset-0 z-10 flex items-center justify-center opacity-0;
+  transition: opacity var(--duration-sidebar-fold) ease-in-out;
+}
+
+/* Hover or keyboard focus shows the fold button in place of the mark. So does
+   a mark that renders nothing (a name-only brand), and a device without hover. */
+.opal-sidebar-rail__logo:is(:hover, :has(:focus-visible))
+  .opal-sidebar-rail__fold-button,
+.opal-sidebar-rail__logo:has(.opal-sidebar-rail__mark:empty)
+  .opal-sidebar-rail__fold-button {
+  @apply opacity-100;
+}
+.opal-sidebar-rail__logo:is(:hover, :has(:focus-visible))
+  .opal-sidebar-rail__mark {
+  @apply opacity-0;
+}
+@media (hover: none) {
+  .opal-sidebar-rail__fold-button {
+    @apply opacity-100;
+  }
+  .opal-sidebar-rail__mark {
+    @apply opacity-0;
+  }
 }
 
 .opal-sidebar-rail__tabs {

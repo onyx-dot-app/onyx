@@ -15,7 +15,6 @@ import { usePathname } from "@opal/navigation/next";
 import {
   Text,
   Button,
-  SidebarTab,
   Divider,
   ShadowDiv,
   Spacer,
@@ -383,9 +382,9 @@ function SidebarHeader(props: SidebarHeaderProps) {
 // ---------------------------------------------------------------------------
 
 interface SidebarRailProps {
-  /** The logo mark at the top of the rail. */
+  /** The logo mark at the top of the rail. Hover shows the fold button. */
   logo?: React.ReactNode;
-  /** Bottom items, below the fold toggle (e.g. a settings tab, the account). */
+  /** Bottom items (e.g. a settings tab, the account). */
   footer?: React.ReactNode;
   /** Window tabs, usually `SidebarTab`s with an icon and a string label. */
   children?: React.ReactNode;
@@ -394,26 +393,30 @@ interface SidebarRailProps {
 function SidebarRail({ logo, footer, children }: SidebarRailProps) {
   const { folded, setFolded } = useSidebarState();
   const strings = useOpalStrings();
+  const foldLabel = folded ? strings.sidebarOpen : strings.sidebarClose;
   return (
     <div className="opal-sidebar-rail">
-      {logo && (
-        <div
-          className="opal-sidebar-rail__logo"
-          style={{ height: SIDEBAR_LOGO_HEIGHT_PX }}
-        >
-          {logo}
+      {/* The fold button sits over the mark and shows on hover or keyboard
+          focus, as in the brand row of an unrailed header. */}
+      <div
+        className="opal-sidebar-rail__logo"
+        style={{ height: SIDEBAR_LOGO_HEIGHT_PX }}
+      >
+        <div className="opal-sidebar-rail__mark">{logo}</div>
+        <div className="opal-sidebar-rail__fold-button">
+          <Button
+            icon={SvgSidebar}
+            prominence="tertiary"
+            aria-label={foldLabel}
+            tooltip={foldLabel}
+            tooltipSide="end"
+            size="md"
+            onClick={() => setFolded((prev) => !prev)}
+          />
         </div>
-      )}
-      <div className="opal-sidebar-rail__tabs">{children}</div>
-      <div className="opal-sidebar-rail__footer">
-        <SidebarTab
-          icon={SvgSidebar}
-          onClick={() => setFolded((prev) => !prev)}
-        >
-          {folded ? strings.sidebarOpen : strings.sidebarClose}
-        </SidebarTab>
-        {footer}
       </div>
+      <div className="opal-sidebar-rail__tabs">{children}</div>
+      {footer && <div className="opal-sidebar-rail__footer">{footer}</div>}
     </div>
   );
 }
