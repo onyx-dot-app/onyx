@@ -1391,6 +1391,28 @@ extend type Query { closedTickets: [Ticket!]! }`;
     ).toBeInTheDocument();
   });
 
+  test("a GraphQL schema with a long name and no colon counts at once", async () => {
+    const schema = `type Query { a: Int b: Int ${"x".repeat(100_000)} }`;
+    mockFetch({
+      "POST /api/admin/integrations/openapi-import": () => failure(400),
+      "POST /api/admin/integrations/graphql-introspect": {
+        shape: "graphql",
+        endpoint_url: "https://api.example.com/graphql",
+        graphql_schema: schema,
+      },
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Tickets",
+      add.api.url.title,
+      "https://api.example.com/graphql"
+    );
+    expect(
+      await screen.findByText("GraphQL API, 2 queries and 0 mutations")
+    ).toBeInTheDocument();
+  });
+
   test("a GraphQL schema with unclosed headers and quotes counts at once", async () => {
     // Each line alone takes seconds with a regex that rescans after a failed
     // match.

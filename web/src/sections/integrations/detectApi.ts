@@ -276,5 +276,5 @@ function blockFields(
     else if (char === ")") parens = Math.max(0, parens - 1);
     else if (parens === 0) body += char;
   }
-  return { count: body.match(/[A-Za-z_]\w*\s*:/g)?.length ?? 0, end };
+  return { count: body.match(/\b[A-Za-z_]\w*\s*:/g)?.length ?? 0, end };
 }
