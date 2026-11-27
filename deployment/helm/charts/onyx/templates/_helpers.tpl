@@ -429,16 +429,32 @@ prepuller must not. Call with (dict "ctx" $ "tolerations" $list). */}}
 {{- end }}
 
 {{/* Fails when sandboxPod.tolerations would let pod sandboxes onto the
-onyx.app/kvm nodes: that key, or an Exists toleration without a key. */}}
+onyx.app/kvm nodes. */}}
 {{- define "onyx.craftCheckSandboxTolerations" -}}
-{{- if include "onyx.craftFcEnabled" . -}}
-{{- range (index (.Values.sandboxPod | default dict) "tolerations" | default list) -}}
+{{- include "onyx.craftCheckNoKvmTolerations" (dict "ctx" . "field" "sandboxPod.tolerations" "tolerations" (index (.Values.sandboxPod | default dict) "tolerations" | default list)) -}}
+{{- end }}
+
+{{/* Fails when a sandbox pod toleration list would let the pods onto the
+onyx.app/kvm nodes while Firecracker renders: that key, or an Exists
+toleration without a key. Call with (dict "ctx" $ "field" <values path>
+"tolerations" $list). */}}
+{{- define "onyx.craftCheckNoKvmTolerations" -}}
+{{- if include "onyx.craftFcEnabled" .ctx -}}
+{{- $field := .field -}}
+{{- range .tolerations -}}
 {{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
 {{- if and $effectMatches (or (eq (toString .key) "onyx.app/kvm") (and (not .key) (eq (toString .operator) "Exists"))) -}}
-{{- fail "sandboxPod.tolerations must not tolerate the onyx.app/kvm taint (key onyx.app/kvm, or operator Exists without a key) while the chart renders Firecracker (craft.sandboxRuntime auto or firecracker): pod sandboxes must stay off the Firecracker nodes" -}}
+{{- fail (printf "%s must not tolerate the onyx.app/kvm taint (key onyx.app/kvm, or operator Exists without a key) while the chart renders Firecracker (craft.sandboxRuntime auto or firecracker): pod sandboxes must stay off the Firecracker nodes" $field) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- end }}
+
+{{/* The tolerations of harness sandbox pods: harnessSandbox.tolerations,
+else sandboxPod.tolerations, else the sandbox node pool taint. */}}
+{{- define "onyx.harnessSandboxTolerations" -}}
+{{- $harness := .Values.harnessSandbox | default dict -}}
+{{- toYaml ($harness.tolerations | default (index (.Values.sandboxPod | default dict) "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule"))) -}}
 {{- end }}
 
 {{/* Prometheus job label of the host agent series (alert rules, dashboard).

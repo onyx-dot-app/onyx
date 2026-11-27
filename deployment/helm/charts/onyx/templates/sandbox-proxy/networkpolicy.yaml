@@ -22,7 +22,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ $sandboxNs }}
+              kubernetes.io/metadata.name: {{ $sandboxNs | quote }}
         {{- if include "onyx.craftFcEnabled" . }}
         {{- /* With relayTls off, the relays use the plain port. With it on,
         the port stays open to them so that agents that have not rolled yet

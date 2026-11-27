@@ -274,3 +274,40 @@ def test_pod_runtime_builds_a_pod_from_the_rendered_template() -> None:
     assert mounts["daemon-files"] == "/run/craft-fc/daemon"
     assert [c.name for c in pod.spec.init_containers] == ["sandbox-init"]
     assert pod.spec.restart_policy == "Always"
+
+
+@pytest.mark.parametrize(
+    "field", ["harnessSandbox.tolerations", "sandboxPod.tolerations"]
+)
+def test_harness_pods_never_tolerate_the_kvm_nodes(field: str) -> None:
+    """With Firecracker on, harness pods stay off the KVM nodes, also when
+    they take sandboxPod.tolerations without Craft."""
+    result = render_chart(
+        [
+            *_NO_CRAFT,
+            "--set-string",
+            "craft.sandboxRuntime=auto",
+            "--set-string",
+            "global.version=v6.0.0",
+            "--set-string",
+            f"{field}[0].operator=Exists",
+        ]
+    )
+    assert result.returncode != 0
+    assert "must not tolerate the onyx.app/kvm taint" in result.stderr
+
+
+def test_the_pods_can_own_their_secret_and_the_namespace_is_a_string() -> None:
+    docs = _render([*_NO_CRAFT, "--set-string", "configMap.SANDBOX_NAMESPACE=true"])
+    namespace = next(d for d in docs if d["kind"] == "Namespace")
+    assert namespace["metadata"]["name"] == "true"
+    assert _template(docs)["metadata"]["namespace"] == "true"
+    role = next(
+        d
+        for d in docs
+        if d["kind"] == "Role" and d["metadata"]["name"].endswith("-sandbox-manager")
+    )
+    assert role["metadata"]["namespace"] == "true"
+    # PodRuntime patches the daemon Secret to make the pod its owner.
+    secrets = next(r for r in role["rules"] if r["resources"] == ["secrets"])
+    assert "patch" in secrets["verbs"]

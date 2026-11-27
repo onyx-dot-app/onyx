@@ -9,7 +9,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "onyx.resourceName" (list . "harness-sandbox-daemon") }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox

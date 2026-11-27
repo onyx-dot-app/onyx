@@ -8,7 +8,6 @@ restartPolicy and the proxy hostAlias.
 */}}
 {{- $cm := .Values.configMap }}
 {{- $harness := .Values.harnessSandbox | default dict }}
-{{- $sandboxPod := .Values.sandboxPod | default dict }}
 {{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $image := include "onyx.harnessSandboxImage" . }}
 {{- $pullPolicy := ($harness.image | default dict).pullPolicy | default .Values.global.pullPolicy }}
@@ -18,11 +17,13 @@ restartPolicy and the proxy hostAlias.
 {{- $netAdminLockdown := eq (include "onyx.sandboxNetAdminLockdown" .) "true" }}
 {{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}
 {{- $volumes := $harness.volumes | default dict }}
+{{- $tolerations := include "onyx.harnessSandboxTolerations" . }}
+{{- include "onyx.craftCheckNoKvmTolerations" (dict "ctx" . "field" "harnessSandbox.tolerations (or the sandboxPod.tolerations it falls back to)" "tolerations" (fromYamlArray $tolerations)) }}
 apiVersion: v1
 kind: PodTemplate
 metadata:
   name: {{ (index $cm "SANDBOX_HARNESS_POD_TEMPLATE") | default "harness-sandbox-pod" }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox
@@ -54,7 +55,7 @@ template:
       {{- toYaml . | nindent 6 }}
     {{- end }}
     tolerations:
-      {{- ($harness.tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule"))) | toYaml | nindent 6 }}
+      {{- $tolerations | nindent 6 }}
     securityContext:
       runAsNonRoot: true
       runAsUser: 1000

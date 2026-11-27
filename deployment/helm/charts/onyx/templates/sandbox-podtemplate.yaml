@@ -35,7 +35,7 @@ apiVersion: v1
 kind: PodTemplate
 metadata:
   name: sandbox-pod
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox

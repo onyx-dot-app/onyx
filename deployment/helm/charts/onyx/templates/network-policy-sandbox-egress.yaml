@@ -11,7 +11,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "onyx.resourceName" (list . "sandbox-egress") }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
 spec:
   podSelector:
     matchLabels:
@@ -45,7 +45,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "onyx.resourceName" (list . "sandbox-bootstrap-dns") }}
-  namespace: {{ $sandboxNs }}
+  namespace: {{ $sandboxNs | quote }}
 spec:
   podSelector:
     matchLabels:
