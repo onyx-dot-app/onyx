@@ -84,7 +84,17 @@ def _represent_oversized_int(dumper: yaml.SafeDumper, data: OversizedYamlInt) ->
     return dumper.represent_scalar("tag:yaml.org,2002:int", data.text)
 
 
+def _represent_int(dumper: yaml.SafeDumper, data: int) -> Node:
+    try:
+        text = str(data)
+    except ValueError:
+        # Python refuses to write integers longer than 4300 decimal digits.
+        text = hex(data)
+    return dumper.represent_scalar("tag:yaml.org,2002:int", text)
+
+
 _SkillMdDumper.add_representer(OversizedYamlInt, _represent_oversized_int)
+_SkillMdDumper.add_representer(int, _represent_int)
 
 
 def split_skill_md(raw: bytes) -> tuple[str, str]:

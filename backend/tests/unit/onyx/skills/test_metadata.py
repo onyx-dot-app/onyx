@@ -8,6 +8,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.metadata import (
     frontmatter_for_jsonb,
     parse_skill_document,
+    parse_skill_md_frontmatter,
     serialize_skill_md,
     with_skill_md_name,
 )
@@ -189,3 +190,15 @@ def test_with_skill_md_name_keeps_the_body_as_is() -> None:
     renamed = with_skill_md_name(skill_md, "zeta-2")
 
     assert renamed == f"---\nname: zeta-2\ndescription: Desc\n---{body}"
+
+
+def test_with_skill_md_name_keeps_a_large_hex_integer() -> None:
+    big = "0x" + "f" * 4000
+    skill_md = f"---\nname: zeta\ndescription: Desc\nbig: {big}\n---\n\nBody.\n"
+
+    renamed = with_skill_md_name(skill_md, "zeta-2")
+
+    frontmatter, body = parse_skill_md_frontmatter(renamed.encode())
+    assert frontmatter["name"] == "zeta-2"
+    assert frontmatter["big"] == int(big, 16)
+    assert body == "\nBody.\n"
