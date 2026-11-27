@@ -17,7 +17,7 @@ You can also use your custom skills in [chat](/overview/core_features/chat#skill
   or GitHub, connect an [App](/overview/core_features/craft_apps).
 </Note>
 
-<img className="rounded-image" src="/assets/overview/core_features/craft_skills.webp" alt="The Skills tab of Customize, with skills in the Created by you, From your organization, and Shared with you groups"/>
+<img className="rounded-image" src="/assets/overview/core_features/craft_skills.webp" alt="The Skills page of Customize, with skills in the Created by you, From your organization, and Shared with you groups"/>
 
 ## How Craft uses skills
 
@@ -46,8 +46,8 @@ You can also select one explicitly when you want Craft to follow a particular wo
 
 ## Browse and inspect skills
 
-Open **Customize** from the Chat sidebar or the Craft sidebar, then select the **Skills** tab.
-This page does not need Craft. The tab lists the skills that you can use, in groups:
+Open **Customize** from the rail at the far left or from the Craft sidebar, then select **Skills** in the sidebar.
+This page does not need Craft. It lists the skills that you can use, in groups:
 
 | Group                      | Skills                                                                              |
 | -------------------------- | ----------------------------------------------------------------------------------- |
@@ -173,7 +173,7 @@ description: Create a concise weekly customer update from meeting notes and acco
 ### Upload a plugin with several skills
 
 A Claude Code or Codex plugin can hold several skills in `skills/<name>/SKILL.md`,
-and it can name the MCP servers that it needs. Upload it on the **Plugins** tab with **Add → Upload plugin**.
+and it can name the MCP servers that it needs. Upload it on the **Plugins** page with **Add → Upload plugin**.
 Onyx keeps the skills together as one plugin with versions. If you own or can edit a plugin with the same name,
 the upload becomes its next version, unless you select **Save as a New Plugin**. If you can only view that plugin,
 the upload becomes a new plugin. If you upload a zip with a `SKILL.md` and no `plugin.json` there,
@@ -182,7 +182,7 @@ Onyx continues with the skill flow on this page. See [Upload a plugin](/overview
 ### Get Skills from GitHub
 
 To get Skills from a GitHub repository,
-add the repository as a marketplace on the **Plugins** tab with **Add → Add marketplace**.
+add the repository as a marketplace on the **Plugins** page with **Add → Add marketplace**.
 The repository needs a `.claude-plugin/marketplace.json` file. Each entry becomes a plugin,
 and **Sync now** gets the changes from GitHub.
 See [Add a marketplace](/overview/core_features/plugins#add-a-marketplace).
