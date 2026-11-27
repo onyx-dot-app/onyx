@@ -347,6 +347,15 @@ func createsForOrganization(plan integrationResourceModel) bool {
 		(plan.Enabled.IsNull() || plan.Enabled.IsUnknown() || plan.Enabled.ValueBool())
 }
 
+// withDefaultInstallationPolicy gives a plan with no install setting the
+// default, AVAILABLE, so an integration that starts private gets it.
+func withDefaultInstallationPolicy(plan integrationResourceModel) integrationResourceModel {
+	if plan.InstallationPolicy.IsNull() || plan.InstallationPolicy.IsUnknown() {
+		plan.InstallationPolicy = types.StringValue("AVAILABLE")
+	}
+	return plan
+}
+
 func (r *integrationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan integrationResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -371,7 +380,7 @@ func (r *integrationResource) Create(ctx context.Context, req resource.CreateReq
 		resp.Diagnostics.AddError("Failed to create Onyx integration", err.Error())
 		return
 	}
-	planned := plan
+	planned := withDefaultInstallationPolicy(plan)
 	// Save the id first so a failed follow-up leaves a resource to fix or destroy.
 	applyRemoteIntegration(ctx, &plan, created, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)

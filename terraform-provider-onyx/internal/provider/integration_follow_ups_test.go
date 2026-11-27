@@ -197,3 +197,16 @@ func TestCreateKeepsAnIntegrationMeantToBeOffPrivate(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateGivesAnUnsetInstallSettingTheDefault(t *testing.T) {
+	for _, policy := range []types.String{types.StringNull(), types.StringUnknown()} {
+		plan := withDefaultInstallationPolicy(integrationResourceModel{InstallationPolicy: policy})
+		if got := plan.InstallationPolicy.ValueString(); got != "AVAILABLE" {
+			t.Errorf("%v: install setting = %q, want AVAILABLE", policy, got)
+		}
+	}
+	plan := withDefaultInstallationPolicy(integrationResourceModel{InstallationPolicy: types.StringValue("REQUIRED")})
+	if got := plan.InstallationPolicy.ValueString(); got != "REQUIRED" {
+		t.Errorf("install setting = %q, want REQUIRED", got)
+	}
+}
