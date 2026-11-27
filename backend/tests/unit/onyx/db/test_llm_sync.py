@@ -9,6 +9,15 @@ from onyx.db.llm import _model_protocol_flows, sync_model_configurations
 from onyx.server.manage.llm.models import SyncModelEntry
 
 
+def _session_with_locked_provider(provider: MagicMock) -> MagicMock:
+    """Session whose locked provider read returns ``provider``."""
+    session = MagicMock()
+    (
+        session.query.return_value.populate_existing.return_value.filter.return_value.with_for_update.return_value.first.return_value
+    ) = provider
+    return session
+
+
 def _make_existing_model(name: str, flow_types: list[LLMModelFlowType]) -> MagicMock:
     model = MagicMock()
     model.id = 42
@@ -236,6 +245,218 @@ class TestSyncModelConfigurations:
 
             assert result == 0
             mock_session.commit.assert_not_called()
+
+    @pytest.mark.parametrize("provider_name", ["nace", "typesafe"])
+    def test_inserts_decision_flow_for_hosted_decision_provider(
+        self, provider_name: str
+    ) -> None:
+        """A discovered hosted decision model is listed as a decision model."""
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.provider = provider_name
+        mock_provider.model_configurations = []
+        mock_session = _session_with_locked_provider(mock_provider)
+        mock_session.execute.return_value.all.return_value = [(1, "decision-model")]
+
+        result = sync_model_configurations(
+            db_session=mock_session,
+            provider_id=1,
+            models=[
+                SyncModelEntry(
+                    name="decision-model",
+                    display_name="Decision Model",
+                    supports_chat=False,
+                    supports_decisions=True,
+                )
+            ],
+            expected_provider=provider_name,
+        )
+
+        assert result == 1
+        inserted_flow_types = {
+            value
+            for call in mock_session.execute.call_args_list
+            for key, value in call.args[0].compile().params.items()
+            if key.startswith("llm_model_flow_type")
+        }
+        assert inserted_flow_types == {LLMModelFlowType.DECISION}
+        mock_session.commit.assert_called_once()
+
+    def test_other_provider_discovery_does_not_insert_decision_flow(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.provider = "openrouter"
+        mock_provider.model_configurations = []
+        mock_session = MagicMock()
+        mock_session.execute.return_value.all.return_value = [(1, "vendor/decision")]
+
+        with patch(
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
+        ):
+            result = sync_model_configurations(
+                db_session=mock_session,
+                provider_id=1,
+                models=[
+                    SyncModelEntry(
+                        name="vendor/decision",
+                        display_name="Decision",
+                        supports_chat=False,
+                        supports_decisions=True,
+                    )
+                ],
+            )
+
+        assert result == 1
+        inserted_flow_types = {
+            value
+            for call in mock_session.execute.call_args_list
+            for key, value in call.args[0].compile().params.items()
+            if key.startswith("llm_model_flow_type")
+        }
+        assert LLMModelFlowType.DECISION not in inserted_flow_types
+        assert LLMModelFlowType.CHAT not in inserted_flow_types
+
+    def test_rejects_sync_when_stored_provider_type_differs(self) -> None:
+        """Models fetched for one provider must not land on another type."""
+        mock_provider = MagicMock()
+        mock_provider.id = 7
+        mock_provider.provider = "openai"
+        mock_provider.model_configurations = []
+        mock_session = _session_with_locked_provider(mock_provider)
+
+        with pytest.raises(ValueError, match="is openai, not nace"):
+            sync_model_configurations(
+                db_session=mock_session,
+                provider_id=7,
+                models=[
+                    SyncModelEntry(
+                        name="drex-max-v1.1",
+                        display_name="Drex Max",
+                        supports_chat=False,
+                        supports_decisions=True,
+                    )
+                ],
+                expected_provider="nace",
+            )
+
+        mock_session.execute.assert_not_called()
+        mock_session.commit.assert_not_called()
+        mock_session.rollback.assert_called_once()
+
+    def test_sync_refuses_when_loaded_provider_type_changes(self) -> None:
+        """A provider already in the session must be reloaded under the row lock.
+
+        Without populate_existing the identity map still says nace, and the
+        Nace model is inserted onto the provider that is now OpenAI.
+        """
+        from sqlalchemy import create_engine, text, update
+        from sqlalchemy.dialects import postgresql
+        from sqlalchemy.orm import Query, Session
+        from sqlalchemy.pool import StaticPool
+
+        from onyx.db.models import LLMProvider
+
+        engine = create_engine(
+            "sqlite://",
+            poolclass=StaticPool,
+            connect_args={"check_same_thread": False},
+        )
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE llm_provider (
+                        id INTEGER PRIMARY KEY,
+                        name VARCHAR,
+                        provider VARCHAR NOT NULL,
+                        api_key BLOB,
+                        api_base VARCHAR,
+                        api_version VARCHAR,
+                        zoom_voice_provider_id INTEGER,
+                        custom_config TEXT,
+                        default_model_name VARCHAR,
+                        deployment_name VARCHAR,
+                        is_default_provider BOOLEAN,
+                        is_default_vision_provider BOOLEAN,
+                        default_vision_model VARCHAR,
+                        is_public BOOLEAN NOT NULL,
+                        is_auto_mode BOOLEAN NOT NULL
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO llm_provider (provider, is_public, is_auto_mode)"
+                    " VALUES ('nace', 1, 0)"
+                )
+            )
+
+        reader = Session(engine)
+        loaded = reader.query(LLMProvider).filter(LLMProvider.id == 1).one()
+        with Session(engine) as writer:
+            writer.execute(
+                update(LLMProvider).where(LLMProvider.id == 1).values(provider="openai")
+            )
+            writer.commit()
+        # The loaded object is unchanged until a refresh. That is the bug.
+        assert loaded.provider == "nace"
+
+        lock_sql: list[str] = []
+        original_for_update = Query.with_for_update
+
+        def record_lock(self: Query, *args: object, **kwargs: object) -> Query:
+            locked = original_for_update(self, *args, **kwargs)
+            lock_sql.append(str(locked.statement.compile(dialect=postgresql.dialect())))
+            return locked
+
+        try:
+            with (
+                patch.object(Query, "with_for_update", record_lock),
+                pytest.raises(ValueError, match="is openai, not nace"),
+            ):
+                sync_model_configurations(
+                    reader,
+                    1,
+                    [
+                        SyncModelEntry(
+                            name="drex-max-v1.1",
+                            display_name="Drex Max",
+                            supports_chat=False,
+                            supports_decisions=True,
+                        )
+                    ],
+                    expected_provider="nace",
+                )
+        finally:
+            reader.close()
+
+        assert lock_sql
+        assert "FOR UPDATE" in lock_sql[0]
+
+    def test_hosted_decision_provider_still_rejects_chat_discovery(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.provider = "nace"
+        mock_provider.model_configurations = []
+        mock_session = _session_with_locked_provider(mock_provider)
+
+        with pytest.raises(ValueError, match="does not support chat"):
+            sync_model_configurations(
+                db_session=mock_session,
+                provider_id=1,
+                models=[
+                    SyncModelEntry(
+                        name="drex-max-v1.1",
+                        display_name="Drex Max",
+                        supports_chat=True,
+                        supports_decisions=True,
+                    )
+                ],
+                expected_provider="nace",
+            )
+
+        mock_session.execute.assert_not_called()
 
     def test_raises_on_missing_provider(self) -> None:
         """Test that ValueError is raised when provider not found."""

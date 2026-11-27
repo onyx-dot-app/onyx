@@ -246,7 +246,8 @@ def test_discovered_typesafe_model_survives_save_and_refresh_without_reselection
     future = next(
         model for model in stored.model_configurations if model.name == "jev-future"
     )
-    assert LLMModelFlowType.DECISION not in future.llm_model_flow_types
+    assert set(future.llm_model_flow_types) == {LLMModelFlowType.DECISION}
+    assert future.is_visible is False
     upsert_decision_provider(
         DecisionProviderUpsertRequest(
             id=decision_provider.id,

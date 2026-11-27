@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.voice import fetch_voice_provider_by_id
-from onyx.llm.decisions.client import DEFAULT_DECISION_TIMEOUT_S, DecisionClient
+from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.decisions.models import DecisionProvider
 from onyx.voice.interface import normalize_provider_type
 from onyx.voice.providers.zoom import build_zoom_scribe_jwt
@@ -43,7 +43,7 @@ def build_decision_client(
     zoom_voice_provider_id: int | None = None,
     extra_headers: dict[str, str] | None = None,
     model_configuration_id: int | None = None,
-    timeout: float = DEFAULT_DECISION_TIMEOUT_S,
+    timeout: float | None = None,
 ) -> DecisionClient:
     if zoom_voice_provider_id is not None and provider != DecisionProvider.ZOOM_AI:
         raise ValueError("Only Zoom Decisions can link a Zoom Scribe connection")

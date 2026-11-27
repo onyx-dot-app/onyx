@@ -10,6 +10,7 @@ class DecisionProvider(StrEnum):
     OPENAI = "openai"
     OPENROUTER = "openrouter"
     VERCEL_AI_GATEWAY = "vercel_ai_gateway"
+    NACE = "nace"
 
 
 # The OpenAI model offered as the built-in decision model.
