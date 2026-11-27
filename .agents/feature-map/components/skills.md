@@ -111,7 +111,7 @@
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
-  stay selected. Admin Skills filters by exact group. Admin Plugins filters by
+  stay selected while they are still in the list. Admin Skills filters by exact group. Admin Plugins filters by
   status, and its search also matches group names. Search and filter changes
   clear selection. The bulk Share dialog loads users and groups only while it
   is open.
