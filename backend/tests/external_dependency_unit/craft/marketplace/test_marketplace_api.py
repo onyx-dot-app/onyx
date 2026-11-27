@@ -31,6 +31,7 @@ from tests.external_dependency_unit.craft.marketplace.helpers import (
     Connections,
     existing_files,
     http_request,
+    make_marketplace,
     plugin_files,
     synced_plugins,
 )
@@ -359,6 +360,29 @@ def test_a_default_branch_url_is_the_same_source(
             )
         assert exc.value.detail == detail
         db_session.rollback()
+
+
+def test_a_marketplace_saved_with_the_default_branch_is_the_same_source(
+    db_session: Session,
+    users: tuple[User, User, User],
+    manager: User,
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    enqueued: list[UUID],  # noqa: ARG001
+    marketplace_ids: list[UUID],
+) -> None:
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    make_marketplace(db_session, marketplace_ids, login=manager, owner=None, ref="main")
+
+    preview = api.preview_marketplace(
+        MarketplaceSourceRequest(repository=f"{OWNER}/{REPO}"),
+        _fresh(db_session, users[0]),
+        db_session,
+    )
+    assert preview.added_company
+    with pytest.raises(OnyxError) as exc:
+        _create(db_session, manager, MarketplaceScope.COMPANY)
+    assert exc.value.detail == "This marketplace is already added."
 
 
 def test_sync_replace_login_and_delete(

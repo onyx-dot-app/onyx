@@ -190,19 +190,21 @@ def _request_sync(
 
 def _source_config(
     request: MarketplaceSourceRequest, authorization: str | None
-) -> GitHubMarketplaceConfig:
-    """A ref that names the default branch is stored as no ref, so that
-    ``owner/repo`` and ``.../tree/main`` are one source."""
+) -> tuple[GitHubMarketplaceConfig, str | None]:
+    """The source, and the repository's default branch. A ref that names the
+    default branch is stored as no ref, so that ``owner/repo`` and
+    ``.../tree/main`` are one source."""
 
     def resolve(source: GitHubSource) -> GitHubRevision:
         return resolve_github_revision(source, authorization)
 
     config = request.to_config(resolve)
-    if config.ref and config.ref == github_default_branch(
+    default_branch = github_default_branch(
         GitHubSource(owner=config.owner, repo=config.repo), authorization
-    ):
-        return config.model_copy(update={"ref": None})
-    return config
+    )
+    if config.ref and config.ref == default_branch:
+        config = config.model_copy(update={"ref": None})
+    return config, default_branch
 
 
 @router.post("/preview")
@@ -214,12 +216,14 @@ def preview_marketplace(
     authorization = github_authorization_for(user.id, db_session)
     # End the read transaction before the GitHub calls.
     db_session.commit()
-    config = _source_config(request, authorization)
+    config, default_branch = _source_config(request, authorization)
     read = read_marketplace_repository(
         GitHubMarketplaceAdapter(config, authorization), config.folder
     )
     integrations = integrations_for_needs(user, db_session)
-    added_personal, added_company = source_added_for(config, user.id, db_session)
+    added_personal, added_company = source_added_for(
+        config, user.id, db_session, default_branch
+    )
     entries: list[MarketplacePreviewEntry] = []
     for entry in read.entries:
         result = entry_result(entry)
@@ -277,7 +281,9 @@ def create_marketplace(
 ) -> MarketplaceDetail:
     manager = _is_manager(user, http_request)
     _authorize_scope(request.scope, manager)
-    config = _source_config(request, github_authorization_for(user.id, db_session))
+    config, default_branch = _source_config(
+        request, github_authorization_for(user.id, db_session)
+    )
     policy = request.default_installation_policy
     if request.scope == MarketplaceScope.PERSONAL and policy is not None:
         raise OnyxError(
@@ -291,6 +297,7 @@ def create_marketplace(
         login_user_id=user.id,
         default_installation_policy=policy or PluginInstallationPolicy.AVAILABLE,
         db_session=db_session,
+        default_branch=default_branch,
     )
     marketplace_id = marketplace.id
     _request_sync(marketplace_id, background_tasks, db_session)
