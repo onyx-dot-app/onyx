@@ -29,6 +29,7 @@ import useUserSkills from "@/hooks/useUserSkills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import {
   memberPluginEntries,
+  panelShowsSkill,
   pluginSwitch,
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
@@ -335,7 +336,9 @@ export default function MemberPluginDetailPage({
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
   const skills = useUserSkills();
   const entry = memberPluginEntries(
-    skills.data?.customs ?? [],
+    (skills.data?.customs ?? []).filter((skill) =>
+      panelShowsSkill(skill, panel)
+    ),
     user?.email ?? null,
     locale
   ).find((candidate) => candidate.id === pluginId);
