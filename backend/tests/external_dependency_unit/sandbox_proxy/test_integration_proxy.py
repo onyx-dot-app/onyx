@@ -555,7 +555,7 @@ def test_an_ask_action_in_a_session_opens_an_approval_with_the_integration(
     resolved = addon._resolve_request_policies(ctx, matched)
     assert resolved.governing_action.policy is ActionPolicy.ASK
 
-    approval_id = addon._persist_approval_row(ctx, resolved)
+    approval_id = addon._persist_approval_row(ctx, resolved, resolved.payload)
     addon._parked.remove(TENANT, approval_id)
     db_session.expire_all()
     row = db_session.get(ActionApproval, approval_id)
@@ -590,7 +590,7 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
     )
     db_session.commit()
 
-    applied = addon._apply_session_grant(ctx, resolved)
+    applied = addon._apply_session_grant(ctx, resolved, resolved.payload)
     assert applied is not None
     assert (
         db_session.scalar(
@@ -604,7 +604,9 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
         _request(f"https://{other_host}/mcp", _tool_call("update")), user
     )
     other_resolved = addon._resolve_request_policies(ctx, other_matched)
-    assert addon._apply_session_grant(ctx, other_resolved) is None
+    assert (
+        addon._apply_session_grant(ctx, other_resolved, other_resolved.payload) is None
+    )
 
 
 def test_the_craft_mcp_config_lists_only_connected_integrations_that_are_on(
@@ -785,17 +787,18 @@ def test_a_chat_session_takes_the_policies_of_its_chat(
     )
     db_session.add(chat)
     db_session.commit()
-    ctx = _sandbox(user).with_session(chat.id)
+    craft_ctx = _sandbox(user).with_session(chat.id)
+    chat_ctx = _sandbox(user).with_session(chat.id, chat_command_id=uuid4())
     addon = _addon()
 
-    def policy(method: str, path: str, from_chat: bool = True) -> ActionPolicy:
+    def policy(method: str, path: str, ctx: SessionContext = chat_ctx) -> ActionPolicy:
         matched = _evaluate(_request(f"https://{host}{path}", method=method), user)
         assert matched.target.api_app and matched.target.chat_tools
-        resolved = addon._resolve_request_policies(ctx, matched, from_chat)
+        resolved = addon._resolve_request_policies(ctx, matched)
         return resolved.governing_action.policy
 
     assert policy("GET", "/items/7") is ActionPolicy.DENY
-    assert policy("GET", "/items/7", from_chat=False) is ActionPolicy.ALWAYS
+    assert policy("GET", "/items/7", craft_ctx) is ActionPolicy.ALWAYS
     assert policy("POST", "/items") is ActionPolicy.DENY
     assert policy("DELETE", "/items/7") is ActionPolicy.ASK
     assert policy("GET", "/other") is ActionPolicy.ASK

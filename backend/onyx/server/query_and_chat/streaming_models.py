@@ -603,15 +603,28 @@ class ToolApprovalRequest(BaseObj):
     # that started the agent and waits whether or not the reply ended. None for
     # the reply's own runs.
     agent_name: str | None = None
+    # An app request of the command that an exec_command or write_stdin call
+    # waits on: the card offers "approve for this command" in place of "approve
+    # for this chat", which it never offers.
+    can_approve_for_command: bool = False
+    # The app of such a request.
+    app_name: str | None = None
+    # When such a request expires.
+    expires_at: datetime | None = None
 
 
 # How a tool approval request ended: the user's decision, an approval of the
 # action for the rest of the chat session (approved_for_chat: this request's or
-# an earlier request's), an approval that the action policy blocked or a
-# request deleted with its tool's server (disabled), or the call stopped
-# waiting because its run or program stopped.
+# an earlier request's) or of a command (approved_for_command), an approval
+# that the action policy blocked or a request deleted with its tool's server
+# (disabled), or the call stopped waiting because its run or program stopped.
 ToolApprovalOutcome = Literal[
-    "approved", "approved_for_chat", "rejected", "disabled", "cancelled"
+    "approved",
+    "approved_for_chat",
+    "approved_for_command",
+    "rejected",
+    "disabled",
+    "cancelled",
 ]
 
 

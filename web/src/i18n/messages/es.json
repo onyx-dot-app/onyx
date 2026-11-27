@@ -14458,6 +14458,10 @@
         "button": "Aprobar para este chat",
         "tooltip": "Aprueba ahora y ejecuta esta herramienta sin volver a preguntar durante el resto de este chat"
       },
+      "approveCommand": {
+        "button": "Aprobar para este comando",
+        "tooltip": "Aprueba ahora y permite esta acción sin volver a preguntar hasta que termine el comando"
+      },
       "approveOnce": {
         "ariaLabel": "Aprobar esta acción una vez",
         "button": "Aprobar una vez"
@@ -14485,6 +14489,7 @@
         "expired": "Tiempo agotado: {headline}",
         "rejected": "No aprobado: {headline}",
         "approvedForChat": "Aprobado para este chat: {headline}",
+        "approvedForCommand": "Aprobado para este comando: {headline}",
         "approvedForSession": "Aprobado para esta sesión: {headline}"
       },
       "submitError": "No se pudo enviar tu decisión. Inténtalo de nuevo.",

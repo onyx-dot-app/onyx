@@ -224,6 +224,9 @@ The packet has these fields:
 | `arguments` | The arguments of the call. Show them to the user before they decide. |
 | `agent_name` | The name of the background agent that made the request, or `null` for the answer's own calls. |
 | `can_approve_for_chat` | `false` when the action asks each time, such as a request to an app that matches no action. Then hide the option to approve for the chat session: `approve_session` approves only this call. |
+| `can_approve_for_command` | `true` when the request comes from a command in the chat's VM and `approve_command` applies to it. See [Approvals of VM commands](#approvals-of-vm-commands). |
+| `app_name` | The app of a VM command's request, or `null`. |
+| `expires_at` | The time when a VM command's request expires, or `null`. |
 
 A request waits until the user decides. Other calls of the answer can continue while it waits.
 Onyx saves approval requests only when no other part of the answer runs.
@@ -239,6 +242,7 @@ A `tool_approval_resolved` packet with `approval_id` and `outcome` ends each req
 |-----------|---------|
 | `approved` | The user approved the call, and it runs. |
 | `approved_for_chat` | The user approved the tool for the chat session, with this request or an earlier one, and the call runs. |
+| `approved_for_command` | The user approved the action for the rest of a VM command, and the request goes out. |
 | `rejected` | The user rejected the call, or stopped the answer while the call waited. It did not run. |
 | `disabled` | The user approved the call, but the tool became disabled while the call waited. The call did not run. |
 | `cancelled` | The call stopped waiting without a decision, for example because its code mode program ended or held too much data to pause. |
@@ -246,6 +250,8 @@ A `tool_approval_resolved` packet with `approval_id` and `outcome` ends each req
 Stop applies only while the answer runs. When you stop a running answer,
 Onyx rejects each call of the answer that waits.
 The stream sends the `tool_approval_resolved` packet with `rejected` before its `stop` packet.
+A request of a VM command is different:
+it ends with `cancelled` (see [Approvals of VM commands](#approvals-of-vm-commands)).
 If you close the stream after you send the stop, read the chat session to get the outcomes.
 After the stream ends with `awaiting_user`, a stop does not end the wait, and the requests still wait.
 A stop without a `stream_id` still pauses the queue of the chat session:
@@ -276,6 +282,33 @@ From the decision until the agent finishes or waits for approval again, `has_act
 To show the agent's later requests, read the status once after the decision. While `has_active_subagents` is `true`,
 read the status again every few seconds. Read the chat session again each time `approvals_version` changes.
 
+### Approvals of VM commands
+
+On a deployment with chat VMs, the agent runs commands in the user's VM with the `exec_command` tool.
+A command can call a connected app. When the action has the **Ask** policy, Onyx holds the request,
+and the stream sends a `tool_approval_request` packet at the call of the command, while the command runs.
+`can_approve_for_chat` is `false`, and `arguments` has the `method` and the `path` of the request.
+It also has the `body` when the body is JSON or form data of 64 KB or less. For a different body, such as an upload,
+it has `body_bytes`, the size of the body, in place of `body`. A request with no body has neither field.
+The call does not return while a request of its command waits.
+The request expires at `expires_at` if the user does not decide.
+
+- `approve_once` sends the request.
+- `approve_command` sends the request, and the later requests of the same action from the same command,
+  until the command exits. A request of a different action asks again.
+  A process that the command leaves running after it exits does not get this approval.
+  It is not available when `can_approve_for_command` is `false`.
+- `reject` refuses the request. The command gets a `403` response.
+- `approve_session` is the same as `approve_once`. Onyx keeps no chat-wide approval for these requests.
+
+The decision continues no answer, so `continuation` is `null`. A request waits for 180 seconds by default. After that,
+or when the user stops the answer, the command gets a `403` response,
+and the `tool_approval_resolved` packet has `cancelled`. Only a streamed answer can ask.
+A command that runs in the background with no call that waits on it, a command of a background agent,
+and a command of a send-message request with `stream` set to `false` or `origin` set to `desktop` cannot ask.
+A request that an `approve_command` decision of its running command covers still goes out.
+Their requests get a `403` response with the error `approval_needs_tool`. These requests are not in the saved answer.
+
 ### Approvals in saved answers
 
 `GET /chat/get-chat-session/{chat_session_id}` returns the approval packets of each answer that has ended or that waits
@@ -302,6 +335,8 @@ Call `POST /chat/approvals/{approval_id}/decision` with one of these bodies:
 - `{"decision": "approve_once"}` approves this call.
 - `{"decision": "approve_session"}` approves this call and later calls of the same tool in the chat session.
   When the request's `can_approve_for_chat` is `false`, it approves only this call.
+- `{"decision": "approve_command"}` applies only to a VM command's request.
+  See [Approvals of VM commands](#approvals-of-vm-commands).
 - `{"decision": "reject"}` rejects this call.
 
 Each body can also have `mcp_headers`,
@@ -321,6 +356,7 @@ and `decided_via`:
 | `USER` | The user's decision for this call. |
 | `SESSION_GRANT` | `approve_session` approved this call, from this request or an earlier request for the same tool in the chat session. |
 | `POLICY` | The tool is disabled now, so Onyx saved `REJECTED` for your approval. The `outcome` is `disabled`. |
+| `COMMAND_GRANT` | `approve_command` approved this request, from this request or an earlier request of the same command. |
 
 Only the user who owns the chat session can decide. Other users get a `404`.
 A repeated decision returns `200` with the saved decision, also after the answer ends or the tool's policy changes.

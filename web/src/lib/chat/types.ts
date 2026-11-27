@@ -173,7 +173,8 @@ export interface ApprovalDecisionResponse {
   approval_id: string;
   decision: "APPROVED" | "REJECTED";
   // "POLICY": the action policy disabled the tool, so the approval rejected it.
-  decided_via: "USER" | "SESSION_GRANT" | "POLICY";
+  // "COMMAND_GRANT": approved for the rest of a VM command.
+  decided_via: "USER" | "SESSION_GRANT" | "POLICY" | "COMMAND_GRANT";
   /** The stream that continues the suspended response, when it runs. */
   continuation: ChatStream | null;
 }

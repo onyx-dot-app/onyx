@@ -131,6 +131,9 @@ send → ApiService                                   services/api-service.ts
   └─ a root question waits (questions.ts:findPendingWait) → no send: the
        text is a typed answer (below)
 decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
+  card (services/approval-card.ts): Approve once, Reject, and "Approve for
+    this command" (approve_command) when can_approve_for_command, else
+    "Approve for this chat" unless can_approve_for_chat is false
 answers  → POST /chat/question-requests/{id}/answers   widget.ts, services/questions.ts
   card: one question per page (Back/Next, page in widget.ts questionPages);
     per question, one option or "Other" with a typed answer in place of an
@@ -259,7 +262,9 @@ panel picks up the new session when the user returns.
    `email`, else a shared value. `widget/src/utils/storage.ts:loadSession`
    drops a session for another identity. A JWT with neither claim falls back
    to the shared value, so a second such visitor in the same tab can restore
-   the transcript of the first.
+   the transcript of the first. `saveSession` leaves out the approval cards
+   of VM command app requests (`expires_at` set): they show the request's path
+   and body, and scripts of the host page can read `sessionStorage`.
 7. `widget-reset-cancels-send` **`resetConversation` must cancel a send at
    every stage.** The admin guide tells host pages to call it on sign-out or an
    account change, so a send that survives a reset shows the previous user's

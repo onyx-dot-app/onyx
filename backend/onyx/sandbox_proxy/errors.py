@@ -100,11 +100,12 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "against internal hosts (databases, caches, metadata endpoints, etc.)."
     ),
     SandboxProxyError.APPROVAL_NEEDS_TOOL: (
-        "This request needs the user's approval, and a request from a command "
-        "cannot ask for it, so it was not performed. Do not retry it from a "
-        "command. Send it through the chat tool that the detail names, which "
-        "asks the user in the chat. If the detail names no tool, the request "
-        "cannot run in this chat."
+        "This request needs the user's approval, and nobody could ask the "
+        "user for it: the command runs in the background, or this chat shows "
+        "no approval cards. It was not performed. When the chat can ask the "
+        "user, run the command in the foreground and wait for it. Otherwise "
+        "send the request through the chat tool that the detail names. If "
+        "the detail names no tool, the request cannot run in this chat."
     ),
 }
 

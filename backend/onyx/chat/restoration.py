@@ -142,6 +142,8 @@ def restore_chat_agent(
     if isinstance(state, ChatFeatureState):
         chat = ChatFeature(
             is_subagent=not is_root,
+            # A resumed root streams to the chat, as any turn the server starts.
+            shows_command_approvals=is_root,
             messages=context.messages,
             tools=tools,
             code_mode=state.code_mode,

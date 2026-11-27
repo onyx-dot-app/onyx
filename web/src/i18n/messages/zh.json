@@ -14458,6 +14458,10 @@
         "button": "在此聊天中批准",
         "tooltip": "立即批准，并在此聊天的剩余时间内运行此工具而不再询问"
       },
+      "approveCommand": {
+        "button": "为此命令批准",
+        "tooltip": "立即批准，并在命令结束前允许此操作而不再询问"
+      },
       "approveOnce": {
         "ariaLabel": "仅批准此操作一次",
         "button": "批准一次"
@@ -14485,6 +14489,7 @@
         "expired": "已超时：{headline}",
         "rejected": "未批准：{headline}",
         "approvedForChat": "已在此聊天中批准：{headline}",
+        "approvedForCommand": "已为此命令批准：{headline}",
         "approvedForSession": "已在此会话中批准：{headline}"
       },
       "submitError": "无法提交你的决定。请重试。",

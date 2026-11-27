@@ -33,11 +33,11 @@ export class ToolApprovalCard {
   }
 
   async expectPending(toolName: string): Promise<void> {
-    // The header names the action.
+    // The header names the action; a command's request adds its deadline.
+    const name = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     await expect(
       this.card.getByRole("button", {
-        name: `Approval requested: ${toolName}`,
-        exact: true,
+        name: new RegExp(`^Approval requested: ${name}(\\.? ?Approve by .+)?$`),
       })
     ).toBeVisible({ timeout: 30_000 });
   }

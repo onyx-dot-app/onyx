@@ -172,15 +172,27 @@ started the agent, with `agent_name` set
 `can_approve_for_chat` is false for an action that asks each time, the
 request tool of an app (`integrations/policy.py:always_asks`): the
 card offers no approval for the chat, no saved grant skips its card, and the
-decision route saves such an approval as a single one.
+decision route saves such an approval as a single one. An exec_command or
+write_stdin call also sends both packets, from its progress, for an app
+request of its command that the egress proxy holds
+(`CommandApprovalRequest`, `CommandApprovalResolved`;
+[[craft-external-apps#chat-command-approvals]]): `can_approve_for_command`,
+`app_name` and `expires_at` (the proxy's wait deadline,
+`action_approval.wait_deadline`) are set. These packets go through the stream
+buffer, so a client that reconnects to a live stream gets them again from its
+cursor. Saved-session replay does not rebuild them, because they have no
+`approval_request` row.
 `tool_approval_resolved` carries an `outcome`
 (`chat/renderer.py:approval_outcome`): `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an
-earlier one), `rejected` (also a user Stop of a live turn), `disabled` (an
+earlier one), `approved_for_command` (a command grant; command requests
+only), `rejected` (also a user Stop of a live turn), `disabled` (an
 approval of a tool that the policy now disables, or a request deleted with its
 tool's server), or `cancelled` for a call that stopped waiting without a
-decision. Requests have no deadline. A turn whose run has nothing left but
-approval waits ends its stream with its requests, then
+decision. Tool requests have no deadline. A command request expires after
+`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` (180 s by default) and resolves as
+`cancelled` in the same stream; it never suspends the turn. A turn whose run has
+nothing left but tool approval waits ends its stream with its requests, then
 `stop(awaiting_user)` (`chat/presentation.py:overall_stop` maps
 `SUSPENDED`); after the decisions the response continues in a new stream,
 under a new stream ID, that clients follow from cursor 0: it replays the saved

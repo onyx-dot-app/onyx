@@ -772,17 +772,27 @@ export interface ToolApprovalRequest extends BaseObj {
   /** The background subagent that made the request; null for the reply's own
    * calls. Such a request waits on its own: no stop of the reply closes it. */
   agent_name: string | null;
+  /** An app request of a command that the call waits on: the card offers
+   * "approve for this command" in place of "approve for this chat". */
+  can_approve_for_command?: boolean;
+  /** The app of a command's request. */
+  app_name?: string | null;
+  /** When a command's request expires. */
+  expires_at?: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {
   type: "tool_approval_resolved";
   approval_id: string;
   // "approved_for_chat": approved by a grant for the chat's later calls of the
-  // tool. "disabled": an approval found the tool disabled, so the call did not
-  // run. "cancelled": the call stopped waiting because its run or cell stopped.
+  // tool. "approved_for_command": approved by a grant for the command's later
+  // requests of the action. "disabled": an approval found the tool disabled,
+  // so the call did not run. "cancelled": the call stopped waiting because its
+  // run or cell stopped.
   outcome:
     | "approved"
     | "approved_for_chat"
+    | "approved_for_command"
     | "rejected"
     | "disabled"
     | "cancelled";

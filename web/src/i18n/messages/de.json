@@ -14458,6 +14458,10 @@
         "button": "Für diesen Chat freigeben",
         "tooltip": "Jetzt freigeben und dieses Tool für den Rest dieses Chats ohne erneute Nachfrage ausführen"
       },
+      "approveCommand": {
+        "button": "Für diesen Befehl freigeben",
+        "tooltip": "Jetzt freigeben und diese Aktion ohne erneute Nachfrage erlauben, bis der Befehl endet"
+      },
       "approveOnce": {
         "ariaLabel": "Diese Aktion einmalig genehmigen",
         "button": "Einmalig genehmigen"
@@ -14485,6 +14489,7 @@
         "expired": "Zeitüberschreitung: {headline}",
         "rejected": "Nicht freigegeben: {headline}",
         "approvedForChat": "Für diesen Chat freigegeben: {headline}",
+        "approvedForCommand": "Für diesen Befehl freigegeben: {headline}",
         "approvedForSession": "Für diese Sitzung freigegeben: {headline}"
       },
       "submitError": "Ihre Entscheidung konnte nicht gesendet werden. Versuchen Sie es erneut.",

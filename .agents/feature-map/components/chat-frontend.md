@@ -115,11 +115,18 @@
   `ChatUI`), oldest response first and in packet order, from the replies and
   from their background subagents alike. A multi-model card names its model;
   a subagent's card (`agent_name` set) names the subagent. The request has no
-  deadline. The user approves once, approves for the chat, or rejects; the
-  card then becomes a record of the outcome, or of "No longer
-  waiting" when the server returns 409 or 404. The record is a closed
-  timeline step (`RunStep`) titled with the outcome; it opens onto the
-  request details. The record shows in the region
+  deadline. The user approves once, approves for the chat, or rejects. A card
+  with `can_approve_for_command` (an app request of a VM command,
+  [[craft-external-apps#chat-command-approvals]]) offers "Approve for this
+  command" (`ApprovalCard` `sessionScope="command"`, which sends
+  `approve_command`) in place of the chat choice. Any card of a VM command's
+  app request, also one that offers only approve once and reject, shows its
+  `expires_at` deadline; it waits only while its call runs. A reconnect to the live stream
+  buffer can send the card and its outcome again; a saved session does not
+  rebuild it. The card then becomes a record of the
+  outcome, or of "No longer waiting" when the server returns 409 or 404. The
+  record is a closed timeline step (`RunStep`) titled with the outcome; it
+  opens onto the request details. The record shows in the region
   until the resolution packet arrives; from then on the reply's timeline
   shows it next to its tool call (`AgentMessage:buildSectionSegments`), and
   a reload replays it there. While the turn waits, its stream ends with

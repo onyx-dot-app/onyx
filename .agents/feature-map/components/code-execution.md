@@ -395,7 +395,12 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         README "Skills").
   ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (the
                                         browser is not a command: the browser_* tools call
-                                        the VM's browser service, see browser_tools.py); each
+                                        the VM's browser service, see browser_tools.py; each
+                                        command gets a command ID in its proxy URL user; the
+                                        call's sandbox/command_approvals.py:CommandApprovals
+                                        shows the egress proxy's held Ask requests of the
+                                        command as approval cards and keeps the call open
+                                        while one waits, [[craft-external-apps#source-ip-is-identity]]); each
                                         ExecOutputDelta -> ToolProgress, which the tool
                                         stops at the call's character budget (the request
                                         of the shape's arguments: max_output_tokens x 4, or

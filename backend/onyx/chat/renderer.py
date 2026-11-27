@@ -95,6 +95,8 @@ from onyx.tools.tool_implementations.question.shapes import (
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_PUBLISH_PATHS,
     ApplyPatchResult,
+    CommandApprovalRequest,
+    CommandApprovalResolved,
     FileToolName,
     PublishedFiles,
     PublishedFileView,
@@ -758,6 +760,8 @@ class ToolRenderer:
         # An approval request of the call ended without an approval, so its
         # error result is that decision, not a failure.
         self._not_approved = False
+        # The command approval cards of the call that wait for a resolution.
+        self._open_command_approvals: dict[str, None] = {}
 
     def consume(
         self,
@@ -1004,6 +1008,34 @@ class ToolRenderer:
     ) -> list[packets.Packet]:
         """Render result details; content already rendered is skipped."""
         objects: list[packets.PacketObj] = []
+        if isinstance(details, CommandApprovalRequest):
+            self._open_command_approvals[details.approval_id] = None
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.ToolApprovalRequest(
+                        approval_id=details.approval_id,
+                        tool_call_id=self.call.id,
+                        tool_name=details.action_type,
+                        display_name=details.display_name,
+                        arguments=details.arguments,
+                        can_approve_for_chat=False,
+                        can_approve_for_command=details.can_approve_for_command,
+                        app_name=details.app_name,
+                        expires_at=details.expires_at,
+                    ),
+                )
+            ]
+        if isinstance(details, CommandApprovalResolved):
+            self._open_command_approvals.pop(details.approval_id, None)
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.ToolApprovalResolved(
+                        approval_id=details.approval_id, outcome=details.outcome
+                    ),
+                )
+            ]
         if isinstance(
             details,
             (SandboxOutputDelta, SandboxExecResult, ApplyPatchResult, PublishedFiles),
@@ -1192,6 +1224,17 @@ class ToolRenderer:
         output = self.start()
         output.extend(self._result_packets(result))
         self._finished = True
+        # A stopped call reports no more progress, so its open cards close here.
+        output.extend(
+            packets.Packet(
+                placement=self.placement,
+                obj=packets.ToolApprovalResolved(
+                    approval_id=approval_id, outcome="cancelled"
+                ),
+            )
+            for approval_id in self._open_command_approvals
+        )
+        self._open_command_approvals.clear()
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
                 packets.Packet(

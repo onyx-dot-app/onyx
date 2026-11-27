@@ -33,6 +33,27 @@ export interface ApprovalCardView {
   onToggle: (id: string) => void;
 }
 
+const COMMAND_SCOPE = {
+  decision: "approve_command",
+  label: "Approve for this command",
+  title:
+    "Approve now and run this action without asking again until the command exits",
+} as const;
+const CHAT_SCOPE = {
+  decision: "approve_session",
+  label: "Approve for this chat",
+  title:
+    "Approve now and run this tool without asking again for the rest of this chat",
+} as const;
+
+/** The approval beyond this request that the server offers, if any. */
+function sessionScope(
+  request: ToolApprovalRequest
+): typeof COMMAND_SCOPE | typeof CHAT_SCOPE | null {
+  if (request.can_approve_for_command) return COMMAND_SCOPE;
+  return request.can_approve_for_chat === false ? null : CHAT_SCOPE;
+}
+
 /** A waiting request shows its arguments and decisions; a decided one, one line. */
 export function renderApprovalCard(
   entry: ApprovalEntry,
@@ -43,7 +64,9 @@ export function renderApprovalCard(
   const { submitting, expanded, onDecide, onToggle } = view;
   const name = request.display_name || request.tool_name;
   const record = approvalRecord(status, name);
-  const title = `Approval requested: ${name}`;
+  const title = `Approval requested: ${
+    request.app_name ? `${name} in ${request.app_name}` : name
+  }`;
   const agentLabel = request.agent_name
     ? `${request.agent_name} wants to run ${name}`
     : null;
@@ -55,6 +78,7 @@ export function renderApprovalCard(
   const allRowsId = JSON.stringify([request.approval_id]);
   const allRows = expanded.has(allRowsId);
   const shownRows = allRows ? rows : rows.slice(0, ARGUMENT_ROWS_SHOWN);
+  const scope = sessionScope(request);
 
   return html`
     <div class="approval" data-approval-id=${request.approval_id}>
@@ -152,14 +176,18 @@ export function renderApprovalCard(
                 >
                   Approve once
                 </button>
-                <button
-                  class="approval-button"
-                  ?disabled=${submitting}
-                  title="Approve now and run this tool without asking again for the rest of this chat"
-                  @click=${() => onDecide(request, "approve_session")}
-                >
-                  Approve for this chat
-                </button>
+                ${
+                  scope === null
+                    ? ""
+                    : html`<button
+                        class="approval-button"
+                        ?disabled=${submitting}
+                        title=${scope.title}
+                        @click=${() => onDecide(request, scope.decision)}
+                      >
+                        ${scope.label}
+                      </button>`
+                }
                 <button
                   class="approval-button"
                   ?disabled=${submitting}

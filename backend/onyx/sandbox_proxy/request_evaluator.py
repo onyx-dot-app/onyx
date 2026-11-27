@@ -212,7 +212,8 @@ def _request_payload(request: http.Request) -> dict[str, Any]:
 
 
 def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:
-    if "application/json" in content_type:
+    media_type = content_type.split(";", 1)[0].strip()
+    if media_type == "application/json" or media_type.endswith("+json"):
         try:
             decoded = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -228,7 +229,8 @@ def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:
 
     if "application/x-www-form-urlencoded" in content_type:
         try:
-            raw = parse_qs(body.decode("utf-8"))
+            # The card shows an empty field: it can clear a value.
+            raw = parse_qs(body.decode("utf-8"), keep_blank_values=True)
         except UnicodeDecodeError:
             return None
         # Collapse parse_qs's list-per-key to match the JSON shape.
