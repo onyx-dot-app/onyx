@@ -32,14 +32,25 @@ An operator deploys sandboxes on Kubernetes (the default) or Docker Compose.
 When the pod template, RBAC or network setup is wrong, provisioning fails and
 the user sees Craft fail to start.
 
-A third runtime is in development: Firecracker micro-VMs on KVM nodes, with
-`SANDBOX_RUNTIME=firecracker` or `auto` (backend default `pod`; `off` acts as
-`pod`). It serves chat sandbox tools, not Craft build sessions. With `auto`,
-chats get the tools only while a live registered node reports the template
-(`backend/onyx/microvm/availability.py`). Admins see the runtime, the nodes and
-why tools are off at `GET /admin/sandbox/status`
-(`backend/onyx/server/features/microvm/admin_api.py`, single tenant only). The
-Kubernetes and Docker paths do not change.
+A third runtime is in development: Firecracker micro-VMs on KVM nodes. The
+Helm value `craft.sandboxRuntime` (`auto` default, `firecracker`, `pod`, `off`)
+sets `SANDBOX_RUNTIME` (backend default `pod`; `off` acts as `pod`). It serves
+chat sandbox tools, not Craft build sessions. With `auto`, the chart renders the host agent,
+sandbox-proxy and their certificates (without `ENABLE_CRAFT`) only when it has a
+A third runtime is in development: Firecracker micro-VMs on KVM nodes. The
+Helm value `craft.sandboxRuntime` (`auto` default, `firecracker`, `pod`, `off`)
+sets `SANDBOX_RUNTIME` (backend default `pod`; `off` acts as `pod`). It serves
+chat sandbox tools, not Craft build sessions. With `auto`, the chart renders the host agent,
+sandbox-proxy and their certificates (without `ENABLE_CRAFT`) only when it has a
+stable, beta or nightly-latest release tag, or explicit image tags
+(`onyx.craftFcEnabled`); the chart makes the node registration value when
+none is set and keeps it on upgrade, but not in renders without cluster
+access (`onyx.sandboxNodeRegistrationValue`); with a pre-v6 global.version
+or backend image tag `auto` acts as `pod` (`onyx.craftPreV6App`). With `auto`, chats get the tools only while a
+live registered node reports the template (`backend/onyx/microvm/availability.py`).
+Admins see the runtime, the nodes and why tools are off at
+`GET /admin/sandbox/status` (`backend/onyx/server/features/microvm/admin_api.py`,
+single tenant only). The Kubernetes and Docker paths do not change.
 
 In this document "session workspace" is the directory of one session under
 `/workspace/sessions`. "Workspace" alone, as in "workspace policy", means the
@@ -112,10 +123,10 @@ Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` conv
 `onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
 it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
 The chart takes `<version>` from `craft.hostAgent.rootfs.version` (default: the
-`global.version` release tag) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
+pinned `global.version`, else the pinned chart `appVersion`) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
 and the template tag move together (`onyx.craftFcRootfsVersion`). An explicit
 `craft.hostAgent.rootfs.image.tag` needs an explicit `configMap.SANDBOX_FC_TEMPLATE`
-(the chart fails without it); the operator keeps those two aligned. Without
+(without it, `firecracker` fails the render and `auto` renders no Firecracker parts); the operator keeps those two aligned. Without
 `existingSecret` values, the chart makes the agent mTLS CA and certificates and
 keeps them on upgrade with `lookup` (`deployment/helm/charts/onyx/templates/craft-fc-host-agent.yaml`).
 The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with

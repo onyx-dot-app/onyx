@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- if include "onyx.sandboxProxyEnabled" . }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $sandboxProxyServiceAccount := .Values.sandboxProxy.serviceAccount | default dict }}
 {{- $sandboxProxyServiceAccountAutomount := true }}

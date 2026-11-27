@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- if include "onyx.sandboxProxyEnabled" . }}
 # Egress lockdown for the sandbox egress proxy.
 #
 # The proxy forwards arbitrary sandbox traffic to the internet (LLM providers, GitHub, package

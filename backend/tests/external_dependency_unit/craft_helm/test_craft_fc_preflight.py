@@ -1,4 +1,4 @@
-"""Render tests for the opt-in Craft Firecracker node preflight DaemonSet.
+"""Render tests for the Craft Firecracker node preflight DaemonSet.
 
 The preflight is only useful if it lands on the sandbox nodes, sees the host
 /dev/kvm, and checks the host directory that will hold sandbox data. None of
@@ -47,8 +47,27 @@ def _pod_spec(extra_args: list[str] | None = None) -> dict[str, Any]:
     return _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]
 
 
-def test_preflight_renders_nothing_by_default() -> None:
-    assert _render([]) == []
+def test_preflight_renders_by_default() -> None:
+    assert _by_kind(_render([]), "DaemonSet")
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--set", "craft.firecrackerPreflight.enabled=false"],
+        ["--set", "craft.sandboxRuntime=pod"],
+        [
+            "--set",
+            "craft.sandboxRuntime=off",
+            "--set-string",
+            "configMap.ENABLE_CRAFT=",
+        ],
+        # "auto" acts as "pod" before v6.
+        ["--set-string", "global.version=v5.1.3"],
+    ],
+)
+def test_preflight_renders_nothing_without_firecracker(args: list[str]) -> None:
+    assert _render(args) == []
 
 
 def test_preflight_schedules_like_sandbox_pods_without_runtime_class() -> None:
@@ -59,8 +78,11 @@ def test_preflight_schedules_like_sandbox_pods_without_runtime_class() -> None:
     preflight = _pod_spec(args)
     sandbox = _render(args, _PODTEMPLATE_TEMPLATE)[0]["template"]["spec"]
 
-    assert preflight["nodeSelector"] == {"onyx.app/workload": "sandbox"}
-    assert preflight["nodeSelector"] == sandbox["nodeSelector"]
+    # Only the Firecracker nodes: a cluster without KVM nodes gets no pods.
+    assert preflight["nodeSelector"] == {
+        **sandbox["nodeSelector"],
+        "onyx.app/kvm": "true",
+    }
     # Also the Firecracker nodes, which Terraform taints onyx.app/kvm.
     assert preflight["tolerations"] == [
         *sandbox["tolerations"],

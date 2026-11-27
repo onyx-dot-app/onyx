@@ -1,4 +1,4 @@
-{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- if include "onyx.sandboxProxyEnabled" . }}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $healthzPort := "8081" }}
 {{- $relayTls := include "onyx.craftFcRelayTls.enabled" . }}
