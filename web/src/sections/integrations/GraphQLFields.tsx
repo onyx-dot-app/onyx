@@ -132,17 +132,16 @@ export default function GraphQLFields({
               setValue={(text) => {
                 const fromFile = readingFileRef.current;
                 readingFileRef.current = false;
-                setRejected(false);
+                // A blank or unreadable file or a blank paste is a failed
+                // load; a clear keeps the schema.
+                const failed = !text.trim() && (fromFile || text !== "");
+                setRejected(failed);
                 if (text.trim()) setSchema(text);
-                // A blank file or paste is a failed load; a clear keeps the schema.
-                else
-                  onImportErrorChange(
-                    fromFile || text ? t("schema.required") : null
-                  );
+                else onImportErrorChange(failed ? t("schema.required") : null);
               }}
             />
-            {/* A refused file is never attached, so the control has no clear
-                button; this one keeps the current schema. */}
+            {/* A refused or unreadable file is never attached, so the control
+                has no clear button; this one keeps the current schema. */}
             {rejected && importError !== null && (
               <Button
                 type="button"

@@ -1024,7 +1024,7 @@ test("a blank schema upload blocks Save until it is cleared", async () => {
   ).toHaveValue(GRAPHQL_CONFIG.graphql_schema);
 });
 
-test("an unreadable schema upload blocks Save", async () => {
+test("an unreadable schema upload blocks Save until it is removed", async () => {
   mockFetch({
     [URL_DETAIL]: makeDetail({
       kind: "api",
@@ -1051,6 +1051,15 @@ test("an unreadable schema upload blocks Save", async () => {
     await view.findByText(copy.add.graphql.schema.required)
   ).toBeInTheDocument();
   expect(save).toBeDisabled();
+
+  await u.click(view.getByRole("button", { name: copy.add.api.upload.remove }));
+  expect(
+    view.queryByText(copy.add.graphql.schema.required)
+  ).not.toBeInTheDocument();
+  expect(save).toBeEnabled();
+  expect(
+    view.getByRole("textbox", { name: copy.add.graphql.schema.title })
+  ).toHaveValue(GRAPHQL_CONFIG.graphql_schema);
 });
 
 test("a schema loaded from the endpoint clears a refused upload", async () => {
