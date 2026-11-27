@@ -63,6 +63,7 @@ from onyx.tools.models import (
     ToolExecutionError,
     ToolExecutionException,
 )
+from onyx.tools.tool_implementations.api_app.openapi_parsing import REQUEST_BODY
 from onyx.tools.tool_implementations.code_mode.models import (
     CellWindow,
     CodeModeCall,
@@ -77,7 +78,6 @@ from onyx.tools.tool_implementations.code_mode.shapes import (
     RUN_TOOL_NAMES,
     WAIT_TOOL_NAMES,
 )
-from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,

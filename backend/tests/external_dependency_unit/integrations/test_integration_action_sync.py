@@ -44,7 +44,7 @@ from onyx.integrations.kinds.api import (
     sync_integration_actions__no_commit,
 )
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     openapi_to_method_specs,
 )
 

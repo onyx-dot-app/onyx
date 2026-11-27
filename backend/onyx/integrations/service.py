@@ -179,13 +179,13 @@ from onyx.server.features.mcp.client import discover_mcp_tools
 from onyx.server.features.mcp.ssrf import validate_mcp_url
 from onyx.server.security.models import outbound_ssrf_params, ssrf_error_hint
 from onyx.server.security.store import get_security_settings
-from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
-from onyx.tools.tool_implementations.custom.graphql_tool import introspection_to_sdl
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.graphql_tool import introspection_to_sdl
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     openapi_to_url,
     parse_openapi_document,
     validate_openapi_schema,
 )
+from onyx.tools.tool_implementations.api_app.rest_tool import validate_custom_tool_url
 from onyx.tools.tool_implementations.http_request import (
     ToolRequestError,
     ToolRequestFailure,

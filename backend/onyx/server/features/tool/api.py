@@ -77,7 +77,7 @@ from onyx.server.features.tool.models import (
 )
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
     parse_openapi_document,

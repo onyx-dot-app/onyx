@@ -39,8 +39,8 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.ordering import ToolRank
-from onyx.tools.tool_implementations.custom.graphql_tool import graphql_failed
-from onyx.tools.tool_implementations.custom.openapi_parsing import TOOL_HTTP_METHODS
+from onyx.tools.tool_implementations.api_app.graphql_tool import graphql_failed
+from onyx.tools.tool_implementations.api_app.openapi_parsing import TOOL_HTTP_METHODS
 from onyx.tools.tool_implementations.http_request import (
     TOOL_REQUEST_FAILURE_MESSAGES,
     ToolRequestError,

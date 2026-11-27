@@ -54,7 +54,7 @@ from onyx.tools.models import (
     ToolOptions,
 )
 from onyx.tools.tool_constructor import CustomToolConfig, construct_tools
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
@@ -279,7 +279,7 @@ def test_an_agent_offers_the_mcp_and_openapi_actions_of_its_integrations(
     }
     assert all(tool.id is None for tool in tools.values())
     assert isinstance(tools[f"mcp__{mcp.id}__crm__search"], MCPTool)
-    assert isinstance(tools[f"custom__{api.id}__listOrders"], CustomTool)
+    assert isinstance(tools[f"custom__{api.id}__listOrders"], RestTool)
     # Read-only and GET run; each other action asks, keyed by the integration.
     approvals = {name: tool.approval for name, tool in tools.items()}
     assert approvals == {
@@ -357,8 +357,8 @@ def test_the_user_token_wins_over_a_literal_authorization_header(
 
     literal_tool = tools[f"custom__{literal.id}__listOrders"]
     templated_tool = tools[f"custom__{templated.id}__listOrders"]
-    assert isinstance(literal_tool, CustomTool)
-    assert isinstance(templated_tool, CustomTool)
+    assert isinstance(literal_tool, RestTool)
+    assert isinstance(templated_tool, RestTool)
     assert literal_tool.headers == {"Authorization": "Bearer mine", "X-Team": "blue"}
     assert templated_tool.headers == {"Authorization": "token mine"}
 
@@ -398,7 +398,7 @@ def test_an_integration_with_no_usable_credential_offers_no_action(
 
     assert len(tools) == 4
     orders = tools[f"custom__{shared.id}__listOrders"]
-    assert isinstance(orders, CustomTool)
+    assert isinstance(orders, RestTool)
     assert orders.headers == {"X-Key": "org"}
 
 
@@ -441,7 +441,7 @@ def test_each_user_calls_with_their_own_key_and_everyone_with_the_org_key(
         for integration in (personal, shared):
             tool = tools.get(f"custom__{integration.id}__listOrders")
             sent[integration.name] = (
-                tool.headers.get("X-Key") if isinstance(tool, CustomTool) else None
+                tool.headers.get("X-Key") if isinstance(tool, RestTool) else None
             )
         if sent[personal.name] is None:
             assert f"app__{personal.id}__connect" in tools
@@ -892,5 +892,5 @@ def test_an_onyx_login_integration_sends_the_login_token(
         tools = _build(db_session, user, configuration)
 
     orders = tools[f"custom__{api.id}__listOrders"]
-    assert isinstance(orders, CustomTool)
+    assert isinstance(orders, RestTool)
     assert orders.headers == {"Authorization": "Bearer login-token"}

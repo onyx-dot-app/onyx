@@ -86,7 +86,7 @@ This component owns:
 - the MCP client: the admin and member API, create and refresh, OAuth, the
   setup probe, the SSRF guard, credential resolution, tool sync, and the `MCPTool`
   that runs a call;
-- OpenAPI custom tools: the admin API, schema parsing, and the `CustomTool`
+- OpenAPI custom tools: the admin API, schema parsing, and the `RestTool`
   that runs a call;
 - MCP server access grants and the per-server and per-user credential rows;
 - chat tool approvals: the policy materialized at tool construction, the
@@ -116,7 +116,7 @@ Persona --persona__integration--> Integration resolve_call_credentials(integrati
                                    +--integration_connection / oauth_client
                                    +--kind row: mcp_server | api_app
 MCP server kind  -> one MCPTool per offered action (mcp__<integration id>__...)
-OpenAPI kind     -> one CustomTool per offered operation (custom__<integration id>__...)
+OpenAPI kind     -> one RestTool per offered operation (custom__<integration id>__...)
 ```
 
 **MCP setup.** An admin adds an MCP server through
@@ -301,12 +301,12 @@ For OAuth2 on a non-SSE transport, construction reads the server settings
 (`mcp_oauth_server`), and each call passes `make_integration_oauth_provider` with
 `IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401 on
 an API key connection sets it to Needs reconnect (`mark_api_key_rejected`).
-`CustomTool`, `GraphQLTool` and `AppActionTool` do the same refresh and mark
+`RestTool`, `GraphQLTool` and `AppActionTool` do the same refresh and mark
 through `fresh_call_credentials` and `note_rejected_credential`
 (`tools/tool_implementations/http_request.py`).
 Request MCP headers do not stand in for a missing connection. The kind handler (`build_chat_tools`) builds the tools:
-`MCPTool` for an MCP server, one `CustomTool` per operation for an OpenAPI spec,
-one `GraphQLTool` (`tools/tool_implementations/custom/graphql_tool.py`, an
+`MCPTool` for an MCP server, one `RestTool` per operation for an OpenAPI spec,
+one `GraphQLTool` (`tools/tool_implementations/api_app/graphql_tool.py`, an
 `ApiTool` that writes a one-root-field document with variables and an
 optional `selection`) per root field of a GraphQL app, and one `AppActionTool` (`tools/tool_implementations/app_action/app_action_tool.py`)
 per catalog action of a preset, plus `app__<id>__request` for the `unspecified`
@@ -359,7 +359,7 @@ cannot save Always allow on an action whose admin value is not Ask.
   gave it (YAML stays YAML) and its server URL. The `api_app` document is the
   source: for one release each create and spec change also writes the parsed
   object to the `tool` row, with path-level parameters copied into each
-  operation and server variable defaults filled into the server URL (`tools/tool_implementations/custom/openapi_parsing.py:inline_path_parameters`), the
+  operation and server variable defaults filled into the server URL (`tools/tool_implementations/api_app/openapi_parsing.py:inline_path_parameters`), the
   shape the previous release reads; a delete removes both
   (`db/integration.py:write_openapi_document__no_commit`). The OpenAPI config
   takes a document, or a base URL and endpoint lines
@@ -378,7 +378,7 @@ cannot save Always allow on an action whose admin value is not Ask.
   and a save decodes it. Then it runs the create checks except the server URL ones, so a
   spec that imports also creates. A document that is not a spec is
   `INVALID_INPUT`; a spec that fails is `VALIDATION_ERROR`, which stops the
-  add modal at step 1. `backend/onyx/tools/tool_implementations/custom/openapi_parsing.py:openapi_to_method_specs` merges
+  add modal at step 1. `backend/onyx/tools/tool_implementations/api_app/openapi_parsing.py:openapi_to_method_specs` merges
   path-level `parameters` into each operation and resolves local parameter
   `$ref`s. Users cannot create a URL-pattern app
   (a CUSTOM `external_app`). Only legacy ones exist: migration `933a21d46472`
@@ -386,7 +386,7 @@ cannot save Always allow on an action whose admin value is not Ask.
   kept the others; a kept one stays editable. The readers of the spec
   (chat tools, the action sync, the admin config, the proxy match targets,
   `sign_in_host` and the `/tool` snapshots) read `api_app.openapi_document`
-  through `tools/tool_implementations/custom/openapi_parsing.py:parse_openapi_document`, which takes JSON or
+  through `tools/tool_implementations/api_app/openapi_parsing.py:parse_openapi_document`, which takes JSON or
   YAML. Only the writes, the shape (`integrations/service.py:_shapes`) and the `/tool`
   route ids still use the `tool` row. Migration `c2caf6a8285c` copied the existing rows. A GraphQL app
   (`GraphQLConfigInput`: endpoint URL and SDL) is an `api_app` row with
@@ -715,7 +715,7 @@ default agent, is Blocked.
     notices only when neither readable content nor structured content exists.
     Transport exceptions report an auth error for a 401,
     `MCPReauthenticationRequired`, or auth words in the message.
-    `tools/tool_implementations/custom/custom_tool.py:ApiTool._run` returns a
+    `tools/tool_implementations/api_app/rest_tool.py:ApiTool._run` returns a
     failed result for a blocked destination, a timeout, a connection error
     or a redirect (`tools/tool_implementations/http_request.py:send_tool_request`,
     which the app tools also use), and flags only 401 and 403. Both put a
@@ -1082,7 +1082,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   has no STDIO path and uses `sse_client` for it. Do not remove the enum value:
   the column is a non-native enum, and a stored `STDIO` row would fail to load.
 - A per-tool OAuth token replaces a static `Authorization` header with no
-  warning (`tools/tool_implementations/custom/custom_tool.py:ApiTool.headers`).
+  warning (`tools/tool_implementations/api_app/rest_tool.py:ApiTool.headers`).
   Save rejects that pair only for `passthrough_auth`
   (`server/features/tool/api.py:_auth_settings`).
 - On CE, `_apply_mcp_server_access` raises `EE_REQUIRED` for a non-public

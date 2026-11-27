@@ -25,10 +25,10 @@ from onyx.server.features.integrations.models import (
 )
 from onyx.server.features.tool import api as tool_api
 from onyx.tools.models import IntegrationChatRequest, IntegrationLinkConfiguration
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     parse_openapi_document,
 )
+from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import give_access
 
@@ -105,7 +105,7 @@ def test_readers_use_the_api_app_document(
         ),
     )
     assert len(tools) == 1
-    assert isinstance(tools[0], CustomTool)
+    assert isinstance(tools[0], RestTool)
     assert tools[0].integration_action is not None
     assert tools[0].integration_action.action == "list_from_api_app"
     assert tools[0]._base_url == "https://api-app.example.com/v1"

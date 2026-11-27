@@ -85,11 +85,11 @@ from onyx.tools.models import (
     ToolOptions,
     ToolPreference,
 )
+from onyx.tools.tool_implementations.api_app.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeExecutionResult,
     SavedCodeCell,
 )
-from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.question.models import (
     ToolQuestion,
     ToolQuestionAnswer,

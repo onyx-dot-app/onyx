@@ -22,10 +22,7 @@ from onyx.server.features.integrations.models import (
     OpenApiEndpointsRequest,
 )
 from onyx.tools.models import DynamicSchemaInfo
-from onyx.tools.tool_implementations.custom.custom_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
-)
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     _MAX_INLINED_NODES,
     REQUEST_BODY,
     inline_path_parameters,
@@ -33,6 +30,9 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_url,
     parse_openapi_document,
     validate_openapi_schema,
+)
+from onyx.tools.tool_implementations.api_app.rest_tool import (
+    build_custom_tools_from_openapi_schema_and_headers,
 )
 from tests.unit.fakes import NO_CREDENTIALS
 

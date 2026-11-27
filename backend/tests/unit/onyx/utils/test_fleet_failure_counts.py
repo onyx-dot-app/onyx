@@ -19,7 +19,7 @@ from onyx.llm.models import ToolResult
 from onyx.server.features.mcp import client as mcp_client
 from onyx.tools.interface import Tool, tool_kind
 from onyx.tools.models import ToolContext
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils import fleet_query_telemetry as query
@@ -85,7 +85,7 @@ def test_query_counts_tool_calls_and_failures_by_kind(
         observation,
         _mock_tool(MCPTool, ToolResult(content="private error", is_error=True)),
     )
-    _run_in_query(observation, _mock_tool(CustomTool, RuntimeError("private error")))
+    _run_in_query(observation, _mock_tool(RestTool, RuntimeError("private error")))
     _run_in_query(observation, _mock_tool(Tool, ToolResult(content="ok")))
     observation.mcp_auth_failed()
     observation.finish()

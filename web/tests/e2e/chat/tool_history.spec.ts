@@ -66,7 +66,7 @@ test("custom tool output and answer survive a history reload @code-mode", async 
     );
     sessionId = await api.createChatSession("Tool history", agentId);
     const callId = `call-${nonce}`;
-    // Matches `CustomTool.name` in the backend.
+    // Matches `RestTool.name` in the backend.
     const toolName = `custom__${created.id}__${operation}`;
     await addMockLlmConversation({
       name: nonce,

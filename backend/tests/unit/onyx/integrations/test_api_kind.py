@@ -32,11 +32,11 @@ from onyx.sandbox_proxy.usable_integrations import (
     openapi_match_target,
 )
 from onyx.tools.models import IntegrationActionRef, ToolApprovalScope
-from onyx.tools.tool_implementations.custom import openapi_parsing
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+from onyx.tools.tool_implementations.api_app import openapi_parsing
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     openapi_to_method_specs,
 )
+from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
 
 DB = MagicMock(spec=Session)
 HANDLER = ApiKindHandler()
@@ -405,7 +405,7 @@ def test_openapi_build_chat_tools_keeps_names_placeholders_and_approval(
 
     tools = HANDLER.build_chat_tools(integration, actions, ctx, DB)
 
-    assert all(isinstance(t, CustomTool) for t in tools)
+    assert all(isinstance(t, RestTool) for t in tools)
     by_key = {t.name.removeprefix("custom__21__"): t for t in tools}
     assert set(by_key) == {"getOrder", "createOrder"}
     get_order = by_key["getOrder"]
@@ -415,7 +415,7 @@ def test_openapi_build_chat_tools_keeps_names_placeholders_and_approval(
     assert get_order.approval == scope
     assert by_key["createOrder"].approval is None
     assert get_order.description == "Get one order for pat@example.com"
-    assert isinstance(get_order, CustomTool)
+    assert isinstance(get_order, RestTool)
     # The credential wins over a request header of the same name.
     assert get_order.headers == {"X-Key": "secret", "X-Trace": "1"}
     assert get_order.id is None
@@ -446,7 +446,7 @@ def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id
     )
 
     assert len(tools) == 1
-    assert isinstance(tools[0], CustomTool)
+    assert isinstance(tools[0], RestTool)
     assert tools[0].approval == scope
     assert tools[0].integration_action == IntegrationActionRef(
         integration_id=integration.id, action="get_USER_ID"

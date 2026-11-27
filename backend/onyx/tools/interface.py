@@ -184,11 +184,11 @@ def _invoke_tool[T: ToolOutcome](
 @cache
 def _tool_kind_classes() -> tuple[tuple[type["Tool"], ToolKind], ...]:
     # Local imports break the Tool / implementation inheritance cycle.
+    from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
     from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
         CodeModeTool,
         WaitCodeTool,
     )
-    from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
     from onyx.tools.tool_implementations.images.image_generation_tool import (
         ImageGenerationTool,
     )
@@ -206,7 +206,7 @@ def _tool_kind_classes() -> tuple[tuple[type["Tool"], ToolKind], ...]:
         (WebSearchTool, ToolKind.WEB_SEARCH),
         (OpenURLTool, ToolKind.OPEN_URL),
         (MCPTool, ToolKind.MCP),
-        (CustomTool, ToolKind.CUSTOM),
+        (RestTool, ToolKind.CUSTOM),
         (ImageGenerationTool, ToolKind.IMAGE),
         (PythonTool, ToolKind.PYTHON),
         (CodeModeTool, ToolKind.CODE_MODE),
