@@ -44,12 +44,12 @@ _SOURCE_INDEXES = (
 
 
 def _same_source(
-    config: GitHubMarketplaceConfig, default_branch: str | None
+    config: GitHubMarketplaceConfig, default_branch: str
 ) -> ColumnElement[bool]:
     """A source with no ref is also a marketplace saved with the name of the
     default branch."""
     ref = config.ref or ""
-    refs = [ref, default_branch] if not ref and default_branch else [ref]
+    refs = [ref] if ref else [ref, default_branch]
     return and_(
         Marketplace.kind == MarketplaceKind.GITHUB,
         Marketplace.repository == config.repository,
@@ -66,7 +66,7 @@ def create_github_marketplace__no_commit(
     login_user_id: UUID,
     default_installation_policy: PluginInstallationPolicy,
     db_session: Session,
-    default_branch: str | None = None,
+    default_branch: str,
 ) -> Marketplace:
     owners = db_session.scalars(
         select(Marketplace.owner_user_id).where(
@@ -111,7 +111,7 @@ def source_added_for(
     config: GitHubMarketplaceConfig,
     user_id: UUID,
     db_session: Session,
-    default_branch: str | None = None,
+    default_branch: str,
 ) -> tuple[bool, bool]:
     """Whether the user's personal marketplaces, and the company ones, already
     have this source."""

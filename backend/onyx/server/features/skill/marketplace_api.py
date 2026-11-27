@@ -190,7 +190,7 @@ def _request_sync(
 
 def _source_config(
     request: MarketplaceSourceRequest, authorization: str | None
-) -> tuple[GitHubMarketplaceConfig, str | None]:
+) -> tuple[GitHubMarketplaceConfig, str]:
     """The source, and the repository's default branch. A ref that names the
     default branch is stored as no ref, so that ``owner/repo`` and
     ``.../tree/main`` are one source."""
