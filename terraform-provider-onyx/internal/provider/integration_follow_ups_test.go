@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -83,10 +84,13 @@ func TestApplyFollowUpsSkipsRefreshWithoutCredentialsOrServerChange(t *testing.T
 	}
 }
 
-func TestUpdateSendsCredentialsForANewVersionOrAMovedServerWithoutAWorkingConnection(t *testing.T) {
+func TestUpdateSendsCredentialsForANewVersionOrAChangedConnectionWithoutAWorkingConnection(t *testing.T) {
 	base := integrationResourceModel{
 		ServerURL:                        types.StringValue("https://mcp.example.com/mcp"),
 		OpenAPIDocument:                  types.StringNull(),
+		HeaderTemplate:                   types.MapNull(types.StringType),
+		AuthMode:                         types.StringValue("none"),
+		AuthMethod:                       types.StringNull(),
 		OrganizationCredentialsWOVersion: types.Int64Value(1),
 	}
 	newVersion := base
@@ -95,6 +99,12 @@ func TestUpdateSendsCredentialsForANewVersionOrAMovedServerWithoutAWorkingConnec
 	newURL.ServerURL = types.StringValue("https://mcp2.example.com/mcp")
 	newDocument := base
 	newDocument.OpenAPIDocument = types.StringValue(`{"openapi":"3.0.0"}`)
+	newHeaders := base
+	newHeaders.HeaderTemplate = types.MapValueMust(types.StringType, map[string]attr.Value{
+		"X-Secret": types.StringValue("{secret}"),
+	})
+	newSignIn := base
+	newSignIn.AuthMode = types.StringValue("shared")
 	status := func(state string) *client.Integration {
 		return &client.Integration{OrganizationStatus: &client.IntegrationStatus{State: state}}
 	}
@@ -110,6 +120,8 @@ func TestUpdateSendsCredentialsForANewVersionOrAMovedServerWithoutAWorkingConnec
 		{"a new server URL with no connection yet", newURL, status("not_set_up"), true},
 		{"a new OpenAPI document that needs reconnect", newDocument, status("needs_reconnect"), true},
 		{"a new OpenAPI document that keeps the connection", newDocument, status("connected"), false},
+		{"a new header field that needs reconnect", newHeaders, status("needs_reconnect"), true},
+		{"a new shared sign-in with no connection yet", newSignIn, status("not_set_up"), true},
 		{"an unrelated update of a rejected key", base, status("needs_reconnect"), false},
 		{"a new server URL with no shared sign-in", newURL, &client.Integration{}, false},
 	}
