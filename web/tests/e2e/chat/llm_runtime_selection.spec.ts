@@ -317,20 +317,10 @@ test.describe("LLM Runtime Selection", () => {
     await expect(messageSwitcher).toBeVisible({ timeout: 10000 });
     await expect(messageSwitcher).toContainText("2/2");
 
-    await messageSwitcher
-      .locator("..")
-      .locator("svg")
-      .first()
-      .locator("..")
-      .click();
+    await messageSwitcher.getByRole("button").first().click();
     await expect(messageSwitcher).toContainText("1/2");
 
-    await messageSwitcher
-      .locator("..")
-      .locator("svg")
-      .last()
-      .locator("..")
-      .click();
+    await messageSwitcher.getByRole("button").last().click();
     await expect(messageSwitcher).toContainText("2/2");
 
     expect(regeneratePayload.llm_override?.model_version).toBeTruthy();
