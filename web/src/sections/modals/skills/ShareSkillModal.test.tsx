@@ -310,6 +310,40 @@ describe("ShareSkillModal", () => {
     ).toBeDisabled();
   });
 
+  it("locks every group share while one is outside the user's scope", async () => {
+    const user = setupUser();
+    mockIsAdmin = false;
+    mockGroups = [{ id: 7, name: "Design" }];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: "VIEWER",
+        group_shares: [
+          { group_id: 42, group_name: "Editors", permission: "EDITOR" },
+          { group_id: 7, group_name: "Design", permission: "VIEWER" },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Manage individual access" })
+    );
+    expect(
+      screen.getByRole("button", { name: "Update access for Design" })
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/shared with a group you do not manage/)
+    ).toBeInTheDocument();
+  });
+
   it("says when the groups did not load", async () => {
     const user = setupUser();
     mockGroupsError = new Error("failed");

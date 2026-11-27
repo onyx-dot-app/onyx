@@ -17350,7 +17350,8 @@
             "description": "Un administrateur a désactivé la publication dans l’organisation. Demandez à un administrateur de publier ce plugin."
           }
         },
-        "groupsLoadFailed": "Onyx n'a pas pu charger vos groupes, les partages de groupe ne peuvent donc pas changer. Fermez et rouvrez cette boîte de dialogue pour réessayer."
+        "groupsLoadFailed": "Onyx n'a pas pu charger vos groupes, les partages de groupe ne peuvent donc pas changer. Fermez et rouvrez cette boîte de dialogue pour réessayer.",
+        "groupSharesLocked": "Cette compétence est partagée avec un groupe que vous ne gérez pas, vous ne pouvez donc pas modifier ses partages de groupe. Demandez à un gestionnaire de compétences de l'organisation."
       },
       "tabs": {
         "details": "Détails",

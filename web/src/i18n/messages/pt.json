@@ -17350,7 +17350,8 @@
             "description": "Um administrador desativou a publicação na organização. Peça a um administrador para publicar este plugin."
           }
         },
-        "groupsLoadFailed": "O Onyx não conseguiu carregar seus grupos, então os compartilhamentos de grupo não podem mudar. Feche e abra esta caixa de diálogo para tentar novamente."
+        "groupsLoadFailed": "O Onyx não conseguiu carregar seus grupos, então os compartilhamentos de grupo não podem mudar. Feche e abra esta caixa de diálogo para tentar novamente.",
+        "groupSharesLocked": "Esta habilidade é compartilhada com um grupo que você não gerencia, então você não pode alterar os compartilhamentos de grupo. Peça a um gerente de habilidades de toda a organização."
       },
       "tabs": {
         "details": "Detalhes",

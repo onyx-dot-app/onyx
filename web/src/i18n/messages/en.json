@@ -17350,7 +17350,8 @@
             "description": "An admin turned off publishing to the organization. Ask an admin to publish this plugin."
           }
         },
-        "groupsLoadFailed": "Onyx could not load your groups, so group shares cannot change. Close and open this dialog to try again."
+        "groupsLoadFailed": "Onyx could not load your groups, so group shares cannot change. Close and open this dialog to try again.",
+        "groupSharesLocked": "This skill is shared with a group you do not manage, so you cannot change its group shares. Ask an organization-wide skill manager."
       },
       "tabs": {
         "details": "Details",
