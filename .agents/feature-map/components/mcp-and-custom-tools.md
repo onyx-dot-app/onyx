@@ -743,7 +743,10 @@ default agent, is Blocked.
     the connection row that the call read (`connection_id`) and marks it only
     when the row still holds the key the call sent
     (`CallCredentials.secret_fingerprint`). A key saved during the call stays
-    connected. OAuth2 connections are left to the refresh.
+    connected. For OAuth2, `server/features/mcp/oauth.py:OnyxOAuthClientProvider`
+    records the access token that got the 401, which can be a token that the
+    call renewed, and the mark compares that token instead. A failed refresh or
+    a 403 does not mark the connection.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
     to an integration or a new connection (also the OAuth callback,
     `server/features/integrations/connections_api.py:oauth_callback`) must call
