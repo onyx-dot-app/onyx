@@ -5,7 +5,7 @@ integration test client.
 
 import json
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import cast
 from uuid import uuid4
@@ -94,8 +94,10 @@ def _grant_report(chat_id: str, request_id: str | None) -> str:
     )
 
 
-def test_a_token_opens_one_socket(admin_user: DATestUser) -> None:
-    token = _token(admin_user)
+def test_a_token_opens_one_socket(user_factory: Callable[[], DATestUser]) -> None:
+    # Its own user: another test's socket cannot take its share requests.
+    user = user_factory()
+    token = _token(user)
     with _connect(token) as socket:
         socket.send_text(json.dumps({"type": "hello", "installation_id": str(uuid4())}))
         assert _next(socket, "welcome")
@@ -105,42 +107,48 @@ def test_a_token_opens_one_socket(admin_user: DATestUser) -> None:
             socket.receive_text()
 
 
-def test_share_approve_and_stop(admin_user: DATestUser) -> None:
-    chat_id = str(ChatSessionManager.create(user_performing_action=admin_user).id)
-    with _extension(admin_user) as socket:
-        state = _state(admin_user, chat_id)
+def test_share_approve_and_stop(user_factory: Callable[[], DATestUser]) -> None:
+    # Its own user: another test's socket cannot take its share requests.
+    user = user_factory()
+    chat_id = str(ChatSessionManager.create(user_performing_action=user).id)
+    with _extension(user) as socket:
+        state = _state(user, chat_id)
         assert any(i["label"] == "Test Chrome" for i in state["installations"])
         assert state["grant"] is None
 
-        _request(admin_user, chat_id)
+        _request(user, chat_id)
         request = _next(socket, "grant_request")
         assert request["chat_session_id"] == chat_id
-        assert _state(admin_user, chat_id)["request"] == "pending"
+        assert _state(user, chat_id)["request"] == "pending"
 
         # A report for a request that this installation never got is refused.
         socket.send_text(_grant_report(chat_id, uuid4().hex))
         assert _next(socket, "end_grant")["chat_session_id"] == chat_id
-        assert _state(admin_user, chat_id)["grant"] is None
+        assert _state(user, chat_id)["grant"] is None
 
         socket.send_text(_grant_report(chat_id, request["request_id"]))
         assert _next(socket, "grant_saved")["chat_session_id"] == chat_id
-        grant = _state(admin_user, chat_id)["grant"]
+        grant = _state(user, chat_id)["grant"]
         assert grant["origins"] == ["https://wiki.example"]
         assert grant["tabs"][0]["title"] == "Wiki"
 
         # A stop in Onyx ends the grant and tells the extension.
         client.delete(
             f"{API_SERVER_URL}/chat/sessions/{chat_id}/browser/chrome",
-            headers=admin_user.headers,
+            headers=user.headers,
         ).raise_for_status()
         assert _next(socket, "end_grant")["chat_session_id"] == chat_id
-        assert _state(admin_user, chat_id)["grant"] is None
+        assert _state(user, chat_id)["grant"] is None
 
 
-def test_deny_and_a_stop_in_the_extension(admin_user: DATestUser) -> None:
-    chat_id = str(ChatSessionManager.create(user_performing_action=admin_user).id)
-    with _extension(admin_user) as socket:
-        _request(admin_user, chat_id)
+def test_deny_and_a_stop_in_the_extension(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    # Its own user: another test's socket cannot take its share requests.
+    user = user_factory()
+    chat_id = str(ChatSessionManager.create(user_performing_action=user).id)
+    with _extension(user) as socket:
+        _request(user, chat_id)
         request = _next(socket, "grant_request")
         socket.send_text(
             json.dumps(
@@ -153,9 +161,9 @@ def test_deny_and_a_stop_in_the_extension(admin_user: DATestUser) -> None:
         )
         socket.send_text(json.dumps({"type": "ping"}))
         _next(socket, "pong")
-        assert _state(admin_user, chat_id)["request"] == "denied"
+        assert _state(user, chat_id)["request"] == "denied"
 
-        _request(admin_user, chat_id)
+        _request(user, chat_id)
         request = _next(socket, "grant_request")
         socket.send_text(_grant_report(chat_id, request["request_id"]))
         _next(socket, "grant_saved")
@@ -164,20 +172,24 @@ def test_deny_and_a_stop_in_the_extension(admin_user: DATestUser) -> None:
         )
         socket.send_text(json.dumps({"type": "ping"}))
         _next(socket, "pong")
-        assert _state(admin_user, chat_id)["grant"] is None
+        assert _state(user, chat_id)["grant"] is None
 
 
-def test_one_installation_serves_one_chat(admin_user: DATestUser) -> None:
-    first = str(ChatSessionManager.create(user_performing_action=admin_user).id)
-    second = str(ChatSessionManager.create(user_performing_action=admin_user).id)
-    with _extension(admin_user) as socket:
+def test_one_installation_serves_one_chat(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    # Its own user: another test's socket cannot take its share requests.
+    user = user_factory()
+    first = str(ChatSessionManager.create(user_performing_action=user).id)
+    second = str(ChatSessionManager.create(user_performing_action=user).id)
+    with _extension(user) as socket:
         for chat_id in (first, second):
-            _request(admin_user, chat_id)
+            _request(user, chat_id)
             request = _next(socket, "grant_request")
             socket.send_text(_grant_report(chat_id, request["request_id"]))
             _next(socket, "grant_saved")
-        assert _state(admin_user, first)["grant"] is None
-        assert _state(admin_user, second)["grant"] is not None
+        assert _state(user, first)["grant"] is None
+        assert _state(user, second)["grant"] is not None
 
 
 def test_another_user_cannot_read_or_share_the_chat(
@@ -192,7 +204,11 @@ def test_another_user_cannot_read_or_share_the_chat(
     assert response.status_code == 404
 
 
-def test_the_admin_switch_closes_the_socket(admin_user: DATestUser) -> None:
+def test_the_admin_switch_closes_the_socket(
+    admin_user: DATestUser, user_factory: Callable[[], DATestUser]
+) -> None:
+    user = user_factory()
+
     def set_enabled(enabled: bool) -> None:
         client.patch(
             f"{API_SERVER_URL}/admin/settings",
@@ -200,8 +216,12 @@ def test_the_admin_switch_closes_the_socket(admin_user: DATestUser) -> None:
             headers=admin_user.headers,
         ).raise_for_status()
 
+    settings = client.get(f"{API_SERVER_URL}/settings", headers=admin_user.headers)
+    settings.raise_for_status()
+    previous = settings.json().get("chrome_browser_enabled", True)
+    set_enabled(True)
     try:
-        with _extension(admin_user) as socket:
+        with _extension(user) as socket:
             set_enabled(False)
             socket.send_text(json.dumps({"type": "ping"}))
             with pytest.raises(WebSocketDisconnect) as closed:
@@ -209,8 +229,8 @@ def test_the_admin_switch_closes_the_socket(admin_user: DATestUser) -> None:
             assert closed.value.code == 4403
         response = client.post(
             f"{API_SERVER_URL}/chat/browser/extension/token",
-            headers=admin_user.headers,
+            headers=user.headers,
         )
         assert response.status_code == 403
     finally:
-        set_enabled(True)
+        set_enabled(previous)

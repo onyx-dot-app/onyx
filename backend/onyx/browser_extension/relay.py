@@ -91,6 +91,10 @@ def _grant_lock_key(chat_session_id: UUID) -> str:
     return f"{_PREFIX}:grant_lock:{chat_session_id}"
 
 
+def _installation_lock_key(user_id: UUID, installation_id: UUID) -> str:
+    return f"{_PREFIX}:installation_lock:{user_id}:{installation_id}"
+
+
 def _installation_grant_key(user_id: UUID, installation_id: UUID) -> str:
     return f"{_PREFIX}:installation_grant:{user_id}:{installation_id}"
 
@@ -378,38 +382,59 @@ def save_grant(
             _end_grant(cache, user_id, chat_session_id, notify=False)
             return None
         # One installation serves one chat: a new grant ends the one before.
-        installation_key = _installation_grant_key(user_id, installation_id)
-        previous = cache.get(installation_key)
-        if previous is not None and previous.decode() != str(chat_session_id):
-            previous_key = _grant_key(UUID(previous.decode()))
-            previous_raw = cache.get(previous_key)
-            previous_grant = _load(cache, previous_key, ChromeGrant)
-            # Only while that grant is still this installation's: compare and
-            # delete, since another installation may take that chat meanwhile.
-            if (
-                previous_raw is not None
-                and previous_grant is not None
-                and previous_grant.installation_id == installation_id
-            ):
-                cache.delete_if_value(previous_key, previous_raw)
-        # A chat moved from another installation leaves that one free.
-        if existing is not None and existing.installation_id != installation_id:
-            cache.delete_if_value(
-                _installation_grant_key(user_id, existing.installation_id),
-                str(chat_session_id).encode(),
+        # The installation's own lock (always taken after a chat's) keeps two
+        # chats' approvals from both keeping a grant.
+        with cache.lock(
+            _installation_lock_key(user_id, installation_id),
+            timeout=_GRANT_LOCK_SECONDS,
+        ):
+            return _replace_installation_grant(
+                cache, user_id, installation_id, report, existing, expires_at, now
             )
-        grant = ChromeGrant(
-            user_id=user_id,
-            installation_id=installation_id,
-            chat_session_id=chat_session_id,
-            tabs=report.tabs,
-            origins=report.origins,
-            expires_at=expires_at,
+
+
+def _replace_installation_grant(
+    cache: CacheBackend,
+    user_id: UUID,
+    installation_id: UUID,
+    report: GrantReport,
+    existing: ChromeGrant | None,
+    expires_at: float,
+    now: float,
+) -> ChromeGrant:
+    chat_session_id = report.chat_session_id
+    installation_key = _installation_grant_key(user_id, installation_id)
+    previous = cache.get(installation_key)
+    if previous is not None and previous.decode() != str(chat_session_id):
+        previous_key = _grant_key(UUID(previous.decode()))
+        previous_raw = cache.get(previous_key)
+        previous_grant = _load(cache, previous_key, ChromeGrant)
+        # Only while that grant is still this installation's: compare and
+        # delete, since another installation may take that chat meanwhile.
+        if (
+            previous_raw is not None
+            and previous_grant is not None
+            and previous_grant.installation_id == installation_id
+        ):
+            cache.delete_if_value(previous_key, previous_raw)
+    # A chat moved from another installation leaves that one free.
+    if existing is not None and existing.installation_id != installation_id:
+        cache.delete_if_value(
+            _installation_grant_key(user_id, existing.installation_id),
+            str(chat_session_id).encode(),
         )
-        ttl = max(1, int(expires_at - now))
-        cache.set(_grant_key(chat_session_id), grant.model_dump_json(), ex=ttl)
-        cache.set(installation_key, str(chat_session_id), ex=ttl)
-        return grant
+    grant = ChromeGrant(
+        user_id=user_id,
+        installation_id=installation_id,
+        chat_session_id=chat_session_id,
+        tabs=report.tabs,
+        origins=report.origins,
+        expires_at=expires_at,
+    )
+    ttl = max(1, int(expires_at - now))
+    cache.set(_grant_key(chat_session_id), grant.model_dump_json(), ex=ttl)
+    cache.set(installation_key, str(chat_session_id), ex=ttl)
+    return grant
 
 
 def end_grant(
@@ -513,6 +538,10 @@ class ChromeBrowser(BrowserBackend):
             raise tool_error(NOT_CONNECTED_MESSAGE)
         command_id = uuid4().hex
         deadline = time.time() + timeout_seconds
+        cancellation = current_cancellation()
+        # A turn stopped during the lookups above sends nothing.
+        if cancellation is not None:
+            cancellation.check()
         _send(
             cache,
             self._user_id,
@@ -526,7 +555,6 @@ class ChromeBrowser(BrowserBackend):
             },
             deadline,
         )
-        cancellation = current_cancellation()
         while time.time() < deadline:
             if cancellation is not None and cancellation.cancelled:
                 # A command still in the list must not run after the turn stopped.
