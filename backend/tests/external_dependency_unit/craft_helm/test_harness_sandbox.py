@@ -110,8 +110,10 @@ def test_auto_and_pod_render_harness_pods_without_craft(runtime: str) -> None:
         ["--set", "harnessSandbox.enabled=false"],
         # A release before v6 has no container backend.
         ["--set-string", "global.version=v5.2.0"],
+        # Lite: no beat or heavy worker to stop idle pods.
+        ["--set", "vectorDB.enabled=false"],
     ],
-    ids=["firecracker", "off", "disabled", "pre-v6"],
+    ids=["firecracker", "off", "disabled", "pre-v6", "lite"],
 )
 def test_no_harness_pods(args: list[str]) -> None:
     docs = _render([*_NO_CRAFT, *args])

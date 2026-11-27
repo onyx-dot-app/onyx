@@ -45,9 +45,11 @@
 - **When the admin switch is off, the service is unreachable, or the URL is
   set to an empty value**, the model cannot call `run_python`. When code fails or
   times out, the user sees the error output and the turn continues.
-- **With harness sandboxes** (`SANDBOX_RUNTIME=firecracker` and
-  `SANDBOX_FC_TEMPLATE`; with `auto`, only while a live registered node
-  reports a compatible template of that tag), every chat agent gives the model a shell tool
+- **With harness sandboxes** (the container backend,
+  `SANDBOX_CONTAINER_HARNESS=true` with `auto` or `pod`; or Firecracker,
+  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`, with `auto` only
+  while a live registered node reports a compatible template of that tag),
+  every chat agent gives the model a shell tool
   (`bash` for Claude models, `exec_command` for all other models),
   `write_stdin` and file tools: `edit` and `write` for Claude models (in
   the shapes of Claude Code's Edit and Write), `apply_patch` for all other

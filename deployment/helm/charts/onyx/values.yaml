@@ -2432,7 +2432,8 @@ sandboxPod:
 # clusters without KVM nodes. One pod per user sandbox, from the
 # harness-sandbox-pod PodTemplate, running the craft-runtime container image.
 # Renders with craft.sandboxRuntime auto or pod (not firecracker or off), on
-# Onyx v6 and later. Does not need ENABLE_CRAFT. With auto, a sandbox starts on
+# Onyx v6 and later, and not in Lite mode (vectorDB.enabled=false has no
+# Celery beat or heavy worker to stop idle pods). Does not need ENABLE_CRAFT. With auto, a sandbox starts on
 # Firecracker while a KVM node serves the template, else on a pod. A running
 # sandbox stays on its backend until it stops.
 harnessSandbox:

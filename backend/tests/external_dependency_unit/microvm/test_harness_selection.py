@@ -76,8 +76,8 @@ def report_node(
 ) -> ReportNode:
     """Register a fake agent with the template and run one report pass."""
 
-    def report(at: int | None = None) -> RunningFakeAgent:
-        node_id = f"sel-{uuid.uuid4().hex[:8]}"
+    def report(at: int | None = None, node_id: str | None = None) -> RunningFakeAgent:
+        node_id = node_id or f"sel-{uuid.uuid4().hex[:8]}"
         agent = FakeHostAgent(template=NODE_TEMPLATE)
         agent.templates[0].compatible = True
         running = add_node(node_id, agent)
@@ -206,25 +206,39 @@ def test_a_container_sandbox_stays_in_its_container_when_a_node_comes(
 
 
 def test_a_firecracker_sandbox_stays_on_firecracker_while_its_node_serves(
-    report_node: ReportNode, new_ref: NewRef, tenant_cache: CacheBackend
+    report_node: ReportNode,
+    new_ref: NewRef,
+    tenant_cache: CacheBackend,
+    shared_cache: CacheBackend,
 ) -> None:
-    report_node()
+    node_id = f"sel-{uuid.uuid4().hex[:8]}"
+    report_node(node_id=node_id)
     ref = new_ref()
-    _placement(tenant_cache, ref.sandbox_id, "sel-node")
+    _placement(tenant_cache, ref.sandbox_id, node_id)
     # A choice made elsewhere does not move a placed sandbox.
     tenant_cache.set(
         harness_selection._CHOICE_PREFIX + str(ref.sandbox_id),
         HarnessBackend.CONTAINER.value,
     )
-    selector = _selector()
-    assert _backend(selector, ref) == "firecracker"
-    # No live node: the placed VM cannot serve, so the sandbox starts again in
-    # a container.
-    tenant_cache.delete(harness_selection._CHOICE_PREFIX + str(ref.sandbox_id))
-    no_node = SelectingHarnessSandbox(
+    assert _backend(_selector(), ref) == "firecracker"
+    # A cached "no node serves" answer does not move it either: its own node
+    # still reports.
+    cached_no = SelectingHarnessSandbox(
         firecracker=_fake(), container=_fake(), firecracker_available=lambda: False
     )
-    assert _backend(no_node, ref) == "container"
+    assert _backend(cached_no, ref) == "firecracker"
+    # Its node stopped reporting: the VM cannot serve, so the sandbox starts
+    # again where the choice says.
+    registry.record_node_report(shared_cache, node_id, int(time.time()) - 3600)
+    assert _backend(cached_no, ref) == "container"
+
+
+def test_a_placement_on_an_unregistered_node_does_not_keep_the_sandbox(
+    new_ref: NewRef, tenant_cache: CacheBackend
+) -> None:
+    ref = new_ref()
+    _placement(tenant_cache, ref.sandbox_id, f"gone-{uuid.uuid4().hex[:8]}")
+    assert _backend(_selector(), ref) == "container"
 
 
 def test_concurrent_first_calls_agree_on_one_backend(
@@ -273,9 +287,12 @@ def test_activity_calls_never_choose_and_purges_reach_both(
     assert (
         tenant_cache.get(harness_selection._CHOICE_PREFIX + str(ref.sandbox_id)) is None
     )
+    order = MagicMock()
+    order.attach_mock(firecracker.purge_sandbox, "firecracker")
+    order.attach_mock(container.purge_sandbox, "container")
     selector.purge_sandbox(tenant_id=ref.tenant_id, sandbox_id=ref.sandbox_id)
-    firecracker.purge_sandbox.assert_called_once()
-    container.purge_sandbox.assert_called_once()
+    # Nothing runs: the container backend goes first.
+    assert [c[0] for c in order.mock_calls] == ["container", "firecracker"]
     firecracker.purge_session.side_effect = RuntimeError("down")
     with pytest.raises(RuntimeError, match="down"):
         selector.purge_session(
@@ -285,6 +302,26 @@ def test_activity_calls_never_choose_and_purges_reach_both(
         )
     # One failed backend does not skip the other.
     container.purge_session.assert_called_once()
+
+
+def test_a_purge_runs_first_on_the_backend_that_runs_the_sandbox(
+    report_node: ReportNode, new_ref: NewRef, tenant_cache: CacheBackend
+) -> None:
+    """That backend deletes the live session directory and cancels commands
+    before the shared records go."""
+    node_id = f"sel-{uuid.uuid4().hex[:8]}"
+    report_node(node_id=node_id)
+    firecracker, container = _fake(), _fake()
+    order = MagicMock()
+    order.attach_mock(firecracker.purge_session, "firecracker")
+    order.attach_mock(container.purge_session, "container")
+    selector = _selector(firecracker, container)
+    ref = new_ref()
+    _placement(tenant_cache, ref.sandbox_id, node_id)
+    selector.purge_session(
+        tenant_id=ref.tenant_id, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+    )
+    assert [c[0] for c in order.mock_calls] == ["firecracker", "container"]
 
 
 @pytest.mark.parametrize(

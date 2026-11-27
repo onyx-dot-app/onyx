@@ -1,5 +1,6 @@
-"""The microVM router is mounted only with `SANDBOX_RUNTIME=firecracker|auto`;
-the admin sandbox status on every runtime."""
+"""The microVM router is mounted only with `SANDBOX_RUNTIME=firecracker|auto`
+on Kubernetes (`SANDBOX_FIRECRACKER_ENABLED`); the admin sandbox status on
+every runtime."""
 
 import importlib
 
@@ -17,7 +18,7 @@ from onyx.server.features.microvm.api import (
 def _has_signing_key_route(runtime: SandboxRuntime) -> bool:
     onyx_main = importlib.import_module("onyx.main")
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(onyx_main, "SANDBOX_RUNTIME", runtime)
+        mp.setattr(onyx_main, "SANDBOX_FIRECRACKER_ENABLED", runtime.uses_firecracker)
         mp.setattr(onyx_main, "APP_API_PREFIX", "")
         app = onyx_main.get_application()
     return any(
@@ -54,7 +55,7 @@ def test_admin_status_route_on_every_runtime() -> None:
 def _has_route(runtime: SandboxRuntime, path: str, method: str) -> bool:
     onyx_main = importlib.import_module("onyx.main")
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(onyx_main, "SANDBOX_RUNTIME", runtime)
+        mp.setattr(onyx_main, "SANDBOX_FIRECRACKER_ENABLED", runtime.uses_firecracker)
         mp.setattr(onyx_main, "APP_API_PREFIX", "")
         app = onyx_main.get_application()
     return any(
@@ -81,3 +82,15 @@ def test_deregister_route_only_with_firecracker_runtime() -> None:
     assert SANDBOX_NODE_DEREGISTER_PATH == "/microvm/node/deregister"
     assert not _has_post_route(SandboxRuntime.POD, SANDBOX_NODE_DEREGISTER_PATH)
     assert _has_post_route(SandboxRuntime.FIRECRACKER, SANDBOX_NODE_DEREGISTER_PATH)
+
+
+def test_auto_on_docker_mounts_no_node_routes() -> None:
+    """`auto` with SANDBOX_BACKEND=docker turns Firecracker off."""
+    onyx_main = importlib.import_module("onyx.main")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(onyx_main, "SANDBOX_FIRECRACKER_ENABLED", False)
+        mp.setattr(onyx_main, "APP_API_PREFIX", "")
+        app = onyx_main.get_application()
+    paths = {route.path for route in app.routes if isinstance(route, APIRoute)}
+    assert SANDBOX_NODE_STATE_REPORT_PATH not in paths
+    assert "/admin/sandbox/status" in paths

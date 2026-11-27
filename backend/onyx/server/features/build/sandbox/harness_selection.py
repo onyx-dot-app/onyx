@@ -4,21 +4,27 @@ backend are both on (`SANDBOX_RUNTIME=auto` on Kubernetes with
 
 A sandbox stays on its backend while it runs there: a container record
 keeps it on the container backend, and a Firecracker placement keeps it on
-Firecracker while a live node serves the template. A sandbox that runs on
-neither starts on Firecracker when a live node serves the template, else on
-the container backend. A short choice mark makes concurrent first calls
-agree. Errors of the chosen backend, such as a Firecracker capacity error,
-reach the caller: there is no fallback to the other backend. Sessions come
-back from their saves on either backend.
+Firecracker while the placement's own node is registered and reports. A
+sandbox that runs on neither starts on Firecracker when a live node serves
+the template, else on the container backend. A short choice mark makes
+concurrent first calls agree. Errors of the chosen backend, such as a
+Firecracker capacity error, reach the caller: there is no fallback to the
+other backend. Sessions come back from their saves on either backend.
 """
 
+import time
 from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import IO
 from uuid import UUID
 
-from onyx.cache.factory import get_cache_backend
+from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.microvm.models import FileListing, HarnessBackend
-from onyx.microvm.registry import get_sandbox_placement
+from onyx.microvm.registry import (
+    SandboxPlacement,
+    get_registered_node,
+    get_sandbox_placement,
+    node_reports_stopped,
+)
 from onyx.server.features.build.configs import SANDBOX_HARNESS_START_TIMEOUT_SECONDS
 from onyx.server.features.build.sandbox.container.state import get_container_record
 from onyx.server.features.build.sandbox.harness_base import (
@@ -57,11 +63,14 @@ def choose_backend(
     tenant_cache = get_cache_backend(tenant_id=tenant_id)
     if get_container_record(tenant_cache, sandbox_id) is not None:
         return HarnessBackend.CONTAINER
-    live = firecracker_available()
-    # Without a live node the placed VM cannot serve: its node is dead.
-    if live and get_sandbox_placement(tenant_cache, sandbox_id) is not None:
+    placement = get_sandbox_placement(tenant_cache, sandbox_id)
+    if placement is not None and _placed_node_is_up(placement):
         return HarnessBackend.FIRECRACKER
-    pick = HarnessBackend.FIRECRACKER if live else HarnessBackend.CONTAINER
+    pick = (
+        HarnessBackend.FIRECRACKER
+        if firecracker_available()
+        else HarnessBackend.CONTAINER
+    )
     key = _CHOICE_PREFIX + str(sandbox_id)
     if tenant_cache.set_if_absent(key, pick.value, ex=CHOICE_SECONDS):
         return pick
@@ -72,6 +81,21 @@ def choose_backend(
         return HarnessBackend(raw.decode())
     except ValueError:
         return pick
+
+
+def _placed_node_is_up(placement: SandboxPlacement) -> bool:
+    """Whether the placement's node may still run the VM: registered and
+    reporting. A failed read keeps the sandbox on Firecracker, so a cache
+    error never moves a running sandbox."""
+    try:
+        shared_cache = get_shared_cache_backend()
+        if get_registered_node(shared_cache, placement.node_id) is None:
+            return False
+        return not node_reports_stopped(
+            shared_cache, placement.node_id, int(time.time())
+        )
+    except Exception:
+        return True
 
 
 class SelectingHarnessSandbox(HarnessSandbox):
@@ -213,6 +237,20 @@ class SelectingHarnessSandbox(HarnessSandbox):
         )
 
     # Purge: on both backends, since the sandbox may have run on either.
+    # Without a running sandbox the container backend goes first: it deletes
+    # saves through the file store even when the store cannot sign URLs.
+
+    def _purge_order(self, tenant_id: str, sandbox_id: UUID) -> list[HarnessSandbox]:
+        """The backend that runs the sandbox first: it deletes the live
+        session directories and cancels commands before the shared records
+        go. The other one then finds no records left."""
+        first = running_backend(tenant_id, sandbox_id) or HarnessBackend.CONTAINER
+        second = (
+            HarnessBackend.FIRECRACKER
+            if first is HarnessBackend.CONTAINER
+            else HarnessBackend.CONTAINER
+        )
+        return [self._backends[first], self._backends[second]]
 
     def purge_session(
         self,
@@ -223,7 +261,7 @@ class SelectingHarnessSandbox(HarnessSandbox):
         retention: bool = False,
     ) -> None:
         errors: list[Exception] = []
-        for backend in self._backends.values():
+        for backend in self._purge_order(tenant_id, sandbox_id):
             try:
                 backend.purge_session(
                     tenant_id=tenant_id,
@@ -244,7 +282,7 @@ class SelectingHarnessSandbox(HarnessSandbox):
         session_ids: list[UUID] | None = None,
     ) -> None:
         errors: list[Exception] = []
-        for backend in self._backends.values():
+        for backend in self._purge_order(tenant_id, sandbox_id):
             try:
                 backend.purge_sandbox(
                     tenant_id=tenant_id, sandbox_id=sandbox_id, session_ids=session_ids

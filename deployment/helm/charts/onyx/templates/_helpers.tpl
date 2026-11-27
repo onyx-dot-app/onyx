@@ -379,14 +379,16 @@ in .Values, so every template of one render uses the same value.
 {{/*
 "true" when the container backend of harness sandboxes renders (one pod per
 user sandbox, chat sandbox tools without KVM): craft.sandboxRuntime auto or
-pod, harnessSandbox.enabled, and an Onyx release from v6 on. Does not need
-ENABLE_CRAFT. With auto, the backend uses Firecracker while a node serves the
-template, and these pods otherwise.
+pod, harnessSandbox.enabled, an Onyx release from v6 on, and the Celery
+workers (not Lite, vectorDB.enabled=false): beat and the heavy worker stop
+idle pods and delete orphans. Does not need ENABLE_CRAFT. With auto, the
+backend uses Firecracker while a node serves the template, and these pods
+otherwise.
 */}}
 {{- define "onyx.harnessSandboxEnabled" -}}
 {{- $runtime := include "onyx.craftSandboxRuntime" . -}}
 {{- $harness := .Values.harnessSandbox | default dict -}}
-{{- if and (has $runtime (list "auto" "pod")) (ne (toString $harness.enabled) "false") (not (include "onyx.craftPreV6App" .)) -}}true{{- end -}}
+{{- if and (has $runtime (list "auto" "pod")) (ne (toString $harness.enabled) "false") (not (include "onyx.craftPreV6App" .)) .Values.vectorDB.enabled -}}true{{- end -}}
 {{- end }}
 
 {{/* "true" when the sandbox namespace gets the sandbox-manager RBAC: for Craft pod sandboxes or for harness sandbox pods. */}}

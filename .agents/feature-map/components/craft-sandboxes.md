@@ -37,16 +37,14 @@ Helm value `craft.sandboxRuntime` (`auto` default, `firecracker`, `pod`, `off`)
 sets `SANDBOX_RUNTIME` (backend default `pod`; `off` acts as `pod`). It serves
 chat sandbox tools, not Craft build sessions. With `auto`, the chart renders the host agent,
 sandbox-proxy and their certificates (without `ENABLE_CRAFT`) only when it has a
-A third runtime is in development: Firecracker micro-VMs on KVM nodes. The
-Helm value `craft.sandboxRuntime` (`auto` default, `firecracker`, `pod`, `off`)
-sets `SANDBOX_RUNTIME` (backend default `pod`; `off` acts as `pod`). It serves
-chat sandbox tools, not Craft build sessions. With `auto`, the chart renders the host agent,
-sandbox-proxy and their certificates (without `ENABLE_CRAFT`) only when it has a
 pinned release tag (`onyx.craftFcEnabled`); the chart makes the node
 registration value when none is set and keeps it on upgrade
-(`onyx.sandboxNodeRegistrationValue`); before v6 `auto` acts as `pod`. With `auto`, chats get the tools only while a
-live registered node reports the template (`backend/onyx/microvm/availability.py`).
-Admins see the runtime, the nodes and why tools are off at
+(`onyx.sandboxNodeRegistrationValue`); before v6 `auto` acts as `pod`. Chats
+get the tools while a harness backend can serve
+(`backend/onyx/microvm/availability.py`): always with the container backend
+(harness pods or Docker containers, see below), and for Firecracker with
+`auto` only while a live registered node reports the template.
+Admins see the runtime, the nodes, the backend of new sandboxes and why tools are off at
 `GET /admin/sandbox/status` (`backend/onyx/server/features/microvm/admin_api.py`,
 single tenant only). The Kubernetes and Docker paths do not change.
 
