@@ -577,10 +577,16 @@ export function useChatSessionStatus(
     })
   );
   const key = sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null;
-  // Reads the cached status without a request. SWR restarts its poll timer
+  // The current status, for the interval below. SWR restarts its poll timer
   // each time `refreshInterval` changes, so the interval is a number that
   // changes only when the rule's answer does, not a new function per render.
-  const { data: cached } = useSWR<ChatSessionStatus, Error>(key, null);
+  // It has the fetcher too: SWR sends a key's focus and mutate reloads to one
+  // of its subscribers only.
+  const { data: cached } = useSWR<ChatSessionStatus, Error>(
+    key,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
   return useSWR<ChatSessionStatus, Error>(key, errorHandlingFetcher, {
     refreshInterval: statusPollInterval(cached, streaming, requestWaits),
     onErrorRetry: skipRetryOnAuthError,

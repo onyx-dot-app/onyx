@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { SWRConfig } from "swr";
+import { SWRConfig, useSWRConfig } from "swr";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import {
   Packet,
@@ -495,6 +495,24 @@ describe("useChatSessionStatus", () => {
     } finally {
       clearInterval(renders);
     }
+  });
+
+  it("reloads when its key is mutated", async () => {
+    startChat("mutated-session", "input", []);
+    const fetchMock = serveIdleStatus();
+
+    const { result } = renderHook(
+      () => {
+        useChatSessionStatus("mutated-session");
+        return useSWRConfig().mutate;
+      },
+      { wrapper: fresh }
+    );
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await act(async () => {
+      await result.current(SWR_KEYS.chatSessionStatus("mutated-session"));
+    });
+    expect(statusReads(fetchMock)).toBe(2);
   });
 
   it("polls for the agents list while a shown request waits, as for the queue", async () => {
