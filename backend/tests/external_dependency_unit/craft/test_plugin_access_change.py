@@ -10,6 +10,7 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import (
+    Plugin__User,
     Plugin__UserGroup,
     User,
     User__UserGroup,
@@ -21,12 +22,14 @@ from onyx.db.plugin import (
     PluginAccessMode,
     PluginGroupGrant,
     PluginGroupSetting,
+    PluginUserGrant,
     apply_plugin_access_change__no_commit,
 )
 from onyx.db.skill import fetch_editable_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
     make_group,
     make_skill,
     make_user,
@@ -176,6 +179,63 @@ def test_not_available_writes(
     assert row is not None
     assert row.permission is None
     assert row.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
+
+
+def test_scoped_manager_user_shares_stay_within_managed_groups(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """A scoped manager cannot share a plugin they reach only through their
+    groups with a user outside those groups. The author can, and the manager
+    can still add and remove shares for members."""
+    group = make_group(db_session)
+    manager = _manager_of(db_session, group)
+    member = make_user(db_session, standard_account=True)
+    add_user_to_group(db_session, member, group)
+    outsider = make_user(db_session, standard_account=True)
+    author = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=author.id)
+    share_plugin_with_group(db_session, skill.id, group.id, SkillSharePermission.VIEWER)
+
+    def user_shares(*users: User) -> PluginAccessChange:
+        return PluginAccessChange(
+            user_grants=tuple(
+                PluginUserGrant(user_id=user.id, permission=SkillSharePermission.VIEWER)
+                for user in users
+            ),
+            mode=PluginAccessMode.REPLACE,
+        )
+
+    def shared_user_ids() -> set[object]:
+        return set(
+            db_session.scalars(
+                select(Plugin__User.user_id).where(Plugin__User.plugin_id == skill.id)
+            )
+        )
+
+    with pytest.raises(OnyxError) as exc_info:
+        apply_plugin_access_change__no_commit(
+            [skill.id], user_shares(member, outsider), manager, db_session
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    assert shared_user_ids() == set()
+
+    apply_plugin_access_change__no_commit(
+        [skill.id], user_shares(member), manager, db_session
+    ).raise_first_failure()
+    assert shared_user_ids() == {member.id}
+    apply_plugin_access_change__no_commit(
+        [skill.id], user_shares(), manager, db_session
+    ).raise_first_failure()
+    assert shared_user_ids() == set()
+
+    own_skill = make_skill(db_session, author_user_id=manager.id)
+    share_plugin_with_group(
+        db_session, own_skill.id, group.id, SkillSharePermission.VIEWER
+    )
+    apply_plugin_access_change__no_commit(
+        [own_skill.id], user_shares(outsider), manager, db_session
+    ).raise_first_failure()
 
 
 def test_owner_removing_a_group_share_keeps_its_setting(
