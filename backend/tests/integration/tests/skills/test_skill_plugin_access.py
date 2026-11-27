@@ -519,6 +519,11 @@ def test_transfer_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     assert again.status_code == 409
     assert again.json()["taken_name"] == name
 
+    reserved = _transfer(owner, skill.id, new_owner.id, name="pptx")
+    assert reserved.status_code == 400
+    assert reserved.json()["error_code"] == "INVALID_INPUT"
+    assert _plugin(skill.id).author_user_id == UUID(owner.id)
+
     new_name = f"{name}-theirs"
     _transfer(owner, skill.id, new_owner.id, name=new_name).raise_for_status()
     plugin = _plugin(skill.id)

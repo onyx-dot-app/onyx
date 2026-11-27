@@ -112,6 +112,7 @@ from onyx.server.features.skill.response_helpers import (
     skill_response_for_user,
     skills_list_response_for_user,
 )
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
     build_single_file_bundle,
@@ -641,7 +642,7 @@ def _read_plugin_upload(upload: UploadFile) -> PluginBundle:
     return read_plugin_bundle(read_bundle_file(upload.file, filename=upload.filename))
 
 
-def _upload_name(name: str | None) -> str | None:
+def _requested_name(name: str | None) -> str | None:
     if name is None:
         return None
     if len(name) > SKILL_NAME_MAX_LENGTH or not SKILL_NAME_PATTERN.fullmatch(name):
@@ -650,6 +651,8 @@ def _upload_name(name: str | None) -> str | None:
             f"The name '{name}' must use only lowercase letters, numbers and "
             f"single hyphens, and at most {SKILL_NAME_MAX_LENGTH} characters.",
         )
+    if name in BUILT_IN_SKILLS:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"The name '{name}' is reserved.")
     return name
 
 
@@ -693,7 +696,7 @@ def inspect_plugin_upload(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginUploadPreview:
-    new_name = _upload_name(name)
+    new_name = _requested_name(name)
     plugin_bundle = _read_plugin_upload(bundle)
     target = _upload_target(plugin_bundle, save_as_new, new_name, user, db_session)
     name_conflicts = (
@@ -738,7 +741,7 @@ def save_plugin_upload(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginUploadResponse:
-    new_name = _upload_name(name)
+    new_name = _requested_name(name)
     plugin_bundle = _read_plugin_upload(bundle)
     file_store = get_default_file_store()
     added = True
@@ -1412,7 +1415,7 @@ def transfer_current_user_skill_ownership(
         skill=skill,
         new_owner_user_id=target.id,
         db_session=db_session,
-        name=transfer_req.name,
+        name=_requested_name(transfer_req.name),
     )
 
     after_affected = affected_user_ids_for_plugins([skill.id], db_session)

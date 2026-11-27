@@ -313,6 +313,16 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
     assert taken.value.extra == {"taken_name": "same-kit"}
     assert "same-kit" in taken.value.detail
     db_session.rollback()
+    with pytest.raises(OnyxError) as reserved:
+        _save(
+            author,
+            _plugin_zip("same-kit", ["one"]),
+            db_session,
+            save_as_new=True,
+            name="pptx",
+        )
+    assert reserved.value.error_code is OnyxErrorCode.INVALID_INPUT
+    db_session.rollback()
     copy = _save(
         author,
         _plugin_zip("same-kit", ["one"]),

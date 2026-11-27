@@ -766,7 +766,9 @@ the app from the same rule
     ([[mcp-and-custom-tools#access-grants-default-chat-only]]). A publish or
     a transfer to a marketplace that has the plugin name is refused, or
     takes a free name on request (`db/plugin.py:_move_plugin__no_commit`).
-    A transfer can set a new `name` (`TransferSkillOwnershipRequest.name`).
+    A transfer can set a new `name` (`TransferSkillOwnershipRequest.name`);
+    the API refuses a built-in skill name there and in an upload `name`
+    (`server/features/skill/api.py:_requested_name`).
     No foreign key checks the
     version pointers (`current_version_id`, `published_version_id`,
     `pending_version_id`); write them only through `db/plugin.py`, which sets
