@@ -260,6 +260,27 @@ test("the overview shows why the user must reconnect and offers Disconnect", asy
   ).toBeVisible();
 });
 
+test("a broken Onyx login asks the member to sign in again, not the admin", async () => {
+  open(
+    makeMemberIntegration({
+      auth_method: "onyx_login",
+      status: {
+        state: "needs_reconnect",
+        reason: "Sign in to Onyx again to use Linear.",
+      },
+    })
+  );
+  expect(
+    await screen.findByText("Sign in to Onyx again to use Linear.")
+  ).toBeVisible();
+  expect(
+    screen.queryByText(messages.plugins.member.connection.askAdmin)
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Disconnect Linear" })
+  ).toBeVisible();
+});
+
 test("OAuth continues in this tab when the browser blocks the new tab", async () => {
   jest.spyOn(window, "open").mockReturnValue(null);
   open(makeMemberIntegration(), {
