@@ -13645,6 +13645,10 @@
       },
       "viewAllButton": {
         "label": "عرض كل الملفات ({count})"
+      },
+      "unavailable": {
+        "title": "هذا الملف غير متاح",
+        "description": "تم حذفه، أو ليس لديك صلاحية الوصول إليه."
       }
     },
     "rightPanel": {

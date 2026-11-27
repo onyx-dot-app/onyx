@@ -13645,6 +13645,10 @@
       },
       "viewAllButton": {
         "label": "Ver todos os {count} arquivos"
+      },
+      "unavailable": {
+        "title": "Este arquivo não está disponível",
+        "description": "Ele foi excluído ou você não tem acesso a ele."
       }
     },
     "rightPanel": {

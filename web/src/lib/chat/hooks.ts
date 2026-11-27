@@ -1113,6 +1113,7 @@ export function useOpenArtifactFromUrl(
   loadedChatId: string | null,
   openFile: (file: PublishedFile, pinVersion: boolean) => void
 ): void {
+  const t = useTranslations("chat.messages");
   const searchParams = useSearchParams();
   const navigation = useNavigation();
   const artifactId = searchParams?.get(SEARCH_PARAM_NAMES.ARTIFACT_ID);
@@ -1134,17 +1135,16 @@ export function useOpenArtifactFromUrl(
   );
   const pinVersion = link?.version != null;
   useEffect(() => {
+    if (!artifactId || isValidating || !searchParams) return;
     // A cached response of an earlier visit can name an older version, or a
     // file that is gone, which SWR keeps when its reload fails
-    if (
-      !file ||
-      isValidating ||
-      error ||
-      file.chat_id !== loadedChatId ||
-      !searchParams
-    )
+    if (error) {
+      toast.error(t("memoizedLink.artifactError.message"));
+    } else if (!file || file.chat_id !== loadedChatId) {
       return;
-    openFile(file, pinVersion);
+    } else {
+      openFile(file, pinVersion);
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.delete(SEARCH_PARAM_NAMES.ARTIFACT_ID);
     params.delete(SEARCH_PARAM_NAMES.ARTIFACT_VERSION);
@@ -1158,6 +1158,8 @@ export function useOpenArtifactFromUrl(
     openFile,
     searchParams,
     navigation,
+    artifactId,
+    t,
   ]);
 }
 

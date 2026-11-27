@@ -156,6 +156,7 @@ from onyx.db.enums import (
     record_mode_persists_content,
 )
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.incognito import (
     is_incognito_teardown_target,
     mark_incognito_user_files_deleting,
@@ -1356,7 +1357,10 @@ def _readable_chat_file_record(
         file_id = file_id_from_user_file
     if not user_can_access_chat_file(file_id, user, db_session):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
-    file_record = get_default_file_store().read_file_record(file_id)
+    try:
+        file_record = get_default_file_store().read_file_record(file_id)
+    except FileRecordNotFoundError:
+        file_record = None
     if not file_record:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
     return file_record
