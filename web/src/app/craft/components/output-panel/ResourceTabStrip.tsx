@@ -35,7 +35,6 @@ export default function ResourceTabStrip({
       menuResetKey={panelMode}
       tabs={tabs.map((tab) => ({
         id: panelTabId(tab),
-        closable: true,
         movable: true,
         label:
           tab.kind === "outputs"
