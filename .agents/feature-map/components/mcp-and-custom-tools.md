@@ -21,8 +21,11 @@
   error and nothing is saved. A server with a sign-in is saved with no
   actions, and the admin refreshes the actions after the sign-in. A URL that SSRF protection blocks fails with a hint that names the
   SSRF Protection level that allows it, or says that no level does.
-- **An admin adds an OpenAPI action.** The admin pastes an OpenAPI 3 schema with
-  one server URL. Each operation in it becomes a tool that the model can call.
+- **An admin adds an OpenAPI action.** In the Add dialog, the admin enters a
+  spec URL or uploads an OpenAPI 3 spec. When the spec has no single server
+  URL, or comes from a file, the dialog asks for the base URL. Each operation
+  in it becomes a tool that the model can call. A spec that gives no tools
+  stops at that step with the skipped list.
   The admin can add static headers, link a per-tool OAuth client, or forward
   each user's Onyx login token. An import drops each operation with a missing
   or duplicate `operationId` and lists it as skipped. A save rejects such a
