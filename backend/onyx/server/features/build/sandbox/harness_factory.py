@@ -121,7 +121,9 @@ def _selecting_sandbox() -> "SelectingHarnessSandbox":
     container = get_container_harness_sandbox()
     with _lock:
         if _selecting_instance is None:
-            from onyx.microvm.availability import firecracker_available
+            from onyx.microvm.availability import (
+                firecracker_accepts_new_sandboxes,
+            )
             from onyx.server.features.build.sandbox.harness_selection import (
                 SelectingHarnessSandbox,
             )
@@ -129,7 +131,7 @@ def _selecting_sandbox() -> "SelectingHarnessSandbox":
             _selecting_instance = SelectingHarnessSandbox(
                 firecracker=firecracker,
                 container=container,
-                firecracker_available=firecracker_available,
+                firecracker_available=firecracker_accepts_new_sandboxes,
             )
     return _selecting_instance
 

@@ -80,6 +80,11 @@ def _serving(node: SandboxNodeStatus) -> bool:
     return node.live and node.has_template
 
 
+def _accepts_new(node: SandboxNodeStatus) -> bool:
+    # A draining node keeps its VMs but refuses new ones.
+    return _serving(node) and not node.draining
+
+
 # Why Firecracker serves no sandbox from the configuration alone; None when
 # nodes decide.
 STATIC_OFF_REASON: SandboxToolsOffReason | None = None
@@ -113,7 +118,11 @@ def get_sandbox_status(
         elif not any(_serving(n) for n in nodes):
             reason = SandboxToolsOffReason.NO_LIVE_NODE_WITH_TEMPLATE
     backend: HarnessBackend | None = None
-    if reason is None:
+    if reason is None and (
+        not CONTAINER_HARNESS_ENABLED
+        or SANDBOX_RUNTIME is not SandboxRuntime.AUTO
+        or any(_accepts_new(n) for n in nodes)
+    ):
         backend = HarnessBackend.FIRECRACKER
     elif CONTAINER_HARNESS_ENABLED:
         backend = HarnessBackend.CONTAINER
@@ -129,12 +138,22 @@ def get_sandbox_status(
     )
 
 
-def _live_node_has_template(shared_cache: CacheBackend, now: int) -> bool:
-    return any(
-        not node_reports_stopped(shared_cache, node.node_id, now)
-        and _has_template(get_node_info(shared_cache, node.node_id))
-        for node in list_registered_nodes(shared_cache)
-    )
+def _live_node_has_template(
+    shared_cache: CacheBackend, now: int, *, exclude_draining: bool
+) -> bool:
+    for node in list_registered_nodes(shared_cache):
+        if node_reports_stopped(shared_cache, node.node_id, now):
+            continue
+        info = get_node_info(shared_cache, node.node_id)
+        if not _has_template(info):
+            continue
+        if exclude_draining and (
+            (info is not None and info.draining)
+            or is_node_draining(shared_cache, node.node_id)
+        ):
+            continue
+        return True
+    return False
 
 
 class _AvailabilityCache:
@@ -164,11 +183,16 @@ class _AvailabilityCache:
 
 
 _availability = _AvailabilityCache()
+_new_sandbox_availability = _AvailabilityCache()
 
 
-def _check_live_node() -> bool:
+def _check_live_node(*, exclude_draining: bool) -> bool:
     try:
-        return _live_node_has_template(get_shared_cache_backend(), int(time.time()))
+        return _live_node_has_template(
+            get_shared_cache_backend(),
+            int(time.time()),
+            exclude_draining=exclude_draining,
+        )
     except Exception:
         logger.exception("sandbox_fc_availability_check_failed")
         return False
@@ -180,7 +204,21 @@ def firecracker_available() -> bool:
         return False
     if SANDBOX_RUNTIME is not SandboxRuntime.AUTO:
         return True
-    return _availability.get(_check_live_node)
+    return _availability.get(lambda: _check_live_node(exclude_draining=False))
+
+
+def firecracker_accepts_new_sandboxes() -> bool:
+    """Whether a new sandbox can start on Firecracker now: as
+    `firecracker_available`, without draining nodes. The backend choice uses
+    it; the tools keep `firecracker_available`, so sandboxes on a draining
+    node keep their tools."""
+    if STATIC_OFF_REASON is not None:
+        return False
+    if SANDBOX_RUNTIME is not SandboxRuntime.AUTO:
+        return True
+    return _new_sandbox_availability.get(
+        lambda: _check_live_node(exclude_draining=True)
+    )
 
 
 def sandbox_tools_available() -> bool:

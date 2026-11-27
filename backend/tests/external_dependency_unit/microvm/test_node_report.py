@@ -631,3 +631,36 @@ def test_deregister_needs_the_address_owner(
     assert registry.deregister_node(
         shared_cache, node_id=node.node_id, key_id=node.key_id
     )
+
+
+def test_node_info_of_an_old_registration_is_not_recorded(
+    node: Node,
+    shared_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+) -> None:
+    info = client_factory.client(node.running.address).node_info()
+    # The pass read the first registration; a new agent registered since.
+    registry.clear_node_agent_address(shared_cache, node_id=node.node_id)
+    registry.set_node_agent_address(
+        shared_cache,
+        node_id=node.node_id,
+        address=node.running.address,
+        key_id=f"{node.node_id}-2",
+    )
+    assert not registry.record_node_info(
+        shared_cache,
+        node.node_id,
+        info,
+        address=node.running.address,
+        key_id=node.key_id,
+    )
+    assert registry.get_node_info(shared_cache, node.node_id) is None
+
+    assert registry.record_node_info(
+        shared_cache,
+        node.node_id,
+        info,
+        address=node.running.address,
+        key_id=f"{node.node_id}-2",
+    )
+    assert registry.get_node_info(shared_cache, node.node_id) == info

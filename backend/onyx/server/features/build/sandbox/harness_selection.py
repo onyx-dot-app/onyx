@@ -65,12 +65,13 @@ def choose_backend(
         return HarnessBackend.CONTAINER
     placement = get_sandbox_placement(tenant_cache, sandbox_id)
     if placement is not None and _placed_node_is_up(placement):
-        return HarnessBackend.FIRECRACKER
-    pick = (
-        HarnessBackend.FIRECRACKER
-        if firecracker_available()
-        else HarnessBackend.CONTAINER
-    )
+        pick = HarnessBackend.FIRECRACKER
+    elif firecracker_available():
+        pick = HarnessBackend.FIRECRACKER
+    else:
+        pick = HarnessBackend.CONTAINER
+    # Every pick goes through the mark, so calls that see different node
+    # states in one start still agree.
     key = _CHOICE_PREFIX + str(sandbox_id)
     if tenant_cache.set_if_absent(key, pick.value, ex=CHOICE_SECONDS):
         return pick

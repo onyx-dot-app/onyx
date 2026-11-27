@@ -468,14 +468,36 @@ def node_reports_stopped(shared_cache: CacheBackend, node_id: str, now: int) -> 
     return now - last > SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS
 
 
-def record_node_info(shared_cache: CacheBackend, node_id: str, info: NodeInfo) -> None:
-    """Keep the node's `NodeInfo` from its last report pass. Expires with the
-    node's keys."""
-    shared_cache.set(
-        _NODE_INFO_PREFIX + node_id,
-        info.model_dump_json(),
-        ex=NODE_SIGNING_KEY_TTL_SECONDS,
-    )
+def get_node_registration_key(shared_cache: CacheBackend, node_id: str) -> str | None:
+    """The key id of the registration that wrote the node's address, if any."""
+    raw = shared_cache.get(_NODE_ADDRESS_KEY_PREFIX + node_id)
+    return None if raw is None else raw.decode()
+
+
+def record_node_info(
+    shared_cache: CacheBackend,
+    node_id: str,
+    info: NodeInfo,
+    *,
+    address: str,
+    key_id: str | None,
+) -> bool:
+    """Keep the node's `NodeInfo` from its last report pass, only while the
+    registration that the pass read (`address`, `key_id`) is still the
+    node's: a late write never restores old info for a new registration.
+    Expires with the node's keys. Returns False when it skipped the write."""
+    with _node_lock(shared_cache, node_id):
+        current = shared_cache.get(_NODE_ADDRESS_PREFIX + node_id)
+        if current is None or current.decode() != address:
+            return False
+        if get_node_registration_key(shared_cache, node_id) != key_id:
+            return False
+        shared_cache.set(
+            _NODE_INFO_PREFIX + node_id,
+            info.model_dump_json(),
+            ex=NODE_SIGNING_KEY_TTL_SECONDS,
+        )
+        return True
 
 
 def get_node_info(shared_cache: CacheBackend, node_id: str) -> NodeInfo | None:

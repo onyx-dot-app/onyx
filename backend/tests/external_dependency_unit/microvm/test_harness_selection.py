@@ -62,10 +62,13 @@ def auto_runtime(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]
     monkeypatch.setattr(availability, "SANDBOX_FC_TEMPLATE", SOURCE_TAG)
     monkeypatch.setattr(availability, "STATIC_OFF_REASON", None)
     monkeypatch.setattr(availability, "SANDBOX_FIRECRACKER_ENABLED", True)
+    monkeypatch.setattr(availability, "CONTAINER_HARNESS_ENABLED", False)
     monkeypatch.setattr(availability, "SANDBOX_FC_AVAILABILITY_CACHE_SECONDS", 0.0)
     availability._availability.clear()
+    availability._new_sandbox_availability.clear()
     yield
     availability._availability.clear()
+    availability._new_sandbox_availability.clear()
 
 
 @pytest.fixture
@@ -120,7 +123,7 @@ def _selector(
     return SelectingHarnessSandbox(
         firecracker=firecracker or _fake(),
         container=container or _fake(),
-        firecracker_available=availability.firecracker_available,
+        firecracker_available=availability.firecracker_accepts_new_sandboxes,
     )
 
 
@@ -215,22 +218,59 @@ def test_a_firecracker_sandbox_stays_on_firecracker_while_its_node_serves(
     report_node(node_id=node_id)
     ref = new_ref()
     _placement(tenant_cache, ref.sandbox_id, node_id)
-    # A choice made elsewhere does not move a placed sandbox.
-    tenant_cache.set(
-        harness_selection._CHOICE_PREFIX + str(ref.sandbox_id),
-        HarnessBackend.CONTAINER.value,
-    )
-    assert _backend(_selector(), ref) == "firecracker"
-    # A cached "no node serves" answer does not move it either: its own node
-    # still reports.
+    # A cached "no node serves" answer does not move it: its own node still
+    # reports.
     cached_no = SelectingHarnessSandbox(
         firecracker=_fake(), container=_fake(), firecracker_available=lambda: False
     )
     assert _backend(cached_no, ref) == "firecracker"
-    # Its node stopped reporting: the VM cannot serve, so the sandbox starts
-    # again where the choice says.
+    # A drain blocks only new VMs: the placed sandbox keeps its node.
+    registry.set_node_draining(shared_cache, node_id, True)
+    assert _backend(_selector(), ref) == "firecracker"
+    # Its node stopped reporting: the VM cannot serve, so the next start
+    # picks again.
     registry.record_node_report(shared_cache, node_id, int(time.time()) - 3600)
+    tenant_cache.delete(harness_selection._CHOICE_PREFIX + str(ref.sandbox_id))
     assert _backend(cached_no, ref) == "container"
+
+
+def test_calls_that_see_different_node_states_agree(
+    report_node: ReportNode,
+    new_ref: NewRef,
+    tenant_cache: CacheBackend,
+    shared_cache: CacheBackend,
+) -> None:
+    """A call that saw the placed node down chose a container; a call that
+    sees the node again must not send the same start to Firecracker."""
+    node_id = f"sel-{uuid.uuid4().hex[:8]}"
+    report_node(node_id=node_id)
+    ref = new_ref()
+    _placement(tenant_cache, ref.sandbox_id, node_id)
+    registry.record_node_report(shared_cache, node_id, int(time.time()) - 3600)
+    cached_no = SelectingHarnessSandbox(
+        firecracker=_fake(), container=_fake(), firecracker_available=lambda: False
+    )
+    assert _backend(cached_no, ref) == "container"
+    registry.record_node_report(shared_cache, node_id, int(time.time()))
+    assert _backend(_selector(), ref) == "container"
+
+
+def test_a_draining_node_takes_no_new_sandbox(
+    report_node: ReportNode,
+    new_ref: NewRef,
+    shared_cache: CacheBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node_id = f"sel-{uuid.uuid4().hex[:8]}"
+    report_node(node_id=node_id)
+    registry.set_node_draining(shared_cache, node_id, True)
+    assert _backend(_selector(), new_ref()) == "container"
+    # The tools stay: sandboxes on the draining node still serve.
+    assert availability.firecracker_available()
+    monkeypatch.setattr(availability, "CONTAINER_HARNESS_ENABLED", True)
+    status = availability.get_sandbox_status()
+    assert status.new_sandbox_backend is HarnessBackend.CONTAINER
+    assert status.firecracker_off_reason is None
 
 
 def test_a_placement_on_an_unregistered_node_does_not_keep_the_sandbox(
