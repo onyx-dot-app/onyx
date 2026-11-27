@@ -15,8 +15,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from onyx.auth.users import UserManager
 from tests.utils.audit import audit_events
 
-# Audit emission is an EE feature.
-pytestmark = pytest.mark.usefixtures("enable_ee")
+# Audit emission needs EE and the Enterprise tier.
+pytestmark = pytest.mark.usefixtures("enterprise_audit")
 
 
 @pytest.mark.asyncio

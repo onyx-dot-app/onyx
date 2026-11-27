@@ -73,12 +73,12 @@ from tests.utils.pytest_secrets import test_secrets as test_secrets
 @pytest.fixture
 def audit_stream(
     caplog: pytest.LogCaptureFixture,
-    enable_ee: None,  # noqa: ARG001
+    enterprise_audit: None,  # noqa: ARG001
 ) -> Generator[None, None, None]:
     """``onyx.audit`` sets ``propagate=False``, so caplog's root handler never sees
     its records; hang caplog's handler below that barrier instead. Not autouse — it
     would feed audit records to tests that capture logs for other reasons. Enables
-    EE, because audit emission is an EE feature.
+    EE and the Enterprise tier, which audit emission needs.
     """
     audit_logger = logging.getLogger("onyx.audit")
     audit_logger.addHandler(caplog.handler)

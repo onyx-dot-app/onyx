@@ -142,7 +142,7 @@ def _with_common_patches(fn: object) -> object:
     return fn
 
 
-@pytest.mark.usefixtures("enable_ee")
+@pytest.mark.usefixtures("enterprise_audit")
 @_with_common_patches
 @patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
 def test_bulk_invite_emits_user_create(
@@ -167,7 +167,7 @@ def test_bulk_invite_emits_user_create(
     assert events[0]["extra"]["invited_emails"] == ["new@example.com"]
 
 
-@pytest.mark.usefixtures("enable_ee")
+@pytest.mark.usefixtures("enterprise_audit")
 # Explicit patches (not _with_common_patches): this case needs
 # get_invited_users to report the email as already-invited, which the helper
 # hardcodes to [] and re-patching from inside the stack doesn't override.

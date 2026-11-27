@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ee.onyx.utils import audit
+from ee.onyx.utils import tier as tier_module
 from ee.onyx.utils.audit import (
     _OCSF_CLASS_BY_ACTION,
     AUDIT_HANDLER_NAME,
@@ -21,6 +22,7 @@ from ee.onyx.utils.audit import (
     OCSFEventClass,
     emit_audit_event,
 )
+from onyx.server.settings.models import Tier
 from onyx.utils import audit as audit_surface
 from onyx.utils.audit import (
     AuditAction,
@@ -30,6 +32,8 @@ from onyx.utils.audit import (
 )
 from onyx.utils.variable_functionality import global_version
 from tests.utils.audit import audit_events
+
+pytestmark = pytest.mark.usefixtures("enterprise_audit")
 
 
 def test_every_action_has_an_ocsf_class() -> None:
@@ -280,3 +284,57 @@ def test_surface_is_a_noop_without_ee(caplog: pytest.LogCaptureFixture) -> None:
         audit_surface.emit_audit_event(AuditAction.LOGOUT, AuditOutcome.SUCCESS)
 
     assert audit_events(caplog) == []
+
+
+@pytest.mark.parametrize(
+    ("tier", "expected_events"),
+    [(Tier.ENTERPRISE, 1), (Tier.BUSINESS, 0), (Tier.COMMUNITY, 0)],
+)
+def test_only_the_enterprise_tier_emits(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tier: Tier,
+    expected_events: int,
+) -> None:
+    monkeypatch.setattr(tier_module, "get_tier", lambda tenant_id=None: tier)  # noqa: ARG005
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(AuditAction.LOGOUT, AuditOutcome.SUCCESS)
+
+    assert len(audit_events(caplog)) == expected_events
+
+
+def test_a_dropped_event_claims_no_dedup_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tier_module, "get_tier", lambda tenant_id=None: Tier.BUSINESS)  # noqa: ARG005
+    should_emit = MagicMock(return_value=True)
+    monkeypatch.setattr(audit, "should_emit", should_emit)
+
+    emit_audit_event(AuditAction.CREDENTIAL_ACCESS, AuditOutcome.SUCCESS, dedup_key="k")
+
+    should_emit.assert_not_called()
+
+
+def test_tier_lookup_failure_fails_open(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def boom(tenant_id: str | None = None) -> Tier:  # noqa: ARG001
+        raise RuntimeError("license cache down")
+
+    monkeypatch.setattr(tier_module, "get_tier", boom)
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(AuditAction.LOGOUT, AuditOutcome.SUCCESS)
+
+    assert len(audit_events(caplog)) == 1
+
+
+def test_tier_is_resolved_once_per_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    get_tier = MagicMock(return_value=Tier.ENTERPRISE)
+    monkeypatch.setattr(tier_module, "get_tier", get_tier)
+
+    emit_audit_event(AuditAction.LOGOUT, AuditOutcome.SUCCESS)
+    emit_audit_event(AuditAction.LOGOUT, AuditOutcome.SUCCESS)
+
+    assert get_tier.call_count == 1
