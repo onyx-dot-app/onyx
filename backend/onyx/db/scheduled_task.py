@@ -443,6 +443,27 @@ def mark_run_status(
     return run
 
 
+def fail_queued_run__no_commit(
+    *, db_session: Session, run_id: UUID, error_detail: str
+) -> ScheduledTaskRun | None:
+    """Fail a run that is still QUEUED, under its row lock. None: the run
+    already left the queue, so an executor owns it."""
+    status = db_session.execute(
+        select(ScheduledTaskRun.status)
+        .where(ScheduledTaskRun.id == run_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if status != ScheduledTaskRunStatus.QUEUED:
+        return None
+    return mark_run_status(
+        db_session=db_session,
+        run_id=run_id,
+        status=ScheduledTaskRunStatus.FAILED,
+        error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
+        error_detail=error_detail,
+    )
+
+
 def get_run(
     *,
     db_session: Session,
@@ -524,7 +545,11 @@ def latest_runs_for_tasks(
         select(ScheduledTaskRun)
         .where(ScheduledTaskRun.task_id.in_(task_ids))
         .distinct(ScheduledTaskRun.task_id)
-        .order_by(ScheduledTaskRun.task_id, desc(ScheduledTaskRun.started_at))
+        .order_by(
+            ScheduledTaskRun.task_id,
+            desc(ScheduledTaskRun.started_at),
+            desc(ScheduledTaskRun.id),
+        )
     )
     return {run.task_id: run for run in db_session.execute(stmt).scalars()}
 

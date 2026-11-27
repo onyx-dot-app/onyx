@@ -196,15 +196,23 @@ it("marks a run without a chat viewed when it is clicked", async () => {
     viewed_revision: null,
   });
   serverRuns = [failed];
-  jest
-    .mocked(markScheduledRunsViewed)
-    .mockResolvedValue({ items: [], next_cursor: null });
+  jest.mocked(markScheduledRunsViewed).mockImplementation(async () => {
+    serverRuns = [{ ...failed, viewed_revision: 1 }];
+    return { items: [], next_cursor: null };
+  });
   render(<ScheduledRunHistory taskId="task" />);
 
   expect(await screen.findByText("Failed: Budget used up")).toBeInTheDocument();
+  const pageFetches = () =>
+    jest
+      .mocked(global.fetch)
+      .mock.calls.filter(([url]) => !String(url).includes("unviewed=true"))
+      .length;
+  const pagesBefore = pageFetches();
   await user.click(screen.getAllByRole("row")[1]!);
 
   await waitFor(() =>
     expect(markScheduledRunsViewed).toHaveBeenCalledWith("task", [failed])
   );
+  await waitFor(() => expect(pageFetches()).toBeGreaterThan(pagesBefore));
 });

@@ -28,7 +28,7 @@ from onyx.chat.run_store import (
     cancel_parked_response,
     interrupt_ownerless_responses,
 )
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import NotificationType, OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ScheduledTaskErrorClass,
@@ -36,10 +36,11 @@ from onyx.db.enums import (
     ScheduledTaskSkipReason,
     ScheduledTaskTriggerSource,
 )
-from onyx.db.models import ScheduledTaskRun
+from onyx.db.models import ScheduledTask, ScheduledTaskRun
 from onyx.db.scheduled_task import (
     advance_next_run_at,
     claim_due_scheduled_tasks,
+    fail_queued_run__no_commit,
     find_stuck_runs,
     get_run_response,
     has_in_flight_run_for_task,
@@ -47,6 +48,7 @@ from onyx.db.scheduled_task import (
     list_chat_runs_in_flight,
     mark_run_status,
     missing_chat_session_ids,
+    notify_run_owner__no_commit,
     pause_scheduled_task__no_commit,
     sync_chat_run__no_commit,
 )
@@ -160,6 +162,47 @@ def _cancel_parked_runs(
 # --- Dispatch ----------------------------------------------------------------
 
 
+def _record_failed_fire(
+    db_session: Session, task: ScheduledTask, now: datetime
+) -> None:
+    """A fire that failed to dispatch rolled back, so its next_run_at did
+    not advance and it would fail again on every tick. Skip the fire, and
+    record it as a failed run the owner is told about. Pause only a schedule
+    that cannot advance."""
+    try:
+        with db_session.begin_nested():
+            advance_next_run_at(db_session=db_session, task=task, now=now)
+    except Exception:
+        task_logger.exception(
+            "Could not advance scheduled task %s; pausing it", task.id
+        )
+        try:
+            with db_session.begin_nested():
+                pause_scheduled_task__no_commit(db_session, task.id)
+        except Exception:
+            task_logger.exception("Could not pause scheduled task %s", task.id)
+    try:
+        with db_session.begin_nested():
+            run = insert_run(
+                db_session=db_session,
+                task_id=task.id,
+                trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+            )
+            failed = fail_queued_run__no_commit(
+                db_session=db_session,
+                run_id=run.id,
+                error_detail="The scheduled run could not be started",
+            )
+            if failed is not None:
+                notify_run_owner__no_commit(
+                    db_session, failed, NotificationType.SCHEDULED_TASK_FAILED
+                )
+    except Exception:
+        task_logger.exception(
+            "Could not record the failed fire of scheduled task %s", task.id
+        )
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_DISPATCH_DUE,
     ignore_result=True,
@@ -198,7 +241,7 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         to_enqueue: list[UUID] = []
 
         for task in claimed_tasks:
-            task_run_ids: list[UUID] = []
+            queued_run_id: UUID | None = None
             try:
                 # A savepoint per task: a failure leaves no run behind to
                 # be committed and sent with the rest of the batch.
@@ -232,40 +275,26 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                             status=ScheduledTaskRunStatus.SKIPPED,
                             skip_reason=ScheduledTaskSkipReason.PRIOR_IN_FLIGHT,
                         )
-                        skipped_count += 1
                     else:
-                        run = insert_run(
+                        queued_run_id = insert_run(
                             db_session=db_session,
                             task_id=task.id,
                             trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
                             status=ScheduledTaskRunStatus.QUEUED,
-                        )
-                        task_run_ids.append(run.id)
-                        dispatched_count += 1
+                        ).id
 
                     # Always advance next_run_at; otherwise the next tick
                     # would re-claim the same row.
                     advance_next_run_at(db_session=db_session, task=task, now=now)
-                to_enqueue.extend(task_run_ids)
             except Exception:
                 task_logger.exception("Error dispatching scheduled task %s", task.id)
-                # Its next_run_at did not advance, so it would fail again on
-                # every tick. Skip this fire; pause only a schedule that
-                # cannot advance.
-                try:
-                    with db_session.begin_nested():
-                        advance_next_run_at(db_session=db_session, task=task, now=now)
-                except Exception:
-                    task_logger.exception(
-                        "Could not advance scheduled task %s; pausing it", task.id
-                    )
-                    try:
-                        with db_session.begin_nested():
-                            pause_scheduled_task__no_commit(db_session, task.id)
-                    except Exception:
-                        task_logger.exception(
-                            "Could not pause scheduled task %s", task.id
-                        )
+                _record_failed_fire(db_session, task, now)
+                continue
+            if queued_run_id is None:
+                skipped_count += 1
+            else:
+                to_enqueue.append(queued_run_id)
+                dispatched_count += 1
 
         db_session.commit()
 
@@ -276,8 +305,8 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
             send_scheduled_run(self.app, run_id, tenant_id)
         except Exception:
             task_logger.exception(
-                "Failed to enqueue scheduled run %s; "
-                "sweeper will reclaim if it stays QUEUED.",
+                "Could not send or fail scheduled run %s; "
+                "the sweeper fails it if it stays QUEUED.",
                 run_id,
             )
 

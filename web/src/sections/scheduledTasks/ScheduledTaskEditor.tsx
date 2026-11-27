@@ -142,7 +142,22 @@ function TaskForm({ task }: TaskFormProps) {
     mode !== initial.mode ||
     JSON.stringify(payload) !== JSON.stringify(initial.payload) ||
     JSON.stringify(integrations) !== JSON.stringify(initialIntegrations);
-  const unsaved = useUnsavedChangesGuard({ isDirty: dirty && !saving });
+  const formSnapshot = JSON.stringify([
+    name,
+    prompt,
+    mode,
+    payload,
+    integrations,
+  ]);
+  const latestSnapshot = useRef(formSnapshot);
+  useEffect(() => {
+    latestSnapshot.current = formSnapshot;
+  }, [formSnapshot]);
+  // The form as it was sent. Edits made after it stay guarded.
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  const unsaved = useUnsavedChangesGuard({
+    isDirty: dirty && formSnapshot !== savedSnapshot,
+  });
 
   useEffect(() => {
     restoredPayload.current = false;
@@ -178,6 +193,8 @@ function TaskForm({ task }: TaskFormProps) {
     if (!canSave || integrations === null || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    const submitted = formSnapshot;
+    setSavedSnapshot(submitted);
     const fields = {
       name: name.trim(),
       prompt: prompt.trim(),
@@ -201,11 +218,19 @@ function TaskForm({ task }: TaskFormProps) {
           ? t("toasts.updated")
           : t(runNow ? "toasts.createdAndRun" : "toasts.created")
       );
-      navigation.go(scheduledTaskHref(saved.id));
+      const leave = () => navigation.go(scheduledTaskHref(saved.id));
+      if (latestSnapshot.current === submitted) {
+        leave();
+        return;
+      }
+      savingRef.current = false;
+      setSaving(false);
+      unsaved.requestLeave(leave);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("toasts.saveFailed"));
       savingRef.current = false;
       setSaving(false);
+      setSavedSnapshot(null);
     }
   }
 

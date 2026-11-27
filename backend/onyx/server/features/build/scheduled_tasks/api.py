@@ -561,7 +561,11 @@ def run_now(
         status=ScheduledTaskRunStatus.QUEUED,
     )
     db_session.commit()
-    send_scheduled_run(celery_app, run.id, get_current_tenant_id())
+    if not send_scheduled_run(celery_app, run.id, get_current_tenant_id()):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "The run could not be started. Try again later.",
+        )
     return RunNowResponse(run_id=str(run.id), status=run.status)
 
 

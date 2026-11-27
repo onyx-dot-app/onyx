@@ -55,7 +55,9 @@ from onyx.db.models import (
 )
 from onyx.db.scheduled_task import (
     create_scheduled_task,
+    has_in_flight_run_for_task,
     insert_run,
+    latest_runs_for_tasks,
     mark_run_status,
     soft_delete_scheduled_task,
     sync_chat_run__no_commit,
@@ -68,6 +70,7 @@ from onyx.integrations.policy import (
     chat_session_integrations,
     resolve_chat_action_policies,
 )
+from onyx.scheduled_tasks.enqueue import send_scheduled_run
 from onyx.scheduled_tasks.executor import _fail, _start_run, run_scheduled_task_logic
 from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
 from onyx.tools.models import IntegrationLinkConfiguration
@@ -289,6 +292,20 @@ def _dispatch_with_fake_broker() -> list[dict[str, Any]]:
     return sent
 
 
+def _dispatch_count_with_fake_broker() -> int:
+    class _FakeApp:
+        def send_task(self, name: str, **kwargs: Any) -> None:
+            pass
+
+    task_instance = dispatch_due_scheduled_tasks.run.__self__
+    with patch.object(
+        type(task_instance), "app", new_callable=PropertyMock, return_value=_FakeApp()
+    ):
+        return dispatch_due_scheduled_tasks.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
+        )
+
+
 def test_the_next_fire_cancels_a_run_that_waits_for_approval(
     db_session: Session,
     owner: User,
@@ -315,7 +332,7 @@ def test_the_next_fire_cancels_a_run_that_waits_for_approval(
     assert response.response_status == RunStatus.CANCELLED
 
 
-def test_a_fire_that_fails_to_dispatch_leaves_no_run(
+def test_a_fire_that_fails_to_dispatch_records_a_failed_run(
     db_session: Session,
     owner: User,
     cleanup: list[int],  # noqa: ARG001
@@ -329,7 +346,8 @@ def test_a_fire_that_fails_to_dispatch_leaves_no_run(
 
     db_session.expire_all()
     assert sent == []
-    assert _task_runs(db_session, task) == []
+    [run] = _task_runs(db_session, task)
+    assert run.status == ScheduledTaskRunStatus.FAILED
     # Paused, so the next tick does not fail on it again.
     assert task.status == ScheduledTaskStatus.PAUSED
     assert task.next_run_at is None
@@ -949,7 +967,10 @@ def test_a_fire_that_hits_a_passing_error_keeps_its_schedule(
 
     db_session.expire_all()
     assert sent == []
-    assert _task_runs(db_session, task) == []
+    [run] = _task_runs(db_session, task)
+    assert run.status == ScheduledTaskRunStatus.FAILED
+    assert run.error_detail == "The scheduled run could not be started"
+    assert _notifications(db_session, owner) == [NotificationType.SCHEDULED_TASK_FAILED]
     # Only this fire is skipped; the task keeps running on schedule.
     assert task.status == ScheduledTaskStatus.ACTIVE
     assert task.next_run_at is not None and due_at is not None
@@ -976,3 +997,70 @@ def test_a_second_approval_wait_shows_its_notification_again(
 
     assert run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
     assert _open_notifications(db_session, owner) == [str(run.id)]
+
+
+def test_a_run_the_broker_rejects_fails_and_tells_the_owner(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+    )
+    db_session.commit()
+
+    class _DownBroker:
+        def send_task(self, name: str, **kwargs: Any) -> None:  # noqa: ARG002
+            raise ConnectionError("broker down")
+
+    assert not send_scheduled_run(
+        _DownBroker(),  # ty: ignore[invalid-argument-type]
+        run.id,
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+    )
+
+    db_session.expire_all()
+    [failed] = _task_runs(db_session, task)
+    assert failed.status == ScheduledTaskRunStatus.FAILED
+    assert not has_in_flight_run_for_task(db_session=db_session, task_id=task.id)
+    assert _notifications(db_session, owner) == [NotificationType.SCHEDULED_TASK_FAILED]
+
+
+def test_the_dispatcher_counts_only_fires_it_handled(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    _task(db_session, owner, due=True)
+
+    with patch(
+        "onyx.background.celery.tasks.scheduled_tasks.tasks.advance_next_run_at",
+        side_effect=RuntimeError("cannot advance"),
+    ):
+        assert _dispatch_count_with_fake_broker() == 0
+
+
+def test_the_latest_run_breaks_start_time_ties_like_the_run_history(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    runs = [
+        insert_run(
+            db_session=db_session,
+            task_id=task.id,
+            trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+            status=ScheduledTaskRunStatus.SKIPPED,
+        )
+        for _ in range(5)
+    ]
+    for run in runs:
+        run.started_at = runs[0].started_at
+    db_session.commit()
+
+    latest = latest_runs_for_tasks(db_session, [task.id])[task.id]
+    assert latest.id == max(run.id for run in runs)

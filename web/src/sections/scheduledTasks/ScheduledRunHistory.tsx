@@ -177,7 +177,7 @@ export default function ScheduledRunHistory({
   async function markRunViewed(run: ScheduledRunSummary) {
     try {
       await markScheduledRunsViewed(taskId, [run]);
-      await revalidateScheduledRunViews(taskId);
+      await Promise.all([revalidateScheduledRunViews(taskId), refreshRuns()]);
     } catch {
       toast.error(t("markAllViewedFailed"));
     }

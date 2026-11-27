@@ -1,6 +1,7 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import ScheduledTaskEditor from "@/sections/scheduledTasks/ScheduledTaskEditor";
 import { createScheduledTask } from "@/lib/scheduledTasks/svc";
+import type { ScheduledTaskDetail } from "@/lib/scheduledTasks/types";
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -79,27 +80,29 @@ jest.mock("@/app/craft/v1/tasks/components/TaskActionPolicies", () => ({
   },
 }));
 
+const savedTask: ScheduledTaskDetail = {
+  id: "task",
+  name: "Digest",
+  prompt: "Summarize",
+  cron_expression: "0 */1 * * *",
+  editor_mode: "interval",
+  status: "ACTIVE",
+  next_run_at: null,
+  next_runs: [],
+  last_run: null,
+  integrations: [],
+  human_readable_schedule: "Every hour",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
 beforeEach(() => {
   window.history.replaceState(null, "", "/app/scheduled-tasks/new");
 });
 
 it("creates a task with every integration off and runs it", async () => {
   const user = setupUser();
-  jest.mocked(createScheduledTask).mockResolvedValue({
-    id: "task",
-    name: "Digest",
-    prompt: "Summarize",
-    cron_expression: "0 */1 * * *",
-    editor_mode: "interval",
-    status: "ACTIVE",
-    next_run_at: null,
-    next_runs: [],
-    last_run: null,
-    integrations: [],
-    human_readable_schedule: "Every hour",
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
-  });
+  jest.mocked(createScheduledTask).mockResolvedValue(savedTask);
   render(<ScheduledTaskEditor />);
 
   await user.type(screen.getByTestId("scheduled-task-name"), " Digest ");
@@ -162,4 +165,26 @@ it("counts an emoji in a name as one character, as the server does", async () =>
   expect(
     screen.queryByText("Use 200 characters or fewer.")
   ).not.toBeInTheDocument();
+});
+
+it("asks before it leaves edits made while the save was pending", async () => {
+  const user = setupUser();
+  let finishSave: (task: ScheduledTaskDetail) => void = () => undefined;
+  jest.mocked(createScheduledTask).mockReturnValue(
+    new Promise((resolve) => {
+      finishSave = resolve;
+    })
+  );
+  render(<ScheduledTaskEditor />);
+
+  await user.type(screen.getByTestId("scheduled-task-name"), "Digest");
+  await user.type(screen.getByTestId("scheduled-task-prompt"), "Summarize");
+  await user.click(screen.getByTestId("save-scheduled-task"));
+  await user.type(screen.getByTestId("scheduled-task-prompt"), " the news");
+  finishSave(savedTask);
+
+  expect(
+    await screen.findByText("Discard unsaved changes?")
+  ).toBeInTheDocument();
+  expect(window.location.pathname).toBe("/app/scheduled-tasks/new");
 });

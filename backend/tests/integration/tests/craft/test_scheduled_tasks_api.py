@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
@@ -42,6 +42,24 @@ def _db_access() -> Generator[None, None, None]:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
+_created_task_ids: list[UUID] = []
+
+
+@pytest.fixture(autouse=True)
+def _delete_created_tasks(_db_access: None) -> Generator[None, None, None]:  # noqa: ARG001
+    try:
+        yield
+    finally:
+        if _created_task_ids:
+            # Runs and integration links cascade with their task.
+            with get_session_with_current_tenant() as db_session:
+                db_session.execute(
+                    delete(ScheduledTask).where(ScheduledTask.id.in_(_created_task_ids))
+                )
+                db_session.commit()
+            _created_task_ids.clear()
+
+
 def _url(*parts: str) -> str:
     base = f"{API_SERVER_URL}/build/scheduled-tasks"
     if not parts:
@@ -70,12 +88,15 @@ def _create_task(
     }
     if integrations is not None:
         body["integrations"] = integrations
-    return client.post(
+    response = client.post(
         _url(),
         json=body,
         headers=user.headers,
         cookies=user.cookies,
     )
+    if response.is_success:
+        _created_task_ids.append(UUID(response.json()["id"]))
+    return response
 
 
 def _patch_task(

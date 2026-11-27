@@ -60,6 +60,10 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
     // Runs end and next runs move in the background.
     { refreshInterval: TASK_REFRESH_INTERVAL_MS }
   );
+  // A task deleted elsewhere is gone even while its old data is cached.
+  const notFound =
+    error instanceof FetchError &&
+    (error.status === 404 || error.status === 422);
   const actions = useScheduledTaskActions(task, () =>
     navigation.go(SCHEDULED_TASKS_PATH, { replace: true })
   );
@@ -120,12 +124,7 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
       description={schedule}
       loading={isLoading}
       error={
-        error && !task
-          ? error instanceof FetchError &&
-            (error.status === 404 || error.status === 422)
-            ? t("notFound")
-            : t("loadFailed")
-          : false
+        notFound ? t("notFound") : error && !task ? t("loadFailed") : false
       }
       tabs={tabs}
       tab={parseTab(searchParams.get("tab"))}
