@@ -10,7 +10,7 @@ from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
     expand_entra_group,
     list_nested_entra_groups,
     normalize_email,
-    resolve_entra_group_name,
+    resolve_entra_group_id,
 )
 from onyx.access.models import ExternalAccess
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
@@ -88,10 +88,20 @@ def _assigned_group(
     reader: SharepointPermissionReader,
     site_url: str,
     principal: SharepointPrincipal,
-) -> SharepointGroup:
-    """A group principal, named the way its external group is stored."""
+) -> SharepointGroup | None:
+    """A group principal, named the way its external group is stored. None for
+    an Entra group that Entra does not know, which grants no one."""
     if principal.principal_type == SharepointPrincipalType.ENTRA_GROUP:
-        name = resolve_entra_group_name(reader, principal.login_name, principal.title)
+        if is_public_login_name(principal.login_name):
+            name = principal.login_name
+        else:
+            group_id = resolve_entra_group_id(reader, principal.login_name)
+            if group_id is None:
+                logger.warning(
+                    "Skipping unresolved Entra group %s", principal.login_name
+                )
+                return None
+            name = group_id
     else:
         name = _get_site_scoped_group_name(site_url, principal.title)
     return SharepointGroup(
@@ -117,7 +127,9 @@ def _collect_principals(
                     "User don't have a user principal name: %s", principal.login_name
                 )
         elif principal.principal_type in GROUP_PRINCIPAL_TYPES:
-            groups.add(_assigned_group(reader, site_url, principal))
+            group = _assigned_group(reader, site_url, principal)
+            if group is not None:
+                groups.add(group)
     return _AssignedPrincipals(groups=groups, user_emails=user_emails)
 
 
@@ -134,7 +146,7 @@ def _as_sharepoint_groups(groups: set[ResolvedEntraGroup]) -> set[SharepointGrou
         SharepointGroup(
             login_name=group.id,
             principal_type=SharepointPrincipalType.ENTRA_GROUP,
-            name=group.name,
+            name=group.id,
         )
         for group in groups
     }
@@ -430,9 +442,10 @@ def get_sharepoint_external_groups(
         securable=SharepointSecurable(kind=SharepointSecurableKind.SITE),
     )
     groups = {
-        _assigned_group(reader, site_url, member)
+        group
         for member in granting_members(assignments)
         if member.principal_type in GROUP_PRINCIPAL_TYPES
+        and (group := _assigned_group(reader, site_url, member)) is not None
     }
     groups_and_members: GroupsResult = _get_groups_and_members_recursively(
         reader, site_url, groups, is_group_sync=True
