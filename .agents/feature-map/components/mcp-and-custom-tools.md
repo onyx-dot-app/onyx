@@ -301,8 +301,11 @@ For OAuth2 on a non-SSE transport, construction reads the server settings
 (`mcp_oauth_server`), and each call passes `make_integration_oauth_provider` with
 `IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401, or an
 OAuth2 grant that the SDK cannot renew without the browser
-(`MCPReauthenticationRequired`), sets an API key or OAuth2 connection to Needs
-reconnect (`mark_credential_rejected`). Refresh actions does the same and answers
+(`MCPReauthenticationRequired`) after the server answered 401 to the stored
+access token (`rejected_token_fingerprint`), sets an API key or OAuth2 connection
+to Needs reconnect (`mark_credential_rejected`). The mark compares that token,
+which the SDK can have renewed during the call, with the stored one. A failed refresh or a 403
+`insufficient_scope` shows the reconnect card but keeps the connection. Refresh actions does the same and answers
 "refused the credential", not "Could not reach".
 `RestTool`, `GraphQLTool` and `PresetActionTool` do the same refresh and mark
 through `fresh_call_credentials` and `note_rejected_credential`

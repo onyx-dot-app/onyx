@@ -18,7 +18,11 @@ from onyx.integrations.call_credentials import (
     resolve_call_credentials,
     resolve_fresh_call_credentials,
 )
-from onyx.integrations.connection_models import ConnectionSecret, ConnectionState
+from onyx.integrations.connection_models import (
+    ConnectionSecret,
+    ConnectionState,
+    access_token_fingerprint,
+)
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.models import CallCredentials
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -140,3 +144,54 @@ def test_a_call_that_resolves_again_reads_the_current_rows(
     assert fresh.headers == {"Authorization": "Bearer a"}
     assert isinstance(disabled, ConnectionProblem)
     assert disabled.code is ConnectionState.NOT_SET_UP
+
+
+def test_a_rejected_renewed_token_needs_reconnect_but_a_new_grant_stays(
+    db_session: Session, make_test_user: MakeTestUser
+) -> None:
+    """The MCP SDK can renew the token during the call, so the server can
+    reject a token that the call credentials do not hold."""
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url=SERVER_URL,
+        name="renewed_tokens",
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        header_template={"Authorization": "Bearer {access_token}"},
+    )
+    try:
+        renewed = make_test_user("renewed_token")
+        regranted = make_test_user("regranted_token")
+        calls: list[CallCredentials] = []
+        for user in (renewed, regranted):
+            add_connection(
+                db_session, integration, user.id, ConnectionSecret(access_token="old")
+            )
+            calls.append(_credentials(db_session, integration, user))
+            # The call renews the token, and the server rejects the new one.
+            add_connection(
+                db_session, integration, user.id, ConnectionSecret(access_token="new")
+            )
+        # The user signs in again before the rejection is recorded.
+        add_connection(
+            db_session, integration, regranted.id, ConnectionSecret(access_token="b")
+        )
+
+        for call in calls:
+            mark_credential_rejected(
+                call, rejected_token_fingerprint=access_token_fingerprint("new")
+            )
+
+        renewed_call, regranted_call = calls
+        assert renewed_call.connection_id is not None
+        assert regranted_call.connection_id is not None
+        assert (
+            _status(db_session, renewed_call.connection_id)
+            is IntegrationConnectionStatus.NEEDS_RECONNECT
+        )
+        assert (
+            _status(db_session, regranted_call.connection_id)
+            is IntegrationConnectionStatus.CONNECTED
+        )
+    finally:
+        delete_integrations(db_session, [integration.id])

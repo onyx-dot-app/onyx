@@ -209,7 +209,7 @@ def test_rejected_user_credentials_still_require_reauthentication() -> None:
 
     assert response.is_error
     assert "Authentication failed" in response.text
-    mark.assert_called_once_with(_CREDENTIALS)
+    mark.assert_called_once_with(_CREDENTIALS, rejected_token_fingerprint=None)
 
 
 @pytest.mark.parametrize(

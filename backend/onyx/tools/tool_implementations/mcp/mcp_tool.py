@@ -294,11 +294,19 @@ class MCPTool(Tool):
             raise
         except Exception as e:
             status_code = http_status(e)
+            rejected_token_fingerprint = (
+                e.rejected_token_fingerprint
+                if isinstance(e, MCPReauthenticationRequired)
+                else None
+            )
             if credentials is not None and (
-                status_code == 401 or isinstance(e, MCPReauthenticationRequired)
+                status_code == 401 or rejected_token_fingerprint is not None
             ):
                 try:
-                    mark_credential_rejected(credentials)
+                    mark_credential_rejected(
+                        credentials,
+                        rejected_token_fingerprint=rejected_token_fingerprint,
+                    )
                 except Exception:
                     logger.exception("Could not record rejected MCP credentials")
             error_str = str(e).lower()

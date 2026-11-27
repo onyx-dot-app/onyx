@@ -122,8 +122,15 @@ def fetch_mcp_actions(
         )
     except Exception as error:
         reauthentication = isinstance(error, MCPReauthenticationRequired)
-        if reauthentication or has_unauthorized_response(error):
-            mark_credential_rejected(credentials)
+        rejected_token_fingerprint = (
+            error.rejected_token_fingerprint
+            if isinstance(error, MCPReauthenticationRequired)
+            else None
+        )
+        if rejected_token_fingerprint is not None or has_unauthorized_response(error):
+            mark_credential_rejected(
+                credentials, rejected_token_fingerprint=rejected_token_fingerprint
+            )
         if reauthentication or has_auth_rejection_response(error):
             raise OnyxError(
                 OnyxErrorCode.CREDENTIAL_INVALID,
