@@ -56,8 +56,6 @@ export interface PanelTabItem {
   // Shown in place of `label` when parts of it need their own direction
   content?: RichNodes;
   icon: IconFunctionComponent;
-  // Shows a close button in place of the icon on hover
-  closable: boolean;
   // Moves by drag or Alt+arrow, only to the place of another movable tab
   movable: boolean;
 }
@@ -342,31 +340,27 @@ export function PanelTabStrip({
                           close button's focus ring */}
                       <div className="size-5 shrink-0">
                         <Section gap={0}>
-                          {tab.closable ? (
-                            <Hoverable.Item
-                              group="resource-tab"
-                              variant="replace-on-hover"
-                              resting={iconTile}
-                            >
-                              <Button
-                                data-tab-close
-                                disabled={disabled}
-                                icon={SvgX}
-                                size="2xs"
-                                prominence="tertiary"
-                                aria-label={t("close.label", {
-                                  name: tab.label,
-                                })}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  closedTab.current = id;
-                                  onClose(id);
-                                }}
-                              />
-                            </Hoverable.Item>
-                          ) : (
-                            iconTile
-                          )}
+                          <Hoverable.Item
+                            group="resource-tab"
+                            variant="replace-on-hover"
+                            resting={iconTile}
+                          >
+                            <Button
+                              data-tab-close
+                              disabled={disabled}
+                              icon={SvgX}
+                              size="2xs"
+                              prominence="tertiary"
+                              aria-label={t("close.label", {
+                                name: tab.label,
+                              })}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                closedTab.current = id;
+                                onClose(id);
+                              }}
+                            />
+                          </Hoverable.Item>
                         </Section>
                       </div>
                       <div className="min-w-0 overflow-hidden pe-2 [&_p]:truncate">

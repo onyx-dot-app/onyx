@@ -11426,6 +11426,8 @@
         "invalidScope": "요청한 권한을 사용할 수 없습니다.",
         "loginBadCredentials": "이 계정으로는 로그인할 수 없습니다. 비활성화되었을 수 있습니다. 워크스페이스 관리자에게 문의하세요.",
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
+        "magicLinkInvalid": "이 로그인 링크는 만료되었거나 이미 사용되었습니다. 새 링크를 요청하세요.",
+        "magicLinkWrongEmail": "이 링크는 다른 이메일 주소로 전송되었습니다. 새 링크를 요청하세요.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
         "playgroundActiveTenant": "회사의 팀이 이미 Onyx를 사용해 보고 있습니다. 팀에 참여하시겠습니까, 새 팀을 시작하시겠습니까?",
         "playgroundAskAdmin": "관리자에게 초대를 요청하세요.",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "팀에 참여"
+      },
+      "newLinkButton": {
+        "label": "새 링크 받기"
       },
       "playgroundHeading": {
         "title": "Onyx 플레이그라운드"
@@ -11601,6 +11606,34 @@
       },
       "workEmailField": {
         "label": "회사 이메일"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "이 링크는 요청한 브라우저와 다른 브라우저에서 열렸습니다. 링크를 받은 이메일 주소를 입력하세요.",
+        "title": "이메일 확인"
+      },
+      "differentEmailButton": {
+        "label": "다른 이메일 사용"
+      },
+      "redeeming": {
+        "text": "로그인하는 중…"
+      },
+      "requestButton": {
+        "label": "이메일로 링크 받기"
+      },
+      "resendWait": {
+        "error": "방금 이 주소로 로그인 링크를 보냈습니다. 받은편지함을 확인하거나 1분 후에 다시 요청하세요."
+      },
+      "sendFailed": {
+        "error": "로그인 이메일을 보낼 수 없습니다. 잠시 후 다시 시도하세요."
+      },
+      "sent": {
+        "description": "{email}(으)로 로그인 링크를 보냈습니다. 링크는 한 번만 사용할 수 있으며 15분 후에 만료됩니다.",
+        "title": "이메일을 확인하세요"
+      },
+      "useSso": {
+        "error": "SSO 공급자로 로그인하세요. 이 워크스페이스에서는 이메일 링크가 꺼져 있습니다."
       }
     },
     "passwordRequirements": {
@@ -12937,11 +12970,10 @@
         },
         "submitError": "답변을 보내지 못했습니다. 다시 시도하세요.",
         "record": {
-          "answered": "답변함",
+          "answeredCount": "{count, plural, other {질문 #개에 답변함}}",
           "answeredInChat": "채팅에서 답변함",
           "cancelled": "답변하지 않음",
           "closed": "더 이상 대기하지 않음",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
@@ -17488,6 +17520,8 @@
       "updated": "{count, plural, one {스킬 #개 업데이트됨} other {스킬 #개 업데이트됨}}",
       "failed": "스킬을 업데이트하지 못했습니다. 다시 시도하세요.",
       "partialFailure": "{count, plural, one {스킬 #개를 업데이트하지 못했습니다} other {스킬 #개를 업데이트하지 못했습니다}}",
+      "deleted": "{count, plural, one {스킬 #개 삭제됨} other {스킬 #개 삭제됨}}",
+      "deleteFailure": "{count, plural, one {스킬 #개를 삭제하지 못했습니다} other {스킬 #개를 삭제하지 못했습니다}}",
       "deleteTitle": "{count, plural, one {스킬 #개를 삭제할까요?} other {스킬 #개를 삭제할까요?}}",
       "deleteDescription": "{count, plural, one {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬을 삭제합니다. 이 작업은 취소할 수 없습니다.} other {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬 #개를 모두 삭제합니다. 이 작업은 취소할 수 없습니다.}}",
       "shareTitle": "{count, plural, one {스킬 #개의 액세스 업데이트} other {스킬 #개의 액세스 업데이트}}",
@@ -18004,6 +18038,8 @@
       "updated": "{count, plural, one {플러그인 #개 업데이트됨} other {플러그인 #개 업데이트됨}}",
       "failed": "플러그인을 업데이트하지 못했습니다. 다시 시도하세요.",
       "partialFailure": "{count, plural, one {플러그인 #개를 업데이트하지 못했습니다} other {플러그인 #개를 업데이트하지 못했습니다}}",
+      "deleted": "{count, plural, one {플러그인 #개 삭제됨} other {플러그인 #개 삭제됨}}",
+      "deleteFailure": "{count, plural, one {플러그인 #개를 삭제하지 못했습니다} other {플러그인 #개를 삭제하지 못했습니다}}",
       "deleteTitle": "{count, plural, one {플러그인 #개를 삭제할까요?} other {플러그인 #개를 삭제할까요?}}",
       "deleteDescription": "{count, plural, one {액세스 권한이 있는 모든 사용자에 대해 선택한 플러그인을 삭제합니다. 이 작업은 취소할 수 없습니다.} other {액세스 권한이 있는 모든 사용자에 대해 선택한 플러그인 #개를 모두 삭제합니다. 이 작업은 취소할 수 없습니다.}}",
       "shareTitle": "{count, plural, one {플러그인 #개의 액세스 업데이트} other {플러그인 #개의 액세스 업데이트}}",

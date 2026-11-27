@@ -11426,6 +11426,8 @@
         "invalidScope": "要求された権限は利用できません。",
         "loginBadCredentials": "このアカウントはサインインできません。無効化されている可能性があります。ワークスペースの管理者にお問い合わせください。",
         "loginRequired": "先に ID プロバイダーでログインする必要があります。",
+        "magicLinkInvalid": "このサインインリンクは期限切れか、すでに使用されています。新しいリンクをリクエストしてください。",
+        "magicLinkWrongEmail": "このリンクは別のメールアドレスに送信されました。新しいリンクをリクエストしてください。",
         "oauthUserAlreadyExists": "このメールアドレスのアカウントは、別のサインイン方法で既に存在します。最初に使用した方法でサインインするか、管理者にこのプロバイダーの連携を依頼してください。",
         "playgroundActiveTenant": "あなたの会社のチームがすでに Onyx を試用しています。チームに参加しますか、それとも新しいチームを始めますか？",
         "playgroundAskAdmin": "管理者に招待を依頼してください。",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "チームに参加"
+      },
+      "newLinkButton": {
+        "label": "新しいリンクを取得"
       },
       "playgroundHeading": {
         "title": "Onyx プレイグラウンド"
@@ -11601,6 +11606,34 @@
       },
       "workEmailField": {
         "label": "職場のメールアドレス"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "このリンクは、リクエストしたブラウザーとは別のブラウザーで開かれました。リンクの送信先のメールアドレスを入力してください。",
+        "title": "メールアドレスを確認"
+      },
+      "differentEmailButton": {
+        "label": "別のメールアドレスを使用"
+      },
+      "redeeming": {
+        "text": "サインインしています…"
+      },
+      "requestButton": {
+        "label": "メールでリンクを受け取る"
+      },
+      "resendWait": {
+        "error": "このアドレスには先ほどサインインリンクを送信しました。受信トレイを確認するか、1分待ってからもう一度リクエストしてください。"
+      },
+      "sendFailed": {
+        "error": "サインインメールを送信できませんでした。しばらくしてからもう一度お試しください。"
+      },
+      "sent": {
+        "description": "{email} にサインインリンクを送信しました。リンクは1回だけ使用でき、15分で期限切れになります。",
+        "title": "メールを確認してください"
+      },
+      "useSso": {
+        "error": "SSO プロバイダーでサインインしてください。このワークスペースではメールリンクが無効になっています。"
       }
     },
     "passwordRequirements": {
@@ -12937,11 +12970,10 @@
         },
         "submitError": "回答を送信できませんでした。もう一度お試しください。",
         "record": {
-          "answered": "回答済み",
+          "answeredCount": "{count, plural, other {# 件の質問に回答済み}}",
           "answeredInChat": "チャットで回答済み",
           "cancelled": "未回答",
           "closed": "待機は終了しました",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option}（{note}）"
         }
       },
@@ -17488,6 +17520,8 @@
       "updated": "{count, plural, one {# 件のスキルを更新しました} other {# 件のスキルを更新しました}}",
       "failed": "スキルを更新できませんでした。もう一度お試しください。",
       "partialFailure": "{count, plural, one {# 件のスキルを更新できませんでした} other {# 件のスキルを更新できませんでした}}",
+      "deleted": "{count, plural, one {# 件のスキルを削除しました} other {# 件のスキルを削除しました}}",
+      "deleteFailure": "{count, plural, one {# 件のスキルを削除できませんでした} other {# 件のスキルを削除できませんでした}}",
       "deleteTitle": "{count, plural, one {# 件のスキルを削除しますか？} other {# 件のスキルを削除しますか？}}",
       "deleteDescription": "{count, plural, one {アクセス権を持つすべてのユーザーに対して、選択したスキルを削除します。この操作は元に戻せません。} other {アクセス権を持つすべてのユーザーに対して、選択した # 件のスキルをすべて削除します。この操作は元に戻せません。}}",
       "shareTitle": "{count, plural, one {# 件のスキルのアクセス権を更新} other {# 件のスキルのアクセス権を更新}}",
@@ -18004,6 +18038,8 @@
       "updated": "{count, plural, one {# 件のプラグインを更新しました} other {# 件のプラグインを更新しました}}",
       "failed": "プラグインを更新できませんでした。もう一度お試しください。",
       "partialFailure": "{count, plural, one {# 件のプラグインを更新できませんでした} other {# 件のプラグインを更新できませんでした}}",
+      "deleted": "{count, plural, one {# 件のプラグインを削除しました} other {# 件のプラグインを削除しました}}",
+      "deleteFailure": "{count, plural, one {# 件のプラグインを削除できませんでした} other {# 件のプラグインを削除できませんでした}}",
       "deleteTitle": "{count, plural, one {# 件のプラグインを削除しますか？} other {# 件のプラグインを削除しますか？}}",
       "deleteDescription": "{count, plural, one {アクセス権を持つすべてのユーザーに対して、選択したプラグインを削除します。この操作は元に戻せません。} other {アクセス権を持つすべてのユーザーに対して、選択した # 件のプラグインをすべて削除します。この操作は元に戻せません。}}",
       "shareTitle": "{count, plural, one {# 件のプラグインのアクセス権を更新} other {# 件のプラグインのアクセス権を更新}}",
