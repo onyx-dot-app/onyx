@@ -508,12 +508,17 @@ func (r *integrationResource) ModifyPlan(ctx context.Context, req resource.Modif
 
 // sendsOrganizationCredentials reports whether Update sends the configured
 // shared credentials: for a new credentials version, for credentials that an
-// earlier apply could not save, or when a new sign-in, header template,
-// server URL or OpenAPI document left the organization without a working
-// connection. Without a new version, it does not replace a key that Onyx
+// earlier apply could not save while the connection still does not work, or
+// when a new sign-in, header template, server URL or OpenAPI document left the
+// organization without a working connection. Without a new version, it does not replace a key that Onyx
 // rejected before the update: that key may be newer than the configured one.
 func sendsOrganizationCredentials(plan, state integrationResourceModel, before, after *client.Integration, pending bool) bool {
-	if pending || writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) {
+	if writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) {
+		return true
+	}
+	// A connection that works again, such as after an admin reconnects, needs
+	// no retry.
+	if pending && (before.OrganizationStatus == nil || before.OrganizationStatus.State != "connected") {
 		return true
 	}
 	connectionChanged := !plan.ServerURL.Equal(state.ServerURL) ||

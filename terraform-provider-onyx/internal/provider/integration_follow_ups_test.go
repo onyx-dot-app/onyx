@@ -130,6 +130,7 @@ func TestUpdateSendsCredentialsForANewVersionOrAChangedConnectionWithoutAWorking
 		{"a new header field that needs reconnect", newHeaders, connected, status("needs_reconnect"), false, true},
 		{"a header edit of a key rejected before", newHeaders, status("needs_reconnect"), status("needs_reconnect"), false, false},
 		{"a retry of credentials that an earlier apply could not save", base, status("needs_reconnect"), status("needs_reconnect"), true, true},
+		{"a retry after an admin reconnected", base, connected, connected, true, false},
 		{"an OpenAPI edit after an admin changed the document and the key", newDocument, status("needs_reconnect"), status("needs_reconnect"), false, false},
 		{"a new shared sign-in with no connection yet", newSignIn, status("not_set_up"), status("not_set_up"), false, true},
 		{"an unrelated update of a rejected key", base, status("needs_reconnect"), status("needs_reconnect"), false, false},
