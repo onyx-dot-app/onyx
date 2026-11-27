@@ -27,10 +27,7 @@ from onyx.db.enums import (
     PermissionAuthority,
     PluginInstallationPolicy,
 )
-from onyx.db.external_app import (
-    associate_built_in_skill__no_commit,
-    configured_app_types,
-)
+from onyx.db.external_app import associate_built_in_skill__no_commit
 from onyx.db.integration import (
     create_external_app_row__no_commit,
     create_graphql_app_row__no_commit,
@@ -423,14 +420,12 @@ def _preset_view(preset: Preset) -> PresetView:
     )
 
 
-def preset_views(db_session: Session) -> list[PresetView]:
-    """The presets an admin can add. A built-in app can have only one app
-    row, so a preset that is already set up is left out."""
-    configured = configured_app_types(db_session)
+def preset_views() -> list[PresetView]:
+    """The presets an admin can add."""
     return [
         _preset_view(preset)
         for preset in sorted(PRESETS.values(), key=lambda preset: preset.name)
-        if not _is_onyx_managed(preset) and preset.app_type not in configured
+        if not _is_onyx_managed(preset)
     ]
 
 

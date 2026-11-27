@@ -68,9 +68,8 @@ def list_integrations_admin(
 @router.get("/presets")
 def list_integration_presets(
     _: User = Depends(_manager),
-    db_session: Session = Depends(get_session),
 ) -> list[PresetView]:
-    return preset_views(db_session)
+    return preset_views()
 
 
 @router.post("/openapi-import")

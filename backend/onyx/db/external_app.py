@@ -45,11 +45,6 @@ def get_built_in_external_app(
     return db_session.scalars(stmt).one_or_none()
 
 
-def configured_app_types(db_session: Session) -> set[ExternalAppType]:
-    """The app types that have an app row."""
-    return set(db_session.scalars(select(ExternalApp.app_type).distinct()))
-
-
 def associate_built_in_skill__no_commit(
     db_session: Session,
     app: ExternalApp,

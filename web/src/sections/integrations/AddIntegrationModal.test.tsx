@@ -6,6 +6,7 @@ import AddIntegrationModal, {
 import messages from "@/i18n/messages/en.json";
 import {
   makeDetail,
+  makeIntegration,
   mockFetch,
   requestBody,
 } from "@tests/setup/integrationTestUtils";
@@ -435,6 +436,26 @@ describe("Catalog", () => {
         },
       })
     );
+  });
+
+  test("leaves out a preset that is already added", async () => {
+    mockFetch({
+      "/api/admin/integrations/presets": [
+        GITHUB_PRESET,
+        { ...GITHUB_PRESET, id: "zendesk", name: "Zendesk" },
+      ],
+      "/api/admin/integrations": [
+        makeIntegration({ shape: "preset", preset_id: "github" }),
+      ],
+    });
+    open({ kind: "catalog" });
+
+    expect(
+      await screen.findByRole("button", { name: "Zendesk" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "GitHub" })
+    ).not.toBeInTheDocument();
   });
 
   test("a different tile resets the owner; the same tile keeps it", async () => {
