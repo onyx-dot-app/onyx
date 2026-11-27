@@ -163,9 +163,19 @@ process for 60 s, fails open). The credential-access line uses the same gate. Th
 owns its stdout handler, set at import, because root-logger propagation drops
 the events under uvicorn.
 High-volume actions pass a `dedup_key`, which a Redis `SET NX` checks.
-When the actor is the requester, the EE emitter adds the request's credential
-(`credential_type`, `credential_id`, `oauth_client_id`) from
-`CURRENT_USAGE_CREDENTIAL_CONTEXTVAR`, so call sites only pass `actor_from_user(user)`.
+`backend/onyx/utils/audit.py:actor_from_user` adds the request's credential
+(`credential_type`, `credential_id`, `oauth_client_id`) when the user is the requester. Build
+the actor in the request: a streamed response body can run after the request contextvars end.
+Each action maps to an `AuditEventCategory` (`backend/ee/onyx/utils/audit.py:_CATEGORY_BY_ACTION`,
+guarded at import). An admin picks categories in security settings (`audit_event_categories`,
+Enterprise only); user activity (`chat`, `search`, `llm_gateway`, `file_download`) is off by
+default, and `settings.security_settings_change` is always written. Activity events: chat in
+`backend/onyx/chat/execution.py:ChatTurnExecution._emit_message_audit` (one per finished
+response, none for a parked run), search in `backend/onyx/server/features/search/api.py:_run_search`
+(which MCP calls over HTTP) and `backend/ee/onyx/search/process_search_query.py:stream_search_query`,
+the gateway in the tracing processor `backend/ee/onyx/tracing/audit_processor.py`, and chat file
+downloads. Query text reaches an event only through `query_text=`, and only when
+`audit_include_query_text` is on and query history is `normal`.
 
 **Log export.** `ee/onyx/server/log_export/api.py:start_log_export` sends a
 collect task to the queue of each worker type, collects its own logs inline,

@@ -10,7 +10,8 @@ customer schema and export guide is
 the ``AuditAction`` taxonomy changes. ``AuditAction`` values are append-only.
 
 Callers use ``onyx.utils.audit``, which resolves here when EE is loaded.
-Events are written only for tenants on the Enterprise tier.
+Events are written only for tenants on the Enterprise tier, and only for the
+``AuditEventCategory`` values an admin turned on in the security settings.
 
 Invariants (from the ``credential_audit`` seed): never raise into the caller
 (emission sits on hot paths), never log a secret, always tenant-tag, and dedup
@@ -31,6 +32,7 @@ from onyx.utils.audit import (
     DEFAULT_AUDIT_DEDUP_TTL_SECONDS,
     AuditAction,
     AuditActor,
+    AuditEventCategory,
     AuditOutcome,
 )
 
@@ -117,6 +119,10 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.OAUTH_CLIENT_REGISTER: OCSFEventClass.API_ACTIVITY,
     AuditAction.OAUTH_GRANT_CREATE: OCSFEventClass.USER_ACCESS_MANAGEMENT,
     AuditAction.OAUTH_GRANT_REVOKE: OCSFEventClass.USER_ACCESS_MANAGEMENT,
+    AuditAction.CHAT_MESSAGE_SEND: OCSFEventClass.API_ACTIVITY,
+    AuditAction.SEARCH_QUERY: OCSFEventClass.API_ACTIVITY,
+    AuditAction.GATEWAY_LLM_REQUEST: OCSFEventClass.API_ACTIVITY,
+    AuditAction.FILE_DOWNLOAD: OCSFEventClass.API_ACTIVITY,
 }
 
 # Guard: every action must map to a class, so a new action can't ship untagged.
@@ -126,6 +132,121 @@ if _unmapped:
         f"AuditAction members missing an OCSF class mapping: "
         f"{sorted(a.value for a in _unmapped)}"
     )
+
+
+_C = AuditEventCategory
+_CATEGORY_BY_ACTION: dict[AuditAction, AuditEventCategory] = {
+    AuditAction.LOGIN: _C.AUTHENTICATION,
+    AuditAction.LOGIN_FAILURE: _C.AUTHENTICATION,
+    AuditAction.LOGOUT: _C.AUTHENTICATION,
+    AuditAction.REGISTER: _C.AUTHENTICATION,
+    AuditAction.PASSWORD_FORGOT: _C.AUTHENTICATION,
+    AuditAction.PASSWORD_RESET: _C.AUTHENTICATION,
+    AuditAction.EMAIL_VERIFY: _C.AUTHENTICATION,
+    AuditAction.IMPERSONATE: _C.AUTHENTICATION,
+    AuditAction.USER_CREATE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_DELETE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_DEACTIVATE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_REACTIVATE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_ROLE_CHANGE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_CRAFT_ACCESS_CHANGE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_CHANGE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_CREATE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_RENAME: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_DELETE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_PERMISSION_CHANGE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_MANAGER_CHANGE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.OAUTH_GRANT_CREATE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.OAUTH_GRANT_REVOKE: _C.USER_AND_GROUP_MANAGEMENT,
+    AuditAction.CRAFT_DEFAULT_CHANGE: _C.CONFIGURATION,
+    AuditAction.DEFAULT_LANGUAGE_CHANGE: _C.CONFIGURATION,
+    AuditAction.LLM_GATEWAY_ENABLED_CHANGE: _C.CONFIGURATION,
+    AuditAction.SECURITY_SETTINGS_CHANGE: _C.CONFIGURATION,
+    AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE: _C.CONFIGURATION,
+    AuditAction.CC_PAIR_ACCESS_MODE_CHANGE: _C.CONFIGURATION,
+    AuditAction.LLM_PROVIDER_CREATE: _C.CONFIGURATION,
+    AuditAction.LLM_PROVIDER_UPDATE: _C.CONFIGURATION,
+    AuditAction.LLM_PROVIDER_DELETE: _C.CONFIGURATION,
+    AuditAction.CONNECTOR_CREATE: _C.CONFIGURATION,
+    AuditAction.CONNECTOR_UPDATE: _C.CONFIGURATION,
+    AuditAction.CONNECTOR_DELETE: _C.CONFIGURATION,
+    AuditAction.CC_PAIR_CREATE: _C.CONFIGURATION,
+    AuditAction.CC_PAIR_UPDATE: _C.CONFIGURATION,
+    AuditAction.CC_PAIR_DELETE: _C.CONFIGURATION,
+    AuditAction.API_KEY_CREATE: _C.CONFIGURATION,
+    AuditAction.API_KEY_REGENERATE: _C.CONFIGURATION,
+    AuditAction.API_KEY_UPDATE: _C.CONFIGURATION,
+    AuditAction.API_KEY_DELETE: _C.CONFIGURATION,
+    AuditAction.CREDENTIAL_CREATE: _C.CONFIGURATION,
+    AuditAction.CREDENTIAL_UPDATE: _C.CONFIGURATION,
+    AuditAction.CREDENTIAL_DELETE: _C.CONFIGURATION,
+    AuditAction.PERMISSION_DENIED: _C.CONFIGURATION,
+    AuditAction.PAT_CREATE: _C.CONFIGURATION,
+    AuditAction.PAT_REVOKE: _C.CONFIGURATION,
+    AuditAction.PERSONA_CREATE: _C.CONFIGURATION,
+    AuditAction.PERSONA_UPDATE: _C.CONFIGURATION,
+    AuditAction.PERSONA_DELETE: _C.CONFIGURATION,
+    AuditAction.DOCUMENT_SET_CREATE: _C.CONFIGURATION,
+    AuditAction.DOCUMENT_SET_UPDATE: _C.CONFIGURATION,
+    AuditAction.DOCUMENT_SET_DELETE: _C.CONFIGURATION,
+    AuditAction.OAUTH_CLIENT_REGISTER: _C.CONFIGURATION,
+    AuditAction.CREDENTIAL_ACCESS: _C.CREDENTIAL_ACCESS,
+    AuditAction.EXPORT_QUERY_HISTORY: _C.DATA_EXPORT,
+    AuditAction.EXPORT_USAGE_REPORT: _C.DATA_EXPORT,
+    AuditAction.EXPORT_LOGS: _C.DATA_EXPORT,
+    AuditAction.CHAT_MESSAGE_SEND: _C.CHAT,
+    AuditAction.SEARCH_QUERY: _C.SEARCH,
+    AuditAction.GATEWAY_LLM_REQUEST: _C.LLM_GATEWAY,
+    AuditAction.FILE_DOWNLOAD: _C.FILE_DOWNLOAD,
+}
+
+_uncategorized = set(AuditAction) - set(_CATEGORY_BY_ACTION)
+if _uncategorized:
+    raise RuntimeError(
+        f"AuditAction members missing a category: "
+        f"{sorted(a.value for a in _uncategorized)}"
+    )
+
+# Written whatever the categories say, so turning a category off is itself on
+# the record.
+_ALWAYS_EMITTED: frozenset[AuditAction] = frozenset(
+    {AuditAction.SECURITY_SETTINGS_CHANGE}
+)
+
+
+def category_enabled(category: AuditEventCategory) -> bool:
+    """Whether the admin turned this category on. When the settings cannot be
+    read, ``get_security_settings`` falls back to the defaults, so the audit
+    categories stay on and user activity stays off; an unexpected error emits."""
+    try:
+        from onyx.server.security.store import get_security_settings
+
+        return category in get_security_settings().audit_event_categories
+    except Exception:
+        _internal_logger.warning("Audit category lookup failed", exc_info=True)
+        return True
+
+
+def _query_text_if_allowed(query_text: str | None) -> str | None:
+    """The query text, when the admin added it to events and query history
+    records content in full. Fails closed: user text is the sensitive part."""
+    if query_text is None:
+        return None
+    try:
+        from onyx.configs.constants import QueryHistoryType
+        from onyx.server.security.store import get_security_settings
+        from onyx.server.settings.store import load_settings
+
+        if not get_security_settings().audit_include_query_text:
+            return None
+        history_type = (
+            load_settings(raise_on_error=True).query_history_type
+            or QueryHistoryType.NORMAL
+        )
+        return query_text if history_type == QueryHistoryType.NORMAL else None
+    except Exception:
+        _internal_logger.warning("Audit query text lookup failed", exc_info=True)
+        return None
 
 
 # Best-effort context gathering: each degrades to ``None`` rather than raising,
@@ -166,31 +287,6 @@ def _safe_get_client_ip() -> str | None:
         return current_client_ip()
     except Exception:
         return None
-
-
-def _with_request_credential(actor: AuditActor | None) -> AuditActor | None:
-    """Add the credential that authenticated this request to an actor that is
-    the requester. Leaves other actors (and actors that set it) unchanged."""
-    if actor is None or actor.credential_type is not None or actor.user_id is None:
-        return actor
-    try:
-        from shared_configs.contextvars import (
-            get_current_usage_credential,
-            get_current_user_id,
-        )
-
-        credential = get_current_usage_credential()
-        if credential is None or actor.user_id != get_current_user_id():
-            return actor
-        return actor.model_copy(
-            update={
-                "credential_type": credential.credential_type.value,
-                "credential_id": credential.credential_id,
-                "oauth_client_id": credential.oauth_client_id,
-            }
-        )
-    except Exception:
-        return actor
 
 
 # Emission is checked on hot paths, and ``get_tier`` reads the cache backend on
@@ -253,6 +349,7 @@ def emit_audit_event(
     dedup_key: str | None = None,
     dedup_ttl_seconds: int = DEFAULT_AUDIT_DEDUP_TTL_SECONDS,
     extra: dict[str, Any] | None = None,
+    query_text: str | None = None,
 ) -> None:
     """Emit one structured audit line. Never raises.
 
@@ -264,8 +361,13 @@ def emit_audit_event(
     try:
         tenant_id = _safe_get_tenant_id()
 
-        # Check the tier before the dedup, so a dropped event claims no window.
+        # Check the tier and category before the dedup, so a dropped event
+        # claims no window.
         if not audit_enabled_for_tenant(tenant_id):
+            return
+        if action not in _ALWAYS_EMITTED and not category_enabled(
+            _CATEGORY_BY_ACTION[action]
+        ):
             return
 
         if dedup_key is not None and not should_emit(
@@ -274,7 +376,6 @@ def emit_audit_event(
             return
 
         ocsf_class = _OCSF_CLASS_BY_ACTION.get(action)
-        actor = _with_request_credential(actor)
 
         payload: dict[str, Any] = {
             "audit_schema_version": AUDIT_SCHEMA_VERSION,
@@ -291,6 +392,9 @@ def emit_audit_event(
             "source_ip": _safe_get_client_ip(),
             "extra": extra or None,
         }
+        allowed_query_text = _query_text_if_allowed(query_text)
+        if allowed_query_text is not None:
+            payload["extra"] = {**(extra or {}), "query_text": allowed_query_text}
 
         # JSON as the message body so it parses identically under plain/json
         # LOG_FORMAT; default=str keeps a stray value from raising.

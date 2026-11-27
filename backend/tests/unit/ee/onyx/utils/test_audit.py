@@ -17,18 +17,22 @@ import pytest
 from ee.onyx.utils import audit
 from ee.onyx.utils import tier as tier_module
 from ee.onyx.utils.audit import (
+    _CATEGORY_BY_ACTION,
     _OCSF_CLASS_BY_ACTION,
     AUDIT_HANDLER_NAME,
     AUDIT_LOGGER_ROOT,
     OCSFEventClass,
     emit_audit_event,
 )
+from onyx.configs.constants import QueryHistoryType
 from onyx.server.settings.models import Tier
 from onyx.utils import audit as audit_surface
 from onyx.utils.audit import (
     AuditAction,
     AuditActor,
+    AuditEventCategory,
     AuditOutcome,
+    actor_from_request_context,
     actor_from_user,
 )
 from onyx.utils.variable_functionality import global_version
@@ -38,7 +42,7 @@ from shared_configs.contextvars import (
     UsageCredentialIdentity,
 )
 from shared_configs.enums import UsageCredentialType
-from tests.utils.audit import audit_events
+from tests.utils.audit import audit_events, use_audit_settings
 
 pytestmark = pytest.mark.usefixtures("enterprise_audit")
 
@@ -365,36 +369,31 @@ def pat_request() -> Generator[str, None, None]:
         CURRENT_USER_ID_CONTEXTVAR.reset(user_token)
 
 
-def test_requester_actor_carries_the_request_credential(
-    pat_request: str, caplog: pytest.LogCaptureFixture
-) -> None:
-    with caplog.at_level(logging.INFO, logger="onyx.audit"):
-        emit_audit_event(
-            AuditAction.LOGOUT,
-            AuditOutcome.SUCCESS,
-            actor=AuditActor(user_id=pat_request),
-        )
+def test_requester_actor_carries_the_request_credential(pat_request: str) -> None:
+    actor = actor_from_user(MagicMock(id=pat_request, email="a@example.com"))
 
-    (event,) = audit_events(caplog)
-    assert event["actor"]["credential_type"] == "pat"
-    assert event["actor"]["credential_id"] == "42"
-    assert event["actor"]["oauth_client_id"] is None
+    assert actor is not None
+    assert actor.credential_type == "pat"
+    assert actor.credential_id == "42"
+    assert actor.oauth_client_id is None
 
 
 def test_other_actor_does_not_get_the_request_credential(
     pat_request: str,  # noqa: ARG001
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with caplog.at_level(logging.INFO, logger="onyx.audit"):
-        emit_audit_event(
-            AuditAction.LOGOUT,
-            AuditOutcome.SUCCESS,
-            actor=AuditActor(user_id="someone-else"),
-        )
+    actor = actor_from_user(MagicMock(id="someone-else", email="b@example.com"))
 
-    (event,) = audit_events(caplog)
-    assert event["actor"]["credential_type"] is None
-    assert event["actor"]["credential_id"] is None
+    assert actor is not None
+    assert actor.credential_type is None
+    assert actor.credential_id is None
+
+
+def test_request_context_actor(pat_request: str) -> None:
+    actor = actor_from_request_context()
+
+    assert actor is not None
+    assert actor.user_id == pat_request
+    assert actor.credential_type == "pat"
 
 
 def test_explicit_credential_is_kept(
@@ -415,3 +414,79 @@ def test_explicit_credential_is_kept(
     (event,) = audit_events(caplog)
     assert event["actor"]["credential_type"] == "oauth_provider"
     assert event["actor"]["oauth_client_id"] == "client-1"
+
+
+def test_every_action_has_a_category() -> None:
+    for action in AuditAction:
+        assert action in _CATEGORY_BY_ACTION
+
+
+def test_default_categories_keep_activity_off(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    use_audit_settings(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(AuditAction.CHAT_MESSAGE_SEND, AuditOutcome.SUCCESS)
+        emit_audit_event(AuditAction.LOGIN, AuditOutcome.SUCCESS)
+
+    assert [e["action"] for e in audit_events(caplog)] == ["auth.login"]
+
+
+def test_an_enabled_category_emits(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    use_audit_settings(monkeypatch, categories=(AuditEventCategory.CHAT,))
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(AuditAction.CHAT_MESSAGE_SEND, AuditOutcome.SUCCESS)
+        emit_audit_event(AuditAction.LOGIN, AuditOutcome.SUCCESS)
+
+    assert [e["action"] for e in audit_events(caplog)] == ["chat.message_send"]
+
+
+def test_audit_settings_changes_are_always_written(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    use_audit_settings(monkeypatch, categories=())
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(AuditAction.SECURITY_SETTINGS_CHANGE, AuditOutcome.SUCCESS)
+
+    assert len(audit_events(caplog)) == 1
+
+
+@pytest.mark.parametrize(
+    ("include_query_text", "query_history_type", "expected"),
+    [
+        (False, QueryHistoryType.NORMAL, None),
+        (True, QueryHistoryType.NORMAL, "what is our refund policy"),
+        (True, QueryHistoryType.ANONYMIZED, None),
+        (True, QueryHistoryType.DISABLED, None),
+    ],
+)
+def test_query_text_follows_both_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    include_query_text: bool,
+    query_history_type: QueryHistoryType,
+    expected: str | None,
+) -> None:
+    use_audit_settings(
+        monkeypatch,
+        categories=(AuditEventCategory.SEARCH,),
+        include_query_text=include_query_text,
+        query_history_type=query_history_type,
+    )
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        emit_audit_event(
+            AuditAction.SEARCH_QUERY,
+            AuditOutcome.SUCCESS,
+            extra={"retrieved_document_ids": ["d1"]},
+            query_text="what is our refund policy",
+        )
+
+    (event,) = audit_events(caplog)
+    assert event["extra"]["retrieved_document_ids"] == ["d1"]
+    assert event["extra"].get("query_text") == expected
