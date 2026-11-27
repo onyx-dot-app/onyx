@@ -971,9 +971,10 @@ Resume).
 **Pending input.** `lib/chat/hooks.ts:useChatSessionQueue` holds the pending
 list and session status in SWR. `useChatSessionController` mounts it once per
 chat page and passes it to `AppInputBar`, which only renders it. The hook
-subscribes to primitives and memoizes its result, so streamed frames do not
-re-render the memoized `AppInputBar`; submit reads its target response from
-the store when it runs. Incognito chats and anonymous users get a disabled
+reads the current message tree only to know whether a shown request waits
+(`readWaitingToolRequests`). Its result does not depend on the tree and is
+memoized, so streamed frames do not re-render the memoized `AppInputBar`;
+submit reads its target response from the store when it runs. Incognito chats and anonymous users get a disabled
 queue. One pending-message request runs at a time, and its cache writes use
 the key of the chat that made it. Each request revalidates session status when
 it ends, so polling starts for input it made startable. Submit appends the
@@ -985,7 +986,10 @@ Input that joins a running response arrives as a `user_message` packet;
 reader, with no request. Saved replay emits the same packets from each step's
 human inputs, so both paths render user bubbles between response sections.
 Status polls every 2 seconds while `has_startable_input` or
-`has_active_subagents` is true.
+`has_active_subagents` is true, or while the chat shows a waiting approval or
+question. Another tab or client can decide that request and continue the
+response there; the poll sees `is_processing`, a new `latest_response_id` or
+a new `approvals_version` and refreshes the chat.
 The header's activity button (`sections/chat/ChatActivity.tsx`) shows once a
 chat has a waiting request, a background agent or a published file. It sits
 after the share menu. The extension page (`app/nrf/NRFPage.tsx`) has no app

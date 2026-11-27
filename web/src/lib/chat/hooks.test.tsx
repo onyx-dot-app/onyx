@@ -251,6 +251,43 @@ describe("useChatSessionQueue", () => {
     );
   });
 
+  it("polls the status while a shown request waits, so a decision made elsewhere arrives", async () => {
+    startChat("waiting-session");
+    const node = (
+      nodeId: number,
+      type: Message["type"],
+      parentNodeId: number | null
+    ): Message => ({
+      nodeId,
+      messageId: nodeId,
+      type,
+      message: "",
+      files: [],
+      packets: type === "assistant" ? [request("a", 1)] : [],
+      toolCall: null,
+      parentNodeId,
+      latestChildNodeId: type === "user" ? 2 : null,
+    });
+    useChatSessionStore.getState().updateSessionMessageTree(
+      "waiting-session",
+      new Map([
+        [1, node(1, "user", null)],
+        [2, node(2, "assistant", 1)],
+      ])
+    );
+    const fetchMock = serveStatus("");
+    const statusReads = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/status")
+      ).length;
+
+    renderHook(() => useChatSessionQueue(true));
+
+    await waitFor(() => expect(statusReads()).toBeGreaterThanOrEqual(2), {
+      timeout: 5000,
+    });
+  });
+
   it("refreshes an incognito chat whose approvals changed, without its server queue", async () => {
     useChatSessionStore.setState({
       sessions: new Map(),

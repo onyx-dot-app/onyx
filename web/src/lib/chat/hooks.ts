@@ -499,12 +499,19 @@ export function useAnswerWithMessage(): (
 /**
  * How often a chat's status reloads. Pending input and background work can
  * start a turn this client did not send; a decided agent request counts as
- * background work until its agent settles. Pass it in a new arrow on each
- * render: SWR reschedules its poll only when `refreshInterval` changes, so a
- * stable function reads only the data from before the first load.
+ * background work until its agent settles. A shown request that waits can be
+ * decided in another tab or client, which continues the response there.
+ * Pass it in a new arrow on each render: SWR reschedules its poll only when
+ * `refreshInterval` changes, so a stable function reads only the data from
+ * before the first load.
  */
-function statusPollInterval(current: ChatSessionStatus | undefined): number {
-  return current?.has_startable_input || current?.has_active_subagents
+function statusPollInterval(
+  current: ChatSessionStatus | undefined,
+  requestWaits: boolean
+): number {
+  return requestWaits ||
+    current?.has_startable_input ||
+    current?.has_active_subagents
     ? SERVER_WORK_POLL_MS
     : 0;
 }
@@ -538,6 +545,11 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       };
     })
   );
+  const tree = useCurrentMessageTree();
+  const requestWaits = useMemo(
+    () => (tree ? readWaitingToolRequests(tree).length > 0 : false),
+    [tree]
+  );
   const pendingKey =
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
   // An incognito chat has no server queue, but its background agents' requests
@@ -558,7 +570,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     statusKey,
     errorHandlingFetcher,
     {
-      refreshInterval: (current) => statusPollInterval(current),
+      refreshInterval: (current) => statusPollInterval(current, requestWaits),
       onErrorRetry: skipRetryOnAuthError,
     }
   );
@@ -1036,7 +1048,7 @@ export function useChatSubagents(
       // caller again, and a new function would restart SWR's timer
       refreshInterval: streaming
         ? SERVER_WORK_POLL_MS
-        : (current) => statusPollInterval(current),
+        : (current) => statusPollInterval(current, false),
       onErrorRetry: skipRetryOnAuthError,
     }
   );
