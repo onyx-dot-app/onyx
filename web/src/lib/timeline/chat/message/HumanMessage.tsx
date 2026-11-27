@@ -217,18 +217,22 @@ const HumanMessage = React.memo(function HumanMessage({
   };
 
   return (
-    <div
+    <Section
       id="onyx-human-message"
-      className="group/message flex flex-col justify-end w-full relative"
+      justifyContent="end"
+      alignItems="stretch"
+      height="fit"
+      gap={0}
+      className="group/message relative"
     >
       <FileDisplay files={files || []} />
-      <div className="flex justify-end">
+      <Section flexDirection="row" justifyContent="end" height="fit" gap={0}>
         <HumanMessageBubble
           content={content}
           mentions={mentions}
           findKey={chatFindTextKey("user", nodeId)}
         />
-      </div>
+      </Section>
       <Section
         flexDirection="row"
         justifyContent="end"
@@ -290,7 +294,7 @@ const HumanMessage = React.memo(function HumanMessage({
           />
         )}
       </Section>
-    </div>
+    </Section>
   );
 }, arePropsEqual);
 
