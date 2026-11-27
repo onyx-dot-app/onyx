@@ -127,6 +127,11 @@ class AdvancedPayload(_PayloadBase):
         problem = _cron_problem(v)
         if problem is not None:
             raise ValueError(problem)
+        # Checked only on input: a stored row must not break the list read.
+        try:
+            croniter(v, datetime.now(UTC)).get_next(datetime)
+        except (ValueError, KeyError) as e:
+            raise ValueError(f"Cron expression has no future fire: {v!r}") from e
         return v
 
 
@@ -151,10 +156,6 @@ def _cron_problem(cron: str) -> str | None:
         return "Cron expression must have exactly 5 fields"
     if not croniter.is_valid(cron):
         return f"Invalid cron expression: {cron!r}"
-    try:
-        croniter(cron, datetime.now(UTC)).get_next(datetime)
-    except (ValueError, KeyError):
-        return f"Cron expression has no future fire: {cron!r}"
     return None
 
 
