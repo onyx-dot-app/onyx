@@ -208,7 +208,8 @@ def test_scoped_manager_edit_scope_is_per_plugin(
     test_user: User,  # noqa: ARG001
 ) -> None:
     """A group manager's edit scope reads the shares of each plugin only: a
-    share of another plugin neither grants nor takes away their edit."""
+    group or user share of another plugin neither grants nor takes away their
+    edit."""
     group = make_group(db_session)
     manager = _manager_of(db_session, group)
     in_scope = make_skill(db_session)
@@ -220,6 +221,12 @@ def test_scoped_manager_edit_scope_is_per_plugin(
         db_session,
         shared_elsewhere.id,
         make_group(db_session).id,
+        SkillSharePermission.VIEWER,
+    )
+    share_plugin_with_user(
+        db_session,
+        shared_elsewhere.id,
+        make_user(db_session, standard_account=True).id,
         SkillSharePermission.VIEWER,
     )
     unshared = make_skill(
