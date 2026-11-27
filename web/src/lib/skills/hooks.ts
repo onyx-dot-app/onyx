@@ -132,6 +132,27 @@ export function useChatSkills({
   return { entries, onInputFocus };
 }
 
+/** The ids of the built-in skills that chat offers. The server leaves out
+ * the built-ins whose service is unavailable, and all of them when the
+ * deployment has no chat VMs. */
+export function useChatBuiltInSkillIds(): ReadonlySet<string> {
+  const { user } = useUser();
+  const { data } = useSWR<ChatSkill[]>(
+    user ? SWR_KEYS.chatSkills : null,
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
+  );
+  return useMemo(
+    () =>
+      new Set(
+        (data ?? [])
+          .filter((skill) => skill.built_in_skill_id !== null)
+          .map((skill) => skill.version_id)
+      ),
+    [data]
+  );
+}
+
 interface UseEntryPickerOptions {
   /** The character that opens the picker. */
   trigger: string;

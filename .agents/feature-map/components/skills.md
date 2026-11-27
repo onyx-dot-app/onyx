@@ -13,8 +13,9 @@
   `sections/customize/CustomizeSkillsPage.tsx`; Craft is not needed, and
   `/craft/v1/skills*` redirect here with their query). The groups are Created by
   you (owner is the user), From your organization (published), Shared with you,
-  and Built-in, which shows only with Craft on
-  (`lib/customize/skills.ts:groupSkills`). A row has the
+  and Built-in, which shows the built-ins that chat offers (`GET
+  /api/skills/chat`, so only on a deployment with chat VMs; Craft is not a
+  condition) (`lib/customize/skills.ts:groupSkills`). A row has the
   tag Off, Required, Pending review or Unpublished changes, the date, Turn
   on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
   skill (`/app/customize/skills/new`); GitHub skills come in through a
