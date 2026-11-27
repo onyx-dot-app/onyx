@@ -218,6 +218,8 @@ export default function AddIntegrationModal({
   // Continue with these inputs again returns to the setup step as it was.
   // Null after a failed check, so Continue checks again.
   const detectedFrom = useRef<DetectionInputs | null>(null);
+  // The owner belongs to the draft of one catalog item.
+  const pickedTile = useRef<string | null>(null);
 
   useEffect(() => {
     if (prefill && !badPrefillUrl) {
@@ -565,7 +567,11 @@ export default function AddIntegrationModal({
               aria-label={tile.name}
               tabIndex={0}
               state="empty"
-              onClick={tile.onPick}
+              onClick={() => {
+                if (pickedTile.current !== tile.id) setOwnerChoice(null);
+                pickedTile.current = tile.id;
+                tile.onPick();
+              }}
             >
               <Content
                 icon={tile.icon}

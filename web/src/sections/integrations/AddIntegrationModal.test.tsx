@@ -437,6 +437,40 @@ describe("Catalog", () => {
     );
   });
 
+  test("a different tile resets the owner; the same tile keeps it", async () => {
+    mockProbe.mockResolvedValue(OAUTH_PROBE);
+    mockFetch({
+      "/api/admin/integrations/presets": [
+        GITHUB_PRESET,
+        { ...GITHUB_PRESET, id: "LINEAR", name: "Linear" },
+      ],
+    });
+    const { user } = open({ kind: "catalog" });
+    const owner = () => screen.getByRole("combobox", { name: add.owner.title });
+    await user.click(await screen.findByRole("button", { name: "GitHub" }));
+    await user.click(
+      screen.getByRole("button", { name: `Expand ${add.advanced}` })
+    );
+    await user.click(owner());
+    await user.click(
+      await screen.findByRole("option", { name: add.owner.organization })
+    );
+    expect(
+      screen.getByText(add.owner.organizationDescription)
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.click(await screen.findByRole("button", { name: "GitHub" }));
+    expect(
+      screen.getByText(add.owner.organizationDescription)
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.click(await screen.findByRole("button", { name: "Linear" }));
+    await screen.findByText(add.mcp.probe.oauth);
+    expect(screen.getByText(add.owner.personalDescription)).toBeInTheDocument();
+  });
+
   test("a preset shows its setup steps, callback URL and scopes beside the fields", async () => {
     mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
     const { user } = open({ kind: "catalog" });
