@@ -119,8 +119,9 @@
   with `can_approve_for_command` (an app request of a VM command,
   [[craft-external-apps#chat-command-approvals]]) offers "Approve for this
   command" (`ApprovalCard` `sessionScope="command"`, which sends
-  `approve_command`) in place of the chat choice and shows its `expires_at`
-  deadline; it waits only while its call runs. A reconnect to the live stream
+  `approve_command`) in place of the chat choice. Any card of a VM command's
+  app request, also one that offers only approve once and reject, shows its
+  `expires_at` deadline; it waits only while its call runs. A reconnect to the live stream
   buffer can send the card and its outcome again; a saved session does not
   rebuild it. The card then becomes a record of the
   outcome, or of "No longer waiting" when the server returns 409 or 404. The
