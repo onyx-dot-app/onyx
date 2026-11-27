@@ -61,9 +61,7 @@ export function ensureHrefProtocol(
     return `mailto:${trimmedHref}`;
   }
 
-  return BARE_HOST_REGEX.test(trimmedHref)
-    ? `https://${trimmedHref}`
-    : trimmedHref;
+  return `https://${trimmedHref}`;
 }
 
 /**

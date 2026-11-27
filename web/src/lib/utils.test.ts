@@ -36,12 +36,6 @@ describe("ensureHrefProtocol", () => {
       "https://docs.onyx.app/guide"
     );
   });
-
-  it("keeps a relative path relative", () => {
-    expect(ensureHrefProtocol("attachments/artifacts/report.pdf")).toBe(
-      "attachments/artifacts/report.pdf"
-    );
-  });
 });
 
 describe("isBareRelativeHref", () => {

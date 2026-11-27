@@ -202,9 +202,9 @@ export const MemoizedLink = memo(
       }
     }, [document, updatePresentingDocument, question, openQuestion]);
 
-    const url: string | undefined = ensureHrefProtocol(href);
     // A VM path the model linked opens nothing in the browser.
-    const isVmPath: boolean = !!url && isBareRelativeHref(url);
+    const isVmPath: boolean = !!href?.trim() && isBareRelativeHref(href.trim());
+    const url: string | undefined = ensureHrefProtocol(href);
     const isChatFile: boolean = !!url?.includes("/api/chat/file/");
     const plainLabel: string | null = getPlainLabel(value);
 
