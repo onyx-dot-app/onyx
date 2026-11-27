@@ -57,6 +57,17 @@ function stateOf(tabId) {
   return state;
 }
 
+// Grants that ended while one of their calls still ran.
+const endedGrants = new Set();
+
+/** Mark a grant as ended, so its running calls stop. */
+export function grantEnded(grantId) {
+  endedGrants.add(grantId);
+}
+
+const grantEndedError = () =>
+  new OperationError("no_grant", "The user's share of Chrome with this chat ended.");
+
 export function forgetTab(tabId) {
   tabStates.delete(tabId);
 }
@@ -223,6 +234,7 @@ function resolveTab(grant, params) {
 }
 
 async function sharedTab(grant, tabId) {
+  if (endedGrants.has(grant.id)) throw grantEndedError();
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   if (!tab)
     throw new OperationError("tab_not_found", "The tab closed.");
@@ -547,17 +559,21 @@ async function actionPoint(tabId, objectId, deadline) {
 /** Send input. A page dialog blocks input events until it closes, so the
  * send also ends when a dialog opens; the event finishes after the answer. */
 /** Stop a write when its call ran past its deadline (the server already
- * gave up on it) or the user took the tab meanwhile. `ctx` is the write's
- * tab and deadline. */
-function checkLive(ctx) {
+ * gave up on it), its grant ended, the user took the tab, or the tab left
+ * the shared sites meanwhile. `ctx` is the write's grant, tab and deadline. */
+async function checkLive(ctx) {
   if (Date.now() > ctx.deadline)
     throw new OperationError("timeout", "The call ran out of time before Chrome could act. Check the page before you retry.");
+  if (endedGrants.has(ctx.grant.id)) throw grantEndedError();
   if (isHumanControlled(ctx.tabId))
     throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
+  const tab = await chrome.tabs.get(ctx.tabId).catch(() => null);
+  if (!tab) throw new OperationError("tab_not_found", "The tab closed.");
+  if (!isShared(ctx.grant, tab.url ?? "")) throw new OperationError("failed", UNSHARED_TAB_MESSAGE);
 }
 
 async function input(ctx, method, params) {
-  checkLive(ctx);
+  await checkLive(ctx);
   const state = stateOf(ctx.tabId);
   state.agentInputUntil = Date.now() + 1_000;
   const sent = send(ctx.tabId, method, params);
@@ -671,7 +687,7 @@ async function waitForReady(tabId, readiness, deadline) {
 }
 
 async function navigateTab(grant, tabId, target, readiness, deadline) {
-  checkLive({ tabId, deadline });
+  await checkLive({ grant, tabId, deadline });
   if (target.url !== undefined) {
     if (!isShared(grant, target.url))
       throw new OperationError("failed", outsideMessage(target.url));
@@ -811,7 +827,7 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
         throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
       const state = stateOf(tabId);
       if (!state.dialog) throw new OperationError("failed", "No dialog is pending.");
-      checkLive({ tabId, deadline });
+      await checkLive({ grant, tabId, deadline });
       await send(tabId, "Page.handleJavaScriptDialog", {
         accept: params.accept,
         ...(optString(params, "promptText") === undefined ? {} : { promptText: params.promptText }),
@@ -850,7 +866,7 @@ async function conditionsMet(grant, tabId, target, text, urlIncludes) {
 }
 
 async function act(grant, tabId, params, deadline) {
-  const ctx = { tabId, deadline };
+  const ctx = { grant, tabId, deadline };
   const action = optString(params, "action");
   const target = targetOf(params);
   switch (action) {
@@ -900,7 +916,7 @@ async function act(grant, tabId, params, deadline) {
       if (kind === "password") throw passwordRefused();
       if (kind === "picker") {
         // Picker fields take a whole value, not typed text.
-        checkLive(ctx);
+        await checkLive(ctx);
         const taken = await callOn(
           tabId,
           objectId,
@@ -943,7 +959,7 @@ async function act(grant, tabId, params, deadline) {
       if (!hasTarget(target) || values === undefined)
         throw invalid("select needs ref or selector, and values.");
       const objectId = await resolveTarget(tabId, target, deadline);
-      checkLive(ctx);
+      await checkLive(ctx);
       const selected = await callOn(
         tabId,
         objectId,

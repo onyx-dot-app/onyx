@@ -384,6 +384,7 @@ async function approve(requestId, tabIds, minutes, shownOrigins) {
     }
     await takeRequest(requestId);
     const grant = {
+      id: crypto.randomUUID(),
       chat_session_id: request.chat_session_id,
       chat_title: request.chat_title,
       request_id: request.request_id,
@@ -414,6 +415,8 @@ export function endGrant(notify) {
 async function endGrantNow(notify) {
   const grant = await getGrant();
   if (!grant) return;
+  // Calls of this grant that still run stop at their next step.
+  driver.grantEnded(grant.id);
   await chrome.storage.session.remove(GRANT_KEY);
   for (const tabId of grant.tabs) {
     await driver.detach(tabId);
