@@ -19,6 +19,8 @@ from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.server.features.mcp.client import (
     call_mcp_tool,
+    has_auth_rejection_response,
+    has_unauthorized_response,
     http_status,
     is_unreachable_error,
     process_mcp_result,
@@ -300,7 +302,7 @@ class MCPTool(Tool):
                 else None
             )
             if credentials is not None and (
-                status_code == 401 or rejected_token_fingerprint is not None
+                has_unauthorized_response(e) or rejected_token_fingerprint is not None
             ):
                 try:
                     mark_credential_rejected(
@@ -315,10 +317,11 @@ class MCPTool(Tool):
             # The text check is only for errors without a status: an HTTP
             # error's text holds its URL, which can contain "authentication".
             is_auth_error = (
-                status_code in (401, 403)
+                has_auth_rejection_response(e)
                 or isinstance(e, MCPReauthenticationRequired)
                 or (
                     status_code is None
+                    and not is_unreachable_error(e)
                     and any(
                         indicator in error_str for indicator in _AUTH_ERROR_INDICATORS
                     )

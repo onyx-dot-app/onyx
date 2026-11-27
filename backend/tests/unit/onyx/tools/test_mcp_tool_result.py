@@ -212,6 +212,39 @@ def test_rejected_user_credentials_still_require_reauthentication() -> None:
     mark.assert_called_once_with(_CREDENTIALS, rejected_token_fingerprint=None)
 
 
+def _status_error(status: int) -> httpx.HTTPStatusError:
+    return httpx.HTTPStatusError(
+        f"status {status}",
+        request=httpx.Request("POST", "https://mcp.example"),
+        response=httpx.Response(status),
+    )
+
+
+def test_a_401_anywhere_in_the_error_group_requires_reauthentication() -> None:
+    error = ExceptionGroup("task group", [_status_error(401), _status_error(500)])
+    with (
+        patch(f"{MODULE}.call_mcp_tool", side_effect=error),
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
+    ):
+        response = _run(_github_tool())
+
+    assert "Authentication failed" in response.text
+    mark.assert_called_once_with(_CREDENTIALS, rejected_token_fingerprint=None)
+
+
+def test_unreachable_server_with_auth_words_in_the_error_is_not_an_auth_error() -> None:
+    error = httpx.ConnectError("could not connect to auth.example: unauthorized")
+    with (
+        patch(f"{MODULE}.call_mcp_tool", side_effect=error),
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
+    ):
+        response = _run(_github_tool())
+
+    assert response.is_error
+    assert "Authentication failed" not in response.text
+    mark.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("result", "expected"),
     [
