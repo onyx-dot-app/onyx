@@ -147,14 +147,16 @@ def integration_ids(db_session: Session) -> Iterator[list[int]]:
 
 @pytest.fixture(autouse=True)
 def bundle_cleanup(
-    db_session: Session, users: tuple[User, User, User]
+    db_session: Session,
+    users: tuple[User, User, User],  # noqa: ARG001
+    created_user_ids: list[UUID],
 ) -> Iterator[None]:
     yield
     db_session.rollback()
     file_store = get_default_file_store()
     for file_id in db_session.scalars(
         select(PluginVersion.bundle_file_id).where(
-            PluginVersion.created_by_user_id.in_([user.id for user in users])
+            PluginVersion.created_by_user_id.in_(created_user_ids)
         )
     ):
         if file_id is not None:
@@ -1076,7 +1078,6 @@ def test_an_admin_list_marks_a_members_private_plugin_not_member_visible(
     author, _, _ = users
     admin = make_user(db_session, is_admin=True)
     db_session.commit()
-    created_user_ids.append(admin.id)
     created_user_ids.append(admin.id)
     private = _save(author, _plugin_zip("private-kit", ["one"]), db_session)
     own = _save(admin, _plugin_zip("admin-kit", ["two"]), db_session)
