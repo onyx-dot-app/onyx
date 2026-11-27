@@ -16,13 +16,22 @@ import {
   summaryFixture,
 } from "@/sections/marketplaces/__fixtures__/marketplace";
 
+let mockIsMobile = false;
+jest.mock("@/hooks/useScreenSize", () => ({
+  __esModule: true,
+  default: () => ({ isMobile: mockIsMobile }),
+}));
+
 const DETAIL_URL = `/api/marketplaces/${MARKETPLACE_ID}`;
 
 function user() {
   return setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
 }
 
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  mockIsMobile = false;
+});
 
 function Table() {
   return <MarketplacesTable list={useMarketplaces()} />;
@@ -260,4 +269,24 @@ test("Replace login warns when the new login has no GitHub connection", async ()
       expect.stringContaining("you have not connected GitHub")
     )
   );
+});
+
+test("a failed marketplace the user cannot manage shows its reason at phone width", async () => {
+  mockIsMobile = true;
+  const error = "The GitHub connection of admin@example.com is gone.";
+  mockFetch({
+    "/api/marketplaces": {
+      marketplaces: [
+        summaryFixture({
+          scope: "company",
+          can_manage: false,
+          last_error: error,
+        }),
+      ],
+    },
+  });
+  render(<Table />);
+
+  const table = await screen.findByRole("table", { name: "Marketplaces" });
+  expect(within(table).getByText(error)).toBeInTheDocument();
 });

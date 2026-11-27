@@ -244,23 +244,30 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
       field: "name",
       title: t("columns.marketplace"),
       weight: 100,
-      cell: (_name, row) => (
-        <Content
-          title={row.name}
-          titleMaxLines={1}
-          description={[
-            sourceLine(row),
-            t("items", { count: row.plugin_count }),
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-          descriptionMaxLines={1}
-          badge={{
-            title: t(`sync.state.${marketplaceSyncState(row)}`),
-            color: SYNC_STATE_COLOR[marketplaceSyncState(row)],
-          }}
-        />
-      ),
+      cell: (_name, row) => {
+        // Attention lists only the failed rows that the user can manage.
+        const failure =
+          !row.can_manage && marketplaceSyncState(row) === "failed"
+            ? row.last_error
+            : null;
+        return (
+          <Content
+            title={row.name}
+            titleMaxLines={1}
+            description={
+              failure ??
+              [sourceLine(row), t("items", { count: row.plugin_count })]
+                .filter(Boolean)
+                .join(" · ")
+            }
+            descriptionMaxLines={failure ? 2 : 1}
+            badge={{
+              title: t(`sync.state.${marketplaceSyncState(row)}`),
+              color: SYNC_STATE_COLOR[marketplaceSyncState(row)],
+            }}
+          />
+        );
+      },
     },
     actionsColumn,
   ];
