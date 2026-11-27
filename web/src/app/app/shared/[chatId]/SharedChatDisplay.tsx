@@ -137,7 +137,7 @@ export default function SharedChatDisplay({
 
   if (!chatSession || !chat) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center">
+      <Section gap={0}>
         <Section flexDirection="column" alignItems="center" gap={4}>
           <IllustrationContent
             illustration={SvgNotFound}
@@ -148,7 +148,7 @@ export default function SharedChatDisplay({
             {t("newChatButton.label")}
           </Button>
         </Section>
-      </div>
+      </Section>
     );
   }
 
@@ -165,7 +165,7 @@ export default function SharedChatDisplay({
 
   if (firstMessage === undefined) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center">
+      <Section gap={0}>
         <Section flexDirection="column" alignItems="center" gap={4}>
           <IllustrationContent
             illustration={SvgNotFound}
@@ -176,7 +176,7 @@ export default function SharedChatDisplay({
             {t("newChatButton.label")}
           </Button>
         </Section>
-      </div>
+      </Section>
     );
   }
 
@@ -208,43 +208,62 @@ export default function SharedChatDisplay({
           />
         </RootLayout.RightPanel>
 
-        <div className="flex flex-col h-full w-full overflow-hidden">
-          <div className="flex-1 flex flex-col items-center overflow-y-auto">
+        <Section
+          justifyContent="start"
+          alignItems="stretch"
+          gap={0}
+          className="overflow-hidden"
+        >
+          <Section
+            justifyContent="start"
+            height="auto"
+            gap={0}
+            className="flex-1 overflow-y-auto"
+          >
             {/* The end padding keeps the text clear of the panel toggle */}
             <div
-              className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 ps-8 py-4"
+              className="sticky top-0 z-10 w-full bg-background-tint-01 ps-8 py-4"
               style={{ paddingInlineEnd: `max(2rem, ${PANEL_TOGGLE_ROOM})` }}
             >
-              <Text as="p" font="heading-headline" color="text-04">
-                {chatSession.description || t("header.untitledChat.title")}
-              </Text>
               <Section
                 flexDirection="row"
-                width="fit"
+                justifyContent="between"
                 height="fit"
-                alignItems="center"
-                gap={2}
+                gap={0}
               >
-                <Section alignItems="end" gap={0} width="fit" height="fit">
-                  <Text as="p" font="secondary-body" color="text-03">
-                    {t("header.sharedOn.text", {
-                      date: humanReadableFormat(
-                        chatSession.time_created,
-                        locale
-                      ),
-                    })}
-                  </Text>
-                  {chatSession.owner_name && (
+                <Text as="p" font="heading-headline" color="text-04">
+                  {chatSession.description || t("header.untitledChat.title")}
+                </Text>
+                <Section
+                  flexDirection="row"
+                  width="fit"
+                  height="fit"
+                  alignItems="center"
+                  gap={2}
+                >
+                  <Section alignItems="end" gap={0} width="fit" height="fit">
                     <Text as="p" font="secondary-body" color="text-03">
-                      {t("header.owner.text", { name: chatSession.owner_name })}
+                      {t("header.sharedOn.text", {
+                        date: humanReadableFormat(
+                          chatSession.time_created,
+                          locale
+                        ),
+                      })}
                     </Text>
-                  )}
+                    {chatSession.owner_name && (
+                      <Text as="p" font="secondary-body" color="text-03">
+                        {t("header.owner.text", {
+                          name: chatSession.owner_name,
+                        })}
+                      </Text>
+                    )}
+                  </Section>
                 </Section>
               </Section>
             </div>
 
             {isMounted ? (
-              <div className="w-full flex flex-col items-center">
+              <Section justifyContent="start" height="auto" gap={0}>
                 {messages.map((message, i) => {
                   if (message.type === "user") {
                     const multiModelResponses = getMultiModelResponses(
@@ -253,9 +272,11 @@ export default function SharedChatDisplay({
                       modelProviderLookup
                     );
                     return (
-                      <div
+                      <Section
                         key={message.messageId}
-                        className="w-full flex flex-col items-center"
+                        justifyContent="start"
+                        height="auto"
+                        gap={0}
                       >
                         <div className="w-[min(50rem,100%)]">
                           <HumanMessage
@@ -282,7 +303,7 @@ export default function SharedChatDisplay({
                             />
                           </div>
                         )}
-                      </div>
+                      </Section>
                     );
                   }
 
@@ -358,18 +379,18 @@ export default function SharedChatDisplay({
 
                   return null;
                 })}
-              </div>
+              </Section>
             ) : (
-              <div className="h-full w-full flex items-center justify-center">
+              <Section gap={0}>
                 <OnyxInitializingLoader />
-              </div>
+              </Section>
             )}
-          </div>
+          </Section>
 
           <div className="w-full max-w-200 mx-auto px-4 pb-4">
             <SharedAppInputBar />
           </div>
-        </div>
+        </Section>
       </PublishedFilesPanelContext.Provider>
     </ToolRequestDeciderContext.Provider>
   );
