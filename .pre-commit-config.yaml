@@ -68,6 +68,18 @@ repos:
           ]
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-export
+        name: uv-export kerberos.txt
+        args:
+          [
+            "--no-emit-project",
+            "--no-default-groups",
+            "--group",
+            "kerberos",
+            "-o",
+            "backend/requirements/kerberos.txt",
+          ]
+        files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
+      - id: uv-export
         name: uv-export model_server.txt
         args:
           [

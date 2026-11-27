@@ -3722,7 +3722,7 @@
           "fields": {
             "host": {
               "label": "Servidor de Archivos",
-              "description": "El nombre DNS o la dirección IPv4 del servidor de archivos, p. ej. fs01.corp.example.com. No añada el nombre del recurso compartido."
+              "description": "El nombre DNS o la dirección IPv4 del servidor de archivos, p. ej. fs01.corp.example.com. No añada el nombre del recurso compartido. Kerberos necesita el nombre DNS completo."
             },
             "share": {
               "label": "Nombre del Recurso Compartido",
@@ -4399,6 +4399,8 @@
         "subdomain": "Subdominio de {source}",
         "domain": "Dominio de {source}",
         "accountDomain": "Dominio de la Cuenta",
+        "kerberosRealm": "Dominio Kerberos",
+        "kerberosKdc": "KDC de Kerberos",
         "ldapHost": "Host LDAP",
         "ldapTls": "Cifrado LDAP",
         "ldapPort": "Puerto LDAP",
@@ -4437,6 +4439,8 @@
         "youtrackToken": "Un token permanente de un usuario de YouTrack que puede leer todos los proyectos que se indexarán. Créelo en su perfil de YouTrack, en Seguridad de la cuenta.",
         "azureDatalakeAccountKey": "En Azure Portal, abra la cuenta de almacenamiento, luego Seguridad y redes, luego Claves de acceso.",
         "smbDomain": "Opcional. El nombre NetBIOS o DNS del dominio de Active Directory. Déjelo vacío para una cuenta local del servidor de archivos.",
+        "smbKerberosRealm": "El nombre DNS del dominio de Active Directory en mayúsculas, p. ej., CORP.EXAMPLE.COM.",
+        "smbKerberosKdc": "El nombre de host de un controlador de dominio que emite tickets. Déjelo vacío solo si la configuración de Kerberos del host de Onyx (/etc/krb5.conf) indica el KDC del dominio Kerberos.",
         "smbLdapHost": "Solo para la sincronización de permisos. El nombre DNS de un controlador de dominio, p. ej., dc01.corp.example.com. Debe coincidir con el nombre del certificado TLS del controlador de dominio.",
         "smbLdapTls": "Solo para la sincronización de permisos. Cómo cifra Onyx la conexión con el controlador de dominio. El valor predeterminado es LDAPS.",
         "smbLdapPort": "Opcional. El valor predeterminado es 636 para LDAPS y 389 para StartTLS.",
@@ -4461,7 +4465,9 @@
           "iamRole": "Rol de IAM",
           "assumeRole": "Asumir rol",
           "serviceAccount": "Cuenta de servicio",
-          "oauth": "OAuth"
+          "oauth": "OAuth",
+          "ntlm": "NTLM",
+          "kerberos": "Kerberos"
         },
         "descriptions": {
           "sharepointClientSecret": "Si seleccionas este modo, el conector de SharePoint usará un secreto de cliente para autenticarse. Deberás proporcionar el ID de cliente y el secreto de cliente.",

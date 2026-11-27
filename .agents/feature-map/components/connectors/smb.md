@@ -114,6 +114,22 @@ it to emails, group SIDs and exclusion groups.
 9. `exclusion-ids-are-lowercase` **Stored group ids are in lower case, SIDs in
    code are in upper case.** `external_permissions/smb/exclusion_groups.py:parse_exclusion_group_id`
    restores the case of the SIDs it reads back.
+10. `kerberos-settings-are-process-wide` **Kerberos settings are one file for
+   the process.** The Kerberos library reads its settings from files, so
+   `connectors/smb/kerberos_config.py:register_realm` writes each realm a
+   credential names into one file and puts it first in `KRB5_CONFIG`. The
+   first credential to name a realm or a server decides its entry, also when
+   it names no KDC host, and a later one that differs is refused until the
+   process restarts.
+   The file holds the KDC addresses that passed the network policy, and turns
+   off the KDC lookup through DNS. The values are checked before they are
+   written, because they come from a credential and go into a settings file.
+11. `kerberos-libraries-are-optional` **The Kerberos libraries are in the
+   backend image only.** `gssapi` and `krb5` compile against system headers, so
+   they are in the `kerberos` dependency group and outside the default groups.
+   `connectors/smb/source_operations.py:_kerberos_library` loads them by name
+   and gives a clear error where they are absent. Do not import them at the
+   top of a module.
 
 ---
 

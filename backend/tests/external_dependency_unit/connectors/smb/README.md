@@ -26,6 +26,13 @@ Run these commands from this directory.
 
 The container writes the certificate of its test authority to `.certs/ca.pem`.
 
+3. Install the Kerberos libraries for the Kerberos tests. They compile against
+   the MIT Kerberos headers (`libkrb5-dev` on Debian and Ubuntu).
+
+   ```bash
+   uv sync --group kerberos
+   ```
+
 ## Run the tests
 
 Run this command from the repository root.
@@ -91,6 +98,11 @@ To use other ports or another password, set `SMB_TEST_PORT`,
    | Domain | `ONYXTEST` |
    | Username | `svc-onyx` |
    | Password | `Onyx-Test-Passw0rd` |
+
+   For Kerberos, select the Kerberos sign-in method and add the realm
+   `ONYX.TEST` and the KDC host `dc1.onyx.test`. The SMB port must then be
+   `445` on the name `dc1.onyx.test`, because a Kerberos ticket names the
+   server and not a port. The backend image holds the Kerberos libraries.
 
 5. For permission sync, add these values to the credential, and turn on
    **Share Permissions Confirmed** on the connector:

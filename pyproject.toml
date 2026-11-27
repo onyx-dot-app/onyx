@@ -202,6 +202,15 @@ prek = ["prek==0.5.10"]
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
 
+# Kerberos for the Windows file share connector. gssapi and krb5 have no Linux
+# wheels: they compile against the MIT Kerberos headers (libkrb5-dev). Kept OUT
+# of default-groups so a normal `uv sync` needs no system library. The backend
+# image installs it. Opt in with `uv sync --group kerberos`.
+kerberos = [
+    "gssapi==1.12.0",
+    "krb5==0.10.0",
+]
+
 # Locust load-test runtime (the tools/loadtest/ project). Kept OUT of default-groups
 # so a normal `uv sync` doesn't pull locust's heavy gevent/flask/socketio tree.
 # Opt in with `uv sync --group loadtest`. See tools/loadtest/README.md.

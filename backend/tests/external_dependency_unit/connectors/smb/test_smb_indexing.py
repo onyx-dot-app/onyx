@@ -5,7 +5,10 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.models import CapabilityCheckContext
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckContext,
+    CheckNotApplicableError,
+)
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -15,7 +18,10 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.smb import connector as smb_connector
-from onyx.connectors.smb.capability_checks import build_smb_indexing_checks
+from onyx.connectors.smb.capability_checks import (
+    KERBEROS_TICKET_CHECK_ID,
+    build_smb_indexing_checks,
+)
 from onyx.connectors.smb.connector import SmbConnector
 from onyx.connectors.smb.models import SmbCheckpoint
 from tests.external_dependency_unit.connectors.smb.conftest import (
@@ -247,5 +253,12 @@ def test_every_indexing_check_passes_for_the_service_account(
         source_operations=connector.ops,
     )
 
+    not_applicable: list[str] = []
     for check in build_smb_indexing_checks():
-        check.run(context)
+        try:
+            check.run(context)
+        except CheckNotApplicableError:
+            not_applicable.append(check.check_id)
+
+    # The service account signs in with NTLM here.
+    assert not_applicable == [KERBEROS_TICKET_CHECK_ID]

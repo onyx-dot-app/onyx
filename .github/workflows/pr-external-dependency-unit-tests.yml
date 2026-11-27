@@ -266,6 +266,11 @@ jobs:
           echo "127.0.0.1 dc1.onyx.test" | sudo tee -a /etc/hosts
           mkdir -p .certs
           docker compose up -d --build --wait --wait-timeout 300
+          # The Kerberos libraries compile against these headers. Only this
+          # test directory needs them.
+          sudo apt-get update && sudo apt-get install -y libkrb5-dev
+          pip install --no-deps --require-hashes \
+            -r "${GITHUB_WORKSPACE}/backend/requirements/kerberos.txt"
 
       - name: Run Tests for ${{ matrix.test-dir }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
