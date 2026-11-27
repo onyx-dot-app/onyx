@@ -14,10 +14,12 @@ The default is every **30** minutes.
 
 Onyx indexes public comments. It does not index internal (agent-only) comments.
 
-| Content  | Notes                                                                                           |
-| -------- | ----------------------------------------------------------------------------------------------- |
+The Jira connector and this connector index the same issue as two separate documents.
+
+| Content  | Notes                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------ |
 | Requests | Summary and description, with the request's comments. Requests with a label to skip are skipped. |
-| Scope    | One Jira Service Management project, chosen by its project key.                                 |
+| Scope    | One Jira Service Management project, chosen by its project key.                                  |
 
 The connector supports Jira Cloud and Jira Data Center. It rejects a project that is not a service project.
 To index a software or business project, use the [Jira connector](/admins/connectors/official/jira).

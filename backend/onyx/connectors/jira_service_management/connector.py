@@ -1,17 +1,32 @@
 from collections.abc import Generator
-from typing import Any
+from typing import Any, overload
+
+from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.jira.connector import JiraConnector, JiraIssue
+from onyx.connectors.interfaces import (
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.jira.connector import (
+    JiraConnector,
+    JiraConnectorCheckpoint,
+    JiraIssue,
+)
 from onyx.connectors.models import (
+    ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
+    SlimDocument,
 )
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 SERVICE_DESK_PROJECT_TYPE = "service_desk"
+DOCUMENT_ID_PREFIX = "jira_service_management:"
 
 REQUEST_TYPE_KEY = "request_type"
 REQUEST_STATUS_KEY = "request_status"
@@ -77,6 +92,45 @@ def _without_internal_comments(issue: JiraIssue) -> JiraIssue:
     return filtered
 
 
+@overload
+def _namespaced(item: Document) -> Document: ...
+@overload
+def _namespaced(item: ConnectorFailure) -> ConnectorFailure: ...
+@overload
+def _namespaced(item: SlimDocument | HierarchyNode) -> SlimDocument | HierarchyNode: ...
+@overload
+def _namespaced(
+    item: Document | ConnectorFailure | HierarchyNode,
+) -> Document | ConnectorFailure | HierarchyNode: ...
+def _namespaced(
+    item: Document | ConnectorFailure | SlimDocument | HierarchyNode,
+) -> Document | ConnectorFailure | SlimDocument | HierarchyNode:
+    """Prefix the document ID, so a request does not collide with the same issue
+    indexed by the Jira connector. The Jira code keeps the plain IDs."""
+    if isinstance(item, Document | SlimDocument):
+        item.id = DOCUMENT_ID_PREFIX + item.id
+    elif isinstance(item, ConnectorFailure):
+        document = item.failed_document
+        if document is not None:
+            item.failed_document = document.model_copy(
+                update={"document_id": DOCUMENT_ID_PREFIX + document.document_id}
+            )
+    return item
+
+
+def _stripped(failure: ConnectorFailure) -> ConnectorFailure:
+    """A copy of the failure with the plain Jira document ID."""
+    document = failure.failed_document
+    if document is None or not document.document_id.startswith(DOCUMENT_ID_PREFIX):
+        return failure
+    plain_id = document.document_id.removeprefix(DOCUMENT_ID_PREFIX)
+    return failure.model_copy(
+        update={
+            "failed_document": document.model_copy(update={"document_id": plain_id})
+        }
+    )
+
+
 class JiraServiceManagementConnector(JiraConnector):
     """Indexes the requests of one Jira Service Management project. Requests
     are Jira issues, so the Jira connector does the fetching."""
@@ -116,6 +170,45 @@ class JiraServiceManagementConnector(JiraConnector):
                 item.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
                 item.metadata.update(request_metadata(issue))
             yield item
+
+    @override
+    def _load_from_checkpoint(
+        self, jql: str, checkpoint: JiraConnectorCheckpoint, include_permissions: bool
+    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
+        output = super()._load_from_checkpoint(jql, checkpoint, include_permissions)
+        while True:
+            try:
+                item = next(output)
+            except StopIteration as stop:
+                return stop.value
+            yield _namespaced(item)
+
+    @override
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        stripped = [_stripped(failure) for failure in errors]
+        for item in super().reindex(stripped, include_permissions):
+            yield _namespaced(item)
+
+    @override
+    def _retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+        *,
+        include_permissions: bool,
+    ) -> GenerateSlimDocumentOutput:
+        for batch in super()._retrieve_all_slim_docs(
+            start=start,
+            end=end,
+            callback=callback,
+            include_permissions=include_permissions,
+        ):
+            yield [_namespaced(item) for item in batch]
 
     def validate_connector_settings(self) -> None:
         if self._source_operations is None or self.jira_project is None:

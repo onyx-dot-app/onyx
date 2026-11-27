@@ -1,6 +1,6 @@
 import copy
 from typing import Any
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from pydantic import ValidationError
@@ -10,6 +10,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
 )
+from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
     JiraSourceOperations,
@@ -18,10 +19,17 @@ from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
 )
 from onyx.connectors.jira_service_management.connector import (
+    DOCUMENT_ID_PREFIX,
     JiraServiceManagementConnector,
     request_metadata,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError, Document
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    SlimDocument,
+)
 
 _BASE_URL = "https://example.atlassian.net"
 
@@ -160,6 +168,99 @@ def test_documents_carry_the_service_management_source() -> None:
     assert documents[0].source == DocumentSource.JIRA_SERVICE_MANAGEMENT
     assert documents[0].metadata["request_type"] == "Get IT help"
     assert documents[0].semantic_identifier == "HELP-1: Laptop will not boot"
+
+
+_PLAIN_ID = f"{_BASE_URL}/browse/HELP-1"
+_NAMESPACED_ID = DOCUMENT_ID_PREFIX + _PLAIN_ID
+
+
+def _checkpoint(connector: JiraServiceManagementConnector) -> JiraConnectorCheckpoint:
+    return connector.build_dummy_checkpoint()
+
+
+def test_document_ids_differ_from_the_jira_connector() -> None:
+    jira = JiraConnector(jira_base_url=_BASE_URL, project_key="HELP")
+    jira._source_operations = create_autospec(JiraSourceOperations, instance=True)
+    jira_ids = {
+        item.id
+        for item in jira._issue_to_items(_request_issue(), set(), False)
+        if isinstance(item, Document)
+    }
+    connector = _connector()
+    with patch(
+        "onyx.connectors.jira.connector._perform_jql_search",
+        return_value=iter([_request_issue()]),
+    ):
+        items = list(
+            connector._load_from_checkpoint("jql", _checkpoint(connector), False)
+        )
+    documents = [item for item in items if isinstance(item, Document)]
+    assert jira_ids == {_PLAIN_ID}
+    assert [d.id for d in documents] == [_NAMESPACED_ID]
+    assert documents[0].sections[0].link == _PLAIN_ID
+
+
+def test_failures_carry_the_namespaced_id() -> None:
+    connector = _connector()
+    with (
+        patch(
+            "onyx.connectors.jira.connector._perform_jql_search",
+            return_value=iter([_request_issue()]),
+        ),
+        patch.object(
+            JiraServiceManagementConnector,
+            "_issue_to_items",
+            side_effect=RuntimeError("boom"),
+        ),
+    ):
+        items = list(
+            connector._load_from_checkpoint("jql", _checkpoint(connector), False)
+        )
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_document is not None
+    assert failures[0].failed_document.document_id == _NAMESPACED_ID
+    assert failures[0].failed_document.document_link == _PLAIN_ID
+
+
+def test_slim_documents_carry_the_namespaced_id() -> None:
+    connector = _connector()
+
+    def _finish(checkpoint: JiraConnectorCheckpoint, *_args: Any) -> None:
+        checkpoint.has_more = False
+
+    with (
+        patch(
+            "onyx.connectors.jira.connector._perform_jql_search",
+            return_value=iter([_request_issue()]),
+        ),
+        patch.object(connector, "update_checkpoint_for_next_run", side_effect=_finish),
+    ):
+        batches = list(connector.retrieve_all_slim_docs())
+    slim_ids = [
+        item.id for batch in batches for item in batch if isinstance(item, SlimDocument)
+    ]
+    assert slim_ids == [_NAMESPACED_ID]
+
+
+def test_reindex_round_trips_a_namespaced_id() -> None:
+    connector = _connector()
+    failure = ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=_NAMESPACED_ID, document_link=_PLAIN_ID
+        ),
+        failure_message="failed",
+    )
+    with patch.object(
+        JiraServiceManagementConnector,
+        "_fetch_issues_by_key",
+        return_value=([_request_issue()], {}),
+    ):
+        items = list(connector.reindex([failure]))
+    assert [i.id for i in items if isinstance(i, Document)] == [_NAMESPACED_ID]
+    assert not [i for i in items if isinstance(i, ConnectorFailure)]
+    assert failure.failed_document is not None
+    assert failure.failed_document.document_id == _NAMESPACED_ID
 
 
 def test_jql_is_limited_to_the_project() -> None:
