@@ -170,3 +170,34 @@ def test_a_failed_grant_drop_still_ends_the_command(
 
     assert dropped == [(record.command_id, cache)]
     assert removed == ["exec-1"]
+
+
+def test_a_failed_record_drop_still_ends_the_grants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The proxy checks the grants, not the record, so they end first."""
+    dropped: list[UUID] = []
+
+    def remove(_cache: CacheBackend, _sandbox: UUID, _exec_session_id: str) -> None:
+        raise RedisError("down")
+
+    monkeypatch.setattr(harness_sandbox, "remove_exec_session", remove)
+    monkeypatch.setattr(
+        harness_sandbox.approval_cache,
+        "drop_command_grants",
+        lambda command_id, _cache: dropped.append(command_id),
+    )
+    record = ExecSessionRecord(
+        exec_session_id="exec-1",
+        chat_session_id=str(uuid4()),
+        execution_id="execution-1",
+        command_id=uuid4(),
+        attempt=0,
+        generation=0,
+        last_used=0.0,
+    )
+
+    with pytest.raises(RedisError):
+        harness_sandbox._end_exec_session(FakeCache(), uuid4(), record)
+
+    assert dropped == [record.command_id]

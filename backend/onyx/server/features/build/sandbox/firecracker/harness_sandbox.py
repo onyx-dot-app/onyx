@@ -289,19 +289,19 @@ def _end_exec_session(
 ) -> None:
     """The command ended (or nobody can reach it again): drop its record and
     the app grants of the command, which a process that it left running
-    must not use. A failed drop leaves the grants to their TTL, so the
+    must not use. The grants go first, so a failed record drop still ends
+    them. A failed grant drop leaves the grants to their TTL, so the
     command's result and the cleanup of other commands still go on."""
+    if record.command_id is not None:
+        try:
+            approval_cache.drop_command_grants(record.command_id, cache)
+        except Exception:
+            logger.exception(
+                "command_grants_drop_failed sandbox=%s command=%s",
+                sandbox_id,
+                record.command_id,
+            )
     remove_exec_session(cache, sandbox_id, record.exec_session_id)
-    if record.command_id is None:
-        return
-    try:
-        approval_cache.drop_command_grants(record.command_id, cache)
-    except Exception:
-        logger.exception(
-            "command_grants_drop_failed sandbox=%s command=%s",
-            sandbox_id,
-            record.command_id,
-        )
 
 
 class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
