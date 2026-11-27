@@ -5,8 +5,12 @@ import {
   WEB_MESSAGE,
   CHROME_SPECIFIC_STORAGE_KEYS,
   SIDE_PANEL_PATH,
+  BROWSER_MESSAGES,
 } from "../utils/constants.js";
 (function () {
+  // Opening the panel connects the chat browser socket now, not at the next retry.
+  chrome.runtime.sendMessage({ action: BROWSER_MESSAGES.WAKE }).catch(() => {});
+
   const iframe = document.getElementById("onyx-panel-iframe");
   const loadingScreen = document.getElementById("loading-screen");
 

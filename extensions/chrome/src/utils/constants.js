@@ -54,4 +54,6 @@ export const BROWSER_MESSAGES = {
   DENY: "onyxBrowserDeny",
   STOP: "onyxBrowserStop",
   STATE: "onyxBrowserState",
+  // From an Onyx page or the popup: try to connect now, not at the next retry
+  WAKE: "onyxBrowserWake",
 };

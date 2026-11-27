@@ -79,6 +79,15 @@ function scheduleRetry() {
   retryTimer = setTimeout(connect, Math.min(1000 * 2 ** failures, MAX_BACKOFF_MS));
 }
 
+/** The status for a refused token request. A 403 is also the admin switch. */
+async function refusedState(response) {
+  if (response.status === 403) {
+    const body = await response.json().catch(() => null);
+    if (body?.error_code === "FEATURE_DISABLED") return "disabled";
+  }
+  return response.status === 401 || response.status === 403 ? "signed_out" : "offline";
+}
+
 export async function connect() {
   if (socket || connecting) return;
   connecting = true;
@@ -98,9 +107,7 @@ export async function connect() {
     });
     if (stale()) return;
     if (!response.ok) {
-      await setStatus({
-        state: response.status === 401 || response.status === 403 ? "signed_out" : "offline",
-      });
+      await setStatus({ state: await refusedState(response) });
       scheduleRetry();
       return;
     }
@@ -149,6 +156,19 @@ export async function connect() {
   } finally {
     if (!stale()) connecting = false;
   }
+}
+
+const WAKE_MS = 5_000;
+let lastWake = 0;
+
+/** Connect now when the user is looking, for example after an admin turns
+ * the feature back on, instead of at the end of the backoff. */
+export function wake() {
+  if (socket || connecting || Date.now() - lastWake < WAKE_MS) return;
+  lastWake = Date.now();
+  failures = 0;
+  clearTimeout(retryTimer);
+  void connect();
 }
 
 export async function reconnect() {
@@ -336,16 +356,22 @@ function takeRequest(requestId) {
 async function groupTabs(tabIds, groupId) {
   try {
     const loose = [];
+    let windowId = null;
     for (const id of tabIds) {
       const tab = await chrome.tabs.get(id).catch(() => null);
-      if (tab && tab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) loose.push(id);
+      if (tab && tab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+        loose.push(id);
+        windowId ??= tab.windowId;
+      }
     }
     if (loose.length === 0) return groupId;
     if (groupId != null) {
       const group = await chrome.tabGroups.get(groupId).catch(() => null);
       if (group) return await chrome.tabs.group({ tabIds: loose, groupId });
     }
-    const created = await chrome.tabs.group({ tabIds: loose });
+    // Without a window, Chrome makes the group in the focused window, which
+    // can be a popup that takes no groups.
+    const created = await chrome.tabs.group({ tabIds: loose, createProperties: { windowId } });
     await chrome.tabGroups.update(created, { title: GROUP_TITLE, color: "purple" });
     return created;
   } catch (error) {
@@ -554,7 +580,11 @@ export function handleRuntimeMessage(request, sendResponse) {
       return respond(deny(request.request_id));
     case BROWSER_MESSAGES.STOP:
       return respond(endGrant(true));
+    case BROWSER_MESSAGES.WAKE:
+      wake();
+      return false;
     case BROWSER_MESSAGES.STATE:
+      wake();
       return respond(
         (async () => ({
           status: await readSession(STATUS_KEY, { state: "offline" }),

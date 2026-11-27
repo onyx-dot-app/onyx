@@ -178,6 +178,16 @@ async function sendActiveTabUrlToPanel() {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (Object.values(BROWSER_MESSAGES).includes(request.action)) {
+    // A web page may only wake the socket, and only an Onyx page. The
+    // extension's own pages (popup, consent window) may send all of them.
+    if (!(sender.url ?? "").startsWith(chrome.runtime.getURL(""))) {
+      if (request.action !== BROWSER_MESSAGES.WAKE) return false;
+      getOnyxDomain().then((domain) => {
+        if (new URL(sender.url ?? "about:blank").origin === new URL(domain).origin)
+          browserRelay.wake();
+      });
+      return false;
+    }
     return browserRelay.handleRuntimeMessage(request, sendResponse);
   }
   if (request.action === ACTIONS.GET_CURRENT_ONYX_DOMAIN) {

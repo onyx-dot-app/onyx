@@ -14,8 +14,17 @@ const AGENT_INPUT_MARGIN_MS = 400;
 const HUMAN_BINDING = "__onyxHumanInput";
 const MASKED = "••••••";
 
-const HUMAN_CONTROL_MESSAGE =
-  "The user is using this tab. Wait a few seconds and try again, or ask the user to stop.";
+/** The user holds the tab until HUMAN_HOLD_MS after their last input, so
+ * the agent learns when to try again. */
+function humanControlError(tabId) {
+  const seconds = Math.max(1, Math.ceil(((tabStates.get(tabId)?.humanUntil ?? 0) - Date.now()) / 1000));
+  return new OperationError(
+    "human_control",
+    `The user is using this tab. Control returns ${HUMAN_HOLD_MS / 1000} seconds after their last input, ` +
+      `in about ${seconds} seconds if they stop now. Wait at least that long before you try again, ` +
+      "or ask the user in chat to stop."
+  );
+}
 
 export class OperationError extends Error {
   constructor(code, message) {
@@ -266,7 +275,7 @@ function checkWritable(tabId) {
   const state = stateOf(tabId);
   if (state.dialog) throw dialogPending();
   if (isHumanControlled(tabId))
-    throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
+    throw humanControlError(tabId);
 }
 
 const dialogPending = () =>
@@ -613,7 +622,7 @@ async function checkLive(ctx) {
   if (endedGrants.has(ctx.grant.id) || ctx.grant.expires_at * 1000 <= Date.now())
     throw grantEndedError();
   if (isHumanControlled(ctx.tabId))
-    throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
+    throw humanControlError(ctx.tabId);
   const tab = await chrome.tabs.get(ctx.tabId).catch(() => null);
   if (!tab) throw new OperationError("tab_not_found", "The tab closed.");
   if (!isShared(ctx.grant, tab.url ?? "")) throw new OperationError("failed", UNSHARED_TAB_MESSAGE);
@@ -880,7 +889,7 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
       await sharedTab(grant, tabId);
       if (typeof params.accept !== "boolean") throw invalid("accept is required.");
       if (isHumanControlled(tabId))
-        throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
+        throw humanControlError(tabId);
       const state = stateOf(tabId);
       if (!state.dialog) throw new OperationError("failed", "No dialog is pending.");
       // A dialog of a site that the user did not share is the user's to answer.

@@ -65,6 +65,10 @@
       "matches": ["<all_urls>"],
       "js": ["src/utils/selection-icon.js"],
       "css": ["src/styles/selection-icon.css"]
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/utils/onyx-page-bridge.js"]
     }
   ],
   "web_accessible_resources": [

@@ -9,6 +9,8 @@
 
     selectionIcon = document.createElement("div");
     selectionIcon.id = "onyx-selection-icon";
+    // A mouse-only shortcut; hidden from page snapshots and screen readers.
+    selectionIcon.setAttribute("aria-hidden", "true");
 
     const img = document.createElement("img");
     img.src = chrome.runtime.getURL("public/icon32.png");
