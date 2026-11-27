@@ -14708,9 +14708,6 @@
       "unsupported": {
         "description": "ファイルをダウンロードして内容を確認してください。"
       },
-      "retry": {
-        "label": "再試行"
-      },
       "download": {
         "label": "ファイルをダウンロード"
       },

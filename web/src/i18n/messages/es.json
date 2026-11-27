@@ -14708,9 +14708,6 @@
       "unsupported": {
         "description": "Descarga el archivo para ver su contenido."
       },
-      "retry": {
-        "label": "Reintentar"
-      },
       "download": {
         "label": "Descargar archivo"
       },
