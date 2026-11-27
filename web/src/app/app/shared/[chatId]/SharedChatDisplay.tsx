@@ -30,6 +30,7 @@ import {
 } from "@/lib/chat/publishedFiles";
 import { useOpenArtifactFromUrl, usePublishedFiles } from "@/lib/chat/hooks";
 import { fetchSettledChatSession } from "@/lib/chat/sessionReadiness";
+import { ToolRequestDeciderContext } from "@/lib/chat/toolApprovals";
 import { PANEL_TOGGLE_ROOM } from "@/lib/outputPanel/layout";
 import { ChatRightPanel } from "@/sections/chat/ChatRightPanel";
 import {
@@ -179,188 +180,197 @@ export default function SharedChatDisplay({
     );
   }
 
+  // Only the owner decides the chat's requests, and not from here.
   return (
-    <PublishedFilesPanelContext.Provider value={filesPanel}>
-      <previewModal.Provider>
-        {presentingDocument && (
-          <PreviewModal
-            presentingDocument={presentingDocument}
-            onClose={() => previewModal.toggle(false)}
-          />
-        )}
-      </previewModal.Provider>
+    <ToolRequestDeciderContext.Provider value={false}>
+      <PublishedFilesPanelContext.Provider value={filesPanel}>
+        <previewModal.Provider>
+          {presentingDocument && (
+            <PreviewModal
+              presentingDocument={presentingDocument}
+              onClose={() => previewModal.toggle(false)}
+            />
+          )}
+        </previewModal.Provider>
 
-      {/* Always mounted, so a reply card opens its file whatever the Files
+        {/* Always mounted, so a reply card opens its file whatever the Files
           list holds. A shared chat has no Sources view. */}
-      <RootLayout.RightPanel>
-        <ChatRightPanel
-          sessionId={chatSession.chat_session_id}
-          open={showsFiles(rightPanel)}
-          state={rightPanel}
-          dispatch={dispatchRightPanel}
-          files={publishedFiles}
-          sources={null}
-          hasSources={false}
-          reloadFiles={reloadFiles}
-        />
-      </RootLayout.RightPanel>
+        <RootLayout.RightPanel>
+          <ChatRightPanel
+            sessionId={chatSession.chat_session_id}
+            open={showsFiles(rightPanel)}
+            state={rightPanel}
+            dispatch={dispatchRightPanel}
+            files={publishedFiles}
+            sources={null}
+            hasSources={false}
+            reloadFiles={reloadFiles}
+          />
+        </RootLayout.RightPanel>
 
-      <div className="flex flex-col h-full w-full overflow-hidden">
-        <div className="flex-1 flex flex-col items-center overflow-y-auto">
-          {/* The end padding keeps the text clear of the panel toggle */}
-          <div
-            className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 ps-8 py-4"
-            style={{ paddingInlineEnd: `max(2rem, ${PANEL_TOGGLE_ROOM})` }}
-          >
-            <Text as="p" font="heading-headline" color="text-04">
-              {chatSession.description || t("header.untitledChat.title")}
-            </Text>
-            <Section
-              flexDirection="row"
-              width="fit"
-              height="fit"
-              alignItems="center"
-              gap={2}
+        <div className="flex flex-col h-full w-full overflow-hidden">
+          <div className="flex-1 flex flex-col items-center overflow-y-auto">
+            {/* The end padding keeps the text clear of the panel toggle */}
+            <div
+              className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 ps-8 py-4"
+              style={{ paddingInlineEnd: `max(2rem, ${PANEL_TOGGLE_ROOM})` }}
             >
-              <Section alignItems="end" gap={0} width="fit" height="fit">
-                <Text as="p" font="secondary-body" color="text-03">
-                  {t("header.sharedOn.text", {
-                    date: humanReadableFormat(chatSession.time_created, locale),
-                  })}
-                </Text>
-                {chatSession.owner_name && (
+              <Text as="p" font="heading-headline" color="text-04">
+                {chatSession.description || t("header.untitledChat.title")}
+              </Text>
+              <Section
+                flexDirection="row"
+                width="fit"
+                height="fit"
+                alignItems="center"
+                gap={2}
+              >
+                <Section alignItems="end" gap={0} width="fit" height="fit">
                   <Text as="p" font="secondary-body" color="text-03">
-                    {t("header.owner.text", { name: chatSession.owner_name })}
+                    {t("header.sharedOn.text", {
+                      date: humanReadableFormat(
+                        chatSession.time_created,
+                        locale
+                      ),
+                    })}
                   </Text>
-                )}
+                  {chatSession.owner_name && (
+                    <Text as="p" font="secondary-body" color="text-03">
+                      {t("header.owner.text", { name: chatSession.owner_name })}
+                    </Text>
+                  )}
+                </Section>
               </Section>
-            </Section>
-          </div>
+            </div>
 
-          {isMounted ? (
-            <div className="w-full flex flex-col items-center">
-              {messages.map((message, i) => {
-                if (message.type === "user") {
-                  const multiModelResponses = getMultiModelResponses(
-                    message,
-                    messageTree,
-                    modelProviderLookup
-                  );
-                  return (
-                    <div
-                      key={message.messageId}
-                      className="w-full flex flex-col items-center"
-                    >
-                      <div className="w-[min(50rem,100%)]">
-                        <HumanMessage
-                          content={message.message}
-                          files={message.files}
-                          nodeId={message.nodeId}
-                        />
-                      </div>
-                      {/* Multi-model turns render every response side-by-side,
-                          full width, mirroring the author's comparison. */}
-                      {multiModelResponses && (
-                        <div className="w-full px-4 pt-12">
-                          <MultiModelResponseView
-                            responses={multiModelResponses}
-                            chatState={{
-                              agent: persona,
-                              docs: [],
-                              citations: undefined,
-                              setPresentingDocument: presentDocument,
-                            }}
-                            llmManager={null}
-                            parentMessage={message}
-                            readOnly
+            {isMounted ? (
+              <div className="w-full flex flex-col items-center">
+                {messages.map((message, i) => {
+                  if (message.type === "user") {
+                    const multiModelResponses = getMultiModelResponses(
+                      message,
+                      messageTree,
+                      modelProviderLookup
+                    );
+                    return (
+                      <div
+                        key={message.messageId}
+                        className="w-full flex flex-col items-center"
+                      >
+                        <div className="w-[min(50rem,100%)]">
+                          <HumanMessage
+                            content={message.message}
+                            files={message.files}
+                            nodeId={message.nodeId}
                           />
                         </div>
-                      )}
-                    </div>
-                  );
-                }
+                        {/* Multi-model turns render every response side-by-side,
+                          full width, mirroring the author's comparison. */}
+                        {multiModelResponses && (
+                          <div className="w-full px-4 pt-12">
+                            <MultiModelResponseView
+                              responses={multiModelResponses}
+                              chatState={{
+                                agent: persona,
+                                docs: [],
+                                citations: undefined,
+                                setPresentingDocument: presentDocument,
+                              }}
+                              llmManager={null}
+                              parentMessage={message}
+                              readOnly
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
 
-                // The follow-up continues the turn, as T3 Code shows it
-                if (message.type === "agent_results") return null;
+                  // The follow-up continues the turn, as T3 Code shows it
+                  if (message.type === "agent_results") return null;
 
-                // Non-user (assistant or error): skip the single child the
-                // chain surfaced when its parent is a multi-model turn. The
-                // panels already render every response, including failures.
-                const previousMessage = i !== 0 ? messages[i - 1] : null;
-                if (
-                  previousMessage?.type === "user" &&
-                  getMultiModelResponses(
-                    previousMessage,
-                    messageTree,
-                    modelProviderLookup
-                  )
-                ) {
+                  // Non-user (assistant or error): skip the single child the
+                  // chain surfaced when its parent is a multi-model turn. The
+                  // panels already render every response, including failures.
+                  const previousMessage = i !== 0 ? messages[i - 1] : null;
+                  if (
+                    previousMessage?.type === "user" &&
+                    getMultiModelResponses(
+                      previousMessage,
+                      messageTree,
+                      modelProviderLookup
+                    )
+                  ) {
+                    return null;
+                  }
+
+                  if (
+                    message.type === "assistant" ||
+                    message.type === "error"
+                  ) {
+                    return (
+                      <div
+                        key={message.messageId}
+                        className="w-[min(50rem,100%)]"
+                      >
+                        {(message.type !== "error" ||
+                          message.packets.length > 0) && (
+                          <AgentMessage
+                            rawPackets={message.packets}
+                            chatState={{
+                              agent: persona,
+                              docs: message.documents,
+                              citations: message.citations,
+                              setPresentingDocument: presentDocument,
+                              // Shared payload carries the model as `modelDisplayName`,
+                              // not `overridden_model`. Surface it in the read-only footer.
+                              overriddenModel:
+                                message.modelDisplayName ?? undefined,
+                              overriddenModelProvider: message.modelDisplayName
+                                ? modelProviderLookup.get(
+                                    message.modelDisplayName
+                                  )
+                                : undefined,
+                            }}
+                            nodeId={message.nodeId}
+                            llmManager={null}
+                            otherMessagesCanSwitchTo={undefined}
+                            onMessageSelection={undefined}
+                            // A turn's actions show once, under its last answer
+                            hideFooter={
+                              message.type === "error" ||
+                              messages[i + 1]?.type === "agent_results"
+                            }
+                            disableTTS={message.type === "error"}
+                          />
+                        )}
+                        {message.type === "error" && (
+                          <ErrorBanner
+                            error={message.errorMessage ?? ""}
+                            errorCode={message.errorCode ?? undefined}
+                            isRetryable={message.isRetryable}
+                            details={message.errorDetails ?? undefined}
+                          />
+                        )}
+                      </div>
+                    );
+                  }
+
                   return null;
-                }
+                })}
+              </div>
+            ) : (
+              <div className="h-full w-full flex items-center justify-center">
+                <OnyxInitializingLoader />
+              </div>
+            )}
+          </div>
 
-                if (message.type === "assistant" || message.type === "error") {
-                  return (
-                    <div
-                      key={message.messageId}
-                      className="w-[min(50rem,100%)]"
-                    >
-                      {(message.type !== "error" ||
-                        message.packets.length > 0) && (
-                        <AgentMessage
-                          rawPackets={message.packets}
-                          chatState={{
-                            agent: persona,
-                            docs: message.documents,
-                            citations: message.citations,
-                            setPresentingDocument: presentDocument,
-                            // Shared payload carries the model as `modelDisplayName`,
-                            // not `overridden_model`. Surface it in the read-only footer.
-                            overriddenModel:
-                              message.modelDisplayName ?? undefined,
-                            overriddenModelProvider: message.modelDisplayName
-                              ? modelProviderLookup.get(
-                                  message.modelDisplayName
-                                )
-                              : undefined,
-                          }}
-                          nodeId={message.nodeId}
-                          llmManager={null}
-                          otherMessagesCanSwitchTo={undefined}
-                          onMessageSelection={undefined}
-                          // A turn's actions show once, under its last answer
-                          hideFooter={
-                            message.type === "error" ||
-                            messages[i + 1]?.type === "agent_results"
-                          }
-                          disableTTS={message.type === "error"}
-                        />
-                      )}
-                      {message.type === "error" && (
-                        <ErrorBanner
-                          error={message.errorMessage ?? ""}
-                          errorCode={message.errorCode ?? undefined}
-                          isRetryable={message.isRetryable}
-                          details={message.errorDetails ?? undefined}
-                        />
-                      )}
-                    </div>
-                  );
-                }
-
-                return null;
-              })}
-            </div>
-          ) : (
-            <div className="h-full w-full flex items-center justify-center">
-              <OnyxInitializingLoader />
-            </div>
-          )}
+          <div className="w-full max-w-200 mx-auto px-4 pb-4">
+            <SharedAppInputBar />
+          </div>
         </div>
-
-        <div className="w-full max-w-200 mx-auto px-4 pb-4">
-          <SharedAppInputBar />
-        </div>
-      </div>
-    </PublishedFilesPanelContext.Provider>
+      </PublishedFilesPanelContext.Provider>
+    </ToolRequestDeciderContext.Provider>
   );
 }

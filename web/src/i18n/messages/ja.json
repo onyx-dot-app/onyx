@@ -12569,6 +12569,12 @@
           "waitingForAnswer": {
             "label": "回答を待っています..."
           },
+          "waitingForOwnerApproval": {
+            "label": "オーナーの承認を待っています..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "オーナーの回答を待っています..."
+          },
           "runningCommand": {
             "label": "コマンドを実行中..."
           },

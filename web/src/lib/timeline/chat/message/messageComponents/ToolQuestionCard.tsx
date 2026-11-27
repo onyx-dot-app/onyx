@@ -24,11 +24,11 @@ import {
   useFollowUserInput,
   useNudgedCard,
 } from "@/lib/chat/hooks";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import {
   type ToolQuestionCall,
   type ToolQuestionStatus,
-  useToolRequestUi,
-} from "@/lib/chat/toolApprovals";
+} from "@/lib/chat/toolQuestions";
 
 interface ToolQuestionCardProps {
   question: ToolQuestionCall;

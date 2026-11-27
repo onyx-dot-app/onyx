@@ -12569,6 +12569,12 @@
           "waitingForAnswer": {
             "label": "Esperando tu respuesta..."
           },
+          "waitingForOwnerApproval": {
+            "label": "Esperando la aprobación del propietario..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "Esperando la respuesta del propietario..."
+          },
           "runningCommand": {
             "label": "Ejecutando comando..."
           },
