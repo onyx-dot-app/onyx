@@ -34,7 +34,6 @@ const RECORD_PREFIX: Record<Exclude<ApprovalStatus, "pending">, string> = {
   approved: "Approved",
   approvedForSession: "Approved for this chat",
   rejected: "Not approved",
-  expired: "Timed out",
   disabled: "Disabled",
   closed: "No longer waiting",
 };

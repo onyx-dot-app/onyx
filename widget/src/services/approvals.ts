@@ -30,16 +30,15 @@ export type ApprovalOutcome =
 /**
  * "approvedForSession": approved by a grant for the chat's later requests of
  * the same tool, or for the command's later requests of the same action.
- * "expired": the request timed out. "disabled": an approval found the tool disabled by a policy,
- * so the call did not run. "closed": nothing waits for a decision any more,
- * and the outcome is unknown.
+ * "disabled": an approval found the tool disabled by a policy, so the call
+ * did not run. "closed": nothing waits for a decision any more, and the
+ * outcome is unknown.
  */
 export type ApprovalStatus =
   | "pending"
   | "approved"
   | "approvedForSession"
   | "rejected"
-  | "expired"
   | "disabled"
   | "closed";
 
@@ -147,8 +146,6 @@ export function approvalRecord(
         : `Approved for this chat: ${toolName}`;
     case "rejected":
       return `Not approved: ${toolName}`;
-    case "expired":
-      return `Timed out: ${toolName}`;
     case "disabled":
       return `Disabled: ${toolName}`;
     case "closed":

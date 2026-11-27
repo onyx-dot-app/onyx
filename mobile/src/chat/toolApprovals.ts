@@ -20,7 +20,6 @@ export type ApprovalDecision =
 
 // "approvedForSession": approved by a grant for the chat's later requests of the same tool, or
 // for the command's later requests of the same action.
-// "expired": the request timed out.
 // "disabled": an approval found the tool disabled, so the call did not run.
 // "closed": the request no longer waits for a decision ("cancelled", or a decision answered 404 or
 // 409).
@@ -29,7 +28,6 @@ export type ApprovalStatus =
   | "approved"
   | "approvedForSession"
   | "rejected"
-  | "expired"
   | "disabled"
   | "closed";
 

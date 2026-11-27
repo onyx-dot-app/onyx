@@ -268,9 +268,6 @@ describe("approval status", () => {
     expect(approvalRecord("approvedForSession", "GET /x", "command")).toBe(
       "Approved for this command: GET /x"
     );
-    expect(approvalRecord("expired", "Send email")).toBe(
-      "Timed out: Send email"
-    );
     expect(approvalRecord("closed", "Send email")).toBe(
       "No longer waiting: Send email"
     );
