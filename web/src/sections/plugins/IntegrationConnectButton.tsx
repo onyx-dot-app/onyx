@@ -7,97 +7,12 @@ import { toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgKey } from "@opal/icons";
 import { useSWRConfig } from "swr";
-import {
-  connectAction,
-  connectWithOAuth,
-  needsAdmin,
-} from "@/lib/integrations/connect";
-import { deleteUserConnection, startUserOAuth } from "@/lib/integrations/svc";
+import { connectAction, needsAdmin } from "@/lib/integrations/connect";
+import { useIntegrationConnect } from "@/lib/integrations/hooks";
+import { deleteUserConnection } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
-import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentialsModal";
-
-interface IntegrationConnectOptions {
-  /** Where the OAuth callback returns when no waiting tab closes it. */
-  returnPath: string;
-  onConnected?: () => void;
-  /** Called when a connect attempt fails or is abandoned. */
-  onConnectFailed?: () => void;
-  /** Called before a blocked popup moves the sign-in to this tab. */
-  onRedirect?: () => void;
-}
-
-/** Connects one integration: an OAuth sign-in, or the API key modal. Render
- * `modal` where the API key modal can open. */
-export function useIntegrationConnect(
-  integration: MemberIntegration,
-  {
-    returnPath,
-    onConnected,
-    onConnectFailed,
-    onRedirect,
-  }: IntegrationConnectOptions
-) {
-  const t = useTranslations("plugins.member.connection");
-  const { mutate } = useSWRConfig();
-  const [busy, setBusy] = useState(false);
-  const [credentialsOpen, setCredentialsOpen] = useState(false);
-
-  async function refresh() {
-    await mutate(SWR_KEYS.integrations);
-  }
-
-  async function connected() {
-    toast.success(t("connected", { name: integration.name }));
-    await refresh();
-    onConnected?.();
-  }
-
-  async function connect() {
-    if (integration.auth_method === "api_key") {
-      setCredentialsOpen(true);
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await connectWithOAuth(
-        (path) => startUserOAuth(integration.id, path),
-        returnPath,
-        onRedirect
-      );
-      if (result === "connected") await connected();
-    } catch (error) {
-      if (!isSilentOAuthOutcome(error))
-        toast.error(
-          oauthFailureDetail(error)?.description ??
-            (error instanceof Error && error.message
-              ? error.message
-              : t("failed"))
-        );
-      onConnectFailed?.();
-      await refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const modal = credentialsOpen ? (
-    <IntegrationCredentialsModal
-      integration={integration}
-      onClose={() => {
-        setCredentialsOpen(false);
-        onConnectFailed?.();
-      }}
-      onConnected={() => {
-        setCredentialsOpen(false);
-        void connected();
-      }}
-    />
-  ) : null;
-
-  return { busy, connect, modal };
-}
 
 interface IntegrationConnectButtonProps {
   integration: MemberIntegration;
@@ -204,7 +119,13 @@ export default function IntegrationConnectButton({
           {t("disconnect.label")}
         </Button>
       )}
-      {signIn.modal}
+      {signIn.credentialsOpen && (
+        <IntegrationCredentialsModal
+          integration={integration}
+          onClose={signIn.closeCredentials}
+          onConnected={signIn.credentialsConnected}
+        />
+      )}
     </>
   );
 }

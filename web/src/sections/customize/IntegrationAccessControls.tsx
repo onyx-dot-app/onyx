@@ -19,14 +19,14 @@ import {
   setIntegrationEnabled,
 } from "@/lib/integrations/svc";
 import { connectAction } from "@/lib/integrations/connect";
+import { useIntegrationConnect } from "@/lib/integrations/hooks";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Permission } from "@/lib/types";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
-import IntegrationConnectButton, {
-  useIntegrationConnect,
-} from "@/sections/plugins/IntegrationConnectButton";
+import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
+import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentialsModal";
 import ShareIntegrationModal from "@/sections/plugins/ShareIntegrationModal";
 
 /** Why the user cannot use an integration, or null when the user can. */
@@ -138,7 +138,13 @@ export function IntegrationSwitch({
           />
         </Section>
       </Tooltip>
-      {signIn.modal}
+      {signIn.credentialsOpen && (
+        <IntegrationCredentialsModal
+          integration={integration}
+          onClose={signIn.closeCredentials}
+          onConnected={signIn.credentialsConnected}
+        />
+      )}
     </Section>
   );
 }
