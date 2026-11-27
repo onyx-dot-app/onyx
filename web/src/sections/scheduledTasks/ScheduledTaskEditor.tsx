@@ -120,10 +120,6 @@ function TaskForm({ task }: TaskFormProps) {
   const restoredPayload = useRef(false);
   const [touched, setTouched] = useState({ name: false, prompt: false });
   const [saving, setSaving] = useState(false);
-  // A task this editor created while the user kept editing; later saves
-  // update it instead of creating another.
-  const [created, setCreated] = useState<ScheduledTaskDetail | null>(null);
-  const target = task ?? created;
   // State updates land on the next render; the ref stops a second click
   // in the same frame from sending a second save.
   const savingRef = useRef(false);
@@ -146,22 +142,7 @@ function TaskForm({ task }: TaskFormProps) {
     mode !== initial.mode ||
     JSON.stringify(payload) !== JSON.stringify(initial.payload) ||
     JSON.stringify(integrations) !== JSON.stringify(initialIntegrations);
-  const formSnapshot = JSON.stringify([
-    name,
-    prompt,
-    mode,
-    payload,
-    integrations,
-  ]);
-  const latestSnapshot = useRef(formSnapshot);
-  useEffect(() => {
-    latestSnapshot.current = formSnapshot;
-  }, [formSnapshot]);
-  // The form as it was sent. Edits made after it stay guarded.
-  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
-  const unsaved = useUnsavedChangesGuard({
-    isDirty: dirty && formSnapshot !== savedSnapshot,
-  });
+  const unsaved = useUnsavedChangesGuard({ isDirty: dirty && !saving });
 
   useEffect(() => {
     restoredPayload.current = false;
@@ -197,8 +178,6 @@ function TaskForm({ task }: TaskFormProps) {
     if (!canSave || integrations === null || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
-    const submitted = formSnapshot;
-    setSavedSnapshot(submitted);
     const fields = {
       name: name.trim(),
       prompt: prompt.trim(),
@@ -207,8 +186,8 @@ function TaskForm({ task }: TaskFormProps) {
       integrations,
     };
     try {
-      const saved = target
-        ? await updateScheduledTask(target.id, fields)
+      const saved = task
+        ? await updateScheduledTask(task.id, fields)
         : await createScheduledTask({ ...fields, run_immediately: runNow });
       await Promise.all([
         mutate(SWR_KEYS.chatScheduledTask(saved.id), saved, {
@@ -218,24 +197,15 @@ function TaskForm({ task }: TaskFormProps) {
         revalidateScheduledRunViews(saved.id),
       ]);
       toast.success(
-        target
+        task
           ? t("toasts.updated")
           : t(runNow ? "toasts.createdAndRun" : "toasts.created")
       );
-      const leave = () => navigation.go(scheduledTaskHref(saved.id));
-      if (latestSnapshot.current === submitted) {
-        leave();
-        return;
-      }
-      setCreated(saved);
-      savingRef.current = false;
-      setSaving(false);
-      unsaved.requestLeave(leave);
+      navigation.go(scheduledTaskHref(saved.id));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("toasts.saveFailed"));
       savingRef.current = false;
       setSaving(false);
-      setSavedSnapshot(null);
     }
   }
 
@@ -243,17 +213,17 @@ function TaskForm({ task }: TaskFormProps) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgClock}
-        title={target ? t("editTitle") : t("newTitle")}
+        title={task ? t("editTitle") : t("newTitle")}
         description={t("description")}
         back={
           <BackLink
-            to={target ? scheduledTaskHref(target.id) : SCHEDULED_TASKS_PATH}
+            to={task ? scheduledTaskHref(task.id) : SCHEDULED_TASKS_PATH}
             label={t("back")}
           />
         }
         divider
         actions={[
-          ...(target
+          ...(task
             ? []
             : [
                 <Button
@@ -277,45 +247,48 @@ function TaskForm({ task }: TaskFormProps) {
         ]}
       />
       <SettingsLayouts.Body>
-        <Section height="auto" alignItems="stretch">
-          <InputVertical withLabel title={t("fields.name.label")}>
-            <InputTypeIn
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              onBlur={() => setTouched((was) => ({ ...was, name: true }))}
-              placeholder={t("fields.name.placeholder")}
-              variant={touched.name && nameError ? "error" : undefined}
-              data-testid="scheduled-task-name"
-            />
-            {touched.name && nameError && (
-              <Text as="p" font="secondary-body" color="status-error-05">
-                {nameError}
-              </Text>
-            )}
-          </InputVertical>
-          <InputVertical
-            withLabel
-            title={t("fields.prompt.label")}
-            description={t("fields.prompt.description")}
-          >
-            <InputTextArea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onBlur={() => setTouched((was) => ({ ...was, prompt: true }))}
-              placeholder={t("fields.prompt.placeholder")}
-              rows={6}
-              autoResize
-              maxRows={12}
-              variant={touched.prompt && promptError ? "error" : undefined}
-              data-testid="scheduled-task-prompt"
-            />
-            {touched.prompt && promptError && (
-              <Text as="p" font="secondary-body" color="status-error-05">
-                {promptError}
-              </Text>
-            )}
-          </InputVertical>
-        </Section>
+        {/* Edits made while a save is pending would not be saved. */}
+        <div inert={saving} data-testid="scheduled-task-form">
+          <Section height="auto" alignItems="stretch">
+            <InputVertical withLabel title={t("fields.name.label")}>
+              <InputTypeIn
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                onBlur={() => setTouched((was) => ({ ...was, name: true }))}
+                placeholder={t("fields.name.placeholder")}
+                variant={touched.name && nameError ? "error" : undefined}
+                data-testid="scheduled-task-name"
+              />
+              {touched.name && nameError && (
+                <Text as="p" font="secondary-body" color="status-error-05">
+                  {nameError}
+                </Text>
+              )}
+            </InputVertical>
+            <InputVertical
+              withLabel
+              title={t("fields.prompt.label")}
+              description={t("fields.prompt.description")}
+            >
+              <InputTextArea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onBlur={() => setTouched((was) => ({ ...was, prompt: true }))}
+                placeholder={t("fields.prompt.placeholder")}
+                rows={6}
+                autoResize
+                maxRows={12}
+                variant={touched.prompt && promptError ? "error" : undefined}
+                data-testid="scheduled-task-prompt"
+              />
+              {touched.prompt && promptError && (
+                <Text as="p" font="secondary-body" color="status-error-05">
+                  {promptError}
+                </Text>
+              )}
+            </InputVertical>
+          </Section>
+        </div>
         <Divider paddingParallel={0} paddingPerpendicular={0} />
         <InputVertical title={t("fields.schedule.label")}>
           <ScheduleEditor

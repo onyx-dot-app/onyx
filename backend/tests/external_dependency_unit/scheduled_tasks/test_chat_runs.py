@@ -330,6 +330,10 @@ def test_the_next_fire_cancels_a_run_that_waits_for_approval(
     assert [UUID(message["kwargs"]["run_id"]) for message in sent] == [new_run.id]
     db_session.refresh(response)
     assert response.response_status == RunStatus.CANCELLED
+    assert response.response_failure is not None
+    assert (
+        response.response_failure.message == "The next scheduled run replaced this one."
+    )
 
 
 def test_a_fire_that_fails_to_dispatch_records_a_failed_run(

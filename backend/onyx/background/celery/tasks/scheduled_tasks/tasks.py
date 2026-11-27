@@ -72,10 +72,17 @@ NO_RESPONSE_OLDER_THAN = timedelta(minutes=15)
 APPROVAL_WAIT_LIMIT = timedelta(hours=24)
 # The chat of a run that nobody approved in time says that it hit a time
 # limit, not that the user stopped it.
-_APPROVAL_WAIT_ENDED = RunFailure(
-    kind=RunFailureKind.DEADLINE,
-    message="Nobody answered the approval request in time.",
-)
+# The reason a cancelled approval wait gives in its chat, by run error class.
+_APPROVAL_WAIT_ENDED = {
+    ScheduledTaskErrorClass.APPROVAL_TIMEOUT: RunFailure(
+        kind=RunFailureKind.DEADLINE,
+        message="Nobody answered the approval request in time.",
+    ),
+    ScheduledTaskErrorClass.SUPERSEDED_BY_NEXT_FIRE: RunFailure(
+        kind=RunFailureKind.DEADLINE,
+        message="The next scheduled run replaced this one.",
+    ),
+}
 
 
 def _sync_chat_runs(db_session: Session, tenant_id: str, now: datetime) -> None:
@@ -145,7 +152,7 @@ def _cancel_parked_runs(
             else None
         )
         if response is not None and cancel_parked_response(
-            cache, tenant_id, response.id, _APPROVAL_WAIT_ENDED
+            cache, tenant_id, response.id, _APPROVAL_WAIT_ENDED[error_class]
         ):
             mark_run_status(
                 db_session=db_session,
