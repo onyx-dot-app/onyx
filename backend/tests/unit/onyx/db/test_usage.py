@@ -4,6 +4,7 @@ tests/external_dependency_unit/db/test_tenant_usage_counter.py."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import ValidationError
@@ -47,6 +48,19 @@ class TestUsagePeriod:
     def test_must_end_after_it_starts(self, end: datetime) -> None:
         with pytest.raises(ValidationError):
             UsagePeriod(anchor=WindowAnchor.CALENDAR, start=_MONDAY, end=end)
+
+    def test_compares_real_instants_across_a_clock_change(self) -> None:
+        """On 1 Nov 2026 New York clocks go back: 01:45 before the change is
+        earlier than 01:15 after it."""
+        new_york = ZoneInfo("America/New_York")
+        before = datetime(2026, 11, 1, 1, 45, tzinfo=new_york)
+        after = datetime(2026, 11, 1, 1, 15, tzinfo=new_york, fold=1)
+
+        period = UsagePeriod(anchor=WindowAnchor.CALENDAR, start=before, end=after)
+        assert period.start == datetime(2026, 11, 1, 5, 45, tzinfo=timezone.utc)
+        assert period.end == datetime(2026, 11, 1, 6, 15, tzinfo=timezone.utc)
+        with pytest.raises(ValidationError):
+            UsagePeriod(anchor=WindowAnchor.CALENDAR, start=after, end=before)
 
     def test_needs_timezone_aware_times(self) -> None:
         with pytest.raises(ValidationError):

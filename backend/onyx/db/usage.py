@@ -8,7 +8,7 @@ must use the same period, or they read and write different rows.
 
 from datetime import datetime, timedelta, timezone
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -32,12 +32,19 @@ class UsagePeriod(BaseModel):
     # None means the period never ends.
     end: datetime | None = None
 
-    @model_validator(mode="after")
-    def _is_valid(self) -> "UsagePeriod":
-        if self.start.tzinfo is None or (
-            self.end is not None and self.end.tzinfo is None
-        ):
+    @field_validator("start", "end")
+    @classmethod
+    def _in_utc(cls, value: datetime | None) -> datetime | None:
+        """Times are kept in UTC, so comparing them compares real instants,
+        also across a daylight saving change."""
+        if value is None:
+            return None
+        if value.utcoffset() is None:
             raise ValueError("A usage period needs timezone-aware times")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def _ends_after_start(self) -> "UsagePeriod":
         if self.end is not None and self.end <= self.start:
             raise ValueError("A usage period must end after it starts")
         return self
