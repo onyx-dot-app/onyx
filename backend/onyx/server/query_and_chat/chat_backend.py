@@ -162,6 +162,7 @@ from onyx.db.incognito import (
     mark_incognito_user_files_deleting,
 )
 from onyx.db.models import (
+    ApprovalRequest,
     ChatMessage,
     ChatSessionSharedStatus,
     FileRecord,
@@ -213,7 +214,10 @@ from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
     parse_spreadsheet_for_preview,
 )
-from onyx.server.query_and_chat.command_approvals import decide_command_approval
+from onyx.server.query_and_chat.command_approvals import (
+    decide_command_approval,
+    saved_answer_or_conflict,
+)
 from onyx.server.query_and_chat.models import (
     ApprovalDecisionResponse,
     ChatApprovalDecisionRequest,
@@ -2177,6 +2181,22 @@ def stop_chat_subagents(
     return StopSubagentsResponse(stopped_count=len(stopped))
 
 
+def _chat_choice(
+    db_session: Session, approval: ApprovalRequest, choice: ApprovalChoice
+) -> ApprovalChoice:
+    """The choice that a tool call in the chat can take."""
+    if choice == ApprovalChoice.APPROVE_COMMAND:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "A tool call has no command to approve for"
+        )
+    # An action that asks each time takes a chat approval as a single one.
+    if choice == ApprovalChoice.APPROVE_SESSION and integration_action_always_asks(
+        db_session, approval.integration_id, approval.action_id
+    ):
+        return ApprovalChoice.APPROVE_ONCE
+    return choice
+
+
 @router.post("/approvals/{approval_id}/decision", tags=PUBLIC_API_TAGS)
 def decide_approval(
     approval_id: UUID,
@@ -2213,58 +2233,29 @@ def decide_approval(
         return decide_command_approval(
             db_session, command_approval, body.decision, user.id
         )
-    if body.decision == ApprovalChoice.APPROVE_COMMAND:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, "A tool call has no command to approve for"
-        )
-    rejected = body.decision == ApprovalChoice.REJECT
-    # An action that asks each time takes a chat approval as a single one.
-    standing = (
-        body.decision == ApprovalChoice.APPROVE_SESSION
-        and not integration_action_always_asks(
-            db_session, approval.integration_id, approval.action_id
-        )
-    )
-    upgrades_to_grant = (
-        standing
-        and approval.decision == ApprovalDecision.APPROVED
-        and approval.decided_via == ApprovalDecidedVia.USER
-    )
-    if approval.decision is None or upgrades_to_grant:
-        blocked = action_now_blocked(
-            db_session,
-            integration_id=approval.integration_id,
-            action_id=approval.action_id,
-            user_id=user.id,
-            chat_session_id=approval.chat_session_id,
-        )
+    choice = _chat_choice(db_session, approval, body.decision)
+    if approval.decision is None or choice.upgrades(
+        approval.decision, approval.decided_via
+    ):
         record_approval_decision__no_commit(
             db_session,
             approval,
-            ApprovalDecision.REJECTED
-            if rejected or blocked
-            else ApprovalDecision.APPROVED,
-            ApprovalDecidedVia.POLICY
-            if blocked and not rejected
-            else ApprovalDecidedVia.SESSION_GRANT
-            if standing
-            else ApprovalDecidedVia.USER,
+            *choice.outcome(
+                blocked=action_now_blocked(
+                    db_session,
+                    integration_id=approval.integration_id,
+                    action_id=approval.action_id,
+                    user_id=user.id,
+                    chat_session_id=approval.chat_session_id,
+                )
+            ),
         )
     db_session.refresh(approval)
-    decided_via = approval.decided_via
-    # The answer to this body: an approval that a policy blocked was saved as
-    # a rejection. A saved answer also comes from an earlier attempt, a session
-    # grant from another request, or a concurrent decision.
-    decision = (
-        ApprovalDecision.REJECTED
-        if rejected or decided_via == ApprovalDecidedVia.POLICY
-        else ApprovalDecision.APPROVED
+    # A saved answer also comes from an earlier attempt, a session grant from
+    # another request, or a concurrent decision.
+    decision, decided_via = saved_answer_or_conflict(
+        choice, approval.decision, approval.decided_via
     )
-    if decided_via is None or approval.decision != decision:
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "This request was already decided or is no longer waiting",
-        )
     return ApprovalDecisionResponse(
         approval_id=approval_id,
         decision=decision,

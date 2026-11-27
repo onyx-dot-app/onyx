@@ -41,10 +41,11 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.integration import get_integration_by_id
 from onyx.db.integration_policy import get_session_granted_actions
-from onyx.integrations.models import EffectivePolicy
 from onyx.integrations.policy import (
+    ApprovalRecheck,
+    current_chat_action_policies,
     integration_action_always_asks,
-    resolve_chat_action_policies,
+    recheck_approval,
 )
 from onyx.llm.models import ToolResult
 from onyx.tools.models import (
@@ -133,22 +134,16 @@ def action_now_blocked(
     action."""
     if is_builtin_action(integration_id, action_id):
         return False
-    integration = (
-        get_integration_by_id(integration_id, db_session)
-        if integration_id is not None
-        else None
+    policies = current_chat_action_policies(
+        db_session,
+        integration_id=integration_id,
+        action_keys=[action_id],
+        user_id=user_id,
+        chat_session_id=chat_session_id,
     )
-    if integration is None or not integration.enabled:
-        return True
     return (
-        resolve_chat_action_policies(
-            db_session,
-            integration=integration,
-            action_keys=[action_id],
-            user_id=user_id,
-            chat_session_id=chat_session_id,
-        )[action_id]
-        is EffectivePolicy.BLOCKED
+        recheck_approval(policies, [action_id], asked=[action_id])
+        is ApprovalRecheck.BLOCKED
     )
 
 
