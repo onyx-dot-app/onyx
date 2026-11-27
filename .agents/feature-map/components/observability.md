@@ -163,6 +163,9 @@ process for 60 s, fails open). The credential-access line uses the same gate. Th
 owns its stdout handler, set at import, because root-logger propagation drops
 the events under uvicorn.
 High-volume actions pass a `dedup_key`, which a Redis `SET NX` checks.
+When the actor is the requester, the EE emitter adds the request's credential
+(`credential_type`, `credential_id`, `oauth_client_id`) from
+`CURRENT_USAGE_CREDENTIAL_CONTEXTVAR`, so call sites only pass `actor_from_user(user)`.
 
 **Log export.** `ee/onyx/server/log_export/api.py:start_log_export` sends a
 collect task to the queue of each worker type, collects its own logs inline,

@@ -34,7 +34,7 @@ from onyx.utils.audit import (
     AuditOutcome,
 )
 
-AUDIT_SCHEMA_VERSION = "1.0"
+AUDIT_SCHEMA_VERSION = "1.1"
 
 # Root of the audit logger tree; children propagate up to the dedicated stdout
 # handler configured in ``_configure_audit_logging``.
@@ -103,6 +103,20 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     # OCSF has no authorization-denial class, so a refused request maps onto the
     # request surface instead.
     AuditAction.PERMISSION_DENIED: OCSFEventClass.API_ACTIVITY,
+    AuditAction.PAT_CREATE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.PAT_REVOKE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.PERSONA_CREATE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.PERSONA_UPDATE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.PERSONA_DELETE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.DOCUMENT_SET_CREATE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.DOCUMENT_SET_UPDATE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.DOCUMENT_SET_DELETE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.EXPORT_QUERY_HISTORY: OCSFEventClass.API_ACTIVITY,
+    AuditAction.EXPORT_USAGE_REPORT: OCSFEventClass.API_ACTIVITY,
+    AuditAction.EXPORT_LOGS: OCSFEventClass.API_ACTIVITY,
+    AuditAction.OAUTH_CLIENT_REGISTER: OCSFEventClass.API_ACTIVITY,
+    AuditAction.OAUTH_GRANT_CREATE: OCSFEventClass.USER_ACCESS_MANAGEMENT,
+    AuditAction.OAUTH_GRANT_REVOKE: OCSFEventClass.USER_ACCESS_MANAGEMENT,
 }
 
 # Guard: every action must map to a class, so a new action can't ship untagged.
@@ -152,6 +166,31 @@ def _safe_get_client_ip() -> str | None:
         return current_client_ip()
     except Exception:
         return None
+
+
+def _with_request_credential(actor: AuditActor | None) -> AuditActor | None:
+    """Add the credential that authenticated this request to an actor that is
+    the requester. Leaves other actors (and actors that set it) unchanged."""
+    if actor is None or actor.credential_type is not None or actor.user_id is None:
+        return actor
+    try:
+        from shared_configs.contextvars import (
+            get_current_usage_credential,
+            get_current_user_id,
+        )
+
+        credential = get_current_usage_credential()
+        if credential is None or actor.user_id != get_current_user_id():
+            return actor
+        return actor.model_copy(
+            update={
+                "credential_type": credential.credential_type.value,
+                "credential_id": credential.credential_id,
+                "oauth_client_id": credential.oauth_client_id,
+            }
+        )
+    except Exception:
+        return actor
 
 
 # Emission is checked on hot paths, and ``get_tier`` reads the cache backend on
@@ -235,6 +274,7 @@ def emit_audit_event(
             return
 
         ocsf_class = _OCSF_CLASS_BY_ACTION.get(action)
+        actor = _with_request_credential(actor)
 
         payload: dict[str, Any] = {
             "audit_schema_version": AUDIT_SCHEMA_VERSION,
