@@ -400,7 +400,14 @@ export default function CustomizePluginsPage() {
             onDelete={(skill) => bulk.confirmDelete([skill])}
             source={(skill) => {
               const shown = shownGroups.get(skill.id);
-              return shown ? sourceOf(shown.entry, shown.group) : "";
+              if (!shown) return "";
+              // The admin table says where a published plugin lives, not who owns it.
+              return sourceOf(
+                shown.entry,
+                shown.entry.section === "organization"
+                  ? "organization"
+                  : shown.group
+              );
             }}
             canSelect={canManageSkill}
           />

@@ -345,6 +345,32 @@ describe("admin page", () => {
     ).toBeInTheDocument();
   });
 
+  test("an admin's own published plugin is from the organization", async () => {
+    window.history.replaceState(null, "", "/admin/plugins");
+    mockFetch({
+      "/api/skills": {
+        builtins: [],
+        customs: [
+          plugin("pub", "pub-kit", { published_version_number: 1 }),
+          plugin("mine", "my-kit"),
+        ],
+      },
+      "/api/marketplaces": { marketplaces: [] },
+    });
+    render(<CustomizePluginsPage />);
+
+    const published = await screen.findByRole("row", { name: "Open pub-kit" });
+    expect(
+      within(published).getByText("from your organization")
+    ).toBeInTheDocument();
+    expect(within(published).queryByText("by you")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("row", { name: "Open my-kit" })).getByText(
+        "by you"
+      )
+    ).toBeInTheDocument();
+  });
+
   test("deletes the selected plugins in one bulk request after the confirm", async () => {
     window.history.replaceState(null, "", "/admin/plugins");
     const fetchMock = mockFetch({
