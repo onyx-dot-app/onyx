@@ -666,6 +666,10 @@ export default function AddIntegrationModal({
                   picked
                     .text()
                     .then((text) => {
+                      if (!text.trim()) {
+                        setFileError(t("api.failed"));
+                        return;
+                      }
                       setFile({ name: picked.name, text });
                       setDetectError(null);
                     })

@@ -1298,6 +1298,31 @@ describe("Custom API", () => {
     expect(await screen.findByText(add.api.failed)).toBeInTheDocument();
   });
 
+  test("a blank schema file blocks Continue until discarded", async () => {
+    const fetchMock = mockFetch({});
+    const { user } = open({ kind: "api" });
+    await user.type(
+      screen.getByRole("textbox", { name: add.api.url.title }),
+      "https://api.example.com/graphql"
+    );
+    await user.upload(
+      screen.getByLabelText(add.api.upload.label),
+      Object.assign(new File([" \n"], "schema.graphql"), {
+        text: async () => " \n",
+      })
+    );
+
+    expect(await screen.findByText(add.api.failed)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: add.continue })).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("button", { name: add.api.upload.remove })
+    );
+    expect(screen.queryByText(add.api.failed)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: add.continue })).toBeEnabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("a spec file over the size limit blocks Continue until discarded", async () => {
     const read = jest.fn(() => Promise.resolve("{}"));
     const big = new File(["{}"], "openapi.json", { type: "application/json" });
