@@ -108,8 +108,10 @@ export function attach(tabId) {
         source: HUMAN_INPUT_SCRIPT,
       });
       await send(tabId, "Runtime.evaluate", { expression: HUMAN_INPUT_SCRIPT });
-    })().catch((error) => {
+    })().catch(async (error) => {
       state.ready = null;
+      // A half-set-up attachment goes, so nothing stays attached to the tab.
+      await chrome.debugger.detach({ tabId }).catch(() => {});
       throw new OperationError(
         "failed",
         `Could not control the tab: ${error?.message ?? error}`
@@ -219,7 +221,12 @@ async function tabJson(grant, tabId) {
     loading: tab.status === "loading",
     controller: isHumanControlled(tabId) ? "human" : "agent",
     // A dialog of a site that the user did not share stays hidden.
-    dialog: shared && state.dialog && isShared(grant, state.dialog.origin) ? state.dialog : null,
+    // Only a dialog whose own site is shared shows; a blank frame's dialog
+    // may belong to an unshared parent.
+    dialog:
+      shared && state.dialog && grant.origins.includes(originOf(state.dialog.origin) ?? "")
+        ? state.dialog
+        : null,
   };
 }
 
@@ -299,12 +306,15 @@ async function isPasswordField(tabId, backendNodeId) {
   return false;
 }
 
+/** The frame that an iframe element holds; null for another element, and
+ * undefined when Chrome cannot tell. */
 async function iframeFrameId(tabId, backendNodeId) {
   try {
     const { node } = await send(tabId, "DOM.describeNode", { backendNodeId, depth: 1 });
-    return node.contentDocument?.frameId ?? node.frameId ?? null;
+    if (node.nodeName !== "IFRAME" && node.nodeName !== "FRAME") return null;
+    return node.contentDocument?.frameId ?? node.frameId ?? undefined;
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -337,6 +347,8 @@ async function checkPoint(grant, tabId, { x, y }) {
   const frames = await frameUrls(tabId);
   const frameIds = [answer.frameId];
   const inner = await iframeFrameId(tabId, answer.backendNodeId);
+  // An element that Chrome cannot place in a frame takes no input.
+  if (inner === undefined) throw outsideFrame();
   if (inner) frameIds.push(inner);
   for (const frameId of frameIds) {
     if (frameId && !isShared(grant, frames.get(frameId) ?? "-")) throw outsideFrame();
@@ -370,6 +382,25 @@ async function checkFocus(grant, tabId) {
     const frameId = node.contentDocument?.frameId ?? node.frameId;
     const frames = await frameUrls(tabId);
     if (!isShared(grant, frames.get(frameId) ?? "-")) throw outsideFrame();
+    // Focus inside a frame of another shared site: check its field there,
+    // or refuse when Chrome cannot reach the frame.
+    const inner = await send(tabId, "Page.createIsolatedWorld", { frameId, worldName: "onyx" })
+      .then(({ executionContextId }) =>
+        send(tabId, "Runtime.evaluate", {
+          contextId: executionContextId,
+          returnByValue: true,
+          expression: `(() => {
+            let element = document.activeElement;
+            while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
+            return element?.tagName === "INPUT" && (element.getAttribute("type") || "").toLowerCase() === "password";
+          })()`,
+        })
+      )
+      .then((answer) => answer.result?.value)
+      .catch(() => undefined);
+    if (inner === undefined)
+      throw new OperationError("failed", "Onyx cannot check the focused field in that frame, so it does not press keys there.");
+    if (inner === true) throw passwordRefused();
   }
 }
 
@@ -443,10 +474,13 @@ async function snapshotText(grant, tab, state) {
         push(`${line}:`);
         const frameId = await iframeFrameId(tabId, node.backendDOMNodeId);
         // A frame of a site that the user did not share stays unread.
-        const frameNodes =
+        let frameNodes =
           frameId && isShared(grant, frames.get(frameId) ?? "-")
             ? await readFrameTree(tabId, frameId).catch(() => null)
             : null;
+        // A frame that changed sites during the read is dropped.
+        if (frameNodes && !isShared(grant, (await frameUrls(tabId)).get(frameId) ?? "-"))
+          frameNodes = null;
         if (frameNodes && frameNodes.length > 0)
           await renderTree(frameNodes, level + 1, frameDepth + 1);
         else push(`${"  ".repeat(level + 1)}- text: "(this frame cannot be read)"`);
@@ -529,9 +563,11 @@ const callOn = async (tabId, objectId, fn, args = []) => {
 };
 
 /** The element's center, once it is visible and not covered. */
-async function actionPoint(tabId, objectId, deadline) {
+async function actionPoint(ctx, objectId) {
+  const { tabId, deadline } = ctx;
   let reason = "is not visible";
   for (;;) {
+    await checkLive(ctx);
     await send(tabId, "DOM.scrollIntoViewIfNeeded", { objectId }).catch(() => {});
     const quads = await send(tabId, "DOM.getContentQuads", { objectId })
       .then((answer) => answer.quads)
@@ -712,6 +748,7 @@ async function navigateTab(grant, tabId, target, readiness, deadline) {
     if (!entry) throw new OperationError("failed", `There is no page to go ${target.history} to.`);
     if (!isShared(grant, entry.url))
       throw new OperationError("failed", "That page is on a site that the user did not share with this chat.");
+    await checkLive({ grant, tabId, deadline });
     await send(tabId, "Page.navigateToHistoryEntry", { entryId: entry.id });
     // A page restored from the back-forward cache stays "interactive" with
     // the debugger attached, so a history move waits for its parsed page.
@@ -762,12 +799,17 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
       if (grant.tabs.length >= MAX_TABS)
         throw new OperationError("tab_limit", `This chat has ${MAX_TABS} tabs. Close one first.`);
       const opener = await chrome.tabs.get(grant.current).catch(() => null);
+      if (Date.now() > deadline)
+        throw new OperationError("timeout", "The call ran out of time before Chrome could act.");
+      if (endedGrants.has(grant.id)) throw grantEndedError();
       const tab = await chrome.tabs.create({
         url: url ?? "about:blank",
         active: true,
         ...(opener ? { windowId: opener.windowId, openerTabId: opener.id } : {}),
       });
       await hooks.addTab(tab.id);
+      // A share that ended while the tab opened does not get it.
+      if (endedGrants.has(grant.id)) throw grantEndedError();
       await attach(tab.id);
       await waitForReady(tab.id, "domcontentloaded", deadline);
       return { tab: await tabJson(grant, tab.id) };
@@ -822,8 +864,11 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
         // A tab that left the shared sites ends the wait.
         await sharedTab(grant, tabId);
         if (stateOf(tabId).dialog) throw dialogPending();
-        if (await conditionsMet(grant, tabId, target, text, urlIncludes))
+        if (await conditionsMet(grant, tabId, target, text, urlIncludes)) {
+          // The match counts only while the tab is still on a shared site.
+          await sharedTab(grant, tabId);
           return { tab: await tabJson(grant, tabId) };
+        }
         if (Date.now() >= deadline)
           throw new OperationError("timeout", `The page did not match within ${timeoutMs}ms.`);
         await sleep(POLL_MS);
@@ -887,7 +932,7 @@ async function act(grant, tabId, params, deadline) {
       let point;
       if (hasTarget(target)) {
         const objectId = await resolveTarget(tabId, target, deadline);
-        point = await actionPoint(tabId, objectId, deadline);
+        point = await actionPoint(ctx, objectId);
       } else if (x !== undefined && y !== undefined) {
         point = { x, y };
       } else {
@@ -952,6 +997,7 @@ async function act(grant, tabId, params, deadline) {
         return undefined;
       }
       if (kind !== "ok") throw new OperationError("not_editable", "The element is not an editable field.");
+      await checkLive(ctx);
       await send(tabId, "DOM.focus", { objectId });
       await checkFocus(grant, tabId);
       if (params.clear === true) {
@@ -995,8 +1041,8 @@ async function act(grant, tabId, params, deadline) {
       const targetRef = optString(params, "targetRef");
       if (!hasTarget(target) || targetRef === undefined)
         throw invalid("drag needs ref or selector, and targetRef.");
-      const from = await actionPoint(tabId, await resolveTarget(tabId, target, deadline), deadline);
-      const to = await actionPoint(tabId, await resolveTarget(tabId, { ref: targetRef }, deadline), deadline);
+      const from = await actionPoint(ctx, await resolveTarget(tabId, target, deadline));
+      const to = await actionPoint(ctx, await resolveTarget(tabId, { ref: targetRef }, deadline));
       await checkPoint(grant, tabId, from);
       await checkPoint(grant, tabId, to);
       await input(ctx, "Input.dispatchMouseEvent", { type: "mouseMoved", ...from });
@@ -1023,7 +1069,7 @@ async function act(grant, tabId, params, deadline) {
     }
     case "scroll": {
       const point = hasTarget(target)
-        ? await actionPoint(tabId, await resolveTarget(tabId, target, deadline), deadline)
+        ? await actionPoint(ctx, await resolveTarget(tabId, target, deadline))
         : await viewportCenter(tabId);
       await checkPoint(grant, tabId, point);
       const deltaX = optNumber(params, "deltaX") ?? 0;

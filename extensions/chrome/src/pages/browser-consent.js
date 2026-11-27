@@ -14,13 +14,15 @@ function checkedTabIds() {
   return [...tabsBox.querySelectorAll("input:checked")].map((box) => Number(box.value));
 }
 
-// The sites that the window shows; Allow shares only these.
-let shownOrigins = [];
+// The site that the window shows for each tab; Allow shares only these.
+let shownTabOrigins = {};
 
 function renderOrigins(tabs) {
   const chosen = new Set(checkedTabIds());
   const origins = [...new Set(tabs.filter((tab) => chosen.has(tab.id)).map((tab) => originOf(tab.url)))];
-  shownOrigins = origins;
+  shownTabOrigins = Object.fromEntries(
+    tabs.filter((tab) => chosen.has(tab.id)).map((tab) => [String(tab.id), originOf(tab.url)])
+  );
   originsList.replaceChildren(
     ...origins.map((origin) => {
       const item = document.createElement("li");
@@ -85,7 +87,7 @@ allowButton.addEventListener("click", async () => {
       request_id: requestId,
       tab_ids: checkedTabIds(),
       minutes: Number(document.getElementById("duration").value),
-      origins: shownOrigins,
+      tab_origins: shownTabOrigins,
     });
   } catch (error) {
     answer = { ok: false, error: `Chrome did not answer: ${error?.message ?? error}` };

@@ -83,16 +83,20 @@ export async function connect() {
   if (socket || connecting) return;
   connecting = true;
   const attempt = generation;
+  // A reconnect started a newer attempt: this one changes nothing more.
+  const stale = () => attempt !== generation;
   try {
     if (await controlDisabled()) {
-      await setStatus({ state: "disabled" });
+      if (!stale()) await setStatus({ state: "disabled" });
       return;
     }
+    if (stale()) return;
     const domain = await getOnyxDomain();
     const response = await fetch(`${domain}/api/chat/browser/extension/token`, {
       method: "POST",
       credentials: "include",
     });
+    if (stale()) return;
     if (!response.ok) {
       await setStatus({
         state: response.status === 401 || response.status === 403 ? "signed_out" : "offline",
@@ -102,7 +106,7 @@ export async function connect() {
     }
     const { token } = await response.json();
     // A reconnect or a policy change while the token was on its way wins.
-    if (attempt !== generation || (await controlDisabled())) return;
+    if (stale() || (await controlDisabled()) || stale()) return;
     const url = `${domain.replace(/^http/, "ws")}/api/chat/browser/extension/ws?token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(url);
     socket = ws;
@@ -138,11 +142,12 @@ export async function connect() {
       scheduleRetry();
     };
   } catch (error) {
+    if (stale()) return;
     socket = null;
     await setStatus({ state: "offline" });
     scheduleRetry();
   } finally {
-    connecting = false;
+    if (!stale()) connecting = false;
   }
 }
 
@@ -217,8 +222,8 @@ async function runCommand(message) {
       message.method,
       message.params ?? {},
       {
-        addTab: (tabId) => addTab(tabId, grant.chat_session_id),
-        setCurrent: (tabId) => setCurrent(tabId, grant.chat_session_id),
+        addTab: (tabId) => addTab(tabId, grant.id),
+        setCurrent: (tabId) => setCurrent(tabId, grant.id),
       },
       message.deadline * 1000
     );
@@ -261,7 +266,13 @@ async function tabsFor(grant) {
   return tabs;
 }
 
-async function reportGrant() {
+/** Report the grant to Onyx, in turn with the other grant changes, so a
+ * report never overtakes a Stop. */
+function reportGrant() {
+  return serial(sendGrant);
+}
+
+async function sendGrant() {
   const grant = await getGrant();
   if (!grant) return;
   sendMessage({
@@ -347,6 +358,7 @@ async function groupTabs(tabIds, groupId) {
 const MAX_GRANT_TABS = 50;
 
 async function approve(requestId, tabIds, minutes, shownOrigins) {
+  // `shownOrigins` maps each tab ID to the site that the window showed for it.
   const request = (await readSession(REQUESTS_KEY, {}))[requestId];
   if (!request || request.deadline * 1000 <= Date.now()) {
     await takeRequest(requestId);
@@ -365,10 +377,15 @@ async function approve(requestId, tabIds, minutes, shownOrigins) {
   if (tabs.length === 0) throw new Error("Pick at least one web page tab.");
   if (tabs.length > MAX_GRANT_TABS) throw new Error(`Pick ${MAX_GRANT_TABS} tabs or fewer.`);
   const origins = [...new Set(tabs.map((tab) => driver.originOf(tab.url)))];
-  // The user allows only the sites that the window showed.
-  if (origins.some((origin) => !shownOrigins.includes(origin)))
+  // Each tab must still be on the site that the window showed for it.
+  if (tabs.some((tab) => shownOrigins[String(tab.id)] !== driver.originOf(tab.url)))
     throw new Error("A tab moved to another site. Check the sites and allow again.");
   await serial(async () => {
+    // The deployment or policy may have changed during the lookups above.
+    if (request.domain !== (await getOnyxDomain()) || (await controlDisabled())) {
+      await takeRequest(requestId);
+      throw new Error("Onyx settings changed. Ask again from the Onyx chat.");
+    }
     await endGrantNow(true);
     // The grant is saved only once every tab is under control; on a failure
     // the request stays, so Allow can try again.
@@ -452,10 +469,10 @@ async function sendPendingEnds() {
 
 /** Add a tab that the agent opened to the chat's grant. A tab opened for a
  * grant that ended meanwhile is let go. */
-async function addTab(tabId, chatSessionId) {
+async function addTab(tabId, grantId) {
   const added = await serial(async () => {
     const grant = await getGrant();
-    if (!grant || grant.chat_session_id !== chatSessionId) {
+    if (!grant || grant.id !== grantId) {
       await driver.detach(tabId);
       return false;
     }
@@ -470,10 +487,10 @@ async function addTab(tabId, chatSessionId) {
   await reportGrant();
 }
 
-function setCurrent(tabId, chatSessionId) {
+function setCurrent(tabId, grantId) {
   return serial(async () => {
     const grant = await getGrant();
-    if (grant && grant.chat_session_id === chatSessionId && grant.current !== tabId)
+    if (grant && grant.id === grantId && grant.current !== tabId)
       await setGrant({ ...grant, current: tabId });
   });
 }
@@ -525,7 +542,7 @@ export function handleRuntimeMessage(request, sendResponse) {
   switch (request.action) {
     case BROWSER_MESSAGES.APPROVE:
       return respond(
-        approve(request.request_id, request.tab_ids, request.minutes, request.origins ?? [])
+        approve(request.request_id, request.tab_ids, request.minutes, request.tab_origins ?? {})
       );
     case BROWSER_MESSAGES.DENY:
       return respond(deny(request.request_id));
