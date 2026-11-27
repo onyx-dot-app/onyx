@@ -32,6 +32,7 @@ from onyx.llm.well_known_providers.constants import (
     LITELLM_PROXY_PROVIDER_NAME,
     LM_STUDIO_PROVIDER_NAME,
     NEBIUS_TOKENFACTORY_PROVIDER_NAME,
+    OCI_PROVIDER_NAME,
     OLLAMA_PROVIDER_NAME,
     OPENAI_COMPATIBLE_PROVIDER_NAME,
     OPENAI_PROVIDER_NAME,
@@ -75,6 +76,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
         VERCEL_AI_GATEWAY_PROVIDER_NAME: [],  # Dynamic - fetched from the public catalog
+        OCI_PROVIDER_NAME: get_oci_model_names(),
     }
 
 
@@ -206,6 +208,17 @@ def get_vertexai_model_names(chat_models: list[str] | None = None) -> list[str]:
     )
 
 
+def get_oci_model_names() -> list[str]:
+    """Get OCI Generative AI chat model names from the vendored model catalog.
+
+    Ids are `<vendor>.<model>`; the same catalog also lists embedding models,
+    which the chat-mode filter drops.
+    """
+    from onyx.llm import model_catalog
+
+    return model_catalog.iter_models(LlmProviderNames.OCI, mode="chat")
+
+
 def model_configurations_for_provider(
     provider_name: str, llm_recommendations: LLMRecommendations
 ) -> list[ModelConfigurationView]:
@@ -228,9 +241,9 @@ def model_configurations_for_provider(
         seen_model_names.add(model_name)
         model_names.append(model_name)
 
-    # Vertex model list can be large and mixed-vendor; alphabetical ordering
-    # makes model discovery easier in admin selection UIs.
-    if provider_name == VERTEXAI_PROVIDER_NAME:
+    # Vertex and OCI model lists can be large and mixed-vendor; alphabetical
+    # ordering makes model discovery easier in admin selection UIs.
+    if provider_name in (VERTEXAI_PROVIDER_NAME, OCI_PROVIDER_NAME):
         model_names = sorted(model_names, key=str.lower)
 
     return [
@@ -336,6 +349,7 @@ def get_provider_display_name(provider_name: str) -> str:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",
         PORTKEY_PROVIDER_NAME: "Portkey",
         VERCEL_AI_GATEWAY_PROVIDER_NAME: "Vercel AI Gateway",
+        OCI_PROVIDER_NAME: "OCI Generative AI",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

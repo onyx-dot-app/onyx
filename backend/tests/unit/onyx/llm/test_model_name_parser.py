@@ -21,6 +21,17 @@ def test_bedrock_model_with_enrichment() -> None:
     assert result.provider_display_name == "Claude (Bedrock - Anthropic)"
 
 
+def test_oci_model_with_enrichment() -> None:
+    """OCI ids are `<vendor>.<model>`; the enrichment supplies the vendor and a
+    clean display name, and OCI is an aggregator so both surface in the label."""
+    result = parse_litellm_model_name("oci/meta.llama-3.3-70b-instruct")
+
+    assert result.provider == LlmProviderNames.OCI
+    assert result.vendor == "Meta"
+    assert result.display_name == "Llama 3.3 70B Instruct"
+    assert result.provider_display_name == "Llama (OCI - Meta)"
+
+
 def test_region_extraction() -> None:
     """Test that region prefix is extracted from model key."""
     result = parse_litellm_model_name(

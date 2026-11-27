@@ -230,6 +230,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "bifrost",
   "openai_compatible",
   "vercel_ai_gateway",
+  "oci",
   "vertex_ai",
 ]);
 

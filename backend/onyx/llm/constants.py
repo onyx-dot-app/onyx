@@ -33,6 +33,7 @@ class LlmProviderNames(str, Enum):
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
     VERCEL_AI_GATEWAY = "vercel_ai_gateway"
+    OCI = "oci"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -67,6 +68,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
     LlmProviderNames.VERCEL_AI_GATEWAY,
+    LlmProviderNames.OCI,
 ]
 
 
@@ -91,6 +93,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
     LlmProviderNames.VERCEL_AI_GATEWAY: "Vercel AI Gateway",
+    LlmProviderNames.OCI: "OCI",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -137,7 +140,6 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "minimax": "MiniMax",
     "nlp_cloud": "NLP Cloud",
     "nvidia_nim": "NVIDIA NIM",
-    "oci": "OCI",
     "ovhcloud": "OVHcloud",
     "palm": "PaLM",
     "publicai": "PublicAI",
@@ -185,6 +187,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
     LlmProviderNames.VERCEL_AI_GATEWAY,
+    LlmProviderNames.OCI,
 }
 
 # Providers whose model catalog lists the models they release. Only these

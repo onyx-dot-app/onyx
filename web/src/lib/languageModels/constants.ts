@@ -21,6 +21,7 @@ import {
   SvgTypeSafe,
   SvgVercel,
   SvgZoom,
+  SvgOracle,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderName } from "@/lib/languageModels/types";
@@ -42,6 +43,7 @@ import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusToke
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
 import VercelAIGatewayModal from "@/sections/modals/languageModels/VercelAIGatewayModal";
 import type { ProviderEntry } from "@/lib/languageModels/types";
+import OCIModal from "@/sections/modals/languageModels/OCIModal";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
@@ -151,6 +153,12 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Vercel",
     Modal: VercelAIGatewayModal,
   },
+  [LLMProviderName.OCI]: {
+    icon: SvgOracle,
+    productName: "OCI Generative AI",
+    companyName: "Oracle Cloud Infrastructure",
+    Modal: OCIModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: LLMProviderName.CUSTOM,
@@ -192,6 +200,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.PORTKEY,
   LLMProviderName.VERCEL_AI_GATEWAY,
+  LLMProviderName.OCI,
   LLMProviderName.VERTEX_AI,
 ]);
 
@@ -213,6 +222,7 @@ export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
   [LLMProviderName.VERCEL_AI_GATEWAY]: SvgVercel,
+  [LLMProviderName.OCI]: SvgOracle,
 
   amazon: SvgAWS,
   gpt: SvgOpenAI,
