@@ -573,6 +573,8 @@ export default function AddIntegrationModal({
                   setStep("setup");
                   return;
                 }
+                // A detection of another tile is not this tile's draft.
+                setDetection(null);
                 setOwnerChoice(null);
                 pickedTile.current = tile.id;
                 tile.onPick();

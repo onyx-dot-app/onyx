@@ -471,6 +471,23 @@ describe("Catalog", () => {
     expect(screen.getByText(add.owner.personalDescription)).toBeInTheDocument();
   });
 
+  test("a tile left while detecting does not reuse another tile's setup", async () => {
+    mockProbe.mockReturnValue(new Promise(() => undefined));
+    mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
+    const { user } = open({ kind: "catalog" });
+    await user.click(await screen.findByRole("button", { name: "GitHub" }));
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.click(await screen.findByRole("button", { name: "Notion" }));
+    await user.click(screen.getByRole("button", { name: add.back }));
+
+    await user.click(await screen.findByRole("button", { name: "Notion" }));
+
+    expect(mockProbe).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole("textbox", { name: /GitHub organization/ })
+    ).not.toBeInTheDocument();
+  });
+
   test("the same tile again keeps the entered credentials", async () => {
     mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
     const { user } = open({ kind: "catalog" });
