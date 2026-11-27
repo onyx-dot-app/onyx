@@ -321,7 +321,7 @@
   (`backend/onyx/chat/process_message.py`), so while the chat has a share, `ChatRightPanel`
   turns a sandbox browser opening (for example on `browser_open`) into the
   Chrome tab. A sandbox browser that was open before the share stays until
-  the next user message starts a turn (`userMessageCount`).
+  the next send starts a turn (`turnCount`, from the chat leaving `input`).
 - **A chat has a right panel, with a toggle at the far end of its header**
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the

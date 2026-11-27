@@ -26,6 +26,7 @@ import { cn, richNodes } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
   useChatSessionStore,
+  useCurrentChatState,
   useCurrentRightPanelState,
 } from "@/app/app/stores/useChatSessionStore";
 import { publishedFilesOf, usePublishedFiles } from "@/lib/chat/hooks";
@@ -100,9 +101,9 @@ interface ChatRightPanelProps {
   browserAvailable?: boolean;
   // The "+" menu offers the user's own Chrome
   chromeAvailable?: boolean;
-  // The chat's user messages so far; each starts a turn, and a turn picks
-  // its browser when it starts
-  userMessageCount?: number;
+  // The turns that this view saw start; a turn picks its browser when it
+  // starts
+  turnCount?: number;
 }
 
 /**
@@ -128,7 +129,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   reloadFiles,
   browserAvailable = false,
   chromeAvailable = false,
-  userMessageCount = 0,
+  turnCount = 0,
 }: ChatRightPanelProps) {
   const t = useTranslations("chat.rightPanel");
   // Each tab's shown file, with the name that the list gives its artifact,
@@ -189,15 +190,14 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   if (
     state.browserOpen &&
     !chromeShared &&
-    (sandboxTurn?.sessionId !== sessionId ||
-      sandboxTurn.count !== userMessageCount)
+    (sandboxTurn?.sessionId !== sessionId || sandboxTurn.count !== turnCount)
   )
-    setSandboxTurn({ sessionId, count: userMessageCount });
+    setSandboxTurn({ sessionId, count: turnCount });
   const redirectBrowser =
     chromeShared &&
     (sandboxTurn === null ||
       sandboxTurn.sessionId !== sessionId ||
-      userMessageCount > sandboxTurn.count);
+      turnCount > sandboxTurn.count);
   const browser = useChatBrowserTabs({
     sessionId,
     open,
@@ -347,6 +347,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       shown !== RIGHT_PANEL_SOURCES_TAB &&
       !browser.shown &&
       !chromeShown &&
+      !(redirectBrowser && state.browserOpen) &&
       !seenInitialized
     )
       dispatch({
@@ -358,6 +359,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     shown,
     browser.shown,
     chromeShown,
+    redirectBrowser,
+    state.browserOpen,
     seenInitialized,
     files,
     dispatch,
@@ -851,17 +854,15 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const reloadFiles = useCallback(async () => {
     if (sessionId !== null) await reloadChatPublishedFiles(sessionId);
   }, [sessionId]);
-  const userMessageCount = useChatSessionStore((store) => {
-    const tree =
-      sessionId === null
-        ? undefined
-        : store.sessions.get(sessionId)?.messageTree;
-    let count = 0;
-    tree?.forEach((message) => {
-      if (message.type === "user") count += 1;
-    });
-    return count;
-  });
+  // A send moves the chat out of "input": a turn starts. Loading older
+  // messages does not.
+  const chatState = useCurrentChatState();
+  const [turnCount, setTurnCount] = useState(0);
+  const [lastChatState, setLastChatState] = useState(chatState);
+  if (chatState !== lastChatState) {
+    setLastChatState(chatState);
+    if (lastChatState === "input") setTurnCount(turnCount + 1);
+  }
   return (
     <ChatRightPanel
       {...props}
@@ -872,7 +873,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
       reloadFiles={reloadFiles}
       browserAvailable={browserAvailable}
       chromeAvailable={chromeAvailable}
-      userMessageCount={userMessageCount}
+      turnCount={turnCount}
     />
   );
 }

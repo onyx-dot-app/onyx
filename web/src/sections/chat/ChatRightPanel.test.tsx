@@ -1810,24 +1810,10 @@ describe("the user's Chrome", () => {
     expect(panel().browserOpen).toBe(true);
     expect(screen.getByRole("tab", { name: "Browser" })).toBeInTheDocument();
 
-    // The next message starts a turn that uses Chrome
-    act(() => {
-      const user: Message = {
-        nodeId: 99,
-        messageId: 99,
-        type: "user",
-        message: "Next",
-        files: [],
-        packets: [],
-        toolCall: null,
-        parentNodeId: null,
-      };
-      const tree = new Map(
-        useChatSessionStore.getState().sessions.get("session")!.messageTree
-      );
-      tree.set(user.nodeId, user);
-      useChatSessionStore.getState().updateSessionMessageTree("session", tree);
-    });
+    // The next send starts a turn that uses Chrome
+    act(() =>
+      useChatSessionStore.getState().updateChatState("session", "loading")
+    );
     await waitFor(() => expect(panel().browserOpen).toBe(false));
     expect(panel().activeId).toBe("chrome");
   });
