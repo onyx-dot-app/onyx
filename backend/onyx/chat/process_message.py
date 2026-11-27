@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from onyx.agents.compaction import is_input_context
 from onyx.agents.models import RunStatus
 from onyx.auth.permissions import has_global_permission
+from onyx.browser_extension.relay import load_grant
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import (
@@ -566,8 +567,19 @@ def prepare_chat_turn(
                 and not new_msg_req.deep_research
             )
             sandbox_tools = HARNESS_SANDBOX_ENABLED and owned_turn
+            # The browser tools drive the user's own Chrome while the user
+            # shares tabs with this chat (browser_extension/relay.py), else
+            # the sandbox's browser. Chrome needs no sandbox; the same owner
+            # rules hold.
             browser_target: BrowserTarget | None = None
-            if sandbox_tools and load_browser_enabled():
+            if (
+                owned_turn
+                and load_browser_enabled(chrome=True)
+                and load_grant(get_current_tenant_id(), chat_session.id, user.id)
+                is not None
+            ):
+                browser_target = BrowserTarget.CHROME
+            elif sandbox_tools and load_browser_enabled():
                 browser_target = BrowserTarget.SANDBOX
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn

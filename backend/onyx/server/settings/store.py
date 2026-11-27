@@ -136,14 +136,17 @@ def load_settings(raise_on_error: bool = False) -> Settings:
     return settings
 
 
-def load_browser_enabled() -> bool:
-    """The `browser_enabled` setting. False when the settings cannot be read,
-    so a read error never turns on a browser that an admin turned off."""
+def load_browser_enabled(*, chrome: bool = False) -> bool:
+    """The `browser_enabled` setting; with `chrome`, also
+    `chrome_browser_enabled` (chats driving the user's own Chrome). False when
+    the settings cannot be read, so a read error never turns on a browser that
+    an admin turned off."""
     try:
-        return load_settings(raise_on_error=True).browser_enabled
+        settings = load_settings(raise_on_error=True)
     except Exception:
         logger.exception("Could not load the browser setting; the browser is off")
         return False
+    return settings.browser_enabled and (not chrome or settings.chrome_browser_enabled)
 
 
 def clear_chat_retention() -> None:

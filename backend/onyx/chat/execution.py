@@ -21,6 +21,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
+from onyx.browser_extension.relay import ChromeBrowser
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.agent import (
@@ -103,6 +104,7 @@ from onyx.tools.tool_constructor import (
 )
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.sandbox.browser_tools import (
+    BrowserBackend,
     SandboxBrowser,
     build_browser_tools,
 )
@@ -1104,8 +1106,17 @@ def construct_chat_tools(
                 shell=sandbox.shell,
             )
             sandbox_tools = [tool(turn) for tool in sandbox.tools]
-        if setup.browser_target is BrowserTarget.SANDBOX and turn is not None:
-            sandbox_tools += build_browser_tools(SandboxBrowser(turn))
+        browser: BrowserBackend | None = None
+        if setup.browser_target is BrowserTarget.CHROME:
+            browser = ChromeBrowser(
+                tenant_id=get_current_tenant_id(),
+                user_id=user.id,
+                chat_session_id=setup.chat_session_id,
+            )
+        elif setup.browser_target is BrowserTarget.SANDBOX and turn is not None:
+            browser = SandboxBrowser(turn)
+        if browser is not None:
+            sandbox_tools += build_browser_tools(browser)
         # A turn that runs without asking (evals) gates no built-in action,
         # as integration policies allow its Ask actions.
         if setup.approval_mode is ApprovalMode.RUN_WITHOUT_ASKING:

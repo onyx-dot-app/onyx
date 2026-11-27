@@ -142,6 +142,9 @@ class Settings(BaseModel):
     # Workspace-wide switch for the chat browser: the agent's browser tools
     # in the chat VM and the live view of its tabs. Default on.
     browser_enabled: bool = True
+    # With browser_enabled, chats can also drive the user's own Chrome
+    # through the Onyx extension, in the tabs that the user shares.
+    chrome_browser_enabled: bool = True
 
     # Who can publish skills to the organization. Organization-wide skill
     # managers always publish at once.
@@ -190,6 +193,9 @@ class UserSettings(Settings):
     # True when the user's chats can use the browser: a signed-in user,
     # harness sandboxes run in this deployment and browser_enabled is on.
     chat_browser_available: bool = False
+    # True when the user's chats can use the user's own Chrome: a signed-in
+    # user, and browser_enabled and chrome_browser_enabled are on.
+    chrome_browser_available: bool = False
     # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
     # True on the playground deployment (IS_PLAYGROUND env var). The web app

@@ -100,6 +100,7 @@ from onyx.auth.session_tokens import (
     record_session_rejection,
 )
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
+from onyx.browser_extension.tokens import redeem_extension_token
 from onyx.configs.app_configs import (
     AUTH_BACKEND,
     AUTH_COOKIE_EXPIRE_TIME_SECONDS,
@@ -3058,6 +3059,42 @@ async def current_user_from_websocket_cookie(
 
 
 current_user_from_websocket_cookie._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
+
+
+async def current_user_from_extension_token(
+    token: str = Query(..., description="Single-use extension websocket token"),
+) -> AsyncGenerator[User, None]:
+    """The user of the Onyx Chrome extension's websocket. The extension's
+    origin is chrome-extension://, so there is no origin check: the
+    single-use token from POST /chat/browser/extension/token, which takes the
+    session cookie, is the proof."""
+    token_data = await asyncio.to_thread(redeem_extension_token, token)
+    if token_data is None:
+        raise WebSocketException(code=1008)
+    tenant_id = _websocket_tenant_id({"tenant_id": token_data.tenant_id})
+    if tenant_id is None:
+        raise WebSocketException(code=1008)
+    tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        user = await _get_user_from_token_data({"sub": str(token_data.user_id)})
+        if user is None:
+            raise WebSocketException(code=1008)
+        try:
+            user = await double_check_user(user)
+        except BasicAuthenticationError as e:
+            raise WebSocketException(code=1008) from e
+        if is_limited_user(user) or user.is_anonymous:
+            raise WebSocketException(code=1008)
+        user_context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+        try:
+            yield user
+        finally:
+            CURRENT_USER_ID_CONTEXTVAR.reset(user_context_token)
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
+
+
+current_user_from_extension_token._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
 
 
 def get_default_admin_user_emails_() -> list[str]:

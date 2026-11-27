@@ -335,19 +335,28 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         a chat grant survives a model switch); a turn whose
                                         ApprovalMode is RUN_WITHOUT_ASKING (evals) builds
                                         them with no scope, the browser tools included;
-                                        browser_tools.with_browser_tools appends
-                                        BROWSER_TOOLS (rank BROWSER, after the family's
-                                        sandbox tools) with ChatTurnSetup.browser_tools (the
-                                        browser_enabled setting, read once in
-                                        prepare_chat_turn, off when the settings
+                                        the browser tools (rank BROWSER, after the family's
+                                        sandbox tools) come from build_browser_tools with a
+                                        BrowserBackend for ChatTurnSetup.browser_target:
+                                        CHROME while the user shares Chrome tabs with the
+                                        chat (relay.load_grant; needs no sandbox),
+                                        else SANDBOX with the sandbox tools
+                                        (browser_enabled and chrome_browser_enabled, read
+                                        once in prepare_chat_turn, off when the settings
                                         cannot be read); the token estimate counts
                                         their descriptions too
-                                        (calculate_reserved_tokens browser_tools)
-  browser_tools.py (SEQUENTIAL, one     each call is one HarnessSandbox.browser_call (one Dial
-  group)                                to the VM's browser service, named by the chat); a
-                                        service refusal (for example human_control: a human
-                                        controls the tab) is a tool error with the service's
-                                        message. browser_open's description has the browser
+                                        (calculate_reserved_tokens browser_target)
+  browser_tools.py (SEQUENTIAL, one     each call is one BrowserBackend.call:
+  group)                                SandboxBrowser is one HarnessSandbox.browser_call (one
+                                        Dial to the VM's browser service, named by the chat);
+                                        browser_extension/relay.py:ChromeBrowser pushes the
+                                        call onto the installation's cache list and waits on
+                                        its result list (bounded polls; a lost extension or a
+                                        deadline is an "outcome unknown" error). Chrome offers
+                                        no browser_evaluate and refuses upload and
+                                        screenshot_path. A refusal (for example human_control:
+                                        a human uses the tab) is a tool error with the
+                                        browser's message. browser_open's description has the browser
                                         usage (the user can watch and take control; on a
                                         refusal, open a tab with new_tab or ask the user),
                                         and its name must stay: the web panel opens itself
