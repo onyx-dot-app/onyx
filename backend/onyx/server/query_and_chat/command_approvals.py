@@ -89,19 +89,35 @@ def decide_command_approval(
     it. Approving for the command also approves the command's other waiting
     requests that the grant covers. Approving a request that the current
     policies block, or whose integration is deleted, saves a rejection by the
-    policy, also for a covered one. Repeating a saved decision returns it; a
+    policy, also for a covered one. Approving for the command a request with
+    an action that asks now but did not ask when it arrived is refused, since
+    the proxy would refuse it. Repeating a saved decision returns it; a
     different one, or a request that no longer waits, is a conflict."""
     command_id = row.command_id
     chat_session_id = row.chat_session_id
     integration_id = row.integration_id
     if chat_session_id is None or command_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
-    blocked = choice != ApprovalChoice.REJECT and _blocks(
-        row,
-        _current_policies(db_session, [row], integration_id, chat_session_id, user_id),
+    policies = (
+        None
+        if choice == ApprovalChoice.REJECT
+        else _current_policies(
+            db_session, [row], integration_id, chat_session_id, user_id
+        )
     )
+    blocked = choice != ApprovalChoice.REJECT and _blocks(row, policies)
     if blocked:
         choice = ApprovalChoice.REJECT
+    if (
+        choice == ApprovalChoice.APPROVE_COMMAND
+        and policies is not None
+        and _asks_more(row, policies)
+    ):
+        # The proxy refuses a command approval that misses an Ask action.
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Another action of this request now needs approval. Approve it once or reject it.",
+        )
     if choice == ApprovalChoice.APPROVE_SESSION:
         # Clients that know no command scope offer a chat approval; the proxy
         # keeps no chat grants, so it is a single approval.

@@ -394,7 +394,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     all of them), so a covered row with a now-blocked action is a rejection
     by the policy, not an approval. A covered row with an action that asks
     now but did not ask when it arrived keeps waiting: the gate's recheck
-    refuses a command grant that misses a current Ask action.
+    refuses a command grant that misses a current Ask action. For the same
+    reason, `approve_command` on such a row is a 400 and the card stays open;
+    approve once still works.
     The decision records its row and commits, then saves the grant (best
     effort: a cache error only makes later requests ask again), wakes the
     proxy, and scans the waiting rows: a grant exists only for a committed
