@@ -749,6 +749,21 @@ def running_response_ids(
     return running
 
 
+def _drop_agent_work_of_chats__no_commit(
+    db_session: Session, chat_session_ids: Collection[UUID]
+) -> None:
+    """Delete the queued work of the chats' agents, which would start runs
+    after the delete that no stop reaches."""
+    for chat_session_id in chat_session_ids:
+        sessions = session_descendants(chat_session_id)
+        db_session.execute(
+            delete(ChatInput).where(
+                ChatInput.recipient_session_id.in_(select(sessions.c.id)),
+                ChatInput.source.in_((InputSource.AGENT, InputSource.AGENT_RESULT)),
+            )
+        )
+
+
 def delete_all_chat_sessions_for_user(
     user: User,
     db_session: Session,
@@ -782,6 +797,7 @@ def delete_all_chat_sessions_for_user(
     # cleanup, as in delete_chat_session.
     _mark_chats_deleted__no_commit(db_session, chat_session_ids)
     artifact_ids = stop_indexing_chat_artifacts__no_commit(db_session, chat_session_ids)
+    _drop_agent_work_of_chats__no_commit(db_session, chat_session_ids)
     db_session.commit()
     # A hard delete that failed leaves its chats marked deleted, and they
     # still need the stop and purge.
@@ -827,6 +843,7 @@ def delete_chat_session(
     artifact_ids = stop_indexing_chat_artifacts__no_commit(
         db_session, [chat_session_id]
     )
+    _drop_agent_work_of_chats__no_commit(db_session, [chat_session_id])
     db_session.commit()
     if on_marked is not None:
         on_marked(

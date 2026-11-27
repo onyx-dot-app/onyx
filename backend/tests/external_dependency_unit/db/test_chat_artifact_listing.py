@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import RunStatus
+from onyx.agents.models import InputSource, RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.run_store import _stop_key
@@ -37,6 +37,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import (
     ChatArtifact,
     ChatArtifactVersion,
+    ChatInput,
     ChatMessage,
     ChatSession,
     FileRecord,
@@ -1225,7 +1226,19 @@ def test_a_chat_delete_stops_its_running_background_agents(
         for status in (RunStatus.RUNNING, RunStatus.COMPLETE)
     )
     db_session.add_all([running, done])
+    db_session.flush()
+    # Queued work would start a run after the delete
+    queued = ChatInput(
+        recipient_session_id=agent.id,
+        message_id="queued",
+        source=InputSource.AGENT_RESULT,
+        source_response_id=done.id,
+        root_response_id=spawn.id,
+        content="A result",
+    )
+    db_session.add(queued)
     db_session.commit()
+    queued_id = queued.id
     cache = get_cache_backend()
     try:
         delete_chat_session_by_id(
@@ -1233,5 +1246,9 @@ def test_a_chat_delete_stops_its_running_background_agents(
         )
         assert cache.get(_stop_key(running.id)) == b"user"
         assert cache.get(_stop_key(done.id)) is None
+        assert (
+            db_session.scalar(select(ChatInput.id).where(ChatInput.id == queued_id))
+            is None
+        )
     finally:
         cache.delete(_stop_key(running.id))
