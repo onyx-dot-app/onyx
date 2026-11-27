@@ -5,6 +5,8 @@ import { cn } from "@opal/utils";
 const columnsClassMap = {
   "one-to-two": "grid-cols-1 @xl/card-grid:grid-cols-2",
   "two-to-three": "grid-cols-2 @[24rem]/card-grid:grid-cols-3",
+  "one-to-four":
+    "grid-cols-1 @[18rem]/card-grid:grid-cols-2 @[30rem]/card-grid:grid-cols-3 @[44rem]/card-grid:grid-cols-4",
 } as const;
 
 /**
@@ -19,7 +21,9 @@ interface CardGridProps {
   /**
    * `"one-to-two"`: one column, two once the grid is 36rem wide.
    * `"two-to-three"`: two columns, three once the grid is 24rem wide, for
-   * small tiles. @default "one-to-two"
+   * small tiles.
+   * `"one-to-four"`: one column, then two at 18rem, three at 30rem and four
+   * at 44rem, for a catalog of small tiles. @default "one-to-two"
    */
   columns?: keyof typeof columnsClassMap;
 }

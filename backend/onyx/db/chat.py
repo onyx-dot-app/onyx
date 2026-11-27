@@ -229,6 +229,19 @@ def get_owned_chat_session(
     )
 
 
+def get_chat_session_for_user(
+    db_session: Session, chat_session_id: UUID, user_id: UUID
+) -> ChatSession | None:
+    """The chat when it is the user's and is not deleted."""
+    return db_session.scalar(
+        select(ChatSession).where(
+            ChatSession.id == chat_session_id,
+            ChatSession.user_id == user_id,
+            ChatSession.deleted.is_(False),
+        )
+    )
+
+
 def get_chat_sessions_by_slack_thread_id(
     slack_thread_id: str,
     user_id: UUID | None,
@@ -1052,6 +1065,8 @@ def get_chat_messages_by_session(
     prefetch_tool_call_search_docs: bool = False,
     # Load only these messages (one page of the session); None loads all.
     message_ids: Collection[int] | None = None,
+    # Also a subagent's session, which the caller authorized through its root
+    agent_session: bool = False,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -1062,12 +1077,12 @@ def get_chat_messages_by_session(
     stmt = (
         select(ChatMessage)
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
-        .where(
-            ChatSession.spawned_by_message_id.is_(None), visible_chat_messages_filter()
-        )
+        .where(visible_chat_messages_filter())
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
+    if not agent_session:
+        stmt = stmt.where(ChatSession.spawned_by_message_id.is_(None))
     if message_ids is not None:
         stmt = stmt.where(ChatMessage.id.in_(message_ids))
 
@@ -2788,14 +2803,16 @@ def translate_db_message_to_chat_message_detail(
         if chat_message.request_params is not None
         else None
     )
-    deadline_cancelled = (
+    # A stop is not an error: the answer already ends with its reason
+    stopped = (
         chat_message.response_status == RunStatus.CANCELLED
         and chat_message.response_failure is not None
-        and chat_message.response_failure.kind == RunFailureKind.DEADLINE
+        and chat_message.response_failure.kind
+        in (RunFailureKind.DEADLINE, RunFailureKind.STOPPED_BY_USER)
     )
     error_info = (
         None
-        if deadline_cancelled
+        if stopped
         else chat_error(chat_message.response_failure)
         if chat_message.response_failure is not None
         else StreamingError(error=chat_message.error)

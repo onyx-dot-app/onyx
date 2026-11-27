@@ -113,7 +113,8 @@ def get_external_access_for_folder(
     google_domain: str,
     ops: GoogleDriveSourceOperations,
     user_email: str,
-) -> ExternalAccess:
+    admin_email: str | None = None,
+) -> ExternalAccess | None:
     """
     Extract ExternalAccess from a folder's permissions.
 
@@ -127,16 +128,18 @@ def get_external_access_for_folder(
         folder: The folder metadata from Google Drive API (must include permissionIds field)
         google_domain: The company's Google Workspace domain (e.g., "company.com")
         ops: The gateway that fetches the permission details
-        user_email: The user to read the permissions as
+        user_email: The user to read the permissions as first
+        admin_email: The user to read the permissions not found as ``user_email``
 
     Returns:
-        ExternalAccess with extracted permission info
+        ExternalAccess with extracted permission info, or None when no
+        permission could be read
     """
     # Try to get the EE implementation
     get_folder_access_fn = cast(
         Callable[
-            [GoogleDriveFileType, str, GoogleDriveSourceOperations, str],
-            ExternalAccess,
+            [GoogleDriveFileType, str, GoogleDriveSourceOperations, str, str | None],
+            ExternalAccess | None,
         ],
         fetch_versioned_implementation_with_fallback(
             "onyx.external_permissions.google_drive.doc_sync",
@@ -145,7 +148,7 @@ def get_external_access_for_folder(
         ),
     )
 
-    return get_folder_access_fn(folder, google_domain, ops, user_email)
+    return get_folder_access_fn(folder, google_domain, ops, user_email, admin_email)
 
 
 def get_fields_for_file_type(field_type: DriveFileFieldType) -> str:

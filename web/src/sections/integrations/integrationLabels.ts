@@ -15,6 +15,7 @@ export const INTEGRATION_SHAPE_ICONS: Record<
 > = {
   mcp_server: SvgServer,
   openapi: SvgCodeFile,
+  graphql: SvgCodeFile,
   preset: SvgBlocks,
   custom: SvgBlocks,
 };

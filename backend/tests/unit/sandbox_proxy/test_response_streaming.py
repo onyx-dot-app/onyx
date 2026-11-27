@@ -114,6 +114,14 @@ class _StubResolver(SandboxIdentityResolver):
     ) -> UUID | None:
         return None
 
+    def resolve_chat_session(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
+        return None
+
 
 class _NonGatingMatcher(RequestEvaluator):
     """Never matches, so every request fails open and is forwarded."""
@@ -123,6 +131,7 @@ class _NonGatingMatcher(RequestEvaluator):
         request: mitm_http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        session_tag: UUID | None = None,  # noqa: ARG002
     ) -> None:
         return None
 

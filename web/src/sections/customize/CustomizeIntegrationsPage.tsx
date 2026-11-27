@@ -2,28 +2,22 @@
 
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import {
-  Button,
-  Dropdown,
-  IconContainer,
-  Table,
-  Text,
-  type TableColumn,
-} from "@opal/components";
+import { IconContainer, Table, Text, type TableColumn } from "@opal/components";
 import { IllustrationContent, Section } from "@opal/layouts";
-import { SvgPlug, SvgPlus, SvgSettings } from "@opal/icons";
+import { SvgPlug } from "@opal/icons";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { useScreenSize } from "@opal/hooks";
 import { useNavigation } from "@opal/navigation";
-import {
-  customizeTabHref,
-  integrationHref,
-  NEW_INTEGRATION_PATH,
-} from "@/lib/customize/paths";
+import { customizeTabHref, integrationHref } from "@/lib/customize/paths";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
+import AddIntegrationMenu from "@/sections/integrations/AddIntegrationMenu";
+import IntegrationCatalogSection from "@/sections/integrations/IntegrationCatalogSection";
+import IntegrationKindFilter, {
+  type IntegrationKindFilterValue,
+} from "@/sections/integrations/IntegrationKindFilter";
 import CustomizeLayout from "@/sections/customize/CustomizeLayout";
 import { CustomizeEmpty } from "@/sections/customize/CustomizeList";
 import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
@@ -34,7 +28,14 @@ import {
 
 const RETURN_PATH = customizeTabHref("integrations");
 
-export default function CustomizeIntegrationsPage() {
+interface CustomizeIntegrationsPageProps {
+  /** The `/new` route: the add modal opens at once. */
+  openAdd?: boolean;
+}
+
+export default function CustomizeIntegrationsPage({
+  openAdd = false,
+}: CustomizeIntegrationsPageProps) {
   const t = useTranslations("customize.integrations");
   const locale = useLocale();
   const navigation = useNavigation();
@@ -46,6 +47,7 @@ export default function CustomizeIntegrationsPage() {
   );
   const canAdd = isGlobalHolder || isScopedManager;
   const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<IntegrationKindFilterValue>("all");
 
   // No access goes below every integration the user can use.
   const integrations = [...(data ?? [])].sort(
@@ -55,10 +57,12 @@ export default function CustomizeIntegrationsPage() {
       a.name.localeCompare(b.name, locale, { sensitivity: "base" })
   );
   const search = query.trim().toLocaleLowerCase(locale);
-  const shown = integrations.filter((integration) =>
-    `${integration.name} ${integration.description ?? ""}`
-      .toLocaleLowerCase(locale)
-      .includes(search)
+  const shown = integrations.filter(
+    (integration) =>
+      (kind === "all" || integration.kind === kind) &&
+      `${integration.name} ${integration.description ?? ""}`
+        .toLocaleLowerCase(locale)
+        .includes(search)
   );
 
   function open(integration: MemberIntegration): void {
@@ -115,6 +119,7 @@ export default function CustomizeIntegrationsPage() {
       id: "status",
       title: t("columns.status"),
       width: { weight: 24 },
+      alignment: "right",
       cell: (row) => (
         <Section
           flexDirection="row"
@@ -130,31 +135,11 @@ export default function CustomizeIntegrationsPage() {
     },
   ];
 
-  const controls = canAdd && (
-    <Dropdown align="end" width={60}>
-      <Dropdown.Trigger asChild>
-        <Button icon={SvgPlus}>{t("add.label")}</Button>
-      </Dropdown.Trigger>
-      <Dropdown.Data
-        label={t("add.label")}
-        items={[
-          {
-            kind: "action",
-            id: "add",
-            icon: SvgPlug,
-            title: t("add.integration"),
-            onSelect: () => navigation.go(NEW_INTEGRATION_PATH),
-          },
-          {
-            kind: "action",
-            id: "manage",
-            icon: SvgSettings,
-            title: t("add.manage"),
-            onSelect: () => navigation.go("/admin/integrations"),
-          },
-        ]}
-      />
-    </Dropdown>
+  const controls = (
+    <>
+      <IntegrationKindFilter value={kind} onChange={setKind} />
+      {canAdd && <AddIntegrationMenu from="customize" openOnLoad={openAdd} />}
+    </>
   );
 
   return (
@@ -170,7 +155,9 @@ export default function CustomizeIntegrationsPage() {
         <CustomizeEmpty
           illustration={SvgUnPlugged}
           title={t("empty.title")}
-          description={t("empty.description")}
+          description={
+            canAdd ? t("empty.descriptionCanAdd") : t("empty.description")
+          }
         />
       ) : (
         <Table
@@ -190,6 +177,7 @@ export default function CustomizeIntegrationsPage() {
           }
         />
       )}
+      {canAdd && <IntegrationCatalogSection from="customize" />}
     </CustomizeLayout>
   );
 }

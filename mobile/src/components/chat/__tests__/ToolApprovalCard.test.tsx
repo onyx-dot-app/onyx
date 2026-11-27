@@ -95,6 +95,21 @@ describe("ToolApprovalCard", () => {
     expect(view.getByLabelText("Reject this action")).toBeTruthy();
   });
 
+  it("offers no approval for the chat when the action asks each time", () => {
+    const view = render(
+      <ToolApprovalCard
+        approval={{
+          turnIndex: 0,
+          request: { ...request, can_approve_for_chat: false },
+          status: "pending",
+        }}
+      />,
+    );
+
+    expect(view.getByText("Approve once")).toBeTruthy();
+    expect(view.queryByText("Approve for this chat")).toBeNull();
+  });
+
   it.each<[ApprovalStatus, string]>([
     ["approved", "Approved: Lookup"],
     ["approvedForSession", "Approved for this chat: Lookup"],

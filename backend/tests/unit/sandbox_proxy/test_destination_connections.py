@@ -454,6 +454,9 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                 usable, "load_usable_integration_ids", lambda *_args: usable_ids(1)
             )
             monkeypatch.setattr(
+                request_evaluator, "chat_session_integrations", lambda *_: None
+            )
+            monkeypatch.setattr(
                 request_evaluator,
                 "list_enabled_integrations_by_id",
                 lambda *_args: [integration],
@@ -462,7 +465,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
             monkeypatch.setattr(
                 usable, "list_enabled_mcp_server_urls", lambda *_: [(1, server_url)]
             )
-            monkeypatch.setattr(usable, "list_enabled_openapi_schemas", lambda *_: [])
+            monkeypatch.setattr(usable, "list_enabled_api_apps", lambda *_: [])
             monkeypatch.setattr(usable, "list_enabled_external_apps", lambda *_: [])
             monkeypatch.setattr(
                 integration_resolver, "get_integration_by_id", lambda *_: integration

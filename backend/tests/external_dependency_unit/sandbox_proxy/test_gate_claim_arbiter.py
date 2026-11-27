@@ -6,6 +6,7 @@ updates are tested rather than inferred from mocked session calls.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from collections.abc import Generator
 from typing import Any
@@ -42,6 +43,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
+from onyx.integrations.models import ApiShape
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -121,6 +123,14 @@ class _UnusedResolver(SandboxIdentityResolver):
     ) -> UUID | None:
         raise AssertionError("identity.resolve_session_by_id unexpectedly used")
 
+    def resolve_chat_session(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
+        raise AssertionError("identity.resolve_chat_session unexpectedly used")
+
 
 class _UnusedMatcher(RequestEvaluator):
     def evaluate(
@@ -128,6 +138,7 @@ class _UnusedMatcher(RequestEvaluator):
         request: Any,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        session_tag: UUID | None = None,  # noqa: ARG002
     ) -> Any:
         raise AssertionError("request_evaluator.evaluate unexpectedly used")
 
@@ -149,7 +160,7 @@ def _build_addon(cache_factory: Any | None = None) -> GateAddon:
 
 
 @pytest.mark.parametrize("announce_fails", [False, True], ids=["success", "failure"])
-def test_persist_approval_row_commits_before_announce_and_notifies(
+def test_save_parked_approval_commits_before_announce_and_notifies(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
@@ -184,6 +195,7 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
             integration_id=app_integration_id(db_session, external_app),
             kind=IntegrationKind.API,
             app_name=external_app.name,
+            api_shape=ApiShape.PRESET,
         ),
         payload={"text": "hi"},
     )
@@ -217,7 +229,9 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
     monkeypatch.setattr(approval_cache, "announce_approval", _announce)
     addon = _build_addon(cache_factory=lambda _tenant_id: cache)
 
-    approval_id = addon._persist_approval_row(ctx, matched_actions)
+    approval_id = asyncio.run(
+        addon._save_parked_approval(ctx, matched_actions, matched_actions.payload)
+    )
 
     assert announced == [(approval_id, session_id)]
     if not announce_fails:

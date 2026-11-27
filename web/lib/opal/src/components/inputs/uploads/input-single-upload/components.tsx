@@ -16,6 +16,9 @@ export type InputSingleUploadTextProps = UploadBaseProps & {
   value?: string;
   /** Receives the uploaded file's text or the pasted text; `""` once cleared. */
   setValue: (value: string) => void;
+  /** True from a file's pick or drop until its text is read or the read
+   * fails, so a form can block its submit meanwhile. */
+  onReadingChange?: (reading: boolean) => void;
 };
 
 /** The uploaded file itself, for a binary file such as a certificate. */
@@ -63,6 +66,10 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
   // The last value this control reported. A different one from outside (a
   // form reset) forgets where the old value came from.
   const reportedRef = useRef<string | undefined>(undefined);
+  // Bumped by each report and each new read, so a superseded read is ignored.
+  const readIdRef = useRef(0);
+  // The last file read started; only its end stops the reading state.
+  const startedReadRef = useRef(0);
   const outsideText = props.mode !== "file" ? props.value : undefined;
   useEffect(() => {
     if (outsideText !== undefined && outsideText !== reportedRef.current) {
@@ -95,6 +102,7 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
   function reportText(text: string) {
     if (props.mode === "file") return;
     reportedRef.current = text;
+    readIdRef.current += 1;
     if (props.value === undefined) setOwnText(text);
     props.setValue(text);
   }
@@ -116,12 +124,21 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
       reportFile(file);
       return;
     }
+    const onReadingChange = props.onReadingChange;
+    const readId = ++readIdRef.current;
+    startedReadRef.current = readId;
     const reader = new FileReader();
     reader.onload = () => {
+      if (readId === startedReadRef.current) onReadingChange?.(false);
+      if (readId !== readIdRef.current) return;
       setSource({ kind: "file", name: file.name });
       reportText(typeof reader.result === "string" ? reader.result : "");
     };
-    reader.onerror = clear;
+    reader.onerror = () => {
+      if (readId === startedReadRef.current) onReadingChange?.(false);
+      if (readId === readIdRef.current) clear();
+    };
+    onReadingChange?.(true);
     reader.readAsText(file);
   }
 

@@ -7,6 +7,8 @@ export const SEARCH_PARAM_NAMES = {
   ARTIFACT_ID: "artifactId",
   ARTIFACT_VERSION: "artifactVersion",
   AGENT_ID: "agentId",
+  // The subagent of the open chat that the main view shows
+  SUBAGENT_ID: "subagent",
   PROJECT_ID: "projectId",
   ALL_MY_DOCUMENTS: "allMyDocuments",
   // overrides

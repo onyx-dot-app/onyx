@@ -1,6 +1,7 @@
 """Migration 730bce2814a0 writes no actions for an API integration. A read
 builds them from the settings and writes nothing; an admin save writes them."""
 
+import json
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import patch
@@ -13,7 +14,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_tenant,
 )
-from onyx.db.models import IntegrationAction, Tool, User
+from onyx.db.models import ApiApp, IntegrationAction, User
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.chat_tools import build_integration_chat_tools
 from onyx.integrations.models import ActionSettings, ApprovalMode, EffectivePolicy
@@ -76,11 +77,13 @@ def _migrated_openapi(
 ) -> int:
     """An OpenAPI integration as the migration leaves it: no action rows. The
     app refuses a spec with no actions, so the tool gets ``spec`` after the
-    create, as an old tool row can hold it."""
-    integration, tool = make_openapi_integration(db_session, openapi_schema=ORDERS_SPEC)
+    create, as an old row can hold it."""
+    integration, _ = make_openapi_integration(db_session, openapi_schema=ORDERS_SPEC)
     created.append(integration.id)
     db_session.execute(
-        update(Tool).where(Tool.id == tool.id).values(openapi_schema=spec)
+        update(ApiApp)
+        .where(ApiApp.id == integration.api_app_id)
+        .values(openapi_document=json.dumps(spec))
     )
     give_access(db_session, [integration])
     db_session.execute(

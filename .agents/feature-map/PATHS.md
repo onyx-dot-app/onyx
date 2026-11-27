@@ -39,7 +39,7 @@ covers new files that match it.
 | `backend/onyx/chat/chat_utils.py` | context-assembly, chat-persistence |
 | `backend/onyx/chat/process_message.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/deep_research/` | core-chat-loop, tools-framework |
-| `backend/onyx/chat/emitter.py`, `backend/onyx/chat/stream_buffer.py` | core-chat-loop, streaming-protocol |
+| `backend/onyx/chat/emitter.py`, `backend/onyx/chat/stream_buffer.py`, `backend/onyx/chat/agent_stream.py` | core-chat-loop, streaming-protocol |
 | `backend/onyx/chat/incognito.py`, `backend/onyx/db/incognito.py` | chat-persistence |
 | `backend/onyx/chat/incognito_context.py` | chat-persistence, context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |
@@ -52,6 +52,8 @@ covers new files that match it.
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `backend/onyx/server/query_and_chat/models.py`, `backend/onyx/server/query_and_chat/session_loading.py`, `backend/onyx/server/query_and_chat/chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py`, `backend/onyx/server/query_and_chat/acp_stream.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
+| `backend/onyx/server/query_and_chat/chat_browser.py` | craft-sandboxes, code-execution |
+| `backend/onyx/server/query_and_chat/command_approvals.py` | craft-external-apps |
 | `backend/onyx/secondary_llm_flows/chat_session_naming.py` | chat-persistence |
 | `backend/onyx/chat/session_naming.py` | chat-persistence, core-chat-loop |
 | `backend/onyx/secondary_llm_flows/memory_update.py` | chat-preferences |
@@ -65,8 +67,8 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
 | `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
-| `backend/onyx/tools/tool_implementations/sandbox/`, `backend/onyx/prompts/sandbox_tools.py` | code-execution |
-| `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/custom/` | mcp-and-custom-tools |
+| `backend/onyx/tools/tool_implementations/sandbox/`, `backend/onyx/prompts/sandbox_tools.py`, `backend/onyx/prompts/browser_tools.py` | code-execution |
+| `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/api_app/` | mcp-and-custom-tools |
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
 | `backend/onyx/tools/file_snapshot.py` | file-store-and-user-files, chat-persistence |
@@ -358,6 +360,7 @@ covers new files that match it.
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
 | `web/src/app/admin/integrations/` | plugins |
+| `web/src/app/admin/plugins/` | plugins, skills |
 | `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx` | plugins |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/modals/plugins/` | plugins |
 | `web/src/sections/marketplaces/`, `web/src/lib/marketplaces/` | skills, plugins |

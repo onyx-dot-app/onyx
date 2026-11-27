@@ -1,4 +1,3 @@
-import type { ComponentProps } from "react";
 import {
   render,
   screen,
@@ -8,7 +7,6 @@ import {
 } from "@tests/setup/test-utils";
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import IntegrationsPage from "@/sections/integrations/IntegrationsPage";
-import type AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
 import messages from "@/i18n/messages/en.json";
 import {
   makeDetail,
@@ -44,28 +42,6 @@ jest.mock("@/lib/settings/hooks", () => ({
 }));
 jest.mock("@/lib/mcp/svc", () => ({
   streamMCPServerProbe: (...args: unknown[]) => mockProbe(...args),
-}));
-jest.mock("@/sections/actions/modals/AddOpenAPIActionModal", () => ({
-  __esModule: true,
-  default: function MockSchemaStep(
-    props: ComponentProps<typeof AddOpenAPIActionModal>
-  ) {
-    return (
-      <div role="dialog" aria-label="OpenAPI schema">
-        <button
-          onClick={() =>
-            props.onConfigureAuthentication({
-              name: "Reports API",
-              description: "Weekly reports",
-              definition: { openapi: "3.0.0", info: { title: "Reports API" } },
-            })
-          }
-        >
-          Continue
-        </button>
-      </div>
-    );
-  },
 }));
 
 const linear = makeIntegration();
@@ -131,13 +107,52 @@ test("shows each integration with its type, sign-in, install setting and status"
   );
   expect(reportsRow.getByText(copy.shape.openapi)).toBeInTheDocument();
   expect(reportsRow.getByText("Organization API key")).toBeInTheDocument();
+  expect(reportsRow.getByText("Weekly reports")).toBeInTheDocument();
   expect(
-    reportsRow.getByText("Owned by owner@example.com")
-  ).toBeInTheDocument();
+    reportsRow.queryByText("Owned by owner@example.com")
+  ).not.toBeInTheDocument();
   expect(
-    reportsRow.getByRole("combobox", { name: "Install setting of Reports API" })
+    reportsRow.getByRole("combobox", {
+      name: "Install setting of Reports API",
+    })
   ).toHaveValue(messages.skills.installationPolicy.NOT_AVAILABLE.label);
   expect(reportsRow.getByText(copy.status.needsSetup)).toBeInTheDocument();
+});
+
+test("shows the owner when the integration has no description", async () => {
+  mockFetch({
+    "/api/admin/integrations": [{ ...reports, description: "" }],
+  });
+  render(<IntegrationsPage />);
+
+  expect(
+    await screen.findByText("Owned by owner@example.com")
+  ).toBeInTheDocument();
+});
+
+test("on a phone the list shows only the name and the status", async () => {
+  const width = window.innerWidth;
+  window.innerWidth = 390;
+  try {
+    mockList();
+    render(<IntegrationsPage />);
+
+    const table = await screen.findByRole("table");
+    await waitFor(() =>
+      expect(
+        within(table).queryByText(copy.columns.type)
+      ).not.toBeInTheDocument()
+    );
+    expect(within(table).getByText(copy.columns.name)).toBeInTheDocument();
+    expect(within(table).getByText(copy.columns.status)).toBeInTheDocument();
+    expect(within(table).queryByText(copy.columns.signIn)).toBeNull();
+    expect(within(table).queryByText(copy.columns.installation)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: copy.filters.label })
+    ).toBeInTheDocument();
+  } finally {
+    window.innerWidth = width;
+  }
 });
 
 test("an organization-wide action manager changes the install setting", async () => {
@@ -195,17 +210,25 @@ test("filters by kind and by search", async () => {
   render(<IntegrationsPage />);
   await screen.findByText("Linear");
 
-  await user.click(screen.getByRole("combobox", { name: copy.filters.label }));
+  await user.click(screen.getByRole("button", { name: copy.filters.label }));
   await user.click(screen.getByRole("option", { name: copy.filters.api }));
   expect(screen.queryByText("Linear")).not.toBeInTheDocument();
   expect(screen.getByText("Reports API")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("combobox", { name: copy.filters.label }));
+  await user.click(
+    screen.getByRole("button", {
+      name: `${copy.filters.label}: ${copy.filters.api}`,
+    })
+  );
   await user.click(screen.getByRole("option", { name: copy.filters.mcp }));
   expect(screen.getByText("Linear")).toBeInTheDocument();
   expect(screen.queryByText("Reports API")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("combobox", { name: copy.filters.label }));
+  await user.click(
+    screen.getByRole("button", {
+      name: `${copy.filters.label}: ${copy.filters.mcp}`,
+    })
+  );
   await user.click(screen.getByRole("option", { name: copy.filters.all }));
   await user.type(screen.getByRole("searchbox", { name: copy.search }), "week");
   expect(screen.getByText("Reports API")).toBeInTheDocument();
@@ -227,4 +250,61 @@ test("hides Add without manage:actions", async () => {
   expect(
     screen.queryByRole("button", { name: copy.add.label })
   ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: copy.add.catalog.browse })
+  ).not.toBeInTheDocument();
+});
+
+// ── Add ──────────────────────────────────────────────────────────────────────
+
+test("the Add menu has MCP server, Custom API and the catalog", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  mockList();
+  render(<IntegrationsPage />);
+  await screen.findByText("Linear");
+
+  await user.click(screen.getByRole("button", { name: copy.add.label }));
+  expect(
+    (await screen.findAllByRole("menuitem")).map((item) => item.textContent)
+  ).toEqual([
+    copy.add.menu.mcpServer,
+    copy.add.menu.customApi,
+    copy.add.menu.fromCatalog,
+  ]);
+});
+
+test("From catalog in the Add menu opens the catalog", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  mockList({ "/api/admin/integrations/presets": [] });
+  render(<IntegrationsPage />);
+  await screen.findByText("Linear");
+
+  await user.click(screen.getByRole("button", { name: copy.add.label }));
+  await user.click(
+    await screen.findByRole("menuitem", { name: copy.add.menu.fromCatalog })
+  );
+  expect(
+    await screen.findByRole("dialog", {
+      name: new RegExp(`^${copy.add.modal.catalog.title}`),
+    })
+  ).toBeInTheDocument();
+});
+
+test("the catalog section at the foot opens the catalog", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  mockList({ "/api/admin/integrations/presets": [] });
+  render(<IntegrationsPage />);
+  await screen.findByText("Linear");
+
+  await user.click(
+    screen.getByRole("button", { name: copy.add.catalog.browse })
+  );
+  expect(
+    await screen.findByRole("dialog", {
+      name: new RegExp(`^${copy.add.modal.catalog.title}`),
+    })
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByRole("button", { name: "Sentry" })
+  ).toBeInTheDocument();
 });

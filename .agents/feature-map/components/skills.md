@@ -15,7 +15,7 @@
   you (owner is the user), From your organization (published), Shared with you,
   and Built-in, which shows only with Craft on
   (`lib/customize/skills.ts:groupSkills`). A row has the
-  tag Disabled, Required, Pending review or Unpublished changes, the date, Turn
+  tag Off, Required, Pending review or Unpublished changes, the date, Turn
   on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
   skill (`/app/customize/skills/new`); GitHub skills come in through a
   marketplace ([[#github-marketplaces]]). A custom skill
@@ -43,11 +43,16 @@
   and install settings change in Onyx; a personal one has neither. On the web, the Plugins tab Add menu
   (`sections/customize/AddSkillMenu.tsx`) has Add marketplace
   (`sections/marketplaces/AddMarketplaceModal.tsx`: source, then a confirm
-  step with the resolved source and each entry's Will install list) and
-  Manage marketplaces (`/app/customize/plugins/marketplaces`,
-  `sections/marketplaces/MarketplacesPage.tsx`). The admin skills page
-  (`views/SkillsPage.tsx`) shows the same table
-  (`sections/marketplaces/MarketplacesTable.tsx`): failed syncs above it,
+  step with the resolved source and each entry's Will install list). A Marketplaces
+  section below the plugin list (`CustomizePluginsPage`, `id="marketplaces"`, in
+  both panels; `/app/customize/plugins/marketplaces` redirects to the tab) has
+  the table (`sections/marketplaces/MarketplacesTable.tsx`); Add marketplace is
+  in the Add menu and the empty state only. After an add the menu goes to
+  `#marketplaces`, and the section scrolls into view when it mounts under that
+  hash. The page holds the one `useMarketplaces` subscription and passes it to
+  the table, because each subscription refreshes the skill lists on a sync
+  change. The table has failed syncs above it with the error (the Sync cell
+  shows only the state and the time),
   a row menu (Sync now, Default Access, Replace login,
   Remove, which names the plugins it deletes) and a detail modal. Members see
   company marketplaces read-only (`can_manage` false: no row menu, no Sync
@@ -56,8 +61,7 @@
   (`lib/plugins/directory.ts`, `lib/customize/plugins.ts`) a synced plugin is
   in "From marketplaces" with "from <marketplace>", and a manager sees another
   user's unshared plugin as "private to <email>", not shared. The plugin page
-  shows "Synced from owner/repo", the marketplace as its Location and a
-  "Managed by the <name> marketplace" note with a link to Marketplaces. For `content_locked` the web offers no
+  shows a "Managed by the <name> marketplace" note with a link to the Marketplaces section. For `content_locked` the web offers no
   content change: no Edit on the skill page, no restore or publish on the
   versions tab, and no organization access or ownership transfer in the share
   dialog (`lib/skills/sharing.ts:canChangeOrganizationAccess`); each says
@@ -101,11 +105,15 @@
   library default for published skills with no own setting: Available,
   Installed by default or Not available; never Required) and **Sharing** (off:
   only organization-wide managers add user or group shares).
-- **Bulk management.** **Admin Panel → Skills** supports selection of custom skills, bulk access and installation changes,
+- **Bulk management.** **Admin Panel → Skills** and **Admin Panel → Plugins**
+  ([[plugins]]) support selection of custom skills (`lib/skills/hooks.ts:useSkillBulkSelection`, UI in `sections/skills/useSkillBulkActions.tsx`), bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
-  stay selected. Search and group filter changes clear selection.
+  stay selected. Admin Skills filters by exact group. Admin Plugins filters by
+  status, and its search also matches group names. Search and filter changes
+  clear selection. The bulk Share dialog loads users and groups only while it
+  is open.
   `SkillResponse.group_summaries` lists the `plugin__user_group` rows (group,
   permission or none, setting) to a caller who may edit the skill, and to a
   scoped manager only the rows of their groups. The admin table shows them in
@@ -150,7 +158,8 @@
   `/skills/custom/{id}/edit` (it is 404 for a viewer), and a viewer reads the
   instructions and the supporting file list from `/skills/{id}/preview`. `ShareSkillModal` holds only the
   share settings. Admin Panel → Skills (`views/SkillsPage.tsx`,
-  `sections/skills/AdminSkillsTable.tsx`) is an inventory table (Name, Source,
+  `sections/skills/AdminSkillsTable.tsx`; `kind: plugin` rows are on Admin
+  Panel → Plugins) is an inventory table (Name, Source,
   Version, Audience with the group names, switch, row menu with Share and
   Delete) above which the bulk toolbar and a publish request banner stay (its
   Review opens the requests in a dialog, and a request's Review swaps it for
@@ -166,7 +175,7 @@
 - **In chat**, the agent sees the names and descriptions of the user's
   enabled custom skills and, when the turn has the sandbox tools, the
   available chat built-ins (`skills/built_in.py:CHAT_BUILT_IN_SKILL_IDS`:
-  pptx, and browser with `ENABLE_BROWSER`). In this catalog, a skill's
+  pptx; chats browse with the browser tools, not the browser skill). In this catalog, a skill's
   `metadata.short-description` replaces its description when it has one;
   `skills_list` shows the full description. The agent reads a skill's
   SKILL.md with its skill read tool (`skills_read`, or `skill` for Claude

@@ -30,7 +30,12 @@ with the model of the default agent.
 The run uses the current Onyx permissions and company knowledge access of the task owner.
 
 The run can use only the [integrations](/overview/core_features/plugins) that you turn on for the task.
-Tasks can use MCP and OpenAPI integrations. Craft Apps are not available to Scheduled Tasks.
+Tasks can use MCP servers, OpenAPI and GraphQL integrations,
+and built-in [Craft Apps](/overview/core_features/craft_apps).
+A custom Craft App with URL patterns has no tools in chat, and you cannot turn it on for a new task.
+If a task already has one turned on, the task form still shows it, but runs cannot use it.
+Each request to the app needs approval. A command in a run cannot stop for an approval card,
+and the app has no chat tool that could ask instead. Onyx refuses the request.
 
 Each run starts in a new chat,
 so it does **not** inherit the messages or attachments of the chat where you tested the prompt.
@@ -158,8 +163,8 @@ and skipped runs never get one, so you cannot open those rows.
 
 Run chats are not in your chat history list or in chat search. Open them from the run history of the task.
 
-You can send follow-up messages in a run chat. Follow-up messages use your normal integration settings,
-not the integration settings of the task.
+You can send follow-up messages in a run chat. Follow-up messages use the integration settings of the task,
+not your normal integration settings.
 
 | Status                | Meaning                                                                                                 |
 | --------------------- | ------------------------------------------------------------------------------------------------------- |

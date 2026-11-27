@@ -20,8 +20,8 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 | Item | Value |
 |---|---|
 | Binary | `/craft-fc/bin/guest-daemon` (static, `CGO_ENABLED=0`, read-only root) |
-| vsock port | **52** (the node agent's default `--daemon-port` for the gRPC pass-through; `Dial` always refuses it) |
-| User and env | The daemon runs as root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands run as `--command-user` (default `1000:1000`, the image's `sandbox` user, with its groups from `/etc/group`). Commands get the daemon env, then `HOME`, `USER` and `LOGNAME` of that user (from `/etc/passwd`, else `/home/onyx` and `sandbox`), then the command defaults (`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GH_PAGER=cat`, `LANG` and `LC_ALL` `C.UTF-8`), then the Init env, then their own. The browser runs as the same user, with the same env and no command env. |
+| vsock port | **52** (the node agent's default `--daemon-port` for the gRPC pass-through; `Dial` always refuses it). **3011** relays to the browser service (the node agent's `Dial` allows it). |
+| User and env | The daemon runs as root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands run as `--command-user` (default `1000:1000`, the image's `sandbox` user, with its groups from `/etc/group`). Commands get the daemon env, then `HOME`, `USER` and `LOGNAME` of that user (from `/etc/passwd`, else `/home/onyx` and `sandbox`), then the command defaults (`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GH_PAGER=cat`, `LANG` and `LC_ALL` `C.UTF-8`), then the Init env, then their own. The browser and the browser service run as the same user, with the same env and no command env. |
 | Supervisor | `craft-init` (PID 1) starts the daemon and restarts it when it exits. The daemon is not PID 1. |
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/` (commands) and `/sys/fs/cgroup/guestd-browser/` (the browser). |
 | Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drives). It does nothing if init already attached them. |
@@ -42,7 +42,8 @@ executions), `--max-running` (64), `--max-tracked` (64 records, running and ende
 managed calls off), `--ca-anchor`
 (`/usr/local/share/ca-certificates/craft-egress-ca.crt`), `--ca-bundle` (`/etc/ssl/certs/ca-certificates.crt`;
 empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty to skip), `--certutil`
-(`/usr/bin/certutil`), `--browser-binary` (`/opt/chrome/chrome`; empty turns the browser calls off), the file flags (`--sessions-root`, `--onyx-root`, `--skills-root`,
+(`/usr/bin/certutil`), `--browser-binary` (`/opt/chrome/chrome`; empty turns the browser calls, the browser service and its
+relay off), the file flags (`--sessions-root`, `--onyx-root`, `--skills-root`,
 `--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
 `--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
 `--capture-zstd-level`, `--file-owner`; see Files), `--command-user` (`1000:1000`; empty runs commands as
@@ -100,7 +101,7 @@ agent, every call also carries `x-sandbox-id`.
 | `StatFiles` | Up to 1,000 session paths (1 MiB of path bytes) in one call, through `os.Root`: each path's own entry (exists, type, mode, link target) and its target through the links inside the session (type, mode, device and inode), or why there is none (missing, escapes the session, loop, other). `os.Root` follows at most 8 links per path. Reads no content. Always needs a session ID. |
 | `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
 | `InstallSkill` | Puts one skill in `--skills-root` (default `/var/lib/onyx/skills`), as root. See Skills. |
-| `BrowserStart`, `BrowserStop` | The one headless Chrome of the VM (see Browser). `BrowserStart` returns its DevTools port (`cdp_port`) and `started` (false when it already ran). `BrowserStop` closes it cleanly and returns `stopped`. |
+| `BrowserStart`, `BrowserStop` | The one headless Chrome of the VM and its browser service (see Browser). `BrowserStart(profile_session_id)` returns when Chrome and the service run, with `service_protocol` 1 (0 when there is no service or no relay, as with `--listen`). `BrowserStop` stops the service, closes Chrome cleanly and returns `stopped`. |
 | `ManagedStatus(mount)` | The slot on the mount point (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
 | `MountManaged(mount, slot, size_bytes, fs_uuid)` | Makes the slot the drive on the mount point, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). A slot in use that is mounted beneath the top mount with the requested UUID is a swap that stopped before its detach: the call detaches the old top mount and finishes it. The node agent calls it during `SwapManaged`. |
 
@@ -149,16 +150,47 @@ Browser (`internal/guestd/browser`):
   count it.
 - Its env is the command env with no command env of its own. Chrome ignores `HTTP(S)_PROXY`, so the
   daemon gives it `--proxy-server` from `HTTPS_PROXY` (else `HTTP_PROXY`).
-- The profile is `<command user HOME>/.config/onyx-browser`. Chrome makes it (mode 0700, owned by the
-  command user). It stays after `BrowserStop` and after a daemon restart.
+- The profile is `<sessions root>/<profile_session_id>/chrome`. The daemon checks the ID and makes the
+  session directory as for the file calls (`INVALID_ARGUMENT` for a bad or empty ID). Chrome makes the
+  profile dir (mode 0700, owned by the command user). It stays after `BrowserStop` and after a daemon
+  restart. The caller names the session that holds the profile. A session save of that session
+  keeps the profile only when its capture roots include `chrome`. The default roots
+  (`attachments`) do not. Call `BrowserStop` before the save, so Chrome writes its cookies.
+- When Chrome runs with another profile dir, `BrowserStart` stops it (service first) and starts it again
+  with the requested one.
 - The daemon holds the write end of Chrome's `--remote-debugging-pipe`. `BrowserStop` closes it, and
   Chrome exits cleanly and writes its cookies to the profile. After 5 s the daemon kills the cgroup. A
   kill loses the cookies that Chrome has not written yet.
-- `BrowserStart` returns at once (`started` false) when Chrome runs and `/json/version` answers. Else it
+- `BrowserStart` keeps Chrome when it runs and `/json/version` answers. Else it
   kills a leftover Chrome and starts a new one. It waits up to 20 s for the endpoint. If Chrome exits
   first or does not answer in time, the call fails with `BROWSER_START_FAILED`, with the end of Chrome's
   stderr. Two calls at the same time start one Chrome.
 - Chrome runs with `--no-sandbox`: the guest kernel has no user namespaces.
+
+Browser service:
+
+- After Chrome answers, `BrowserStart` runs `/usr/local/bin/node /opt/onyx/browser-service/main.ts`
+  (Node runs the `.ts` entry) in Chrome's cgroup, as `--command-user`, in its own process group. Its env is Chrome's env plus
+  `ONYX_BROWSER_CDP_URL=http://127.0.0.1:<cdp port>`, `ONYX_BROWSER_SOCKET=/run/onyx-browser/service.sock`
+  and `ONYX_SESSIONS_ROOT=<--sessions-root>`.
+- The daemon makes `/run/onyx-browser` (mode 0700, owned by the command user) and removes a stale socket
+  before the start. `BrowserStart` returns only when the socket accepts a connection, at most 20 s.
+  If the service exits first or does not accept in time, the call fails with `BROWSER_START_FAILED`,
+  with the end of its stderr. Chrome stays up.
+- If the service exits, or its socket stops accepting connections, while Chrome still answers, the next
+  `BrowserStart` starts the service again and keeps Chrome. It first logs the PID and the end of the stderr
+  of a service that exited.
+- `BrowserStop` kills the service process group, then closes Chrome.
+- The daemon listens on vsock 3011 and relays each connection to the socket, with
+  the egress relay code (`internal/egressrelay`) and no idle timeout: a viewer can get no bytes for
+  minutes. If no service runs, the connection closes. There is no relay with `--listen`.
+- The daemon uses the socket only when its listener runs as the command user (`SO_PEERCRED`). The command
+  user owns `/run/onyx-browser`, so a command can replace the socket with a link to another socket.
+- The per-chat tabs of the service are not a security boundary. Commands run as the same user as Chrome
+  and the service, so a command can connect to the socket or to Chrome's DevTools port and use the tabs of
+  every chat. All chats in the VM belong to one user and share one profile.
+- The wire format (length-prefixed JSON and JPEG frames) is the service's: see
+  `deployment/craft-runtime/browser-service/`.
 - A VM stop kills the VM, so Chrome gets no clean close and loses the cookies it has not written yet.
   A caller that must keep the profile (for example a profile save) calls `BrowserStop` first.
 - When the daemon exits, the pipe closes and Chrome exits cleanly. Daemon start-up kills every process

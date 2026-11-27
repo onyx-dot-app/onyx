@@ -16,7 +16,7 @@ _BASE = "https://www.googleapis.com/calendar/v3/"
 _PAGE_SIZE = 250
 _DEFAULT_LIMIT = 250
 _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 
 
 def _prune(value: Any) -> Any:

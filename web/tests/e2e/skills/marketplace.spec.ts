@@ -31,7 +31,7 @@ test.describe("GitHub marketplaces", () => {
     ]);
     await marketplaces.add();
 
-    await expect(page).toHaveURL(/\/app\/customize\/plugins\/marketplaces$/);
+    await expect(page).toHaveURL(/\/app\/customize\/plugins#marketplaces$/);
     await marketplaces.expectRow("acme/plugins", [
       "acme/plugins/catalog@main",
       "Personal",

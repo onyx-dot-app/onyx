@@ -11,6 +11,7 @@ One read-only "label … value" row: the label on the start side, the value on t
 | `label` | `string \| RichStr` | **(required)** | The name of the value                                    |
 | `value` | `string \| RichStr` | **(required)** | The value                                                |
 | `mono`  | `boolean`           | `false`        | Sets the value in the mono font, as for a secret or a commit |
+| `oneLine` | `boolean`         | `false`        | Keeps the value on one line, cut with a tooltip, as for a long URL |
 
 ## Usage
 
@@ -23,4 +24,4 @@ import { KeyValue, Section } from "@opal/layouts";
 </Section>
 ```
 
-Each side is capped at `--block-width-form-input-column-max` (240px), and the label at half the row, so the value always keeps room. A long label or value wraps instead of being cut, so its full text shows without a hover.
+Each side is capped at `--block-width-form-input-column-max` (240px), and the label at half the row, so the value always keeps room. A long label or value wraps instead of being cut, so its full text shows without a hover. Set `oneLine` only for a value that is too long to wrap well, such as a URL.

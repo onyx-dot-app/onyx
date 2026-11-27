@@ -6320,7 +6320,8 @@ class Integration(Base):
         # the enum makes each ORM read of the row raise.
         # Old code still writes the kind tables, so the database keeps each
         # integration tied to exactly one row of its kind. For one release a
-        # REST app has both tool_id and api_app_id.
+        # REST app has both tool_id and api_app_id; a GraphQL app has only
+        # api_app_id.
         CheckConstraint(
             "num_nonnulls(mcp_server_id, external_app_id, "
             "coalesce(tool_id, api_app_id)) = 1",
@@ -6360,7 +6361,7 @@ class ApiApp(Base):
         nullable=False,
     )
     base_url: Mapped[str] = mapped_column(Text, nullable=False)
-    # The spec as text.
+    # The spec as uploaded, JSON or YAML text.
     openapi_document: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The schema as SDL.
     graphql_schema: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -6380,8 +6381,9 @@ class ApiApp(Base):
 
 
 class IntegrationAction(Base):
-    """One action of an integration: an MCP tool, an OpenAPI operation, or an
-    entry of a built-in provider catalog. Policies key on ``key``."""
+    """One action of an integration: an MCP tool, an OpenAPI operation, a
+    GraphQL root field, or an entry of a built-in provider catalog. Policies
+    key on ``key``."""
 
     __tablename__ = "integration_action"
 
@@ -6389,7 +6391,8 @@ class IntegrationAction(Base):
     integration_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("integration.id", ondelete="CASCADE"), nullable=False
     )
-    # The MCP tool name, the OpenAPI operationId, or the provider action id.
+    # The MCP tool name, the OpenAPI operationId, ``query.<field>`` or
+    # ``mutation.<field>``, or the provider action id.
     key: Mapped[str] = mapped_column(String, nullable=False)
     source: Mapped[IntegrationActionSource] = mapped_column(
         Enum(
@@ -8730,19 +8733,36 @@ class ActionApproval(Base):
     ``actions`` is a non-empty JSONB list of :class:`MatchedAction`-shaped
     dicts, sorted strictest-policy-first; ``actions[0]`` drove the gating
     decision. ``decision IS NULL`` is pending (or a proxy-crash orphan).
+
+    A row belongs to a Craft session (``session_id``) or to a command that a
+    chat runs in its VM (``chat_session_id`` and ``command_id``).
     """
 
     __tablename__ = "action_approval"
-    __table_args__ = (Index("ix_action_approval_session", "session_id"),)
+    __table_args__ = (
+        Index("ix_action_approval_session", "session_id"),
+        Index("ix_action_approval_chat_command", "chat_session_id", "command_id"),
+    )
 
     approval_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    session_id: Mapped[UUID] = mapped_column(
+    session_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("build_session.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
+    chat_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "chat_session.id",
+            ondelete="CASCADE",
+            name="fk_action_approval_chat_session_id",
+        ),
+        nullable=True,
+    )
+    # The VM command whose request waits; set with ``chat_session_id``.
+    command_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     actions: Mapped[list[dict[str, Any]]] = mapped_column(PGJSONB, nullable=False)
     app_name: Mapped[str] = mapped_column(String, nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)

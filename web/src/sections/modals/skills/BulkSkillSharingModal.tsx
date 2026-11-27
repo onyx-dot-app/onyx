@@ -19,6 +19,7 @@ import useShareableGroups, {
 } from "@/hooks/useShareableGroups";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type {
+  CustomSkill,
   SkillInstallationPolicy,
   SkillSharePermission,
 } from "@/lib/skills/types";
@@ -32,14 +33,19 @@ import { usePolicyOptions, useSharingAllowed } from "@/lib/skills/hooks";
 import SharingOffNotice from "@/sections/modals/skills/SharingOffNotice";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { SharePermissionMenu } from "@/lib/permissions/components";
+import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 
 const KEEP = "KEEP";
 
+/** The strings that name the rows, as "skill" or "plugin". The skill strings
+ * hold every key of the plugin strings. */
+export type BulkNounCopy = ReturnType<typeof useTranslations<"plugins.bulk">>;
+
 interface BulkSkillSharingModalProps {
-  count: number;
-  // False when a selected skill's organization access is not the caller's to
-  // change (owner or admin only); the API would reject that skill's update.
-  canChangeOrgAccess: boolean;
+  /** @default the skill strings */
+  nounCopy?: BulkNounCopy;
+  /** The selected skills. */
+  items: readonly CustomSkill[];
   open: boolean;
   saving: boolean;
   onClose: () => void;
@@ -47,26 +53,38 @@ interface BulkSkillSharingModalProps {
 }
 
 export default function BulkSkillSharingModal({
-  count,
-  canChangeOrgAccess,
+  nounCopy: givenNounCopy,
+  items,
   open,
   saving,
   onClose,
   onSave,
 }: BulkSkillSharingModalProps) {
-  const t = useTranslations("skills.bulk");
+  const bulkCopy = useTranslations("skills.bulk");
+  const nounCopy = givenNounCopy ?? bulkCopy;
   const shareCopy = useTranslations("skills.modals.share");
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
+  );
+  const count = items.length;
+  // The API rejects an organization access change the caller may not make.
+  const canChangeOrgAccess = items.every((item) =>
+    canChangeOrganizationAccess(item, isOrganizationManager)
   );
   const sharingAllowed = useSharingAllowed();
   const companyOptions = usePolicyOptions({
     inherit: { scope: "skill", policy: null },
   });
-  const { data: users } = useShareableUsers({ includeApiKeys: true });
-  const { data: groups } = useShareableGroups();
+  // The parent keeps this modal mounted; fetch only while it is open.
+  const { data: users } = useShareableUsers({
+    includeApiKeys: true,
+    enabled: open,
+  });
+  const { data: groups } = useShareableGroups(open);
   // Publishing is one-way, so bulk can publish but never make skills private.
-  const [scope, setScope] = useState<"KEEP" | "PUBLIC">("KEEP");
+  const [stagedScope, setScope] = useState<"KEEP" | "PUBLIC">("KEEP");
+  // A selection that loses organization access drops a staged publish.
+  const scope = canChangeOrgAccess ? stagedScope : "KEEP";
   const [policy, setPolicy] = useState<typeof KEEP | PolicyChoice>(KEEP);
   const [permission, setPermission] = useState<SkillSharePermission>("VIEWER");
   const [stagedUsers, setStagedUsers] = useState<MinimalUserSnapshot[]>([]);
@@ -117,8 +135,8 @@ export default function BulkSkillSharingModal({
       <Modal.Content width="md" height="fit">
         <Modal.Header
           icon={SvgBlocks}
-          title={t("shareTitle", { count })}
-          description={t("shareDescription")}
+          title={nounCopy("shareTitle", { count })}
+          description={nounCopy("shareDescription")}
           onClose={() => {
             if (!saving) onClose();
           }}
@@ -133,10 +151,14 @@ export default function BulkSkillSharingModal({
                 ariaLabel={shareCopy("accessTitle")}
                 disabled={saving || !canChangeOrgAccess}
                 options={[
-                  { value: "KEEP", label: t("unchanged"), icon: SvgUsers },
+                  {
+                    value: "KEEP",
+                    label: bulkCopy("unchanged"),
+                    icon: SvgUsers,
+                  },
                   {
                     value: "PUBLIC",
-                    label: t("everyone"),
+                    label: bulkCopy("everyone"),
                     icon: SvgOrganization,
                   },
                 ]}
@@ -146,8 +168,8 @@ export default function BulkSkillSharingModal({
                   variant="warning"
                   outerPadding={1}
                   innerPadding={1}
-                  title={t("publishWarning.title")}
-                  description={t("publishWarning.description")}
+                  title={bulkCopy("publishWarning.title")}
+                  description={nounCopy("publishWarning.description")}
                 />
               )}
             </Section>
@@ -164,7 +186,7 @@ export default function BulkSkillSharingModal({
                     defaultOption={KEEP}
                     disabled={saving}
                     options={[
-                      { value: KEEP, title: t("unchanged") },
+                      { value: KEEP, title: bulkCopy("unchanged") },
                       ...companyOptions,
                     ]}
                     onValueChange={(value) => {
@@ -178,7 +200,7 @@ export default function BulkSkillSharingModal({
             <Section gap={2} height="auto" alignItems="stretch">
               <Content font="main-ui-action" title={shareCopy("peopleTitle")} />
               <Text font="secondary-body" color="text-03">
-                {t("addAccessDescription")}
+                {nounCopy("addAccessDescription")}
               </Text>
               {!sharingAllowed && <SharingOffNotice />}
               <AddPeoplePicker
@@ -223,7 +245,7 @@ export default function BulkSkillSharingModal({
             {shareCopy("cancelButton.label")}
           </Button>
           <Button disabled={!changed || saving} onClick={() => void save()}>
-            {t("apply", { count })}
+            {nounCopy("apply", { count })}
           </Button>
         </Modal.Footer>
       </Modal.Content>

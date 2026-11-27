@@ -25,7 +25,7 @@ _UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3/"
 _DOCS_BASE = "https://docs.googleapis.com/v1/"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 100
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 # Cap a single `read` so a huge file can't blow up the agent's context.
 _DEFAULT_MAX_BYTES = 5_000_000
 _UPLOAD_BOUNDARY = "onyx-gdrive-boundary-7c1f"

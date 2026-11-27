@@ -364,6 +364,8 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
+  // False when the action asks each time: the card offers no "Approve for this chat".
+  can_approve_for_chat?: boolean;
   // The subagent that asks; null or absent for the root agent's own request.
   agent_name?: string | null;
 }
@@ -372,9 +374,15 @@ export interface ToolApprovalResolved extends BaseObj {
   type: "tool_approval_resolved";
   approval_id: string;
   // "approved_for_chat": approved by a grant for the chat's later calls of the tool.
+  // "approved_for_command": a VM command's app request, approved by a grant for the command.
   // "disabled": an approval found the tool disabled, so the call did not run.
   outcome:
-    "approved" | "approved_for_chat" | "rejected" | "disabled" | "cancelled";
+    | "approved"
+    | "approved_for_chat"
+    | "approved_for_command"
+    | "rejected"
+    | "disabled"
+    | "cancelled";
 }
 
 export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;

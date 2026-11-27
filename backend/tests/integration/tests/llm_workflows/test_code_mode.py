@@ -1,6 +1,7 @@
 """Code mode through the real server: the model calls tools from an
 `execute_code` program, which runs in the sandbox and is saved with the chat."""
 
+import json
 from collections.abc import Callable
 from contextlib import ExitStack
 from uuid import uuid4
@@ -200,7 +201,10 @@ def test_a_claude_model_runs_programs_with_execute_code_and_poll(
                 "description": "Ping a service",
                 "auth_mode": "none",
                 "auth_method": None,
-                "config": {"shape": "openapi", "openapi_spec": _PING_SPEC},
+                "config": {
+                    "shape": "openapi",
+                    "openapi_document": json.dumps(_PING_SPEC),
+                },
             },
             admin_user,
         ).id

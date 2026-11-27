@@ -99,6 +99,8 @@ func OutcomeLabel(outcome string) string {
 		return "Approved"
 	case models.ApprovalOutcomeApprovedForChat:
 		return "Approved for this session"
+	case models.ApprovalOutcomeApprovedForCommand:
+		return "Approved for this command"
 	case models.ApprovalOutcomeRejected:
 		return "Not approved"
 	case models.ApprovalOutcomeDisabled:

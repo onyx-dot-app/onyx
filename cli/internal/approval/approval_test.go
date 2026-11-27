@@ -97,3 +97,9 @@ func TestAgentRequestNamesTheAgent(t *testing.T) {
 		t.Fatalf("AgentRequest = %q", got)
 	}
 }
+
+func TestOutcomeLabelNamesACommandGrant(t *testing.T) {
+	if got := OutcomeLabel(models.ApprovalOutcomeApprovedForCommand); got != "Approved for this command" {
+		t.Fatalf("OutcomeLabel = %q", got)
+	}
+}

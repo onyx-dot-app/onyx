@@ -30,11 +30,11 @@ from onyx.db.models import ActionApproval, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     MatchedAction,
     actions_requiring_approval,
 )
 from onyx.external_apps.presentation.decode import decode_payload
+from onyx.integrations.policy import always_asks
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.action_policies.models import ApprovalChoice, DecisionBody
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
@@ -71,9 +71,9 @@ class ApprovalView(BaseModel):
             self.actions
         ):
             return False
-        return not (
-            self.integration_kind is IntegrationKind.API
-            and any(a.action_type == WHOLE_DOMAIN_ACTION_TYPE for a in self.actions)
+        # Same rule as the gate's session grant check.
+        return not any(
+            always_asks(self.integration_kind, a.action_type) for a in self.actions
         )
 
     @computed_field
@@ -88,9 +88,7 @@ class ApprovalView(BaseModel):
     @property
     def expires_at(self) -> datetime:
         """Display cutoff for the existing proxy wait; no stored approval deadline."""
-        return self.created_at + timedelta(
-            seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-        )
+        return action_approval.wait_deadline(self.created_at)
 
     @computed_field
     @property
@@ -203,6 +201,10 @@ def submit_decision(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ApprovalView:
+    if body.decision == ApprovalChoice.APPROVE_COMMAND:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "a Craft request has no command scope"
+        )
     decision = (
         ApprovalDecision.REJECTED
         if body.decision == ApprovalChoice.REJECT
@@ -212,8 +214,10 @@ def submit_decision(
     current = action_approval.get_action_approval_for_user(
         db_session, approval_id, user.id, lock_session=for_session
     )
-    if current is None:
+    # The join on the build session leaves out chat rows, which have none.
+    if current is None or current.session_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "approval request not found")
+    session_id = current.session_id
     if current.decision is not None:
         return _existing_decision_response(current, decision, for_session=for_session)
 
@@ -247,18 +251,25 @@ def submit_decision(
     approved_ids = [approval_id]
     grant_source_rows: list[ActionApproval] = []
     if target is not None:
+        kind = (
+            current.integration.kind
+            if current.integration is not None
+            else IntegrationKind.API
+        )
         grant_source_rows = action_approval.list_session_grant_action_approvals(
             db_session,
-            session_id=current.session_id,
+            session_id=session_id,
             integration_id=current.integration_id,
         )
+        # Same rule as the gate: an old grant never covers an always-ask action.
         granted_actions = {
             action
             for row in grant_source_rows
             for action in actions_requiring_approval(row.actions)
+            if not always_asks(kind, action)
         }
         pending_rows = action_approval.list_session_pending_action_approvals(
-            db_session, current.session_id, created_after=cutoff, load_target=True
+            db_session, session_id, created_after=cutoff, load_target=True
         )
         for row in pending_rows:
             required = set(actions_requiring_approval(row.actions))
@@ -280,32 +291,24 @@ def submit_decision(
 
     # Commit all covered decisions before publishing grants or waking requests.
     db_session.commit()
+    cache: CacheBackend | None = None
+    try:
+        cache = get_cache_backend(tenant_id=get_current_tenant_id())
+    except CACHE_TRANSIENT_ERRORS:
+        logger.warning("approval.cache_failed approval_id=%s", approval_id)
     if target is not None:
-        cache: CacheBackend | None = None
-        try:
-            cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        except CACHE_TRANSIENT_ERRORS:
-            logger.warning(
-                "approval.session_grant_cache_failed approval_id=%s", approval_id
-            )
         approval_cache.hydrate_session_grants(
-            session_id=current.session_id,
+            session_id=session_id,
             integration_id=target,
             rows=grant_source_rows,
             cache=cache,
         )
-    for decided_id in approved_ids:
-        try:
-            cache = get_cache_backend(tenant_id=get_current_tenant_id())
-            approval_cache.send_wake(decided_id, decision, cache)
-        except CACHE_TRANSIENT_ERRORS as error:
-            logger.warning(
-                "approval.wake_failed approval_id=%s error=%s", decided_id, error
-            )
+    if cache is not None:
+        approval_cache.send_wakes(approved_ids, decision, cache)
     logger.info(
         "approval.decision_recorded approval_id=%s session_id=%s decision=%s for_session=%s",
         approval_id,
-        current.session_id,
+        session_id,
         decision.value,
         for_session,
     )

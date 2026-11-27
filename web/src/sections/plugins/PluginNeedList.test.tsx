@@ -103,12 +103,12 @@ test("each need shows its state and the one action the member can take", async (
   const linear = screen.getByLabelText("linear");
   expect(within(linear).getByText("Not added")).toBeInTheDocument();
   expect(within(linear).getByText("Ask an admin")).toBeInTheDocument();
-  expect(
-    within(screen.getByLabelText("local")).getByText("Not supported in Onyx")
-  ).toBeInTheDocument();
-  expect(
-    within(screen.getByLabelText("docs")).getByText("Turned off by your admin")
-  ).toBeInTheDocument();
+  const local = screen.getByLabelText("local");
+  expect(within(local).getByText("Not supported")).toBeInTheDocument();
+  expect(within(local).queryByText("Ask an admin")).not.toBeInTheDocument();
+  const docs = screen.getByLabelText("docs");
+  expect(within(docs).getByText("Turned off")).toBeInTheDocument();
+  expect(within(docs).queryByText("Ask an admin")).not.toBeInTheDocument();
 });
 
 test("a need whose URL Onyx dropped gives the reason", async () => {

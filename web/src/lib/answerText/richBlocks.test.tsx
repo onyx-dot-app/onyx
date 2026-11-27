@@ -147,3 +147,157 @@ test("a summary keeps comparison text", () => {
     /^Check x < 5 > 3$/
   );
 });
+
+test.each([
+  "Intro.\n\n<details>\n<summary>Show steps</summary>\n\n- one\n- two\n\n</details>\n\nAfter.",
+  // A blank line puts a lone `<` in a text paragraph
+  "Intro.\n\n<details>\n\n<summary>Show steps</summary>\n\n- one\n\n</details>\n\nAfter.",
+])("a details block shows no raw tags while it streams in: %j", (answer) => {
+  // From the end of the opener on, every prefix renders a disclosure
+  const from = answer.indexOf("<details>") + "<details>".length;
+  for (let end = from; end <= answer.length; end++) {
+    const { container, unmount } = render(
+      <AnswerMarkdown content={answer.slice(0, end)} streaming />
+    );
+    expect(container.querySelector("details")).not.toBeNull();
+    expect(container.textContent).not.toMatch(/<\/?(details|summary)/);
+    unmount();
+  }
+});
+
+test("a complete summary keeps a comparison at its end", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={"<details>\n<summary>Check x<y</summary>\n\nBody\n\n</details>"}
+    />
+  );
+  expect(container.querySelector("summary")).toHaveTextContent(/^Check x<y$/);
+});
+
+test("a closing tag at the end of a body line ends the disclosure there", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Steps</summary>\n\n**Step one**</details>\n\nNext steps"
+      }
+    />
+  );
+  const details = container.querySelector("details");
+  expect(details).toHaveTextContent("Step one");
+  expect(details).not.toHaveTextContent("Next steps");
+  expect(details?.textContent).not.toContain("</details>");
+  expect(container.querySelector("details + p")).toHaveTextContent(
+    "Next steps"
+  );
+});
+
+test("a preformatted block after the summary does not join the title", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={"<details>\n\n<summary>Example</summary>\n<pre>literal</pre>"}
+    />
+  );
+  expect(container.querySelector("summary")?.textContent ?? "").not.toContain(
+    "literal"
+  );
+});
+
+test("an unclosed details block keeps the rest of the answer inside it", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={"<details>\n<summary>Steps</summary>\n\nStep one\n\nStep two"}
+    />
+  );
+
+  const details = container.querySelector("details");
+  expect(details?.querySelector("summary")).toHaveTextContent(/^Steps$/);
+  expect(details).toHaveTextContent("Step two");
+});
+
+test("text after a closing tag on the same line stays outside the disclosure", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Steps</summary>\n\nStep one</details>\nMore prose\n\nAfter."
+      }
+    />
+  );
+  const details = container.querySelector("details");
+  expect(details).toHaveTextContent("Step one");
+  expect(details).not.toHaveTextContent("More prose");
+  expect(container.textContent).not.toContain("</details>");
+  expect(container.querySelector("details + p")).toHaveTextContent(
+    /^More prose$/
+  );
+  expect(container.querySelector("details + p + p")).toHaveTextContent(
+    "After."
+  );
+});
+
+test("a whole disclosure inside one body line keeps the outer one open", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Outer</summary>\n\nSee <details><summary>Inner</summary>hidden</details>\n\nStill outer\n\n</details>\n\nAfter."
+      }
+    />
+  );
+  const outer = container.querySelector("details");
+  expect(outer).toHaveTextContent("Still outer");
+  expect(container.querySelector("details + p")).toHaveTextContent(/^After\.$/);
+});
+
+test.each(["Use the sign:\n\n&lt;", "Use the sign:\n\n<"])(
+  "a finished answer keeps a lone sign in its last paragraph: %j",
+  (answer) => {
+    const { container } = render(<AnswerMarkdown content={answer} />);
+    expect(container.textContent).toContain("<");
+  }
+);
+
+test("a custom element named like details does not count as a disclosure", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Steps</summary>\n\nSee <details-card>Example</details-card>.\n\n</details>\n\nNext steps."
+      }
+    />
+  );
+  expect(container.querySelector("details + p")).toHaveTextContent(
+    /^Next steps\.$/
+  );
+});
+
+test.each([
+  // An inline pair whose closer sits in bold text
+  "<details>\n<summary>Outer</summary>\n\nSee <details><summary>Inner</summary>**Example</details>**\n\n</details>\n\nAfter.",
+  // The outer closer itself sits in bold text
+  "<details>\n<summary>Outer</summary>\n\n**Step one</details>** more\n\nAfter.",
+])("a details tag inside formatting still counts: %j", (answer) => {
+  const { container } = render(<AnswerMarkdown content={answer} />);
+  const after = Array.from(container.querySelectorAll("p")).find(
+    (p) => p.textContent === "After."
+  );
+  expect(after?.closest("details")).toBeNull();
+  if (answer.includes("**Step one")) {
+    expect(container.querySelector("details strong")).toHaveTextContent(
+      /^Step one$/
+    );
+  }
+});
+
+test("formatted text after a closing tag leaves the disclosure", () => {
+  const { container } = render(
+    <AnswerMarkdown
+      content={
+        "<details>\n<summary>Steps</summary>\n\n**Step one</details> More prose**\n\nAfter."
+      }
+    />
+  );
+  const details = container.querySelector("details");
+  expect(details?.querySelector("strong")).toHaveTextContent(/^Step one$/);
+  expect(details).not.toHaveTextContent("More prose");
+  expect(container.querySelector("details + p strong")).toHaveTextContent(
+    "More prose"
+  );
+});

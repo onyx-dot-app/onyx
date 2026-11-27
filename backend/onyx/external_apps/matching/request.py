@@ -5,7 +5,10 @@ from functools import cached_property
 
 from pydantic import BaseModel, Field
 
-from onyx.external_apps.matching.graphql_parsing import parse_invocations
+from onyx.external_apps.matching.graphql_parsing import (
+    document_invocations,
+    request_queries,
+)
 
 
 class ProxiedRequest(BaseModel):
@@ -37,6 +40,16 @@ class MatchContext:
         self.request = request
 
     @cached_property
+    def graphql_documents(self) -> list[list[tuple[str, str]]]:
+        """``(operation_type, root_field)`` pairs of each GraphQL document in
+        the body; an empty list for a document that names no root field."""
+        return document_invocations(request_queries(self.request.body))
+
+    @cached_property
     def graphql_invocations(self) -> list[tuple[str, str]]:
         """``(operation_type, root_field)`` pairs the request's body invokes."""
-        return parse_invocations(self.request.body)
+        return [
+            invocation
+            for invocations in self.graphql_documents
+            for invocation in invocations
+        ]

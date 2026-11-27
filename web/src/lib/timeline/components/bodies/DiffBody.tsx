@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, CodePanel, type CodePanelLine } from "@opal/components";
 import { SvgColumn, SvgMenu } from "@opal/icons";
@@ -15,6 +15,8 @@ import {
 } from "@/lib/timeline/components/bodies/diffLines";
 
 const SIDE_BY_SIDE_AUTO_THRESHOLD = 20;
+// Below this width (30rem) a split view cannot fit, as in T3 Code
+const SIDE_BY_SIDE_MIN_WIDTH_PX = 480;
 const BLANK = " ";
 
 /** A diff line as a `CodePanel` line, numbered on the side it belongs to. */
@@ -86,61 +88,76 @@ export function DiffBody(props: DiffBodyProps) {
     autoSideBySide ? "side-by-side" : "unified"
   );
 
+  const empty = given === null && !newText && !oldText;
+  // A narrow panel shows the unified view and offers no toggle
+  const frame = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setNarrow(entry.contentRect.width < SIDE_BY_SIDE_MIN_WIDTH_PX);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [empty]);
+  const shown = narrow ? "unified" : mode;
+
   const toggleLabel =
     mode === "unified"
       ? t("viewToggle.sideBySideTooltip")
       : t("viewToggle.unifiedTooltip");
 
-  if (given === null && !newText && !oldText) {
-    return null;
-  }
+  if (empty) return null;
 
   return (
-    <CodePanel>
-      <CodePanel.Header
-        title={title}
-        copyText={copyText ?? (given === null ? newText : undefined)}
-        rightChildren={
-          <>
-            <DiffStat added={stats.added} removed={stats.removed} />
-            {stats.added + stats.removed > 0 && (
-              <Button
-                variant="default"
-                prominence="tertiary"
-                size="2xs"
-                icon={mode === "unified" ? SvgColumn : SvgMenu}
-                onClick={() =>
-                  setMode(mode === "unified" ? "side-by-side" : "unified")
-                }
-                tooltip={toggleLabel}
-                aria-label={toggleLabel}
-              />
-            )}
-          </>
-        }
-      />
-      {mode === "unified" ? (
-        <CodePanel.Lines
-          lineNumbers
-          markers
-          lines={diffLines.map(toPanelLine)}
+    <div ref={frame}>
+      <CodePanel>
+        <CodePanel.Header
+          title={title}
+          copyText={copyText ?? (given === null ? newText : undefined)}
+          rightChildren={
+            <>
+              <DiffStat added={stats.added} removed={stats.removed} />
+              {stats.added + stats.removed > 0 && !narrow && (
+                <Button
+                  variant="default"
+                  prominence="tertiary"
+                  size="2xs"
+                  icon={mode === "unified" ? SvgColumn : SvgMenu}
+                  onClick={() =>
+                    setMode(mode === "unified" ? "side-by-side" : "unified")
+                  }
+                  tooltip={toggleLabel}
+                  aria-label={toggleLabel}
+                />
+              )}
+            </>
+          }
         />
-      ) : (
-        <CodePanel.Columns>
-          {/* Each side is its own table, so lines do not wrap: a wrapped
+        {shown === "unified" ? (
+          <CodePanel.Lines
+            lineNumbers
+            markers
+            lines={diffLines.map(toPanelLine)}
+          />
+        ) : (
+          <CodePanel.Columns>
+            {/* Each side is its own table, so lines do not wrap: a wrapped
               line would push its side's rows out of line with the other. */}
-          <CodePanel.Lines
-            lineNumbers
-            wrap={false}
-            lines={diffLines.map((line) => toSideLine(line, "old"))}
-          />
-          <CodePanel.Lines
-            lineNumbers
-            wrap={false}
-            lines={diffLines.map((line) => toSideLine(line, "new"))}
-          />
-        </CodePanel.Columns>
-      )}
-    </CodePanel>
+            <CodePanel.Lines
+              lineNumbers
+              wrap={false}
+              lines={diffLines.map((line) => toSideLine(line, "old"))}
+            />
+            <CodePanel.Lines
+              lineNumbers
+              wrap={false}
+              lines={diffLines.map((line) => toSideLine(line, "new"))}
+            />
+          </CodePanel.Columns>
+        )}
+      </CodePanel>
+    </div>
   );
 }

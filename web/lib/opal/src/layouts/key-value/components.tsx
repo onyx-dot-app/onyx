@@ -14,6 +14,9 @@ interface KeyValueProps {
 
   /** Sets the value in the mono font, as for a secret, a commit or an id. */
   mono?: boolean;
+
+  /** Keeps the value on one line, cut with a tooltip, as for a long URL. */
+  oneLine?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -22,10 +25,15 @@ interface KeyValueProps {
 
 /**
  * One read-only "label … value" row. Both sides wrap rather than cut, so the
- * full text shows to every user, with no hover needed. The label takes at
- * most half the row, so the value always keeps room.
+ * full text shows to every user, with no hover needed, unless `oneLine` is set.
+ * The label takes at most half the row, so the value always keeps room.
  */
-function KeyValue({ label, value, mono = false }: KeyValueProps) {
+function KeyValue({
+  label,
+  value,
+  mono = false,
+  oneLine = false,
+}: KeyValueProps) {
   return (
     <div className="flex w-full flex-row gap-4">
       <div className="min-w-0 max-w-[min(50%,var(--block-width-form-input-column-max))] [overflow-wrap:anywhere]">
@@ -38,6 +46,8 @@ function KeyValue({ label, value, mono = false }: KeyValueProps) {
           as="p"
           font={mono ? "main-ui-mono" : "main-ui-body"}
           color="text-04"
+          maxLines={oneLine ? 1 : undefined}
+          overflowTooltip={oneLine}
         >
           {value}
         </Text>

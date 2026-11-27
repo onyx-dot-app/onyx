@@ -239,11 +239,9 @@ def confluence_group_sync(
         )
         all_found_emails.update(group_member_emails)
 
-    # This is so that when we find a public confleunce server page, we can
-    # give access to all users only in if they have an email in Confluence
-    if cc_pair.connector.connector_specific_config.get("is_cloud", False):
-        all_found_group = ExternalUserGroup(
-            id=ALL_CONF_EMAILS_GROUP_NAME,
-            user_emails=list(all_found_emails),
-        )
-        yield all_found_group
+    # Spaces with anonymous read grant this group on Cloud and Server/DC alike
+    # (see space_access.py), so every user found here can read them.
+    yield ExternalUserGroup(
+        id=ALL_CONF_EMAILS_GROUP_NAME,
+        user_emails=list(all_found_emails),
+    )

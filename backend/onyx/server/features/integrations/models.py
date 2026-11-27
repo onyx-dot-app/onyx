@@ -1,10 +1,10 @@
 """Request and response shapes of the integration API."""
 
 from enum import Enum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from onyx.db.enums import (
     IntegrationAuthMethod,
@@ -23,6 +23,7 @@ from onyx.server.features.mcp.models import HeaderTemplate
 class IntegrationShape(str, Enum):
     MCP_SERVER = "mcp_server"
     OPENAPI = "openapi"
+    GRAPHQL = "graphql"
     PRESET = "preset"
     CUSTOM = "custom"
 
@@ -78,7 +79,7 @@ class IntegrationActionView(BaseModel):
     default_policy: EffectivePolicy
     admin_policy: EffectivePolicy | None
     effective_admin_policy: EffectivePolicy
-    # Craft asks before each call, whatever the policy is, unless Blocked.
+    # Onyx asks before each call, whatever the policy is, unless Blocked.
     always_asks: bool
 
 
@@ -141,8 +142,60 @@ class McpServerConfigInput(BaseModel):
 
 
 class OpenApiConfigInput(BaseModel):
+    """A full OpenAPI document, or a base URL and endpoint lines
+    (``METHOD /path?query1&query2 Name``). With both, the lines edit the
+    given document; with lines only, they edit the stored document, or a new
+    one on a create."""
+
     shape: Literal[IntegrationShape.OPENAPI] = IntegrationShape.OPENAPI
-    openapi_spec: dict[str, Any]
+    # JSON or YAML text.
+    openapi_document: str | None = None
+    base_url: str | None = None
+    endpoints: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _document_or_lines(self) -> "OpenApiConfigInput":
+        if self.endpoints is None:
+            if self.openapi_document is None:
+                raise ValueError("Send an OpenAPI document or endpoint lines.")
+        elif not (self.base_url or "").strip():
+            raise ValueError("Send a base URL with the endpoint lines.")
+        return self
+
+
+class OpenApiConfigView(BaseModel):
+    shape: Literal[IntegrationShape.OPENAPI] = IntegrationShape.OPENAPI
+    openapi_document: str
+    base_url: str
+    # One line per operation, read from the document.
+    endpoints: list[str]
+    # On import, one "METHOD /path: reason" line for each operation that was
+    # dropped because no tool can call it.
+    skipped: list[str] = []
+
+
+class OpenApiEndpointsRequest(BaseModel):
+    """A spec to import: its text, or a URL that Onyx fetches."""
+
+    openapi_document: str | None = None
+    spec_url: str | None = None
+
+    @model_validator(mode="after")
+    def _one_source(self) -> "OpenApiEndpointsRequest":
+        if (self.openapi_document is None) == (self.spec_url is None):
+            raise ValueError("Send the spec text or a spec URL.")
+        return self
+
+
+class GraphQLConfigInput(BaseModel):
+    shape: Literal[IntegrationShape.GRAPHQL] = IntegrationShape.GRAPHQL
+    endpoint_url: str
+    # The schema as SDL.
+    graphql_schema: str
+
+
+class GraphQLIntrospectRequest(BaseModel):
+    endpoint_url: str
 
 
 class PresetConfigInput(BaseModel):
@@ -151,13 +204,13 @@ class PresetConfigInput(BaseModel):
     organization_credentials: dict[str, str] | None = None
 
 
-class CustomConfigInput(BaseModel):
+class CustomConfigView(BaseModel):
     shape: Literal[IntegrationShape.CUSTOM] = IntegrationShape.CUSTOM
     upstream_url_patterns: list[str]
 
 
 IntegrationConfigInput = Annotated[
-    McpServerConfigInput | OpenApiConfigInput | PresetConfigInput | CustomConfigInput,
+    McpServerConfigInput | OpenApiConfigInput | GraphQLConfigInput | PresetConfigInput,
     Field(discriminator="shape"),
 ]
 
@@ -168,7 +221,11 @@ class PresetConfigView(BaseModel):
 
 
 IntegrationConfigView = Annotated[
-    McpServerConfigInput | OpenApiConfigInput | PresetConfigView | CustomConfigInput,
+    McpServerConfigInput
+    | OpenApiConfigView
+    | GraphQLConfigInput
+    | PresetConfigView
+    | CustomConfigView,
     Field(discriminator="shape"),
 ]
 
@@ -236,7 +293,13 @@ class PresetView(BaseModel):
     name: str
     auth_methods: list[IntegrationAuthMethod | None]
     required_org_credential_fields: list[CredentialField]
-    setup_instructions: str | None
+    setup_steps: list[str]
+    # The vendor page where the admin creates the OAuth app.
+    setup_url: str | None
+    # The redirect URI to register with the service. None without OAuth.
+    callback_url: str | None
+    # The scopes the sign-in asks for.
+    scopes: list[str]
 
 
 class IntegrationCreate(BaseModel):

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
+  Collapsible,
   InputSingleSelect,
   InputTypeIn,
   MessageCard,
@@ -225,38 +226,42 @@ function AddMarketplaceForm({
                   }
                 />
               </InputVertical>
-              <InputVertical
-                withLabel
-                title={t("folder.title")}
-                suffix="optional"
-                description={t("folder.description")}
-              >
-                <InputTypeIn
-                  aria-label={t("folder.title")}
-                  placeholder={t("folder.placeholder")}
-                  value={fields.folder}
-                  variant={inputVariant}
-                  onChange={(event) =>
-                    setFields({ ...fields, folder: event.target.value })
-                  }
-                />
-              </InputVertical>
-              <InputVertical
-                withLabel
-                title={t("ref.title")}
-                suffix="optional"
-                description={t("ref.description")}
-              >
-                <InputTypeIn
-                  aria-label={t("ref.title")}
-                  placeholder={t("ref.placeholder")}
-                  value={fields.ref}
-                  variant={inputVariant}
-                  onChange={(event) =>
-                    setFields({ ...fields, ref: event.target.value })
-                  }
-                />
-              </InputVertical>
+              <Collapsible title={t("advanced")} defaultOpen={false}>
+                <Section gap={3} alignItems="stretch" height="auto">
+                  <InputVertical
+                    withLabel
+                    title={t("folder.title")}
+                    suffix="optional"
+                    description={t("folder.description")}
+                  >
+                    <InputTypeIn
+                      aria-label={t("folder.title")}
+                      placeholder={t("folder.placeholder")}
+                      value={fields.folder}
+                      variant={inputVariant}
+                      onChange={(event) =>
+                        setFields({ ...fields, folder: event.target.value })
+                      }
+                    />
+                  </InputVertical>
+                  <InputVertical
+                    withLabel
+                    title={t("ref.title")}
+                    suffix="optional"
+                    description={t("ref.description")}
+                  >
+                    <InputTypeIn
+                      aria-label={t("ref.title")}
+                      placeholder={t("ref.placeholder")}
+                      value={fields.ref}
+                      variant={inputVariant}
+                      onChange={(event) =>
+                        setFields({ ...fields, ref: event.target.value })
+                      }
+                    />
+                  </InputVertical>
+                </Section>
+              </Collapsible>
               <Text as="p" font="secondary-body" color="text-03">
                 {t("privateNote")}
               </Text>

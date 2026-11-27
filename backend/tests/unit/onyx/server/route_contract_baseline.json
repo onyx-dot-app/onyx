@@ -10,6 +10,8 @@
     "GET /manage/admin/connector-checks/runs/{run_id}": "Existing. No registered GATE-2 helper found. Review.",
     "GET /manage/admin/indexing/targeted-reindex/{job_id}": "Existing. No registered GATE-2 helper found. Review.",
     "GET /manage/connector-group-restrictions": "Existing. No registered GATE-2 helper found. Review.",
+    "POST /admin/integrations/graphql-introspect": "Reads no stored resource: it only fetches the URL or parses the text in the request, so there is nothing to scope.",
+    "POST /admin/integrations/openapi-import": "Reads no stored resource: it only fetches the URL or parses the text in the request, so there is nothing to scope.",
     "POST /admin/mcp/probe": "Create-flow probe. Takes only a URL and reads or writes no stored resource, so there is nothing to scope. The SSRF-guarded client blocks internal hosts.",
     "POST /admin/tool/custom": "Existing. Create route: no stored resource to scope yet. Review.",
     "POST /admin/tool/custom/validate": "Existing. No registered GATE-2 helper found. Review.",

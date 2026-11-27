@@ -23,8 +23,8 @@ You turn each integration on, and you connect your account to each integration t
 | Type | What it does | Where you can use it |
 | --- | --- | --- |
 | **MCP** | Connects to a [Model Context Protocol](https://modelcontextprotocol.io/) server, such as Linear, Notion, or Atlassian | Chat, custom agents, and Craft |
-| **OpenAPI** | Calls a REST API that your admin describes with an OpenAPI schema | Chat and custom agents |
-| **Craft App** | Lets Craft act as you in Slack, Gmail, Google Calendar, Google Drive, Notion, Linear, GitHub, HubSpot, or Zendesk | Craft only |
+| **OpenAPI** | Calls a REST API that your admin describes with an OpenAPI schema | Chat, custom agents, and Craft |
+| **Craft App** | Lets the agent act as you in Slack, Gmail, Google Calendar, Google Drive, Notion, Linear, GitHub, HubSpot, or Zendesk | Chat, custom agents, and Craft |
 
 For Craft Apps, see [Craft Apps](/overview/core_features/craft_apps).
 
@@ -60,7 +60,7 @@ for example **3 of 5 integrations available**. Search by name,
 or use the filter to show only the plugins that are on or off.
 A plugin can be off because a plugin that is on has the same skill name. Its row then names that plugin.
 
-Admins see only the plugins that they can use here. The private plugins of other users are on the admin **Skills** page.
+Admins see only the plugins that they can use here. The private plugins of other users are on **Admin Panel → Plugins**.
 
 The **Skills** tab lists each skill, and the **Integrations** tab lists each integration with its state.
 
@@ -70,16 +70,14 @@ Click a plugin to open it. The plugin page has these tabs. A tab with nothing to
 
 | Tab | What it shows |
 | --- | --- |
-| **Overview** | Whether the plugin is on and why, the description, the group, the owner, and for an uploaded plugin the version in `plugin.json`, the author, the license and the parts that Onyx does not use |
+| **Overview** | The group, the owner, and for an uploaded plugin the version in `plugin.json`, the author, the license and the parts that Onyx does not use. For a plugin from a marketplace, the marketplace replaces the group. |
 | **Skills** | The skills of the plugin. Click **Read** to read the instructions of a skill. |
-| **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action. The count in the tab counts only the integrations that Onyx supports. |
+| **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action. The count in the tab counts each integration, also one that Onyx does not support. |
 | **Versions** | The versions of a plugin that you own or can edit, with the version in `plugin.json`. Click a version to see its skills and integrations. |
 
 If you own or can edit the plugin, the page header has **Share** and a **...** menu with **Upload New Version**.
 If you can delete the plugin, the menu also has **Delete Plugin**. You can delete a plugin that you added,
 until it is published. Only an admin can delete a published plugin.
-
-A plugin from a marketplace shows **Synced from *owner/repo*** below its title.
 
 ## Upload a plugin
 
@@ -158,7 +156,7 @@ a dialog lists the integrations with their states and actions.
 
 ### Turn a plugin on or off
 
-The plugin page has the **Use this plugin** switch in its header. The **Overview** tab shows whether the plugin is on.
+The plugin page has the **Use this plugin** switch in its header. The switch shows whether the plugin is on.
 In the **Plugins** tab, a plugin that is off shows **Turn on**, and the row menu has **Turn on** or **Turn off**.
 The default agent uses only the plugins that you turn on.
 
@@ -244,13 +242,13 @@ An admin can change the setting of one plugin later.
 
 ### Manage your marketplaces
 
-Select **Customize → Plugins**, then click **Add → Manage marketplaces**.
-The page lists each marketplace with its source, its plugins and its sync:
+Select **Customize → Plugins**. The **Marketplaces** section below the plugins lists each marketplace with its source,
+its plugins and its sync:
 
 | Column | What it shows |
 | --- | --- |
 | **Marketplace** | The name, the source as `owner/repo`, with the folder and `@ref` when you set them, and **Personal** or **Company** |
-| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Not synced**, with the time of the last sync or the reason of the failure |
+| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Not synced**, with the time of the last sync. A failed marketplace that you cannot manage also shows the reason of the failure |
 | **Items** | The number of plugins |
 
 Click a row to see the source, the GitHub login, the last commit and each entry with its state.
@@ -271,15 +269,15 @@ One sync of a marketplace runs at a time. A sync applies these changes:
 - An entry that is gone deletes its plugin, with its shares and settings.
 - A blocked or not supported entry keeps its plugin and its versions.
 
-If a sync fails, the page shows the reason above the list. The plugins stay as they are. Fix the cause,
-then click **Sync now**.
+If a sync of a marketplace that you manage fails, the section shows the reason above the list.
+The plugins stay as they are. Fix the cause, then click **Sync now**.
 
 ### Plugins from a marketplace
 
 The content of a plugin from a marketplace comes only from GitHub. To change a skill, change it in the repository,
 then sync the marketplace. Onyx refuses to edit, upload a version of, restore, publish or delete the plugin.
 The **Versions** tab shows **This plugin syncs from GitHub,
-so you change it in GitHub.** The **Overview** tab names the marketplace and links to **Marketplaces**.
+so you change it in GitHub.** The **Overview** tab names the marketplace and links to the **Marketplaces** section.
 You can still turn the plugin on or off. You can share a plugin of a company marketplace and change its install setting.
 A plugin of a personal marketplace is only for you: you cannot share it or change its install setting.
 Remove the marketplace to delete its plugins.
@@ -301,21 +299,27 @@ and its switch is locked. An **Installed** integration is on until you turn it o
 An **Available** integration is off until you turn it on. A custom agent uses each integration that it links to,
 with the switch on or off, if you have access and are signed in.
 
-Click an integration to open its page, with the tabs **Overview** (the type, the sign-in, the owner, the state,
-and the **Use This Integration** switch), **Configuration** (your connection) and **Actions** (how each action runs).
+Click an integration to open its page, with the tabs **Overview** (the type, the sign-in, the owner,
+and the **Use This Integration** switch) and **Actions** (how each action runs).
 
 ## Connect an integration
 
-The **Configuration** tab of an integration page shows the status of your connection:
+The header of an integration page shows the status of your connection:
 
 | Status | What you see | Who fixes it |
 | --- | --- | --- |
-| **Connected** | A check mark | Nobody |
+| **Connected** | **Connected** | Nobody |
 | **Not connected** | **Connect** | You |
-| **Needs reconnect** | The reason, for example a change to the sign-in settings, and **Reconnect** | You |
+| **Needs reconnect** | **Reconnect**. The **Overview** tab shows the reason, for example a change to the sign-in settings | You |
 | **Not set up** | **Ask your admin** | An admin, or the owner of a personal integration |
 
-<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Actions tab of the Weather API integration with one action set to Allow and one set to Ask with its Always allow switch"/>
+If an integration that uses your Onyx login needs a reconnect, the header shows no **Reconnect**.
+Sign out of Onyx and sign in again.
+
+If an integration that needs a reconnect is turned off for you, the header shows **Disconnect** and not **Reconnect**.
+You can reconnect after an admin turns it on again.
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Actions tab of the Support Desk integration with actions set to Allow, Ask, and Blocked, and a Don't ask me switch on each action that asks"/>
 
 To connect:
 
@@ -332,14 +336,14 @@ An integration that is not connected gives the agent no actions until you connec
 
 Your admin sets each action of an integration to **Allow**, **Ask**, or **Blocked**.
 An action set to **Ask** asks for your approval in chat.
-The **Actions** tab of the integration page lists each action with its setting. If your admin lets users save it,
-turn on **Always allow** for an action that asks, and it runs with no prompt. Some actions always ask,
-and their switch stays off with the reason. An action set to **Blocked** never runs.
+The **Actions** tab of the integration page lists each action with its setting as a tag.
+If your admin lets users save it, turn on **Don't ask me** for an action that asks, and it runs with no prompt.
+Some actions always ask, and their switch stays off with the reason. An action set to **Blocked** never runs.
 
 ### Disconnect
 
-Click **Disconnect** on an integration that you connected with your own account. Onyx deletes your connection.
-The integration stays available to you.
+Click **Disconnect** in the header of an integration that you connected with your own account.
+Onyx deletes your connection. The integration stays available to you.
 
 ## Add your own integration
 
@@ -377,9 +381,9 @@ Until you connect an integration, the agent does not get its actions. You can co
 ### Approve tool calls
 
 Your admin sets an approval policy for each MCP tool. When the agent calls a tool with the **Ask** policy,
-the answer pauses. An approval card shows **Approval requested** with the tool name and the arguments of the call.
-The card shows below the last message of the chat. If more cards wait, they show in the order of the requests.
-When you compare models, each card names its model. Select one of these options:
+the answer pauses. An approval card shows the tool and its integration, for example **Create issue in GitHub**,
+and the arguments of the call. The card shows below the last message of the chat. If more cards wait,
+they show in the order of the requests. When you compare models, each card names its model. Select one of these options:
 
 | Option | Effect |
 | --- | --- |
@@ -404,6 +408,30 @@ The Onyx web app, the mobile app, the website widget, and the Onyx CLI show appr
 The Slack and Discord bots cannot show approval requests, so they do not get tools that need approval,
 except the tools that their agent had before integrations were added. Incognito chats can block approvals,
 if your admin sets them to keep no content. There, a tool that needs approval does not run, and the agent is told why.
+
+#### Approve requests of a command
+
+The agent can run a command or script in the chat's sandbox that calls an app.
+When the command sends a request with the **Ask** policy, the request waits, and an approval card shows on the command.
+The card shows the app, the action, and the method, origin (for example `https://api.github.com`), path,
+and body of the request. For a Gmail message, the body shows the recipients, subject, and text,
+and also the HTML version when it differs. For a large body or a body that is not JSON, for example a file upload,
+the card shows only the size of the body. The command waits while the card waits.
+
+| Option | Effect |
+| --- | --- |
+| **Approve once** | The request continues. |
+| **Approve for this command** | The request continues. Later requests of the same action of the app in this command continue without a card, until the command ends. A process that the command leaves running does not get this approval. |
+| **Reject** | The request fails. The command gets an error. |
+
+**Approve for this command** is not available for an action that always asks. By default,
+a request waits for up to 3 minutes. If you do not decide in that time, the request fails.
+If the command ends or you stop the answer before you decide, the card closes and the request fails.
+
+Only a command that the answer waits on can ask. A command that runs in the background, a subagent,
+and a chat without a live answer, such as a chat through the API without streaming, cannot show a card. There,
+a request with the **Ask** policy fails, and the agent is told which tool of the app to call instead.
+A request that **Approve for this command** covers continues while its command runs.
 
 Tools with the **Allow** policy run without a card. By default, an OpenAPI `GET` operation runs without a card,
 and the OpenAPI plugins made before integrations were added keep running without a card.

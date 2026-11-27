@@ -141,44 +141,6 @@
         "tooltip": "{description}\nDieses Tool für diesen Chat bevorzugen. Der Agent kann antworten, ohne es zu verwenden."
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "Abbrechen"
-      },
-      "copyButton": {
-        "tooltip": "Definition kopieren"
-      },
-      "definition": {
-        "invalidJson": "Ungültiges JSON-Format",
-        "placeholder": "Geben Sie hier Ihr OpenAPI-Schema ein",
-        "required": "Die Definition des OpenAPI-Schemas ist erforderlich",
-        "subDescription": "Geben Sie ein OpenAPI-Schema an, das die APIs definiert, die Sie im Rahmen dieses Plugins bereitstellen möchten. Sie können die Platzhalter `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` und `USER_EMAIL` an beliebiger Stelle im Schema verwenden (z. B. Server-URL, Pfade, Standardwerte von Parametern). Sie werden beim Aufruf durch die Werte der aktuellen Anfrage ersetzt. Mehr über [OpenAPI-Plugins]({docsUrl}) erfahren.",
-        "title": "Definition des OpenAPI-Schemas"
-      },
-      "empty": {
-        "description": "Geben Sie ein OpenAPI-Schema an, um hier eine Vorschau der Aktionen zu sehen.",
-        "title": "Keine Aktionen gefunden"
-      },
-      "formatButton": {
-        "tooltip": "Definition formatieren"
-      },
-      "method": {
-        "noSummary": "Keine Zusammenfassung angegeben"
-      },
-      "toasts": {
-        "actionCreated": "OpenAPI-Plugin erfolgreich erstellt",
-        "invalidJson": "Ungültiges JSON-Format in der Definition des OpenAPI-Schemas"
-      },
-      "humanDescription": {
-        "title": "Beschreibung für Menschen",
-        "hint": "Wird auf der Plugin-Karte und in den Plugin-Details angezeigt."
-      },
-      "agentDescription": {
-        "title": "Beschreibung für Agenten",
-        "hint": "Bearbeitet info.description im OpenAPI-Schema.",
-        "disabled": "Geben Sie ein gültiges Schema ein, um dieses Feld zu bearbeiten."
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(Getrennt)"
@@ -360,10 +322,8 @@
       "detectedTransport": "Transport: {transport}",
       "authenticationUndetected": "Wählen Sie die Authentifizierungsmethode auf der nächsten Seite.",
       "details": "Details",
-      "checking": "Server wird geprüft…",
       "serverDetails": "Serverdetails",
       "authentication": "Authentifizierung",
-      "continue": "Weiter",
       "back": "Zurück"
     },
     "policyEditor": {
@@ -1521,6 +1481,10 @@
           "description": "Das Web nach Echtzeitinformationen und aktuellen Ergebnissen durchsuchen.",
           "title": "Websuche"
         }
+      },
+      "browser": {
+        "title": "Browser",
+        "description": "Erlauben Sie dem Agenten, in seiner Sandbox einen Webbrowser zu verwenden. Benutzer können ihn im Chatbereich beobachten und die Steuerung übernehmen."
       }
     },
     "codeInterpreter": {
@@ -10392,51 +10356,22 @@
     },
     "integrations": {
       "title": "Integrationen",
-      "description": "Verbinden Sie MCP-Server und Apps. Jede Integration hat einen Eigentümer, eine Installationseinstellung und eigene Freigaben.",
+      "description": "Verbinden Sie MCP-Server und Apps.",
       "search": "Integrationen suchen",
       "open": "{name} öffnen",
       "loadFailed": "Die Integrationen konnten nicht geladen werden.",
       "add": {
         "label": "Hinzufügen",
-        "title": "Integration hinzufügen",
-        "description": "Verbinden Sie einen Dienst, damit Personen ihn im Chat und in Craft verwenden können.",
         "created": "{name} wurde hinzugefügt.",
         "createFailed": "Die Integration konnte nicht hinzugefügt werden.",
-        "openapi": {
-          "title": "OpenAPI-App hinzufügen",
-          "schema": {
-            "title": "Schema",
-            "description": "Fügen Sie das OpenAPI-Schema hinzu, das die Aktionen definiert.",
-            "added": "{count, plural, one {Das Schema hat # Pfad.} other {Das Schema hat # Pfade.}}",
-            "required": "Fügen Sie ein Schema hinzu.",
-            "add": "Schema hinzufügen",
-            "edit": "Schema bearbeiten"
-          }
-        },
         "preset": {
-          "title": "Ausgangspunkt",
           "loadFailed": "Die Vorlagen konnten nicht geladen werden.",
-          "instructions": "Einrichtungsanleitung",
-          "credentialRequired": "Geben Sie diesen Wert ein.",
-          "description": "Eine Vorlage füllt den Namen und die Anmeldung einer integrierten App aus. Wählen Sie „Benutzerdefinierte App“, um einen beliebigen HTTP-Dienst einzurichten.",
-          "custom": "Benutzerdefinierte App"
+          "credentialRequired": "Geben Sie diesen Wert ein."
         },
         "name": {
           "title": "Name",
           "placeholder": "Namen eingeben",
           "required": "Geben Sie einen Namen ein."
-        },
-        "descriptionField": {
-          "title": "Beschreibung",
-          "placeholder": "Beschreibung eingeben"
-        },
-        "custom": {
-          "patterns": {
-            "title": "URL-Muster",
-            "description": "Ein URL-Muster pro Zeile, z. B. https://api.example.com/*.",
-            "placeholder": "https://api.example.com/*",
-            "required": "Geben Sie mindestens ein URL-Muster ein."
-          }
         },
         "mcp": {
           "url": {
@@ -10445,7 +10380,6 @@
             "error": "Geben Sie eine gültige Server-URL ein."
           },
           "probe": {
-            "checking": "Server wird geprüft …",
             "public": "{count, plural, one {# Tool gefunden} other {# Tools gefunden}}. Der Server benötigt keine Anmeldung.",
             "oauth": "Der Server verwendet die OAuth-Anmeldung.",
             "authUnknown": "Der Server benötigt eine Anmeldung. Fügen Sie einen API-Schlüssel-Header oder OAuth hinzu.",
@@ -10456,8 +10390,7 @@
             "title": "Transport",
             "streamableHttp": "Streamable HTTP",
             "sse": "Server-sent Events (SSE)"
-          },
-          "suggested": "Vorgeschlagene Server"
+          }
         },
         "owner": {
           "title": "Eigentümer",
@@ -10469,31 +10402,118 @@
         "submit": "Hinzufügen",
         "adding": "Wird hinzugefügt …",
         "cancel": "Abbrechen",
-        "type": {
-          "title": "Typ",
-          "description": "Wählen Sie, wie Onyx sich mit dem Dienst verbindet.",
-          "mcp_server": {
-            "title": "MCP-Server",
-            "description": "Verbinden Sie einen entfernten MCP-Server über seine URL."
+        "rest": {
+          "import": {
+            "title": "Spezifikation Importieren",
+            "description": "Laden Sie eine OpenAPI-Spezifikation in JSON oder YAML hoch, fügen Sie sie ein oder importieren Sie sie über eine URL. Onyx füllt die Basis-URL und einen Endpunkt pro Operation aus.",
+            "upload": "Spezifikation hochladen oder einfügen",
+            "url": "Spezifikations-URL",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "Importieren",
+            "done": "{count, plural, one {# Endpunkt importiert.} other {# Endpunkte importiert.}}",
+            "failed": "Die Spezifikation konnte nicht importiert werden.",
+            "noActions": "Onyx hat jede Operation der Spezifikation übersprungen, daher bleiben die aktuellen Endpunkte. Verwenden Sie eine andere Spezifikation."
           },
-          "openapi": {
-            "title": "OpenAPI-App",
-            "description": "Erstellen Sie Aktionen aus einem OpenAPI-Schema."
+          "baseUrl": {
+            "title": "Basis-URL",
+            "placeholder": "https://api.example.com",
+            "required": "Fügen Sie eine Basis-URL hinzu."
           },
-          "app": {
-            "title": "App",
-            "description": "Beginnen Sie mit einer Vorlage wie GitHub oder einer eigenen App."
+          "endpoints": {
+            "title": "Endpunkte",
+            "description": "Ein Endpunkt pro Zeile: Methode, Pfad, optionale Query-Parameter und ein Name. Jeder Endpunkt wird zu einer Aktion.",
+            "placeholder": "GET /tickets?status&limit Tickets auflisten",
+            "required": "Fügen Sie mindestens einen Endpunkt hinzu.",
+            "lineError": "Zeile {line} ({text}): {message}"
           }
         },
-        "details": {
-          "title": "Details"
+        "graphql": {
+          "endpointUrl": {
+            "title": "Endpunkt-URL",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "Fügen Sie eine Endpunkt-URL hinzu."
+          },
+          "schema": {
+            "title": "Schema",
+            "description": "Fügen Sie das Schema als GraphQL-SDL ein, laden Sie eine .graphql-Datei hoch oder laden Sie es vom Endpunkt. Jede Query und Mutation wird zu einer Aktion.",
+            "upload": "Eine .graphql-Datei hochladen",
+            "required": "Fügen Sie ein Schema hinzu."
+          },
+          "introspect": {
+            "submit": "Vom Endpunkt laden",
+            "done": "Das Schema wurde geladen.",
+            "failed": "Das Schema konnte nicht geladen werden."
+          }
         },
-        "signIn": {
-          "title": "Anmeldung"
+        "menu": {
+          "mcpServer": "MCP-Server",
+          "customApi": "Eigene API",
+          "fromCatalog": "Aus dem Katalog"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "MCP-Server hinzufügen",
+            "description": "Verbinden Sie einen entfernten MCP-Server über seine URL."
+          },
+          "api": {
+            "title": "Eigene API hinzufügen",
+            "description": "Verbinden Sie eine REST- oder GraphQL-API. Onyx findet die Endpunkte über die URL oder eine Spezifikation."
+          },
+          "catalog": {
+            "title": "Aus dem Katalog hinzufügen",
+            "description": "Wählen Sie eine App oder einen MCP-Server zum Einrichten."
+          },
+          "namedTitle": "{name} hinzufügen"
+        },
+        "catalog": {
+          "title": "Katalog durchsuchen",
+          "description": "Apps und gehostete MCP-Server, mit denen sich Onyx bereits verbinden kann.",
+          "browse": "Durchsuchen"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "Eine OpenAPI-Spezifikations-URL, ein GraphQL-Endpunkt oder eine Basis-URL",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "Geben Sie eine gültige URL ein oder laden Sie eine Spezifikation hoch.",
+            "needed": "Fügen Sie die URL der API hinzu. Die Spezifikation nennt keine."
+          },
+          "upload": {
+            "label": "Spezifikationsdatei hochladen",
+            "chosen": "Spezifikation: {file}",
+            "remove": "Spezifikation entfernen"
+          },
+          "failed": "Die Spezifikation konnte nicht gelesen werden.",
+          "specError": "Die Spezifikation kann nicht hinzugefügt werden: {detail}",
+          "tooLarge": "Die Datei ist größer als 5 MB.",
+          "checkFailed": "Onyx konnte die URL nicht prüfen. Versuchen Sie es erneut.",
+          "noActions": "Onyx hat jede Operation der Spezifikation übersprungen, daher liefert sie keine Aktionen. Verwenden Sie eine andere Spezifikation, oder entfernen Sie sie und geben Sie die Basis-URL der API ein, um die Endpunkte manuell hinzuzufügen."
+        },
+        "detected": {
+          "openapi": "REST-API, {count, plural, one {# Endpunkt} other {# Endpunkte}}",
+          "openapiSkipped": "REST-API, {count, plural, one {# Endpunkt} other {# Endpunkte}}. {skipped} übersprungen.",
+          "skippedTitle": "Übersprungene Endpunkte",
+          "rest": "REST-API ohne Spezifikation. Fügen Sie unten die Endpunkte hinzu.",
+          "restUnreachable": "Onyx kann die URL nicht erreichen: {detail} Sie können sie trotzdem als REST-API ohne Spezifikation hinzufügen. Fügen Sie unten die Endpunkte hinzu.",
+          "restTooLarge": "Onyx kann die URL nicht auf eine Spezifikation prüfen: {detail} Sie können sie trotzdem als REST-API ohne Spezifikation hinzufügen oder eine kleinere Spezifikationsdatei hochladen. Fügen Sie unten die Endpunkte hinzu.",
+          "graphql": "GraphQL-API, {queries, plural, one {# Query} other {# Queries}} und {mutations, plural, one {# Mutation} other {# Mutationen}}",
+          "preset": "Integrierte App. Onyx ruft ihre API auf."
+        },
+        "continue": "Weiter",
+        "back": "Zurück",
+        "detecting": "URL wird geprüft…",
+        "advanced": "Erweitert",
+        "setup": {
+          "title": "{name} einrichten",
+          "callbackUrl": "Callback-URL",
+          "copyCallbackUrl": "Callback-URL kopieren",
+          "scopes": "Scopes",
+          "open": "{name} öffnen"
         }
       },
       "filters": {
         "label": "Integrationstyp",
+        "selected": "Integrationstyp: {type}",
         "all": "Alle Typen",
         "mcp": "MCP-Server",
         "api": "Apps"
@@ -10513,9 +10533,10 @@
       },
       "shape": {
         "mcp_server": "MCP-Server",
-        "openapi": "OpenAPI-App",
+        "openapi": "REST-App",
         "preset": "App",
-        "custom": "Eigene App"
+        "custom": "URL-Muster-App",
+        "graphql": "GraphQL-App"
       },
       "signInSummary": "{mode, select, none {Keine Anmeldung} shared {{method, select, oauth2 {Organisationskonto (OAuth)} api_key {API-Schlüssel der Organisation} onyx_login {Onyx-Anmeldung} managed {Von Onyx verwaltet} other {Organisationskonto}}} individual {{method, select, oauth2 {Jeder Nutzer (OAuth)} api_key {Jeder Nutzer (API-Schlüssel)} onyx_login {Onyx-Anmeldung} managed {Von Onyx verwaltet} other {Jeder Nutzer}}} other {Unbekannt}}",
       "status": {
@@ -10592,7 +10613,6 @@
         "overview": {
           "readOnly": "Sie können diese Integration sehen, aber nicht ändern.",
           "noDescription": "Keine Beschreibung",
-          "type": "Typ",
           "signIn": "Anmeldung",
           "createdBy": "Hinzugefügt von",
           "needsSetup": "Einrichtung nötig",
@@ -10623,19 +10643,18 @@
           },
           "description": "Beschreibung",
           "menu": "Weitere Aktionen",
-          "owner": "Eigentümer"
+          "owner": "Eigentümer",
+          "urlPatternApp": {
+            "title": "Diese App verwendet URL-Muster",
+            "description": "Onyx fügt keine Apps mit URL-Mustern mehr hinzu. Um diese App zu ersetzen, fügen Sie für jeden Host, den ihre URL-Muster erreichen, eine eigene REST-App hinzu. Führen Sie die Einrichtungsschritte aus der Dokumentation aus, bevor Sie diese App löschen."
+          }
         },
         "configuration": {
           "readOnly": "Sie können diese Integration sehen, aber nicht ändern.",
           "connection": {
             "title": "Verbindung",
             "serverUrl": "Server-URL",
-            "serverUrlError": "Geben Sie eine gültige Server-URL ein.",
-            "urlPatterns": "URL-Muster",
-            "urlPatternsDescription": "Ein URL-Muster pro Zeile.",
-            "schema": "OpenAPI-Schema",
-            "schemaDescription": "Onyx synchronisiert die Aktionen erneut, wenn Sie ein geändertes Schema speichern.",
-            "schemaError": "Geben Sie das Schema als JSON-Objekt ein."
+            "serverUrlError": "Geben Sie eine gültige Server-URL ein."
           },
           "signIn": {
             "title": "Anmeldung",
@@ -10683,11 +10702,11 @@
           },
           "usesDefault": "Verwendet Standard",
           "setByAdmin": "Vom Admin festgelegt",
-          "alwaysAsks": "Craft fragt vor jeder Anfrage nach, die zu keiner anderen Aktion passt. Sie können Erlauben nicht festlegen.",
+          "alwaysAsks": "Onyx fragt vor jeder Anfrage nach, die zu keiner anderen Aktion passt. Sie können Erlauben nicht festlegen.",
           "useDefaults": "Standards verwenden",
-          "readOnly": "Lesende Aktionen ({count})",
-          "write": "Schreibende Aktionen ({count})",
-          "other": "Weitere Aktionen ({count})",
+          "readOnly": "Lesende Aktionen",
+          "write": "Schreibende Aktionen",
+          "other": "Weitere Aktionen",
           "empty": "Diese Integration hat keine Aktionen.",
           "connectFirst": {
             "title": "Verbinden Sie zuerst den Server",
@@ -10703,8 +10722,8 @@
         "saved": "{name} ist jetzt {policy}.",
         "saveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
         "title": "Installationseinstellung",
-        "description": "Wer diese Integration erhält. Nicht verfügbar hält sie privat: Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie. Entferne diese Gruppeneinstellungen, um sie auf den Eigentümer und die Freigaben zu beschränken.",
-        "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie.",
+        "description": "Wer in der Organisation diese Integration erhält.",
+        "notAvailable": "Privat. Nur der Eigentümer und die Personen, mit denen sie geteilt ist, nutzen sie.",
         "required": "Mitglieder, die sich mit ihrem eigenen Konto anmelden, müssen sie verbinden, bevor sie Chat und Craft nutzen können."
       },
       "ownedBy": "Eigentümer: {owner}",
@@ -10712,6 +10731,10 @@
         "saved": "Gruppeneinstellungen für {name} gespeichert.",
         "saveFailed": "Die Gruppeneinstellung konnte nicht gespeichert werden."
       }
+    },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Lade Plugins für Claude Code und Codex hoch und synchronisiere Marketplaces von GitHub. Ein Plugin ist eine Gruppe von Skills und nennt die Integrationen, die diese Skills brauchen."
     },
     "serviceStatus": {
       "page": {
@@ -11049,7 +11072,7 @@
         "loadFailed": "Die Integrationen konnten nicht geladen werden.",
         "lock": {
           "adminBlocked": "Erlauben ist nicht verfügbar: Ein Administrator hat diese Aktion blockiert.",
-          "alwaysAsks": "Erlauben ist nicht verfügbar: Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
+          "alwaysAsks": "Erlauben ist nicht verfügbar: Onyx fragt bei jeder dieser Anfragen nach einer Freigabe.",
           "adminFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellung dieser Integration ist endgültig."
         },
         "noActions": "Diese Integration hat noch keine Aktionen.",
@@ -12210,9 +12233,6 @@
           "text": "Die Antwort wurde gestoppt, weil sie ihr Zeitlimit erreicht hat."
         }
       },
-      "agentResults": {
-        "received": "Ergebnisse der Subagenten empfangen"
-      },
       "callout": {
         "note": {
           "title": "Hinweis"
@@ -12776,6 +12796,9 @@
             },
             "noLines": {
               "label": "{change, select, delete {Datei löschen} other {Leere Datei}}"
+            },
+            "movedFrom": {
+              "label": "Verschoben von {path}"
             }
           },
           "stopped": {
@@ -12787,6 +12810,62 @@
             },
             "failed": {
               "status": "Veröffentlichung fehlgeschlagen"
+            }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {{target} wird geöffnet} failed {{target} konnte nicht geöffnet werden} canceled {Abgebrochen} other {{target} geöffnet}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Neuer Tab wird geöffnet} failed {Neuer Tab konnte nicht geöffnet werden} canceled {Abgebrochen} other {Neuer Tab geöffnet}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Wechsel zu {target}} failed {Wechsel zu {target} fehlgeschlagen} canceled {Abgebrochen} other {Zu {target} gewechselt}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Seite wird gelesen} failed {Seite konnte nicht gelesen werden} canceled {Abgebrochen} other {Seite gelesen}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Seite wird bedient} failed {Seite konnte nicht bedient werden} canceled {Abgebrochen} other {Seite bedient}}",
+              "click": {
+                "status": "{phase, select, running {Element wird angeklickt} failed {Element konnte nicht angeklickt werden} canceled {Abgebrochen} other {Element angeklickt}}"
+              },
+              "type": {
+                "status": "{phase, select, running {„{text}“ wird eingegeben} failed {„{text}“ konnte nicht eingegeben werden} canceled {Abgebrochen} other {„{text}“ eingegeben}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {Zeiger über Element} failed {Zeiger konnte nicht über das Element bewegt werden} canceled {Abgebrochen} other {Zeiger über Element bewegt}}"
+              },
+              "select": {
+                "status": "{phase, select, running {Option wird ausgewählt} failed {Option konnte nicht ausgewählt werden} canceled {Abgebrochen} other {Option ausgewählt}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {Element wird gezogen} failed {Element konnte nicht gezogen werden} canceled {Abgebrochen} other {Element gezogen}}"
+              },
+              "press": {
+                "status": "{phase, select, running {{key} wird gedrückt} failed {{key} konnte nicht gedrückt werden} canceled {Abgebrochen} other {{key} gedrückt}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {Seite wird gescrollt} failed {Seite konnte nicht gescrollt werden} canceled {Abgebrochen} other {Seite gescrollt}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {Dateien werden hochgeladen} failed {Dateien konnten nicht hochgeladen werden} canceled {Abgebrochen} other {Dateien hochgeladen}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Warten auf die Seite} failed {Die Seite wurde nicht bereit} canceled {Abgebrochen} other {Auf die Seite gewartet}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Seitenskript wird ausgeführt} failed {Das Seitenskript ist fehlgeschlagen} canceled {Abgebrochen} other {Seitenskript ausgeführt}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Seitendialog wird beantwortet} failed {Seitendialog konnte nicht beantwortet werden} canceled {Abgebrochen} other {Seitendialog beantwortet}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Browser wird geprüft} failed {Browser konnte nicht geprüft werden} canceled {Abgebrochen} other {Browser geprüft}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Zurück} forward {Vorwärts} other {Seite wird neu geladen}}} failed {Seite konnte nicht geändert werden} canceled {Abgebrochen} other {{history, select, back {Zurückgegangen} forward {Vorwärtsgegangen} other {Seite neu geladen}}}}"
             }
           }
         },
@@ -12809,14 +12888,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "Subagent {name} wird gestartet",
-            "done": "Subagent {name} gestartet",
-            "failed": "Subagent {name} konnte nicht gestartet werden",
-            "runningUnnamed": "Subagent wird gestartet",
-            "doneUnnamed": "Subagent gestartet",
-            "failedUnnamed": "Subagent konnte nicht gestartet werden"
-          },
           "send": {
             "running": "Nachricht an {name} wird gesendet",
             "done": "Nachricht an {name} gesendet",
@@ -12833,6 +12904,17 @@
             "doneUnnamed": "Subagent unterbrochen",
             "failedUnnamed": "Subagent konnte nicht unterbrochen werden"
           }
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {# Subagent} other {# Subagenten}}",
+          "summary": {
+            "working": "{count, number} arbeiten",
+            "done": "{count, number} fertig",
+            "failed": "{count, number} fehlgeschlagen",
+            "stopped": "{count, number} gestoppt"
+          },
+          "activity": "Nutzt {tool}",
+          "open": "{name} öffnen"
         }
       },
       "toolApproval": {
@@ -13567,6 +13649,9 @@
       },
       "resizeHandle": {
         "label": "Bereichsgröße ändern"
+      },
+      "browserTab": {
+        "label": "Browser"
       }
     },
     "export": {
@@ -13627,6 +13712,126 @@
       "next": "Nächster Treffer",
       "placeholder": "In Sitzung suchen",
       "previous": "Vorheriger Treffer"
+    },
+    "subagents": {
+      "status": {
+        "starting": "Startet",
+        "running": "Läuft",
+        "waiting": "Wartet",
+        "completed": "Abgeschlossen",
+        "stopped": "Gestoppt",
+        "failed": "Fehlgeschlagen",
+        "limit": "Schrittlimit erreicht"
+      },
+      "timedStatus": {
+        "running": "Läuft {elapsed}",
+        "waiting": "Wartet {elapsed}",
+        "completed": "Abgeschlossen in {elapsed}"
+      },
+      "view": {
+        "parent": "Subagent von",
+        "parentOf": "Subagent von · {title}",
+        "openParentChat": "Übergeordneten Chat öffnen",
+        "empty": "Dieser Agent hat noch keine Nachrichten.",
+        "failed": "Das Gespräch dieses Agenten konnte nicht geladen werden."
+      },
+      "bar": {
+        "runsOnItsOwn": "Läuft selbstständig",
+        "openParent": "Übergeordneten öffnen",
+        "announcement": "{model}-Subagent: {status}",
+        "announcementUnnamed": "Subagent: {status}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "Browserseite",
+        "inputDescription": "Drücken Sie Umschalt+Esc, um die Browserseite zu verlassen."
+      },
+      "download": {
+        "action": "Herunterladen",
+        "saved": "Der Browser hat {fileName} heruntergeladen"
+      },
+      "error": "Der Browser konnte das nicht ausführen. Versuchen Sie es erneut.",
+      "clearData": {
+        "action": "Browserdaten löschen",
+        "title": "Browserdaten löschen?",
+        "description": "Dadurch werden Sie im Browser von allen Websites abgemeldet, und Cookies, Verlauf und gespeicherte Daten werden für alle Ihre Chats gelöscht.",
+        "confirm": "Daten löschen",
+        "done": "Browserdaten gelöscht",
+        "error": "Die Browserdaten konnten nicht gelöscht werden. Versuchen Sie es erneut."
+      },
+      "urlBar": {
+        "back": "Zurück",
+        "forward": "Vorwärts",
+        "reload": "Neu laden",
+        "label": "Adresse",
+        "placeholder": "URL eingeben"
+      },
+      "moreMenu": {
+        "label": "Weitere Browseraktionen"
+      },
+      "tabs": {
+        "new": "Neuer Tab"
+      },
+      "control": {
+        "you": "Sie steuern diesen Tab",
+        "agent": "Der Agent steuert diesen Tab",
+        "anotherViewer": "Ein anderes Fenster steuert diesen Tab",
+        "none": "Niemand steuert diesen Tab",
+        "take": "Steuerung übernehmen",
+        "release": "Steuerung abgeben"
+      },
+      "status": {
+        "connecting": "Verbindung zum Browser wird hergestellt",
+        "starting": "Browser wird gestartet",
+        "blank": {
+          "title": "Noch keine Seite",
+          "description": "Geben Sie oben eine URL ein, um eine Seite zu öffnen."
+        },
+        "noTabs": {
+          "title": "Keine Seite geöffnet",
+          "description": "Seiten, die der Agent öffnet, erscheinen hier. Sie können auch einen neuen Tab öffnen."
+        },
+        "disconnected": {
+          "title": "Die Verbindung zum Browser wurde getrennt",
+          "description": "Es wird erneut versucht, eine Verbindung herzustellen."
+        },
+        "disabled": {
+          "title": "Der Browser ist ausgeschaltet",
+          "description": "Ein Administrator hat den Browser ausgeschaltet, oder Sie können den Browser dieses Chats nicht ansehen."
+        },
+        "unreachable": {
+          "title": "Der Browser ist nicht erreichbar",
+          "description": "Prüfen Sie, ob Sie angemeldet und online sind, und versuchen Sie es dann erneut."
+        },
+        "error": {
+          "title": "Der Browser ist nicht verfügbar",
+          "description": "Die Sandbox des Chats konnte nicht starten. Versuchen Sie es später erneut."
+        },
+        "retry": "Erneut versuchen"
+      },
+      "dialog": {
+        "label": "Seitendialog",
+        "from": "{origin} meldet",
+        "response": "Antwort im Dialog",
+        "responsePlaceholder": "Antwort eingeben",
+        "dismiss": "Schließen",
+        "accept": "Annehmen",
+        "takeControl": "Übernehmen Sie die Steuerung, um zu antworten."
+      },
+      "fileChooser": {
+        "label": "Dateien für die Seite auswählen",
+        "askOne": "Die Seite fordert eine Datei an.",
+        "askMany": "Die Seite fordert Dateien an.",
+        "askOneFrom": "{origin} fordert eine Datei an.",
+        "askManyFrom": "{origin} fordert Dateien an.",
+        "cancel": "Abbrechen",
+        "chooseOne": "Datei auswählen",
+        "chooseMany": "Dateien auswählen",
+        "inputLabel": "Dateien für die Seite",
+        "error": "Die Dateien konnten nicht hochgeladen werden. Versuchen Sie es erneut."
+      },
+      "answerError": "Die Antwort an die Seite ist fehlgeschlagen. Versuchen Sie es erneut."
     }
   },
   "common": {
@@ -14254,6 +14459,10 @@
         "button": "Für diesen Chat freigeben",
         "tooltip": "Jetzt freigeben und dieses Tool für den Rest dieses Chats ohne erneute Nachfrage ausführen"
       },
+      "approveCommand": {
+        "button": "Für diesen Befehl freigeben",
+        "tooltip": "Jetzt freigeben und diese Aktion ohne erneute Nachfrage erlauben, bis der Befehl endet"
+      },
       "approveOnce": {
         "ariaLabel": "Diese Aktion einmalig genehmigen",
         "button": "Einmalig genehmigen"
@@ -14264,7 +14473,8 @@
       },
       "deadline": "Bis {time} genehmigen",
       "header": {
-        "required": "Freigabe angefordert: {headline}"
+        "required": "Freigabe angefordert: {headline}",
+        "requiredBy": "Freigabe angefordert: {headline}. Bis {time} genehmigen"
       },
       "headline": {
         "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",
@@ -14281,6 +14491,7 @@
         "expired": "Zeitüberschreitung: {headline}",
         "rejected": "Nicht freigegeben: {headline}",
         "approvedForChat": "Für diesen Chat freigegeben: {headline}",
+        "approvedForCommand": "Für diesen Befehl freigegeben: {headline}",
         "approvedForSession": "Für diese Sitzung freigegeben: {headline}"
       },
       "submitError": "Ihre Entscheidung konnte nicht gesendet werden. Versuchen Sie es erneut.",
@@ -16603,6 +16814,9 @@
         "integrations": {
           "label": "Integrationen"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "slackBot": {
           "label": "Slack-Bot"
         },
@@ -17166,15 +17380,11 @@
           "title": "Von Grund auf neu beginnen"
         },
         "trigger": {
-          "label": "Skill erstellen"
+          "label": "Einen Skill erstellen"
         },
         "upload": {
           "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
           "title": "Skill hochladen"
-        },
-        "marketplace": {
-          "title": "Marketplace hinzufügen",
-          "description": "Aus einem Repository hinzufügen und dessen Plugins synchronisieren."
         }
       },
       "empty": {
@@ -17403,17 +17613,13 @@
           "versions": "Versionen"
         },
         "overview": {
-          "noDescription": "Keine Beschreibung.",
           "location": "Ort",
           "owner": "Eigentümer",
-          "skills": "Skills",
-          "description": "Beschreibung",
           "version": "Version in plugin.json",
           "author": "Autor",
           "homepage": "Homepage",
           "license": "Lizenz",
-          "notUsed": "Nicht in Onyx verwendet",
-          "marketplace": "Marketplace {name}, {scope, select, personal {persönlich} other {Unternehmen}} ({repository})"
+          "notUsed": "Nicht in Onyx verwendet"
         },
         "skills": {
           "off": "Aus",
@@ -17427,11 +17633,7 @@
           "title": "Dieses Plugin verwenden",
           "label": "{name} verwenden",
           "required": "Ihr Admin hat dieses Plugin als erforderlich festgelegt. Sie können es nicht deaktivieren.",
-          "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren.",
-          "failed": "Das Plugin konnte nicht geändert werden.",
-          "on": "An. Der Standard-Agent kann dieses Plugin verwenden.",
-          "off": "Aus. Aktivieren Sie es, damit der Standard-Agent dieses Plugin verwenden kann.",
-          "nameHeld": "Aus, weil {names} denselben Skill-Namen verwendet. Aktivieren Sie dieses Plugin, um es stattdessen zu verwenden."
+          "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren."
         },
         "actions": {
           "share": "Teilen",
@@ -17447,7 +17649,6 @@
           "done": "{name} wurde gelöscht.",
           "failed": "Das Plugin konnte nicht gelöscht werden."
         },
-        "syncedFrom": "Synchronisiert aus {repository}",
         "managed": {
           "title": "Vom Marketplace {name} verwaltet",
           "description": "Onyx synchronisiert dieses Plugin aus {repository}. Ändern Sie es in GitHub und synchronisieren Sie dann den Marketplace.",
@@ -17487,18 +17688,17 @@
         }
       },
       "alwaysAllow": {
-        "title": "Immer Erlauben",
-        "description": "Eine Aktion, die eine Freigabe verlangt, ohne Nachfrage ausführen.",
+        "description": "Dein Admin legt fest, wie jede Aktion ausgeführt wird. Aktiviere „Nicht fragen“, um eine Aktion, die nachfragt, ohne Rückfrage auszuführen.",
         "loadFailed": "Die Aktionen konnten nicht geladen werden.",
         "saveFailed": "Speichern fehlgeschlagen. Versuchen Sie es erneut.",
-        "alwaysAsks": "Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
+        "alwaysAsks": "Onyx fragt bei jeder dieser Anfragen nach einer Freigabe.",
         "switch": {
-          "label": "{name} immer erlauben"
+          "label": "Für {name} nicht fragen",
+          "visibleLabel": "Nicht fragen"
         },
         "retry": {
           "label": "Erneut versuchen"
         },
-        "readOnlyTitle": "Aktionen",
         "readOnlyDescription": "Ihr Administrator legt fest, wie jede Aktion ausgeführt wird."
       },
       "oauthCallback": {
@@ -17562,10 +17762,7 @@
         "not_supported": "Nicht unterstützt"
       },
       "note": {
-        "askAdmin": "Fragen Sie einen Admin",
-        "turnedOff": "Von Ihrem Admin deaktiviert",
-        "moreThanOne": "Mehr als eine Integration passt",
-        "notSupported": "In Onyx nicht unterstützt"
+        "askAdmin": "Fragen Sie einen Admin"
       },
       "localServer": "Lokaler Server",
       "noUrl": "Keine Server-URL",
@@ -17717,7 +17914,8 @@
         "duplicate": {
           "personal": "Sie haben diesen Marketplace bereits hinzugefügt.",
           "company": "Ihre Organisation erhält diesen Marketplace bereits."
-        }
+        },
+        "advanced": "Erweitert"
       },
       "sync": {
         "now": "Jetzt synchronisieren",
@@ -17742,10 +17940,6 @@
       "open": "{name} öffnen",
       "menu": "Aktionen für {name}",
       "loadFailed": "Die Marketplaces konnten nicht geladen werden.",
-      "empty": {
-        "title": "Noch keine Marketplaces",
-        "description": "Fügen Sie ein GitHub-Repository hinzu, um dessen Plugins zu erhalten."
-      },
       "page": {
         "title": "Marketplaces",
         "description": "Die GitHub-Repositorys, aus denen Sie Plugins erhalten, mit ihrer Quelle. Synchronisieren Sie ein Marketplace, um die Änderungen aus GitHub zu übernehmen."
@@ -17804,6 +17998,20 @@
       "errors": {
         "rateLimited": "Das API-Limit von GitHub ist erreicht. Versuchen Sie es in einigen Minuten erneut. Verbinden Sie GitHub, um das Limit zu erhöhen.",
         "rateLimitedUntil": "Das API-Limit von GitHub ist erreicht. Es wird um {time} zurückgesetzt. Verbinden Sie GitHub, um das Limit zu erhöhen."
+      }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {# Plugin aktualisiert} other {# Plugins aktualisiert}}",
+      "failed": "Plugins konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
+      "partialFailure": "{count, plural, one {# Plugin konnte nicht aktualisiert werden} other {# Plugins konnten nicht aktualisiert werden}}",
+      "deleteTitle": "{count, plural, one {# Plugin löschen?} other {# Plugins löschen?}}",
+      "deleteDescription": "{count, plural, one {Das ausgewählte Plugin wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Plugins werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
+      "shareTitle": "{count, plural, one {Zugriff für # Plugin aktualisieren} other {Zugriff für # Plugins aktualisieren}}",
+      "shareDescription": "Diese Änderungen auf jedes ausgewählte Plugin anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
+      "addAccessDescription": "Diese Personen und Gruppen zu jedem ausgewählten Plugin hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
+      "apply": "{count, plural, one {Auf # Plugin anwenden} other {Auf # Plugins anwenden}}",
+      "publishWarning": {
+        "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Plugins verwenden. Veröffentlichte Plugins können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
       }
     }
   },
@@ -17894,18 +18102,12 @@
         "on": "Aktiviert",
         "off": "Deaktiviert"
       },
-      "sort": {
-        "label": "Sortieren",
-        "updated": "Zuletzt aktualisiert",
-        "name": "Name"
-      },
       "add": {
         "label": "Hinzufügen",
         "upload": "Skill hochladen",
         "create": "Skill erstellen",
         "uploadPlugin": "Plugin hochladen",
-        "marketplace": "Marketplace hinzufügen",
-        "manageMarketplaces": "Marketplaces verwalten"
+        "marketplace": "Marketplace hinzufügen"
       },
       "groups": {
         "mine": "Von Ihnen erstellt",
@@ -17926,7 +18128,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Deaktiviert",
+        "off": "Aus",
         "required": "Erforderlich",
         "pending": "Prüfung ausstehend",
         "invalid": "Ungültig"
@@ -17961,15 +18163,11 @@
       "status": {
         "connected": "Verbunden"
       },
-      "add": {
-        "label": "Hinzufügen",
-        "integration": "Integration hinzufügen",
-        "manage": "Integrationen verwalten"
-      },
       "open": "{name} öffnen",
       "empty": {
         "title": "Noch keine Integrationen",
-        "description": "Bitten Sie Ihren Administrator, eine Integration hinzuzufügen."
+        "description": "Bitten Sie Ihren Administrator, eine Integration hinzuzufügen.",
+        "descriptionCanAdd": "Fügen Sie eine hinzu, oder durchsuchen Sie den Katalog."
       },
       "noMatches": {
         "title": "Keine passenden Integrationen",
@@ -17983,14 +18181,13 @@
       },
       "empty": {
         "title": "Noch keine Plugins",
-        "description": "Laden Sie ein Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder erstellen Sie einen Skill. Jeder Skill ist ein Plugin.",
+        "description": "Laden Sie ein Plugin hoch oder fügen Sie einen Marketplace aus GitHub hinzu.",
         "upload": "Plugin hochladen"
       },
       "noMatches": {
         "title": "Keine passenden Plugins",
         "clear": "Alle Plugins anzeigen"
       },
-      "intro": "Ein Plugin bündelt Skills und die Integrationen, die sie benötigen. Laden Sie ein Claude-Code- oder Codex-Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder fügen Sie einen Skill hinzu. Ein Plugin, das nur eine SKILL.md im Stammverzeichnis enthält, finden Sie im Tab „Skills“.",
       "integrations": "{available} von {needed} Integrationen verfügbar",
       "nameHeld": "Aus: {names} verwendet denselben Skill-Namen"
     },
@@ -18058,26 +18255,19 @@
       "loadFailed": "Diese Integration ist für Sie nicht verfügbar.",
       "tabs": {
         "overview": "Übersicht",
-        "configuration": "Konfiguration",
         "actions": "Aktionen"
       },
       "overview": {
-        "description": "Beschreibung",
-        "noDescription": "Keine Beschreibung.",
         "type": "Typ",
         "signIn": "Anmeldung",
         "url": "Server-URL",
         "owner": "Eigentümer",
         "organization": "Organisation",
-        "status": "Status",
         "switch": {
           "title": "Diese Integration Verwenden",
           "description": "Wenn dies aktiviert ist, können Sie sie in Chats und in Craft verwenden.",
           "required": "Ihr Admin hat diese Integration als erforderlich festgelegt. Sie können sie nicht deaktivieren."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Ihre Verbindung zu dieser Integration. Nur Sie verwenden sie.} shared {Das Konto dieser Integration. Alle mit Zugriff verwenden es.} other {Diese Integration benötigt keine Anmeldung.}}"
       }
     },
     "pluginPage": {

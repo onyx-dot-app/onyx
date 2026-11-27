@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import pytest
 import requests
 
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.api_app.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
     SearXNGClient,
 )

@@ -4,12 +4,14 @@ user's approval, keyed by its integration."""
 
 import json
 from collections.abc import Generator
+from io import BytesIO
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 import requests
+import urllib3
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -139,7 +141,10 @@ def _orders_response(
         response = requests.Response()
         response.status_code = 200
         response.headers["Content-Type"] = "application/json"
-        response._content = json.dumps({"orders": ["A-1"]}).encode()
+        response.raw = urllib3.HTTPResponse(
+            body=BytesIO(json.dumps({"orders": ["A-1"]}).encode()),
+            preload_content=False,
+        )
         return response
 
     return respond
@@ -188,7 +193,7 @@ def test_a_chat_calls_an_openapi_action(
     sent: list[dict[str, str]] = []
 
     with patch(
-        "onyx.tools.tool_implementations.custom.custom_tool.ssrf_safe_request",
+        "onyx.tools.tool_implementations.http_request.ssrf_safe_request",
         side_effect=_orders_response(sent),
     ):
         parts = send(chat.id, user, llm, "List orders.", code_mode=code_mode)

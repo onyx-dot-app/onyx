@@ -1,4 +1,4 @@
-import { render, screen } from "@tests/setup/test-utils";
+import { fireEvent, render, screen } from "@tests/setup/test-utils";
 import { Table, type TableColumn } from "@opal/components";
 
 interface Row {
@@ -54,5 +54,59 @@ describe("Table header, footer and paging", () => {
     expect(
       renderTable({ header: false }).header?.querySelector("tr") ?? null
     ).toBeNull();
+  });
+});
+
+describe("Table selection", () => {
+  it("single-select ignores a click on an ineligible row", () => {
+    const onSelectionChange = jest.fn();
+    render(
+      <Table
+        items={ROWS}
+        columns={[
+          { kind: "qualifier", canSelect: (row) => row.id !== "b" },
+          ...COLUMNS,
+        ]}
+        getRowId={(row) => row.id}
+        selectionBehavior="single-select"
+        onSelectionChange={onSelectionChange}
+      />
+    );
+    fireEvent.click(screen.getByText("Row b"));
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Row a"));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["a"]));
+  });
+
+  it("disables Select all when no row can be selected", () => {
+    render(
+      <Table
+        items={ROWS}
+        columns={[{ kind: "qualifier", canSelect: () => false }, ...COLUMNS]}
+        getRowId={(row) => row.id}
+        selectionBehavior="multi-select"
+      />
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select all" })
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("disables Select all when the search hides every row that can be selected", () => {
+    render(
+      <Table
+        items={ROWS}
+        columns={[
+          { kind: "qualifier", canSelect: (row: Row) => row.id === "a" },
+          ...COLUMNS,
+        ]}
+        getRowId={(row) => row.id}
+        selectionBehavior="multi-select"
+        query="Row b"
+      />
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select all" })
+    ).toHaveAttribute("aria-disabled", "true");
   });
 });

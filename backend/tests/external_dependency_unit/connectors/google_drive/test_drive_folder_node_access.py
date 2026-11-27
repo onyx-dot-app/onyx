@@ -283,14 +283,22 @@ def _visible_to_group_member(db_session: Session, group_ids: set[str]) -> set[st
     }
 
 
+@pytest.mark.parametrize(
+    "admin_drive_membership",
+    [1.0, 0.0],
+    ids=["admin-in-every-drive", "admin-in-no-drive"],
+)
 def test_doc_sync_keeps_folder_node_group_access(
     own_mock_drive: MockDrive,
     db_session: Session,
     ee_drive_nodes: None,  # noqa: ARG001
+    admin_drive_membership: float,
 ) -> None:
-    # Folder permissions are read as the admin, so the admin joins every
-    # drive. A group is a member of one of them.
-    own_mock_drive.set_corpus({**_SMALL_CORPUS, "admin_drive_membership": 1.0})
+    # A group is a member of a shared drive. When the admin is not a member,
+    # the folder permissions are read as the user who found the folder.
+    own_mock_drive.set_corpus(
+        {**_SMALL_CORPUS, "admin_drive_membership": admin_drive_membership}
+    )
     connector = own_mock_drive.build_connector()
     connector.set_raw_file_callback(_discard_raw_file)
     _persist(

@@ -4,6 +4,7 @@ import { useNavigation, useSearchParams } from "@opal/navigation";
 import {
   type AnimationEvent,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -85,11 +86,20 @@ import {
   useToolRequestUi,
   type WaitingToolRequest,
 } from "@/lib/chat/toolApprovals";
-import type { Packet, PublishedFile } from "@/app/app/services/streamingModels";
+import type {
+  Packet,
+  PublishedFile,
+  StreamCursor,
+} from "@/app/app/services/streamingModels";
+import { processRawChatHistory } from "@/app/app/services/lib";
+import { handleSSEStream } from "@/lib/search/streamingUtils";
+import { SubagentPathContext } from "@/lib/chat/subagents";
 import {
   APPROVAL_PENDING_ERROR_CODE,
+  type BackendMessage,
   type ChatSession,
   type ChatStream,
+  type Message,
 } from "@/app/app/types";
 import {
   exportChatSession,
@@ -997,6 +1007,10 @@ export function publishedFilesOf(
 
 const NO_SUBAGENTS: ChatSubagent[] = [];
 
+/** The most agents the agents endpoint returns: the backend's
+ * `MAX_DISCOVERED_AGENTS` (onyx/chat/models.py). */
+export const MAX_LISTED_SUBAGENTS = 128;
+
 /**
  * The chat's background agents, by the newest response that started them,
  * and `stopAgent`, which stops one agent and the agents below it. They load
@@ -1007,30 +1021,34 @@ const NO_SUBAGENTS: ChatSubagent[] = [];
  * once a list has been read from the server since the hook mounted.
  */
 export function useChatSubagents(
-  sessionId: string,
+  sessionId: string | null,
   streaming: boolean
 ): ChatSubagents {
   const t = useTranslations("chat.activity.agents");
   const { data: status, mutate: reloadStatus } = useSWR<
     ChatSessionStatus,
     Error
-  >(SWR_KEYS.chatSessionStatus(sessionId), errorHandlingFetcher, {
-    // A number while a reply streams: each streamed packet renders the
-    // caller again, and a new function would restart SWR's timer
-    refreshInterval: streaming
-      ? SERVER_WORK_POLL_MS
-      : (current) => statusPollInterval(current),
-    onErrorRetry: skipRetryOnAuthError,
-  });
+  >(
+    sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null,
+    errorHandlingFetcher,
+    {
+      // A number while a reply streams: each streamed packet renders the
+      // caller again, and a new function would restart SWR's timer
+      refreshInterval: streaming
+        ? SERVER_WORK_POLL_MS
+        : (current) => statusPollInterval(current),
+      onErrorRetry: skipRetryOnAuthError,
+    }
+  );
   const active = status?.has_active_subagents ?? false;
-  const url = SWR_KEYS.chatSessionAgents(sessionId);
+  const url = sessionId ? SWR_KEYS.chatSessionAgents(sessionId) : "";
   const {
     data,
     error,
     isValidating,
     mutate: reloadAgents,
   } = useSWR<ChatSubagent[], Error>(
-    status ? [url, active, status.latest_response_id] : null,
+    status && sessionId ? [url, active, status.latest_response_id] : null,
     () => errorHandlingFetcher<ChatSubagent[]>(url),
     {
       refreshInterval: active ? SERVER_WORK_POLL_MS : 0,
@@ -1046,6 +1064,7 @@ export function useChatSubagents(
   }
   const stopAgent = useCallback(
     async (agentId: string) => {
+      if (!sessionId) return;
       try {
         await errorHandlingFetchWith<unknown>(
           `/api/chat/chat-session/${sessionId}/stop-subagents`,
@@ -1295,4 +1314,213 @@ export function useTrackChatRuns(): void {
       }),
     []
   );
+}
+
+/** A background agent's saved conversation, with its live stream. */
+interface SubagentHistory {
+  messages: BackendMessage[];
+  packets: Packet[][];
+  stream: { stream_id: number; response_ids: number[] } | null;
+}
+
+interface SpawnedSubagents {
+  /** The agent for each name; undefined for an empty or unlisted name. */
+  agents: (ChatSubagent | undefined)[];
+  /**
+   * The chat has an agents list. Without one (such as a shared chat), an
+   * undefined agent is unknown, not starting. While the list loads, a spawn
+   * still counts as starting, so a running group does not flash done.
+   */
+  available: boolean;
+  /**
+   * The list is not cut off at the endpoint's cap, so an agent it lacks has
+   * not started yet. In a full list, an older agent can be missing.
+   */
+  complete: boolean;
+}
+
+/**
+ * The open chat's agents that the rendering agent spawned with these names,
+ * once the agents list holds them.
+ */
+export function useSpawnedSubagents(
+  names: readonly string[]
+): SpawnedSubagents {
+  const base = useContext(SubagentPathContext);
+  const sessionId = useChatSessionStore((state) => state.currentSessionId);
+  const { agents } = useChatSubagents(sessionId, false);
+  return {
+    agents: names.map((name) =>
+      name
+        ? agents.find((agent) => agent.path === `${base}/${name}`)
+        : undefined
+    ),
+    available: sessionId !== null,
+    complete: agents.length < MAX_LISTED_SUBAGENTS,
+  };
+}
+
+function isPacket(item: Packet | StreamCursor): item is Packet {
+  return "obj" in item;
+}
+
+async function* followSubagentStream(
+  sessionId: string,
+  agentId: string,
+  streamId: number,
+  cursor: number,
+  signal: AbortSignal
+): AsyncGenerator<Packet | StreamCursor, void, unknown> {
+  const response = await fetch(
+    `/api/chat/chat-session/${sessionId}/agents/${agentId}/stream?stream_id=${streamId}&cursor=${cursor}`,
+    { signal }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `HTTP error! status: ${response.status}`,
+      response.status,
+      null
+    );
+  yield* handleSSEStream<Packet | StreamCursor>(response, signal);
+}
+
+const RECONNECT_DELAY_MS = 1000;
+
+interface SubagentTranscript {
+  /** The conversation's messages, oldest first. */
+  messages: Message[];
+  loading: boolean;
+  failed: boolean;
+}
+
+/**
+ * A subagent's conversation: its saved history, and its running response's
+ * packets from the live stream, which the saved packets lag. `streamId` is
+ * the agents list's live stream for the agent: a new one reloads the history,
+ * which names the stream to follow; its end reloads the history too. The
+ * history reloads when the stream ends, and a dropped stream resumes from its
+ * last cursor. `runId` is the agent's latest run on the selected branch: the
+ * history is keyed on it, so another branch's transcript replaces the old one.
+ */
+export function useSubagentTranscript(
+  sessionId: string,
+  agentId: string,
+  streamId: number | null,
+  runId: number | null
+): SubagentTranscript {
+  const url = SWR_KEYS.chatSubagentHistory(sessionId, agentId);
+  const { data, error, isLoading, mutate } = useSWR<SubagentHistory, Error>(
+    [url, runId],
+    () => errorHandlingFetcher<SubagentHistory>(url),
+    { onErrorRetry: skipRetryOnAuthError, revalidateOnFocus: false }
+  );
+  const stream = data?.stream ?? null;
+  const followed = stream?.stream_id ?? null;
+  const liveResponseId = stream?.response_ids[0] ?? null;
+
+  // The agents list names another stream, or none once the agent ended
+  useEffect(() => {
+    if (streamId !== followed) void mutate();
+  }, [streamId, followed, mutate]);
+
+  const [live, setLive] = useState<{ streamId: number; packets: Packet[] }>({
+    streamId: 0,
+    packets: [],
+  });
+  useEffect(() => {
+    if (followed === null) return;
+    const controller = new AbortController();
+    let pending: Packet[] = [];
+    let frame: number | null = null;
+    // Packets land once per frame, as the chat's own stream does
+    const flush = () => {
+      frame = null;
+      const batch = pending;
+      pending = [];
+      setLive((current) =>
+        current.streamId === followed
+          ? { streamId: followed, packets: [...current.packets, ...batch] }
+          : { streamId: followed, packets: batch }
+      );
+    };
+    setLive({ streamId: followed, packets: [] });
+    void (async () => {
+      let cursor = 0;
+      let stopped = false;
+      // Until the stream sends its stop, or no longer serves this stream
+      while (!stopped && !controller.signal.aborted) {
+        // The stream sends a cursor after each batch of packets. A batch
+        // lands with its cursor, so a drop before it cannot repeat packets
+        let batch: Packet[] = [];
+        try {
+          for await (const item of followSubagentStream(
+            sessionId,
+            agentId,
+            followed,
+            cursor,
+            controller.signal
+          )) {
+            if (!isPacket(item)) {
+              cursor = item.next_cursor;
+              if (batch.length > 0) {
+                pending.push(...batch);
+                if (batch.some((packet) => packet.obj.type === "stop"))
+                  stopped = true;
+                batch = [];
+                if (frame === null) frame = requestAnimationFrame(flush);
+              }
+              continue;
+            }
+            const type = item.obj.type;
+            if (type === "chat_heartbeat" || type === "replay_end") continue;
+            batch.push(item);
+          }
+        } catch (failure) {
+          if (controller.signal.aborted) return;
+          // Gone, or no longer allowed: the history reload shows which
+          if (
+            failure instanceof FetchError &&
+            [401, 403, 404].includes(failure.status)
+          )
+            break;
+          console.warn("The subagent's live stream dropped", failure);
+        }
+        if (!stopped)
+          await new Promise((resolve) =>
+            setTimeout(resolve, RECONNECT_DELAY_MS)
+          );
+      }
+      if (controller.signal.aborted) return;
+      if (frame !== null) cancelAnimationFrame(frame);
+      flush();
+      // The saved response replaces the stream
+      void mutate();
+    })();
+    return () => {
+      controller.abort();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [sessionId, agentId, followed, mutate]);
+
+  const messages = useMemo(() => {
+    if (!data) return [];
+    // Each message the parent sends starts a reply that no earlier reply
+    // links to as its latest child, so the conversation reads in order
+    const chain = [
+      ...processRawChatHistory(data.messages, data.packets).values(),
+    ].sort((a, b) => (a.messageId ?? 0) - (b.messageId ?? 0));
+    const streamed = live.streamId === followed ? live.packets : [];
+    if (liveResponseId === null || streamed.length === 0) return chain;
+    return chain.map((message) =>
+      message.messageId === liveResponseId
+        ? { ...message, packets: streamed }
+        : message
+    );
+  }, [data, live, followed, liveResponseId]);
+
+  return {
+    messages,
+    loading: isLoading,
+    failed: error !== undefined,
+  };
 }
