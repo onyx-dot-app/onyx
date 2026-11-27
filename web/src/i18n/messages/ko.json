@@ -10411,7 +10411,8 @@
             "urlPlaceholder": "https://api.example.com/openapi.json",
             "submit": "가져오기",
             "done": "{count, plural, other {엔드포인트 #개를 가져왔습니다.}}",
-            "failed": "사양을 가져올 수 없습니다."
+            "failed": "사양을 가져올 수 없습니다.",
+            "noActions": "Onyx가 사양의 모든 작업을 건너뛰었으므로 현재 엔드포인트가 유지됩니다. 다른 사양을 사용하세요."
           },
           "baseUrl": {
             "title": "기본 URL",

@@ -81,6 +81,13 @@ export default function RestEndpointFields({
     onImportingChange(true);
     try {
       const view = await importOpenApiSpec(body);
+      setSkipped(view.skipped);
+      // Saving a spec with no endpoints would drop every current action.
+      if (view.endpoints.length === 0) {
+        setErrorSource("spec_url" in body ? "url" : "file");
+        onImportErrorChange(t("import.noActions"));
+        return;
+      }
       const specUrl = "spec_url" in body ? body.spec_url : null;
       // A file gives no URL to resolve a relative server against, and a spec
       // with no single server gives no URL, so the Base URL stays.
@@ -90,7 +97,6 @@ export default function RestEndpointFields({
           specBaseUrl(view.base_url, view.base_url.trim() ? specUrl : null) ??
           (draft.baseUrl.trim() || view.base_url),
       });
-      setSkipped(view.skipped);
       setErrorSource(null);
       onImportErrorChange(null);
       toast.success(t("import.done", { count: view.endpoints.length }));

@@ -10411,7 +10411,8 @@
             "urlPlaceholder": "https://api.example.com/openapi.json",
             "submit": "Importer",
             "done": "{count, plural, one {# endpoint importé.} other {# endpoints importés.}}",
-            "failed": "Impossible d'importer la spécification."
+            "failed": "Impossible d'importer la spécification.",
+            "noActions": "Onyx a ignoré toutes les opérations de la spécification, les endpoints actuels sont donc conservés. Utilisez une autre spécification."
           },
           "baseUrl": {
             "title": "URL de Base",

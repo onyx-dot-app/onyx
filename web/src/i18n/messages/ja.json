@@ -10411,7 +10411,8 @@
             "urlPlaceholder": "https://api.example.com/openapi.json",
             "submit": "インポート",
             "done": "{count, plural, other {# 件のエンドポイントをインポートしました。}}",
-            "failed": "仕様をインポートできませんでした。"
+            "failed": "仕様をインポートできませんでした。",
+            "noActions": "Onyx は仕様のすべての操作をスキップしたため、現在のエンドポイントはそのままです。別の仕様を使用してください。"
           },
           "baseUrl": {
             "title": "ベース URL",

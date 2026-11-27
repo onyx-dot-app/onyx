@@ -848,6 +848,46 @@ test("keeps the Base URL when an uploaded spec has a relative server", async () 
   ).toHaveValue(OPENAPI_VIEW.base_url);
 });
 
+test("a reimported spec with no endpoints keeps the current ones", async () => {
+  const skipped = "POST /reports: the request body is not JSON";
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": {
+      ...OPENAPI_VIEW,
+      openapi_document: '{"openapi": "3.0.0", "paths": {}}',
+      endpoints: [],
+      skipped: [skipped],
+    },
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.type(
+    await view.findByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://reports.example.com/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+
+  expect(
+    await view.findByText(copy.add.rest.import.noActions)
+  ).toBeInTheDocument();
+  expect(
+    view.getByRole("textbox", { name: copy.add.rest.endpoints.title })
+  ).toHaveValue("GET /reports List reports");
+  expect(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  ).toBeDisabled();
+});
+
 test("lists the operations that a reimported spec skipped", async () => {
   const skipped = "POST /reports: the request body is not JSON";
   mockFetch({

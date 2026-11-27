@@ -10411,7 +10411,8 @@
             "urlPlaceholder": "https://api.example.com/openapi.json",
             "submit": "Import",
             "done": "{count, plural, one {Imported # endpoint.} other {Imported # endpoints.}}",
-            "failed": "Could not import the spec."
+            "failed": "Could not import the spec.",
+            "noActions": "Onyx skipped every operation in the spec, so the current endpoints stay. Use another spec."
           },
           "baseUrl": {
             "title": "Base URL",

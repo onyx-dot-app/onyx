@@ -10411,7 +10411,8 @@
             "urlPlaceholder": "https://api.example.com/openapi.json",
             "submit": "导入",
             "done": "{count, plural, other {已导入 # 个端点。}}",
-            "failed": "无法导入规范。"
+            "failed": "无法导入规范。",
+            "noActions": "Onyx 跳过了规范中的所有操作，因此当前端点保持不变。请使用其他规范。"
           },
           "baseUrl": {
             "title": "基础 URL",
