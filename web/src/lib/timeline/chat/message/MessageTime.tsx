@@ -4,6 +4,12 @@ import { isToday, isYesterday } from "date-fns";
 import { useFormatter, useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 
+/** Hides a message's footer row until the message (a `group/message`) is
+ * hovered for 250ms. Open menus, keyboard focus and touch screens keep it
+ * shown. */
+export const MESSAGE_FOOTER_REVEAL =
+  "opacity-0 transition-opacity duration-0 group-hover/message:opacity-100 group-hover/message:delay-250 group-hover/message:duration-150 has-[:focus-visible]:opacity-100 has-[[aria-expanded=true]]:opacity-100 no-hover:opacity-100";
+
 interface MessageTimeProps {
   timeSent: string;
 }
