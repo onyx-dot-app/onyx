@@ -505,6 +505,7 @@ def test_import_refuses_servers_of_the_wrong_shape(servers: Any) -> None:
     [
         (lambda spec: spec.pop("info"), "`info` section is required"),
         (lambda spec: spec.update(openapi="2.0"), "'2.0' is not supported"),
+        (lambda spec: spec.update(openapi=3.0), "must be a version string"),
         (
             lambda spec: spec.update(swagger=spec.pop("openapi")),
             "Swagger 3.0.3 is not supported",
@@ -530,6 +531,52 @@ def test_import_tells_a_document_that_is_no_spec_apart(document: str) -> None:
         _import(document)
 
     assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
+def _deeply_nested_spec() -> dict[str, Any]:
+    spec = _callable_spec()
+    schema: dict[str, Any] = {"type": "string"}
+    for _ in range(3000):
+        schema = {"type": "object", "properties": {"a": schema}}
+    spec["paths"]["/deep"] = {
+        "post": {
+            "operationId": "deep",
+            "summary": "Deep",
+            "requestBody": {"content": {"application/json": {"schema": schema}}},
+            "responses": {"200": {"description": "OK"}},
+        }
+    }
+    return spec
+
+
+def test_import_refuses_a_spec_nested_too_deeply() -> None:
+    with pytest.raises(OnyxError, match="nested too deeply"):
+        _import(json.dumps(_deeply_nested_spec()))
+
+
+def test_create_refuses_a_spec_nested_too_deeply() -> None:
+    with pytest.raises(ValueError, match="nested too deeply"):
+        validate_openapi_schema(_deeply_nested_spec())
+
+
+def test_endpoint_lines_on_a_spec_nested_too_deeply_are_refused() -> None:
+    with pytest.raises(OnyxError, match="nested too deeply"):
+        _openapi_document(
+            OpenApiConfigInput(
+                openapi_document=json.dumps(_deeply_nested_spec()),
+                base_url="https://api.example.com",
+                endpoints=["GET /pets list_pets"],
+            ),
+            None,
+            title="Deep",
+            description=None,
+        )
+
+
+def test_a_stored_spec_nested_too_deeply_still_loads() -> None:
+    spec = _deeply_nested_spec()
+
+    assert parse_openapi_document(json.dumps(spec)) == spec
 
 
 def test_import_refuses_an_unpaired_surrogate() -> None:
