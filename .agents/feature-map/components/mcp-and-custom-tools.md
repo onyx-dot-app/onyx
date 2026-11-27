@@ -322,6 +322,9 @@ a call tells the model to ask the user to connect, and its auth error opens the
 connect card for the integration. Tool names use the integration id
 (`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>` (or `custom__<id>__<query|mutation>.<field>`, sanitized),
 `app__<id>__<action>`), and each tool has `id = None`.
+A failed `MCPTool` call returns `failed_tool_result` like the API tools, so
+its `CustomToolErrorInfo` marks a 401 or 403 as an auth error (with the reconnect
+card) and a transport error or timeout as unreachable.
 
 **Integrations API.** One API serves every integration. Routes:
 `server/features/integrations/admin_api.py` (`/admin/integrations`: list,
