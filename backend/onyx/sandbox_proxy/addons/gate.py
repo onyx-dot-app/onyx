@@ -1601,11 +1601,27 @@ def _approval_payload(
         if matched_actions.payload and raw_bytes <= 2 * _CARD_BODY_MAX_BYTES
         else None
     )
-    if body and len(json.dumps(body)) <= _CARD_BODY_MAX_BYTES:
+    if body and _storable_preview(body):
         payload["body"] = body
     elif raw_bytes:
         payload["body_bytes"] = raw_bytes
     return payload
+
+
+def _storable_preview(body: dict[str, Any]) -> bool:
+    """The body fits the card and Postgres JSONB takes it: no NUL and no
+    unpaired surrogate."""
+    text = json.dumps(body, ensure_ascii=False)
+    if len(text.encode("utf-8", "surrogatepass")) > _CARD_BODY_MAX_BYTES:
+        return False
+    # JSON escapes a NUL as \u0000, which JSONB refuses.
+    if "\\u0000" in text:
+        return False
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _approval_needs_tool(matched_actions: AllMatchedActions) -> http.Response:

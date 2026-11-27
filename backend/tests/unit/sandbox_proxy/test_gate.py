@@ -2759,6 +2759,23 @@ def test_a_command_card_shows_a_gmail_send_decoded() -> None:
     }
 
 
+@pytest.mark.parametrize("text", ["a\x00b", "a\ud800b"])
+def test_a_command_card_shows_the_size_of_a_body_jsonb_cannot_store(
+    text: str,
+) -> None:
+    """Postgres refuses a NUL or an unpaired surrogate in JSONB, so the card
+    shows the size and the request still waits for the user."""
+    ctx = _ctx().model_copy(update={"chat_command_id": _COMMAND})
+    flow = make_flow(raw_content=b'{"note": "x"}')
+
+    payload = gate._approval_payload(
+        flow, ctx, make_matched_actions(payload={"note": text})
+    )
+
+    assert "body" not in payload
+    assert payload["body_bytes"] == len(b'{"note": "x"}')
+
+
 @pytest.mark.parametrize(
     ("scheme", "host", "port", "origin"),
     [
