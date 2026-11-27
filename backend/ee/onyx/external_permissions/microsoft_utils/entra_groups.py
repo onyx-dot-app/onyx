@@ -5,9 +5,10 @@ permissions names Entra groups and needs the same two things from Graph:
 expand one group into its members and nested groups, and enumerate a tenant's
 groups outright. SharePoint is the caller today.
 
-The external group name is ``{displayName}_{groupId}``, built only through
-:func:`entra_group_name`. Onyx prefixes it with the source when it stores the
-group, so the shape here only has to be stable within a source.
+The external group id is the Entra group id. Display names change and are not
+unique, and OneDrive and Azure Data Lake store the same id, so one Entra group
+has one id across the Microsoft sources. Onyx prefixes it with the source when
+it stores the group.
 
 This module knows nothing about SharePoint principal types or any other
 source-specific shape. Callers adapt :class:`ResolvedEntraGroup` into their own
@@ -42,33 +43,21 @@ ENTRA_GROUP_MEMBER_THRESHOLD = 1_000_000
 
 
 class ResolvedEntraGroup(BaseModel):
-    """An Entra group as a caller needs it: the id and its external group name."""
+    """An Entra group as a caller needs it. The id is also its external group id."""
 
     model_config = {"frozen": True}
 
     id: str
-    name: str
 
 
 def normalize_email(email: str) -> str:
     return email.replace(MICROSOFT_DOMAIN, "")
 
 
-def entra_group_name(display_name: str, group_id: str | None) -> str:
-    """The external group name for an Entra group.
-
-    Display names are not unique in Entra, so the id is part of the name. A
-    failed id lookup yields the literal ``None`` suffix. Persisted ACLs already
-    carry that name, so it must keep matching.
-    """
-    return f"{display_name}_{group_id}"
-
-
-def resolve_entra_group_name(
-    reader: EntraGroupReader, identifier: str, display_name: str
-) -> str:
-    """The external group name for a group known only by an identifier."""
-    return entra_group_name(display_name, resolve_group_id(reader, identifier))
+def resolve_entra_group_id(reader: EntraGroupReader, identifier: str) -> str | None:
+    """The external group id for a group known only by an identifier, or None
+    when Entra has no such group. A grant to an unresolved group matches no one."""
+    return resolve_group_id(reader, identifier)
 
 
 def expand_entra_group(
@@ -89,12 +78,8 @@ def expand_entra_group(
                 user_emails.add(normalize_email(email))
             logger.info("Added user: %s", email)
         elif member.kind == EntraMemberKind.GROUP:
-            if not member.display_name:
-                logger.error("No display name for group: %s", member.id)
-                continue
-            name = resolve_entra_group_name(reader, member.id, member.display_name)
-            groups.add(ResolvedEntraGroup(id=member.id, name=name))
-            logger.info("Added group: %s", name)
+            groups.add(ResolvedEntraGroup(id=member.id))
+            logger.info("Added group: %s", member.id)
         else:
             logger.warning("Could not identify member type for: %s", member)
 
@@ -110,12 +95,8 @@ def list_nested_entra_groups(
         logger.error("Failed to get Entra group id for %s", identifier)
         return set()
     return {
-        ResolvedEntraGroup(
-            id=group.id,
-            name=resolve_entra_group_name(reader, group.id, group.display_name),
-        )
+        ResolvedEntraGroup(id=group.id)
         for group in reader.list_nested_entra_groups(group_id=group_id)
-        if group.display_name
     }
 
 
@@ -126,7 +107,7 @@ def enumerate_entra_groups(
 ) -> Generator[ExternalUserGroup, None, None]:
     """Yield every Entra group in the tenant as an ExternalUserGroup.
 
-    Skips groups whose name is already in ``already_resolved``. Stops once
+    Skips groups whose id is already in ``already_resolved``. Stops once
     ``threshold`` groups have been seen.
     """
     total_groups = 0
@@ -137,8 +118,7 @@ def enumerate_entra_groups(
     )
     for group in groups:
         group_id = group.id
-        display_name = group.display_name
-        if not group_id or not display_name:
+        if not group_id:
             continue
 
         total_groups += 1
@@ -149,8 +129,7 @@ def enumerate_entra_groups(
             )
             return
 
-        name = entra_group_name(display_name, group_id)
-        if name in already_resolved:
+        if group_id in already_resolved:
             continue
 
         member_emails: list[str] = []
@@ -169,6 +148,6 @@ def enumerate_entra_groups(
                     f"Entra group `{group_id}` exceeds the member count limit."
                 )
 
-        yield ExternalUserGroup(id=name, user_emails=member_emails)
+        yield ExternalUserGroup(id=group_id, user_emails=member_emails)
 
     logger.info("Enumerated %s Entra groups via paginated Graph API", total_groups)

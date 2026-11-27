@@ -1260,7 +1260,7 @@ def get_last_modified_for_documents(
     return dict(db_session.execute(stmt).tuples().all())
 
 
-def _get_onedrive_permission_owned_doc_ids(
+def get_onedrive_permission_owned_doc_ids(
     db_session: Session, doc_ids: list[str]
 ) -> set[str]:
     """IDs of documents whose permissions an indexed, perm-synced OneDrive pair owns.
@@ -1398,7 +1398,7 @@ def upsert_documents(
             DbDocument.is_public,
         )
         onedrive_owned_doc_ids = (
-            _get_onedrive_permission_owned_doc_ids(
+            get_onedrive_permission_owned_doc_ids(
                 db_session, list(seen_documents.keys())
             )
             if source == DocumentSource.SHAREPOINT

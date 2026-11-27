@@ -280,11 +280,11 @@ export default function MessageToolbar({
           width="auto"
           height="fit"
           wrap
-          gap={0}
+          gap={0.5}
           className="max-w-[calc(100%-0.25rem)] ms-1"
         >
           {includeMessageSwitcher && (
-            <div className="-mx-1">
+            <div>
               <MessageSwitcher
                 currentPage={(currentMessageInd ?? 0) + 1}
                 totalPages={otherMessagesCanSwitchTo?.length || 0}
@@ -315,6 +315,7 @@ export default function MessageToolbar({
                 .map((element) => element?.innerHTML || "")
                 .join("\n")
             }
+            size="xs"
             data-testid="AgentMessage/copy-button"
           />
           {!incognitoEnabled && (
@@ -329,6 +330,7 @@ export default function MessageToolbar({
                     ? t("toolbar.likeButton.removeTooltip")
                     : t("toolbar.likeButton.tooltip")
                 }
+                size="xs"
                 data-testid="AgentMessage/like-button"
               />
               <SelectButton
@@ -341,6 +343,7 @@ export default function MessageToolbar({
                     ? t("toolbar.dislikeButton.removeTooltip")
                     : t("toolbar.dislikeButton.tooltip")
                 }
+                size="xs"
                 data-testid="AgentMessage/dislike-button"
               />
             </>
@@ -357,6 +360,7 @@ export default function MessageToolbar({
             <SelectButton
               chevron
               disabled
+              size="xs"
               icon={getModelIcon(currentModelProvider ?? "", readOnlyModelName)}
             >
               {readOnlyModelName}
@@ -406,6 +410,7 @@ export default function MessageToolbar({
                     return (
                       <SelectButton
                         chevron
+                        size="xs"
                         icon={SvgRefreshCw}
                         tooltip={t("toolbar.regenerateButton.tooltip")}
                         foldable={distinctModelsUsed <= 1}
