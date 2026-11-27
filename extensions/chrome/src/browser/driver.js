@@ -687,6 +687,9 @@ async function navigateTab(grant, tabId, target, readiness, deadline) {
     if (!isShared(grant, entry.url))
       throw new OperationError("failed", "That page is on a site that the user did not share with this chat.");
     await send(tabId, "Page.navigateToHistoryEntry", { entryId: entry.id });
+    // A page restored from the back-forward cache stays "interactive" with
+    // the debugger attached, so a history move waits for its parsed page.
+    readiness = "domcontentloaded";
   }
   stateOf(tabId).refs.clear();
   await sleep(POLL_MS);
