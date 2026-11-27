@@ -11426,6 +11426,8 @@
         "invalidScope": "Les autorisations demandées ne sont pas disponibles.",
         "loginBadCredentials": "Ce compte ne peut pas se connecter. Il est peut-être désactivé. Contactez l'administrateur de votre espace de travail.",
         "loginRequired": "Vous devez d'abord vous connecter avec votre fournisseur d'identité.",
+        "magicLinkInvalid": "Ce lien de connexion a expiré ou a déjà été utilisé. Demandez-en un nouveau.",
+        "magicLinkWrongEmail": "Ce lien a été envoyé à une autre adresse e-mail. Demandez un nouveau lien.",
         "oauthUserAlreadyExists": "Un compte avec cette adresse e-mail existe déjà avec une autre méthode de connexion. Connectez-vous comme la première fois, ou demandez à votre administrateur d'associer ce fournisseur.",
         "playgroundActiveTenant": "Une équipe de votre entreprise essaie déjà Onyx. Rejoindre votre équipe ou créer une nouvelle équipe ?",
         "playgroundAskAdmin": "Demandez à votre administrateur de vous inviter.",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "Rejoindre mon équipe"
+      },
+      "newLinkButton": {
+        "label": "Obtenir un nouveau lien"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11601,6 +11606,34 @@
       },
       "workEmailField": {
         "label": "E-mail professionnel"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "Ce lien a été ouvert dans un autre navigateur que celui qui l'a demandé. Saisissez l'adresse e-mail à laquelle il a été envoyé.",
+        "title": "Confirmez votre adresse e-mail"
+      },
+      "differentEmailButton": {
+        "label": "Utiliser une autre adresse e-mail"
+      },
+      "redeeming": {
+        "text": "Connexion en cours…"
+      },
+      "requestButton": {
+        "label": "Recevoir un lien par e-mail"
+      },
+      "resendWait": {
+        "error": "Un lien de connexion vient d'être envoyé à cette adresse. Consultez votre boîte de réception, ou attendez une minute et demandez-en un nouveau."
+      },
+      "sendFailed": {
+        "error": "Impossible d'envoyer l'e-mail de connexion. Réessayez dans un instant."
+      },
+      "sent": {
+        "description": "Nous avons envoyé un lien de connexion à {email}. Il fonctionne une seule fois et expire dans 15 minutes.",
+        "title": "Consultez vos e-mails"
+      },
+      "useSso": {
+        "error": "Connectez-vous avec votre fournisseur SSO. Les liens par e-mail sont désactivés pour cet espace de travail."
       }
     },
     "passwordRequirements": {
@@ -12943,11 +12976,10 @@
         },
         "submitError": "Impossible d'envoyer vos réponses. Réessayez.",
         "record": {
-          "answered": "Répondu",
+          "answeredCount": "{count, plural, one {# question répondue} other {# questions répondues}}",
           "answeredInChat": "Répondu dans le chat",
           "cancelled": "Sans réponse",
           "closed": "N'attend plus",
-          "answer": "{header} : {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
@@ -17323,7 +17355,9 @@
           "publishOff": {
             "description": "Un administrateur a désactivé la publication dans l’organisation. Demandez à un administrateur de publier ce plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx n'a pas pu charger vos groupes, les partages de groupe ne peuvent donc pas changer. Fermez et rouvrez cette boîte de dialogue pour réessayer.",
+        "groupSharesLocked": "Cette compétence est partagée avec un groupe que vous ne gérez pas, vous ne pouvez donc pas modifier ses partages de groupe. Demandez à un gestionnaire de compétences de l'organisation."
       },
       "tabs": {
         "details": "Détails",
@@ -17432,7 +17466,8 @@
         "disableFailed": "Échec de la désactivation de {name}",
         "enableFailed": "Échec de l'activation de {name}",
         "refreshFailed": "{name} a été mise à jour, mais la liste des compétences n'a pas pu être actualisée.",
-        "listRefreshFailed": "La liste des compétences n'a pas pu être actualisée. Rechargez la page pour voir la modification."
+        "listRefreshFailed": "La liste des compétences n'a pas pu être actualisée. Rechargez la page pour voir la modification.",
+        "requiredHolder": "Impossible d'activer {name}. Une compétence obligatoire porte déjà ce nom."
       }
     },
     "sections": {
@@ -17475,7 +17510,8 @@
       "upload": {
         "error": {
           "readFailed": "Impossible de lire le fichier téléversé.",
-          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}"
+          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}",
+          "unsupportedFile": "{name} n'est pas un fichier ZIP ou SKILL.md. Importez un ZIP, un fichier SKILL.md ou un dossier de skill."
         }
       }
     },
@@ -17494,6 +17530,8 @@
       "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
       "failed": "Impossible de mettre à jour les compétences. Réessayez.",
       "partialFailure": "{count, plural, one {# compétence n’a pas pu être mise à jour} other {# compétences n’ont pas pu être mises à jour}}",
+      "deleted": "{count, plural, one {# compétence supprimée} other {# compétences supprimées}}",
+      "deleteFailure": "{count, plural, one {# compétence n’a pas pu être supprimée} other {# compétences n’ont pas pu être supprimées}}",
       "deleteTitle": "{count, plural, one {Supprimer # compétence ?} other {Supprimer # compétences ?}}",
       "deleteDescription": "{count, plural, one {La compétence sélectionnée sera supprimée pour toutes les personnes qui y ont accès. Cette action est irréversible.} other {Les # compétences sélectionnées seront supprimées pour toutes les personnes qui y ont accès. Cette action est irréversible.}}",
       "shareTitle": "{count, plural, one {Mettre à jour l’accès à # compétence} other {Mettre à jour l’accès à # compétences}}",
@@ -17506,7 +17544,8 @@
       "publishWarning": {
         "title": "La publication est irréversible",
         "description": "Après l'application, tout le monde dans l'organisation peut utiliser les compétences sélectionnées. Les compétences publiées ne peuvent plus redevenir privées. Seul un administrateur peut les supprimer."
-      }
+      },
+      "skipped": "{count, plural, one {# compétence ne peut pas être activée ou désactivée par vous et a été ignorée} other {# compétences ne peuvent pas être activées ou désactivées par vous et ont été ignorées}}"
     },
     "reviewRequests": {
       "title": "Demandes de publication",
@@ -17808,6 +17847,7 @@
         "newPlugin": "Nouveau plugin : {name}"
       },
       "willBeOff": "Le plugin est enregistré désactivé. {names} a déjà une compétence du même nom.",
+      "willClash": "{names} a déjà une compétence du même nom. Une seule d'entre elles peut être activée.",
       "saveAsNew": {
         "label": "Enregistrer comme Nouveau Plugin",
         "description": "Le plugin qui porte ce nom reste inchangé."
@@ -17839,7 +17879,8 @@
         "newPlugin": "{name} ajouté.",
         "newVersion": "{name} mis à jour vers la version Onyx {version}.",
         "unchanged": "Aucun changement. {name} est déjà à la version Onyx {version}.",
-        "off": "{name} ajouté. Il est désactivé car {names} a déjà une compétence du même nom."
+        "off": "{name} ajouté. Il est désactivé car {names} a déjà une compétence du même nom.",
+        "clash": "{name} a été mis à jour vers la version Onyx {version}. {names} a déjà une compétence du même nom, une seule d'entre elles est donc activée."
       }
     },
     "turnOn": {
@@ -18010,6 +18051,8 @@
       "updated": "{count, plural, one {# plugin mis à jour} other {# plugins mis à jour}}",
       "failed": "Impossible de mettre à jour les plugins. Réessayez.",
       "partialFailure": "{count, plural, one {# plugin n’a pas pu être mis à jour} other {# plugins n’ont pas pu être mis à jour}}",
+      "deleted": "{count, plural, one {# plugin supprimé} other {# plugins supprimés}}",
+      "deleteFailure": "{count, plural, one {# plugin n’a pas pu être supprimé} other {# plugins n’ont pas pu être supprimés}}",
       "deleteTitle": "{count, plural, one {Supprimer # plugin ?} other {Supprimer # plugins ?}}",
       "deleteDescription": "{count, plural, one {Le plugin sélectionné sera supprimé pour toutes les personnes qui y ont accès. Cette action est irréversible.} other {Les # plugins sélectionnés seront supprimés pour toutes les personnes qui y ont accès. Cette action est irréversible.}}",
       "shareTitle": "{count, plural, one {Mettre à jour l’accès à # plugin} other {Mettre à jour l’accès à # plugins}}",
@@ -18018,7 +18061,8 @@
       "apply": "{count, plural, one {Appliquer à # plugin} other {Appliquer à # plugins}}",
       "publishWarning": {
         "description": "Après l'application, tout le monde dans l'organisation peut utiliser les plugins sélectionnés. Les plugins publiés ne peuvent plus redevenir privés. Seul un administrateur peut les supprimer."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin ne peut pas être activé ou désactivé par vous et a été ignoré} other {# plugins ne peuvent pas être activés ou désactivés par vous et ont été ignorés}}"
     }
   },
   "integrations": {
@@ -18344,7 +18388,7 @@
       },
       "confirmDelete": {
         "title": "Supprimer « {name} » ?",
-        "description": "La tâche cesse de s'exécuter et son historique d'exécution est supprimé.",
+        "description": "La tâche ne s’exécute plus. Les chats de ses exécutions passées sont conservés.",
         "submit": "Supprimer"
       }
     },
@@ -18357,7 +18401,8 @@
       "markAllViewed": "Tout marquer comme vu",
       "markAllViewedFailed": "Impossible de marquer les exécutions comme vues. Réessayez.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Exécuter une fois} other {Planification}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Annulée : l'exécution suivante a démarré avant que quiconque réponde à l'approbation.} approval_timeout {Annulée : personne n'a répondu à l'approbation dans les 24 heures.} user_cancelled {Arrêtée par vous.} agent_permission_required {Une action nécessitait une approbation.} agent_exception {Échec : l’exécution a rencontré une erreur.} stuck {Échec : l’exécution n’a pas démarré à temps.} timeout {Échec : l’exécution a atteint la limite d’une heure.} other {Échouée : {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Annulée : l'exécution suivante a démarré avant que quiconque réponde à l'approbation.} approval_timeout {Annulée : personne n'a répondu à l'approbation dans les 24 heures.} user_cancelled {Arrêtée par vous.} agent_permission_required {Une action nécessitait une approbation.} agent_exception {Échec : l’exécution a rencontré une erreur.} stuck {Échec : l’exécution n’a pas démarré à temps.} timeout {Échec : l’exécution a atteint la limite d’une heure.} chat_deleted {Annulée : le chat de cette exécution a été supprimé.} owner_cannot_chat {Échec : vous ne pouvez plus discuter, la tâche est donc en pause.} rate_limited {Échec : la limite d’utilisation a été atteinte.} other {Échouée : {errorClass}}}",
+      "errorDetail": "Échec : {detail}",
       "columns": {
         "started": "Début",
         "status": "Statut",
@@ -18395,7 +18440,8 @@
         "title": "Exécuter selon la planification",
         "label": "Exécuter {name} selon la planification"
       },
-      "menu": "Plus d’actions"
+      "menu": "Plus d’actions",
+      "notFound": "Cette tâche planifiée a été supprimée ou appartient à un autre utilisateur."
     },
     "editor": {
       "newTitle": "Nouvelle tâche planifiée",
@@ -18407,7 +18453,8 @@
       "saveAndRun": "Enregistrer et exécuter maintenant",
       "errors": {
         "nameRequired": "Saisissez un nom.",
-        "promptRequired": "Saisissez un prompt."
+        "promptRequired": "Saisissez un prompt.",
+        "tooLong": "Utilisez {max, number} caractères au maximum."
       },
       "toasts": {
         "created": "Tâche planifiée créée.",

@@ -3,6 +3,7 @@
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
+import { redactCapturedRequest, redactEventUrls } from "@/lib/analytics/redact";
 
 /**
  * Initialize PostHog. Idempotent, so the build-time path (PHProvider) and the
@@ -16,9 +17,13 @@ export function initPostHog(key: string, host?: string | null): void {
     person_profiles: "identified_only",
     capture_pageview: false,
     cross_subdomain_cookie: false,
+    // Sign-in, verification and reset links carry a token in the URL.
+    before_send: redactEventUrls,
     session_recording: {
       // Sensitive inputs should use data-ph-no-capture attribute
       maskAllInputs: false,
+      // Replays record the page URL too, which can carry those tokens.
+      maskCapturedNetworkRequestFn: redactCapturedRequest,
     },
   });
 }

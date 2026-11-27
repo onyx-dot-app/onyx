@@ -163,8 +163,11 @@ test("the Other note is one of the choices and the answer follows the continuati
       },
     ],
   });
-  expect(screen.getByRole("status")).toHaveTextContent("Answered");
-  expect(screen.getByText("Scope: Docs and the README")).toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("Answered 1 question");
+  await user.click(
+    screen.getByRole("button", { name: "Expand Answered 1 question" })
+  );
+  expect(screen.getByText("Docs and the README")).toBeVisible();
 });
 
 test("a multi-select question takes several options and a note", async () => {
@@ -226,9 +229,10 @@ test("a multi-select question takes several options and a note", async () => {
       },
     ],
   });
-  expect(
-    screen.getByText("Channels: Email and Wiki (Teams too)")
-  ).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Expand Answered 1 question" })
+  );
+  expect(screen.getByText("Email and Wiki (Teams too)")).toBeVisible();
 });
 
 test("each option of a multi-select question shows whether it is chosen with a mark", async () => {
@@ -498,10 +502,12 @@ test("each question has its own page, and the choices stay across pages", async 
       { question_id: "tone", option_labels: ["Formal"], user_note: null },
     ],
   });
-  // The record's title lists every answer.
-  expect(
-    screen.getByText("Scope: Docs · Format: A table · Tone: Formal")
-  ).toBeInTheDocument();
+  // The record's title counts the answers; its body pairs each with its question.
+  await user.click(
+    screen.getByRole("button", { name: "Expand Answered 3 questions" })
+  );
+  expect(screen.getByText("How should the notes look?")).toBeVisible();
+  expect(screen.getByText("A table")).toBeVisible();
 });
 
 describe("record", () => {
@@ -511,7 +517,7 @@ describe("record", () => {
     );
   }
 
-  test("an answered question is a step titled with its answer that opens onto the question", async () => {
+  test("an answered question is a step titled with the answer count that opens onto the question and its answer", async () => {
     const user = setupUser();
     renderRecord({
       kind: "answered",
@@ -525,9 +531,8 @@ describe("record", () => {
       message: null,
     });
 
-    expect(screen.getByRole("status")).toHaveTextContent("Answered");
-    const title = "Scope: Docs (and the README)";
-    expect(screen.getByText(title)).toBeInTheDocument();
+    const title = "Answered 1 question";
+    expect(screen.getByRole("status")).toHaveTextContent(title);
     const toggle = screen.getByRole("button", { name: `Expand ${title}` });
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");

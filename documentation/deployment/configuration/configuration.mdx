@@ -406,6 +406,9 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
 
     `REQUIRE_EMAIL_VERIFICATION`: Require email verification for registration
 
+    `MAGIC_LINK_ENABLED`: Add "Get a link by email" to the sign-in page. Needs SMTP or SendGrid.
+    See [Basic Auth](/deployment/authentication/basic#sign-in-with-an-email-link).
+
     `TRACK_EXTERNAL_IDP_EXPIRY`: Honor the `expires_at` field returned by the external identity provider.
     Disabled be default because many auth providers have very short expiry times.
 

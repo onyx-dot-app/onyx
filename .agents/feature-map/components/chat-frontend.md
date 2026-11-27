@@ -203,9 +203,8 @@
   with `multi_select` reads "Choose all that apply." and shows its options
   as checkboxes; the user toggles any of them and can also write in Other.
   The record joins several chosen options as a list. The record is a closed
-  timeline step titled with each "Header: answer", joined by " · ", or with
-  the outcome when the card has no answers; it opens onto each question and
-  its answer. The user submits on the last page,
+  timeline step titled "Answered N questions", or with the outcome when the
+  card has no answers; it opens onto each question and its answer. The user submits on the last page,
   where Submit replaces Next. Submit stays disabled, with a hint that
   names the unanswered questions, until each question has an answer.
   Waiting cards show in their own region after the approval

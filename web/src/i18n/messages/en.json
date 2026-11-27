@@ -11426,6 +11426,8 @@
         "invalidScope": "The requested permissions are not available.",
         "loginBadCredentials": "This account can't sign in. It may be deactivated. Contact your workspace admin.",
         "loginRequired": "You need to log in with your identity provider first.",
+        "magicLinkInvalid": "This sign-in link has expired or was already used. Ask for a new one.",
+        "magicLinkWrongEmail": "This link was sent to a different email address. Ask for a new link.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
         "playgroundActiveTenant": "A team from your company is already trying Onyx. Join your team, or start a new team?",
         "playgroundAskAdmin": "Ask your admin to invite you.",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "Join your team"
+      },
+      "newLinkButton": {
+        "label": "Get a new link"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11601,6 +11606,34 @@
       },
       "workEmailField": {
         "label": "Work Email"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "This link was opened in a different browser from the one that asked for it. Enter the email address it was sent to.",
+        "title": "Confirm your email"
+      },
+      "differentEmailButton": {
+        "label": "Use a different email"
+      },
+      "redeeming": {
+        "text": "Signing you in…"
+      },
+      "requestButton": {
+        "label": "Get a link by email"
+      },
+      "resendWait": {
+        "error": "A sign-in link was sent to this address a moment ago. Check your inbox, or wait a minute and ask again."
+      },
+      "sendFailed": {
+        "error": "Could not send the sign-in email. Try again in a moment."
+      },
+      "sent": {
+        "description": "We sent a sign-in link to {email}. It works once and expires in 15 minutes.",
+        "title": "Check your email"
+      },
+      "useSso": {
+        "error": "Sign in with your SSO provider. Email links are turned off for this workspace."
       }
     },
     "passwordRequirements": {
@@ -12943,11 +12976,10 @@
         },
         "submitError": "Could not send your answers. Try again.",
         "record": {
-          "answered": "Answered",
+          "answeredCount": "{count, plural, one {Answered # question} other {Answered # questions}}",
           "answeredInChat": "Answered in the chat",
           "cancelled": "Not answered",
           "closed": "No longer waiting",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
@@ -17323,7 +17355,9 @@
           "publishOff": {
             "description": "An admin turned off publishing to the organization. Ask an admin to publish this plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx could not load your groups, so group shares cannot change. Close and open this dialog to try again.",
+        "groupSharesLocked": "This skill is shared with a group you do not manage, so you cannot change its group shares. Ask an organization-wide skill manager."
       },
       "tabs": {
         "details": "Details",
@@ -17432,7 +17466,8 @@
         "disableFailed": "Failed to disable {name}",
         "enableFailed": "Failed to enable {name}",
         "refreshFailed": "{name} was updated, but the skill list could not be refreshed.",
-        "listRefreshFailed": "The skill list could not be refreshed. Reload the page to see the change."
+        "listRefreshFailed": "The skill list could not be refreshed. Reload the page to see the change.",
+        "requiredHolder": "{name} cannot be turned on. A required skill already has this name."
       }
     },
     "sections": {
@@ -17475,7 +17510,8 @@
       "upload": {
         "error": {
           "readFailed": "Could not read the upload.",
-          "folderRoot": "{upload, select, plugin {The selected folder must contain SKILL.md or a plugin.json manifest at its top level.} other {The selected folder must contain SKILL.md at its top level.}}"
+          "folderRoot": "{upload, select, plugin {The selected folder must contain SKILL.md or a plugin.json manifest at its top level.} other {The selected folder must contain SKILL.md at its top level.}}",
+          "unsupportedFile": "{name} is not a ZIP or SKILL.md file. Upload a ZIP, a SKILL.md file, or a skill folder."
         }
       }
     },
@@ -17494,6 +17530,8 @@
       "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
       "failed": "Could not update skills. Try again.",
       "partialFailure": "{count, plural, one {# skill could not be updated} other {# skills could not be updated}}",
+      "deleted": "{count, plural, one {# skill deleted} other {# skills deleted}}",
+      "deleteFailure": "{count, plural, one {# skill could not be deleted} other {# skills could not be deleted}}",
       "deleteTitle": "{count, plural, one {Delete # skill?} other {Delete # skills?}}",
       "deleteDescription": "{count, plural, one {This deletes the selected skill for everyone who has access. This cannot be undone.} other {This deletes all # selected skills for everyone who has access. This cannot be undone.}}",
       "shareTitle": "{count, plural, one {Update Access for # Skill} other {Update Access for # Skills}}",
@@ -17506,7 +17544,8 @@
       "publishWarning": {
         "title": "Publishing cannot be undone",
         "description": "After you apply, everyone in the organization can use the selected skills. Published skills cannot be made private again. Only an admin can delete them."
-      }
+      },
+      "skipped": "{count, plural, one {# skill cannot be turned on or off by you and was skipped} other {# skills cannot be turned on or off by you and were skipped}}"
     },
     "reviewRequests": {
       "title": "Publish Requests",
@@ -17808,6 +17847,7 @@
         "newPlugin": "New plugin: {name}"
       },
       "willBeOff": "The plugin is saved off. {names} already has a skill with the same name.",
+      "willClash": "{names} already has a skill with the same name. Only one of them can be on.",
       "saveAsNew": {
         "label": "Save as a New Plugin",
         "description": "Keep the plugin that has this name as it is."
@@ -17839,7 +17879,8 @@
         "newPlugin": "Added {name}.",
         "newVersion": "Updated {name} to Onyx version {version}.",
         "unchanged": "No changes. {name} is already at Onyx version {version}.",
-        "off": "Added {name}. It is off because {names} already has a skill with the same name."
+        "off": "Added {name}. It is off because {names} already has a skill with the same name.",
+        "clash": "Updated {name} to Onyx version {version}. {names} already has a skill with the same name, so only one of them is on."
       }
     },
     "turnOn": {
@@ -18010,6 +18051,8 @@
       "updated": "{count, plural, one {# plugin updated} other {# plugins updated}}",
       "failed": "Could not update plugins. Try again.",
       "partialFailure": "{count, plural, one {# plugin could not be updated} other {# plugins could not be updated}}",
+      "deleted": "{count, plural, one {# plugin deleted} other {# plugins deleted}}",
+      "deleteFailure": "{count, plural, one {# plugin could not be deleted} other {# plugins could not be deleted}}",
       "deleteTitle": "{count, plural, one {Delete # plugin?} other {Delete # plugins?}}",
       "deleteDescription": "{count, plural, one {This deletes the selected plugin for everyone who has access. This cannot be undone.} other {This deletes all # selected plugins for everyone who has access. This cannot be undone.}}",
       "shareTitle": "{count, plural, one {Update Access for # Plugin} other {Update Access for # Plugins}}",
@@ -18018,7 +18061,8 @@
       "apply": "{count, plural, one {Apply to # plugin} other {Apply to # plugins}}",
       "publishWarning": {
         "description": "After you apply, everyone in the organization can use the selected plugins. Published plugins cannot be made private again. Only an admin can delete them."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin cannot be turned on or off by you and was skipped} other {# plugins cannot be turned on or off by you and were skipped}}"
     }
   },
   "integrations": {
@@ -18344,7 +18388,7 @@
       },
       "confirmDelete": {
         "title": "Delete \"{name}\"?",
-        "description": "The task stops running and its run history goes away.",
+        "description": "The task stops running. Chats of its past runs are kept.",
         "submit": "Delete"
       }
     },
@@ -18357,7 +18401,8 @@
       "markAllViewed": "Mark all viewed",
       "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} agent_exception {Failed: the run hit an error.} stuck {Failed: the run did not start in time.} timeout {Failed: the run reached the one-hour limit.} other {Failed: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} agent_exception {Failed: the run hit an error.} stuck {Failed: the run did not start in time.} timeout {Failed: the run reached the one-hour limit.} chat_deleted {Cancelled: the chat of this run was deleted.} owner_cannot_chat {Failed: you can no longer chat, so the task is paused.} rate_limited {Failed: the usage limit was reached.} other {Failed: {errorClass}}}",
+      "errorDetail": "Failed: {detail}",
       "columns": {
         "started": "Started",
         "status": "Status",
@@ -18395,7 +18440,8 @@
         "title": "Run on schedule",
         "label": "Run {name} on schedule"
       },
-      "menu": "More actions"
+      "menu": "More actions",
+      "notFound": "This scheduled task was deleted, or it belongs to another user."
     },
     "editor": {
       "newTitle": "New Scheduled Task",
@@ -18407,7 +18453,8 @@
       "saveAndRun": "Save and run now",
       "errors": {
         "nameRequired": "Enter a name.",
-        "promptRequired": "Enter a prompt."
+        "promptRequired": "Enter a prompt.",
+        "tooLong": "Use {max, number} characters or fewer."
       },
       "toasts": {
         "created": "Scheduled task created.",

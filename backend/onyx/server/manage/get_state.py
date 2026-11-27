@@ -11,8 +11,13 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from onyx import __version__
+from onyx.auth.magic_link import is_sso_only
 from onyx.auth.users import anonymous_user_enabled, user_needs_to_be_verified
-from onyx.configs.app_configs import OAUTH_ENABLED
+from onyx.configs.app_configs import (
+    EMAIL_CONFIGURED,
+    MAGIC_LINK_ENABLED,
+    OAUTH_ENABLED,
+)
 from onyx.configs.constants import (
     DEV_VERSION_PATTERN,
     PUBLIC_API_TAGS,
@@ -239,6 +244,10 @@ async def get_auth_type(response: Response) -> AuthConfigResponse:
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
         password_auth_enabled=security.password_auth_enabled,
+        magic_link_enabled=MAGIC_LINK_ENABLED
+        and EMAIL_CONFIGURED
+        # A display hint: the routes check again, strictly.
+        and not is_sso_only(allow_fallback=True),
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
         default_language=(
             None

@@ -11426,6 +11426,8 @@
         "invalidScope": "요청한 권한을 사용할 수 없습니다.",
         "loginBadCredentials": "이 계정으로는 로그인할 수 없습니다. 비활성화되었을 수 있습니다. 워크스페이스 관리자에게 문의하세요.",
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
+        "magicLinkInvalid": "이 로그인 링크는 만료되었거나 이미 사용되었습니다. 새 링크를 요청하세요.",
+        "magicLinkWrongEmail": "이 링크는 다른 이메일 주소로 전송되었습니다. 새 링크를 요청하세요.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
         "playgroundActiveTenant": "회사의 팀이 이미 Onyx를 사용해 보고 있습니다. 팀에 참여하시겠습니까, 새 팀을 시작하시겠습니까?",
         "playgroundAskAdmin": "관리자에게 초대를 요청하세요.",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "팀에 참여"
+      },
+      "newLinkButton": {
+        "label": "새 링크 받기"
       },
       "playgroundHeading": {
         "title": "Onyx 플레이그라운드"
@@ -11601,6 +11606,34 @@
       },
       "workEmailField": {
         "label": "회사 이메일"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "이 링크는 요청한 브라우저와 다른 브라우저에서 열렸습니다. 링크를 받은 이메일 주소를 입력하세요.",
+        "title": "이메일 확인"
+      },
+      "differentEmailButton": {
+        "label": "다른 이메일 사용"
+      },
+      "redeeming": {
+        "text": "로그인하는 중…"
+      },
+      "requestButton": {
+        "label": "이메일로 링크 받기"
+      },
+      "resendWait": {
+        "error": "방금 이 주소로 로그인 링크를 보냈습니다. 받은편지함을 확인하거나 1분 후에 다시 요청하세요."
+      },
+      "sendFailed": {
+        "error": "로그인 이메일을 보낼 수 없습니다. 잠시 후 다시 시도하세요."
+      },
+      "sent": {
+        "description": "{email}(으)로 로그인 링크를 보냈습니다. 링크는 한 번만 사용할 수 있으며 15분 후에 만료됩니다.",
+        "title": "이메일을 확인하세요"
+      },
+      "useSso": {
+        "error": "SSO 공급자로 로그인하세요. 이 워크스페이스에서는 이메일 링크가 꺼져 있습니다."
       }
     },
     "passwordRequirements": {
@@ -12943,11 +12976,10 @@
         },
         "submitError": "답변을 보내지 못했습니다. 다시 시도하세요.",
         "record": {
-          "answered": "답변함",
+          "answeredCount": "{count, plural, other {질문 #개에 답변함}}",
           "answeredInChat": "채팅에서 답변함",
           "cancelled": "답변하지 않음",
           "closed": "더 이상 대기하지 않음",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
@@ -17323,7 +17355,9 @@
           "publishOff": {
             "description": "관리자가 조직 게시를 껐습니다. 관리자에게 이 플러그인 게시를 요청하세요."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx가 그룹을 불러오지 못해 그룹 공유를 변경할 수 없습니다. 이 대화 상자를 닫았다가 다시 열어 주세요.",
+        "groupSharesLocked": "이 스킬은 관리하지 않는 그룹과 공유되어 있어 그룹 공유를 변경할 수 없습니다. 조직 전체 스킬 관리자에게 요청하세요."
       },
       "tabs": {
         "details": "세부 정보",
@@ -17432,7 +17466,8 @@
         "disableFailed": "{name}을(를) 비활성화하지 못했습니다",
         "enableFailed": "{name}을(를) 활성화하지 못했습니다",
         "refreshFailed": "{name}이(가) 업데이트되었지만 스킬 목록을 새로고침할 수 없습니다.",
-        "listRefreshFailed": "스킬 목록을 새로고침할 수 없습니다. 페이지를 다시 불러와 변경 사항을 확인하세요."
+        "listRefreshFailed": "스킬 목록을 새로고침할 수 없습니다. 페이지를 다시 불러와 변경 사항을 확인하세요.",
+        "requiredHolder": "{name}을(를) 켤 수 없습니다. 필수 스킬이 이미 이 이름을 사용하고 있습니다."
       }
     },
     "sections": {
@@ -17475,7 +17510,8 @@
       "upload": {
         "error": {
           "readFailed": "업로드한 파일을 읽지 못했습니다.",
-          "folderRoot": "{upload, select, plugin {선택한 폴더의 최상위에 SKILL.md 또는 plugin.json 매니페스트가 있어야 합니다.} other {선택한 폴더의 최상위에 SKILL.md가 있어야 합니다.}}"
+          "folderRoot": "{upload, select, plugin {선택한 폴더의 최상위에 SKILL.md 또는 plugin.json 매니페스트가 있어야 합니다.} other {선택한 폴더의 최상위에 SKILL.md가 있어야 합니다.}}",
+          "unsupportedFile": "{name}은(는) ZIP 또는 SKILL.md 파일이 아닙니다. ZIP, SKILL.md 파일 또는 스킬 폴더를 업로드하세요."
         }
       }
     },
@@ -17494,6 +17530,8 @@
       "updated": "{count, plural, one {스킬 #개 업데이트됨} other {스킬 #개 업데이트됨}}",
       "failed": "스킬을 업데이트하지 못했습니다. 다시 시도하세요.",
       "partialFailure": "{count, plural, one {스킬 #개를 업데이트하지 못했습니다} other {스킬 #개를 업데이트하지 못했습니다}}",
+      "deleted": "{count, plural, one {스킬 #개 삭제됨} other {스킬 #개 삭제됨}}",
+      "deleteFailure": "{count, plural, one {스킬 #개를 삭제하지 못했습니다} other {스킬 #개를 삭제하지 못했습니다}}",
       "deleteTitle": "{count, plural, one {스킬 #개를 삭제할까요?} other {스킬 #개를 삭제할까요?}}",
       "deleteDescription": "{count, plural, one {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬을 삭제합니다. 이 작업은 취소할 수 없습니다.} other {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬 #개를 모두 삭제합니다. 이 작업은 취소할 수 없습니다.}}",
       "shareTitle": "{count, plural, one {스킬 #개의 액세스 업데이트} other {스킬 #개의 액세스 업데이트}}",
@@ -17506,7 +17544,8 @@
       "publishWarning": {
         "title": "게시는 취소할 수 없습니다",
         "description": "적용하면 조직의 모든 사용자가 선택한 스킬을 사용할 수 있습니다. 게시된 스킬은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
-      }
+      },
+      "skipped": "{count, plural, other {켜거나 끌 수 없는 스킬 #개를 건너뛰었습니다}}"
     },
     "reviewRequests": {
       "title": "게시 요청",
@@ -17808,6 +17847,7 @@
         "newPlugin": "새 플러그인: {name}"
       },
       "willBeOff": "플러그인이 꺼진 상태로 저장됩니다. {names}에 같은 이름의 스킬이 이미 있습니다.",
+      "willClash": "{names}에 같은 이름의 스킬이 이미 있습니다. 둘 중 하나만 켤 수 있습니다.",
       "saveAsNew": {
         "label": "새 플러그인으로 저장",
         "description": "이 이름의 플러그인은 그대로 둡니다."
@@ -17839,7 +17879,8 @@
         "newPlugin": "{name}을(를) 추가했습니다.",
         "newVersion": "{name}을(를) Onyx 버전 {version}(으)로 업데이트했습니다.",
         "unchanged": "변경 사항이 없습니다. {name}은(는) 이미 Onyx 버전 {version}입니다.",
-        "off": "{name}을(를) 추가했습니다. {names}에 같은 이름의 스킬이 있어 꺼져 있습니다."
+        "off": "{name}을(를) 추가했습니다. {names}에 같은 이름의 스킬이 있어 꺼져 있습니다.",
+        "clash": "{name}을(를) Onyx 버전 {version}(으)로 업데이트했습니다. {names}에 같은 이름의 스킬이 이미 있어 둘 중 하나만 켜집니다."
       }
     },
     "turnOn": {
@@ -18010,6 +18051,8 @@
       "updated": "{count, plural, one {플러그인 #개 업데이트됨} other {플러그인 #개 업데이트됨}}",
       "failed": "플러그인을 업데이트하지 못했습니다. 다시 시도하세요.",
       "partialFailure": "{count, plural, one {플러그인 #개를 업데이트하지 못했습니다} other {플러그인 #개를 업데이트하지 못했습니다}}",
+      "deleted": "{count, plural, one {플러그인 #개 삭제됨} other {플러그인 #개 삭제됨}}",
+      "deleteFailure": "{count, plural, one {플러그인 #개를 삭제하지 못했습니다} other {플러그인 #개를 삭제하지 못했습니다}}",
       "deleteTitle": "{count, plural, one {플러그인 #개를 삭제할까요?} other {플러그인 #개를 삭제할까요?}}",
       "deleteDescription": "{count, plural, one {액세스 권한이 있는 모든 사용자에 대해 선택한 플러그인을 삭제합니다. 이 작업은 취소할 수 없습니다.} other {액세스 권한이 있는 모든 사용자에 대해 선택한 플러그인 #개를 모두 삭제합니다. 이 작업은 취소할 수 없습니다.}}",
       "shareTitle": "{count, plural, one {플러그인 #개의 액세스 업데이트} other {플러그인 #개의 액세스 업데이트}}",
@@ -18018,7 +18061,8 @@
       "apply": "{count, plural, one {플러그인 #개에 적용} other {플러그인 #개에 적용}}",
       "publishWarning": {
         "description": "적용하면 조직의 모든 사용자가 선택한 플러그인을 사용할 수 있습니다. 게시된 플러그인은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
-      }
+      },
+      "skipped": "{count, plural, other {켜거나 끌 수 없는 플러그인 #개를 건너뛰었습니다}}"
     }
   },
   "integrations": {
@@ -18344,7 +18388,7 @@
       },
       "confirmDelete": {
         "title": "\"{name}\"을(를) 삭제할까요?",
-        "description": "작업 실행이 중지되고 실행 기록이 삭제됩니다.",
+        "description": "작업 실행이 중지됩니다. 이전 실행의 채팅은 유지됩니다.",
         "submit": "삭제"
       }
     },
@@ -18357,7 +18401,8 @@
       "markAllViewed": "모두 확인함으로 표시",
       "markAllViewedFailed": "실행을 확인함으로 표시하지 못했습니다. 다시 시도하세요.",
       "trigger": "{source, select, MANUAL_RUN_NOW {한 번 실행} other {일정}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {취소됨: 누군가 승인에 응답하기 전에 다음 실행이 시작되었습니다.} approval_timeout {취소됨: 24시간 이내에 아무도 승인에 응답하지 않았습니다.} user_cancelled {사용자가 중지했습니다.} agent_permission_required {작업에 승인이 필요했습니다.} agent_exception {실패: 실행 중 오류가 발생했습니다.} stuck {실패: 실행이 제때 시작되지 않았습니다.} timeout {실패: 실행이 1시간 제한에 도달했습니다.} other {실패: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {취소됨: 누군가 승인에 응답하기 전에 다음 실행이 시작되었습니다.} approval_timeout {취소됨: 24시간 이내에 아무도 승인에 응답하지 않았습니다.} user_cancelled {사용자가 중지했습니다.} agent_permission_required {작업에 승인이 필요했습니다.} agent_exception {실패: 실행 중 오류가 발생했습니다.} stuck {실패: 실행이 제때 시작되지 않았습니다.} timeout {실패: 실행이 1시간 제한에 도달했습니다.} chat_deleted {취소됨: 이 실행의 채팅이 삭제되었습니다.} owner_cannot_chat {실패: 더 이상 채팅할 수 없어 작업이 일시 중지되었습니다.} rate_limited {실패: 사용 한도에 도달했습니다.} other {실패: {errorClass}}}",
+      "errorDetail": "실패: {detail}",
       "columns": {
         "started": "시작",
         "status": "상태",
@@ -18395,7 +18440,8 @@
         "title": "일정에 따라 실행",
         "label": "일정에 따라 {name} 실행"
       },
-      "menu": "추가 작업"
+      "menu": "추가 작업",
+      "notFound": "이 예약 작업은 삭제되었거나 다른 사용자의 작업입니다."
     },
     "editor": {
       "newTitle": "새 예약된 작업",
@@ -18407,7 +18453,8 @@
       "saveAndRun": "저장하고 지금 실행",
       "errors": {
         "nameRequired": "이름을 입력하세요.",
-        "promptRequired": "프롬프트를 입력하세요."
+        "promptRequired": "프롬프트를 입력하세요.",
+        "tooLong": "{max, number}자 이하로 입력하세요."
       },
       "toasts": {
         "created": "예약된 작업을 만들었습니다.",

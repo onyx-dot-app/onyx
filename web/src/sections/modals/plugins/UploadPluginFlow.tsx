@@ -53,10 +53,13 @@ export default function UploadPluginFlow({
           toast.info(uploadCopy("saved.unchanged", values));
         } else if (name_conflicts.length > 0) {
           toast.warning(
-            uploadCopy("saved.off", {
-              ...values,
-              names: name_conflicts.join(", "),
-            })
+            uploadCopy(
+              target.kind === "new_version" ? "saved.clash" : "saved.off",
+              {
+                ...values,
+                names: name_conflicts.join(", "),
+              }
+            )
           );
         } else {
           toast.success(

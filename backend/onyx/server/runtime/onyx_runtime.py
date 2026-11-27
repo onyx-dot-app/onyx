@@ -65,18 +65,24 @@ class OnyxRuntime:
         return onyx_file
 
     @staticmethod
-    def get_logo() -> FileWithMimeType:
+    def get_logo(*, workspace_branding: bool = True) -> FileWithMimeType:
+        """``workspace_branding=False`` skips the workspace's uploaded logo, for
+        a caller with no workspace to read it from."""
         STATIC_FILENAME = "static/images/logo.png"
 
-        db_filename: str | None = fetch_ee_implementation_or_noop(
-            "onyx.server.enterprise_settings.store", "get_logo_filename", None
+        db_filename: str | None = (
+            fetch_ee_implementation_or_noop(
+                "onyx.server.enterprise_settings.store", "get_logo_filename", None
+            )
+            if workspace_branding
+            else None
         )
 
         return OnyxRuntime._get_with_static_fallback(db_filename, STATIC_FILENAME)
 
     @staticmethod
-    def get_emailable_logo() -> FileWithMimeType:
-        onyx_file = OnyxRuntime.get_logo()
+    def get_emailable_logo(*, workspace_branding: bool = True) -> FileWithMimeType:
+        onyx_file = OnyxRuntime.get_logo(workspace_branding=workspace_branding)
 
         # check dimensions and resize downwards if necessary or if not PNG
         image = Image.open(io.BytesIO(onyx_file.data))
