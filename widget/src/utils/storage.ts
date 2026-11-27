@@ -32,7 +32,7 @@ export function saveSession(
           ? {
               ...message,
               approvals: message.approvals.filter(
-                (entry) => !entry.request.app_name
+                (entry) => !entry.request.expires_at
               ),
             }
           : message

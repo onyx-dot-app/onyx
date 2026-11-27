@@ -131,7 +131,7 @@ describe("approval packets", () => {
 });
 
 describe("saved session", () => {
-  it("keeps command approval cards out of the host page's storage", () => {
+  it("keeps command approval cards out of the host page's storage, not app cards", () => {
     const saved = new Map<string, string>();
     const storage = {
       getItem: (key: string) => saved.get(key) ?? null,
@@ -154,16 +154,25 @@ describe("saved session", () => {
           can_approve_for_chat: false,
           can_approve_for_command: true,
           app_name: "Gmail",
+          expires_at: "2026-01-01T00:00:00Z",
         },
         outcome: null,
       };
-      saveSession("s", [streamingMessage([entry("1"), command])], "id");
+      const appCall: ApprovalEntry = {
+        request: { ...request("3"), app_name: "Gmail" },
+        outcome: null,
+      };
+      saveSession(
+        "s",
+        [streamingMessage([entry("1"), command, appCall])],
+        "id"
+      );
       const stored = saved.get("onyx-widget-session") ?? "";
       expect(stored).not.toContain("secret");
       const messages: ChatMessage[] = JSON.parse(stored).messages;
       expect(
         messages[0]?.approvals?.map((e) => e.request.approval_id)
-      ).toEqual(["1"]);
+      ).toEqual(["1", "3"]);
     } finally {
       if (original) Object.defineProperty(globalThis, "sessionStorage", original);
       else Reflect.deleteProperty(globalThis, "sessionStorage");

@@ -183,6 +183,8 @@ export interface ToolApprovalRequest {
   can_approve_for_command?: boolean;
   // The app of such a request
   app_name?: string | null;
+  // When a command's request expires; set only for a command's requests
+  expires_at?: string | null;
 }
 
 export interface ToolApprovalResolved {
