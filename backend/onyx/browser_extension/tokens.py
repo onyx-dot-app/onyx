@@ -5,16 +5,12 @@ since the websocket learns its tenant from the token."""
 import secrets
 from uuid import UUID
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
+from onyx.browser_extension.models import ExtensionTokenData
 from onyx.cache.factory import get_shared_cache_backend
 
 TOKEN_SECONDS = 60
-
-
-class ExtensionTokenData(BaseModel):
-    user_id: UUID
-    tenant_id: str
 
 
 def _token_key(token: str) -> str:

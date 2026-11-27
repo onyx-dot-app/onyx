@@ -6,6 +6,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.agents.models import MessageDelivery, RunStatus
+from onyx.browser_extension.models import (
+    CommandResult,
+    GrantReport,
+    Installation,
+    SharedTabs,
+)
 from onyx.chat.mention_models import Mentions, RecordedMention
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
@@ -635,3 +641,45 @@ class ChatArtifactFile(PublishedFileView):
 
     chat_id: UUID
     access: ChatArtifactAccess
+
+
+# The Onyx extension's socket and the chat's Chrome state
+# (chrome_browser.py).
+
+
+class ExtensionTokenResponse(BaseModel):
+    token: str
+
+
+class ExtensionHello(BaseModel):
+    type: Literal["hello"]
+    installation_id: UUID
+    label: str = Field(default="Chrome", max_length=200)
+    version: str = Field(default="", max_length=50)
+
+
+class CommandResultMessage(CommandResult):
+    type: Literal["result"]
+    command_id: str = Field(max_length=64)
+
+
+class GrantReportMessage(BaseModel):
+    type: Literal["grant"]
+    grant: GrantReport
+
+
+class GrantDenied(BaseModel):
+    type: Literal["grant_denied"]
+    chat_session_id: UUID
+    request_id: str = Field(max_length=64)
+
+
+class GrantEnded(BaseModel):
+    type: Literal["grant_ended"]
+    chat_session_id: UUID
+
+
+class ChromeBrowserState(BaseModel):
+    installations: list[Installation]
+    request: Literal["pending", "denied"] | None
+    grant: SharedTabs | None

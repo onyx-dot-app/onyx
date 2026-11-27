@@ -12,15 +12,16 @@ import pytest
 from pydantic import JsonValue
 
 from onyx.browser_extension import relay
-from onyx.browser_extension.relay import (
-    ChromeBrowser,
+from onyx.browser_extension.models import (
     CommandError,
     CommandResult,
     GrantReport,
     GrantTab,
     Presence,
 )
+from onyx.browser_extension.relay import ChromeBrowser
 from onyx.cache.interface import CacheBackend
+from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
 from onyx.tools.models import ToolCallException
 
@@ -32,22 +33,28 @@ def _use_cache(cache: CacheBackend, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(relay, "_cache", lambda _tenant_id: cache)
 
 
-def _shared_chat() -> tuple[UUID, UUID, Presence]:
-    """A user whose connected Chrome shares a tab with a new chat."""
-    user_id, chat_id = uuid4(), uuid4()
+def _connect(user_id: UUID, installation_id: UUID | None = None) -> Presence:
     presence = Presence(
-        installation_id=uuid4(), connection_id="c1", label="Chrome", version="1.3"
+        installation_id=installation_id or uuid4(),
+        connection_id=uuid4().hex,
+        label="Chrome",
+        version="1.3",
     )
     relay.claim_presence(_TENANT, user_id, presence)
+    return presence
+
+
+def _share(user_id: UUID, chat_id: UUID, presence: Presence) -> None:
+    """The installation approves a share request for the chat."""
     request = relay.request_grant(
         _TENANT,
         user_id,
         chat_id,
-        presence.installation_id,
+        presence,
         chat_title="Chat",
         account="a@example.com",
     )
-    message = relay.pop_message(_TENANT, user_id, presence.installation_id)
+    message = relay.pop_message(_TENANT, user_id, presence)
     assert message is not None and message["type"] == "grant_request"
     grant = relay.save_grant(
         _TENANT,
@@ -62,6 +69,13 @@ def _shared_chat() -> tuple[UUID, UUID, Presence]:
         ),
     )
     assert grant is not None
+
+
+def _shared_chat() -> tuple[UUID, UUID, Presence]:
+    """A user whose connected Chrome shares a tab with a new chat."""
+    user_id, chat_id = uuid4(), uuid4()
+    presence = _connect(user_id)
+    _share(user_id, chat_id, presence)
     return user_id, chat_id, presence
 
 
@@ -75,7 +89,7 @@ def _extension(
     def run() -> None:
         deadline = time.time() + 10
         while time.time() < deadline:
-            message = relay.pop_message(_TENANT, user_id, presence.installation_id)
+            message = relay.pop_message(_TENANT, user_id, presence)
             if message is not None and message["type"] == "command":
                 relay.push_result(_TENANT, str(message["command_id"]), answer(message))
                 return
@@ -158,28 +172,79 @@ def test_a_cancel_ends_the_wait() -> None:
     with cancellation_scope(signal), pytest.raises(AgentCancelled):
         browser.call("status", {}, timeout_seconds=30)
     # The queued command never reaches the extension.
-    assert relay.pop_message(_TENANT, user_id, _presence.installation_id) is None
+    assert relay.pop_message(_TENANT, user_id, _presence) is None
 
 
 def test_a_command_past_its_deadline_is_dropped(cache: CacheBackend) -> None:
-    user_id, installation_id = uuid4(), uuid4()
+    user_id = uuid4()
+    presence = _connect(user_id)
     cache.rpush(
-        relay.commands_key(user_id, installation_id),
+        relay.commands_key(user_id, presence.installation_id, presence.connection_id),
         json.dumps({"type": "command", "deadline": time.time() - 1}),
     )
-    assert relay.pop_message(_TENANT, user_id, installation_id) is None
+    assert relay.pop_message(_TENANT, user_id, presence) is None
+
+
+def test_an_unread_message_list_expires(cache: CacheBackend) -> None:
+    if isinstance(cache, PostgresCacheBackend):
+        pytest.skip("Postgres list items expire one by one on their own.")
+    user_id, chat_id, presence = _shared_chat()
+    relay.end_grant(_TENANT, user_id, chat_id, notify=True)
+    key = relay.commands_key(user_id, presence.installation_id, presence.connection_id)
+    assert 0 < cache.ttl(key) <= relay.REQUEST_SECONDS
 
 
 def test_a_newer_connection_takes_the_installation_over() -> None:
     user_id = uuid4()
-    first = Presence(
-        installation_id=uuid4(), connection_id="old", label="Chrome", version="1.3"
-    )
-    relay.claim_presence(_TENANT, user_id, first)
-    newer = first.model_copy(update={"connection_id": "new"})
-    relay.claim_presence(_TENANT, user_id, newer)
+    first = _connect(user_id)
+    newer = _connect(user_id, first.installation_id)
+    assert not relay.owns_presence(_TENANT, user_id, first)
     assert not relay.renew_presence(_TENANT, user_id, first)
     assert relay.renew_presence(_TENANT, user_id, newer)
+    # Messages go to the newer connection only.
+    relay.request_grant(
+        _TENANT, user_id, uuid4(), newer, chat_title="Chat", account="a@example.com"
+    )
+    assert relay.pop_message(_TENANT, user_id, first) is None
+    message = relay.pop_message(_TENANT, user_id, newer)
+    assert message is not None and message["type"] == "grant_request"
     # The old connection's close leaves the newer presence alone.
     relay.drop_presence(_TENANT, user_id, first)
-    assert relay.is_connected(_TENANT, user_id, first.installation_id)
+    assert relay.owns_presence(_TENANT, user_id, newer)
+    assert [
+        p.connection_id for p in relay.connected_installations(_TENANT, user_id)
+    ] == [newer.connection_id]
+
+
+def test_a_takeover_loses_the_command_at_once() -> None:
+    user_id, chat_id, presence = _shared_chat()
+    browser = ChromeBrowser(tenant_id=_TENANT, user_id=user_id, chat_session_id=chat_id)
+    threading.Timer(1, lambda: _connect(user_id, presence.installation_id)).start()
+    started = time.monotonic()
+    with pytest.raises(ToolCallException) as raised:
+        browser.call("act", {"action": "click"}, timeout_seconds=30)
+    assert raised.value.llm_facing_message == relay.LOST_MESSAGE
+    assert time.monotonic() - started < 10
+
+
+def test_a_ping_keeps_the_installation_listed(cache: CacheBackend) -> None:
+    user_id = uuid4()
+    presence = _connect(user_id)
+    # The list lapsed (it lives a day); the live socket's ping restores it.
+    cache.set_remove(relay._installations_key(user_id), str(presence.installation_id))
+    assert relay.connected_installations(_TENANT, user_id) == []
+    assert relay.renew_presence(_TENANT, user_id, presence)
+    assert relay.connected_installations(_TENANT, user_id) == [presence]
+
+
+def test_a_chat_that_moved_keeps_its_grant() -> None:
+    """Chat X moves from installation A to B; A's next share leaves X's grant
+    with B alone."""
+    user_id, chat_x, chat_y = uuid4(), uuid4(), uuid4()
+    work, home = _connect(user_id), _connect(user_id)
+    _share(user_id, chat_x, work)
+    _share(user_id, chat_x, home)
+    _share(user_id, chat_y, work)
+    grant = relay.load_grant(_TENANT, chat_x, user_id)
+    assert grant is not None and grant.installation_id == home.installation_id
+    assert relay.load_grant(_TENANT, chat_y, user_id) is not None

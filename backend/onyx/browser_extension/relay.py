@@ -6,25 +6,35 @@ server, so the two meet in the cache:
 
 - Presence: each connected installation renews `presence` while its socket
   lives. `installations` lists the user's installations.
-- Commands: a turn pushes onto the installation's `commands` list; the server
-  that holds its socket pops and sends them. A command carries its deadline,
-  so a late one is dropped, never run.
+- Commands: a turn pushes onto the `commands` list of the installation's
+  current connection; the server that holds that socket pops and sends them.
+  A replaced socket reads only its own list, so it never takes a message
+  meant for the newer one. A command carries its deadline, so a late one is
+  dropped, never run, and the list expires when nothing reads it.
 - Results: the socket's server pushes the answer onto `result:{command_id}`;
   the turn waits on it with a bounded poll and checks its cancel signal.
 - Grants: the user shares tabs and sites with one chat in the extension. The
   extension and the server both keep the grant, and both check it. One
   installation serves one chat at a time; a new grant ends the old one.
+  Grant changes of a chat run under the chat's lock, so a late tab report
+  cannot bring back a grant that Stop ended.
 
 Everything here lives in the cache with a TTL. Chat history is the record.
 """
 
 import json
 import time
-from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 
+from onyx.browser_extension.models import (
+    ChromeGrant,
+    CommandResult,
+    GrantReport,
+    GrantRequest,
+    Presence,
+)
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.llm.cancellation import current_cancellation
@@ -45,6 +55,7 @@ _RESULT_SECONDS = 120
 MAX_GRANT_SECONDS = 8 * 3600
 # One poll of the result list; the turn checks its cancel signal between polls.
 _POLL_SECONDS = 1
+_GRANT_LOCK_SECONDS = 10
 MAX_INSTALLATIONS = 20
 
 
@@ -56,8 +67,8 @@ def _installations_key(user_id: UUID) -> str:
     return f"{_PREFIX}:installations:{user_id}"
 
 
-def commands_key(user_id: UUID, installation_id: UUID) -> str:
-    return f"{_PREFIX}:commands:{user_id}:{installation_id}"
+def commands_key(user_id: UUID, installation_id: UUID, connection_id: str) -> str:
+    return f"{_PREFIX}:commands:{user_id}:{installation_id}:{connection_id}"
 
 
 def _result_key(command_id: str) -> str:
@@ -76,68 +87,12 @@ def _grant_key(chat_session_id: UUID) -> str:
     return f"{_PREFIX}:grant:{chat_session_id}"
 
 
+def _grant_lock_key(chat_session_id: UUID) -> str:
+    return f"{_PREFIX}:grant_lock:{chat_session_id}"
+
+
 def _installation_grant_key(user_id: UUID, installation_id: UUID) -> str:
     return f"{_PREFIX}:installation_grant:{user_id}:{installation_id}"
-
-
-class Installation(BaseModel):
-    """A connected Chrome with the Onyx extension, as the web app sees it."""
-
-    installation_id: UUID
-    label: str = Field(max_length=200)
-    version: str = Field(max_length=50)
-
-
-class Presence(Installation):
-    # The installation's current socket; a newer one replaces it.
-    connection_id: str
-
-
-class GrantTab(BaseModel):
-    id: str = Field(max_length=50)
-    title: str = Field(default="", max_length=500)
-    url: str = Field(default="", max_length=2048)
-
-
-class SharedTabs(BaseModel):
-    """What the user shared with one chat, as the web app sees it."""
-
-    tabs: list[GrantTab] = Field(max_length=50)
-    origins: list[str] = Field(max_length=50)
-    expires_at: float
-
-
-class ChromeGrant(SharedTabs):
-    user_id: UUID
-    installation_id: UUID
-    chat_session_id: UUID
-
-
-class GrantReport(SharedTabs):
-    """A grant as the extension reports it: on approval (with the request)
-    and after each change of its tabs."""
-
-    chat_session_id: UUID
-    request_id: str | None = None
-
-
-class GrantRequest(BaseModel):
-    """The chat's one share request; a newer request replaces it."""
-
-    request_id: str
-    user_id: UUID
-    installation_id: UUID
-    state: Literal["pending", "denied"]
-
-
-class CommandError(BaseModel):
-    message: str = Field(max_length=4000)
-
-
-class CommandResult(BaseModel):
-    ok: bool
-    result: dict[str, JsonValue] | None = None
-    error: CommandError | None = None
 
 
 def _cache(tenant_id: str) -> CacheBackend:
@@ -161,15 +116,26 @@ def _load[ModelT: BaseModel](
 # ---- presence ----
 
 
+def _add_installation(
+    cache: CacheBackend, user_id: UUID, installation_id: UUID
+) -> None:
+    installations = _installations_key(user_id)
+    cache.set_add(installations, str(installation_id))
+    cache.expire(installations, _INSTALLATIONS_SECONDS)
+
+
 def renew_presence(tenant_id: str, user_id: UUID, presence: Presence) -> bool:
     """Renew the installation's presence for this connection. False when a
     newer connection of the installation took it over."""
     cache = _cache(tenant_id)
-    key = _presence_key(user_id, presence.installation_id)
-    current = _load(cache, key, Presence)
-    if current is not None and current.connection_id != presence.connection_id:
+    if not owns_presence(tenant_id, user_id, presence):
         return False
-    cache.set(key, presence.model_dump_json(), ex=PRESENCE_SECONDS)
+    cache.set(
+        _presence_key(user_id, presence.installation_id),
+        presence.model_dump_json(),
+        ex=PRESENCE_SECONDS,
+    )
+    _add_installation(cache, user_id, presence.installation_id)
     return True
 
 
@@ -181,9 +147,16 @@ def claim_presence(tenant_id: str, user_id: UUID, presence: Presence) -> None:
         presence.model_dump_json(),
         ex=PRESENCE_SECONDS,
     )
-    installations = _installations_key(user_id)
-    cache.set_add(installations, str(presence.installation_id))
-    cache.expire(installations, _INSTALLATIONS_SECONDS)
+    _add_installation(cache, user_id, presence.installation_id)
+
+
+def owns_presence(tenant_id: str, user_id: UUID, presence: Presence) -> bool:
+    """False when a newer connection of the installation took it over. A
+    lapsed presence still belongs to its connection until another claims it."""
+    current = _load(
+        _cache(tenant_id), _presence_key(user_id, presence.installation_id), Presence
+    )
+    return current is None or current.connection_id == presence.connection_id
 
 
 def drop_presence(tenant_id: str, user_id: UUID, presence: Presence) -> None:
@@ -211,8 +184,10 @@ def connected_installations(tenant_id: str, user_id: UUID) -> list[Presence]:
     return present
 
 
-def is_connected(tenant_id: str, user_id: UUID, installation_id: UUID) -> bool:
-    return _cache(tenant_id).exists(_presence_key(user_id, installation_id))
+def _connection(
+    cache: CacheBackend, user_id: UUID, installation_id: UUID
+) -> Presence | None:
+    return _load(cache, _presence_key(user_id, installation_id), Presence)
 
 
 # ---- messages to the extension ----
@@ -221,23 +196,25 @@ def is_connected(tenant_id: str, user_id: UUID, installation_id: UUID) -> bool:
 def _send(
     cache: CacheBackend,
     user_id: UUID,
-    installation_id: UUID,
+    presence: Presence,
     message: dict[str, JsonValue],
     deadline: float,
 ) -> None:
-    cache.rpush(
-        commands_key(user_id, installation_id),
-        json.dumps({**message, "deadline": deadline}),
-    )
+    key = commands_key(user_id, presence.installation_id, presence.connection_id)
+    cache.rpush(key, json.dumps({**message, "deadline": deadline}))
+    # No message lives past REQUEST_SECONDS, so an unread list goes with them.
+    cache.expire(key, REQUEST_SECONDS)
 
 
 def pop_message(
-    tenant_id: str, user_id: UUID, installation_id: UUID
+    tenant_id: str, user_id: UUID, presence: Presence
 ) -> dict[str, JsonValue] | None:
-    """The next live message for the installation, waiting up to one poll.
+    """The next live message for this connection, waiting up to one poll.
     Messages past their deadline are dropped."""
-    popped = _cache(tenant_id).blpop(
-        [commands_key(user_id, installation_id)], timeout=_POLL_SECONDS
+    cache = _cache(tenant_id)
+    popped = cache.blpop(
+        [commands_key(user_id, presence.installation_id, presence.connection_id)],
+        timeout=_POLL_SECONDS,
     )
     if popped is None:
         return None
@@ -251,9 +228,7 @@ def pop_message(
     if not isinstance(deadline, (int, float)) or deadline < time.time():
         return None
     command_id = message.get("command_id")
-    if isinstance(command_id, str) and _cache(tenant_id).exists(
-        _cancelled_key(command_id)
-    ):
+    if isinstance(command_id, str) and cache.exists(_cancelled_key(command_id)):
         return None
     return message
 
@@ -281,17 +256,18 @@ def request_grant(
     tenant_id: str,
     user_id: UUID,
     chat_session_id: UUID,
-    installation_id: UUID,
+    presence: Presence,
     *,
     chat_title: str,
     account: str,
 ) -> GrantRequest:
-    """Ask the installation to show its consent window for the chat."""
+    """Ask the installation's connection to show its consent window for the
+    chat."""
     cache = _cache(tenant_id)
     request = GrantRequest(
         request_id=uuid4().hex,
         user_id=user_id,
-        installation_id=installation_id,
+        installation_id=presence.installation_id,
         state="pending",
     )
     cache.set(
@@ -300,7 +276,7 @@ def request_grant(
     _send(
         cache,
         user_id,
-        installation_id,
+        presence,
         {
             "type": "grant_request",
             "request_id": request.request_id,
@@ -368,57 +344,75 @@ def save_grant(
     installation's pending request for the chat; a change must be of this
     installation's grant. Returns None when neither holds."""
     cache = _cache(tenant_id)
-    if report.request_id is not None:
-        if (
-            _pending_request(
-                cache,
-                user_id,
-                installation_id,
-                report.chat_session_id,
-                report.request_id,
-            )
-            is None
-        ):
-            return None
-        cache.delete(_request_key(report.chat_session_id))
-    else:
-        existing = _load(cache, _grant_key(report.chat_session_id), ChromeGrant)
-        if (
+    chat_session_id = report.chat_session_id
+    with cache.lock(_grant_lock_key(chat_session_id), timeout=_GRANT_LOCK_SECONDS):
+        existing = _load(cache, _grant_key(chat_session_id), ChromeGrant)
+        if report.request_id is not None:
+            if (
+                _pending_request(
+                    cache, user_id, installation_id, chat_session_id, report.request_id
+                )
+                is None
+            ):
+                return None
+            cache.delete(_request_key(chat_session_id))
+        elif (
             existing is None
             or existing.user_id != user_id
             or existing.installation_id != installation_id
         ):
             return None
-    now = time.time()
-    expires_at = min(report.expires_at, now + MAX_GRANT_SECONDS)
-    if expires_at <= now or not report.tabs:
-        end_grant(tenant_id, user_id, report.chat_session_id, notify=False)
-        return None
-    # One installation serves one chat: a new grant ends the one before.
-    installation_key = _installation_grant_key(user_id, installation_id)
-    previous = cache.get(installation_key)
-    if previous is not None and previous.decode() != str(report.chat_session_id):
-        cache.delete(_grant_key(UUID(previous.decode())))
-    grant = ChromeGrant(
-        user_id=user_id,
-        installation_id=installation_id,
-        chat_session_id=report.chat_session_id,
-        tabs=report.tabs,
-        origins=report.origins,
-        expires_at=expires_at,
-    )
-    ttl = max(1, int(expires_at - now))
-    cache.set(_grant_key(report.chat_session_id), grant.model_dump_json(), ex=ttl)
-    cache.set(installation_key, str(report.chat_session_id), ex=ttl)
-    return grant
+        now = time.time()
+        expires_at = min(report.expires_at, now + MAX_GRANT_SECONDS)
+        if expires_at <= now or not report.tabs:
+            _end_grant(cache, user_id, chat_session_id, notify=False)
+            return None
+        # One installation serves one chat: a new grant ends the one before.
+        installation_key = _installation_grant_key(user_id, installation_id)
+        previous = cache.get(installation_key)
+        if previous is not None and previous.decode() != str(chat_session_id):
+            previous_chat = UUID(previous.decode())
+            previous_grant = _load(cache, _grant_key(previous_chat), ChromeGrant)
+            # Only while that grant is still this installation's.
+            if (
+                previous_grant is not None
+                and previous_grant.installation_id == installation_id
+            ):
+                cache.delete(_grant_key(previous_chat))
+        # A chat moved from another installation leaves that one free.
+        if existing is not None and existing.installation_id != installation_id:
+            cache.delete_if_value(
+                _installation_grant_key(user_id, existing.installation_id),
+                str(chat_session_id).encode(),
+            )
+        grant = ChromeGrant(
+            user_id=user_id,
+            installation_id=installation_id,
+            chat_session_id=chat_session_id,
+            tabs=report.tabs,
+            origins=report.origins,
+            expires_at=expires_at,
+        )
+        ttl = max(1, int(expires_at - now))
+        cache.set(_grant_key(chat_session_id), grant.model_dump_json(), ex=ttl)
+        cache.set(installation_key, str(chat_session_id), ex=ttl)
+        return grant
 
 
 def end_grant(
     tenant_id: str, user_id: UUID, chat_session_id: UUID, *, notify: bool
 ) -> None:
     """End the chat's grant. `notify` also tells the extension, for a stop
-    from Onyx; a stop in the extension already ended it there."""
+    from Onyx; a stop in the extension already ended it there. An extension
+    that is not connected learns it when it reports its grant on reconnect."""
     cache = _cache(tenant_id)
+    with cache.lock(_grant_lock_key(chat_session_id), timeout=_GRANT_LOCK_SECONDS):
+        _end_grant(cache, user_id, chat_session_id, notify=notify)
+
+
+def _end_grant(
+    cache: CacheBackend, user_id: UUID, chat_session_id: UUID, *, notify: bool
+) -> None:
     grant = _load(cache, _grant_key(chat_session_id), ChromeGrant)
     if grant is None or grant.user_id != user_id:
         return
@@ -427,11 +421,12 @@ def end_grant(
         _installation_grant_key(user_id, grant.installation_id),
         str(chat_session_id).encode(),
     )
-    if notify:
+    presence = _connection(cache, user_id, grant.installation_id)
+    if notify and presence is not None:
         _send(
             cache,
             user_id,
-            grant.installation_id,
+            presence,
             {"type": "end_grant", "chat_session_id": str(chat_session_id)},
             time.time() + REQUEST_SECONDS,
         )
@@ -474,16 +469,16 @@ class ChromeBrowser(BrowserBackend):
         grant = load_grant(self._tenant_id, self._chat_session_id, self._user_id)
         if grant is None:
             raise tool_error(NO_GRANT_MESSAGE)
-        installation_id = grant.installation_id
-        if not is_connected(self._tenant_id, self._user_id, installation_id):
-            raise tool_error(NOT_CONNECTED_MESSAGE)
         cache = _cache(self._tenant_id)
+        presence = _connection(cache, self._user_id, grant.installation_id)
+        if presence is None:
+            raise tool_error(NOT_CONNECTED_MESSAGE)
         command_id = uuid4().hex
         deadline = time.time() + timeout_seconds
         _send(
             cache,
             self._user_id,
-            installation_id,
+            presence,
             {
                 "type": "command",
                 "command_id": command_id,
@@ -506,7 +501,10 @@ class ChromeBrowser(BrowserBackend):
             popped = cache.blpop([_result_key(command_id)], timeout=_POLL_SECONDS)
             if popped is not None:
                 return _answer(popped[1])
-            if not is_connected(self._tenant_id, self._user_id, installation_id):
+            # The command waits in the list of the connection that it went
+            # to; a lost or replaced connection never answers it.
+            current = _connection(cache, self._user_id, grant.installation_id)
+            if current is None or current.connection_id != presence.connection_id:
                 raise tool_error(LOST_MESSAGE)
         raise tool_error(LOST_MESSAGE)
 

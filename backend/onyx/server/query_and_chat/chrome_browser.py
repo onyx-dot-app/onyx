@@ -11,30 +11,34 @@ extension). The relay logic is in `onyx/browser_extension/relay.py`.
 
 import asyncio
 import json
-from typing import Final, Literal
+from typing import Final
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 from starlette.websockets import WebSocketState
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_user_from_extension_token
 from onyx.browser_extension import relay
-from onyx.browser_extension.relay import (
-    CommandResult,
-    GrantReport,
-    Installation,
-    Presence,
-    SharedTabs,
-)
+from onyx.browser_extension.models import Presence
 from onyx.browser_extension.tokens import issue_extension_token
 from onyx.db.chat import get_owned_chat_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.query_and_chat.models import (
+    ChromeBrowserState,
+    CommandResultMessage,
+    ExtensionHello,
+    ExtensionTokenResponse,
+    GrantDenied,
+    GrantEnded,
+    GrantReportMessage,
+)
 from onyx.server.settings.store import load_browser_enabled
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -49,44 +53,6 @@ CLOSE_REPLACED: Final = 4409
 _HELLO_SECONDS = 10.0
 _MAX_MESSAGE_BYTES = 4 << 20
 _DISABLED = "Chats cannot use your Chrome in this workspace."
-
-
-class ExtensionTokenResponse(BaseModel):
-    token: str
-
-
-class ExtensionHello(BaseModel):
-    type: Literal["hello"]
-    installation_id: UUID
-    label: str = Field(default="Chrome", max_length=200)
-    version: str = Field(default="", max_length=50)
-
-
-class CommandResultMessage(CommandResult):
-    type: Literal["result"]
-    command_id: str = Field(max_length=64)
-
-
-class GrantReportMessage(BaseModel):
-    type: Literal["grant"]
-    grant: GrantReport
-
-
-class GrantDenied(BaseModel):
-    type: Literal["grant_denied"]
-    chat_session_id: UUID
-    request_id: str = Field(max_length=64)
-
-
-class GrantEnded(BaseModel):
-    type: Literal["grant_ended"]
-    chat_session_id: UUID
-
-
-class ChromeBrowserState(BaseModel):
-    installations: list[Installation]
-    request: Literal["pending", "denied"] | None
-    grant: SharedTabs | None
 
 
 def _check_enabled(user: User) -> None:
@@ -150,7 +116,7 @@ def request_chrome_browser(
         tenant_id,
         user.id,
         chat_session_id,
-        chosen.installation_id,
+        chosen,
         chat_title=title,
         account=user.email,
     )
@@ -175,8 +141,9 @@ async def chrome_extension_socket(
 ) -> None:
     tenant_id = get_current_tenant_id()
     await websocket.accept()
-    if not await asyncio.to_thread(load_browser_enabled, chrome=True):
-        await websocket.close(code=CLOSE_FORBIDDEN, reason=_DISABLED)
+    refusal = await asyncio.to_thread(_refusal, user.id)
+    if refusal is not None:
+        await websocket.close(code=refusal[0], reason=refusal[1])
         return
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), _HELLO_SECONDS)
@@ -196,13 +163,9 @@ async def chrome_extension_socket(
     pump = asyncio.create_task(_pump(websocket, tenant_id, user, presence))
     try:
         await asyncio.wait({reader, pump}, return_when=asyncio.FIRST_COMPLETED)
-        if reader.done():
-            close = reader.result()
-            if close is not None:
-                await _close(websocket, *close)
-        else:
-            # The pump never ends on its own; raise what stopped it.
-            pump.result()
+        close = reader.result() if reader.done() else pump.result()
+        if close is not None:
+            await _close(websocket, *close)
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -213,6 +176,18 @@ async def chrome_extension_socket(
             task.cancel()
         await asyncio.gather(reader, pump, return_exceptions=True)
         await asyncio.to_thread(relay.drop_presence, tenant_id, user.id, presence)
+
+
+def _refusal(user_id: UUID) -> tuple[int, str] | None:
+    """The close for a socket that may no longer serve: the admin switch is
+    off, or the account is no longer active."""
+    if not load_browser_enabled(chrome=True):
+        return CLOSE_FORBIDDEN, _DISABLED
+    with get_session_with_current_tenant() as db_session:
+        current = fetch_user_by_id(db_session, user_id)
+        if current is None or not current.is_active:
+            return CLOSE_FORBIDDEN, "This account is not active."
+    return None
 
 
 async def _close(websocket: WebSocket, code: int, reason: str) -> None:
@@ -240,8 +215,9 @@ async def _read(
             kind = message.get("type") if isinstance(message, dict) else None
             match kind:
                 case "ping":
-                    if not await asyncio.to_thread(load_browser_enabled, chrome=True):
-                        return CLOSE_FORBIDDEN, _DISABLED
+                    refusal = await asyncio.to_thread(_refusal, user.id)
+                    if refusal is not None:
+                        return refusal
                     renewed = await asyncio.to_thread(
                         relay.renew_presence, tenant_id, user.id, presence
                     )
@@ -258,6 +234,9 @@ async def _read(
                     )
                 case "grant":
                     report = GrantReportMessage.model_validate(message).grant
+                    refusal = await asyncio.to_thread(_refusal, user.id)
+                    if refusal is not None:
+                        return refusal
                     grant = await asyncio.to_thread(
                         relay.save_grant,
                         tenant_id,
@@ -298,11 +277,20 @@ async def _read(
 
 async def _pump(
     websocket: WebSocket, tenant_id: str, user: User, presence: Presence
-) -> None:
-    """Send the installation's queued messages as they arrive."""
+) -> tuple[int, str]:
+    """Send this connection's queued messages as they arrive. Returns the
+    close to send when the connection may no longer serve."""
     while True:
+        if not await asyncio.to_thread(
+            relay.owns_presence, tenant_id, user.id, presence
+        ):
+            return CLOSE_REPLACED, "Another connection took over."
         message = await asyncio.to_thread(
-            relay.pop_message, tenant_id, user.id, presence.installation_id
+            relay.pop_message, tenant_id, user.id, presence
         )
-        if message is not None:
-            await websocket.send_json(message)
+        if message is None:
+            continue
+        refusal = await asyncio.to_thread(_refusal, user.id)
+        if refusal is not None:
+            return refusal
+        await websocket.send_json(message)

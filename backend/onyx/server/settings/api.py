@@ -291,10 +291,6 @@ def fetch_settings(
         and general_settings.browser_enabled
         and user is not None
         and not user.is_anonymous,
-        chrome_browser_available=general_settings.browser_enabled
-        and general_settings.chrome_browser_enabled
-        and user is not None
-        and not user.is_anonymous,
         hooks_enabled=not MULTI_TENANT,
         is_playground=IS_PLAYGROUND,
         playground_restrictions=playground_restrictions(),
