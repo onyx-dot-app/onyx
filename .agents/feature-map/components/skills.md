@@ -1033,7 +1033,9 @@ the app from the same rule
     `reason` as the fallback (`lib/marketplaces/hooks.ts:useMarketplaceCopy`).
     `utils/github.py:github_rate_limited` puts GitHub's reset time in the
     error (`reset_at`), and a 422 for a ref that names no commit counts as
-    not found. The preview says when the caller or the company already has
+    not found. A sync failure from an `OnyxError` also stores its code and
+    reset time (`last_error_code`, `last_error_reset_at`), so the web shows
+    the same translated limit message as the preview (`syncError`). The preview says when the caller or the company already has
     the source (`db/marketplace.py:source_added_for`). `GitHubMarketplaceConfig` lowercases owner and repo, so the
     unique indexes catch a duplicate that differs only in case. Every JSON
     read in `skills/marketplace/reader.py` turns a `RecursionError` into a

@@ -81,6 +81,9 @@ export interface MarketplaceSummary {
   last_synced_at: string | null;
   last_synced_revision: string | null;
   last_error: string | null;
+  /** The OnyxErrorCode of last_error, if it has one. */
+  last_error_code: string | null;
+  last_error_reset_at: string | null;
   syncing: boolean;
   created_at: string;
 }

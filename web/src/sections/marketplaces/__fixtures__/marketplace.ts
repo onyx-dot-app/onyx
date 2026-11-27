@@ -23,6 +23,8 @@ export function summaryFixture(
     last_synced_at: "2026-11-01T10:00:00Z",
     last_synced_revision: "a".repeat(40),
     last_error: null,
+    last_error_code: null,
+    last_error_reset_at: null,
     syncing: false,
     created_at: "2026-10-01T10:00:00Z",
     ...over,

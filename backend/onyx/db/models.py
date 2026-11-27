@@ -5927,6 +5927,11 @@ class Marketplace(Base):
         DateTime(timezone=True), nullable=True
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The OnyxErrorCode of last_error, so the client can translate it.
+    last_error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error_reset_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_sync_result: Mapped[list[dict[str, Any]] | None] = mapped_column(
         PGJSONB(), nullable=True
     )

@@ -28,7 +28,10 @@ import {
   syncMarketplace,
 } from "@/lib/marketplaces/api";
 import useScreenSize from "@/hooks/useScreenSize";
-import type { MarketplacesState } from "@/lib/marketplaces/hooks";
+import {
+  type MarketplacesState,
+  useMarketplaceCopy,
+} from "@/lib/marketplaces/hooks";
 import type {
   MarketplaceDetail,
   MarketplaceSummary,
@@ -53,6 +56,7 @@ interface AttentionProps {
 function Attention({ marketplaces, busy, onSync }: AttentionProps) {
   const t = useTranslations("plugins.marketplaces.attention");
   const syncCopy = useTranslations("plugins.marketplaces.sync");
+  const copy = useMarketplaceCopy();
   return (
     <>
       {marketplaces.map((row) => (
@@ -62,7 +66,7 @@ function Attention({ marketplaces, busy, onSync }: AttentionProps) {
           outerPadding={1}
           innerPadding={1}
           title={t("failedTitle", { name: row.name })}
-          description={row.last_error ?? undefined}
+          description={copy.syncError(row) ?? undefined}
           rightChildren={
             <Button
               prominence="secondary"
@@ -87,6 +91,7 @@ interface MarketplacesTableProps {
 
 export default function MarketplacesTable({ list }: MarketplacesTableProps) {
   const t = useTranslations("plugins.marketplaces");
+  const copy = useMarketplaceCopy();
   const { marketplaces, error, isLoading, refresh } = list;
   const { isMobile } = useScreenSize();
   const [openId, setOpenId] = useState<string | null>(null);
@@ -248,7 +253,7 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
         // Attention lists only the failed rows that the user can manage.
         const failure =
           !row.can_manage && marketplaceSyncState(row) === "failed"
-            ? row.last_error
+            ? copy.syncError(row)
             : null;
         return (
           <Content

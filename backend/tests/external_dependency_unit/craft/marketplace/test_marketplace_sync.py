@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import PluginVersion, User, UserIntegrationPreference
 from onyx.db.skill import list_chat_skills, skill_user_states
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.skills.marketplace import sync
 from onyx.skills.marketplace.models import (
     MarketplaceSyncResult,
@@ -328,6 +330,33 @@ def test_remote_entries_and_private_repository(
     assert result.blocked == ["missing"]
     assert set(synced_plugins(db_session, marketplace.id)) == {"remote"}
     assert reload(db_session, marketplace).last_error is None
+
+
+def test_rate_limited_sync_keeps_the_error_code_and_reset_time(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+
+    fake_github.rate_limit_reset = 1_800_000_000
+    assert sync.sync_marketplace(marketplace.id).status == MarketplaceSyncStatus.FAILED
+    stored = reload(db_session, marketplace)
+    assert stored.last_error_code == OnyxErrorCode.RATE_LIMITED.code
+    assert stored.last_error_reset_at == datetime(2027, 1, 15, 8, tzinfo=timezone.utc)
+
+    fake_github.rate_limit_reset = None
+    assert sync.sync_marketplace(marketplace.id).status == MarketplaceSyncStatus.APPLIED
+    stored = reload(db_session, marketplace)
+    assert stored.last_error is None
+    assert stored.last_error_code is None
+    assert stored.last_error_reset_at is None
 
 
 def test_remote_entries_count_toward_the_marketplace_limits(

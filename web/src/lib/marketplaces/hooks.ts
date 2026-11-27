@@ -116,11 +116,19 @@ export interface MarketplaceCopy {
   /** A preview, add or sync error: GitHub's limit with its reset time is
    * translated, other errors keep the server's detail. */
   describeError: (error: unknown, fallback: string) => string;
+  /** The last sync error, with GitHub's limit translated like describeError. */
+  syncError: (marketplace: MarketplaceSummary) => string | null;
 }
 
 export function useMarketplaceCopy(): MarketplaceCopy {
   const t = useTranslations("plugins.marketplaces");
   const format = useFormatter();
+  const rateLimited = (resetAt: string | null) =>
+    resetAt !== null
+      ? t("errors.rateLimitedUntil", {
+          time: format.dateTime(new Date(resetAt), { timeStyle: "short" }),
+        })
+      : t("errors.rateLimited");
   return {
     entryReason: (entry) => {
       if (entry.reason_code === null) return entry.reason;
@@ -139,13 +147,13 @@ export function useMarketplaceCopy(): MarketplaceCopy {
       const info = error instanceof FetchError ? error.info : null;
       if (info?.error_code === "RATE_LIMITED") {
         const resetAt = "reset_at" in info ? info.reset_at : null;
-        return typeof resetAt === "string"
-          ? t("errors.rateLimitedUntil", {
-              time: format.dateTime(new Date(resetAt), { timeStyle: "short" }),
-            })
-          : t("errors.rateLimited");
+        return rateLimited(typeof resetAt === "string" ? resetAt : null);
       }
       return fetchErrorDetail(error) ?? fallback;
     },
+    syncError: (marketplace) =>
+      marketplace.last_error_code === "RATE_LIMITED"
+        ? rateLimited(marketplace.last_error_reset_at)
+        : marketplace.last_error,
   };
 }

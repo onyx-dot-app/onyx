@@ -189,13 +189,31 @@ def list_marketplace_plugins(marketplace_id: UUID, db_session: Session) -> list[
 
 
 def record_marketplace_error__no_commit(
-    marketplace_id: UUID, error: str, db_session: Session
+    marketplace_id: UUID, error: str | OnyxError, db_session: Session
 ) -> None:
+    """An OnyxError also keeps its code and GitHub's reset time, so the client
+    can show a translated message in the user's time zone."""
+    code: str | None = None
+    reset_at: datetime | None = None
+    if isinstance(error, OnyxError):
+        code = error.error_code.code
+        reset = (error.extra or {}).get("reset_at")
+        reset_at = datetime.fromisoformat(reset) if isinstance(reset, str) else None
     db_session.execute(
         update(Marketplace)
         .where(Marketplace.id == marketplace_id)
-        .values(last_error=error)
+        .values(
+            last_error=error.detail if isinstance(error, OnyxError) else error,
+            last_error_code=code,
+            last_error_reset_at=reset_at,
+        )
     )
+
+
+def _clear_error(marketplace: Marketplace) -> None:
+    marketplace.last_error = None
+    marketplace.last_error_code = None
+    marketplace.last_error_reset_at = None
 
 
 def _write_sync_state(
@@ -211,7 +229,7 @@ def _write_sync_state(
     marketplace.last_sync_result = [
         result.model_dump(mode="json") for result in results
     ]
-    marketplace.last_error = None
+    _clear_error(marketplace)
 
 
 def apply_marketplace_sync__no_commit(
@@ -333,6 +351,6 @@ def replace_marketplace_login__no_commit(
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
     marketplace.login_user_id = login_user_id
-    marketplace.last_error = None
+    _clear_error(marketplace)
     db_session.flush()
     return marketplace

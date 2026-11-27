@@ -85,6 +85,8 @@ export class FakeMarketplacesApi {
       last_synced_at: now,
       last_synced_revision: this.sha(),
       last_error: null,
+      last_error_code: null,
+      last_error_reset_at: null,
       syncing: false,
       created_at: now,
       entries: [

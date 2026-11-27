@@ -135,6 +135,8 @@ def _summary(
         last_synced_at=marketplace.last_synced_at,
         last_synced_revision=marketplace.last_synced_revision,
         last_error=marketplace.last_error,
+        last_error_code=marketplace.last_error_code,
+        last_error_reset_at=marketplace.last_error_reset_at,
         syncing=marketplace_syncing(marketplace.id),
         created_at=marketplace.created_at,
     )

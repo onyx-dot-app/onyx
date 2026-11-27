@@ -208,7 +208,9 @@ def _stage(
     return staged
 
 
-def _record_failure(marketplace_id: UUID, error: str) -> MarketplaceSyncResult:
+def _record_failure(
+    marketplace_id: UUID, error: str | OnyxError
+) -> MarketplaceSyncResult:
     with get_session_with_current_tenant() as db_session:
         record_marketplace_error__no_commit(marketplace_id, error, db_session)
         db_session.commit()
@@ -251,7 +253,7 @@ def sync_marketplace(
                 f"{login_email} must connect GitHub, or another user must "
                 "replace the login.",
             )
-        return _record_failure(marketplace_id, exc.detail)
+        return _record_failure(marketplace_id, exc)
     if read.failure is not None or read.name is None:
         return _record_failure(marketplace_id, read.failure or SYNC_FAILED_ERROR)
     entries = read.entries
@@ -342,7 +344,7 @@ def _sync_once(marketplace_id: UUID, lock: CacheLock) -> None:
         sync_marketplace(marketplace_id, lock)
     except OnyxError as exc:
         if exc.error_code != OnyxErrorCode.NOT_FOUND:
-            _record_failure(marketplace_id, exc.detail)
+            _record_failure(marketplace_id, exc)
             raise
     except Exception:
         _record_failure(marketplace_id, SYNC_FAILED_ERROR)

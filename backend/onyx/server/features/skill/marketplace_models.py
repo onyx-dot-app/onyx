@@ -124,6 +124,9 @@ class MarketplaceSummary(BaseModel):
     last_synced_at: datetime.datetime | None
     last_synced_revision: str | None
     last_error: str | None
+    # The OnyxErrorCode of last_error; None for an error without a code.
+    last_error_code: str | None
+    last_error_reset_at: datetime.datetime | None
     syncing: bool
     created_at: datetime.datetime
 

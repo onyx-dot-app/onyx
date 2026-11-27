@@ -32,16 +32,17 @@ function DetailBody({ marketplace }: DetailBodyProps) {
   const lastSync = useLastSyncCopy(false);
   const policyCopy = useInstallationPolicyCopy();
   const limitNote = copy.limitNote(marketplace.entries);
+  const syncError = copy.syncError(marketplace);
   return (
     <Section gap={4} alignItems="stretch" height="auto">
       <MarketplaceSyncStatus marketplace={marketplace} />
-      {marketplace.last_error && (
+      {syncError && (
         <MessageCard
           variant="error"
           outerPadding={1}
           innerPadding={1}
           title={t("attention.failedTitle", { name: marketplace.name })}
-          description={marketplace.last_error}
+          description={syncError}
         />
       )}
       <Card padding={4} border="solid">

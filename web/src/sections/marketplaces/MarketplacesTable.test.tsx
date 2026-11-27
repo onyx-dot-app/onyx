@@ -92,6 +92,33 @@ test("a failed sync shows its reason and offers Sync now", async () => {
   );
 });
 
+test("a rate-limited sync shows GitHub's reset time in the user's locale", async () => {
+  const resetAt = "2027-01-15T07:38:00+00:00";
+  mockFetch({
+    "/api/marketplaces": {
+      marketplaces: [
+        summaryFixture({
+          last_error:
+            "GitHub's API rate limit has been reached. It resets at 07:38 UTC. Connect GitHub to raise the limit.",
+          last_error_code: "RATE_LIMITED",
+          last_error_reset_at: resetAt,
+        }),
+      ],
+    },
+  });
+  render(<Table />);
+
+  const time = new Intl.DateTimeFormat("en", { timeStyle: "short" }).format(
+    new Date(resetAt)
+  );
+  expect(
+    await screen.findByText(
+      `GitHub's API rate limit has been reached. It resets at ${time}. Connect GitHub to raise the limit.`
+    )
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/UTC/)).not.toBeInTheDocument();
+});
+
 test("a running sync disables Sync now", async () => {
   mockFetch({
     "/api/marketplaces": { marketplaces: [summaryFixture({ syncing: true })] },

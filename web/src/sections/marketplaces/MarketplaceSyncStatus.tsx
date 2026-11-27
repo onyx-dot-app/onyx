@@ -4,6 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Badge, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { StatusColor } from "@opal/types";
+import { useMarketplaceCopy } from "@/lib/marketplaces/hooks";
 import { marketplaceSyncState } from "@/lib/marketplaces/utils";
 import type {
   MarketplaceSummary,
@@ -44,8 +45,10 @@ export default function MarketplaceSyncStatus({
 }: MarketplaceSyncStatusProps) {
   const t = useTranslations("plugins.marketplaces.sync");
   const lastSync = useLastSyncCopy();
+  const copy = useMarketplaceCopy();
   const state = marketplaceSyncState(marketplace);
-  const error = showError && state === "failed" ? marketplace.last_error : null;
+  const error =
+    showError && state === "failed" ? copy.syncError(marketplace) : null;
   return (
     <Section flexDirection="row" justifyContent="start" gap={1} height="auto">
       <Badge title={t(`state.${state}`)} color={SYNC_STATE_COLOR[state]} />
