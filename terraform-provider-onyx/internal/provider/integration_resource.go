@@ -261,6 +261,14 @@ func (r *integrationResource) applyFollowUps(
 	credentials map[string]string,
 	diags *diag.Diagnostics,
 ) *client.Integration {
+	switchChange := !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() && plan.Enabled.ValueBool() != remote.Enabled
+	// Turn the integration off before it gets credentials and actions, so
+	// members cannot use the shared credentials of an integration meant to be off.
+	if switchChange && !plan.Enabled.ValueBool() {
+		if remote = r.setIntegrationSwitch(ctx, id, false, diags); remote == nil {
+			return nil
+		}
+	}
 	if len(credentials) > 0 {
 		if err := r.client.SaveIntegrationOrganizationConnection(ctx, id, credentials); err != nil {
 			diags.AddError("Failed to save the Onyx integration organization credentials", err.Error())
@@ -275,12 +283,8 @@ func (r *integrationResource) applyFollowUps(
 			}
 		}
 	}
-	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() && plan.Enabled.ValueBool() != remote.Enabled {
-		enabled := plan.Enabled.ValueBool()
-		var err error
-		remote, err = r.client.UpdateIntegrationEnabled(ctx, id, enabled)
-		if err != nil {
-			diags.AddError("Failed to set the Onyx integration switch", err.Error())
+	if switchChange && plan.Enabled.ValueBool() {
+		if remote = r.setIntegrationSwitch(ctx, id, true, diags); remote == nil {
 			return nil
 		}
 	}
@@ -297,6 +301,15 @@ func (r *integrationResource) applyFollowUps(
 		return nil
 	}
 	return refreshed
+}
+
+func (r *integrationResource) setIntegrationSwitch(ctx context.Context, id int64, enabled bool, diags *diag.Diagnostics) *client.Integration {
+	remote, err := r.client.UpdateIntegrationEnabled(ctx, id, enabled)
+	if err != nil {
+		diags.AddError("Failed to set the Onyx integration switch", err.Error())
+		return nil
+	}
+	return remote
 }
 
 func (r *integrationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
