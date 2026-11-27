@@ -721,6 +721,44 @@ def test_a_command_grant_rejects_a_covered_request_that_the_policies_now_block(
     }
 
 
+def test_a_command_grant_leaves_a_request_whose_other_action_now_asks(
+    db_session: Session, chat: _Chat
+) -> None:
+    """The grant covers only the Ask actions of a waiting request, and the
+    proxy refuses an approval that misses an action that asks now. So the
+    scan leaves that request waiting for the user."""
+    command_id, reports, _approvals = _command(chat)
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    create, listing = "issues.create", "issues.list"
+    with_allowed = _matched(chat.integration_id).model_copy(
+        update={
+            "actions": (
+                *_matched(chat.integration_id, create).actions,
+                MatchedAction(
+                    action_type=listing,
+                    display_name=listing,
+                    description=listing,
+                    policy=ActionPolicy.ALWAYS,
+                ),
+            )
+        }
+    )
+    first = _HeldRequest(gate, ctx, _matched(chat.integration_id, create))
+    now_asks = _HeldRequest(gate, ctx, with_allowed)
+    reports.wait_for(lambda: len(reports.cards()) == 2)
+    set_policy(
+        db_session, chat.integration_id, listing, IntegrationActionPolicyValue.ASK
+    )
+
+    _decide(db_session, chat, first.approval_id, ApprovalChoice.APPROVE_COMMAND)
+
+    assert first.result() == ApprovalDecision.APPROVED
+    db_session.expire_all()
+    row = db_session.get(ActionApproval, now_asks.approval_id)
+    assert row is not None and row.decision is None
+
+
 def test_a_command_grant_is_saved_before_the_scan_of_waiting_requests(
     db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
 ) -> None:

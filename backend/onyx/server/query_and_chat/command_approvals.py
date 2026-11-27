@@ -19,6 +19,7 @@ from onyx.db.integration import get_integration_by_id
 from onyx.db.models import ActionApproval
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.engine import actions_requiring_approval
 from onyx.integrations.models import EffectivePolicy
 from onyx.integrations.policy import resolve_chat_action_policies
 from onyx.sandbox_proxy import approval_cache
@@ -30,26 +31,24 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def _now_blocked(
+def _current_policies(
     db_session: Session,
     rows: list[ActionApproval],
     integration_id: int | None,
     chat_session_id: UUID,
     user_id: UUID,
-) -> set[UUID]:
-    """The requests of `rows` that the proxy's final check now refuses: the
+) -> dict[str, EffectivePolicy] | None:
+    """The current policies of the actions of `rows`, or None when the
     integration is gone (a deleted one leaves the rows without one) or
-    turned off, or the current policies block one of their actions."""
-    if not rows:
-        return set()
+    turned off."""
     integration = (
         None
         if integration_id is None
         else get_integration_by_id(integration_id, db_session)
     )
     if integration is None or not integration.enabled:
-        return {row.approval_id for row in rows}
-    policies = resolve_chat_action_policies(
+        return None
+    return resolve_chat_action_policies(
         db_session,
         integration=integration,
         action_keys={
@@ -61,14 +60,26 @@ def _now_blocked(
         user_id=user_id,
         chat_session_id=chat_session_id,
     )
-    return {
-        row.approval_id
-        for row in rows
-        if any(
-            policies.get(action.get("action_type")) == EffectivePolicy.BLOCKED
-            for action in row.actions
-        )
-    }
+
+
+def _blocks(row: ActionApproval, policies: dict[str, EffectivePolicy] | None) -> bool:
+    """The proxy's final check now refuses the request of `row`."""
+    return policies is None or any(
+        policies.get(action.get("action_type")) == EffectivePolicy.BLOCKED
+        for action in row.actions
+    )
+
+
+def _asks_more(row: ActionApproval, policies: dict[str, EffectivePolicy]) -> bool:
+    """An action of `row` asks now that did not ask when the request
+    arrived. A command grant covers only the Ask actions of the row, so the
+    proxy refuses such a request (`gate.py:_recheck_approval`)."""
+    asked = set(actions_requiring_approval(row.actions))
+    return any(
+        policies.get(action.get("action_type")) == EffectivePolicy.ASK
+        and action.get("action_type") not in asked
+        for action in row.actions
+    )
 
 
 def decide_command_approval(
@@ -85,8 +96,9 @@ def decide_command_approval(
     integration_id = row.integration_id
     if chat_session_id is None or command_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
-    blocked = choice != ApprovalChoice.REJECT and bool(
-        _now_blocked(db_session, [row], integration_id, chat_session_id, user_id)
+    blocked = choice != ApprovalChoice.REJECT and _blocks(
+        row,
+        _current_policies(db_session, [row], integration_id, chat_session_id, user_id),
     )
     if blocked:
         choice = ApprovalChoice.REJECT
@@ -179,12 +191,23 @@ def decide_command_approval(
             if covered:
                 covered_rows.append(other)
         # The grant covers only the Ask actions, and an admin may have
-        # blocked another action of a request while it waited.
-        now_blocked = _now_blocked(
-            db_session, covered_rows, integration_id, chat_session_id, user_id
+        # blocked another action of a request, or made it ask, while it
+        # waited. A request with a new Ask action keeps its card.
+        policies = (
+            _current_policies(
+                db_session, covered_rows, integration_id, chat_session_id, user_id
+            )
+            if covered_rows
+            else None
         )
         for other in covered_rows:
-            other_blocked = other.approval_id in now_blocked
+            other_blocked = _blocks(other, policies)
+            if (
+                not other_blocked
+                and policies is not None
+                and _asks_more(other, policies)
+            ):
+                continue
             if action_approval.try_record_decision(
                 db_session,
                 approval_id=other.approval_id,

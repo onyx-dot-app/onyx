@@ -392,7 +392,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     saves a rejection by the policy (`decided_via` POLICY) and grants nothing.
     The scan does the same check for each covered row (one policy read for
     all of them), so a covered row with a now-blocked action is a rejection
-    by the policy, not an approval.
+    by the policy, not an approval. A covered row with an action that asks
+    now but did not ask when it arrived keeps waiting: the gate's recheck
+    refuses a command grant that misses a current Ask action.
     The decision records its row and commits, then saves the grant (best
     effort: a cache error only makes later requests ask again), wakes the
     proxy, and scans the waiting rows: a grant exists only for a committed
