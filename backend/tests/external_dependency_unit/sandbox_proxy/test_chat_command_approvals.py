@@ -759,11 +759,11 @@ def test_a_command_grant_leaves_a_request_whose_other_action_now_asks(
     assert row is not None and row.decision is None
 
 
-def test_a_command_approval_of_a_request_whose_other_action_now_asks_is_refused(
+def test_a_command_approval_of_a_request_whose_other_action_now_asks_approves_it_once(
     db_session: Session, chat: _Chat
 ) -> None:
-    """The proxy refuses a command approval that misses an action that asks
-    now, so the card stays open and an approval once still goes through."""
+    """The proxy refuses a command grant that misses an action that asks
+    now, so approving for the command approves the request once."""
     command_id, reports, _approvals = _command(chat)
     gate = _gate()
     ctx = _ctx(chat, command_id)
@@ -787,14 +787,11 @@ def test_a_command_approval_of_a_request_whose_other_action_now_asks_is_refused(
         db_session, chat.integration_id, listing, IntegrationActionPolicyValue.ASK
     )
 
-    with pytest.raises(OnyxError) as refused:
-        _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_COMMAND)
-    assert refused.value.error_code is OnyxErrorCode.INVALID_INPUT
-    db_session.expire_all()
-    row = db_session.get(ActionApproval, held.approval_id)
-    assert row is not None and row.decision is None
+    decided_via = _decide(
+        db_session, chat, held.approval_id, ApprovalChoice.APPROVE_COMMAND
+    )
 
-    _decide(db_session, chat, held.approval_id, ApprovalChoice.APPROVE_ONCE)
+    assert decided_via is ApprovalDecidedVia.USER
     assert held.result() == ApprovalDecision.APPROVED
 
 

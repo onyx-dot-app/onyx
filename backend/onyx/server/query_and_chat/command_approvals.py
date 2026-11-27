@@ -90,8 +90,8 @@ def decide_command_approval(
     requests that the grant covers. Approving a request that the current
     policies block, or whose integration is deleted, saves a rejection by the
     policy, also for a covered one. Approving for the command a request with
-    an action that asks now but did not ask when it arrived is refused, since
-    the proxy would refuse it. Repeating a saved decision returns it; a
+    an action that asks now but did not ask when it arrived approves it once,
+    since the proxy refuses such a grant. Repeating a saved decision returns it; a
     different one, or a request that no longer waits, is a conflict."""
     command_id = row.command_id
     chat_session_id = row.chat_session_id
@@ -108,19 +108,17 @@ def decide_command_approval(
     blocked = choice != ApprovalChoice.REJECT and _blocks(row, policies)
     if blocked:
         choice = ApprovalChoice.REJECT
+    if choice == ApprovalChoice.APPROVE_SESSION:
+        # Clients that know no command scope offer a chat approval; the proxy
+        # keeps no chat grants, so it is a single approval.
+        choice = ApprovalChoice.APPROVE_ONCE
     if (
         choice == ApprovalChoice.APPROVE_COMMAND
         and policies is not None
         and _asks_more(row, policies)
     ):
-        # The proxy refuses a command approval that misses an Ask action.
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Another action of this request now needs approval. Approve it once or reject it.",
-        )
-    if choice == ApprovalChoice.APPROVE_SESSION:
-        # Clients that know no command scope offer a chat approval; the proxy
-        # keeps no chat grants, so it is a single approval.
+        # The proxy refuses a command grant that misses a current Ask action,
+        # so the request is approved once and grants nothing.
         choice = ApprovalChoice.APPROVE_ONCE
     for_command = choice == ApprovalChoice.APPROVE_COMMAND
     granted = approval_cache.command_grant_actions(row.actions) if for_command else []
