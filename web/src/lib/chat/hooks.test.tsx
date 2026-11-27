@@ -364,7 +364,18 @@ describe("useChatSessionQueue", () => {
 });
 
 describe("useChatSessionStatus", () => {
-  afterEach(() => jest.restoreAllMocks());
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  // Moves the clock past one poll and lets the reads it starts settle.
+  async function passPoll(): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(2500);
+    });
+  }
 
   function serveIdleStatus() {
     return jest.spyOn(global, "fetch").mockImplementation(
@@ -446,7 +457,7 @@ describe("useChatSessionStatus", () => {
     renderHook(() => useChatSessionStatus("idle-session"), { wrapper: fresh });
 
     await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await passPoll();
     expect(statusReads(fetchMock)).toBe(1);
   });
 
@@ -458,9 +469,9 @@ describe("useChatSessionStatus", () => {
       wrapper: fresh,
     });
 
-    await waitFor(() => expect(statusReads(fetchMock)).toBeGreaterThan(1), {
-      timeout: 5000,
-    });
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await passPoll();
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
   });
 
   it("keeps polling while its host renders more often than it polls", async () => {
@@ -487,14 +498,13 @@ describe("useChatSessionStatus", () => {
       }
     );
     await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
-    const renders = setInterval(() => rerender(), 500);
-    try {
-      await waitFor(() => expect(statusReads(fetchMock)).toBeGreaterThan(1), {
-        timeout: 5000,
+    for (let step = 0; step < 5; step++) {
+      rerender();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(500);
       });
-    } finally {
-      clearInterval(renders);
     }
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
   });
 
   it("reloads when its key is mutated", async () => {
@@ -521,9 +531,9 @@ describe("useChatSessionStatus", () => {
 
     renderHook(() => useChatSubagents("agents-session"), { wrapper: fresh });
 
-    await waitFor(() => expect(statusReads(fetchMock)).toBeGreaterThan(1), {
-      timeout: 5000,
-    });
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await passPoll();
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
   });
 });
 
