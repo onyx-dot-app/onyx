@@ -2,7 +2,7 @@
 
 Only the new harness calls this; opencode sessions keep `get_sandbox_manager`
 (pod or Docker, chosen by `SANDBOX_BACKEND`). The harness gets Firecracker
-sandboxes with `SANDBOX_RUNTIME=firecracker`.
+sandboxes with `SANDBOX_RUNTIME=firecracker` or `auto`.
 """
 
 import threading
@@ -38,7 +38,7 @@ def _firecracker_sandbox() -> "FirecrackerHarnessSandbox":
     global _instance
     if not HARNESS_SANDBOX_ENABLED:
         raise HarnessSandboxUnavailableError(
-            "Harness sandboxes need SANDBOX_RUNTIME=firecracker and SANDBOX_FC_TEMPLATE"
+            "Harness sandboxes need SANDBOX_RUNTIME=firecracker or auto, and SANDBOX_FC_TEMPLATE"
         )
     with _lock:
         if _instance is None:

@@ -268,8 +268,11 @@ code mode and calls them directly.
 `exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and
 `write` when the turn's model is Claude) ([[code-execution]]) when
 `ChatTurnSetup.sandbox_tools` is set. `chat/process_message.py:prepare_chat_turn`
-sets it in one expression: harness sandboxes run
-(`microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the user is not anonymous, the
+sets it in one expression: harness sandboxes serve
+(`microvm/availability.py:sandbox_tools_available`; with `SANDBOX_RUNTIME=auto`
+a live registered node must report the template, checked from the cache and
+reused per process for 15 s; a resumed parked run skips the node check,
+`sandbox_tools_configured`), the user is not anonymous, the
 chat is not incognito, the turn has one response and is not Deep Research,
 and no Slack or Discord bot sent it (`SendMessageRequest.origin`). The agent's tools and
 `allowed_tool_ids` do not remove them. They have no tool catalog rows, so no

@@ -51,6 +51,30 @@ def test_sandbox_backend_unknown_fails_fast(
     assert "docker" in str(exc_info.value)
 
 
+@pytest.mark.parametrize(
+    "raw, firecracker",
+    [("pod", False), ("off", False), ("auto", True), ("FIRECRACKER", True)],
+)
+def test_sandbox_runtime_values(
+    monkeypatch: pytest.MonkeyPatch, raw: str, firecracker: bool
+) -> None:
+    monkeypatch.delenv("SANDBOX_BACKEND", raising=False)
+    monkeypatch.setenv("SANDBOX_RUNTIME", raw)
+    settings = runpy.run_path(configs.__file__)
+    assert settings["SANDBOX_RUNTIME"].value == raw.lower()
+    assert settings["SANDBOX_RUNTIME"].uses_firecracker is firecracker
+
+
+@pytest.mark.parametrize("raw", ["auto", "firecracker"])
+def test_firecracker_runtimes_need_the_kubernetes_backend(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("SANDBOX_BACKEND", "docker")
+    monkeypatch.setenv("SANDBOX_RUNTIME", raw)
+    with pytest.raises(ValueError, match=f"SANDBOX_RUNTIME={raw} requires"):
+        runpy.run_path(configs.__file__)
+
+
 def test_sandbox_image_fallback_is_not_derived_from_onyx_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
