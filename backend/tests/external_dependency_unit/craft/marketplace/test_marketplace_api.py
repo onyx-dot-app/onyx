@@ -323,6 +323,44 @@ def test_scope_and_owner_rules(
     assert changed.default_installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
 
 
+def test_a_default_branch_url_is_the_same_source(
+    db_session: Session,
+    users: tuple[User, User, User],
+    manager: User,
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    enqueued: list[UUID],  # noqa: ARG001
+) -> None:
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    _create(db_session, manager, MarketplaceScope.COMPANY)
+    tree_url = f"https://github.com/{OWNER}/{REPO}/tree/main"
+
+    preview = api.preview_marketplace(
+        MarketplaceSourceRequest(repository=tree_url),
+        _fresh(db_session, users[0]),
+        db_session,
+    )
+    assert (preview.ref, preview.added_company) == (None, True)
+    for user, scope, detail in (
+        (manager, MarketplaceScope.COMPANY, "This marketplace is already added."),
+        (
+            users[0],
+            MarketplaceScope.PERSONAL,
+            "Your organization already gets this marketplace.",
+        ),
+    ):
+        with pytest.raises(OnyxError) as exc:
+            api.create_marketplace(
+                http_request(),
+                MarketplaceCreateRequest(repository=tree_url, scope=scope),
+                BackgroundTasks(),
+                _fresh(db_session, user),
+                db_session,
+            )
+        assert exc.value.detail == detail
+        db_session.rollback()
+
+
 def test_sync_replace_login_and_delete(
     db_session: Session,
     manager: User,

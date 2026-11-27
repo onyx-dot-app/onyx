@@ -158,6 +158,28 @@ def _github_get(
         ) from exc
 
 
+def github_default_branch(
+    source: GitHubSource, authorization_header: str | None = None
+) -> str | None:
+    """The repository's default branch, or None when GitHub does not answer."""
+    repository_url = (
+        f"{GITHUB_API_BASE_URL}/repos/{quote(source.owner, safe='')}/"
+        f"{quote(source.repo, safe='')}"
+    )
+    response = _github_get(repository_url)
+    if response.status_code != 200 and authorization_header:
+        response.close()
+        response = _github_get(repository_url, authorization=authorization_header)
+    with response:
+        if response.status_code != 200:
+            return None
+        try:
+            branch = response.json().get("default_branch")
+        except (requests.JSONDecodeError, ValueError, AttributeError):
+            return None
+    return branch if isinstance(branch, str) else None
+
+
 def resolve_github_revision(
     source: GitHubSource,
     authorization_header: str | None = None,

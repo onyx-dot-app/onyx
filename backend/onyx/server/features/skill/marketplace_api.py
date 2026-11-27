@@ -1,6 +1,5 @@
 """Every route authorizes before any GitHub call."""
 
-from collections.abc import Callable
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
@@ -46,7 +45,11 @@ from onyx.server.features.skill.marketplace_models import (
 )
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.marketplace.compare import entry_result
-from onyx.skills.marketplace.models import MarketplaceEntryResult, ReadyPlugin
+from onyx.skills.marketplace.models import (
+    GitHubMarketplaceConfig,
+    MarketplaceEntryResult,
+    ReadyPlugin,
+)
 from onyx.skills.marketplace.provider import (
     GitHubMarketplaceAdapter,
     marketplace_config,
@@ -57,7 +60,12 @@ from onyx.skills.marketplace.sync import (
     request_marketplace_sync,
 )
 from onyx.skills.push import push_skills_and_commit
-from onyx.utils.github import GitHubRevision, GitHubSource, resolve_github_revision
+from onyx.utils.github import (
+    GitHubRevision,
+    GitHubSource,
+    github_default_branch,
+    resolve_github_revision,
+)
 
 router = APIRouter(prefix="/marketplaces")
 
@@ -180,13 +188,21 @@ def _request_sync(
     request_marketplace_sync(marketplace_id, background_tasks)
 
 
-def _tree_resolver(
-    authorization: str | None,
-) -> Callable[[GitHubSource], GitHubRevision]:
+def _source_config(
+    request: MarketplaceSourceRequest, authorization: str | None
+) -> GitHubMarketplaceConfig:
+    """A ref that names the default branch is stored as no ref, so that
+    ``owner/repo`` and ``.../tree/main`` are one source."""
+
     def resolve(source: GitHubSource) -> GitHubRevision:
         return resolve_github_revision(source, authorization)
 
-    return resolve
+    config = request.to_config(resolve)
+    if config.ref and config.ref == github_default_branch(
+        GitHubSource(owner=config.owner, repo=config.repo), authorization
+    ):
+        return config.model_copy(update={"ref": None})
+    return config
 
 
 @router.post("/preview")
@@ -198,7 +214,7 @@ def preview_marketplace(
     authorization = github_authorization_for(user.id, db_session)
     # End the read transaction before the GitHub calls.
     db_session.commit()
-    config = request.to_config(_tree_resolver(authorization))
+    config = _source_config(request, authorization)
     read = read_marketplace_repository(
         GitHubMarketplaceAdapter(config, authorization), config.folder
     )
@@ -261,9 +277,7 @@ def create_marketplace(
 ) -> MarketplaceDetail:
     manager = _is_manager(user, http_request)
     _authorize_scope(request.scope, manager)
-    config = request.to_config(
-        _tree_resolver(github_authorization_for(user.id, db_session))
-    )
+    config = _source_config(request, github_authorization_for(user.id, db_session))
     policy = request.default_installation_policy
     if request.scope == MarketplaceScope.PERSONAL and policy is not None:
         raise OnyxError(
