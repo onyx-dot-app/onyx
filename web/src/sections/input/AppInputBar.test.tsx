@@ -958,7 +958,7 @@ describe("`@` skill mentions", () => {
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
   });
 
-  test("fetches the chat skills again on a focus at most once a minute", async () => {
+  test("fetches the chat skills again on an input focus at most once a minute", async () => {
     mockChatSkills = null;
     let skills: ChatSkill[] = [];
     const fetchSpy = jest
@@ -981,11 +981,6 @@ describe("`@` skill mentions", () => {
           built_in_skill_id: null,
         },
       ];
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"));
-      });
-      expect(skillFetches()).toBe(1);
-
       // The composer takes focus after each send, so a focus within a minute
       // of the last fetch does not fetch.
       const firstFetchAt = Date.now();
@@ -1041,7 +1036,7 @@ describe("`@` skill mentions", () => {
     }
   });
 
-  test("fetches the chat skills again when the window gains focus", async () => {
+  test("fetches the chat skills again on a window focus at most once a minute", async () => {
     mockChatSkills = null;
     const fetchSpy = jest
       .spyOn(global, "fetch")
@@ -1055,13 +1050,27 @@ describe("`@` skill mentions", () => {
         ),
       });
       await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-      // Past the one-minute focus throttle.
-      const later = Date.now() + 61_000;
-      jest.spyOn(Date, "now").mockReturnValue(later);
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"));
-      });
+      const focusWindow = () =>
+        act(async () => {
+          window.dispatchEvent(new Event("focus"));
+          // SWR handles the focus in a timeout.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+      const mountedAt = Date.now();
+      const nowSpy = jest.spyOn(Date, "now");
+
+      // A focus within a minute of the first fetch does not fetch.
+      nowSpy.mockReturnValue(mountedAt + 59_000);
+      await focusWindow();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      nowSpy.mockReturnValue(mountedAt + 61_000);
+      await focusWindow();
       await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+
+      nowSpy.mockReturnValue(mountedAt + 62_000);
+      await focusWindow();
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
     } finally {
       jest.restoreAllMocks();
     }

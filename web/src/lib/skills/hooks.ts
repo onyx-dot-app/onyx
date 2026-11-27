@@ -109,17 +109,16 @@ export function useChatSkills({
       lastFetchRef.current = Date.now();
       return errorHandlingFetcher<ChatSkill[]>(url);
     },
-    { revalidateOnFocus: false }
+    {
+      revalidateOnFocus: true,
+      focusThrottleInterval: CHAT_SKILLS_FOCUS_THROTTLE_MS,
+    }
   );
   const onInputFocus = useCallback(() => {
     if (Date.now() - lastFetchRef.current < CHAT_SKILLS_FOCUS_THROTTLE_MS)
       return;
     void mutate();
   }, [mutate]);
-  useEffect(() => {
-    window.addEventListener("focus", onInputFocus);
-    return () => window.removeEventListener("focus", onInputFocus);
-  }, [onInputFocus]);
   const entries = useMemo(
     (): PickerSections => ({
       skills: (data ?? [])
