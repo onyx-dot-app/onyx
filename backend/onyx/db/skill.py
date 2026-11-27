@@ -32,13 +32,11 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
-    ColumnElement,
     Row,
     Select,
     case,
     delete,
     exists,
-    or_,
     select,
     update,
 )
@@ -46,14 +44,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.elements import KeyedColumnElement
 
-from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.auth.permissions import has_global_permission
 from onyx.db.app_skill import built_in_app_skills
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccountType,
     MarketplaceKind,
     Permission,
-    PermissionAuthority,
     PluginInstallationPolicy,
     SkillSharePermission,
 )
@@ -93,9 +90,9 @@ from onyx.db.plugin_access import (
     frontmatter_in_version,
     holds_one_root_skill,
     load_user_plugin_states,
+    not_others_personal_marketplace,
     order_skill_names,
     plugin_editable_by_user,
-    plugin_in_managed_scope,
     plugin_required_for_anyone,
     version_user_runs,
     visible_plugin_ids,
@@ -185,25 +182,6 @@ def is_published(plugin: Plugin, db_session: Session) -> bool:
         )
         == MarketplaceKind.ORGANIZATION_LIBRARY
     )
-
-
-def _editable_by_user(user: User) -> ColumnElement[bool]:
-    """The author, or EDITOR through a user or group share, or a group manager
-    for a plugin in their managed scope. There is no organization-wide edit."""
-    editable = plugin_editable_by_user(Plugin, user.id)
-    if has_permission(user, Permission.MANAGE_PLUGINS) is PermissionAuthority.SCOPED:
-        marketplace: type[Marketplace] = aliased(Marketplace)
-        editable = or_(
-            editable,
-            select(marketplace.id)
-            .where(
-                marketplace.id == Plugin.marketplace_id,
-                plugin_in_managed_scope(Plugin, marketplace, user),
-            )
-            .correlate_except(marketplace)
-            .exists(),
-        )
-    return editable
 
 
 class _UserSkillSelection(BaseModel):
@@ -302,23 +280,11 @@ def _built_in_skill_select(
     return stmt.where(Skill.built_in_skill_id.notin_(unavailable))
 
 
-def _not_others_personal_marketplace(user: User) -> ColumnElement[bool]:
-    """A manager reaches every plugin except those of another user's personal
-    GitHub marketplace: only its owner gets them."""
-    return Plugin.marketplace_id.not_in(
-        select(Marketplace.id).where(
-            Marketplace.kind == MarketplaceKind.GITHUB,
-            Marketplace.owner_user_id.is_not(None),
-            Marketplace.owner_user_id != user.id,
-        )
-    )
-
-
 def _visible_custom_skill_select(user: User) -> Select[tuple[Plugin]]:
     runs = version_user_runs(Plugin, user.id)
     stmt = select(Plugin)
     if has_global_permission(user, Permission.MANAGE_PLUGINS):
-        stmt = stmt.where(_not_others_personal_marketplace(user))
+        stmt = stmt.where(not_others_personal_marketplace(user))
     else:
         stmt = stmt.where(Plugin.id.in_(visible_plugin_ids(user.id)))
     return stmt.order_by(
@@ -545,10 +511,7 @@ def fetch_editable_skill(
     stmt = select(Plugin).where(Plugin.id == skill_id)
     if not any_plugin:
         stmt = stmt.where(holds_one_root_skill(Plugin.current_version_id.expression))
-    if has_global_permission(user, Permission.MANAGE_PLUGINS):
-        stmt = stmt.where(_not_others_personal_marketplace(user))
-    else:
-        stmt = stmt.where(_editable_by_user(user))
+    stmt = stmt.where(plugin_editable_by_user(user))
     if lock_for_update:
         stmt = stmt.with_for_update(of=Plugin).execution_options(populate_existing=True)
     return db_session.scalars(stmt).one_or_none()

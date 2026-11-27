@@ -682,10 +682,10 @@ def create_synced_plugin__no_commit(
     return plugin
 
 
-def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin | None:
+def find_upload_target(name: str, user: User, db_session: Session) -> Plugin | None:
     """The plugin an upload of ``name`` adds a version to: one the user can
-    edit, in the user's uploads, then in another user's uploads (an EDITOR
-    share), then in the organization library."""
+    edit (``plugin_editable_by_user``), in the user's uploads, then in another
+    user's uploads, then in the organization library."""
     return db_session.scalars(
         select(Plugin)
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
@@ -694,12 +694,12 @@ def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin 
             Marketplace.kind.in_(
                 (MarketplaceKind.USER_UPLOADS, MarketplaceKind.ORGANIZATION_LIBRARY)
             ),
-            plugin_editable_by_user(Plugin, user_id),
+            plugin_editable_by_user(user),
             ~holds_one_root_skill(Plugin.current_version_id.expression),
         )
         .order_by(
             case(
-                (Marketplace.owner_user_id == user_id, 0),
+                (Marketplace.owner_user_id == user.id, 0),
                 (Marketplace.kind == MarketplaceKind.USER_UPLOADS, 1),
                 else_=2,
             ),

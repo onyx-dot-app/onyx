@@ -679,7 +679,7 @@ def _upload_target(
     elif plugin_id is not None:
         target = _bound_upload_target(plugin_id, name, user, db_session)
     else:
-        target = find_upload_target(name, user.id, db_session)
+        target = find_upload_target(name, user, db_session)
     if target is not None:
         return PluginUploadTarget(
             kind="new_version",

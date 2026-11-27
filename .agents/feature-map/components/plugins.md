@@ -77,7 +77,7 @@ Group or user restriction needs EE.
   same page (`CustomizePluginsPage`): settings chrome with
   Add in the header, every plugin, also the ones that are
   not `member_visible`, except the plugins of another user's personal GitHub
-  marketplace (`db/skill.py:_not_others_personal_marketplace`), and the
+  marketplace (`db/plugin_access.py:not_others_personal_marketplace`), and the
   Marketplaces section below them, as on the tab. The admin panel shows the
   plugins in `sections/skills/AdminSkillsTable.tsx`, not in groups: the
   Source column carries the group (marketplace, owner, Organization library).

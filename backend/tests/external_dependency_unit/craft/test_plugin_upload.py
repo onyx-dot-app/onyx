@@ -13,17 +13,26 @@ from fastapi import UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
+from onyx.db.enums import (
+    GrantSource,
+    Permission,
+    PluginInstallationPolicy,
+    SkillSharePermission,
+)
 from onyx.db.models import (
     Integration__User,
     Integration__UserGroup,
+    PermissionGrant,
     Plugin,
     PluginVersion,
     User,
+    User__UserGroup,
     UserGroup,
     UserIntegrationPreference,
 )
+from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
@@ -58,7 +67,11 @@ from onyx.tools.tool_implementations.skills.skill_tools import (
     skills_catalog_message,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.external_dependency_unit.craft.db_helpers import make_group, make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_group,
+    make_user,
+)
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
@@ -786,6 +799,53 @@ def test_an_editor_share_uploads_a_new_version_of_the_shared_plugin(
         "new_version",
         2,
     )
+
+
+def test_a_plugin_manager_uploads_a_new_version_of_another_users_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    """An organization-wide MANAGE_PLUGINS holder who is not an admin edits
+    every plugin, so an upload of the same name adds a version to it."""
+    author, manager, _ = users
+    group = make_group(db_session)
+    group_id = group.id
+    add_user_to_group(db_session, manager, group)
+    db_session.add(
+        PermissionGrant(
+            group_id=group_id,
+            permission=Permission.MANAGE_PLUGINS,
+            grant_source=GrantSource.USER,
+        )
+    )
+    recompute_user_permissions__no_commit(manager.id, db_session)
+    db_session.commit()
+    db_session.refresh(manager)
+    try:
+        assert has_global_permission(manager, Permission.MANAGE_PLUGINS)
+        assert not has_global_permission(manager, Permission.FULL_ADMIN_PANEL_ACCESS)
+        plugin_id = _save(
+            author, _plugin_zip("managed-kit", ["one"]), db_session
+        ).plugin.id
+
+        saved = _save(manager, _plugin_zip("managed-kit", ["one", "two"]), db_session)
+
+        assert (saved.plugin.id, saved.target.kind, saved.target.version_number) == (
+            plugin_id,
+            "new_version",
+            2,
+        )
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(PermissionGrant).where(PermissionGrant.group_id == group_id)
+        )
+        db_session.execute(
+            delete(User__UserGroup).where(User__UserGroup.user_group_id == group_id)
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id == group_id))
+        db_session.commit()
 
 
 def test_an_upload_for_a_plugin_adds_a_version_to_that_plugin(
