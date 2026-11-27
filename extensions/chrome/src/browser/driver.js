@@ -610,7 +610,8 @@ async function actionPoint(ctx, objectId) {
 async function checkLive(ctx) {
   if (Date.now() > ctx.deadline)
     throw new OperationError("timeout", "The call ran out of time before Chrome could act. Check the page before you retry.");
-  if (endedGrants.has(ctx.grant.id)) throw grantEndedError();
+  if (endedGrants.has(ctx.grant.id) || ctx.grant.expires_at * 1000 <= Date.now())
+    throw grantEndedError();
   if (isHumanControlled(ctx.tabId))
     throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
   const tab = await chrome.tabs.get(ctx.tabId).catch(() => null);
@@ -773,7 +774,7 @@ const hasTarget = (target) => target.ref !== undefined || target.selector !== un
 export async function call(grant, method, params, hooks, commandDeadline = Infinity) {
   const timeoutMs = Math.min(optNumber(params, "timeoutMs") ?? DEFAULT_TIMEOUT_MS, 60_000);
   // The server stops waiting at the command's deadline; so does the call.
-  const deadline = Math.min(Date.now() + timeoutMs, commandDeadline);
+  const deadline = Math.min(Date.now() + timeoutMs, commandDeadline, grant.expires_at * 1000);
   switch (method) {
     case "status": {
       const tabs = [];
@@ -807,10 +808,10 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
         active: true,
         ...(opener ? { windowId: opener.windowId, openerTabId: opener.id } : {}),
       });
-      await hooks.addTab(tab.id);
-      // A share that ended while the tab opened does not get it.
-      if (endedGrants.has(grant.id)) throw grantEndedError();
+      // Under control first: a tab that cannot be attached never joins the
+      // grant. addTab lets the tab go when the share ended meanwhile.
       await attach(tab.id);
+      await hooks.addTab(tab.id);
       await waitForReady(tab.id, "domcontentloaded", deadline);
       return { tab: await tabJson(grant, tab.id) };
     }
@@ -882,6 +883,12 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
         throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
       const state = stateOf(tabId);
       if (!state.dialog) throw new OperationError("failed", "No dialog is pending.");
+      // A dialog of a site that the user did not share is the user's to answer.
+      if (!grant.origins.includes(originOf(state.dialog.origin) ?? ""))
+        throw new OperationError(
+          "failed",
+          "A dialog from a site that the user did not share is open. Ask the user to close it."
+        );
       await checkLive({ grant, tabId, deadline });
       await send(tabId, "Page.handleJavaScriptDialog", {
         accept: params.accept,
@@ -980,13 +987,14 @@ async function act(grant, tabId, params, deadline) {
             // leaves the live field and its listeners alone.
             const probe = this.ownerDocument.createElement("input");
             probe.type = this.type;
-            probe.value = value;
-            if (probe.value !== value) return false;
+            // Chrome takes "2026-12-01 13:30" for datetime-local as T-separated.
+            probe.value = this.type === "datetime-local" ? value.replace(" ", "T") : value;
+            if (probe.value === "") return false;
             const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-            setter.call(this, value);
+            setter.call(this, probe.value);
             this.dispatchEvent(new Event("input", { bubbles: true }));
             this.dispatchEvent(new Event("change", { bubbles: true }));
-            return this.value === value;
+            return this.value === probe.value;
           },
           [text]
         );

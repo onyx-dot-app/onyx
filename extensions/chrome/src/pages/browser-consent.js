@@ -105,8 +105,17 @@ allowButton.addEventListener("click", async () => {
 
 denyButton.addEventListener("click", async () => {
   setDeciding(true);
-  await ask({ action: BROWSER_MESSAGES.DENY, request_id: requestId }).catch(() => {});
-  window.close();
+  const answer = await ask({ action: BROWSER_MESSAGES.DENY, request_id: requestId }).catch((error) => ({
+    ok: false,
+    error: `Chrome did not answer: ${error?.message ?? error}`,
+  }));
+  if (answer?.ok) {
+    window.close();
+    return;
+  }
+  setDeciding(false);
+  await load();
+  errorText.textContent = answer?.error ?? "Could not send the answer.";
 });
 
 void load();

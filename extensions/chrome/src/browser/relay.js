@@ -417,6 +417,9 @@ async function approve(requestId, tabIds, minutes, shownOrigins) {
 }
 
 async function deny(requestId) {
+  // Onyx waits for the answer; without a connection, keep the request.
+  if (socket?.readyState !== WebSocket.OPEN)
+    throw new Error("Chrome is not connected to Onyx. Try again in a moment.");
   const request = await takeRequest(requestId);
   if (request) sendMessage({
       type: "grant_denied",
@@ -525,9 +528,12 @@ export async function onDebuggerDetach(source, reason) {
   if (reason === "canceled_by_user") await endGrant(true);
 }
 
-export async function checkExpiry() {
-  const grant = await getGrant();
-  if (grant && grant.expires_at * 1000 <= Date.now()) await endGrant(true);
+export function checkExpiry() {
+  // Read and end in one turn, so a share approved meanwhile stays.
+  return serial(async () => {
+    const grant = await getGrant();
+    if (grant && grant.expires_at * 1000 <= Date.now()) await endGrantNow(true);
+  });
 }
 
 /** Messages from the consent window and the popup. */
