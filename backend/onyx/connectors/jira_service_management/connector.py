@@ -1,15 +1,15 @@
 """Index Jira Service Management requests and their comments.
 
-The service desk API lists the requests and their comments, including which
-comments are internal. It has no updated-since filter, so a poll uses Jira
-issue search on the same project. A full run lists the service desk. Both
-paths build the same document id, and the slim listing uses that same set.
+The service desk API supplies each request and its comments, including which
+comments are internal. A full run lists the project's issues in key order and
+keeps the ones that are requests. A poll uses Jira search by updated time.
+Both paths build the same document id, and the slim listing uses that same set.
 """
 
 import re
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 from urllib.parse import quote
 
 from onyx.configs.constants import DocumentSource
@@ -26,6 +26,7 @@ from onyx.connectors.jira_service_management.keys import ISSUE_KEY as _ISSUE_KEY
 from onyx.connectors.jira_service_management.models import (
     CustomerComment,
     CustomerRequest,
+    IssueSearchPage,
     JsmDate,
     JsmUser,
     ServiceDesk,
@@ -36,8 +37,10 @@ from onyx.connectors.jira_service_management.source_operations import (
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
+    ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
     HierarchyNode,
     ImageSection,
     SlimDocument,
@@ -52,22 +55,41 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _PAGE_SIZE: int = 50
-# Re-read this many requests on the next offset page so a deletion between
-# two pages cannot push a live request past the page boundary.
-_PAGE_OVERLAP: int = 5
 _MAX_SECTION_CHARS: int = 100_000
 _MAX_COMMENT_PAGES: int = 200
 _MAX_PARTICIPANTS: int = 50
 
 
+class _CommentsTruncated(Exception):
+    """The comment list hit the page cap before Jira said it was finished."""
+
+    def __init__(self, issue_key: str) -> None:
+        super().__init__(issue_key)
+        self.issue_key = issue_key
+
+
 class JiraServiceManagementCheckpoint(ConnectorCheckpoint):
-    # "requests" lists the service desk. "search" polls Jira by updated time.
+    # "requests" lists the project in issue-key order. "search" polls by updated.
     listing: str = ""
     start_at: int = 0
     next_page_token: str | None = None
-    # Keys on the previous page. The next page overlaps it, and these are skipped.
+    # The last issue key of a key-ordered page. The next page asks for later keys.
+    last_issue_key: str = ""
+    # Keys on the previous search page. Repeats are skipped, not treated as done.
     previous_keys: list[str] = []
     project_yielded: bool = False
+
+
+def key_page_jql(project_key: str, after_key: str | None) -> str:
+    """Issues in the project after ``after_key``, in Jira's key order.
+
+    Key order does not change when a request is edited, so a page cannot
+    jump past a live issue the way an updated-time list can.
+    """
+    clause = project_jql(project_key)
+    if after_key:
+        clause += f' AND key > "{after_key}"'
+    return f"{clause} ORDER BY key ASC"
 
 
 def project_jql(
@@ -221,12 +243,9 @@ class JiraServiceManagementConnector(
             if _page_ends(page.is_last_page, len(page.values)):
                 return comments
             start += len(page.values)
-        logger.warning(
-            "Stopped reading comments for %s after %s pages.",
-            issue_key,
-            _MAX_COMMENT_PAGES,
-        )
-        return comments
+        # The cap ran out before Jira confirmed the last page. The caller must
+        # not index the request with this partial comment list.
+        raise _CommentsTruncated(issue_key)
 
     def _to_document(self, request: CustomerRequest) -> Document | None:
         if (
@@ -286,6 +305,31 @@ class JiraServiceManagementConnector(
             parent_hierarchy_raw_node_id=self.project_node_id(),
         )
 
+    def _emit(self, request: CustomerRequest) -> Document | ConnectorFailure | None:
+        try:
+            return self._to_document(request)
+        except _CommentsTruncated as error:
+            link = (
+                self._browse_url(request.issue_key)
+                if _ISSUE_KEY.fullmatch(request.issue_key)
+                else None
+            )
+            document_id = (
+                self.doc_id(request.issue_id)
+                if request.issue_id.isdigit()
+                else request.issue_key
+            )
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=document_id,
+                    document_link=link,
+                ),
+                failure_message=(
+                    f"Jira did not finish the comments for {error.issue_key}. "
+                    "The request was not indexed."
+                ),
+            )
+
     def _slim(self, request: CustomerRequest) -> SlimDocument | None:
         if (
             not request.issue_id.isdigit()
@@ -297,11 +341,6 @@ class JiraServiceManagementConnector(
             parent_hierarchy_raw_node_id=self.project_node_id(),
             doc_created_at=_as_utc(request.created_date),
         )
-
-    def _fresh(
-        self, requests: list[CustomerRequest], previous: set[str]
-    ) -> list[CustomerRequest]:
-        return [request for request in requests if request.issue_key not in previous]
 
     def load_from_checkpoint(
         self,
@@ -320,58 +359,39 @@ class JiraServiceManagementConnector(
             checkpoint.project_yielded = True
         previous = set(checkpoint.previous_keys)
         if checkpoint.listing == "requests":
-            page = self.ops.list_requests(
-                service_desk_id=desk.id,
-                start=checkpoint.start_at,
+            found = self.ops.search_issues(
+                jql=key_page_jql(self.project_key, checkpoint.last_issue_key or None),
                 limit=_PAGE_SIZE,
             )
-            fresh = self._fresh(page.values, previous)
-            for request in fresh:
-                document = self._to_document(request)
-                if document is not None:
-                    yield document
-            keys = [request.issue_key for request in page.values]
-            # A page that repeats the one before it would walk forever.
-            if keys and keys == checkpoint.previous_keys:
+            yield from self._emit_search_page(found, previous)
+            checkpoint.previous_keys = [issue.key for issue in found.issues]
+            if not found.issues:
+                if not found.is_last:
+                    _stuck("Jira returned no issues before the last page.")
                 checkpoint.has_more = False
                 return checkpoint
-            checkpoint.previous_keys = keys
-            checkpoint.has_more = not _page_ends(page.is_last_page, len(page.values))
-            if checkpoint.has_more:
-                checkpoint.start_at += _PAGE_SIZE - _PAGE_OVERLAP
+            last_key = found.issues[-1].key
+            if last_key == checkpoint.last_issue_key and not found.is_last:
+                _stuck("Jira repeated the issue key cursor before the last page.")
+            checkpoint.last_issue_key = last_key
+            checkpoint.has_more = not found.is_last
             return checkpoint
 
+        sent_token = checkpoint.next_page_token
         found = self.ops.search_issues(
             jql=project_jql(self.project_key, start, end),
             limit=_PAGE_SIZE,
-            next_page_token=checkpoint.next_page_token,
+            next_page_token=sent_token,
             start_at=checkpoint.start_at,
         )
-        seen = previous
-        keys: list[str] = []
-        for issue in found.issues:
-            keys.append(issue.key)
-            if issue.key in seen:
-                continue
-            if _ISSUE_KEY.fullmatch(issue.key) is None:
-                continue
-            request = self.ops.get_request(issue_key=issue.key)
-            if request is None:
-                continue
-            document = self._to_document(request)
-            if document is not None:
-                yield document
-        if keys and keys == checkpoint.previous_keys:
-            checkpoint.has_more = False
-            return checkpoint
-        checkpoint.previous_keys = keys
-        if found.uses_token:
-            checkpoint.next_page_token = found.next_page_token
-            checkpoint.has_more = not found.is_last
-        else:
-            checkpoint.has_more = not found.is_last and len(found.issues) >= _PAGE_SIZE
-            if checkpoint.has_more:
-                checkpoint.start_at += _PAGE_SIZE - _PAGE_OVERLAP
+        yield from self._emit_search_page(found, previous)
+        checkpoint.previous_keys = [issue.key for issue in found.issues]
+        next_token, next_start, has_more = _follow_search(
+            found, sent_token=sent_token, start_at=checkpoint.start_at
+        )
+        checkpoint.next_page_token = next_token
+        checkpoint.start_at = next_start
+        checkpoint.has_more = has_more
         return checkpoint
 
     def build_dummy_checkpoint(self) -> JiraServiceManagementCheckpoint:
@@ -382,25 +402,53 @@ class JiraServiceManagementConnector(
     ) -> JiraServiceManagementCheckpoint:
         return JiraServiceManagementCheckpoint.model_validate_json(checkpoint_json)
 
+    def _emit_search_page(
+        self, found: IssueSearchPage, seen: set[str]
+    ) -> Iterator[Document | ConnectorFailure]:
+        for issue in found.issues:
+            if issue.key in seen or _ISSUE_KEY.fullmatch(issue.key) is None:
+                continue
+            request = self.ops.get_request(issue_key=issue.key)
+            if request is None:
+                continue
+            emitted = self._emit(request)
+            if emitted is not None:
+                yield emitted
+
     def _iter_all_requests(self) -> Iterator[list[CustomerRequest]]:
-        desk = self._service_desk()
-        start = 0
-        previous: set[str] = set()
+        """Every request, in issue-key order.
+
+        The cursor is the last key, not an offset. An edit cannot move a
+        live request to the other side of the cursor.
+        """
+        last_key = ""
+        seen: set[str] = set()
         for _page in range(100_000):
-            page = self.ops.list_requests(
-                service_desk_id=desk.id, start=start, limit=_PAGE_SIZE
+            found = self.ops.search_issues(
+                jql=key_page_jql(self.project_key, last_key or None),
+                limit=_PAGE_SIZE,
             )
-            fresh = self._fresh(page.values, previous)
-            if not fresh:
+            if not found.issues:
+                if not found.is_last:
+                    _stuck("Jira returned no issues before the last page.")
                 return
-            yield fresh
-            previous = {request.issue_key for request in page.values}
-            if _page_ends(page.is_last_page, len(page.values)):
+            fresh: list[CustomerRequest] = []
+            for issue in found.issues:
+                if issue.key in seen or _ISSUE_KEY.fullmatch(issue.key) is None:
+                    continue
+                seen.add(issue.key)
+                request = self.ops.get_request(issue_key=issue.key)
+                if request is not None:
+                    fresh.append(request)
+            page_last = found.issues[-1].key
+            if page_last == last_key and not found.is_last:
+                _stuck("Jira repeated the issue key cursor before the last page.")
+            if fresh:
+                yield fresh
+            last_key = page_last
+            if found.is_last:
                 return
-            start += _PAGE_SIZE - _PAGE_OVERLAP
-        raise RuntimeError(
-            "Jira Service Management request list did not end after 100000 pages."
-        )
+        _stuck("Jira issue key listing did not end after 100000 pages.")
 
     def retrieve_all_slim_docs(
         self,
@@ -450,9 +498,6 @@ class JiraServiceManagementConnector(
                 next_page_token=next_token,
                 start_at=start_at,
             )
-            page_keys = {issue.key for issue in found.issues}
-            if page_keys and page_keys <= previous:
-                return
             docs: list[SlimDocument] = []
             for issue in found.issues:
                 if issue.key in previous or _ISSUE_KEY.fullmatch(issue.key) is None:
@@ -468,19 +513,40 @@ class JiraServiceManagementConnector(
             if callback is not None:
                 callback.progress("jsm_slim_docs", len(docs))
             previous = {issue.key for issue in found.issues}
-            if found.uses_token:
-                # A short Cloud page is not the last page. Jira's page size is
-                # a maximum, and the token says whether another page exists.
-                if found.is_last or found.next_page_token is None:
-                    return
-                next_token = found.next_page_token
-            elif found.is_last or len(found.issues) < _PAGE_SIZE:
+            next_token, start_at, has_more = _follow_search(
+                found, sent_token=next_token, start_at=start_at
+            )
+            if not has_more:
                 return
-            else:
-                start_at += _PAGE_SIZE - _PAGE_OVERLAP
         raise RuntimeError(
             "Jira search did not end after 100000 pages during slim retrieval."
         )
+
+
+def _stuck(message: str) -> NoReturn:
+    raise RuntimeError(f"Jira Service Management listing is incomplete. {message}")
+
+
+def _follow_search(
+    found: IssueSearchPage, *, sent_token: str | None, start_at: int
+) -> tuple[str | None, int, bool]:
+    """The next cursor, and whether another page exists.
+
+    A Cloud page ends only when ``is_last`` is set. A repeated token on a
+    page that is not the last one is a stuck cursor, not an empty desk.
+    Data Center advances by ``next_start_at`` from the response.
+    """
+    if found.uses_token:
+        if found.is_last:
+            return None, start_at, False
+        if not found.next_page_token or found.next_page_token == sent_token:
+            _stuck("Jira repeated the search page token before the last page.")
+        return found.next_page_token, start_at, True
+    if found.is_last:
+        return None, start_at, False
+    if found.next_start_at is None or found.next_start_at <= start_at:
+        _stuck("Jira did not advance the search page before the last page.")
+    return None, found.next_start_at, True
 
 
 def _jira_time(value: str | None) -> datetime | None:

@@ -14,6 +14,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialInvalidError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
 )
 from onyx.connectors.jira_service_management import source_operations
 from onyx.connectors.jira_service_management.source_operations import (
@@ -245,6 +246,52 @@ def test_issue_timestamps_come_from_the_jira_issue(
     assert times.updated == "2024-06-01T12:00:00.000+0000"
     assert get.call_args.args[0].endswith("/rest/api/3/issue/IT_HELP-1")
     assert get.call_args.kwargs["params"]["fields"] == "updated,created"
+
+
+def test_data_center_search_advances_by_the_returned_span(
+    server: JiraServiceManagementSourceOperations,
+) -> None:
+    issues = [{"id": str(index), "key": f"IT-{index}"} for index in range(1, 51)]
+    get = MagicMock(
+        return_value=_response(
+            200,
+            {"startAt": 0, "maxResults": 50, "total": 60, "issues": issues},
+        )
+    )
+    with patch.object(requests.Session, "get", get):
+        page = server.search_issues(jql='project = "IT"', limit=50)
+    assert page.is_last is False
+    assert page.next_start_at == 50
+    assert page.returned == 50
+
+
+def test_a_rate_limit_response_is_returned_to_the_caller(
+    cloud: JiraServiceManagementSourceOperations,
+) -> None:
+    assert source_operations._RETRY.raise_on_status is False
+    with (
+        patch.object(
+            requests.Session,
+            "get",
+            return_value=_response(429, {"errorMessages": ["slow"]}),
+        ),
+        pytest.raises(RateLimitedValidationError),
+    ):
+        cloud.get_myself()
+
+
+def test_a_customer_cannot_pass_the_agent_probe(
+    cloud: JiraServiceManagementSourceOperations,
+) -> None:
+    with (
+        patch.object(
+            requests.Session,
+            "get",
+            return_value=_response(403, {"errorMessages": ["no"]}),
+        ),
+        pytest.raises(InsufficientPermissionsError, match="agent"),
+    ):
+        cloud.confirm_agent(service_desk_id="10")
 
 
 def test_an_unsafe_issue_key_is_not_requested(

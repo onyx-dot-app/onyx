@@ -52,6 +52,7 @@ class _AccountCheck(CapabilityCheck[JiraServiceManagementConnectorConfig]):
             requires_connector_instance=False,
             requires_fields=_SIGN_IN_FIELDS,
             validates_binding=True,
+            fails_when_unreachable=True,
             remediation=(
                 "Check the Jira site URL. Cloud needs the account email and an "
                 "API token. Data Center needs a personal access token and no email."
@@ -114,6 +115,8 @@ class _RequestsCheck(CapabilityCheck[JiraServiceManagementConnectorConfig]):
         gateway = gateway_from_context(context)
         config = config_from_context(context)
         desk = gateway.find_service_desk(project_key=config.project_key)
+        # Queues are agent-only. A customer can still open one request.
+        gateway.confirm_agent(service_desk_id=desk.id)
         page = gateway.list_requests(service_desk_id=desk.id, limit=_PROBE_LIMIT)
         gateway.search_issues(jql=project_jql(config.project_key), limit=_PROBE_LIMIT)
         if not page.values:

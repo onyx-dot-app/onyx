@@ -81,11 +81,14 @@ class _BoundedRetry(Retry):
 
 
 # urllib3 honors Retry-After on 429 and backs off on 5xx.
+# raise_on_status stays off so the final 429 is a response. _get then raises
+# RateLimitedValidationError instead of a retry error with no status.
 _RETRY: Retry = _BoundedRetry(
     total=5,
     backoff_factor=1,
     status_forcelist=(429, 500, 502, 503, 504),
     allowed_methods=frozenset({"GET"}),
+    raise_on_status=False,
 )
 
 _REQUEST_EXPAND: str = "requestType,participant,status"
@@ -140,6 +143,12 @@ def _is_last_page(is_last: bool | None, count: int) -> bool:
     if is_last is None and count < _PAGE_SIZE:
         return True
     return False
+
+
+def _int_field(value: Any, default: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return default
+    return value
 
 
 def _issue_path(issue_key: str) -> str:
@@ -344,6 +353,33 @@ class JiraServiceManagementSourceOperations(SourceOperations):
         capabilities=(CredentialCapability.INDEXING,),
         consumes=OperationConsumes.BOTH,
     )
+    def confirm_agent(self, *, service_desk_id: str) -> None:
+        """Queues are visible only to agents.
+
+        A customer can open one request and still miss the rest of the desk
+        and the internal comments. A failed queue read means the account is
+        not an agent.
+        """
+        if not service_desk_id.isdigit():
+            raise ConnectorValidationError(
+                "Jira returned a service desk id the connector will not request."
+            )
+        try:
+            self._get(
+                f"/rest/servicedeskapi/servicedesk/{service_desk_id}/queue",
+                {"limit": 1},
+            )
+        except InsufficientPermissionsError as error:
+            raise InsufficientPermissionsError(
+                "The account is not an agent on this service desk. Give it the "
+                "Service Desk Team role so it can read every request and the "
+                "internal comments."
+            ) from error
+
+    @source_operation(
+        capabilities=(CredentialCapability.INDEXING,),
+        consumes=OperationConsumes.BOTH,
+    )
     def list_requests(
         self, *, service_desk_id: str, start: int = 0, limit: int = _PAGE_SIZE
     ) -> RequestPage:
@@ -491,8 +527,19 @@ class JiraServiceManagementSourceOperations(SourceOperations):
                 method="GET",
                 url=None,
             )
+        start = _int_field(payload.get("startAt"), start_at)
+        max_results = _int_field(payload.get("maxResults"), limit)
+        total = payload.get("total")
+        returned = len(issues)
+        reached_total = isinstance(total, int) and start + returned >= total
+        # A short page is the end. A full page ends when startAt plus the
+        # returned count reaches total.
+        is_last = returned == 0 or returned < max_results or reached_total
         return IssueSearchPage(
             issues=[IssueRef.model_validate(issue) for issue in issues],
-            is_last=len(issues) < limit,
+            is_last=is_last,
             uses_token=False,
+            start_at=start,
+            returned=returned,
+            next_start_at=None if is_last else start + returned,
         )

@@ -138,10 +138,15 @@ class IssueSearchPage(_JsmEntity):
     """One page of a Jira issue search.
 
     Cloud pages continue with ``next_page_token``. Server and Data Center
-    pages continue with an offset the caller tracks.
+    pages continue with ``next_start_at``, taken from the response's
+    ``startAt`` plus the number of issues returned. ``next_start_at`` is
+    unset on the last page.
     """
 
     issues: list[IssueRef] = Field(default_factory=list)
     is_last: bool = True
     next_page_token: str | None = None
     uses_token: bool = False
+    start_at: int = 0
+    returned: int = 0
+    next_start_at: int | None = None
