@@ -126,7 +126,9 @@ class IdentityResolver(SandboxIdentityResolver):
         self, session_id: UUID, user_id: UUID, tenant_id: str
     ) -> UUID | None:
         """Validates a chat session id that a command in the sandbox sent: a
-        chat of the owner of the sandbox that is not deleted.
+        chat of the owner of the sandbox that is not deleted, while the owner
+        is active. Deactivation keeps shared app credentials, so this check
+        stops a running command of a deactivated user from using them.
 
         The id is the user name of the proxy URL of the command. Each chat of
         a user runs its commands as one user in one VM, so a command can send
@@ -135,7 +137,9 @@ class IdentityResolver(SandboxIdentityResolver):
         """
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             chat_session = get_chat_session_for_user(db, session_id, user_id)
-            return chat_session.id if chat_session is not None else None
+            if chat_session is None or not chat_session.user.is_active:
+                return None
+            return chat_session.id
 
 
 def build_ip_lookup() -> SandboxIPLookup:
