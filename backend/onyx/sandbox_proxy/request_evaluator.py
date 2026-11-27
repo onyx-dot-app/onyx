@@ -212,7 +212,8 @@ def _request_payload(request: http.Request) -> dict[str, Any]:
 
 
 def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:
-    if "application/json" in content_type:
+    media_type = content_type.split(";", 1)[0].strip()
+    if media_type == "application/json" or media_type.endswith("+json"):
         try:
             decoded = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):

@@ -251,3 +251,13 @@ def test_a_form_body_keeps_its_empty_fields() -> None:
         {"content-type": "application/x-www-form-urlencoded"},
     )
     assert _request_payload(request) == {"name": "Ada", "title": "", "tag": ["a", "b"]}
+
+
+def test_a_json_patch_body_is_decoded() -> None:
+    request = http.Request.make(
+        "PATCH",
+        "https://api.example.com/contacts/1",
+        b'{"title": "CTO"}',
+        {"content-type": "application/merge-patch+json; charset=utf-8"},
+    )
+    assert _request_payload(request) == {"title": "CTO"}
