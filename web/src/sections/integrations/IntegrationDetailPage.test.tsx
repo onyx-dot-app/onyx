@@ -564,6 +564,52 @@ test("a refused REST upload can be discarded to keep the current spec", async ()
   expect(save).toBeEnabled();
 });
 
+test("discarding a refused REST upload keeps a later URL import error", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    "POST /api/admin/integrations/openapi-import": new Response(
+      JSON.stringify({ detail: "Could not fetch the spec" }),
+      { status: 400 }
+    ),
+  });
+  const big = new File(["x"], "openapi.json");
+  Object.defineProperty(big, "size", { value: 5 * 1024 * 1024 + 1 });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const save = await view.findByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  const input =
+    activePanel().querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("No file input");
+  await u.upload(input, big);
+  expect(await view.findByText(copy.add.api.tooLarge)).toBeInTheDocument();
+
+  await u.type(
+    view.getByRole("textbox", { name: copy.add.rest.import.url }),
+    "https://pets.example.com/openapi.json"
+  );
+  await u.click(
+    view.getByRole("button", { name: copy.add.rest.import.submit })
+  );
+  expect(await view.findByText("Could not fetch the spec")).toBeInTheDocument();
+
+  const remove = view.queryByRole("button", {
+    name: copy.add.api.upload.remove,
+  });
+  if (remove) await u.click(remove);
+  expect(view.getByText("Could not fetch the spec")).toBeInTheDocument();
+  expect(save).toBeDisabled();
+});
+
 /** Makes the next file read fail, as an unreadable file does. */
 function failNextRead(): void {
   jest

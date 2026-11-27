@@ -69,6 +69,8 @@ export default function RestEndpointFields({
   // Save drops the actions of these operations, so show them before Save.
   const [skipped, setSkipped] = useState<string[]>([]);
   const [rejected, setRejected] = useState(false);
+  // The control whose failure `importError` shows; each control clears only its own.
+  const [errorSource, setErrorSource] = useState<"file" | "url" | null>(null);
   // True from a file pick until its text arrives, so an empty or unreadable
   // file is told apart from the clear button, which also reports "".
   const readingFileRef = useRef(false);
@@ -89,9 +91,11 @@ export default function RestEndpointFields({
           (draft.baseUrl.trim() || view.base_url),
       });
       setSkipped(view.skipped);
+      setErrorSource(null);
       onImportErrorChange(null);
       toast.success(t("import.done", { count: view.endpoints.length }));
     } catch (error) {
+      setErrorSource("spec_url" in body ? "url" : "file");
       onImportErrorChange(
         error instanceof Error ? error.message : t("import.failed")
       );
@@ -117,6 +121,7 @@ export default function RestEndpointFields({
               maxSizeKb={SPEC_MAX_SIZE_KB}
               onFileSizeExceeded={() => {
                 setRejected(true);
+                setErrorSource("file");
                 onImportErrorChange(tAdd("api.tooLarge"));
               }}
               // Called before setValue, which may start an import.
@@ -132,20 +137,22 @@ export default function RestEndpointFields({
                 const failed = !text.trim() && (fromFile || text !== "");
                 setRejected(failed);
                 const over = specTextTooLarge(text);
-                onImportErrorChange(
-                  over
-                    ? tAdd("api.tooLarge")
-                    : failed
-                      ? t("import.failed")
-                      : null
-                );
+                if (over || failed) {
+                  setErrorSource("file");
+                  onImportErrorChange(
+                    over ? tAdd("api.tooLarge") : t("import.failed")
+                  );
+                } else if (errorSource === "file") {
+                  setErrorSource(null);
+                  onImportErrorChange(null);
+                }
                 if (!over && text.trim())
                   void runImport({ openapi_document: text });
               }}
             />
             {/* A refused or unreadable file is never attached, so the control
                 has no clear button; this one keeps the current spec. */}
-            {rejected && importError !== null && (
+            {rejected && errorSource === "file" && importError !== null && (
               <Button
                 type="button"
                 size="sm"
@@ -154,6 +161,7 @@ export default function RestEndpointFields({
                 aria-label={tAdd("api.upload.remove")}
                 onClick={() => {
                   setRejected(false);
+                  setErrorSource(null);
                   onImportErrorChange(null);
                 }}
               />
@@ -167,7 +175,10 @@ export default function RestEndpointFields({
               variant={disabled ? "disabled" : "primary"}
               onChange={(event) => {
                 setSpecUrl(event.target.value);
-                if (!event.target.value.trim()) onImportErrorChange(null);
+                if (!event.target.value.trim() && errorSource === "url") {
+                  setErrorSource(null);
+                  onImportErrorChange(null);
+                }
               }}
             />
             <Button
