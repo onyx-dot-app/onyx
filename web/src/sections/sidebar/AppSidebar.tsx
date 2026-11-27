@@ -449,6 +449,11 @@ export default function AppSidebar() {
   return (
     <>
       <ChatShortcuts />
+      {/* The Chat sidebar renders the menu with its trigger. Elsewhere it
+          stays mounted for its ⌘K hotkey. */}
+      {activeWindow !== "chat" && (
+        <ChatSearchCommandMenu trigger={() => null} />
+      )}
       <createProjectModal.Provider>
         <CreateProjectModal />
       </createProjectModal.Provider>
