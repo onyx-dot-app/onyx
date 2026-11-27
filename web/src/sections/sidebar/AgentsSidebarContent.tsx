@@ -126,33 +126,37 @@ export default function AgentsSidebarContent({
 
   return (
     <SidebarLayouts.Body scrollKey="agents-sidebar">
-      <SidebarTab
-        icon={SvgOnyxOctagon}
-        {...navigation.linkTo("/app/agents", { scroll: false })}
-        selected={appPosition.isMoreAgents()}
-      >
-        {t("appSidebar.exploreAgents.label")}
-      </SidebarTab>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleAgentDragEnd}
-      >
-        <SidebarLayouts.Section title={t("appSidebar.agents.title")}>
-          <SortableContext
-            items={visibleAgentIds}
-            strategy={verticalListSortingStrategy}
-          >
-            {isLoadingAgentList ? (
-              <SidebarLoader count={3} />
-            ) : (
-              visibleAgents.map((visibleAgent) => (
-                <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-              ))
-            )}
-          </SortableContext>
-        </SidebarLayouts.Section>
-      </DndContext>
+      <SidebarLayouts.Section>
+        <SidebarTab
+          icon={SvgOnyxOctagon}
+          {...navigation.linkTo("/app/agents", { scroll: false })}
+          selected={appPosition.isMoreAgents()}
+        >
+          {t("appSidebar.exploreAgents.label")}
+        </SidebarTab>
+      </SidebarLayouts.Section>
+      {(isLoadingAgentList || visibleAgents.length > 0) && (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleAgentDragEnd}
+        >
+          <SidebarLayouts.Section title={t("appSidebar.agents.title")}>
+            <SortableContext
+              items={visibleAgentIds}
+              strategy={verticalListSortingStrategy}
+            >
+              {isLoadingAgentList ? (
+                <SidebarLoader count={3} />
+              ) : (
+                visibleAgents.map((visibleAgent) => (
+                  <AgentButton key={visibleAgent.id} agent={visibleAgent} />
+                ))
+              )}
+            </SortableContext>
+          </SidebarLayouts.Section>
+        </DndContext>
+      )}
     </SidebarLayouts.Body>
   );
 }
