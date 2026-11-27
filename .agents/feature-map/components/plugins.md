@@ -370,9 +370,9 @@ only the configuration of a chat that does not exist yet.
     (`web/src/sections/integrations/IntegrationActionsTab.tsx`) shows the
     policies with or without Craft, and so does the "Users Can Save Always
     Allow" switch on the Configuration tab. The member "Always allow" list
-    (`sections/plugins/AlwaysAllowList.tsx`) shows for an integration whose
-    `users_can_save_always_allow` is on and offers the switch only for an
-    action whose admin policy is Ask. It reads and writes
+    (`sections/plugins/AlwaysAllowList.tsx`) shows the policy tag of each
+    action to members. `users_can_save_always_allow` only controls whether an
+    Ask action offers the "Don't ask me" switch. It reads and writes
     `/action-policies/integration/{id}` (`server/features/integrations/api.py`),
     which checks plugin visibility but not Craft. The Craft catalog list
     (`/build/action-policies`) and task choices cover the integrations of the
