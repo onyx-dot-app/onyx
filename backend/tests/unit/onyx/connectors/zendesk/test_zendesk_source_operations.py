@@ -145,3 +145,24 @@ def test_ticket_indexing_reads_no_content_tags(monkeypatch: pytest.MonkeyPatch) 
     assert all(
         c.args[0] == "incremental/tickets.json" for c in make_request.call_args_list
     )
+
+
+@pytest.mark.parametrize(
+    "status_code, payload, expected",
+    [
+        (200, {"article": {"id": 7}}, True),
+        # A sign-in or landing page served with 200.
+        (200, {"something": "else"}, False),
+        (302, {}, False),
+        (403, {}, False),
+    ],
+)
+def test_is_article_public(
+    status_code: int, payload: dict[str, Any], expected: bool
+) -> None:
+    with patch(
+        "onyx.connectors.zendesk.source_operations.requests.get",
+        return_value=_response(status_code, payload),
+    ) as get:
+        assert _gateway().is_article_public(article_id=7) is expected
+    assert get.call_args.kwargs["allow_redirects"] is False

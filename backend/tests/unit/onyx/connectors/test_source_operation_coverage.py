@@ -95,7 +95,11 @@ from onyx.connectors.youtrack.models import (
     YouTrackRole,
     YouTrackUser,
 )
-from onyx.connectors.zendesk.models import ZendeskPageResponse, ZendeskUser
+from onyx.connectors.zendesk.models import (
+    ZendeskPageResponse,
+    ZendeskTicketPage,
+    ZendeskUser,
+)
 from tests.unit.onyx.connectors.source_operation_harnesses import (
     compute_uncovered_units,
     import_all_source_operation_gateways,
@@ -361,16 +365,20 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
 def _configure_zendesk_spy(spy: MagicMock) -> None:
     """One article with an author and one ticket, so the checks reach the
     author read and the comment read."""
-    spy.get_me.return_value = ZendeskUser(id=1)
+    spy.get_me.return_value = ZendeskUser(id=1, role="admin")
     spy.list_content_tags.return_value = {}
     spy.get_article_page.return_value = ZendeskPageResponse(
         data=[{"id": 1, "author_id": 1}], meta={}, has_more=False
     )
     spy.get_user.return_value = ZendeskUser(id=1)
-    spy.get_ticket_page.return_value = ZendeskPageResponse(
-        data=[{"id": 1}], meta={"end_time": 1}, has_more=False
+    spy.get_ticket_page.return_value = ZendeskTicketPage(
+        data=[{"id": 1, "requester_id": 1}],
+        meta={"end_time": 1},
+        has_more=False,
+        users=[ZendeskUser(id=1, email="a@example.com")],
     )
     spy.list_ticket_comments.return_value = []
+    spy.is_article_public.return_value = False
 
 
 def _configure_azure_datalake_spy(spy: MagicMock) -> None:

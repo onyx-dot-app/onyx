@@ -3660,6 +3660,10 @@
             "calls_per_minute": {
               "label": "Appels d'API par minute",
               "description": "Limite le nombre d'appels d'API Zendesk que ce connecteur peut effectuer par minute (s'applique uniquement à ce connecteur). Voir les valeurs par défaut : https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            },
+            "grant_end_users": {
+              "label": "Donner accès aux utilisateurs finaux",
+              "description": "Avec la synchronisation des autorisations, donne aussi aux utilisateurs finaux (demandeurs, personnes en CC et membres des organisations qui partagent leurs tickets) l'accès à leurs tickets sans notes internes. Les commentaires de chacun de ces tickets sont alors lus à chaque synchronisation, ce qui ralentit beaucoup la synchronisation sur les grands comptes. Si l'option est désactivée, seuls les agents et les administrateurs ont accès aux tickets."
             }
           }
         },

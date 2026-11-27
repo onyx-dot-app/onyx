@@ -3660,6 +3660,10 @@
             "calls_per_minute": {
               "label": "每分钟 API 调用次数",
               "description": "限制此连接器每分钟可发起的 Zendesk API 调用次数（仅适用于此连接器）。默认值请参阅：https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            },
+            "grant_end_users": {
+              "label": "向最终用户授予访问权限",
+              "description": "在权限同步时，也向最终用户（请求者、抄送人以及共享工单的组织成员）授予其没有内部备注的工单的访问权限。为此，每次同步都会读取这些工单的评论，在大型账户上会使同步明显变慢。关闭时，只有客服和管理员可以访问工单。"
             }
           }
         },
