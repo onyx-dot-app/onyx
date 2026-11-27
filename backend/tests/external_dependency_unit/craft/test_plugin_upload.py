@@ -37,6 +37,7 @@ from onyx.integrations import plugin_needs
 from onyx.integrations.models import PluginNeedState
 from onyx.integrations.service import list_member_integrations
 from onyx.llm.model_capabilities import ToolFamily
+from onyx.server.features.integrations.models import MemberIntegration
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import (
     SkillBulkActionRequest,
@@ -774,6 +775,71 @@ def test_bulk_enable_turns_on_the_needs_of_all_plugins_in_one_pass(
         on = api.fetch_skill_for_current_user(plugin_id, author, db_session)
         assert on.enabled is True
         assert on.available_count == on.needed_count
+
+
+def test_bulk_enable_skips_an_integration_the_user_lost_mid_request(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    integration_ids: list[int],
+) -> None:
+    author, _, _ = users
+    lost_url = "https://lost.plugin-upload.test/mcp"
+    kept, _ = make_mcp_integration(db_session, server_url=MCP_URL)
+    lost, _ = make_mcp_integration(db_session, server_url=lost_url)
+    give_access(db_session, [kept, lost])
+    integration_ids.extend([kept.id, lost.id])
+    bundles: list[tuple[str, dict[str, object] | None]] = [
+        ("lost-one", {"main": _http()}),
+        ("lost-two", {"main": _http(lost_url)}),
+    ]
+    plugin_ids = [
+        _save(
+            author, _plugin_zip(name, [f"{name}-skill"], servers=servers), db_session
+        ).plugin.id
+        for name, servers in bundles
+    ]
+    api.bulk_update_skills(
+        SkillBulkActionRequest(skill_ids=plugin_ids, action="disable"),
+        author,
+        db_session,
+    )
+    db_session.execute(
+        delete(UserIntegrationPreference).where(
+            UserIntegrationPreference.user_id == author.id
+        )
+    )
+    db_session.commit()
+
+    load = plugin_needs.integrations_for_needs
+
+    def load_then_revoke(user: User, session: Session) -> list[MemberIntegration]:
+        loaded = load(user, session)
+        give_access(session, [lost], published=False)
+        return loaded
+
+    with (
+        patch("onyx.server.features.skill.api.reload_craft_sessions"),
+        patch(
+            "onyx.integrations.plugin_needs.integrations_for_needs",
+            side_effect=load_then_revoke,
+        ),
+    ):
+        result = api.bulk_update_skills(
+            SkillBulkActionRequest(skill_ids=plugin_ids, action="enable"),
+            author,
+            db_session,
+        )
+
+    assert (sorted(result.succeeded), result.failed) == (sorted(plugin_ids), [])
+    assert set(
+        db_session.scalars(
+            select(UserIntegrationPreference.integration_id).where(
+                UserIntegrationPreference.user_id == author.id,
+                UserIntegrationPreference.enabled.is_(True),
+            )
+        )
+    ) == {kept.id}
 
 
 def test_a_group_limited_integration_is_no_access_without_its_url(

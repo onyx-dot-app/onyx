@@ -7,9 +7,12 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import IntegrationKind
 from onyx.db.integration import list_mcp_servers_by_integration
+from onyx.db.integration_access import (
+    load_user_integration_states,
+    set_integration_preferences__no_commit,
+)
 from onyx.db.models import User
 from onyx.db.plugin import get_versions_needs
-from onyx.integrations.access import set_integration_enabled__no_commit
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.models import NeedCounts, PluginNeedState, PluginNeedView
 from onyx.integrations.service import list_member_integrations
@@ -120,9 +123,14 @@ def turn_on_needed_integrations__no_commit(
         for view in need_views(needs, integrations)
         if view.state is PluginNeedState.TURN_ON and view.integration_id in connected
     }
-    for integration_id in sorted(to_turn_on):
-        set_integration_enabled__no_commit(user, integration_id, True, db_session)
-    return bool(to_turn_on)
+    # Access can change after the integrations load: skip the ones the user
+    # lost, so that one change does not fail every enable of the request.
+    still_accessible = [
+        state.integration_id
+        for state in load_user_integration_states([user.id], db_session, to_turn_on)
+    ]
+    set_integration_preferences__no_commit(user.id, still_accessible, True, db_session)
+    return bool(still_accessible)
 
 
 def unavailable_need_names(
