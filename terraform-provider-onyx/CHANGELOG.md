@@ -41,7 +41,8 @@ DEPRECATIONS:
 * The integration ids are not the old resource ids. To move a resource:
   1. Add an `onyx_integration` block and run `terraform import` with the integration id from
      **Admin Panel → Integrations**.
-  2. Change references to the old resource, such as agent tool ids, to the new resource.
+  2. Change references to the old resource, such as `onyx_agent.tool_ids`, to the action ids
+     from the `onyx_tools` data source. The `onyx_integration` id is not an action id.
   3. Remove the old resource from state with `terraform state rm`.
   4. Remove the old resource block from the configuration. If you keep the block, the next
      plan creates the old resource again.
