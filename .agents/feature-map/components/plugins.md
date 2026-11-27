@@ -188,8 +188,8 @@ client, header template, transport and owner are under Advanced. The Actions tab
 `PolicyEditor` and `PolicyToggle`, which take the API values
 `allow|ask|blocked`.
 
-**Member flow.** `web/src/sections/customize/` (the three tabs, in
-`CustomizeLayout`) and `web/src/sections/plugins/MemberPluginDetailPage.tsx`
+**Member flow.** `web/src/sections/customize/` (the three tabs, in the
+Customize window's sidebar, `CustomizeSidebarContent`) and `web/src/sections/plugins/MemberPluginDetailPage.tsx`
 read only member endpoints: the user's skills
 (`GET /skills`, as the Skills page) and `GET /integrations`.
 `lib/plugins/directory.ts:memberPluginEntries` makes one plugin of each custom

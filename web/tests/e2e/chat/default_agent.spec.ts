@@ -116,7 +116,7 @@ test.describe("Default Agent Tests", () => {
       expect(greetingElement).toBeTruthy();
 
       // Create a custom agent to test non-default behavior
-      await page.getByTestId("AppSidebar/more-agents").click();
+      await page.getByTestId("AppRail/agents").click();
       await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
@@ -159,7 +159,7 @@ test.describe("Default Agent Tests", () => {
       page,
     }) => {
       // Create a custom agent
-      await page.getByTestId("AppSidebar/more-agents").click();
+      await page.getByTestId("AppRail/agents").click();
       await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
@@ -205,7 +205,7 @@ test.describe("Default Agent Tests", () => {
 
     test("custom agents should display starter messages", async ({ page }) => {
       // Create a custom agent with starter messages
-      await page.getByTestId("AppSidebar/more-agents").click();
+      await page.getByTestId("AppRail/agents").click();
       await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')
@@ -250,7 +250,7 @@ test.describe("Default Agent Tests", () => {
       page,
     }) => {
       // Open agent selector
-      await page.getByTestId("AppSidebar/more-agents").click();
+      await page.getByTestId("AppRail/agents").click();
 
       // Wait for modal or assistant list to appear
       // The selector might be in a modal or dropdown.
@@ -281,7 +281,7 @@ test.describe("Default Agent Tests", () => {
       page,
     }) => {
       // Create a custom agent
-      await page.getByTestId("AppSidebar/more-agents").click();
+      await page.getByTestId("AppRail/agents").click();
       await page.getByLabel("AgentsPage/new-agent-button").click();
       await page
         .locator('input[name="name"]')

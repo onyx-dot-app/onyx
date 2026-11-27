@@ -1,18 +1,12 @@
 "use client";
 
 import { useNavigation, usePathname } from "@opal/navigation";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo } from "react";
 import { useAdminNavLabels } from "@/lib/adminNavLabels";
 import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
-import { SidebarLayouts, useSidebarState } from "@opal/layouts";
+import { SidebarLayouts } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
 import {
   InputTypeIn,
@@ -20,7 +14,7 @@ import {
   Badge,
   type BadgeProps,
 } from "@opal/components";
-import { SvgLock, SvgSearch, SvgX } from "@opal/icons";
+import { SvgLock } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import {
   useBillingInformation,
@@ -35,7 +29,6 @@ import { Tier } from "@/lib/tiers/types";
 import { useBetaTag, usePlans } from "@/lib/tiers/hooks";
 import type { PlaygroundRestrictedFeature } from "@/lib/playground/types";
 import useFilter from "@/hooks/useFilter";
-import { AccountPopover } from "@/lib/app/components";
 import {
   BETA_SECTION_IDS,
   buildItems,
@@ -45,21 +38,12 @@ import {
   type SidebarItemEntry,
 } from "@/lib/admin-sidebar-utils";
 import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
+import AppRail from "@/sections/sidebar/AppRail";
 
 export default function AdminSidebar() {
   const t = useTranslations("sidebar");
   const playgroundT = useTranslations("common.playground");
   const plans = usePlans();
-  const { folded, setFolded } = useSidebarState();
-  const searchRef = useRef<HTMLInputElement>(null);
-  const [focusSearch, setFocusSearch] = useState(false);
-
-  useEffect(() => {
-    if (focusSearch && !folded && searchRef.current) {
-      searchRef.current.focus();
-      setFocusSearch(false);
-    }
-  }, [focusSearch, folded]);
   const navigation = useNavigation();
   const pathname = usePathname();
   const { adminCapabilities } = useUser();
@@ -140,29 +124,16 @@ export default function AdminSidebar() {
   const disabledGroups = groupBySection(disabled);
 
   return (
-    <SidebarLayouts.Root>
+    <SidebarLayouts.Root rail={<AppRail />}>
       <BrandedSidebarHeader>
-        {folded ? (
-          <SidebarTab
-            icon={SvgSearch}
-            onClick={() => {
-              setFolded(false);
-              setFocusSearch(true);
-            }}
-          >
-            {t("adminSidebar.search.label")}
-          </SidebarTab>
-        ) : (
-          <InputTypeIn
-            ref={searchRef}
-            variant="internal"
-            icon="search"
-            placeholder={t("adminSidebar.searchInput.placeholder")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            clearButton
-          />
-        )}
+        <InputTypeIn
+          variant="internal"
+          icon="search"
+          placeholder={t("adminSidebar.searchInput.placeholder")}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          clearButton
+        />
       </BrandedSidebarHeader>
 
       <SidebarLayouts.Body scrollKey="admin-sidebar">
@@ -234,21 +205,6 @@ export default function AdminSidebar() {
           </Disabled>
         )}
       </SidebarLayouts.Body>
-
-      <SidebarLayouts.Footer>
-        {!folded && <SidebarLayouts.Divider />}
-        <SidebarTab
-          icon={SvgX}
-          {...navigation.linkTo(
-            pathname.startsWith("/admin/craft") ? "/craft/v1" : "/app",
-            { scroll: false }
-          )}
-          variant="sidebar-light"
-        >
-          {t("adminSidebar.exitAdminPanel.label")}
-        </SidebarTab>
-        <AccountPopover />
-      </SidebarLayouts.Footer>
     </SidebarLayouts.Root>
   );
 }

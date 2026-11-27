@@ -15,6 +15,7 @@ import { usePathname } from "@opal/navigation/next";
 import {
   Text,
   Button,
+  SidebarTab,
   Divider,
   ShadowDiv,
   Spacer,
@@ -43,6 +44,7 @@ const SIDEBAR_LOGO_HEIGHT_PX = 28;
 // ---------------------------------------------------------------------------
 
 const SidebarFoldableContext = createContext(false);
+const SidebarRailedContext = createContext(false);
 
 interface SidebarRootProps {
   /**
@@ -52,12 +54,19 @@ interface SidebarRootProps {
    * regardless of this prop.
    */
   foldable?: boolean;
+  /**
+   * A `SidebarLayouts.Rail` shown before the sidebar. With a rail the sidebar
+   * always folds, and folding hides the sidebar fully while the rail stays.
+   */
+  rail?: React.ReactNode;
   children: React.ReactNode;
 }
 
-function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
+function SidebarRoot({ foldable = false, rail, children }: SidebarRootProps) {
   const { isMobile, isSmallScreen, isMounted } = useScreenSize();
   const { folded, setFolded } = useSidebarState();
+  const railed = rail !== undefined;
+  const canFold = foldable || railed;
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
@@ -67,7 +76,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   // types too: no text field uses the shortcut, so it always means the
   // sidebar.
   useHotkey("mod+e", () => setFolded((prev) => !prev), {
-    enabled: foldable || isMobile || isSmallScreen,
+    enabled: canFold || isMobile || isSmallScreen,
     whileTyping: true,
   });
 
@@ -79,23 +88,23 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     if (isMobile || isSmallScreen) {
       // The overlay hides the page behind it, so it starts closed.
       setFolded(true);
-    } else if (!foldable) {
+    } else if (!canFold) {
       // A non-foldable desktop sidebar is a column that is always open.
       setFolded(false);
     }
-  }, [isMounted, isMobile, isSmallScreen, foldable, setFolded]);
+  }, [isMounted, isMobile, isSmallScreen, canFold, setFolded]);
 
   const foldedAttr = String(folded);
 
   // The overlays always fold; a desktop column only folds when `foldable`.
   // Tabs read this derived value, not the app-wide raw state, so tabs outside
   // a sidebar (and inside a non-foldable one) never collapse.
-  const effectiveFolded = (isMobile || isSmallScreen || foldable) && folded;
+  const effectiveFolded = (isMobile || isSmallScreen || canFold) && folded;
 
   // The same value in two forms: context for the parts that need JS (the
   // folded-only tooltip), and `data-folded` for the parts CSS can do on its
   // own. The attribute lets descendants restyle without re-rendering.
-  const inner = (
+  const panel = (
     <SidebarFoldedContext.Provider value={effectiveFolded}>
       <div
         className="opal-sidebar-root__inner"
@@ -106,6 +115,25 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     </SidebarFoldedContext.Provider>
   );
 
+  // The rail is a second, always-folded sidebar inner beside the panel, so its
+  // tabs show icons with label tooltips.
+  const inner = railed ? (
+    <SidebarRailedContext.Provider value={true}>
+      <SidebarFoldedContext.Provider value={true}>
+        <div
+          className="opal-sidebar-root__inner opal-sidebar-root__rail"
+          data-folded="true"
+        >
+          {rail}
+        </div>
+      </SidebarFoldedContext.Provider>
+      {panel}
+    </SidebarRailedContext.Provider>
+  ) : (
+    panel
+  );
+  const railedAttr = railed || undefined;
+
   if (isMobile) {
     return (
       <SidebarFoldableContext.Provider value={true}>
@@ -113,6 +141,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
           className="opal-sidebar-root__overlay"
           data-variant="mobile"
           data-folded={foldedAttr}
+          data-railed={railedAttr}
         >
           {inner}
         </div>
@@ -136,6 +165,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
           className="opal-sidebar-root__overlay"
           data-variant="small"
           data-folded={foldedAttr}
+          data-railed={railedAttr}
         >
           {inner}
         </div>
@@ -152,10 +182,11 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   }
 
   return (
-    <SidebarFoldableContext.Provider value={foldable}>
+    <SidebarFoldableContext.Provider value={canFold}>
       <div
         className="opal-sidebar-root__column"
-        data-folded={foldable ? foldedAttr : undefined}
+        data-folded={canFold ? foldedAttr : undefined}
+        data-railed={railedAttr}
       >
         {inner}
       </div>
@@ -211,6 +242,7 @@ function SidebarHeader(props: SidebarHeaderProps) {
     [setFolded]
   );
 
+  const railed = useContext(SidebarRailedContext);
   const foldLabel = folded ? strings.sidebarOpen : strings.sidebarClose;
 
   const closeButton = useMemo(
@@ -228,6 +260,28 @@ function SidebarHeader(props: SidebarHeaderProps) {
     ),
     [folded, foldLabel, toggleFolded]
   );
+
+  // Under a rail, the rail holds the mark and the fold control. The header
+  // keeps only the wordmark, level with the rail's mark.
+  if (railed) {
+    return (
+      <div className="opal-sidebar-header">
+        {props.wordmark && (
+          <div className="opal-sidebar-header__topbar">
+            <div
+              className="opal-sidebar-header__railed-wordmark"
+              style={{ minHeight: SIDEBAR_LOGO_HEIGHT_PX }}
+            >
+              {props.wordmark}
+            </div>
+          </div>
+        )}
+        {children && (
+          <div className="opal-sidebar-header__content">{children}</div>
+        )}
+      </div>
+    );
+  }
 
   if (props.renderAppLogo === undefined) {
     return (
@@ -320,6 +374,46 @@ function SidebarHeader(props: SidebarHeaderProps) {
       {children && (
         <div className="opal-sidebar-header__content">{children}</div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Rail — the thin column of window tabs, passed to `Root` as `rail`
+// ---------------------------------------------------------------------------
+
+interface SidebarRailProps {
+  /** The logo mark at the top of the rail. */
+  logo?: React.ReactNode;
+  /** Bottom items, below the fold toggle (e.g. a settings tab, the account). */
+  footer?: React.ReactNode;
+  /** Window tabs, usually `SidebarTab`s with an icon and a string label. */
+  children?: React.ReactNode;
+}
+
+function SidebarRail({ logo, footer, children }: SidebarRailProps) {
+  const { folded, setFolded } = useSidebarState();
+  const strings = useOpalStrings();
+  return (
+    <div className="opal-sidebar-rail">
+      {logo && (
+        <div
+          className="opal-sidebar-rail__logo"
+          style={{ height: SIDEBAR_LOGO_HEIGHT_PX }}
+        >
+          {logo}
+        </div>
+      )}
+      <div className="opal-sidebar-rail__tabs">{children}</div>
+      <div className="opal-sidebar-rail__footer">
+        <SidebarTab
+          icon={SvgSidebar}
+          onClick={() => setFolded((prev) => !prev)}
+        >
+          {folded ? strings.sidebarOpen : strings.sidebarClose}
+        </SidebarTab>
+        {footer}
+      </div>
     </div>
   );
 }
@@ -470,10 +564,11 @@ function SidebarDivider() {
 
 export {
   SidebarRoot as Root,
+  SidebarRail as Rail,
   SidebarHeader as Header,
   SidebarBody as Body,
   SidebarFooter as Footer,
   SidebarSection as Section,
   SidebarDivider as Divider,
 };
-export type { SidebarRootProps };
+export type { SidebarRootProps, SidebarRailProps };

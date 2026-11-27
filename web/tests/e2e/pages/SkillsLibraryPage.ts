@@ -16,9 +16,7 @@ export class SkillsLibraryPage {
 
   async goto(): Promise<void> {
     await this.page.goto(SKILLS_PATH);
-    await expect(
-      this.page.getByRole("tab", { name: "Skills", exact: true })
-    ).toHaveAttribute("aria-selected", "true");
+    await expect(this.page.getByLabel("admin-page-title")).toHaveText("Skills");
   }
 
   card(name: string): Locator {
@@ -121,7 +119,11 @@ export class SkillsLibraryPage {
   }
 
   async backToList(): Promise<void> {
-    await this.page.getByRole("link", { name: "Skills", exact: true }).click();
+    // The Customize sidebar has a "Skills" link too; use the page's own.
+    await this.page
+      .locator("[data-main-container]")
+      .getByRole("link", { name: "Skills", exact: true })
+      .click();
     await expect(this.page).toHaveURL(/\/app\/customize\/skills$/);
   }
 }

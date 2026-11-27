@@ -59,7 +59,7 @@ export class AgentEditorPage {
 
   /** Navigate from the chat sidebar (the path a basic user takes). */
   async openFromSidebar(): Promise<void> {
-    await this.page.getByTestId("AppSidebar/more-agents").click();
+    await this.page.getByTestId("AppRail/agents").click();
     await this.page.waitForURL("**/app/agents");
     await this.page.getByLabel("AgentsPage/new-agent-button").click();
     await this.page.waitForURL("**/app/agents/create");

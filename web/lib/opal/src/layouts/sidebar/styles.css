@@ -32,6 +32,67 @@
 }
 
 /* ---------------------------------------------------------------------------
+   SidebarRoot — with a rail
+
+   The rail and the panel sit side by side. Unfolded, the root is as wide as
+   both; folded, only the rail shows and the panel is clipped, not shrunk.
+   The rail takes the folded width, so the small-screen spacer reserves it.
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-root__column[data-railed],
+.opal-sidebar-root__overlay[data-railed] {
+  @apply flex-row overflow-hidden;
+  width: calc(var(--sidebar-width-folded) + var(--sidebar-width-expanded));
+}
+.opal-sidebar-root__column[data-railed][data-folded="true"],
+.opal-sidebar-root__overlay[data-railed][data-folded="true"] {
+  width: var(--sidebar-width-folded);
+}
+
+.opal-sidebar-root__rail {
+  @apply shrink-0 border-e border-border-01;
+  width: var(--sidebar-width-folded);
+}
+
+/* Folded, the rail is the whole column and needs no edge of its own. */
+[data-railed][data-folded="true"] > .opal-sidebar-root__rail {
+  @apply border-transparent;
+}
+
+[data-railed] > .opal-sidebar-root__inner:not(.opal-sidebar-root__rail) {
+  @apply shrink-0;
+  width: var(--sidebar-width-expanded);
+}
+
+/* Folded, the clipped panel also leaves the tab order and the accessibility
+   tree, once the column has finished closing. */
+[data-railed][data-folded="true"]
+  > .opal-sidebar-root__inner:not(.opal-sidebar-root__rail) {
+  visibility: hidden;
+  transition: visibility 0s linear var(--duration-sidebar-fold);
+}
+
+/* ---------------------------------------------------------------------------
+   SidebarRail
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-rail {
+  @apply flex flex-col flex-1 min-h-0 gap-4 pt-3 px-2;
+}
+
+.opal-sidebar-rail__logo {
+  @apply flex shrink-0 items-center justify-center;
+}
+
+.opal-sidebar-rail__tabs {
+  @apply flex flex-col flex-1 min-h-0 gap-0.5;
+}
+
+.opal-sidebar-rail__footer {
+  @apply flex flex-col shrink-0 gap-0.5;
+}
+
+/* ---------------------------------------------------------------------------
    SidebarRoot — mobile / small overlays
    --------------------------------------------------------------------------- */
 
@@ -188,6 +249,11 @@
 
 .opal-sidebar-header__content {
   @apply px-2;
+}
+
+/* Under a rail: the wordmark alone, level with the rail's mark. */
+.opal-sidebar-header__railed-wordmark {
+  @apply flex flex-row items-start px-1 min-w-0;
 }
 
 /* Folded logo/unfold button: one control, two faces. The logo shows at rest and

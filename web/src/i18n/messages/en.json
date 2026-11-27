@@ -13636,14 +13636,6 @@
         },
         "title": "Create New Project"
       },
-      "foldedPopover": {
-        "empty": {
-          "title": "No projects found"
-        },
-        "search": {
-          "placeholder": "Search projects..."
-        }
-      },
       "folder": {
         "collapse": {
           "ariaLabel": "Collapse project"
@@ -16552,9 +16544,6 @@
       "header": {
         "title": "Settings"
       },
-      "sectionSelect": {
-        "placeholder": "Select a section"
-      },
       "tabs": {
         "appearance": {
           "label": "Appearance"
@@ -16977,14 +16966,16 @@
       }
     },
     "adminSidebar": {
-      "exitAdminPanel": {
-        "label": "Exit Admin Panel"
-      },
-      "search": {
-        "label": "Search"
-      },
       "searchInput": {
         "placeholder": "Search..."
+      }
+    },
+    "appRail": {
+      "agents": {
+        "label": "Agents"
+      },
+      "chat": {
+        "label": "Chat"
       }
     },
     "appSidebar": {
@@ -16999,9 +16990,6 @@
       },
       "exploreAgents": {
         "label": "Explore Agents"
-      },
-      "moreAgents": {
-        "label": "More Agents"
       },
       "moveChatError": {
         "message": "Failed to move chat. Please try again."
@@ -18233,7 +18221,6 @@
   "customize": {
     "title": "Customize",
     "tabs": {
-      "label": "Customize sections",
       "skills": "Skills",
       "integrations": "Integrations",
       "plugins": "Plugins"
