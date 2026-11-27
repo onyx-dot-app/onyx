@@ -494,7 +494,7 @@ def patch_task(
         and request.prompt
         != get_scheduled_task(
             db_session=db_session, task_id=task_id, user_id=user.id
-        ).prompt
+        ).prompt.strip()
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

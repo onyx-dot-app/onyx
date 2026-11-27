@@ -353,7 +353,7 @@ def test_a_task_saved_with_a_longer_prompt_can_still_be_edited(
     with get_session_with_current_tenant() as db_session:
         task = db_session.get(ScheduledTask, task_id)
         assert task is not None
-        task.prompt = long_prompt
+        task.prompt = f" {long_prompt}\n"
         db_session.commit()
 
     kept = _patch_task(admin_user, task_id, {"name": "Renamed", "prompt": long_prompt})
