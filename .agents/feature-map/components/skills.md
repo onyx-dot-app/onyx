@@ -656,6 +656,9 @@ the app from the same rule
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
     Without it, an owner could push a skill into any group manager's scope.
+    The check includes every current group share, so the share dialog
+    (`web/src/sections/modals/skills/ShareSkillModal.tsx`) makes all group shares read-only for a scoped
+    manager while one is outside their scope.
     It compares against the stored plugin group shares (rows with a
     permission), and the privacy check uses the stored visibility and the
     request, so a public-to-private change in the same request cannot get past
