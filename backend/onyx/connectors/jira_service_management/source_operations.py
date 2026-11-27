@@ -9,7 +9,6 @@ The site URL is admin-supplied and receives the credential, so it passes the
 shared SSRF checks before the first request.
 """
 
-import re
 import threading
 from collections.abc import Mapping
 from typing import Any, Literal, overload
@@ -35,11 +34,13 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementCredentialBinding,
 )
+from onyx.connectors.jira_service_management.keys import ISSUE_KEY as _ISSUE_KEY
 from onyx.connectors.jira_service_management.models import (
     CommentPage,
     CustomerRequest,
     IssueRef,
     IssueSearchPage,
+    IssueTimestamps,
     JsmUser,
     RequestPage,
     ServiceDesk,
@@ -67,8 +68,6 @@ _PAGE_SIZE: int = 50
 _MAX_PAGES: int = 100_000
 _CLOUD_API: str = "3"
 _SERVER_API: str = "2"
-# Issue keys are placed in a URL path. Anything else is refused.
-_ISSUE_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9]+-\d+$")
 
 
 class _BoundedRetry(Retry):
@@ -398,6 +397,38 @@ class JiraServiceManagementSourceOperations(SourceOperations):
             {"start": start, "limit": limit},
         )
         return CommentPage.model_validate(payload)
+
+    @source_operation(
+        capabilities=(CredentialCapability.INDEXING,),
+        consumes=OperationConsumes.BOTH,
+    )
+    def get_issue_timestamps(self, *, issue_key: str) -> IssueTimestamps:
+        """The Jira issue's created and updated times.
+
+        A summary or description edit changes ``updated`` without a new
+        comment or a status change. The service desk request does not carry
+        that time.
+        """
+        _session, _root, cloud = self._client()
+        version = _CLOUD_API if cloud else _SERVER_API
+        payload = self._get(
+            f"/rest/api/{version}/issue/{_issue_path(issue_key)}",
+            {"fields": "updated,created"},
+        )
+        fields = payload.get("fields")
+        updated = fields.get("updated") if isinstance(fields, dict) else None
+        if not isinstance(updated, str) or not updated:
+            raise JsmApiError(
+                "Jira did not return the issue updated time.",
+                status_code=200,
+                method="GET",
+                url=None,
+            )
+        created = fields.get("created") if isinstance(fields, dict) else None
+        return IssueTimestamps(
+            updated=updated,
+            created=created if isinstance(created, str) else None,
+        )
 
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),

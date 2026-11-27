@@ -225,6 +225,28 @@ def test_each_status_maps_to_its_error(
         cloud.get_myself()
 
 
+def test_issue_timestamps_come_from_the_jira_issue(
+    cloud: JiraServiceManagementSourceOperations,
+) -> None:
+    get = MagicMock(
+        return_value=_response(
+            200,
+            {
+                "key": "IT_HELP-1",
+                "fields": {
+                    "updated": "2024-06-01T12:00:00.000+0000",
+                    "created": "2024-01-01T00:00:00.000+0000",
+                },
+            },
+        )
+    )
+    with patch.object(requests.Session, "get", get):
+        times = cloud.get_issue_timestamps(issue_key="IT_HELP-1")
+    assert times.updated == "2024-06-01T12:00:00.000+0000"
+    assert get.call_args.args[0].endswith("/rest/api/3/issue/IT_HELP-1")
+    assert get.call_args.kwargs["params"]["fields"] == "updated,created"
+
+
 def test_an_unsafe_issue_key_is_not_requested(
     cloud: JiraServiceManagementSourceOperations,
 ) -> None:

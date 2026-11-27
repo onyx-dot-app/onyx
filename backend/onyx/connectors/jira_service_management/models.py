@@ -127,6 +127,13 @@ class IssueRef(_JsmEntity):
     key: str
 
 
+class IssueTimestamps(_JsmEntity):
+    """The Jira issue's own created and updated times, not the service desk dates."""
+
+    updated: str
+    created: str | None = None
+
+
 class IssueSearchPage(_JsmEntity):
     """One page of a Jira issue search.
 

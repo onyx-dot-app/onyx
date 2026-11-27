@@ -4,10 +4,16 @@ The service desk list is the full set. A poll uses Jira search. Internal
 comments follow the connector flag. Slim ids match the indexed ids.
 """
 
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
+from onyx.connectors.jira_service_management.config import (
+    JiraServiceManagementConnectorConfig,
+)
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementCheckpoint,
     JiraServiceManagementConnector,
@@ -18,12 +24,14 @@ from onyx.connectors.jira_service_management.models import (
     CustomerRequest,
     IssueRef,
     IssueSearchPage,
+    IssueTimestamps,
     RequestPage,
     ServiceDesk,
 )
 from onyx.connectors.models import Document, HierarchyNode, SlimDocument
 
 _BASE = "https://example.atlassian.net"
+_UPDATED = "2024-06-01T12:00:00.000+0000"
 _DESK = ServiceDesk.model_validate(
     {
         "id": "10",
@@ -93,6 +101,9 @@ def _connector(**kwargs: Any) -> tuple[JiraServiceManagementConnector, MagicMock
     ops.list_comments.return_value = _comments(
         ("public note", True), ("agent note", False)
     )
+    ops.get_issue_timestamps.return_value = IssueTimestamps(
+        updated=_UPDATED, created="2023-11-14T22:13:20.000+0000"
+    )
     connector._ops = ops
     return connector, ops
 
@@ -159,7 +170,10 @@ def test_full_run_indexes_request_text_and_both_comments() -> None:
     assert texts == ["Since Monday", "public note", "agent note"]
     assert document.primary_owners is not None
     assert document.primary_owners[0].email == "ada@example.com"
+    # The comment and status times are older. The issue updated time wins.
+    assert document.doc_updated_at == datetime(2024, 6, 1, 12, tzinfo=timezone.utc)
     ops.search_issues.assert_not_called()
+    ops.get_issue_timestamps.assert_called_once_with(issue_key="IT-1")
 
 
 def test_internal_comments_can_be_left_out() -> None:
@@ -231,3 +245,61 @@ def test_slim_ids_match_a_full_index() -> None:
     ]
 
     assert slim == indexed == [f"{_BASE}/servicedesk/request/100"]
+
+
+def test_a_short_cloud_search_page_is_not_the_end() -> None:
+    connector, ops = _connector()
+    ops.search_issues.side_effect = [
+        IssueSearchPage(
+            issues=[IssueRef(key="IT-1")],
+            is_last=False,
+            next_page_token="next",
+            uses_token=True,
+        ),
+        IssueSearchPage(
+            issues=[IssueRef(key="IT-2")],
+            is_last=True,
+            uses_token=True,
+        ),
+    ]
+    ops.get_request.side_effect = lambda *, issue_key: _request(
+        "100" if issue_key == "IT-1" else "101", issue_key
+    )
+
+    slim = [
+        doc.id
+        for batch in connector.retrieve_all_slim_docs(start=1_700_000_000)
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+
+    assert slim == [
+        f"{_BASE}/servicedesk/request/100",
+        f"{_BASE}/servicedesk/request/101",
+    ]
+    assert ops.search_issues.call_args_list[1].kwargs["next_page_token"] == "next"
+
+
+def test_an_underscore_project_key_and_its_issue_are_indexed() -> None:
+    JiraServiceManagementConnectorConfig(
+        jira_base_url=_BASE,
+        project_key="it_help",
+    )
+    long_key = "A" + "B" * 20
+    JiraServiceManagementConnectorConfig(jira_base_url=_BASE, project_key=long_key)
+    with pytest.raises(ValueError):
+        JiraServiceManagementConnectorConfig(jira_base_url=_BASE, project_key='IT"')
+
+    connector, ops = _connector()
+    connector.project_key = "IT_HELP"
+    ops.list_requests.return_value = RequestPage(
+        values=[_request("300", "IT_HELP-1")], is_last_page=True
+    )
+
+    items, _checkpoint = _run(connector)
+
+    documents = [item for item in items if isinstance(item, Document)]
+    assert [document.id for document in documents] == [
+        f"{_BASE}/servicedesk/request/300"
+    ]
+    assert documents[0].semantic_identifier.startswith("[IT_HELP-1]")

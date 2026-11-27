@@ -1,4 +1,3 @@
-import re
 from typing import Annotated, ClassVar
 
 from pydantic import field_validator
@@ -9,10 +8,7 @@ from onyx.connectors.connector_config import (
     field_format_error,
 )
 from onyx.connectors.field_policy import FieldClass, FieldPolicy, ScopeInclude
-
-# A Jira project key is 2 to 10 characters, starts with a letter, and has no
-# spaces. Quoting it in JQL is then safe.
-_PROJECT_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9]{1,9}$")
+from onyx.connectors.jira_service_management.keys import PROJECT_KEY
 
 
 class JiraServiceManagementCredentialBinding(CredentialBinding):
@@ -38,8 +34,9 @@ class JiraServiceManagementConnectorConfig(
     @classmethod
     def _normalize_project_key(cls, value: str) -> str:
         key = value.strip().upper()
-        if _PROJECT_KEY.fullmatch(key) is None:
+        if PROJECT_KEY.fullmatch(key) is None:
             raise field_format_error(
-                "Enter a Jira project key, such as IT. Use letters and digits only."
+                "Enter a Jira project key, such as IT or IT_HELP. "
+                "Use letters, digits, and underscores."
             )
         return key

@@ -22,6 +22,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
 )
+from onyx.connectors.jira_service_management.keys import ISSUE_KEY as _ISSUE_KEY
 from onyx.connectors.jira_service_management.models import (
     CustomerComment,
     CustomerRequest,
@@ -57,7 +58,6 @@ _PAGE_OVERLAP: int = 5
 _MAX_SECTION_CHARS: int = 100_000
 _MAX_COMMENT_PAGES: int = 200
 _MAX_PARTICIPANTS: int = 50
-_ISSUE_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9]+-\d+$")
 
 
 class JiraServiceManagementCheckpoint(ConnectorCheckpoint):
@@ -133,11 +133,6 @@ def _as_utc(value: JsmDate | None) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
-
-
-def _latest(moments: list[datetime | None]) -> datetime | None:
-    present = [moment for moment in moments if moment is not None]
-    return max(present) if present else None
 
 
 def _clip(text: str) -> str:
@@ -246,26 +241,21 @@ class JiraServiceManagementConnector(
         sections: list[TextSection | ImageSection | TabularSection] = [
             TextSection(link=link, text=_clip(description))
         ]
-        comment_times: list[datetime | None] = []
         for comment in self._comments(request.issue_key):
             if not self.include_internal_comments and not comment.public:
                 continue
             body = plain_text(comment.body)
             if not body:
                 continue
-            comment_times.append(_as_utc(comment.created))
             sections.append(
                 TextSection(
                     link=f"{link}?focusedCommentId={quote(comment.id, safe='')}",
                     text=_clip(body),
                 )
             )
-        created = _as_utc(request.created_date)
-        status_at = (
-            _as_utc(request.current_status.status_date)
-            if request.current_status is not None
-            else None
-        )
+        times = self.ops.get_issue_timestamps(issue_key=request.issue_key)
+        created = _jira_time(times.created) or _as_utc(request.created_date)
+        updated = _jira_time(times.updated)
         metadata: dict[str, str | list[str]] = {
             "project": self.project_key,
             "issue_key": request.issue_key,
@@ -289,7 +279,7 @@ class JiraServiceManagementConnector(
             source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
             semantic_identifier=f"[{request.issue_key}] {summary}".strip(),
             title=summary or request.issue_key,
-            doc_updated_at=_latest([created, status_at, *comment_times]),
+            doc_updated_at=updated,
             doc_created_at=created,
             primary_owners=[reporter] if reporter is not None else None,
             metadata=metadata,
@@ -478,15 +468,35 @@ class JiraServiceManagementConnector(
             if callback is not None:
                 callback.progress("jsm_slim_docs", len(docs))
             previous = {issue.key for issue in found.issues}
-            if found.is_last or len(found.issues) < _PAGE_SIZE:
-                return
             if found.uses_token:
+                # A short Cloud page is not the last page. Jira's page size is
+                # a maximum, and the token says whether another page exists.
+                if found.is_last or found.next_page_token is None:
+                    return
                 next_token = found.next_page_token
+            elif found.is_last or len(found.issues) < _PAGE_SIZE:
+                return
             else:
                 start_at += _PAGE_SIZE - _PAGE_OVERLAP
         raise RuntimeError(
             "Jira search did not end after 100000 pages during slim retrieval."
         )
+
+
+def _jira_time(value: str | None) -> datetime | None:
+    """Jira issue timestamps, for example ``2024-06-01T12:00:00.000+0000``."""
+    if not value:
+        return None
+    text = value.strip().replace("Z", "+00:00")
+    if re.search(r"[+-]\d{4}$", text):
+        text = f"{text[:-2]}:{text[-2:]}"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _page_ends(is_last: bool | None, count: int) -> bool:

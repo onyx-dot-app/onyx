@@ -129,6 +129,7 @@ class _RequestsCheck(CapabilityCheck[JiraServiceManagementConnectorConfig]):
             )
         issue_key = page.values[0].issue_key
         gateway.get_request(issue_key=issue_key)
+        gateway.get_issue_timestamps(issue_key=issue_key)
         gateway.list_comments(issue_key=issue_key, limit=_PROBE_LIMIT)
         return None
 
