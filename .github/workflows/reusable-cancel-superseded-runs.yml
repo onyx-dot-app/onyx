@@ -1,0 +1,51 @@
+### Keeps only the newest run of the calling workflow for a same-repo PR branch.
+###
+### Required status checks read only the newest check suite of each workflow on
+### a commit. Built-in concurrency cancels runs in the order they reach the
+### group, so of two runs created in the same second (a stack push sends one
+### event for the head push and one for the base push) it can cancel the
+### newest. That cancelled run's checks then block the merge.
+###
+### A PR workflow adopts this with two changes (check_pr_workflow_concurrency.py
+### enforces both):
+###   1. Its concurrency group key starts with
+###      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) ||
+###      so concurrency never cancels a same-repo PR run.
+###   2. A first job calls this workflow for those same runs:
+###        cancel-superseded:
+###          if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+###          permissions:
+###            actions: write
+###            contents: read
+###          uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+###
+### Fork PRs get a read-only token, so they keep the concurrency group's cancel.
+
+name: Cancel Superseded Runs (reusable)
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  cancel-superseded:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/cancel_superseded_runs.py
+          sparse-checkout-cone-mode: false
+
+      - name: Cancel superseded runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: python3 .github/scripts/cancel_superseded_runs.py

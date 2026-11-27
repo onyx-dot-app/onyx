@@ -24,7 +24,7 @@
 name: Terraform Provider Tests
 
 concurrency:
-  group: Terraform-Provider-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: Terraform-Provider-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 on:
@@ -52,6 +52,14 @@ env:
   S3_ENDPOINT_URL: "http://object-store:8333"
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   changes:
     # Decides whether the heavy acceptance job runs. On pull_request
     # we use paths-filter; on schedule / push (tags) /

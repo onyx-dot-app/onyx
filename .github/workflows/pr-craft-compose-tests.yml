@@ -3,7 +3,7 @@
 # pr-craft-compose-integration.yml; this lane stays narrow and fast.
 name: Craft Docker-Compose Sandbox Tests
 concurrency:
-  group: Craft-Compose-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: Craft-Compose-Tests-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.ref }}
   cancel-in-progress: true
 
 on:
@@ -36,6 +36,14 @@ env:
   POSTGRES_USER: "postgres"
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   craft-compose-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 8
