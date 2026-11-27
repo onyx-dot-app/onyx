@@ -138,6 +138,7 @@ def _auth_settings(
 def _method_specs(definition: dict[str, Any]) -> list[MethodSpec]:
     """The operations of ``definition``. A custom tool needs at least one,
     unlike a REST integration."""
+    check_api_document_size(json.dumps(definition), "spec")
     validate_openapi_definition(definition)
     methods = openapi_to_method_specs(definition)
     if not methods:
@@ -312,7 +313,6 @@ def create_custom_tool(
     _check_default_chat_permission(tool_data.default_chat_enabled, user)
     _refuse_oauth_config(tool_data.oauth_config_id)
     document = json.dumps(tool_data.definition)
-    check_api_document_size(document, "spec")
     _method_specs(tool_data.definition)
     auth = _auth_settings(tool_data.custom_headers or [], tool_data.passthrough_auth)
     integration = create_integration__no_commit(
@@ -361,7 +361,6 @@ def update_custom_tool(
         update.description = tool_data.description
     if tool_data.definition is not None:
         document = json.dumps(tool_data.definition)
-        check_api_document_size(document, "spec")
         _method_specs(tool_data.definition)
         update.config = OpenApiConfigInput(openapi_document=document)
 
