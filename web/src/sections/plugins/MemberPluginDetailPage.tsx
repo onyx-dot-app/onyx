@@ -85,7 +85,7 @@ interface PluginSwitchProps extends PluginTabProps {
 function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
   const t = useTranslations("plugins.member.detail.switch");
   const { blocked } = pluginSwitch(entry);
-  const skill = entry.skills[0];
+  const { skill } = entry;
 
   return (
     <Section flexDirection="row" width="auto" height="auto" gap={1} padding={1}>
@@ -94,10 +94,10 @@ function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
       </Text>
       <InputSwitch
         aria-label={t("label", { name: entry.name })}
-        checked={skill ? enablement.enabledOf(skill) : false}
-        disabled={!skill || enablement.isPending(skill.id) || blocked !== null}
+        checked={enablement.enabledOf(skill)}
+        disabled={enablement.isPending(skill.id) || blocked !== null}
         onCheckedChange={(checked) => {
-          if (skill) void enablement.setEnabled(skill, checked);
+          void enablement.setEnabled(skill, checked);
         }}
       />
     </Section>
@@ -147,7 +147,7 @@ function OverviewTab({ entry, plugin }: OverviewTabProps) {
   const switchCopy = useTranslations("plugins.member.detail.switch");
   const customizeCopy = useTranslations("customize");
   const { blocked } = pluginSwitch(entry);
-  const heldBy = entry.skills[0]?.name_held_by ?? [];
+  const heldBy = entry.skill.name_held_by;
   const sections = useTranslations("plugins.member.sections");
   const unusedCopy = useTranslations("plugins.upload.unusedParts");
   const manifest = plugin?.manifest ?? null;
@@ -278,23 +278,22 @@ function SkillsTab({ entry, plugin }: OverviewTabProps) {
         )}
       </Section>
     );
+  const { skill } = entry;
   return (
     <Section gap={2} alignItems="stretch" height="auto">
-      {entry.skills.map((skill) => (
-        <Card key={skill.id} padding={4}>
-          <Content
-            title={skill.name}
-            description={skill.description}
-            badge={
-              skill.is_valid === false
-                ? { title: t("invalid"), color: "error" }
-                : !skill.enabled
-                  ? { title: t("off") }
-                  : undefined
-            }
-          />
-        </Card>
-      ))}
+      <Card padding={4}>
+        <Content
+          title={skill.name}
+          description={skill.description}
+          badge={
+            skill.is_valid === false
+              ? { title: t("invalid"), color: "error" }
+              : !skill.enabled
+                ? { title: t("off") }
+                : undefined
+          }
+        />
+      </Card>
     </Section>
   );
 }
@@ -339,7 +338,7 @@ export default function MemberPluginDetailPage({
     user?.email ?? null,
     locale
   ).find((candidate) => candidate.id === pluginId);
-  const isPlugin = entry?.skills[0]?.kind === "plugin";
+  const isPlugin = entry?.skill.kind === "plugin";
   const detail = usePluginDetail(isPlugin ? pluginId : null);
   const plugin = isPlugin ? (detail.data?.plugin ?? null) : null;
   const refreshLists = useRefreshSkillLists();
@@ -364,8 +363,8 @@ export default function MemberPluginDetailPage({
   const loading =
     skills.isLoading || (isPlugin && plugin === null && !detail.error);
   const skillOnlyId =
-    skills.data && entry !== undefined && !isPlugin && entry.skills.length === 1
-      ? entry.skills[0]?.id
+    skills.data && entry !== undefined && !isPlugin
+      ? entry.skill.id
       : undefined;
   const listHref = pluginsHref(panel);
   useEffect(() => {
@@ -377,13 +376,11 @@ export default function MemberPluginDetailPage({
         { replace: true }
       );
   }, [panel, navigation, skillOnlyId]);
-  const skill = entry?.skills.length === 1 ? entry.skills[0] : undefined;
+  const skill = entry?.skill;
   const showVersions =
     skill !== undefined &&
     (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
-  const skillCount = plugin
-    ? plugin.skills.length
-    : (entry?.skills.length ?? 0);
+  const skillCount = plugin ? plugin.skills.length : entry ? 1 : 0;
   const needCount = plugin?.needs.length ?? 0;
   const canEdit =
     skill !== undefined &&

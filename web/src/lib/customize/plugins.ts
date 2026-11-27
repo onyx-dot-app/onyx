@@ -43,12 +43,10 @@ function matches(
       [
         entry.name,
         entry.description ?? "",
-        ...entry.skills.map((skill) => skill.name),
+        ...(entry.skill.plugin?.skills ?? []).map((skill) => skill.name),
         entry.ownerEmail ?? "",
         entry.marketplace?.name ?? "",
-        ...entry.skills.flatMap((skill) =>
-          skill.group_summaries.map((summary) => summary.group_name)
-        ),
+        ...entry.skill.group_summaries.map((summary) => summary.group_name),
       ]
         .join(" ")
         .toLocaleLowerCase(options.locale)

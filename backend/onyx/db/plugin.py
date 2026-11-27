@@ -559,13 +559,21 @@ def get_versions_needs(
     }
 
 
-def get_version_manifest(
-    version_id: UUID, db_session: Session
-) -> PluginManifest | None:
-    manifest = db_session.scalar(
-        select(PluginVersion.manifest).where(PluginVersion.id == version_id)
-    )
-    return PluginManifest.model_validate(manifest) if manifest is not None else None
+def get_versions_manifests(
+    version_ids: Iterable[UUID], db_session: Session
+) -> dict[UUID, PluginManifest]:
+    ids = sorted(set(version_ids))
+    if not ids:
+        return {}
+    return {
+        version_id: PluginManifest.model_validate(manifest)
+        for version_id, manifest in db_session.execute(
+            select(PluginVersion.id, PluginVersion.manifest).where(
+                PluginVersion.id.in_(ids)
+            )
+        ).tuples()
+        if manifest is not None
+    }
 
 
 class VersionSkill(BaseModel):
@@ -576,19 +584,27 @@ class VersionSkill(BaseModel):
     description: str
 
 
-def list_version_skills(version_id: UUID, db_session: Session) -> list[VersionSkill]:
-    return [
-        VersionSkill(path=path, name=name, description=description)
-        for path, name, description in db_session.execute(
-            select(
-                PluginSkill.path,
-                PluginSkill.frontmatter["name"].astext,
-                PluginSkill.frontmatter["description"].astext,
-            )
-            .where(PluginSkill.plugin_version_id == version_id)
-            .order_by(PluginSkill.path)
-        ).tuples()
-    ]
+def list_versions_skills(
+    version_ids: Iterable[UUID], db_session: Session
+) -> dict[UUID, list[VersionSkill]]:
+    ids = sorted(set(version_ids))
+    skills: dict[UUID, list[VersionSkill]] = {version_id: [] for version_id in ids}
+    if not ids:
+        return skills
+    for version_id, path, name, description in db_session.execute(
+        select(
+            PluginSkill.plugin_version_id,
+            PluginSkill.path,
+            PluginSkill.frontmatter["name"].astext,
+            PluginSkill.frontmatter["description"].astext,
+        )
+        .where(PluginSkill.plugin_version_id.in_(ids))
+        .order_by(PluginSkill.plugin_version_id, PluginSkill.path)
+    ).tuples():
+        skills[version_id].append(
+            VersionSkill(path=path, name=name, description=description)
+        )
+    return skills
 
 
 def get_plugin_current_version_id(plugin_id: UUID, db_session: Session) -> UUID | None:

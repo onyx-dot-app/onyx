@@ -11,8 +11,7 @@ export type PluginSection =
   | "shared"
   | "private";
 
-/** One plugin of the Customize pages. A plugin holds custom skills; a custom
- * skill's id is its plugin id. */
+/** One plugin of the Customize pages. A custom skill's id is its plugin id. */
 export interface MemberPluginEntry {
   id: string;
   name: string;
@@ -21,7 +20,8 @@ export interface MemberPluginEntry {
   ownerEmail: string | null;
   /** The GitHub marketplace that syncs the plugin. */
   marketplace: SkillMarketplace | null;
-  skills: CustomSkill[];
+  /** The plugin's own row of the skill list. */
+  skill: CustomSkill;
 }
 
 function pluginSection(
@@ -57,7 +57,7 @@ export function memberPluginEntries(
         ownerEmail,
         marketplace:
           skill.marketplace?.kind === "github" ? skill.marketplace : null,
-        skills: [skill],
+        skill,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, locale));
@@ -73,8 +73,7 @@ export interface PluginSwitch {
 
 /** The user's on/off switch: the switch of the plugin's skill. */
 export function pluginSwitch(entry: MemberPluginEntry): PluginSwitch {
-  const skill = entry.skills[0];
-  if (!skill) return { enabled: false, blocked: "unavailable" };
+  const { skill } = entry;
   return {
     enabled: skill.enabled,
     blocked: skill.can_toggle
