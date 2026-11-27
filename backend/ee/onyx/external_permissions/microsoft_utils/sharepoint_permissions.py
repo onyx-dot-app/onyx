@@ -466,3 +466,26 @@ def get_sharepoint_external_groups(
     external_user_groups.extend(enumerate_entra_groups(reader, already_resolved))
 
     return external_user_groups
+
+
+def get_entra_external_groups(
+    reader: SharepointPermissionReader, group_ids: set[str]
+) -> list[ExternalUserGroup]:
+    """The given Entra groups and each group inside them, with their member
+    emails. A group that Entra no longer has yields nothing."""
+    groups = {
+        SharepointGroup(
+            login_name=group_id,
+            principal_type=SharepointPrincipalType.ENTRA_GROUP,
+            name=group_id,
+        )
+        for group_id in group_ids
+    }
+    # Entra groups never read the site, so no site URL is needed.
+    groups_and_members = _get_groups_and_members_recursively(
+        reader, "", groups, is_group_sync=True
+    )
+    return [
+        ExternalUserGroup(id=group_id, user_emails=list(emails))
+        for group_id, emails in groups_and_members.groups_to_emails.items()
+    ]
