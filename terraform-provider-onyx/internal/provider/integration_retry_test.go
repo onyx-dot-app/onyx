@@ -20,6 +20,7 @@ type fakeIntegrationServer struct {
 	mu          sync.Mutex
 	integration map[string]any
 	failSave    bool
+	failPolicy  bool
 	saves       int
 }
 
@@ -59,6 +60,11 @@ func (f *fakeIntegrationServer) ServeHTTP(w http.ResponseWriter, r *http.Request
 		_, _ = w.Write([]byte(`null`))
 		return
 	case r.Method == http.MethodPut && path == "/admin/integrations/1/installation-policy":
+		if f.failPolicy {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`{"error_code": "BAD_GATEWAY", "detail": "unavailable"}`))
+			return
+		}
 		f.integration["installation_policy"] = body["installation_policy"]
 		_, _ = w.Write([]byte(`null`))
 		return
@@ -75,10 +81,17 @@ func (f *fakeIntegrationServer) ServeHTTP(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(f.integration)
 }
 
-func (f *fakeIntegrationServer) set(failSave bool) {
+func (f *fakeIntegrationServer) set(failSave, failPolicy bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.failSave = failSave
+	f.failPolicy = failPolicy
+}
+
+func (f *fakeIntegrationServer) setStatus(state string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.integration["organization_status"] = map[string]any{"state": state}
 }
 
 func (f *fakeIntegrationServer) checkSaves(want int) resource.TestCheckFunc {
@@ -92,7 +105,7 @@ func (f *fakeIntegrationServer) checkSaves(want int) resource.TestCheckFunc {
 	}
 }
 
-func fakeIntegrationConfig(endpoint, serverURL string) string {
+func fakeIntegrationConfig(endpoint, serverURL, installationPolicy string) string {
 	return fmt.Sprintf(`
 provider "onyx" {
   endpoint   = %q
@@ -108,8 +121,9 @@ resource "onyx_integration" "test" {
   header_template                     = { Authorization = "Bearer {api_key}" }
   organization_credentials_wo         = { api_key = "tf-key" }
   organization_credentials_wo_version = 1
+  installation_policy                 = %q
 }
-`, endpoint, serverURL)
+`, endpoint, serverURL, installationPolicy)
 }
 
 // Onyx takes a new server URL, then the key save fails. A refresh reads the new
@@ -123,18 +137,50 @@ func TestIntegrationRetriesCredentialsThatAFailedApplyCouldNotSave(t *testing.T)
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: fakeIntegrationConfig(server.URL, "https://mcp.example.com/mcp"),
+				Config: fakeIntegrationConfig(server.URL, "https://mcp.example.com/mcp", "AVAILABLE"),
 				Check:  fake.checkSaves(1),
 			},
 			{
-				PreConfig:   func() { fake.set(true) },
-				Config:      fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp"),
+				PreConfig:   func() { fake.set(true, false) },
+				Config:      fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp", "AVAILABLE"),
 				ExpectError: regexp.MustCompile("Failed to save the Onyx integration organization credentials"),
 			},
 			{
-				PreConfig: func() { fake.set(false) },
-				Config:    fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp"),
+				PreConfig: func() { fake.set(false, false) },
+				Config:    fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp", "AVAILABLE"),
 				Check:     fake.checkSaves(2),
+			},
+		},
+	})
+}
+
+// The key save succeeds, then a later follow-up fails. Onyx rejects the key
+// after that, as when an admin enters a newer key that fails, so the next apply
+// must not send the configured key again.
+func TestIntegrationDoesNotResendCredentialsThatAFailedApplySaved(t *testing.T) {
+	fake := &fakeIntegrationServer{}
+	server := httptest.NewServer(fake)
+	t.Cleanup(server.Close)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fakeIntegrationConfig(server.URL, "https://mcp.example.com/mcp", "AVAILABLE"),
+				Check:  fake.checkSaves(1),
+			},
+			{
+				PreConfig:   func() { fake.set(false, true) },
+				Config:      fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp", "DEFAULT"),
+				ExpectError: regexp.MustCompile("Failed to set the Onyx integration install setting"),
+			},
+			{
+				PreConfig: func() {
+					fake.set(false, false)
+					fake.setStatus("needs_reconnect")
+				},
+				Config: fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp", "DEFAULT"),
+				Check:  fake.checkSaves(2),
 			},
 		},
 	})

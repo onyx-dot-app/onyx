@@ -39,7 +39,7 @@ func followUpCallsWith(t *testing.T, enabled bool, credentials map[string]string
 	plan := integrationResourceModel{Enabled: types.BoolValue(enabled), InstallationPolicy: types.StringNull()}
 	remote := &client.Integration{ID: 7, Kind: "mcp", Enabled: true, InstallationPolicy: "AVAILABLE"}
 	var diags diag.Diagnostics
-	r.applyFollowUps(context.Background(), 7, plan, remote, credentials, serverChanged, &diags)
+	r.applyFollowUps(context.Background(), 7, plan, remote, credentials, serverChanged, &fakePrivateState{}, &diags)
 	if diags.HasError() {
 		t.Fatalf("applyFollowUps: %v", diags)
 	}

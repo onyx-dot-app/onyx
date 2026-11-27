@@ -267,6 +267,7 @@ func (r *integrationResource) applyFollowUps(
 	remote *client.Integration,
 	credentials map[string]string,
 	serverChanged bool,
+	private privateStateWriter,
 	diags *diag.Diagnostics,
 ) *client.Integration {
 	switchChange := !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() && plan.Enabled.ValueBool() != remote.Enabled
@@ -282,6 +283,8 @@ func (r *integrationResource) applyFollowUps(
 			diags.AddError("Failed to save the Onyx integration organization credentials", err.Error())
 			return nil
 		}
+		// Onyx has the credentials now, so a later failure must not resend them.
+		diags.Append(markWriteOnlySource(ctx, private, integrationCredentialsPendingKey, false)...)
 	}
 	// Onyx only checks a saved key, and older servers keep the old server's
 	// actions after a URL change. Load the server's tools so chat can use them.
@@ -392,7 +395,7 @@ func (r *integrationResource) Create(ctx context.Context, req resource.CreateReq
 	applyRemoteIntegration(ctx, &plan, created, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 
-	remote := r.applyFollowUps(ctx, created.ID, planned, created, credentialValues, false, &resp.Diagnostics)
+	remote := r.applyFollowUps(ctx, created.ID, planned, created, credentialValues, false, resp.Private, &resp.Diagnostics)
 	if remote == nil {
 		return
 	}
@@ -467,11 +470,10 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 		resp.Diagnostics.Append(markWriteOnlySource(ctx, resp.Private, integrationCredentialsPendingKey, true)...)
 	}
 	serverChanged := !plan.ServerURL.Equal(state.ServerURL) || !plan.Transport.Equal(state.Transport)
-	remote := r.applyFollowUps(ctx, id, plan, updated, credentialValues, serverChanged, &resp.Diagnostics)
+	remote := r.applyFollowUps(ctx, id, plan, updated, credentialValues, serverChanged, resp.Private, &resp.Diagnostics)
 	if remote == nil {
 		return
 	}
-	resp.Diagnostics.Append(markWriteOnlySource(ctx, resp.Private, integrationCredentialsPendingKey, false)...)
 	applyRemoteIntegration(ctx, &plan, remote, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
