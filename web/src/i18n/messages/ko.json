@@ -12937,11 +12937,10 @@
         },
         "submitError": "답변을 보내지 못했습니다. 다시 시도하세요.",
         "record": {
-          "answered": "답변함",
+          "answeredCount": "{count, plural, other {질문 #개에 답변함}}",
           "answeredInChat": "채팅에서 답변함",
           "cancelled": "답변하지 않음",
           "closed": "더 이상 대기하지 않음",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },

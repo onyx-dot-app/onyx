@@ -12937,11 +12937,10 @@
         },
         "submitError": "Impossible d'envoyer vos réponses. Réessayez.",
         "record": {
-          "answered": "Répondu",
+          "answeredCount": "{count, plural, one {# question répondue} other {# questions répondues}}",
           "answeredInChat": "Répondu dans le chat",
           "cancelled": "Sans réponse",
           "closed": "N'attend plus",
-          "answer": "{header} : {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },

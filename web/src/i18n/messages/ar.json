@@ -12937,11 +12937,10 @@
         },
         "submitError": "تعذر إرسال إجاباتك. حاول مرة أخرى.",
         "record": {
-          "answered": "تمت الإجابة",
+          "answeredCount": "{count, plural, zero {لم تتم الإجابة عن أي سؤال} one {تمت الإجابة عن سؤال واحد} two {تمت الإجابة عن سؤالين} few {تمت الإجابة عن # أسئلة} many {تمت الإجابة عن # سؤالًا} other {تمت الإجابة عن # سؤال}}",
           "answeredInChat": "تمت الإجابة في الدردشة",
           "cancelled": "لم تتم الإجابة",
           "closed": "لم يعد في الانتظار",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
