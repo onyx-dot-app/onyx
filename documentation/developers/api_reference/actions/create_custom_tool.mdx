@@ -7,3 +7,5 @@ openapi: "POST /admin/tool/custom"
   **Required permission:** Manage Actions (`manage:actions`), or Admin (`admin`).
   A **Group Manager** can also call this. Their scope comes from the agents shared with the groups they manage.
 </Info>
+
+The `definition` can be up to 5 MB when encoded as JSON. A larger one returns HTTP 413.
