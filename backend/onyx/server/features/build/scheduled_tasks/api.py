@@ -115,6 +115,10 @@ TaskPrompt = Annotated[
         strip_whitespace=True, min_length=1, max_length=TASK_PROMPT_MAX_CHARS
     ),
 ]
+# A task saved before the limit can keep its longer prompt; see ``patch_task``.
+EditedTaskPrompt = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1)
+]
 
 
 def _dispatch_editor_payload(data: Any) -> Any:
@@ -165,7 +169,7 @@ class ScheduledTaskPatch(_Forbid):
     """
 
     name: TaskName | None = None
-    prompt: TaskPrompt | None = None
+    prompt: EditedTaskPrompt | None = None
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
@@ -484,6 +488,18 @@ def patch_task(
     handles ``next_run_at`` recomputation (schedule change, pause/resume) on
     its own.
     """
+    if (
+        request.prompt is not None
+        and len(request.prompt) > TASK_PROMPT_MAX_CHARS
+        and request.prompt
+        != get_scheduled_task(
+            db_session=db_session, task_id=task_id, user_id=user.id
+        ).prompt
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"The prompt can have at most {TASK_PROMPT_MAX_CHARS} characters",
+        )
     cron_expression: str | None = None
     if request.editor_payload is not None:
         # ``_editor_pair_consistency`` already guaranteed editor_mode is set

@@ -343,6 +343,26 @@ def test_a_prompt_over_the_limit_is_rejected(admin_user: DATestUser) -> None:
     assert response.status_code == 422
 
 
+def test_a_task_saved_with_a_longer_prompt_can_still_be_edited(
+    admin_user: DATestUser,
+) -> None:
+    response = _create_task(admin_user)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+    long_prompt = "x" * 20_001
+    with get_session_with_current_tenant() as db_session:
+        task = db_session.get(ScheduledTask, task_id)
+        assert task is not None
+        task.prompt = long_prompt
+        db_session.commit()
+
+    kept = _patch_task(admin_user, task_id, {"name": "Renamed", "prompt": long_prompt})
+    changed = _patch_task(admin_user, task_id, {"prompt": long_prompt + "y"})
+
+    assert kept.status_code == 200
+    assert changed.status_code == 400
+
+
 def test_delete_of_a_missing_task_is_not_found(admin_user: DATestUser) -> None:
     assert _delete_task(admin_user, uuid4()).status_code == 404
 
