@@ -17519,7 +17519,6 @@
       "disable": "내 스킬 비활성화",
       "delete": "삭제",
       "updated": "{count, plural, one {스킬 #개 업데이트됨} other {스킬 #개 업데이트됨}}",
-      "deleted": "{count, plural, other {스킬 #개 삭제됨}}",
       "failed": "스킬을 업데이트하지 못했습니다. 다시 시도하세요.",
       "partialFailure": "{count, plural, one {스킬 #개를 업데이트하지 못했습니다} other {스킬 #개를 업데이트하지 못했습니다}}",
       "deleted": "{count, plural, one {스킬 #개 삭제됨} other {스킬 #개 삭제됨}}",
@@ -18038,7 +18037,6 @@
     },
     "bulk": {
       "updated": "{count, plural, one {플러그인 #개 업데이트됨} other {플러그인 #개 업데이트됨}}",
-      "deleted": "{count, plural, other {플러그인 #개 삭제됨}}",
       "failed": "플러그인을 업데이트하지 못했습니다. 다시 시도하세요.",
       "partialFailure": "{count, plural, one {플러그인 #개를 업데이트하지 못했습니다} other {플러그인 #개를 업데이트하지 못했습니다}}",
       "deleted": "{count, plural, one {플러그인 #개 삭제됨} other {플러그인 #개 삭제됨}}",

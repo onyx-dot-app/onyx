@@ -17519,7 +17519,6 @@
       "disable": "Desactivar para mí",
       "delete": "Eliminar",
       "updated": "{count, plural, one {# habilidad actualizada} other {# habilidades actualizadas}}",
-      "deleted": "{count, plural, one {# skill eliminada} other {# skills eliminadas}}",
       "failed": "No se pudieron actualizar las habilidades. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # habilidad} other {No se pudieron actualizar # habilidades}}",
       "deleted": "{count, plural, one {# habilidad eliminada} other {# habilidades eliminadas}}",
@@ -18038,7 +18037,6 @@
     },
     "bulk": {
       "updated": "{count, plural, one {# plugin actualizado} other {# plugins actualizados}}",
-      "deleted": "{count, plural, one {# plugin eliminado} other {# plugins eliminados}}",
       "failed": "No se pudieron actualizar los plugins. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # plugin} other {No se pudieron actualizar # plugins}}",
       "deleted": "{count, plural, one {# plugin eliminado} other {# plugins eliminados}}",
