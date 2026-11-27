@@ -129,6 +129,8 @@ export interface ChatSkill {
   version_id: string;
   /** Set for a built-in, which needs the turn's sandbox tools. */
   built_in_skill_id: string | null;
+  /** The plugin of a custom skill. Null for a built-in. */
+  plugin_id: string | null;
 }
 
 export interface SkillsList {

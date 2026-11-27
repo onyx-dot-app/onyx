@@ -17349,7 +17349,9 @@
           "publishOff": {
             "description": "Ein Admin hat das Veröffentlichen in der Organisation deaktiviert. Bitten Sie einen Admin, dieses Plugin zu veröffentlichen."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx konnte Ihre Gruppen nicht laden, daher können Gruppenfreigaben nicht geändert werden. Schließen und öffnen Sie diesen Dialog erneut.",
+        "groupSharesLocked": "Dieser Skill ist für eine Gruppe freigegeben, die Sie nicht verwalten. Daher können Sie die Gruppenfreigaben nicht ändern. Fragen Sie einen organisationsweiten Skill-Manager."
       },
       "tabs": {
         "details": "Details",
@@ -17458,7 +17460,8 @@
         "disableFailed": "{name} konnte nicht deaktiviert werden",
         "enableFailed": "{name} konnte nicht aktiviert werden",
         "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden.",
-        "listRefreshFailed": "Die Skill-Liste konnte nicht aktualisiert werden. Laden Sie die Seite neu, um die Änderung zu sehen."
+        "listRefreshFailed": "Die Skill-Liste konnte nicht aktualisiert werden. Laden Sie die Seite neu, um die Änderung zu sehen.",
+        "requiredHolder": "{name} kann nicht eingeschaltet werden. Ein erforderlicher Skill hat bereits diesen Namen."
       }
     },
     "sections": {
@@ -17535,7 +17538,8 @@
       "publishWarning": {
         "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
         "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Skills verwenden. Veröffentlichte Skills können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
-      }
+      },
+      "skipped": "{count, plural, one {# Skill kann von dir nicht ein- oder ausgeschaltet werden und wurde übersprungen} other {# Skills können von dir nicht ein- oder ausgeschaltet werden und wurden übersprungen}}"
     },
     "reviewRequests": {
       "title": "Veröffentlichungsanfragen",
@@ -17837,6 +17841,7 @@
         "newPlugin": "Neues Plugin: {name}"
       },
       "willBeOff": "Das Plugin wird deaktiviert gespeichert. {names} hat bereits einen Skill mit demselben Namen.",
+      "willClash": "{names} hat bereits einen Skill mit demselben Namen. Nur einer davon kann aktiv sein.",
       "saveAsNew": {
         "label": "Als neues Plugin speichern",
         "description": "Das Plugin mit diesem Namen bleibt unverändert."
@@ -17868,7 +17873,8 @@
         "newPlugin": "{name} hinzugefügt.",
         "newVersion": "{name} auf Onyx-Version {version} aktualisiert.",
         "unchanged": "Keine Änderungen. {name} ist bereits auf Onyx-Version {version}.",
-        "off": "{name} hinzugefügt. Es ist deaktiviert, weil {names} bereits einen Skill mit demselben Namen hat."
+        "off": "{name} hinzugefügt. Es ist deaktiviert, weil {names} bereits einen Skill mit demselben Namen hat.",
+        "clash": "{name} wurde auf Onyx-Version {version} aktualisiert. {names} hat bereits einen Skill mit demselben Namen, daher ist nur einer davon aktiv."
       }
     },
     "turnOn": {
@@ -18049,7 +18055,8 @@
       "apply": "{count, plural, one {Auf # Plugin anwenden} other {Auf # Plugins anwenden}}",
       "publishWarning": {
         "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Plugins verwenden. Veröffentlichte Plugins können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
-      }
+      },
+      "skipped": "{count, plural, one {# Plugin kann von dir nicht ein- oder ausgeschaltet werden und wurde übersprungen} other {# Plugins können von dir nicht ein- oder ausgeschaltet werden und wurden übersprungen}}"
     }
   },
   "integrations": {

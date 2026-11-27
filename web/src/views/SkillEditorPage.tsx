@@ -212,9 +212,12 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     try {
       // One upload with every file that is left, so the skill is created,
       // shared and published as one version. An upload whose files were all
-      // removed (a ZIP lists as one row) is left out whole.
-      const live = uploads.filter((item) =>
-        uploadPaths(item).some((path) => !removed.has(path))
+      // removed (a ZIP lists as one row) is left out whole. An upload with a
+      // SKILL.md always goes, so the server keeps its other frontmatter.
+      const live = uploads.filter(
+        (item) =>
+          item.containsSkillMd ||
+          uploadPaths(item).some((path) => !removed.has(path))
       );
       const [only] = live;
       const upload =

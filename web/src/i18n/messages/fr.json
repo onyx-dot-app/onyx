@@ -17349,7 +17349,9 @@
           "publishOff": {
             "description": "Un administrateur a désactivé la publication dans l’organisation. Demandez à un administrateur de publier ce plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx n'a pas pu charger vos groupes, les partages de groupe ne peuvent donc pas changer. Fermez et rouvrez cette boîte de dialogue pour réessayer.",
+        "groupSharesLocked": "Cette compétence est partagée avec un groupe que vous ne gérez pas, vous ne pouvez donc pas modifier ses partages de groupe. Demandez à un gestionnaire de compétences de l'organisation."
       },
       "tabs": {
         "details": "Détails",
@@ -17458,7 +17460,8 @@
         "disableFailed": "Échec de la désactivation de {name}",
         "enableFailed": "Échec de l'activation de {name}",
         "refreshFailed": "{name} a été mise à jour, mais la liste des compétences n'a pas pu être actualisée.",
-        "listRefreshFailed": "La liste des compétences n'a pas pu être actualisée. Rechargez la page pour voir la modification."
+        "listRefreshFailed": "La liste des compétences n'a pas pu être actualisée. Rechargez la page pour voir la modification.",
+        "requiredHolder": "Impossible d'activer {name}. Une compétence obligatoire porte déjà ce nom."
       }
     },
     "sections": {
@@ -17535,7 +17538,8 @@
       "publishWarning": {
         "title": "La publication est irréversible",
         "description": "Après l'application, tout le monde dans l'organisation peut utiliser les compétences sélectionnées. Les compétences publiées ne peuvent plus redevenir privées. Seul un administrateur peut les supprimer."
-      }
+      },
+      "skipped": "{count, plural, one {# compétence ne peut pas être activée ou désactivée par vous et a été ignorée} other {# compétences ne peuvent pas être activées ou désactivées par vous et ont été ignorées}}"
     },
     "reviewRequests": {
       "title": "Demandes de publication",
@@ -17837,6 +17841,7 @@
         "newPlugin": "Nouveau plugin : {name}"
       },
       "willBeOff": "Le plugin est enregistré désactivé. {names} a déjà une compétence du même nom.",
+      "willClash": "{names} a déjà une compétence du même nom. Une seule d'entre elles peut être activée.",
       "saveAsNew": {
         "label": "Enregistrer comme Nouveau Plugin",
         "description": "Le plugin qui porte ce nom reste inchangé."
@@ -17868,7 +17873,8 @@
         "newPlugin": "{name} ajouté.",
         "newVersion": "{name} mis à jour vers la version Onyx {version}.",
         "unchanged": "Aucun changement. {name} est déjà à la version Onyx {version}.",
-        "off": "{name} ajouté. Il est désactivé car {names} a déjà une compétence du même nom."
+        "off": "{name} ajouté. Il est désactivé car {names} a déjà une compétence du même nom.",
+        "clash": "{name} a été mis à jour vers la version Onyx {version}. {names} a déjà une compétence du même nom, une seule d'entre elles est donc activée."
       }
     },
     "turnOn": {
@@ -18049,7 +18055,8 @@
       "apply": "{count, plural, one {Appliquer à # plugin} other {Appliquer à # plugins}}",
       "publishWarning": {
         "description": "Après l'application, tout le monde dans l'organisation peut utiliser les plugins sélectionnés. Les plugins publiés ne peuvent plus redevenir privés. Seul un administrateur peut les supprimer."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin ne peut pas être activé ou désactivé par vous et a été ignoré} other {# plugins ne peuvent pas être activés ou désactivés par vous et ont été ignorés}}"
     }
   },
   "integrations": {

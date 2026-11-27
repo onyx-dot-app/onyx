@@ -17349,7 +17349,9 @@
           "publishOff": {
             "description": "Um administrador desativou a publicação na organização. Peça a um administrador para publicar este plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "O Onyx não conseguiu carregar seus grupos, então os compartilhamentos de grupo não podem mudar. Feche e abra esta caixa de diálogo para tentar novamente.",
+        "groupSharesLocked": "Esta habilidade é compartilhada com um grupo que você não gerencia, então você não pode alterar os compartilhamentos de grupo. Peça a um gerente de habilidades de toda a organização."
       },
       "tabs": {
         "details": "Detalhes",
@@ -17458,7 +17460,8 @@
         "disableFailed": "Falha ao desativar {name}",
         "enableFailed": "Falha ao ativar {name}",
         "refreshFailed": "{name} foi atualizada, mas não foi possível atualizar a lista de habilidades.",
-        "listRefreshFailed": "Não foi possível atualizar a lista de habilidades. Recarregue a página para ver a alteração."
+        "listRefreshFailed": "Não foi possível atualizar a lista de habilidades. Recarregue a página para ver a alteração.",
+        "requiredHolder": "Não é possível ativar {name}. Uma habilidade obrigatória já tem este nome."
       }
     },
     "sections": {
@@ -17535,7 +17538,8 @@
       "publishWarning": {
         "title": "A publicação não pode ser desfeita",
         "description": "Depois de aplicar, todos na organização podem usar as habilidades selecionadas. Habilidades publicadas não podem voltar a ser privadas. Somente um administrador pode excluí-las."
-      }
+      },
+      "skipped": "{count, plural, one {# habilidade não pode ser ativada ou desativada por você e foi ignorada} other {# habilidades não podem ser ativadas ou desativadas por você e foram ignoradas}}"
     },
     "reviewRequests": {
       "title": "Solicitações de publicação",
@@ -17837,6 +17841,7 @@
         "newPlugin": "Novo plugin: {name}"
       },
       "willBeOff": "O plugin é salvo desativado. {names} já tem uma habilidade com o mesmo nome.",
+      "willClash": "{names} já tem uma habilidade com o mesmo nome. Apenas uma delas pode estar ativada.",
       "saveAsNew": {
         "label": "Salvar como Novo Plugin",
         "description": "Mantém sem alterações o plugin que tem este nome."
@@ -17868,7 +17873,8 @@
         "newPlugin": "{name} adicionado.",
         "newVersion": "{name} atualizado para a versão {version} do Onyx.",
         "unchanged": "Nenhuma alteração. {name} já está na versão {version} do Onyx.",
-        "off": "{name} adicionado. Está desativado porque {names} já tem uma habilidade com o mesmo nome."
+        "off": "{name} adicionado. Está desativado porque {names} já tem uma habilidade com o mesmo nome.",
+        "clash": "{name} foi atualizado para a versão {version} do Onyx. {names} já tem uma habilidade com o mesmo nome, então apenas uma delas está ativada."
       }
     },
     "turnOn": {
@@ -18049,7 +18055,8 @@
       "apply": "{count, plural, one {Aplicar a # plugin} other {Aplicar a # plugins}}",
       "publishWarning": {
         "description": "Depois de aplicar, todos na organização podem usar os plugins selecionados. Plugins publicados não podem voltar a ser privados. Somente um administrador pode excluí-los."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin não pode ser ativado ou desativado por você e foi ignorado} other {# plugins não podem ser ativados ou desativados por você e foram ignorados}}"
     }
   },
   "integrations": {

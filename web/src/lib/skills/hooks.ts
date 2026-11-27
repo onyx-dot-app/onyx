@@ -129,6 +129,7 @@ export function useChatSkills({
             slug: skill.name,
             name: skill.name,
             description: skill.short_description ?? skill.description,
+            pluginId: skill.plugin_id,
           })
         ),
       apps: [],
@@ -467,6 +468,10 @@ export interface SkillToggleTarget {
   id: string;
   name: string;
   enabled: boolean;
+  /** False for a skill the user cannot turn off, such as a required one. */
+  can_toggle?: boolean;
+  /** A plugin's name is its label, not the names of the skills inside it. */
+  kind?: "skill" | "plugin";
 }
 
 export interface SkillEnablement {
@@ -517,12 +522,22 @@ export function useSkillEnablement(
     enabled: boolean,
     replaceConflict = false
   ): Promise<void> {
-    const holders = items.filter(
-      (candidate) =>
-        candidate.id !== item.id &&
-        candidate.name === item.name &&
-        candidate.enabled
-    );
+    // A plugin's label is not a skill name, so the server finds its clashes.
+    const holders =
+      item.kind === "plugin"
+        ? []
+        : items.filter(
+            (candidate) =>
+              candidate.id !== item.id &&
+              candidate.kind !== "plugin" &&
+              candidate.name === item.name &&
+              candidate.enabled
+          );
+    if (enabled && holders.some((holder) => holder.can_toggle === false)) {
+      switchModal.toggle(false);
+      toast.error(t("page.toasts.requiredHolder", { name: item.name }));
+      return;
+    }
     if (enabled && !replaceConflict && holders.length > 0) {
       // A holder found here has the same name, so the dialog names nothing.
       askToSwitch(item, []);
@@ -609,6 +624,12 @@ export function useSkillEnablement(
     switchConflicts,
     switchModal,
   };
+}
+
+/** A row a bulk disable turns off. A row the user turned on that a same-name
+ * skill holds shows off, but would run once the holder turns off. */
+export function isDisableTarget(item: CustomSkill): boolean {
+  return item.enabled || item.name_held_by.length > 0;
 }
 
 /** Refreshes the skill lists after a change, and reports a failed refresh. */
@@ -723,9 +744,20 @@ export function useSkillBulkSelection({
         ? deleteTargets
         : action === "share"
           ? selectedItems
-          : toggleableItems;
-    if ((action === "delete" ? deleteLocked : locked) || targets.length === 0)
+          : action === "enable"
+            ? toggleableItems.filter((item) => !item.enabled)
+            : toggleableItems.filter(isDisableTarget);
+    const skipped =
+      action === "enable" || action === "disable"
+        ? selectedItems.filter(
+            (item) => !item.can_toggle && item.enabled !== (action === "enable")
+          ).length
+        : 0;
+    if (action === "delete" ? deleteLocked : locked) return;
+    if (targets.length === 0) {
+      if (skipped) toast.info(nounCopy("skipped", { count: skipped }));
       return;
+    }
     setBusy(true);
     setFailures([]);
     try {
@@ -775,6 +807,7 @@ export function useSkillBulkSelection({
             count: result.succeeded.length,
           })
         );
+      if (skipped) toast.info(nounCopy("skipped", { count: skipped }));
       // The report sits at the top of the list, out of view of a row menu.
       if (result.failed.length)
         toast.error(
