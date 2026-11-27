@@ -113,7 +113,8 @@ func (r *integrationResource) Schema(_ context.Context, _ resource.SchemaRequest
 				MarkdownDescription: "OpenAPI document of the HTTP API, as JSON or YAML text, for example " +
 					"`file(\"openapi.yaml\")`. Each operation becomes an action. Onyx does not return the " +
 					"document as sent, so the provider keeps the configured text and a refresh does not " +
-					"detect changes made outside Terraform.",
+					"detect changes made outside Terraform. An import reads the document Onyx stored, so the " +
+					"first apply after an import can update the integration in place.",
 				PlanModifiers: []planmodifier.String{replaceOnShapeChange()},
 			},
 			"auth_mode": schema.StringAttribute{
@@ -215,7 +216,13 @@ func applyRemoteIntegration(ctx context.Context, model *integrationResourceModel
 		model.ServerURL = types.StringPointerValue(remote.Config.ServerURL)
 		model.Transport = types.StringPointerValue(remote.Config.Transport)
 	} else {
+		model.ServerURL = types.StringNull()
 		model.Transport = types.StringNull()
+		// An import has no configured text, so it takes the stored document.
+		// Without it, the plan would read as a change of shape and replace.
+		if model.OpenAPIDocument.IsNull() || model.OpenAPIDocument.IsUnknown() {
+			model.OpenAPIDocument = types.StringPointerValue(remote.Config.OpenAPIDocument)
+		}
 	}
 	if len(remote.HeaderTemplate) == 0 {
 		model.HeaderTemplate = types.MapNull(types.StringType)
