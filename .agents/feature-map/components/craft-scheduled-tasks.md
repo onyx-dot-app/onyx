@@ -78,8 +78,7 @@ Beat (per tenant, every 30 s, primary queue)
                      sync_chat_run__no_commit for each in-flight chat run
     claim_due_scheduled_tasks            FOR UPDATE SKIP LOCKED
     per task: cancel runs AWAITING_APPROVAL (superseded_by_next_fire)
-              run QUEUED                -> started_at = now, send it again
-              run RUNNING               -> SKIPPED (prior_in_flight)
+              run QUEUED or RUNNING     -> SKIPPED (prior_in_flight)
               else                      -> QUEUED run row
               always advance next_run_at (cron fire + per-task offset)
     commit, send run_scheduled_task(run_id)
