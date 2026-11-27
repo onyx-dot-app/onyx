@@ -1,6 +1,6 @@
 """Migration db8e1bfe4729: tenant_usage_counter replaces tenant_usage. Every
-non-zero amount in tenant_usage becomes one calendar row that ends 7 days after
-it starts. tenant_usage itself is left as it was."""
+non-zero amount in tenant_usage becomes one calendar row that ends where the
+server's calendar period ends. tenant_usage itself is left as it was."""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -16,6 +16,7 @@ from onyx.configs.app_configs import (
     POSTGRES_USER,
 )
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
+from onyx.db.usage import current_calendar_period
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
 PREVIOUS_REVISION = "00a73eb4dccf"
@@ -107,8 +108,9 @@ def test_copies_each_non_zero_amount_into_a_calendar_row(engine: Engine) -> None
         database="postgres", config_name="alembic", revision=COUNTER_REVISION
     )
 
-    last_week_end = LAST_WEEK + timedelta(days=7)
-    this_week_end = THIS_WEEK + timedelta(days=7)
+    # The ends match the periods the server reads.
+    last_week_end = current_calendar_period(LAST_WEEK).end
+    this_week_end = current_calendar_period(THIS_WEEK).end
     assert _counters(engine) == {
         ("llm_cost_cents", LAST_WEEK): (
             "calendar",
@@ -145,3 +147,28 @@ def test_copies_each_non_zero_amount_into_a_calendar_row(engine: Engine) -> None
     with engine.connect() as conn:
         assert conn.scalar(text("SELECT to_regclass('tenant_usage_counter')")) is None
         assert conn.scalar(text("SELECT count(*) FROM tenant_usage")) == 3
+
+
+def test_copied_rows_end_with_the_configured_period(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a one-day period, the copied row ends one day after it starts, so
+    the server, which reads one-day periods, still sees the usage."""
+    one_day = 86400
+    downgrade_postgres(
+        database="postgres", config_name="alembic", revision=PREVIOUS_REVISION
+    )
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM tenant_usage"))
+    _insert_week(engine, THIS_WEEK, 50, 0, 0, None)
+
+    # The setting a deployment would change. The migration reads it when it runs.
+    monkeypatch.setattr("shared_configs.configs.USAGE_LIMIT_WINDOW_SECONDS", one_day)
+    monkeypatch.setattr("onyx.db.usage.USAGE_LIMIT_WINDOW_SECONDS", one_day)
+    upgrade_postgres(
+        database="postgres", config_name="alembic", revision=COUNTER_REVISION
+    )
+    server_period = current_calendar_period(THIS_WEEK)
+
+    assert server_period.end == THIS_WEEK + timedelta(days=1)
+    assert _counters(engine)[("llm_cost_cents", THIS_WEEK)][1] == server_period.end
