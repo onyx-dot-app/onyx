@@ -80,7 +80,8 @@ def upgrade() -> None:
         ],
         unique=True,
     )
-    op.execute(
+    # Reads USAGE_LIMIT_WINDOW_SECONDS on purpose, see _COPY_TENANT_USAGE.
+    op.execute(  # migration-determinism: allow - template tenant_usage is empty
         sa.text(_COPY_TENANT_USAGE).bindparams(
             window_seconds=USAGE_LIMIT_WINDOW_SECONDS
         )
