@@ -128,15 +128,23 @@ def renew_presence(tenant_id: str, user_id: UUID, presence: Presence) -> bool:
     """Renew the installation's presence for this connection. False when a
     newer connection of the installation took it over."""
     cache = _cache(tenant_id)
-    if not owns_presence(tenant_id, user_id, presence):
-        return False
-    cache.set(
-        _presence_key(user_id, presence.installation_id),
-        presence.model_dump_json(),
-        ex=PRESENCE_SECONDS,
-    )
-    _add_installation(cache, user_id, presence.installation_id)
-    return True
+    key = _presence_key(user_id, presence.installation_id)
+    value = presence.model_dump_json()
+    # Compare and set, so a newer connection's claim between the check and
+    # the write is never overwritten.
+    current = cache.get(key)
+    if current is None:
+        renewed = cache.set_if_absent(key, value, ex=PRESENCE_SECONDS)
+    else:
+        owner = _load(cache, key, Presence)
+        renewed = (
+            owner is not None
+            and owner.connection_id == presence.connection_id
+            and cache.replace_if_value(key, current, value, ex=PRESENCE_SECONDS)
+        )
+    if renewed:
+        _add_installation(cache, user_id, presence.installation_id)
+    return renewed
 
 
 def claim_presence(tenant_id: str, user_id: UUID, presence: Presence) -> None:
@@ -373,14 +381,17 @@ def save_grant(
         installation_key = _installation_grant_key(user_id, installation_id)
         previous = cache.get(installation_key)
         if previous is not None and previous.decode() != str(chat_session_id):
-            previous_chat = UUID(previous.decode())
-            previous_grant = _load(cache, _grant_key(previous_chat), ChromeGrant)
-            # Only while that grant is still this installation's.
+            previous_key = _grant_key(UUID(previous.decode()))
+            previous_raw = cache.get(previous_key)
+            previous_grant = _load(cache, previous_key, ChromeGrant)
+            # Only while that grant is still this installation's: compare and
+            # delete, since another installation may take that chat meanwhile.
             if (
-                previous_grant is not None
+                previous_raw is not None
+                and previous_grant is not None
                 and previous_grant.installation_id == installation_id
             ):
-                cache.delete(_grant_key(previous_chat))
+                cache.delete_if_value(previous_key, previous_raw)
         # A chat moved from another installation leaves that one free.
         if existing is not None and existing.installation_id != installation_id:
             cache.delete_if_value(

@@ -158,10 +158,12 @@ async def chrome_extension_socket(
         version=hello.version,
     )
     await asyncio.to_thread(relay.claim_presence, tenant_id, user.id, presence)
-    await websocket.send_json({"type": "welcome", "account": user.email})
-    reader = asyncio.create_task(_read(websocket, tenant_id, user, presence))
-    pump = asyncio.create_task(_pump(websocket, tenant_id, user, presence))
+    reader: asyncio.Task[tuple[int, str] | None] | None = None
+    pump: asyncio.Task[tuple[int, str]] | None = None
     try:
+        await websocket.send_json({"type": "welcome", "account": user.email})
+        reader = asyncio.create_task(_read(websocket, tenant_id, user, presence))
+        pump = asyncio.create_task(_pump(websocket, tenant_id, user, presence))
         await asyncio.wait({reader, pump}, return_when=asyncio.FIRST_COMPLETED)
         close = reader.result() if reader.done() else pump.result()
         if close is not None:
@@ -172,9 +174,10 @@ async def chrome_extension_socket(
         logger.exception("The Chrome extension socket failed")
         await _close(websocket, 1011, "Server error.")
     finally:
-        for task in (reader, pump):
+        tasks = [task for task in (reader, pump) if task is not None]
+        for task in tasks:
             task.cancel()
-        await asyncio.gather(reader, pump, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
         await asyncio.to_thread(relay.drop_presence, tenant_id, user.id, presence)
 
 
@@ -237,6 +240,10 @@ async def _read(
                     refusal = await asyncio.to_thread(_refusal, user.id)
                     if refusal is not None:
                         return refusal
+                    if not await asyncio.to_thread(
+                        relay.owns_presence, tenant_id, user.id, presence
+                    ):
+                        return CLOSE_REPLACED, "Another connection took over."
                     grant = await asyncio.to_thread(
                         relay.save_grant,
                         tenant_id,

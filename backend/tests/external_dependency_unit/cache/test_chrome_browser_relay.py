@@ -99,6 +99,25 @@ def _extension(
     return thread
 
 
+def _after_command(
+    user_id: UUID, presence: Presence, then: Callable[[], object]
+) -> threading.Thread:
+    """Takes the first command off the connection's list, as the extension
+    does, then runs `then` instead of answering."""
+
+    def run() -> None:
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            message = relay.pop_message(_TENANT, user_id, presence)
+            if message is not None and message["type"] == "command":
+                then()
+                return
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread
+
+
 def test_a_command_round_trips_through_the_cache() -> None:
     user_id, chat_id, presence = _shared_chat()
     thread = _extension(
@@ -133,7 +152,9 @@ def test_a_refusal_reaches_the_model_as_a_tool_error() -> None:
 def test_a_lost_extension_gives_an_unknown_outcome_at_once() -> None:
     user_id, chat_id, presence = _shared_chat()
     browser = ChromeBrowser(tenant_id=_TENANT, user_id=user_id, chat_session_id=chat_id)
-    threading.Timer(1, lambda: relay.drop_presence(_TENANT, user_id, presence)).start()
+    _after_command(
+        user_id, presence, lambda: relay.drop_presence(_TENANT, user_id, presence)
+    )
     started = time.monotonic()
     with pytest.raises(ToolCallException) as raised:
         browser.call("act", {"action": "click"}, timeout_seconds=30)
@@ -219,7 +240,9 @@ def test_a_newer_connection_takes_the_installation_over() -> None:
 def test_a_takeover_loses_the_command_at_once() -> None:
     user_id, chat_id, presence = _shared_chat()
     browser = ChromeBrowser(tenant_id=_TENANT, user_id=user_id, chat_session_id=chat_id)
-    threading.Timer(1, lambda: _connect(user_id, presence.installation_id)).start()
+    _after_command(
+        user_id, presence, lambda: _connect(user_id, presence.installation_id)
+    )
     started = time.monotonic()
     with pytest.raises(ToolCallException) as raised:
         browser.call("act", {"action": "click"}, timeout_seconds=30)
@@ -312,3 +335,14 @@ def test_a_stop_ends_the_open_request() -> None:
     )
     assert relay.save_grant(_TENANT, user_id, presence.installation_id, report) is None
     assert relay.load_grant(_TENANT, chat_id, user_id) is None
+
+
+def test_a_replaced_connection_cannot_renew_over_the_newer_one() -> None:
+    user_id = uuid4()
+    first = _connect(user_id)
+    newer = _connect(user_id, first.installation_id)
+    assert not relay.renew_presence(_TENANT, user_id, first)
+    assert relay.owns_presence(_TENANT, user_id, newer)
+    # A lapsed presence goes to the first connection that renews it.
+    relay.drop_presence(_TENANT, user_id, newer)
+    assert relay.renew_presence(_TENANT, user_id, first)

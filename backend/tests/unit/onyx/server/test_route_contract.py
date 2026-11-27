@@ -100,6 +100,7 @@ _AUTH_DEPENDENCY_NAMES: frozenset[str] = frozenset(
         "current_limited_user",
         "current_user",
         "current_user_dependency",
+        "current_user_from_extension_token",
         "current_user_from_websocket",
         "current_user_from_websocket_cookie",
         "current_user_with_expired_token",
