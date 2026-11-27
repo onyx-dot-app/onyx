@@ -17,7 +17,7 @@ from onyx.skills.bundle import (
     normalize_custom_bundle,
     normalize_stored_bundle,
     open_bundle_zip,
-    rewrite_custom_bundle_skill_md,
+    rename_bundle_skill_md,
 )
 from onyx.skills.metadata import frontmatter_for_jsonb, parse_skill_document
 from onyx.skills.models import (
@@ -105,12 +105,7 @@ def ingest_skill_bundle(
                 "Replacement SKILL.md frontmatter field 'name' must remain "
                 f"'{public_name or expected_name}'",
             )
-        bundle_content = rewrite_custom_bundle_skill_md(
-            bundle_content,
-            canonical_name=expected_name,
-            description=description,
-            instructions_markdown=document.instructions_markdown,
-        )
+        bundle_content = rename_bundle_skill_md(bundle_content, expected_name)
         with open_bundle_zip(bundle_content) as bundle_zip:
             raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
         check_skill_md_size(raw_skill_md)
