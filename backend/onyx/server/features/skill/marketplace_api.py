@@ -101,14 +101,12 @@ def _authorized_marketplace(
 
 
 def _summary(
-    marketplace: Marketplace, plugin_count: int, manager: bool, db_session: Session
+    marketplace: Marketplace,
+    plugin_count: int,
+    login_email: str | None,
+    manager: bool,
 ) -> MarketplaceSummary:
     config = marketplace_config(marketplace)
-    login = (
-        fetch_user_by_id(db_session, marketplace.login_user_id)
-        if marketplace.login_user_id is not None
-        else None
-    )
     return MarketplaceSummary(
         id=marketplace.id,
         name=marketplace.name,
@@ -127,8 +125,8 @@ def _summary(
         ),
         can_manage=marketplace.owner_user_id is not None or manager,
         login_user=(
-            MinimalUserSnapshot(id=login.id, email=login.email)
-            if login is not None
+            MinimalUserSnapshot(id=marketplace.login_user_id, email=login_email)
+            if marketplace.login_user_id is not None and login_email is not None
             else None
         ),
         plugin_count=plugin_count,
@@ -151,8 +149,18 @@ def _detail(
         MarketplaceEntryResult.model_validate(item)
         for item in marketplace.last_sync_result or []
     ]
+    login = (
+        fetch_user_by_id(db_session, marketplace.login_user_id)
+        if marketplace.login_user_id is not None
+        else None
+    )
     return MarketplaceDetail(
-        **_summary(marketplace, len(plugins), manager, db_session).model_dump(),
+        **_summary(
+            marketplace,
+            len(plugins),
+            login.email if login is not None else None,
+            manager,
+        ).model_dump(),
         login_has_github=marketplace.login_user_id is not None
         and github_authorization_for(marketplace.login_user_id, db_session) is not None,
         entries=[
@@ -296,8 +304,8 @@ def list_marketplaces(
     manager = _is_manager(user, http_request)
     return MarketplaceList(
         marketplaces=[
-            _summary(marketplace, plugin_count, manager, db_session)
-            for marketplace, plugin_count in list_github_marketplaces(
+            _summary(marketplace, plugin_count, login_email, manager)
+            for marketplace, plugin_count, login_email in list_github_marketplaces(
                 user.id, db_session
             )
         ]

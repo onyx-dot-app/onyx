@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.db.enums import MarketplaceKind, PluginInstallationPolicy
 from onyx.db.models import Marketplace, Plugin, PluginVersion, User
@@ -135,8 +136,9 @@ def lock_github_marketplace(
 
 def list_github_marketplaces(
     owner_user_id: UUID, db_session: Session
-) -> list[tuple[Marketplace, int]]:
-    """The company marketplaces and the user's personal ones."""
+) -> list[tuple[Marketplace, int, str | None]]:
+    """The company marketplaces and the user's personal ones, each with its
+    plugin count and the email of its login user."""
     plugin_count = (
         select(func.count(Plugin.id))
         .where(Plugin.marketplace_id == Marketplace.id)
@@ -146,14 +148,16 @@ def list_github_marketplaces(
     owner_filter = (Marketplace.owner_user_id == owner_user_id) | (
         Marketplace.owner_user_id.is_(None)
     )
-    return [
-        (marketplace, count)
-        for marketplace, count in db_session.execute(
-            select(Marketplace, plugin_count)
+    user = User.__table__.c
+    login_email: KeyedColumnElement[str] = user.email
+    return list(
+        db_session.execute(
+            select(Marketplace, plugin_count, login_email)
+            .outerjoin(User.__table__, user.id == Marketplace.login_user_id)
             .where(Marketplace.kind == MarketplaceKind.GITHUB, owner_filter)
             .order_by(Marketplace.created_at, Marketplace.id)
         ).tuples()
-    ]
+    )
 
 
 def list_synced_plugins(
