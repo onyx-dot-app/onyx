@@ -289,7 +289,7 @@ Select **Customize → Integrations**. Each row shows one state:
 | State | What you see |
 | --- | --- |
 | **On** | The switch is on. You can use the integration in Chat and in Craft. |
-| **Turn on** | The switch is off. Turn it on to use the integration. |
+| **Turn on** | The switch is off. Turn it on to use the integration. If you must connect your account first, Onyx opens the sign-in. If you cancel the sign-in, the switch stays off. |
 | **Sign in** | The switch is on, and **Connect** shows. Connect your account to use the integration. |
 | **Turned off** | **Turned off by an admin.** Nobody can use the integration until an admin turns it on again. |
 
@@ -323,11 +323,17 @@ You can reconnect after an admin turns it on again.
 
 To connect:
 
-1. Click **Connect** or **Reconnect**.
-2. Do one of these steps:
+<Steps>
+  <Step title="Click Connect or Reconnect">
+    Click **Connect** or **Reconnect**.
+  </Step>
+
+  <Step title="Sign in">
     - For an OAuth sign-in, sign in with the service in the new tab. The tab closes when the sign-in is done.
-      If your browser blocks the new tab, the sign-in continues in the same tab, then Onyx opens the integration again.
+    If your browser blocks the new tab, the sign-in continues in the same tab, then Onyx opens the integration again.
     - For an API key, enter the values that the form asks for, then click **Connect**. Only you use these values.
+  </Step>
+</Steps>
 
 Sign in with the account that the agent should use. The agent acts as that account.
 An integration that is not connected gives the agent no actions until you connect it.
