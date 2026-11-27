@@ -248,16 +248,24 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                     advance_next_run_at(db_session=db_session, task=task, now=now)
                 to_enqueue.extend(task_run_ids)
             except Exception:
-                task_logger.exception(
-                    "Error dispatching scheduled task %s; pausing it", task.id
-                )
+                task_logger.exception("Error dispatching scheduled task %s", task.id)
                 # Its next_run_at did not advance, so it would fail again on
-                # every tick.
+                # every tick. Skip this fire; pause only a schedule that
+                # cannot advance.
                 try:
                     with db_session.begin_nested():
-                        pause_scheduled_task__no_commit(db_session, task.id)
+                        advance_next_run_at(db_session=db_session, task=task, now=now)
                 except Exception:
-                    task_logger.exception("Could not pause scheduled task %s", task.id)
+                    task_logger.exception(
+                        "Could not advance scheduled task %s; pausing it", task.id
+                    )
+                    try:
+                        with db_session.begin_nested():
+                            pause_scheduled_task__no_commit(db_session, task.id)
+                    except Exception:
+                        task_logger.exception(
+                            "Could not pause scheduled task %s", task.id
+                        )
 
         db_session.commit()
 

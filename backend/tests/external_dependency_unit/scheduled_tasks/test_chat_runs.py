@@ -931,3 +931,48 @@ def test_a_started_run_without_a_response_fails_after_the_start_limit(
     assert fresh.status == ScheduledTaskRunStatus.RUNNING
     assert stuck.status == ScheduledTaskRunStatus.FAILED
     assert stuck.error_class == ScheduledTaskErrorClass.STUCK
+
+
+def test_a_fire_that_hits_a_passing_error_keeps_its_schedule(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner, due=True)
+    due_at = task.next_run_at
+
+    with patch(
+        "onyx.background.celery.tasks.scheduled_tasks.tasks._cancel_parked_runs",
+        side_effect=RuntimeError("cache down"),
+    ):
+        sent = _dispatch_with_fake_broker()
+
+    db_session.expire_all()
+    assert sent == []
+    assert _task_runs(db_session, task) == []
+    # Only this fire is skipped; the task keeps running on schedule.
+    assert task.status == ScheduledTaskStatus.ACTIVE
+    assert task.next_run_at is not None and due_at is not None
+    assert task.next_run_at > due_at
+
+
+def test_a_second_approval_wait_shows_its_notification_again(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    run, response = _run_with_response(
+        db_session, _task(db_session, owner), RunStatus.SUSPENDED
+    )
+    sync_chat_run__no_commit(db_session, run)
+    response.response_status = RunStatus.RUNNING
+    sync_chat_run__no_commit(db_session, run)
+    db_session.commit()
+    assert _open_notifications(db_session, owner) == []
+
+    response.response_status = RunStatus.SUSPENDED
+    sync_chat_run__no_commit(db_session, run)
+    db_session.commit()
+
+    assert run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
+    assert _open_notifications(db_session, owner) == [str(run.id)]
