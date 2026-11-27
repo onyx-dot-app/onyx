@@ -225,13 +225,30 @@ func applyRemoteIntegration(ctx context.Context, model *integrationResourceModel
 			model.OpenAPIDocument = types.StringPointerValue(remote.Config.OpenAPIDocument)
 		}
 	}
-	if len(remote.HeaderTemplate) == 0 {
-		model.HeaderTemplate = types.MapNull(types.StringType)
-		return
+	model.HeaderTemplate = integrationHeaders(ctx, model.HeaderTemplate, remote.HeaderTemplate, diags)
+}
+
+// integrationHeaders reads the header template Onyx returns. Onyx masks a
+// value with no placeholder, so a mask of the known value keeps the known
+// value. An empty configured map stays empty instead of becoming null.
+func integrationHeaders(ctx context.Context, known types.Map, remote map[string]string, diags *diag.Diagnostics) types.Map {
+	knownValues := stringMapFromModel(ctx, known, diags)
+	if len(remote) == 0 {
+		if !known.IsNull() && !known.IsUnknown() && len(knownValues) == 0 {
+			return known
+		}
+		return types.MapNull(types.StringType)
 	}
-	headers, mapDiags := types.MapValueFrom(ctx, types.StringType, remote.HeaderTemplate)
+	headers := make(map[string]string, len(remote))
+	for key, value := range remote {
+		if knownValue, ok := knownValues[key]; ok && isMaskedHeaderValue(value) && maskHeaderValue(knownValue) == value {
+			value = knownValue
+		}
+		headers[key] = value
+	}
+	result, mapDiags := types.MapValueFrom(ctx, types.StringType, headers)
 	diags.Append(mapDiags...)
-	model.HeaderTemplate = headers
+	return result
 }
 
 // applyFollowUps sends the settings that create and update cannot carry: the
