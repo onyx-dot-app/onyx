@@ -138,7 +138,8 @@
   outcome arrives (`lib/chat/toolApprovals.ts:toolApprovalStatus`). A
   continuation sends a resolution again live after its replay sent it; the
   read keeps one entry per `approval_id`. The decision response names the
-  resume stream of a suspended answer in `continuation` (`ToolApprovalCard`);
+  resume stream of a suspended answer in `continuation`
+  (`lib/chat/hooks.ts:useToolApprovalDecision`, which `ToolApprovalCard` uses);
   for an answer that still runs it is null and the current reader keeps
   reading. The client does not decide which decision was the last: "Approve
   for this chat" can also approve sibling requests on the server. When
@@ -179,7 +180,9 @@
   open request of the reply, and the record reads "Not approved". A reload
   replays the request and the stop the same way.
   While a reply's own card waits, the timeline header reads "Waiting for your
-  approval", also after a preamble and for parallel tool calls. The server
+  approval", also after a preamble and for parallel tool calls. The shared
+  chat view sets `ToolRequestDeciderContext` to false and shows no cards, so
+  its header reads "Waiting for the owner's approval" (or answer) instead. The server
   refuses new input with a 409 `APPROVAL_PENDING`; the client does not check
   first. On that 409 the composer keeps the draft, scrolls to the reply's
   first waiting card in the region, approval or question, shakes it and
@@ -209,7 +212,8 @@
   label, since only a single-model reply's root agent asks. The packets,
   the answers route and the replay are in [[streaming-protocol]] and
   [[mcp-and-custom-tools]]. Questions share the approval reads and UI
-  state in `lib/chat/toolApprovals.ts`: `readToolQuestions` reads them
+  state in `lib/chat/toolApprovals.ts`: `readToolQuestions`
+  (`lib/chat/toolQuestions.ts`, with `toolQuestionStatus`) reads them
   with the same cache as `readToolApprovals`, `readWaitingToolRequests`
   lists both kinds on the selected branch, and `useToolRequestUi` holds
   the local statuses of both and the nudge. The card's answered status
@@ -971,10 +975,11 @@ Resume).
 **Pending input.** `lib/chat/hooks.ts:useChatSessionQueue` holds the pending
 list and session status in SWR. `useChatSessionController` mounts it once per
 chat page and passes it to `AppInputBar`, which only renders it. The hook
-reads the current message tree only to know whether a shown request waits
-(`readWaitingToolRequests`). Its result does not depend on the tree and is
-memoized, so streamed frames do not re-render the memoized `AppInputBar`;
-submit reads its target response from the store when it runs. Incognito chats and anonymous users get a disabled
+and `useChatSessionStatus` subscribe to primitives: the status hook reads the
+message tree only to know whether a shown request waits
+(`readWaitingToolRequests`). The result is memoized, so streamed frames do not
+re-render the memoized `AppInputBar`; submit reads its target response from
+the store when it runs. Incognito chats and anonymous users get a disabled
 queue. One pending-message request runs at a time, and its cache writes use
 the key of the chat that made it. Each request revalidates session status when
 it ends, so polling starts for input it made startable. Submit appends the
@@ -985,11 +990,12 @@ Input that joins a running response arrives as a `user_message` packet;
 `app/app/services/lib.tsx` removes that ID from the cached list on either
 reader, with no request. Saved replay emits the same packets from each step's
 human inputs, so both paths render user bubbles between response sections.
-Status polls every 2 seconds while `has_startable_input` or
-`has_active_subagents` is true, or while the chat shows a waiting approval or
-question. Another tab or client can decide that request and continue the
-response there; the poll sees `is_processing`, a new `latest_response_id` or
-a new `approvals_version` and refreshes the chat.
+Every status reader loads it through `lib/chat/hooks.ts:useChatSessionStatus`,
+which polls every 2 seconds while a reply streams, while the chat shows a
+waiting approval or question, or while `has_startable_input` or
+`has_active_subagents` is true. Another tab or client can decide that request
+and continue the response there; the poll sees `is_processing`, a new
+`latest_response_id` or a new `approvals_version` and refreshes the chat.
 The header's activity button (`sections/chat/ChatActivity.tsx`) shows once a
 chat has a waiting request, a background agent or a published file. It sits
 after the share menu. The extension page (`app/nrf/NRFPage.tsx`) has no app
@@ -1086,8 +1092,8 @@ foreground): `id`, `path`, `status`, `stopped_by_user`, and the latest run's
 reserved) and `duration_seconds` (`processing_duration_seconds`, saved with
 a finished child's reply). The list loads again when the status changes
 `has_active_subagents` or `latest_response_id`, and polls while agents are
-active. The status it reads also polls while a reply streams, so agents that
-the reply starts show. An idle chat that sees a running or unknown
+active. The status it reads (`useChatSessionStatus`) also polls while a reply
+streams, so agents that the reply starts show. An idle chat that sees a running or unknown
 response refreshes history and attaches to the stream.
 `app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
 the latest response's last packet is a turn-level stop. `AppInputBar` then

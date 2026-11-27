@@ -12605,6 +12605,12 @@
           "waitingForAnswer": {
             "label": "正在等待你的回答..."
           },
+          "waitingForOwnerApproval": {
+            "label": "正在等待所有者的批准..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "正在等待所有者的回答..."
+          },
           "runningCommand": {
             "label": "正在运行命令..."
           },

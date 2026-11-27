@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { SWRConfig } from "swr";
+import { SWRConfig, useSWRConfig } from "swr";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import {
   Packet,
@@ -9,6 +9,8 @@ import {
 } from "@/app/app/services/streamingModels";
 import {
   useChatSessionQueue,
+  useChatSessionStatus,
+  useChatSubagents,
   useJumpToLatestReason,
   useOpenArtifactFromUrl,
   usePublishedFiles,
@@ -18,7 +20,10 @@ import {
 import type { Message } from "@/app/app/types";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { useToolRequestUi } from "@/lib/chat/toolApprovals";
+import {
+  ToolRequestDeciderContext,
+  useToolRequestUi,
+} from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { endedRunStatus } from "@/lib/chat/runStatus";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
@@ -195,6 +200,36 @@ describe("useToolRequests", () => {
   });
 });
 
+describe("useToolRequests in a chat that the viewer only reads", () => {
+  function readOnly({ children }: { children: React.ReactNode }) {
+    return (
+      <ToolRequestDeciderContext.Provider value={false}>
+        {children}
+      </ToolRequestDeciderContext.Provider>
+    );
+  }
+
+  it("waits for the owner's approval, not the viewer's", () => {
+    const packets = [request("a", 1)];
+
+    const { result } = renderHook(() => useToolRequests(packets), {
+      wrapper: readOnly,
+    });
+
+    expect(result.current.awaiting).toBe("ownerApproval");
+  });
+
+  it("waits for the owner's answer, not the viewer's", () => {
+    const packets = [question("q", 1)];
+
+    const { result } = renderHook(() => useToolRequests(packets), {
+      wrapper: readOnly,
+    });
+
+    expect(result.current.awaiting).toBe("ownerAnswer");
+  });
+});
+
 describe("useChatSessionQueue", () => {
   beforeEach(() => jest.mocked(refreshChatSession).mockClear());
   afterEach(() => jest.restoreAllMocks());
@@ -325,6 +360,180 @@ describe("useChatSessionQueue", () => {
     expect(
       fetchMock.mock.calls.every(([input]) => String(input).endsWith("/status"))
     ).toBe(true);
+  });
+});
+
+describe("useChatSessionStatus", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  // Moves the clock past one poll and lets the reads it starts settle.
+  async function passPoll(): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(2500);
+    });
+  }
+
+  function serveIdleStatus() {
+    return jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_startable_input: false,
+            has_active_subagents: false,
+            latest_response_id: null,
+            approvals_version: "",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+  }
+
+  function statusReads(fetchMock: jest.SpyInstance): number {
+    return fetchMock.mock.calls.filter(([input]) =>
+      String(input).endsWith("/status")
+    ).length;
+  }
+
+  function startChat(
+    sessionId: string,
+    chatState: "input" | "streaming",
+    packets: Packet[]
+  ) {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: sessionId,
+    });
+    useChatSessionStore.getState().createSession(sessionId, { chatState });
+    const user: Message = {
+      nodeId: 1,
+      messageId: 1,
+      type: "user",
+      message: "",
+      files: [],
+      packets: [],
+      toolCall: null,
+      parentNodeId: null,
+      latestChildNodeId: 2,
+    };
+    useChatSessionStore.getState().updateSessionMessageTree(
+      sessionId,
+      new Map([
+        [1, user],
+        [
+          2,
+          {
+            ...user,
+            nodeId: 2,
+            messageId: 2,
+            type: "assistant",
+            packets,
+            parentNodeId: 1,
+            latestChildNodeId: null,
+          },
+        ],
+      ])
+    );
+  }
+
+  // Each hook gets its own SWR cache, so each reads the status itself.
+  function fresh({ children }: { children: React.ReactNode }) {
+    return (
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        {children}
+      </SWRConfig>
+    );
+  }
+
+  it("reads an idle chat's status once", async () => {
+    startChat("idle-session", "input", []);
+    const fetchMock = serveIdleStatus();
+
+    renderHook(() => useChatSessionStatus("idle-session"), { wrapper: fresh });
+
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await passPoll();
+    expect(statusReads(fetchMock)).toBe(1);
+  });
+
+  it("polls while a reply streams", async () => {
+    startChat("streaming-session", "streaming", []);
+    const fetchMock = serveIdleStatus();
+
+    renderHook(() => useChatSessionStatus("streaming-session"), {
+      wrapper: fresh,
+    });
+
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await passPoll();
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
+  });
+
+  it("keeps polling while its host renders more often than it polls", async () => {
+    startChat("busy-session", "input", []);
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_startable_input: false,
+            has_active_subagents: true,
+            latest_response_id: null,
+            approvals_version: "",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+
+    const { rerender } = renderHook(
+      () => useChatSessionStatus("busy-session"),
+      {
+        wrapper: fresh,
+      }
+    );
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    for (let step = 0; step < 5; step++) {
+      rerender();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(500);
+      });
+    }
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
+  });
+
+  it("reloads when its key is mutated", async () => {
+    startChat("mutated-session", "input", []);
+    const fetchMock = serveIdleStatus();
+
+    const { result } = renderHook(
+      () => {
+        useChatSessionStatus("mutated-session");
+        return useSWRConfig().mutate;
+      },
+      { wrapper: fresh }
+    );
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await act(async () => {
+      await result.current(SWR_KEYS.chatSessionStatus("mutated-session"));
+    });
+    expect(statusReads(fetchMock)).toBe(2);
+  });
+
+  it("polls for the agents list while a shown request waits, as for the queue", async () => {
+    startChat("agents-session", "input", [request("a", 1)]);
+    const fetchMock = serveIdleStatus();
+
+    renderHook(() => useChatSubagents("agents-session"), { wrapper: fresh });
+
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    await passPoll();
+    expect(statusReads(fetchMock)).toBeGreaterThan(1);
   });
 });
 

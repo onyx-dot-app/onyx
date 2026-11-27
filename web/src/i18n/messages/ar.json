@@ -12605,6 +12605,12 @@
           "waitingForAnswer": {
             "label": "في انتظار إجابتك..."
           },
+          "waitingForOwnerApproval": {
+            "label": "في انتظار موافقة المالك..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "في انتظار إجابة المالك..."
+          },
           "runningCommand": {
             "label": "جارٍ تشغيل الأمر..."
           },

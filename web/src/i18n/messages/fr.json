@@ -12605,6 +12605,12 @@
           "waitingForAnswer": {
             "label": "En attente de votre réponse..."
           },
+          "waitingForOwnerApproval": {
+            "label": "En attente de l'approbation du propriétaire..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "En attente de la réponse du propriétaire..."
+          },
           "runningCommand": {
             "label": "Exécution de la commande..."
           },

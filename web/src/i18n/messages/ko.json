@@ -12605,6 +12605,12 @@
           "waitingForAnswer": {
             "label": "답변을 기다리는 중..."
           },
+          "waitingForOwnerApproval": {
+            "label": "소유자의 승인을 기다리는 중..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "소유자의 답변을 기다리는 중..."
+          },
           "runningCommand": {
             "label": "명령 실행 중..."
           },
