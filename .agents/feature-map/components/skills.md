@@ -514,7 +514,8 @@ the app from the same rule
    (`_editable_by_user`). A query on `Plugin` without them skips sharing. The
    reads list every plugin; `SkillResponse.kind` is `plugin` when the version
    the user runs is not a skill (`db/plugin_access.py:holds_one_root_skill`).
-   An edit of the files finds only a skill; the access routes (share,
+   An edit of the files (`server/features/skill/api.py:_editable_skill`)
+   finds only a skill, after it refuses a synced plugin with 400; the access routes (share,
    publish, review, versions, delete, bulk) pass `any_plugin=True`. Both read
    the plugin tables through `db/plugin_access.py`: visibility and the install
    setting come only from `db/plugin_access.py:_user_plugin_pairs` (through
@@ -1072,7 +1073,7 @@ the app from the same rule
     `db/plugin_access.py:seen_by_organization` makes the organization see
     them. A personal plugin belongs to the marketplace owner and starts off, as
     in Claude; the owner turns plugins on one at a time. `db/plugin.py:refuse_if_synced`
-    refuses content edits, uploads, restores, publishing, ownership transfer
+    refuses the edit view, content edits, uploads, restores, publishing, ownership transfer
     and delete of a synced plugin with "Change this plugin in GitHub.". A
     company plugin's shares and install settings still change. A personal
     plugin takes no user or group share and no install setting

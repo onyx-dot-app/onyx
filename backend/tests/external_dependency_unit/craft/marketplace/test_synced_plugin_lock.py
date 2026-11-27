@@ -67,6 +67,7 @@ def synced(
 def _refused(call: Callable[[], object]) -> None:
     with pytest.raises(OnyxError) as exc:
         call()
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
     assert exc.value.detail == SYNCED_PLUGIN_LOCKED
 
 
@@ -78,6 +79,7 @@ def test_content_and_ownership_changes_are_refused(
     plugin_id: UUID = synced.id
     version_id = synced.current_version_id
     calls: list[Callable[[], object]] = [
+        lambda: api.fetch_custom_skill_for_edit(plugin_id, owner, db_session),
         lambda: api.replace_current_user_skill_bundle(
             plugin_id, _zip_upload("alpha"), None, owner, db_session
         ),
@@ -114,13 +116,9 @@ def test_content_and_ownership_changes_are_refused(
             db_session,
         ),
     ]
-    for call in calls[:4]:
-        with pytest.raises(OnyxError, match="Skill not found"):
-            call()
-        db_session.rollback()
     _refused(lambda: lock_skill_for_save(synced, owner, db_session))
     db_session.rollback()
-    for call in calls[4:]:
+    for call in calls:
         _refused(call)
         db_session.rollback()
 

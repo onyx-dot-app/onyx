@@ -27,6 +27,7 @@ from onyx.db.plugin import (
     lock_plugin,
     next_version_number,
     plugin_name_taken,
+    refuse_if_synced,
     set_marketplace_default__no_commit,
     version_is_skill,
 )
@@ -937,15 +938,21 @@ def _editable_skill(
     lock_for_update: bool = False,
     any_plugin: bool = False,
 ) -> Plugin:
+    """``any_plugin`` as in ``fetch_editable_skill``. Without it, a plugin
+    synced from GitHub is refused with 400 instead of 404."""
     skill = fetch_editable_skill(
         skill_id,
         user=user,
         db_session=db_session,
         lock_for_update=lock_for_update,
-        any_plugin=any_plugin,
+        any_plugin=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    if not any_plugin:
+        refuse_if_synced(skill)
+        if not version_is_skill(skill.current_version_id, db_session):
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     return skill
 
 
