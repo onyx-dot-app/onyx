@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { Section } from "@opal/layouts";
 import { useEffect, useRef } from "react";
 import isEqual from "lodash/isEqual";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -52,13 +53,15 @@ export default function SessionApprovalsRegion({
   );
   if (!sessionId || approvals.length === 0) return null;
   return (
-    <div data-testid="session-approvals-region" className="flex flex-col gap-3">
-      {approvals.map((approval) => (
-        <ApprovalCard
-          key={`${approval.approval_id}:${approval.decision ?? "pending"}`}
-          approval={approval}
-        />
-      ))}
+    <div data-testid="session-approvals-region">
+      <Section gap={0.75} alignItems="stretch" height="auto">
+        {approvals.map((approval) => (
+          <ApprovalCard
+            key={`${approval.approval_id}:${approval.decision ?? "pending"}`}
+            approval={approval}
+          />
+        ))}
+      </Section>
     </div>
   );
 }
