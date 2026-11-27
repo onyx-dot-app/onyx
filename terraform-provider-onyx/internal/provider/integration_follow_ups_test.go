@@ -3,12 +3,12 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
@@ -109,25 +109,63 @@ func TestUpdateSendsCredentialsForANewVersionOrAChangedConnectionWithoutAWorking
 		return &client.Integration{OrganizationStatus: &client.IntegrationStatus{State: state}}
 	}
 
+	connected := status("connected")
+	cases := []struct {
+		name   string
+		plan   integrationResourceModel
+		before *client.Integration
+		after  *client.Integration
+		want   bool
+	}{
+		{"a new credentials version", newVersion, status("needs_reconnect"), status("needs_reconnect"), true},
+		{"a new server URL that needs reconnect", newURL, connected, status("needs_reconnect"), true},
+		{"a new server URL with no connection yet", newURL, &client.Integration{}, status("not_set_up"), true},
+		{"a new OpenAPI document that needs reconnect", newDocument, connected, status("needs_reconnect"), true},
+		{"a new OpenAPI document that keeps the connection", newDocument, connected, connected, false},
+		{"a new header field that needs reconnect", newHeaders, connected, status("needs_reconnect"), true},
+		{"a header edit of a key rejected before", newHeaders, status("needs_reconnect"), status("needs_reconnect"), false},
+		{"a new shared sign-in with no connection yet", newSignIn, status("not_set_up"), status("not_set_up"), true},
+		{"an unrelated update of a rejected key", base, status("needs_reconnect"), status("needs_reconnect"), false},
+		{"a new server URL with no shared sign-in", newURL, &client.Integration{}, &client.Integration{}, false},
+	}
+	for _, c := range cases {
+		if got := sendsOrganizationCredentials(c.plan, base, c.before, c.after); got != c.want {
+			t.Errorf("%s: sends = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestRestrictAccessTurnsOffAndHidesBeforeTheUpdate(t *testing.T) {
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id": 7, "kind": "mcp", "enabled": false, "installation_policy": "AVAILABLE"}`))
+	}))
+	t.Cleanup(server.Close)
+	r := &integrationResource{client: client.NewClient(client.Config{ServerURL: server.URL, APIKey: "on_test_key"})}
+	hidden := integrationResourceModel{Enabled: types.BoolValue(false), InstallationPolicy: types.StringValue("NOT_AVAILABLE")}
+	shown := integrationResourceModel{Enabled: types.BoolValue(true), InstallationPolicy: types.StringValue("AVAILABLE")}
+
 	cases := []struct {
 		name    string
 		plan    integrationResourceModel
-		updated *client.Integration
-		want    bool
+		current *client.Integration
+		want    []string
 	}{
-		{"a new credentials version", newVersion, status("connected"), true},
-		{"a new server URL that needs reconnect", newURL, status("needs_reconnect"), true},
-		{"a new server URL with no connection yet", newURL, status("not_set_up"), true},
-		{"a new OpenAPI document that needs reconnect", newDocument, status("needs_reconnect"), true},
-		{"a new OpenAPI document that keeps the connection", newDocument, status("connected"), false},
-		{"a new header field that needs reconnect", newHeaders, status("needs_reconnect"), true},
-		{"a new shared sign-in with no connection yet", newSignIn, status("not_set_up"), true},
-		{"an unrelated update of a rejected key", base, status("needs_reconnect"), false},
-		{"a new server URL with no shared sign-in", newURL, &client.Integration{}, false},
+		{"turned off and made not available", hidden, &client.Integration{Enabled: true, InstallationPolicy: "AVAILABLE"},
+			[]string{"PATCH /admin/integrations/7", "PUT /admin/integrations/7/installation-policy"}},
+		{"already off and not available", hidden, &client.Integration{InstallationPolicy: "NOT_AVAILABLE"}, nil},
+		{"turned on and made available", shown, &client.Integration{InstallationPolicy: "NOT_AVAILABLE"}, nil},
 	}
 	for _, c := range cases {
-		if got := sendsOrganizationCredentials(c.plan, base, c.updated); got != c.want {
-			t.Errorf("%s: sends = %v, want %v", c.name, got, c.want)
+		calls = nil
+		var diags diag.Diagnostics
+		if !r.restrictAccess(context.Background(), 7, c.plan, c.current, &diags) || diags.HasError() {
+			t.Fatalf("%s: restrictAccess: %v", c.name, diags)
+		}
+		if !slices.Equal(calls, c.want) {
+			t.Errorf("%s: calls = %v, want %v", c.name, calls, c.want)
 		}
 	}
 }

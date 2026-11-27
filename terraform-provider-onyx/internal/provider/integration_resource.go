@@ -305,6 +305,30 @@ func (r *integrationResource) applyFollowUps(
 	return refreshed
 }
 
+// restrictAccess turns the integration off and makes it not available when
+// the plan asks for that, so members cannot use it while it gets new
+// credentials, headers or a new server.
+func (r *integrationResource) restrictAccess(
+	ctx context.Context,
+	id int64,
+	plan integrationResourceModel,
+	current *client.Integration,
+	diags *diag.Diagnostics,
+) bool {
+	if current.Enabled && !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() && !plan.Enabled.ValueBool() {
+		if r.setIntegrationSwitch(ctx, id, false, diags) == nil {
+			return false
+		}
+	}
+	if plan.InstallationPolicy.ValueString() == "NOT_AVAILABLE" && current.InstallationPolicy != "NOT_AVAILABLE" {
+		if err := r.client.SetIntegrationInstallationPolicy(ctx, id, "NOT_AVAILABLE"); err != nil {
+			diags.AddError("Failed to set the Onyx integration install setting", err.Error())
+			return false
+		}
+	}
+	return true
+}
+
 func (r *integrationResource) setIntegrationSwitch(ctx context.Context, id int64, enabled bool, diags *diag.Diagnostics) *client.Integration {
 	remote, err := r.client.UpdateIntegrationEnabled(ctx, id, enabled)
 	if err != nil {
@@ -391,6 +415,14 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	current, err := r.client.GetIntegration(ctx, id)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to read Onyx integration", err.Error())
+		return
+	}
+	if !r.restrictAccess(ctx, id, plan, current, &resp.Diagnostics) {
+		return
+	}
 	updated, err := r.client.UpdateIntegration(ctx, id, client.IntegrationUpdate{
 		Name:           plan.Name.ValueString(),
 		Description:    stringPointer(plan.Description),
@@ -404,7 +436,7 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 	var credentialValues map[string]string
-	if sendsOrganizationCredentials(plan, state, updated) {
+	if sendsOrganizationCredentials(plan, state, current, updated) {
 		credentialValues = configuredCredentials
 	}
 	serverChanged := !plan.ServerURL.Equal(state.ServerURL) || !plan.Transport.Equal(state.Transport)
@@ -438,8 +470,10 @@ func (r *integrationResource) ImportState(ctx context.Context, req resource.Impo
 // sendsOrganizationCredentials reports whether Update sends the configured
 // shared credentials: for a new credentials version, or when a new sign-in,
 // header template, server URL or OpenAPI document left the organization
-// without a working connection.
-func sendsOrganizationCredentials(plan, state integrationResourceModel, updated *client.Integration) bool {
+// without a working connection. It does not replace a key that Onyx rejected
+// before the update without a new version: that key may be newer than the
+// configured one.
+func sendsOrganizationCredentials(plan, state integrationResourceModel, before, after *client.Integration) bool {
 	if writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) {
 		return true
 	}
@@ -448,10 +482,13 @@ func sendsOrganizationCredentials(plan, state integrationResourceModel, updated 
 		!plan.HeaderTemplate.Equal(state.HeaderTemplate) ||
 		!plan.AuthMode.Equal(state.AuthMode) ||
 		!plan.AuthMethod.Equal(state.AuthMethod)
-	if !connectionChanged || updated.OrganizationStatus == nil {
+	if !connectionChanged || after.OrganizationStatus == nil {
 		return false
 	}
-	switch updated.OrganizationStatus.State {
+	if before.OrganizationStatus != nil && before.OrganizationStatus.State == "needs_reconnect" {
+		return false
+	}
+	switch after.OrganizationStatus.State {
 	case "needs_reconnect", "not_set_up":
 		return true
 	}
