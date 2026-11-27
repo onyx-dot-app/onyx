@@ -22,6 +22,17 @@ let pingTimer = null;
 let failures = 0;
 let retryTimer = null;
 let commands = Promise.resolve();
+// Each reconnect starts a new generation; an older connect attempt stops.
+let generation = 0;
+// Changes of the grant run one at a time, so a late write never brings back
+// a grant that Stop removed.
+let grantChanges = Promise.resolve();
+
+function serial(change) {
+  const run = grantChanges.then(change);
+  grantChanges = run.catch(() => {});
+  return run;
+}
 
 // ---- state in chrome.storage.session ----
 
@@ -74,6 +85,7 @@ export async function connect() {
     return;
   }
   connecting = true;
+  const attempt = generation;
   try {
     const domain = await getOnyxDomain();
     const response = await fetch(`${domain}/api/chat/browser/extension/token`, {
@@ -88,6 +100,8 @@ export async function connect() {
       return;
     }
     const { token } = await response.json();
+    // A reconnect or a policy change while the token was on its way wins.
+    if (attempt !== generation || (await controlDisabled())) return;
     const url = `${domain.replace(/^http/, "ws")}/api/chat/browser/extension/ws?token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(url);
     socket = ws;
@@ -128,8 +142,10 @@ export async function connect() {
 }
 
 export async function reconnect() {
+  generation += 1;
   socket?.close();
   socket = null;
+  connecting = false;
   failures = 0;
   await connect();
 }
@@ -147,13 +163,13 @@ async function handleMessage(message) {
     case "grant_request":
       await showConsent(message);
       break;
-    case "grant_saved": {
-      const grant = await getGrant();
-      if (grant && grant.chat_session_id === message.chat_session_id && grant.request_id) {
-        await setGrant({ ...grant, request_id: null });
-      }
+    case "grant_saved":
+      await serial(async () => {
+        const grant = await getGrant();
+        if (grant && grant.chat_session_id === message.chat_session_id && grant.request_id)
+          await setGrant({ ...grant, request_id: null });
+      });
       break;
-    }
     case "end_grant": {
       const grant = await getGrant();
       if (grant && grant.chat_session_id === message.chat_session_id) await endGrant(false);
@@ -189,10 +205,17 @@ async function runCommand(message) {
         Math.max(0, message.deadline * 1000 - Date.now())
       );
     });
-    const work = driver.call(grant, message.method, message.params ?? {}, {
-      addTab: (tabId) => addTab(tabId),
-      setCurrent: (tabId) => setCurrent(tabId),
-    });
+    // The hooks act only on the grant that the command started with.
+    const work = driver.call(
+      grant,
+      message.method,
+      message.params ?? {},
+      {
+        addTab: (tabId) => addTab(tabId, grant.chat_session_id),
+        setCurrent: (tabId) => setCurrent(tabId, grant.chat_session_id),
+      },
+      message.deadline * 1000
+    );
     work.catch(() => {});
     const result = await Promise.race([work, expired]).finally(() => clearTimeout(timer));
     reply = { ok: true, result };
@@ -298,11 +321,19 @@ async function groupTabs(tabIds, groupId) {
   }
 }
 
+// The relay's limit on the tabs of one grant.
+const MAX_GRANT_TABS = 50;
+
 async function approve(requestId, tabIds, minutes, shownOrigins) {
   const request = (await readSession(REQUESTS_KEY, {}))[requestId];
   if (!request || request.deadline * 1000 <= Date.now()) {
     await takeRequest(requestId);
     throw new Error("This request expired. Ask again from the Onyx chat.");
+  }
+  // The request belongs to the deployment and policy that the window showed.
+  if (request.domain !== (await getOnyxDomain()) || (await controlDisabled())) {
+    await takeRequest(requestId);
+    throw new Error("Onyx settings changed. Ask again from the Onyx chat.");
   }
   const tabs = [];
   for (const id of tabIds) {
@@ -310,25 +341,38 @@ async function approve(requestId, tabIds, minutes, shownOrigins) {
     if (tab && driver.originOf(tab.url ?? "")) tabs.push(tab);
   }
   if (tabs.length === 0) throw new Error("Pick at least one web page tab.");
+  if (tabs.length > MAX_GRANT_TABS) throw new Error(`Pick ${MAX_GRANT_TABS} tabs or fewer.`);
   const origins = [...new Set(tabs.map((tab) => driver.originOf(tab.url)))];
   // The user allows only the sites that the window showed.
   if (origins.some((origin) => !shownOrigins.includes(origin)))
     throw new Error("A tab moved to another site. Check the sites and allow again.");
-  await takeRequest(requestId);
-  await endGrant(true);
-  const grant = {
-    chat_session_id: request.chat_session_id,
-    chat_title: request.chat_title,
-    request_id: request.request_id,
-    tabs: tabs.map((tab) => tab.id),
-    origins,
-    expires_at: Date.now() / 1000 + Math.min(Math.max(minutes, 5), 480) * 60,
-    current: tabs[0].id,
-    group_id: null,
-  };
-  await setGrant(grant);
-  for (const tab of tabs) await driver.attach(tab.id);
-  await setGrant({ ...grant, group_id: await groupTabs(grant.tabs, null) });
+  await serial(async () => {
+    await endGrantNow(true);
+    // The grant is saved only once every tab is under control; on a failure
+    // the request stays, so Allow can try again.
+    const attached = [];
+    try {
+      for (const tab of tabs) {
+        await driver.attach(tab.id);
+        attached.push(tab.id);
+      }
+    } catch (error) {
+      for (const tabId of attached) await driver.detach(tabId);
+      throw error;
+    }
+    await takeRequest(requestId);
+    const grant = {
+      chat_session_id: request.chat_session_id,
+      chat_title: request.chat_title,
+      request_id: request.request_id,
+      tabs: tabs.map((tab) => tab.id),
+      origins,
+      expires_at: Date.now() / 1000 + Math.min(Math.max(minutes, 5), 480) * 60,
+      current: tabs[0].id,
+      group_id: null,
+    };
+    await setGrant({ ...grant, group_id: await groupTabs(grant.tabs, null) });
+  });
   await reportGrant();
 }
 
@@ -341,7 +385,11 @@ async function deny(requestId) {
     });
 }
 
-export async function endGrant(notify) {
+export function endGrant(notify) {
+  return serial(() => endGrantNow(notify));
+}
+
+async function endGrantNow(notify) {
   const grant = await getGrant();
   if (!grant) return;
   await chrome.storage.session.remove(GRANT_KEY);
@@ -355,33 +403,48 @@ export async function endGrant(notify) {
   if (notify) sendMessage({ type: "grant_ended", chat_session_id: grant.chat_session_id });
 }
 
-async function addTab(tabId) {
-  const grant = await getGrant();
-  if (!grant) return;
-  grant.tabs = [...new Set([...grant.tabs, tabId])];
-  grant.current = tabId;
-  await setGrant(grant);
-  await setGrant({ ...grant, group_id: await groupTabs([tabId], grant.group_id) });
+/** Add a tab that the agent opened to the chat's grant. A tab opened for a
+ * grant that ended meanwhile is let go. */
+async function addTab(tabId, chatSessionId) {
+  const added = await serial(async () => {
+    const grant = await getGrant();
+    if (!grant || grant.chat_session_id !== chatSessionId) {
+      await driver.detach(tabId);
+      return false;
+    }
+    const tabs = [...new Set([...grant.tabs, tabId])];
+    await setGrant({ ...grant, tabs, current: tabId });
+    const groupId = await groupTabs([tabId], grant.group_id);
+    await setGrant({ ...grant, tabs, current: tabId, group_id: groupId });
+    return true;
+  });
+  if (!added)
+    throw new driver.OperationError("no_grant", "The user's share of Chrome with this chat ended.");
   await reportGrant();
 }
 
-async function setCurrent(tabId) {
-  const grant = await getGrant();
-  if (grant && grant.current !== tabId) await setGrant({ ...grant, current: tabId });
+function setCurrent(tabId, chatSessionId) {
+  return serial(async () => {
+    const grant = await getGrant();
+    if (grant && grant.chat_session_id === chatSessionId && grant.current !== tabId)
+      await setGrant({ ...grant, current: tabId });
+  });
 }
 
 export async function onTabRemoved(tabId) {
   driver.forgetTab(tabId);
-  const grant = await getGrant();
-  if (!grant || !grant.tabs.includes(tabId)) return;
-  grant.tabs = grant.tabs.filter((id) => id !== tabId);
-  if (grant.tabs.length === 0) {
-    await endGrant(true);
-    return;
-  }
-  if (grant.current === tabId) grant.current = grant.tabs[0];
-  await setGrant(grant);
-  await reportGrant();
+  const changed = await serial(async () => {
+    const grant = await getGrant();
+    if (!grant || !grant.tabs.includes(tabId)) return false;
+    const tabs = grant.tabs.filter((id) => id !== tabId);
+    if (tabs.length === 0) {
+      await endGrantNow(true);
+      return false;
+    }
+    await setGrant({ ...grant, tabs, current: grant.current === tabId ? tabs[0] : grant.current });
+    return true;
+  });
+  if (changed) await reportGrant();
 }
 
 export async function onTabUpdated(tabId, changeInfo) {

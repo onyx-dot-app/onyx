@@ -223,7 +223,8 @@ reads `chrome.storage.managed` (policy) before `chrome.storage.local`.
 
 **Chat browser control.** `extensions/chrome/src/browser/relay.js` keeps one
 websocket to `/api/chat/browser/extension/ws` (a single-use token from a
-cookie POST; pings every 20 s; an alarm reconnects). It answers the chat
+cookie POST; pings every
+`extensions/chrome/src/browser/relay.js:PING_MS`; an alarm reconnects). It answers the chat
 browser methods with `extensions/chrome/src/browser/driver.js`, which drives the shared tabs over
 `chrome.debugger` (CDP): an accessibility-tree snapshot with refs, trusted
 input, dialogs, and an origin check on every call. The grant lives in

@@ -417,7 +417,7 @@ async function snapshotText(grant, tab, state) {
         const frameId = await iframeFrameId(tabId, node.backendDOMNodeId);
         // A frame of a site that the user did not share stays unread.
         const frameNodes =
-          frameId && isShared(grant, frames.get(frameId) ?? "")
+          frameId && isShared(grant, frames.get(frameId) ?? "-")
             ? await readFrameTree(tabId, frameId).catch(() => null)
             : null;
         if (frameNodes && frameNodes.length > 0)
@@ -541,28 +541,52 @@ async function actionPoint(tabId, objectId, deadline) {
 
 /** Send input. A page dialog blocks input events until it closes, so the
  * send also ends when a dialog opens; the event finishes after the answer. */
-async function input(tabId, method, params) {
-  const state = stateOf(tabId);
+/** Stop a write when its call ran past its deadline (the server already
+ * gave up on it) or the user took the tab meanwhile. `ctx` is the write's
+ * tab and deadline. */
+function checkLive(ctx) {
+  if (Date.now() > ctx.deadline)
+    throw new OperationError("timeout", "The call ran out of time before Chrome could act. Check the page before you retry.");
+  if (isHumanControlled(ctx.tabId))
+    throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
+}
+
+async function input(ctx, method, params) {
+  checkLive(ctx);
+  const state = stateOf(ctx.tabId);
   state.agentInputUntil = Date.now() + 1_000;
-  const sent = send(tabId, method, params);
+  const sent = send(ctx.tabId, method, params);
   sent.catch(() => {});
+  const dialog = dialogOpened(state);
   try {
-    await Promise.race([sent, dialogOpened(state)]);
+    await Promise.race([sent, dialog.promise]);
   } finally {
+    dialog.cancel();
     state.agentInputUntil = Date.now();
   }
 }
 
 function dialogOpened(state) {
-  if (state.dialog) return Promise.resolve();
-  return new Promise((resolve) => state.dialogWaiters.push(resolve));
+  if (state.dialog) return { promise: Promise.resolve(), cancel: () => {} };
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  state.dialogWaiters.push(resolve);
+  return {
+    promise,
+    cancel: () => {
+      const index = state.dialogWaiters.indexOf(resolve);
+      if (index >= 0) state.dialogWaiters.splice(index, 1);
+    },
+  };
 }
 
-async function mouseClick(tabId, { x, y }, button = "left", clickCount = 1) {
-  await input(tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+async function mouseClick(ctx, { x, y }, button = "left", clickCount = 1) {
+  await input(ctx, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
   for (let count = 1; count <= clickCount; count += 1) {
-    await input(tabId, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, clickCount: count });
-    await input(tabId, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, clickCount: count });
+    await input(ctx, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, clickCount: count });
+    await input(ctx, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, clickCount: count });
   }
 }
 
@@ -597,7 +621,7 @@ function keyDefinition(key) {
   throw invalid(`Unknown key ${key.slice(0, 50)}.`);
 }
 
-async function pressKey(tabId, key, modifiers = []) {
+async function pressKey(ctx, key, modifiers = []) {
   const definition = keyDefinition(key);
   const bits = modifiers.reduce((sum, name) => sum | (MODIFIER_BITS[name] ?? 0), 0);
   const text = bits & (MODIFIER_BITS.Control | MODIFIER_BITS.Meta | MODIFIER_BITS.Alt) ? undefined : definition.text;
@@ -608,12 +632,12 @@ async function pressKey(tabId, key, modifiers = []) {
     nativeVirtualKeyCode: definition.keyCode,
     modifiers: bits,
   };
-  await input(tabId, "Input.dispatchKeyEvent", {
+  await input(ctx, "Input.dispatchKeyEvent", {
     ...base,
     type: text ? "keyDown" : "rawKeyDown",
     ...(text ? { text, unmodifiedText: text } : {}),
   });
-  await input(tabId, "Input.dispatchKeyEvent", { ...base, type: "keyUp" });
+  await input(ctx, "Input.dispatchKeyEvent", { ...base, type: "keyUp" });
 }
 
 async function viewportCenter(tabId) {
@@ -638,6 +662,7 @@ async function waitForReady(tabId, readiness, deadline) {
 }
 
 async function navigateTab(grant, tabId, target, readiness, deadline) {
+  checkLive({ tabId, deadline });
   if (target.url !== undefined) {
     if (!isShared(grant, target.url))
       throw new OperationError("failed", outsideMessage(target.url));
@@ -670,9 +695,10 @@ const hasTarget = (target) => target.ref !== undefined || target.selector !== un
  * Run one tool call. `grant` is the chat's grant; `hooks.addTab` adds a tab
  * that the agent opened to it, and `hooks.setCurrent` sets the current tab.
  */
-export async function call(grant, method, params, hooks) {
+export async function call(grant, method, params, hooks, commandDeadline = Infinity) {
   const timeoutMs = Math.min(optNumber(params, "timeoutMs") ?? DEFAULT_TIMEOUT_MS, 60_000);
-  const deadline = Date.now() + timeoutMs;
+  // The server stops waiting at the command's deadline; so does the call.
+  const deadline = Math.min(Date.now() + timeoutMs, commandDeadline);
   switch (method) {
     case "status": {
       const tabs = [];
@@ -768,6 +794,7 @@ export async function call(grant, method, params, hooks) {
         throw new OperationError("human_control", HUMAN_CONTROL_MESSAGE);
       const state = stateOf(tabId);
       if (!state.dialog) throw new OperationError("failed", "No dialog is pending.");
+      checkLive({ tabId, deadline });
       await send(tabId, "Page.handleJavaScriptDialog", {
         accept: params.accept,
         ...(optString(params, "promptText") === undefined ? {} : { promptText: params.promptText }),
@@ -808,6 +835,7 @@ async function conditionsMet(grant, tabId, target, text, urlIncludes) {
 }
 
 async function act(grant, tabId, params, deadline) {
+  const ctx = { tabId, deadline };
   const action = optString(params, "action");
   const target = targetOf(params);
   switch (action) {
@@ -826,13 +854,13 @@ async function act(grant, tabId, params, deadline) {
       }
       await checkPoint(grant, tabId, point);
       if (action === "hover") {
-        await input(tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
+        await input(ctx, "Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
         return undefined;
       }
       const button = optString(params, "button") ?? "left";
       if (!["left", "right", "middle"].includes(button))
         throw invalid("button must be left, right or middle.");
-      await mouseClick(tabId, point, button, Math.min(Math.max(optNumber(params, "clickCount") ?? 1, 1), 3));
+      await mouseClick(ctx, point, button, Math.min(Math.max(optNumber(params, "clickCount") ?? 1, 1), 3));
       return undefined;
     }
     case "type": {
@@ -857,6 +885,7 @@ async function act(grant, tabId, params, deadline) {
       if (kind === "password") throw passwordRefused();
       if (kind === "picker") {
         // Picker fields take a whole value, not typed text.
+        checkLive(ctx);
         const taken = await callOn(
           tabId,
           objectId,
@@ -883,9 +912,9 @@ async function act(grant, tabId, params, deadline) {
           if (typeof this.select === "function") this.select();
           else this.ownerDocument.getSelection().selectAllChildren(this);
         });
-        if (text === "") await pressKey(tabId, "Delete");
+        if (text === "") await pressKey(ctx, "Delete");
       }
-      if (text !== "") await input(tabId, "Input.insertText", { text });
+      if (text !== "") await input(ctx, "Input.insertText", { text });
       return undefined;
     }
     case "select": {
@@ -893,6 +922,7 @@ async function act(grant, tabId, params, deadline) {
       if (!hasTarget(target) || values === undefined)
         throw invalid("select needs ref or selector, and values.");
       const objectId = await resolveTarget(tabId, target, deadline);
+      checkLive(ctx);
       const selected = await callOn(
         tabId,
         objectId,
@@ -922,10 +952,10 @@ async function act(grant, tabId, params, deadline) {
       const to = await actionPoint(tabId, await resolveTarget(tabId, { ref: targetRef }, deadline), deadline);
       await checkPoint(grant, tabId, from);
       await checkPoint(grant, tabId, to);
-      await input(tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", ...from });
-      await input(tabId, "Input.dispatchMouseEvent", { type: "mousePressed", ...from, button: "left", clickCount: 1 });
+      await input(ctx, "Input.dispatchMouseEvent", { type: "mouseMoved", ...from });
+      await input(ctx, "Input.dispatchMouseEvent", { type: "mousePressed", ...from, button: "left", clickCount: 1 });
       for (let step = 1; step <= 5; step += 1) {
-        await input(tabId, "Input.dispatchMouseEvent", {
+        await input(ctx, "Input.dispatchMouseEvent", {
           type: "mouseMoved",
           x: from.x + ((to.x - from.x) * step) / 5,
           y: from.y + ((to.y - from.y) * step) / 5,
@@ -933,7 +963,7 @@ async function act(grant, tabId, params, deadline) {
           buttons: 1,
         });
       }
-      await input(tabId, "Input.dispatchMouseEvent", { type: "mouseReleased", ...to, button: "left", clickCount: 1 });
+      await input(ctx, "Input.dispatchMouseEvent", { type: "mouseReleased", ...to, button: "left", clickCount: 1 });
       return undefined;
     }
     case "press": {
@@ -941,7 +971,7 @@ async function act(grant, tabId, params, deadline) {
       if (!key) throw invalid("press needs key.");
       const modifiers = Array.isArray(params.modifiers) ? params.modifiers.map(String) : [];
       await checkFocus(grant, tabId);
-      await pressKey(tabId, key, modifiers);
+      await pressKey(ctx, key, modifiers);
       return undefined;
     }
     case "scroll": {
@@ -951,7 +981,7 @@ async function act(grant, tabId, params, deadline) {
       await checkPoint(grant, tabId, point);
       const deltaX = optNumber(params, "deltaX") ?? 0;
       const deltaY = optNumber(params, "deltaY") ?? (optNumber(params, "deltaX") === undefined ? 400 : 0);
-      await input(tabId, "Input.dispatchMouseEvent", { type: "mouseWheel", ...point, deltaX, deltaY });
+      await input(ctx, "Input.dispatchMouseEvent", { type: "mouseWheel", ...point, deltaX, deltaY });
       return undefined;
     }
     case "upload":
