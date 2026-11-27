@@ -22,7 +22,7 @@ them inside ``backend/onyx/db/scheduled_task.py`` for persisted reads/writes.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -151,6 +151,10 @@ def _cron_problem(cron: str) -> str | None:
         return "Cron expression must have exactly 5 fields"
     if not croniter.is_valid(cron):
         return f"Invalid cron expression: {cron!r}"
+    try:
+        croniter(cron, datetime.now(UTC)).get_next(datetime)
+    except (ValueError, KeyError):
+        return f"Cron expression has no future fire: {cron!r}"
     return None
 
 

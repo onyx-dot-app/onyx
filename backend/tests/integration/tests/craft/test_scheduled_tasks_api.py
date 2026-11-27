@@ -548,3 +548,18 @@ def test_list_shows_latest_run_of_each_task(admin_user: DATestUser) -> None:
     )
     detail.raise_for_status()
     assert detail.json()["last_run"]["id"] == str(latest_id)
+
+
+def test_a_paused_task_rejects_a_cron_with_no_future_fire(
+    admin_user: DATestUser,
+) -> None:
+    response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+
+    patch = _patch_task(
+        admin_user,
+        task_id,
+        {"editor_mode": "advanced", "editor_payload": {"cron": "0 0 30 2 *"}},
+    )
+    assert patch.status_code == 422
