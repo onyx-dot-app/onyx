@@ -88,9 +88,9 @@ export default function GraphQLFields({
             value={draft.endpoint_url}
             variant={disabled ? "disabled" : "primary"}
             onChange={(event) => {
-              // An edit discards a failed load; the schema stays as it was.
-              setRejected(false);
-              onImportErrorChange(null);
+              // An edit discards a failed introspection; a refused upload
+              // stays until it is replaced or removed.
+              if (!rejected) onImportErrorChange(null);
               onChange({ ...draft, endpoint_url: event.target.value });
             }}
           />

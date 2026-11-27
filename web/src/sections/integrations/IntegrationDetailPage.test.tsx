@@ -1157,6 +1157,14 @@ test("an unreadable schema upload blocks Save until it is removed", async () => 
   ).toBeInTheDocument();
   expect(save).toBeDisabled();
 
+  // An endpoint edit does not discard the refused upload.
+  await u.type(
+    view.getByRole("textbox", { name: copy.add.graphql.endpointUrl.title }),
+    "/v2"
+  );
+  expect(view.getByText(copy.add.graphql.schema.required)).toBeInTheDocument();
+  expect(save).toBeDisabled();
+
   await u.click(view.getByRole("button", { name: copy.add.api.upload.remove }));
   expect(
     view.queryByText(copy.add.graphql.schema.required)
