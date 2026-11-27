@@ -623,6 +623,11 @@ class ScheduledTaskErrorClass(str, PyEnum):
     # CANCELLED runs: an approval that nobody answered, or a user Stop.
     SUPERSEDED_BY_NEXT_FIRE = "superseded_by_next_fire"
     APPROVAL_TIMEOUT = "approval_timeout"
+    # The owner hard-deleted the run's chat; the run keeps no chat id.
+    CHAT_DELETED = "chat_deleted"
+    # The owner is inactive or lost chat access; the task is paused.
+    OWNER_CANNOT_CHAT = "owner_cannot_chat"
+    RATE_LIMITED = "rate_limited"
     USER_CANCELLED = "user_cancelled"
 
 

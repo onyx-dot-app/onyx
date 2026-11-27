@@ -18375,7 +18375,7 @@
       },
       "confirmDelete": {
         "title": "„{name}“ löschen?",
-        "description": "Die Aufgabe wird nicht mehr ausgeführt und ihr Ausführungsverlauf wird entfernt.",
+        "description": "Die Aufgabe wird nicht mehr ausgeführt. Chats früherer Ausführungen bleiben erhalten.",
         "submit": "Löschen"
       }
     },
@@ -18388,7 +18388,8 @@
       "markAllViewed": "Alle als gesehen markieren",
       "markAllViewedFailed": "Die Ausführungen konnten nicht als gesehen markiert werden. Versuchen Sie es erneut.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Einmal ausführen} other {Zeitplan}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Abgebrochen: Die nächste Ausführung begann, bevor jemand die Genehmigung beantwortet hat.} approval_timeout {Abgebrochen: Niemand hat die Genehmigung innerhalb von 24 Stunden beantwortet.} user_cancelled {Von Ihnen gestoppt.} agent_permission_required {Eine Aktion benötigte eine Genehmigung.} agent_exception {Fehlgeschlagen: Bei der Ausführung ist ein Fehler aufgetreten.} stuck {Fehlgeschlagen: Die Ausführung hat nicht rechtzeitig begonnen.} timeout {Fehlgeschlagen: Die Ausführung hat das Limit von einer Stunde erreicht.} other {Fehlgeschlagen: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Abgebrochen: Die nächste Ausführung begann, bevor jemand die Genehmigung beantwortet hat.} approval_timeout {Abgebrochen: Niemand hat die Genehmigung innerhalb von 24 Stunden beantwortet.} user_cancelled {Von Ihnen gestoppt.} agent_permission_required {Eine Aktion benötigte eine Genehmigung.} agent_exception {Fehlgeschlagen: Bei der Ausführung ist ein Fehler aufgetreten.} stuck {Fehlgeschlagen: Die Ausführung hat nicht rechtzeitig begonnen.} timeout {Fehlgeschlagen: Die Ausführung hat das Limit von einer Stunde erreicht.} chat_deleted {Abgebrochen: Der Chat dieser Ausführung wurde gelöscht.} owner_cannot_chat {Fehlgeschlagen: Sie können nicht mehr chatten, daher ist die Aufgabe pausiert.} rate_limited {Fehlgeschlagen: Das Nutzungslimit wurde erreicht.} other {Fehlgeschlagen: {errorClass}}}",
+      "errorDetail": "Fehlgeschlagen: {detail}",
       "columns": {
         "started": "Gestartet",
         "status": "Status",
@@ -18426,7 +18427,8 @@
         "title": "Nach Zeitplan ausführen",
         "label": "{name} nach Zeitplan ausführen"
       },
-      "menu": "Weitere Aktionen"
+      "menu": "Weitere Aktionen",
+      "notFound": "Diese geplante Aufgabe wurde gelöscht oder gehört einem anderen Benutzer."
     },
     "editor": {
       "newTitle": "Neue geplante Aufgabe",
@@ -18438,7 +18440,8 @@
       "saveAndRun": "Speichern und jetzt ausführen",
       "errors": {
         "nameRequired": "Geben Sie einen Namen ein.",
-        "promptRequired": "Geben Sie einen Prompt ein."
+        "promptRequired": "Geben Sie einen Prompt ein.",
+        "tooLong": "Verwenden Sie höchstens {max, number} Zeichen."
       },
       "toasts": {
         "created": "Geplante Aufgabe erstellt.",
