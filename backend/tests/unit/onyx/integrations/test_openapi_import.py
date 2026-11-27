@@ -467,12 +467,15 @@ def test_extensions_under_paths_are_not_endpoints() -> None:
     spec = _callable_spec()
     spec["paths"]["x-tags"] = ["pets"]
     spec["paths"]["x-internal"] = False
+    spec["paths"]["x-owners"] = {"$ref": "#/components/pathItems/Owners"}
     validate_openapi_schema(spec)
 
     view = _import(json.dumps(spec))
 
     assert view.skipped == []
-    assert json.loads(view.openapi_document)["paths"]["x-tags"] == ["pets"]
+    paths = json.loads(view.openapi_document)["paths"]
+    assert paths["x-tags"] == ["pets"]
+    assert paths["x-owners"] == {"$ref": "#/components/pathItems/Owners"}
 
 
 def test_import_needs_no_server_url() -> None:

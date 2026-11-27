@@ -313,7 +313,7 @@ def openapi_to_method_spec(
     )
 
 
-def _path_items(openapi_spec: dict[str, Any]) -> list[tuple[str, Any]]:
+def path_items(openapi_spec: dict[str, Any]) -> list[tuple[str, Any]]:
     """Each ``(path, path item)`` under ``paths``, without the ``x-*``
     extensions, which can be any value."""
     paths = openapi_spec.get("paths")
@@ -330,7 +330,7 @@ def openapi_operations(
     """Each operation as (path, path item, method, operation)."""
     return [
         (path, path_item, method_name, method)
-        for path, path_item in _path_items(openapi_spec)
+        for path, path_item in path_items(openapi_spec)
         if isinstance(path_item, dict)
         for method_name, method in path_item.items()
         if str(method_name).lower() in OPENAPI_METHODS and isinstance(method, dict)
@@ -344,7 +344,7 @@ def malformed_operations(
     operation of a known method that is not an object, as ``(path, method)``.
     ``openapi_operations`` skips them."""
     malformed: list[tuple[str, str | None]] = []
-    for path, path_item in _path_items(openapi_spec):
+    for path, path_item in path_items(openapi_spec):
         if not isinstance(path_item, dict):
             malformed.append((path, None))
             continue

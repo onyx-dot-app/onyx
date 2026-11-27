@@ -24,6 +24,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_spec,
     operation_parameters,
     parse_openapi_document,
+    path_items,
     resolve_ref,
 )
 
@@ -384,15 +385,13 @@ def drop_uncallable_operations(
             del spec["paths"][path]
         else:
             _remove_operation(spec["paths"], path, method_name)
-    paths = spec.get("paths")
-    paths = paths if isinstance(paths, dict) else {}
-    for path, path_item in list(paths.items()):
+    for path, path_item in path_items(spec):
         # Operations behind a path item $ref are not read.
         if isinstance(path_item, dict) and "$ref" in path_item:
             skipped.append(f"The path item of {path}: its $ref is not supported")
             del path_item["$ref"]
             if not path_item:
-                del paths[path]
+                del spec["paths"][path]
     for path, path_item, method, operation in openapi_operations(spec):
         try:
             method_spec = openapi_to_method_spec(
