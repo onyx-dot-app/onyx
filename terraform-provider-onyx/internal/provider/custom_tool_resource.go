@@ -60,7 +60,8 @@ func (r *customToolResource) Metadata(_ context.Context, req resource.MetadataRe
 func (r *customToolResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		DeprecationMessage: "Use onyx_integration with openapi_document instead. A later release " +
-			"removes onyx_custom_tool and the Onyx routes it calls.",
+			"removes onyx_custom_tool and the Onyx routes it calls. onyx_integration cannot send " +
+			"the calling user's Onyx credentials, so keep tools with passthrough_auth on this resource.",
 		MarkdownDescription: "**Deprecated:** use `onyx_integration` with `openapi_document`.\n\n" +
 			"A custom action: an external HTTP API, described by an OpenAPI schema, that " +
 			"assistants can call.\n\n" +

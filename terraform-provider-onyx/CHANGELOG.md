@@ -32,11 +32,19 @@ FEATURES:
 DEPRECATIONS:
 
 * resource/onyx_mcp_server: use `onyx_integration` with `server_url`. A later release removes it.
+  `onyx_integration` cannot limit a server to a list of `users` and `groups`. Keep a server
+  with `is_public = false` on `onyx_mcp_server` until Onyx supports that list.
 * resource/onyx_custom_tool: use `onyx_integration` with `openapi_document`. A later release
-  removes it.
-* The integration ids are not the old resource ids. To move, add an `onyx_integration`
-  with `terraform import` of the integration id from **Admin Panel → Integrations**, then
-  remove the old resource from state with `terraform state rm`.
+  removes it. `onyx_integration` cannot send the calling user's Onyx credentials, and
+  `auth_mode = "individual"` is not the same as `passthrough_auth`. Keep a tool with
+  `passthrough_auth = true` on `onyx_custom_tool`.
+* The integration ids are not the old resource ids. To move a resource:
+  1. Add an `onyx_integration` block and run `terraform import` with the integration id from
+     **Admin Panel → Integrations**.
+  2. Change references to the old resource, such as agent tool ids, to the new resource.
+  3. Remove the old resource from state with `terraform state rm`.
+  4. Remove the old resource block from the configuration. If you keep the block, the next
+     plan creates the old resource again.
 
 ENHANCEMENTS:
 

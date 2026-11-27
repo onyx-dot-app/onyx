@@ -68,7 +68,8 @@ func (r *mcpServerResource) Metadata(_ context.Context, req resource.MetadataReq
 func (r *mcpServerResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		DeprecationMessage: "Use onyx_integration with server_url instead. A later release removes " +
-			"onyx_mcp_server and the Onyx routes it calls.",
+			"onyx_mcp_server and the Onyx routes it calls. onyx_integration cannot limit a server to " +
+			"users and groups, so keep servers with is_public = false on this resource.",
 		MarkdownDescription: "**Deprecated:** use `onyx_integration` with `server_url`.\n\n" +
 			"An MCP server Onyx connects to, so its tools can be attached to agents.\n\n" +
 			"Only servers that need no interactive sign-in can be managed here: `NONE` and " +
