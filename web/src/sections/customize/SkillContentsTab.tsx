@@ -247,7 +247,9 @@ export default function SkillContentsTab({
       // The rest of the page shows the saved skill even after the user left.
       await onSaved();
     } catch (error) {
-      // The steps that finished are kept; Save tries only the rest.
+      // The steps that finished are kept; Save tries only the rest. The page
+      // shows the version and files those steps saved.
+      if (versionId !== base.versionId) await onSaved();
       if (isSkillVersionStale(error)) setStale(true);
       else
         toast.error(

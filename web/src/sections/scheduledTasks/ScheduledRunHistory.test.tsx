@@ -22,7 +22,7 @@ jest.mock("@/lib/scheduledTasks/svc", () => ({
 }));
 jest.mock("@/lib/scheduledTasks/hooks", () => ({
   ...jest.requireActual("@/lib/scheduledTasks/hooks"),
-  revalidateChatScheduledRunViews: jest.fn().mockResolvedValue(undefined),
+  revalidateScheduledRunViews: jest.fn().mockResolvedValue(undefined),
 }));
 
 // The runs the fake server holds, newest first. A page ends with a cursor
@@ -69,6 +69,7 @@ function run(
     summary: null,
     skip_reason: null,
     error_class: null,
+    error_detail: null,
     revision: 1,
     viewed_revision: 1,
     ...overrides,
@@ -182,4 +183,36 @@ it("keeps updating a run that a new run pushes off the first page", async () => 
       screen.getAllByText(/run( done)?$/).map((cell) => cell.textContent)
     ).toEqual(["newest run", "second run", "first run done", "oldest run"])
   );
+});
+
+it("marks a run without a chat viewed when it is clicked", async () => {
+  const user = setupUser();
+  const failed = run("failed", {
+    status: "FAILED",
+    chat_session_id: null,
+    error_class: "agent_exception",
+    error_detail: "Budget used up",
+    revision: 1,
+    viewed_revision: null,
+  });
+  serverRuns = [failed];
+  jest.mocked(markScheduledRunsViewed).mockImplementation(async () => {
+    serverRuns = [{ ...failed, viewed_revision: 1 }];
+    return { items: [], next_cursor: null };
+  });
+  render(<ScheduledRunHistory taskId="task" />);
+
+  expect(await screen.findByText("Failed: Budget used up")).toBeInTheDocument();
+  const pageFetches = () =>
+    jest
+      .mocked(global.fetch)
+      .mock.calls.filter(([url]) => !String(url).includes("unviewed=true"))
+      .length;
+  const pagesBefore = pageFetches();
+  await user.click(screen.getAllByRole("row")[1]!);
+
+  await waitFor(() =>
+    expect(markScheduledRunsViewed).toHaveBeenCalledWith("task", [failed])
+  );
+  await waitFor(() => expect(pageFetches()).toBeGreaterThan(pagesBefore));
 });
