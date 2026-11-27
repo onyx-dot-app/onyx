@@ -13,7 +13,7 @@ import {
   SvgZap,
 } from "@opal/icons";
 import { useNavigation } from "@opal/navigation";
-import { revalidateChatScheduledRunViews } from "@/lib/scheduledTasks/hooks";
+import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import { editScheduledTaskHref } from "@/lib/scheduledTasks/paths";
 import {
   deleteScheduledTask,
@@ -26,7 +26,7 @@ import { CustomizeRowActions } from "@/sections/customize/CustomizeList";
 
 /** Run once, Pause or Resume, and Delete with its confirmation. */
 export function useScheduledTaskActions(
-  task: ScheduledTaskListItem | undefined,
+  task: Pick<ScheduledTaskListItem, "id" | "name" | "status"> | undefined,
   onDeleted?: () => void
 ) {
   const t = useTranslations("scheduledTasks.actions");
@@ -48,7 +48,7 @@ export function useScheduledTaskActions(
     if (!task) return;
     void act(async () => {
       await runScheduledTaskNow(task.id);
-      await revalidateChatScheduledRunViews(task.id);
+      await revalidateScheduledRunViews(task.id);
       return t("toasts.runQueued", { name: task.name });
     }, t("toasts.runFailed"));
   }

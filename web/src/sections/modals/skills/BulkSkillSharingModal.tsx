@@ -80,7 +80,7 @@ export default function BulkSkillSharingModal({
     includeApiKeys: true,
     enabled: open,
   });
-  const { data: groups } = useShareableGroups(open);
+  const { data: groups } = useShareableGroups(open, Permission.MANAGE_PLUGINS);
   // Publishing is one-way, so bulk can publish but never make skills private.
   const [stagedScope, setScope] = useState<"KEEP" | "PUBLIC">("KEEP");
   // A selection that loses organization access drops a staged publish.

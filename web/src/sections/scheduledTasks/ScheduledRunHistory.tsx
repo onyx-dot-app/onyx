@@ -13,12 +13,13 @@ import {
 } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
 import { SvgLongWait } from "@opal/illustrations";
+import { useScreenSize } from "@opal/hooks";
 import UnseenMarker from "@/refresh-components/UnseenMarker";
 import { formatRunDuration, isRunUnviewed } from "@/app/craft/v1/tasks/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import {
-  revalidateChatScheduledRunViews,
+  revalidateScheduledRunViews,
   useScheduledTaskFormat,
 } from "@/lib/scheduledTasks/hooks";
 import {
@@ -73,6 +74,7 @@ export default function ScheduledRunHistory({
   taskId,
 }: ScheduledRunHistoryProps) {
   const t = useTranslations("scheduledTasks.runs");
+  const { isMobile } = useScreenSize();
   const tTasks = useTranslations("scheduledTasks");
   const appPosition = useAppPosition();
   const timeFormat = useScheduledTaskFormat();
@@ -163,7 +165,7 @@ export default function ScheduledRunHistory({
       toast.error(t("markAllViewedFailed"));
     } finally {
       if (marked) {
-        await revalidateChatScheduledRunViews(taskId).catch(() => undefined);
+        await revalidateScheduledRunViews(taskId).catch(() => undefined);
       }
       // Also when nothing was left to mark: another tab may have viewed a
       // loaded row.
@@ -171,6 +173,55 @@ export default function ScheduledRunHistory({
       setMarkingViewed(false);
     }
   }
+
+  async function markRunViewed(run: ScheduledRunSummary) {
+    try {
+      await markScheduledRunsViewed(taskId, [run]);
+      await Promise.all([revalidateScheduledRunViews(taskId), refreshRuns()]);
+    } catch {
+      toast.error(t("markAllViewedFailed"));
+    }
+  }
+
+  function runDetail(run: ScheduledRunSummary): string {
+    if (run.summary) return run.summary;
+    // A generic failure says more with the reason the server saved.
+    if (run.error_class === "agent_exception" && run.error_detail)
+      return t("errorDetail", { detail: run.error_detail });
+    if (run.error_class)
+      return t("errorClass", { errorClass: run.error_class });
+    return run.skip_reason ?? "";
+  }
+
+  // Phone screens drop these, so the table fits the screen width.
+  const secondaryColumns: TableColumn<ScheduledRunSummary>[] = [
+    {
+      kind: "display",
+      id: "duration",
+      title: t("columns.duration"),
+      width: { weight: 12 },
+      cell: (row) => (
+        <ClosedCell run={row}>
+          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
+            {formatRunDuration(row.started_at, row.finished_at)}
+          </Text>
+        </ClosedCell>
+      ),
+    },
+    {
+      kind: "display",
+      id: "trigger",
+      title: t("columns.trigger"),
+      width: { weight: 14 },
+      cell: (row) => (
+        <ClosedCell run={row}>
+          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
+            {t("trigger", { source: row.trigger_source })}
+          </Text>
+        </ClosedCell>
+      ),
+    },
+  ];
 
   const columns: TableColumn<ScheduledRunSummary>[] = [
     {
@@ -214,38 +265,17 @@ export default function ScheduledRunHistory({
         </ClosedCell>
       ),
     },
+    ...(isMobile ? [] : secondaryColumns),
     {
-      kind: "display",
-      id: "duration",
-      title: t("columns.duration"),
-      width: { weight: 12 },
-      cell: (row) => (
-        <ClosedCell run={row}>
-          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
-            {formatRunDuration(row.started_at, row.finished_at)}
-          </Text>
-        </ClosedCell>
-      ),
-    },
-    {
-      kind: "display",
-      id: "trigger",
-      title: t("columns.trigger"),
-      width: { weight: 14 },
-      cell: (row) => (
-        <ClosedCell run={row}>
-          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
-            {t("trigger", { source: row.trigger_source })}
-          </Text>
-        </ClosedCell>
-      ),
-    },
-    {
-      kind: "display",
+      kind: "data",
       id: "detail",
+      value: runDetail,
       title: t("columns.detail"),
-      width: { weight: 30 },
-      cell: (row) => (
+      weight: 30,
+      sortable: false,
+      // Long failure text must not widen the table on a phone.
+      truncate: true,
+      cell: (_detail, row) => (
         <ClosedCell run={row}>
           <Text
             as="p"
@@ -254,10 +284,7 @@ export default function ScheduledRunHistory({
             maxLines={1}
             overflowTooltip
           >
-            {row.summary ??
-              (row.error_class
-                ? t("errorClass", { errorClass: row.error_class })
-                : (row.skip_reason ?? ""))}
+            {runDetail(row)}
           </Text>
         </ClosedCell>
       ),
@@ -305,6 +332,8 @@ export default function ScheduledRunHistory({
         pageSize={false}
         onRowClick={(row) => {
           if (row.chat_session_id) appPosition.openChat(row.chat_session_id);
+          // A run with no chat clears its unread marker when clicked.
+          else if (isRunUnviewed(row)) void markRunViewed(row);
         }}
         getRowLabel={(row) =>
           t("open", { time: timeFormat.absolute(row.started_at) })
