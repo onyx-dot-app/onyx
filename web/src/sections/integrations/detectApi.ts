@@ -165,11 +165,14 @@ function openApiResult(
   url: string | null,
   fallback: string | null
 ): DetectedApi | null {
-  // Onyx fills server variables with their defaults; a "{" left in the URL is
-  // a variable with no default, so the admin sets it.
-  const baseUrlGuessed =
-    fallback !== null || !view.base_url.trim() || view.base_url.includes("{");
   const baseUrl = fallback ?? specBaseUrl(view.base_url, url);
+  // Onyx fills server variables with their defaults; a "{" left in the URL is
+  // a variable with no default. The admin sets it, or fixes a non-http(s) one.
+  const baseUrlGuessed =
+    fallback !== null ||
+    !view.base_url.trim() ||
+    view.base_url.includes("{") ||
+    (baseUrl !== null && restBaseUrl(baseUrl) === null);
   return baseUrl
     ? {
         shape: "openapi",

@@ -853,6 +853,32 @@ describe("Custom API", () => {
     ).toHaveValue("https://api.example.com/{version}");
   });
 
+  test("a server that is not http(s) asks for the base URL", async () => {
+    mockFetch({
+      "POST /api/admin/integrations/openapi-import": {
+        shape: "openapi",
+        openapi_document: "{}",
+        base_url: "ftp://files.example.com/api",
+        endpoints: ["GET /pets List pets"],
+        skipped: [],
+      },
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Pets",
+      add.api.url.title,
+      "https://api.example.com/openapi.json"
+    );
+    expect(
+      await screen.findByRole("textbox", { name: add.rest.baseUrl.title })
+    ).toHaveValue("ftp://files.example.com/api");
+    await submit(user);
+    expect(
+      await screen.findByText(add.rest.baseUrl.required)
+    ).toBeInTheDocument();
+  });
+
   test("a spec that Onyx cannot add shows its error at the URL", async () => {
     const fetchMock = mockFetch({
       "POST /api/admin/integrations/openapi-import": () =>
