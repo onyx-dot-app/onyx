@@ -13913,6 +13913,7 @@
         "title": "{count, plural, one {Este chat usa # pestaña de tu Chrome} other {Este chat usa # pestañas de tu Chrome}}",
         "description": "Observa las acciones en tu propia pestaña. El acceso termina a las {until}.",
         "sites": "Sitios: {sites}",
+        "humanControl": "Estás usando esta pestaña. El agente espera hasta que termines.",
         "stop": "Detener"
       }
     }

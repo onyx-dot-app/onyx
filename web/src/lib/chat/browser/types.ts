@@ -135,7 +135,13 @@ export interface ChromeBrowserState {
   // A share request that waits in Chrome, or that the user denied
   request: "pending" | "denied" | null;
   grant: {
-    tabs: { id: string; title: string; url: string }[];
+    tabs: {
+      id: string;
+      title: string;
+      url: string;
+      // "human" while the user's own input holds the tab
+      controller: "agent" | "human";
+    }[];
     origins: string[];
     // Seconds since the epoch
     expires_at: number;

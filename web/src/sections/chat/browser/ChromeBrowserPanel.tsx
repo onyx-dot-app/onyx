@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Text } from "@opal/components";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
@@ -10,6 +10,12 @@ import { requestChromeShare, stopChromeShare } from "@/lib/chat/browser/api";
 import type { ChromeBrowserState } from "@/lib/chat/browser/types";
 import type { FetchError } from "@/lib/fetcher";
 import type { SWRResponse } from "swr";
+
+// The extension's content script on Onyx pages takes this and connects
+// at once (extensions/chrome/src/utils/onyx-page-bridge.js).
+function wakeExtension() {
+  window.postMessage({ type: "onyx:browser-wake" }, window.origin);
+}
 
 interface ChromeBrowserPanelProps {
   sessionId: string;
@@ -31,6 +37,16 @@ export function ChromeBrowserPanel({
   const format = useFormatter();
   const { data, error, mutate } = chrome;
   const [busy, setBusy] = useState(false);
+  const disconnected = !data || data.installations.length === 0;
+
+  useEffect(() => {
+    if (disconnected) wakeExtension();
+  }, [disconnected]);
+
+  function retry() {
+    wakeExtension();
+    void mutate();
+  }
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -61,7 +77,7 @@ export function ChromeBrowserPanel({
           description={t("unavailable.description")}
           size="sm"
         />
-        <Button prominence="secondary" onClick={() => void mutate()}>
+        <Button prominence="secondary" onClick={retry}>
           {t("retry")}
         </Button>
       </Section>
@@ -104,6 +120,11 @@ export function ChromeBrowserPanel({
               >
                 {tab.url}
               </Text>
+              {tab.controller === "human" && (
+                <Text as="p" font="secondary-body" color="text-04">
+                  {t("shared.humanControl")}
+                </Text>
+              )}
             </Section>
           </Card>
         ))}
@@ -130,7 +151,7 @@ export function ChromeBrowserPanel({
           description={t("connect.description")}
           size="sm"
         />
-        <Button prominence="secondary" onClick={() => void mutate()}>
+        <Button prominence="secondary" onClick={retry}>
           {t("retry")}
         </Button>
       </Section>

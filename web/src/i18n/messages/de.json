@@ -13913,6 +13913,7 @@
         "title": "{count, plural, one {Dieser Chat verwendet # Tab in Ihrem Chrome} other {Dieser Chat verwendet # Tabs in Ihrem Chrome}}",
         "description": "Verfolgen Sie die Aktionen in Ihrem eigenen Tab. Die Freigabe endet um {until}.",
         "sites": "Websites: {sites}",
+        "humanControl": "Sie verwenden diesen Tab. Der Agent wartet, bis Sie aufhören.",
         "stop": "Stoppen"
       }
     }

@@ -13913,6 +13913,7 @@
         "title": "{count, plural, other {このチャットは Chrome のタブを # 個使用しています}}",
         "description": "操作は自分のタブで確認できます。共有は {until} に終了します。",
         "sites": "サイト: {sites}",
+        "humanControl": "このタブを使用中です。操作をやめるまでエージェントは待機します。",
         "stop": "停止"
       }
     }

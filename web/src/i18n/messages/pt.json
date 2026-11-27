@@ -13913,6 +13913,7 @@
         "title": "{count, plural, one {Este chat usa # aba do seu Chrome} other {Este chat usa # abas do seu Chrome}}",
         "description": "Acompanhe as ações na sua própria aba. O compartilhamento termina às {until}.",
         "sites": "Sites: {sites}",
+        "humanControl": "Você está usando esta aba. O agente espera até você parar.",
         "stop": "Parar"
       }
     }

@@ -13913,6 +13913,7 @@
         "title": "{count, plural, other {이 채팅은 Chrome 탭 #개를 사용합니다}}",
         "description": "작업은 내 탭에서 확인하세요. 공유는 {until}에 끝납니다.",
         "sites": "사이트: {sites}",
+        "humanControl": "이 탭을 사용 중입니다. 사용을 멈출 때까지 에이전트가 기다립니다.",
         "stop": "중지"
       }
     }

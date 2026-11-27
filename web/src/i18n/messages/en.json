@@ -13913,6 +13913,7 @@
         "title": "{count, plural, one {This chat uses # tab in your Chrome} other {This chat uses # tabs in your Chrome}}",
         "description": "Watch the actions in your own tab. The share ends at {until}.",
         "sites": "Sites: {sites}",
+        "humanControl": "You are using this tab. The agent waits until you stop.",
         "stop": "Stop"
       }
     }

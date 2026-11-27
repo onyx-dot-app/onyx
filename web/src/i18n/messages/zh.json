@@ -13913,6 +13913,7 @@
         "title": "{count, plural, other {此聊天正在使用你 Chrome 中的 # 个标签页}}",
         "description": "在你自己的标签页中查看操作。共享将于 {until} 结束。",
         "sites": "网站：{sites}",
+        "humanControl": "你正在使用此标签页。代理会等到你停止操作。",
         "stop": "停止"
       }
     }

@@ -13913,6 +13913,7 @@
         "title": "{count, plural, one {Ce chat utilise # onglet de votre Chrome} other {Ce chat utilise # onglets de votre Chrome}}",
         "description": "Suivez les actions dans votre propre onglet. Le partage se termine à {until}.",
         "sites": "Sites : {sites}",
+        "humanControl": "Vous utilisez cet onglet. L'agent attend que vous ayez terminé.",
         "stop": "Arrêter"
       }
     }
