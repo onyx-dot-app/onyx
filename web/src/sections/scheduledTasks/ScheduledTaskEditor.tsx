@@ -50,6 +50,11 @@ interface ScheduledTaskEditorProps {
   taskId?: string;
 }
 
+/** Counts code points after trimming, as the server does. */
+function charCount(text: string): number {
+  return Array.from(text.trim()).length;
+}
+
 export default function ScheduledTaskEditor({
   taskId,
 }: ScheduledTaskEditorProps) {
@@ -122,12 +127,13 @@ function TaskForm({ task }: TaskFormProps) {
   const compiled = compileLocalPayloadToUtcCron(mode, payload, referenceDate);
   const nameError = !name.trim()
     ? t("errors.nameRequired")
-    : name.trim().length > NAME_MAX_CHARS
+    : charCount(name) > NAME_MAX_CHARS
       ? t("errors.tooLong", { max: NAME_MAX_CHARS })
       : null;
   const promptError = !prompt.trim()
     ? t("errors.promptRequired")
-    : prompt.trim().length > PROMPT_MAX_CHARS && prompt !== task?.prompt
+    : charCount(prompt) > PROMPT_MAX_CHARS &&
+        prompt.trim() !== task?.prompt.trim()
       ? t("errors.tooLong", { max: PROMPT_MAX_CHARS })
       : null;
   const dirty =

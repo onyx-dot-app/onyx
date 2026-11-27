@@ -150,3 +150,16 @@ it("says when a name is too long and does not save", async () => {
   expect(screen.getByText("Use 200 characters or fewer.")).toBeInTheDocument();
   expect(screen.getByTestId("save-scheduled-task")).toBeDisabled();
 });
+
+it("counts an emoji in a name as one character, as the server does", async () => {
+  const user = setupUser();
+  render(<ScheduledTaskEditor />);
+
+  await user.click(screen.getByTestId("scheduled-task-name"));
+  await user.paste("😀".repeat(200));
+  await user.type(screen.getByTestId("scheduled-task-prompt"), "Summarize");
+
+  expect(
+    screen.queryByText("Use 200 characters or fewer.")
+  ).not.toBeInTheDocument();
+});
