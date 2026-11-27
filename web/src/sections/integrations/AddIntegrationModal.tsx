@@ -193,6 +193,8 @@ export default function AddIntegrationModal({
   const [readingFile, setReadingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [detectError, setDetectError] = useState<string | null>(null);
+  // The operations of a spec that gave no actions, shown with the error.
+  const [skippedAll, setSkippedAll] = useState<string[]>([]);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [signIn, setSignIn] = useState<SignInDraft>(DEFAULT_SIGN_IN);
   const [transport, setTransport] = useState<McpTransport>(
@@ -303,6 +305,7 @@ export default function AddIntegrationModal({
   async function detectCustomApi(apiUrl: string | null) {
     const controller = newRun();
     setStep("detecting");
+    setSkippedAll([]);
     let detected: DetectedApi | null;
     try {
       detected = await detectApi(apiUrl, file);
@@ -321,6 +324,12 @@ export default function AddIntegrationModal({
     if (controller.signal.aborted) return;
     if (!detected) {
       setDetectError(t("api.url.needed"));
+      setStep("connect");
+      return;
+    }
+    if (detected.shape === "openapi" && detected.view.endpoints.length === 0) {
+      setDetectError(t("api.noActions"));
+      setSkippedAll(detected.view.skipped);
       setStep("connect");
       return;
     }
@@ -674,6 +683,7 @@ export default function AddIntegrationModal({
         {flow === "api" && fileError && (
           <InputErrorText type="error">{fileError}</InputErrorText>
         )}
+        {detectError !== null && <SkippedOperations lines={skippedAll} />}
       </Section>
     );
   }

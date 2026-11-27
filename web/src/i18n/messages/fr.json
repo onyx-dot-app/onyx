@@ -10484,7 +10484,8 @@
           "failed": "Impossible de lire la spécification.",
           "specError": "Impossible d'ajouter la spécification : {detail}",
           "tooLarge": "Le fichier dépasse 5 Mo.",
-          "checkFailed": "Onyx n'a pas pu vérifier l'URL. Réessayez."
+          "checkFailed": "Onyx n'a pas pu vérifier l'URL. Réessayez.",
+          "noActions": "Onyx a ignoré toutes les opérations de la spécification, elle ne donne donc aucune action. Utilisez une autre spécification, ou retirez-la et saisissez l'URL de base de l'API pour ajouter les points de terminaison à la main."
         },
         "detected": {
           "openapi": "API REST, {count, plural, one {# point de terminaison} other {# points de terminaison}}",

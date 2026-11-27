@@ -10484,7 +10484,8 @@
           "failed": "无法读取规范。",
           "specError": "无法添加该规范：{detail}",
           "tooLarge": "文件大于 5 MB。",
-          "checkFailed": "Onyx 无法检查该 URL。请重试。"
+          "checkFailed": "Onyx 无法检查该 URL。请重试。",
+          "noActions": "Onyx 跳过了规范中的所有操作，因此没有可用的操作。请使用其他规范，或移除规范并输入 API 基础 URL 以手动添加端点。"
         },
         "detected": {
           "openapi": "REST API，{count, plural, other {# 个端点}}",

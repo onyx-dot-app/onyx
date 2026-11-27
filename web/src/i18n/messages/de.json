@@ -10484,7 +10484,8 @@
           "failed": "Die Spezifikation konnte nicht gelesen werden.",
           "specError": "Die Spezifikation kann nicht hinzugefügt werden: {detail}",
           "tooLarge": "Die Datei ist größer als 5 MB.",
-          "checkFailed": "Onyx konnte die URL nicht prüfen. Versuchen Sie es erneut."
+          "checkFailed": "Onyx konnte die URL nicht prüfen. Versuchen Sie es erneut.",
+          "noActions": "Onyx hat jede Operation der Spezifikation übersprungen, daher liefert sie keine Aktionen. Verwenden Sie eine andere Spezifikation, oder entfernen Sie sie und geben Sie die Basis-URL der API ein, um die Endpunkte manuell hinzuzufügen."
         },
         "detected": {
           "openapi": "REST-API, {count, plural, one {# Endpunkt} other {# Endpunkte}}",

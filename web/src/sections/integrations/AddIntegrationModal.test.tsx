@@ -624,6 +624,41 @@ describe("Custom API", () => {
     expect(await screen.findByText(skipped)).toBeInTheDocument();
   });
 
+  test("a spec with no actions stops at the connect step", async () => {
+    const skipped =
+      "POST /pets/{petId}/photo: the body is application/octet-stream, and only application/json is supported";
+    mockFetch({
+      "POST /api/admin/integrations/openapi-import": {
+        shape: "openapi",
+        openapi_document: "{}",
+        base_url: "https://pets.example.com",
+        endpoints: [],
+        skipped: [skipped],
+      },
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Pets",
+      add.api.url.title,
+      "https://pets.example.com/openapi.json"
+    );
+
+    expect(await screen.findByText(add.api.noActions)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Add$/ })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: add.continue })
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: `Expand ${add.detected.skippedTitle}`,
+      })
+    );
+    expect(await screen.findByText(skipped)).toBeInTheDocument();
+  });
+
   test.each([
     ["no server", "", "https://pets.example.com/api/v2/"],
     ["a relative server", "/", "https://pets.example.com/api/v2"],

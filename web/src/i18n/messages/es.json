@@ -10484,7 +10484,8 @@
           "failed": "No se pudo leer la especificación.",
           "specError": "No se puede agregar la especificación: {detail}",
           "tooLarge": "El archivo supera los 5 MB.",
-          "checkFailed": "Onyx no pudo comprobar la URL. Inténtelo de nuevo."
+          "checkFailed": "Onyx no pudo comprobar la URL. Inténtelo de nuevo.",
+          "noActions": "Onyx omitió todas las operaciones de la especificación, así que no da acciones. Use otra especificación, o quite la especificación e introduzca la URL base de la API para añadir los endpoints a mano."
         },
         "detected": {
           "openapi": "API REST, {count, plural, one {# endpoint} other {# endpoints}}",
