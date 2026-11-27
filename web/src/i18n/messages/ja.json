@@ -17352,7 +17352,9 @@
           "publishOff": {
             "description": "管理者が組織への公開をオフにしました。このプラグインの公開を管理者に依頼してください。"
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx がグループを読み込めなかったため、グループの共有を変更できません。このダイアログを閉じて開き直してください。",
+        "groupSharesLocked": "このスキルは管理していないグループと共有されているため、グループの共有を変更できません。組織全体のスキル管理者に依頼してください。"
       },
       "tabs": {
         "details": "詳細",
@@ -17461,7 +17463,8 @@
         "disableFailed": "{name}を無効にできませんでした",
         "enableFailed": "{name}を有効にできませんでした",
         "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。",
-        "listRefreshFailed": "スキル一覧を更新できませんでした。ページを再読み込みして変更を確認してください。"
+        "listRefreshFailed": "スキル一覧を更新できませんでした。ページを再読み込みして変更を確認してください。",
+        "requiredHolder": "{name} をオンにできません。必須スキルがすでにこの名前を使用しています。"
       }
     },
     "sections": {
@@ -17504,7 +17507,8 @@
       "upload": {
         "error": {
           "readFailed": "アップロードされたファイルを読み込めませんでした。",
-          "folderRoot": "{upload, select, plugin {選択したフォルダーの最上位に SKILL.md または plugin.json マニフェストが必要です。} other {選択したフォルダーの最上位に SKILL.md が必要です。}}"
+          "folderRoot": "{upload, select, plugin {選択したフォルダーの最上位に SKILL.md または plugin.json マニフェストが必要です。} other {選択したフォルダーの最上位に SKILL.md が必要です。}}",
+          "unsupportedFile": "{name} は ZIP または SKILL.md ファイルではありません。ZIP、SKILL.md ファイル、またはスキルフォルダーをアップロードしてください。"
         }
       }
     },
@@ -17523,6 +17527,8 @@
       "updated": "{count, plural, one {# 件のスキルを更新しました} other {# 件のスキルを更新しました}}",
       "failed": "スキルを更新できませんでした。もう一度お試しください。",
       "partialFailure": "{count, plural, one {# 件のスキルを更新できませんでした} other {# 件のスキルを更新できませんでした}}",
+      "deleted": "{count, plural, one {# 件のスキルを削除しました} other {# 件のスキルを削除しました}}",
+      "deleteFailure": "{count, plural, one {# 件のスキルを削除できませんでした} other {# 件のスキルを削除できませんでした}}",
       "deleteTitle": "{count, plural, one {# 件のスキルを削除しますか？} other {# 件のスキルを削除しますか？}}",
       "deleteDescription": "{count, plural, one {アクセス権を持つすべてのユーザーに対して、選択したスキルを削除します。この操作は元に戻せません。} other {アクセス権を持つすべてのユーザーに対して、選択した # 件のスキルをすべて削除します。この操作は元に戻せません。}}",
       "shareTitle": "{count, plural, one {# 件のスキルのアクセス権を更新} other {# 件のスキルのアクセス権を更新}}",
@@ -17535,7 +17541,8 @@
       "publishWarning": {
         "title": "公開は取り消せません",
         "description": "適用すると、組織内の全員が選択したスキルを使用できます。公開したスキルを非公開に戻すことはできません。削除できるのは管理者のみです。"
-      }
+      },
+      "skipped": "{count, plural, other {オン/オフを切り替えられない # 件のスキルをスキップしました}}"
     },
     "reviewRequests": {
       "title": "公開リクエスト",
@@ -17837,6 +17844,7 @@
         "newPlugin": "新しいプラグイン: {name}"
       },
       "willBeOff": "プラグインはオフで保存されます。{names} に同じ名前のスキルがあります。",
+      "willClash": "{names} には同じ名前のスキルがすでにあります。オンにできるのはどちらか一方だけです。",
       "saveAsNew": {
         "label": "新しいプラグインとして保存",
         "description": "この名前のプラグインは変更しません。"
@@ -17868,7 +17876,8 @@
         "newPlugin": "{name} を追加しました。",
         "newVersion": "{name} を Onyx バージョン {version} に更新しました。",
         "unchanged": "変更はありません。{name} はすでに Onyx バージョン {version} です。",
-        "off": "{name} を追加しました。{names} に同じ名前のスキルがあるため、オフになっています。"
+        "off": "{name} を追加しました。{names} に同じ名前のスキルがあるため、オフになっています。",
+        "clash": "{name} を Onyx バージョン {version} に更新しました。{names} には同じ名前のスキルがすでにあるため、オンになるのは一方だけです。"
       }
     },
     "turnOn": {
@@ -18039,6 +18048,8 @@
       "updated": "{count, plural, one {# 件のプラグインを更新しました} other {# 件のプラグインを更新しました}}",
       "failed": "プラグインを更新できませんでした。もう一度お試しください。",
       "partialFailure": "{count, plural, one {# 件のプラグインを更新できませんでした} other {# 件のプラグインを更新できませんでした}}",
+      "deleted": "{count, plural, one {# 件のプラグインを削除しました} other {# 件のプラグインを削除しました}}",
+      "deleteFailure": "{count, plural, one {# 件のプラグインを削除できませんでした} other {# 件のプラグインを削除できませんでした}}",
       "deleteTitle": "{count, plural, one {# 件のプラグインを削除しますか？} other {# 件のプラグインを削除しますか？}}",
       "deleteDescription": "{count, plural, one {アクセス権を持つすべてのユーザーに対して、選択したプラグインを削除します。この操作は元に戻せません。} other {アクセス権を持つすべてのユーザーに対して、選択した # 件のプラグインをすべて削除します。この操作は元に戻せません。}}",
       "shareTitle": "{count, plural, one {# 件のプラグインのアクセス権を更新} other {# 件のプラグインのアクセス権を更新}}",
@@ -18047,7 +18058,8 @@
       "apply": "{count, plural, one {# 件のプラグインに適用} other {# 件のプラグインに適用}}",
       "publishWarning": {
         "description": "適用すると、組織内の全員が選択したプラグインを使用できます。公開したプラグインを非公開に戻すことはできません。削除できるのは管理者のみです。"
-      }
+      },
+      "skipped": "{count, plural, other {オン/オフを切り替えられない # 件のプラグインをスキップしました}}"
     }
   },
   "integrations": {
@@ -18323,7 +18335,7 @@
       "everyHours": "{count, plural, other {# 時間ごと}}",
       "everyDays": "{count, plural, other {# 日ごとの {time}}}",
       "daily": "毎日 {time}",
-      "weekly": "{days} の {time}"
+      "weekly": "毎週{days} {time}"
     },
     "list": {
       "title": "スケジュールされたタスク",
@@ -18373,7 +18385,7 @@
       },
       "confirmDelete": {
         "title": "「{name}」を削除しますか？",
-        "description": "タスクの実行が停止し、実行履歴も削除されます。",
+        "description": "タスクの実行は停止します。過去の実行のチャットは保持されます。",
         "submit": "削除"
       }
     },
@@ -18386,7 +18398,8 @@
       "markAllViewed": "すべて既読にする",
       "markAllViewedFailed": "実行を既読にできませんでした。もう一度お試しください。",
       "trigger": "{source, select, MANUAL_RUN_NOW {1回実行} other {スケジュール}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} agent_exception {失敗: 実行中にエラーが発生しました。} stuck {失敗: 実行が時間内に開始されませんでした。} timeout {失敗: 実行が 1 時間の上限に達しました。} other {失敗: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} agent_exception {失敗: 実行中にエラーが発生しました。} stuck {失敗: 実行が時間内に開始されませんでした。} timeout {失敗: 実行が 1 時間の上限に達しました。} chat_deleted {キャンセル: この実行のチャットは削除されました。} owner_cannot_chat {失敗: チャットできなくなったため、タスクは一時停止されました。} rate_limited {失敗: 利用上限に達しました。} other {失敗: {errorClass}}}",
+      "errorDetail": "失敗: {detail}",
       "columns": {
         "started": "開始",
         "status": "ステータス",
@@ -18424,7 +18437,8 @@
         "title": "スケジュールどおりに実行",
         "label": "{name} をスケジュールどおりに実行"
       },
-      "menu": "その他の操作"
+      "menu": "その他の操作",
+      "notFound": "このスケジュールタスクは削除されたか、別のユーザーのタスクです。"
     },
     "editor": {
       "newTitle": "新しいスケジュールされたタスク",
@@ -18436,7 +18450,8 @@
       "saveAndRun": "保存して今すぐ実行",
       "errors": {
         "nameRequired": "名前を入力してください。",
-        "promptRequired": "プロンプトを入力してください。"
+        "promptRequired": "プロンプトを入力してください。",
+        "tooLong": "{max, number} 文字以内で入力してください。"
       },
       "toasts": {
         "created": "スケジュールされたタスクを作成しました。",

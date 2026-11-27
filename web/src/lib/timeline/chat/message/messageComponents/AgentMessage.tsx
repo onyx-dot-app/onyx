@@ -19,7 +19,9 @@ import ToolQuestionCard from "@/lib/timeline/chat/message/messageComponents/Tool
 import { FullChatState } from "@/lib/timeline/chat/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
-import MessageTime from "@/lib/timeline/chat/message/MessageTime";
+import MessageTime, {
+  MESSAGE_FOOTER_REVEAL,
+} from "@/lib/timeline/chat/message/MessageTime";
 import { HumanMessageBubble } from "@/lib/timeline/chat/message/HumanMessage";
 import { chatFindInlineKey } from "@/lib/chatFind/match";
 import type {
@@ -571,10 +573,7 @@ const AgentMessage = React.memo(function AgentMessage({
   let nextAnswerRef = 0;
 
   return (
-    <div
-      className="group/agent-message w-full"
-      {...{ [GALLERY_ROOT_ATTR]: "" }}
-    >
+    <div className="group/message w-full" {...{ [GALLERY_ROOT_ATTR]: "" }}>
       {/* One cursor for the whole turn, across its sections. It stays until
           the answer has finished, and hides while the turn waits for the user
           to approve a tool call or answer a question. */}
@@ -834,8 +833,10 @@ const AgentMessage = React.memo(function AgentMessage({
               justifyContent="start"
               alignItems="center"
               height="fit"
-              gap={0}
+              width="fit"
+              gap={0.5}
               wrap
+              className={MESSAGE_FOOTER_REVEAL}
             >
               {!hideFooter && (
                 <MessageToolbar
@@ -860,7 +861,7 @@ const AgentMessage = React.memo(function AgentMessage({
                 />
               )}
               {timeSent && (
-                <div className="ms-auto shrink-0 px-2 opacity-0 transition-opacity duration-0 group-hover/agent-message:duration-150 group-hover/agent-message:opacity-100 group-hover/agent-message:delay-300 group-focus-within/agent-message:opacity-100 no-hover:opacity-100">
+                <div className="shrink-0 px-1">
                   <MessageTime timeSent={timeSent} />
                 </div>
               )}

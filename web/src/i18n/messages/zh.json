@@ -17352,7 +17352,9 @@
           "publishOff": {
             "description": "管理员已关闭向组织发布。请让管理员发布此插件。"
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx 无法加载您的群组，因此无法更改群组共享。请关闭并重新打开此对话框后重试。",
+        "groupSharesLocked": "此技能已与您不管理的群组共享，因此您无法更改其群组共享。请联系组织级技能管理员。"
       },
       "tabs": {
         "details": "详情",
@@ -17461,7 +17463,8 @@
         "disableFailed": "停用 {name} 失败",
         "enableFailed": "启用 {name} 失败",
         "refreshFailed": "{name} 已更新，但技能列表无法刷新。",
-        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。"
+        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。",
+        "requiredHolder": "无法开启 {name}。已有一个必需技能使用此名称。"
       }
     },
     "sections": {
@@ -17504,7 +17507,8 @@
       "upload": {
         "error": {
           "readFailed": "无法读取上传的内容。",
-          "folderRoot": "{upload, select, plugin {所选文件夹的顶层必须包含 SKILL.md 或 plugin.json 清单。} other {所选文件夹的顶层必须包含 SKILL.md。}}"
+          "folderRoot": "{upload, select, plugin {所选文件夹的顶层必须包含 SKILL.md 或 plugin.json 清单。} other {所选文件夹的顶层必须包含 SKILL.md。}}",
+          "unsupportedFile": "{name} 不是 ZIP 或 SKILL.md 文件。请上传 ZIP、SKILL.md 文件或技能文件夹。"
         }
       }
     },
@@ -17523,6 +17527,8 @@
       "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
       "failed": "无法更新技能。请重试。",
       "partialFailure": "{count, plural, one {# 个技能未能更新} other {# 个技能未能更新}}",
+      "deleted": "{count, plural, one {已删除 # 个技能} other {已删除 # 个技能}}",
+      "deleteFailure": "{count, plural, one {# 个技能未能删除} other {# 个技能未能删除}}",
       "deleteTitle": "{count, plural, one {删除 # 个技能？} other {删除 # 个技能？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选技能。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选技能。此操作无法撤销。}}",
       "shareTitle": "{count, plural, one {更新 # 个技能的访问权限} other {更新 # 个技能的访问权限}}",
@@ -17535,7 +17541,8 @@
       "publishWarning": {
         "title": "发布后无法撤销",
         "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有管理员可以删除它们。"
-      }
+      },
+      "skipped": "{count, plural, other {已跳过 # 个你无法开启或关闭的技能}}"
     },
     "reviewRequests": {
       "title": "发布请求",
@@ -17837,6 +17844,7 @@
         "newPlugin": "新插件：{name}"
       },
       "willBeOff": "插件将以关闭状态保存。{names} 已有同名技能。",
+      "willClash": "{names} 已有同名技能。只能开启其中一个。",
       "saveAsNew": {
         "label": "另存为新插件",
         "description": "保持同名插件不变。"
@@ -17868,7 +17876,8 @@
         "newPlugin": "已添加 {name}。",
         "newVersion": "已将 {name} 更新为 Onyx 版本 {version}。",
         "unchanged": "没有更改。{name} 已是 Onyx 版本 {version}。",
-        "off": "已添加 {name}。由于 {names} 已有同名技能，它处于关闭状态。"
+        "off": "已添加 {name}。由于 {names} 已有同名技能，它处于关闭状态。",
+        "clash": "已将 {name} 更新到 Onyx 版本 {version}。{names} 已有同名技能，因此只有其中一个处于开启状态。"
       }
     },
     "turnOn": {
@@ -18039,6 +18048,8 @@
       "updated": "{count, plural, one {已更新 # 个插件} other {已更新 # 个插件}}",
       "failed": "无法更新插件。请重试。",
       "partialFailure": "{count, plural, one {# 个插件未能更新} other {# 个插件未能更新}}",
+      "deleted": "{count, plural, one {已删除 # 个插件} other {已删除 # 个插件}}",
+      "deleteFailure": "{count, plural, one {# 个插件未能删除} other {# 个插件未能删除}}",
       "deleteTitle": "{count, plural, one {删除 # 个插件？} other {删除 # 个插件？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选插件。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选插件。此操作无法撤销。}}",
       "shareTitle": "{count, plural, one {更新 # 个插件的访问权限} other {更新 # 个插件的访问权限}}",
@@ -18047,7 +18058,8 @@
       "apply": "{count, plural, one {应用于 # 个插件} other {应用于 # 个插件}}",
       "publishWarning": {
         "description": "应用后，组织中的所有人都可以使用所选插件。已发布的插件无法再设为私有。只有管理员可以删除它们。"
-      }
+      },
+      "skipped": "{count, plural, other {已跳过 # 个你无法开启或关闭的插件}}"
     }
   },
   "integrations": {
@@ -18373,7 +18385,7 @@
       },
       "confirmDelete": {
         "title": "删除“{name}”？",
-        "description": "任务将停止运行，其运行历史也会被删除。",
+        "description": "任务将停止运行。其过往运行的聊天会被保留。",
         "submit": "删除"
       }
     },
@@ -18386,7 +18398,8 @@
       "markAllViewed": "全部标记为已查看",
       "markAllViewedFailed": "无法将运行标记为已查看。请重试。",
       "trigger": "{source, select, MANUAL_RUN_NOW {运行一次} other {计划}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} other {失败：{errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} chat_deleted {已取消：此运行的聊天已被删除。} owner_cannot_chat {失败：你已无法聊天，因此任务已暂停。} rate_limited {失败：已达到使用上限。} other {失败：{errorClass}}}",
+      "errorDetail": "失败：{detail}",
       "columns": {
         "started": "开始时间",
         "status": "状态",
@@ -18424,7 +18437,8 @@
         "title": "按计划运行",
         "label": "按计划运行 {name}"
       },
-      "menu": "更多操作"
+      "menu": "更多操作",
+      "notFound": "此计划任务已被删除，或属于其他用户。"
     },
     "editor": {
       "newTitle": "新建计划任务",
@@ -18436,7 +18450,8 @@
       "saveAndRun": "保存并立即运行",
       "errors": {
         "nameRequired": "请输入名称。",
-        "promptRequired": "请输入提示词。"
+        "promptRequired": "请输入提示词。",
+        "tooLong": "请使用不超过 {max, number} 个字符。"
       },
       "toasts": {
         "created": "计划任务已创建。",

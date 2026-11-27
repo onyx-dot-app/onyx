@@ -238,32 +238,6 @@ def dismiss_notifications_with_other_value(
     )
 
 
-def dismiss_user_notifications_with_value(
-    user_id: UUID | None,
-    notif_type: NotificationType,
-    key: str,
-    value: str,
-    db_session: Session,
-) -> None:
-    """Dismiss the user's notifications of this type whose
-    additional_data[key] is value. Does not commit."""
-    db_session.execute(
-        update(Notification)
-        .where(
-            (
-                Notification.user_id == user_id
-                if user_id is not None
-                else Notification.user_id.is_(None)
-            ),
-            Notification.notif_type == notif_type,
-            Notification.dismissed.is_(False),
-            _notification_additional_data_key()[key].astext == value,
-        )
-        .values(dismissed=True)
-        .execution_options(synchronize_session=False)
-    )
-
-
 def get_undismissed_additional_data(
     notif_type: NotificationType,
     db_session: Session,
@@ -294,6 +268,26 @@ def dismiss_notifications_by_additional_data(
             Notification.notif_type == notif_type,
             Notification.dismissed.is_(False),
             _notification_additional_data_key() == additional_data,
+        )
+        .values(dismissed=True)
+        .execution_options(synchronize_session=False)
+    )
+
+
+def dismiss_notifications_by_data_value(
+    notif_type: NotificationType,
+    key: str,
+    value: str,
+    db_session: Session,
+) -> None:
+    """Dismiss, for every user, notifications of this type whose
+    additional_data holds ``value`` at ``key``. Does not commit."""
+    db_session.execute(
+        update(Notification)
+        .where(
+            Notification.notif_type == notif_type,
+            Notification.dismissed.is_(False),
+            Notification.additional_data[key].astext == value,
         )
         .values(dismissed=True)
         .execution_options(synchronize_session=False)

@@ -301,8 +301,8 @@ def cancel_parked_response(
 ) -> bool:
     """Cancel a response that still waits for approval. A response that an
     approval resumed, or that ended, stays as it is: unlike Stop, this sends
-    no stop request that a resumed owner would obey. Returns whether it
-    ended here."""
+    no stop request that a resumed owner would obey. `failure` is the reason
+    the response keeps. Returns whether it ended here."""
     with _ownership_lock(cache, response_id):
         if cache.exists(_owner_key(response_id)):
             return False
