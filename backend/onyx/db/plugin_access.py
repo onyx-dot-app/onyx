@@ -217,13 +217,21 @@ def plugin_in_managed_scope(
     shared with a group they manage, and is shared with no other group and no
     user outside their groups. Fails closed for a user who manages no group."""
     managed = scoped_group_ids_subquery(manager)
-    group_share = select(Plugin__UserGroup.plugin_id).where(
-        Plugin__UserGroup.plugin_id == plugin.id,
-        Plugin__UserGroup.permission.is_not(None),
+    group_share = (
+        select(Plugin__UserGroup.plugin_id)
+        .where(
+            Plugin__UserGroup.plugin_id == plugin.id,
+            Plugin__UserGroup.permission.is_not(None),
+        )
+        .correlate(plugin)
     )
-    user_share_outside = select(Plugin__User.plugin_id).where(
-        Plugin__User.plugin_id == plugin.id,
-        Plugin__User.user_id.not_in(managed_group_member_ids_subquery(manager)),
+    user_share_outside = (
+        select(Plugin__User.plugin_id)
+        .where(
+            Plugin__User.plugin_id == plugin.id,
+            Plugin__User.user_id.not_in(managed_group_member_ids_subquery(manager)),
+        )
+        .correlate(plugin)
     )
     return and_(
         ~seen_by_organization(marketplace),
