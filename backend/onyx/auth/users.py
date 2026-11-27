@@ -74,6 +74,7 @@ from onyx.auth.email_utils import (
 from onyx.auth.invited_users import get_invited_users, remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
 from onyx.auth.login_claims_capture import capture_oauth_login_claims
+from onyx.auth.magic_link import MAGIC_LINK_USE_SSO_CODE
 from onyx.auth.mobile_sso.sso_completion import (
     apply_mobile_state,
     complete_mobile_sso,
@@ -1082,6 +1083,48 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
     @log_function_time()
+    async def _insert_web_user(self, email: str, *, is_verified: bool) -> User:
+        """Insert a standard web-login user with a random password nobody holds.
+
+        Takes the seat-limit lock on the session that does the insert. Stops
+        there: the caller links its identity first, then seeds the pinned
+        agents and calls ``on_after_register``.
+        """
+        await self.user_db.session.run_sync(
+            lambda s: enforce_seat_limit_locked(s, seats_needed=1)
+        )
+        password = self.password_helper.generate()
+        return await self.user_db.create(
+            {
+                "email": email,
+                "hashed_password": self.password_helper.hash(password),
+                "is_verified": is_verified,
+                "account_type": AccountType.STANDARD,
+            }
+        )
+
+    async def _promote_placeholder_to_web_login(
+        self, db_session: AsyncSession, user: User, *, is_verified: bool
+    ) -> User:
+        """Turn a placeholder row (EXT_PERM_USER, BOT) into the real account,
+        commit, and return the reloaded row."""
+        # Cache the id before the commit below expires `user`. Reading an
+        # attribute off an expired object triggers a sync lazy load, which
+        # raises MissingGreenlet in this async context.
+        user_id = user.id
+        seat_added = await db_session.run_sync(
+            partial(_upgrade_placeholder_to_web_login__no_commit, user_id, is_verified)
+        )
+        await db_session.commit()
+        if seat_added:
+            _invalidate_license_cache_after_seat_change()
+
+        self.user_db.session.expire(user)
+        reloaded = await self.user_db.get(user_id)
+        if reloaded is None:
+            raise RuntimeError("Could not reload the user after promoting it.")
+        return reloaded
+
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
         oauth_name: str,
@@ -1239,20 +1282,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         valid_email_domains=effective_valid_email_domains,
                     )
 
-                    # Lock + check on the same session that does the insert.
-                    await self.user_db.session.run_sync(
-                        lambda s: enforce_seat_limit_locked(s, seats_needed=1)
+                    user = await self._insert_web_user(
+                        account_email, is_verified=is_verified_by_default
                     )
-
-                    password = self.password_helper.generate()
-                    user_dict = {
-                        "email": account_email,
-                        "hashed_password": self.password_helper.hash(password),
-                        "is_verified": is_verified_by_default,
-                        "account_type": AccountType.STANDARD,
-                    }
-
-                    user = await self.user_db.create(user_dict)
                     await self._hold_sso_provider(sso_provider_id)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
                     await seed_pinned_personas_from_featured(
@@ -1330,31 +1362,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.account_type.is_web_login():
-                # Cache the id before the commit below expires `user`. Reading
-                # an attribute off an expired object here triggers a sync lazy
-                # load, which raises MissingGreenlet in this async context.
-                refreshed_user_id = user.id
-
                 # Runs on this session, which already holds the `"user"` row
                 # lock taken by reconcile_user_email__no_commit above. A second
                 # connection would wait on that lock for the whole callback.
-                seat_added = await db_session.run_sync(
-                    partial(
-                        _upgrade_placeholder_to_web_login__no_commit,
-                        refreshed_user_id,
-                        is_verified_by_default,
-                    )
+                # The reload lets downstream code (e.g. the oidc_expiry check)
+                # see the upgraded fields.
+                user = await self._promote_placeholder_to_web_login(
+                    db_session, user, is_verified=is_verified_by_default
                 )
-                await db_session.commit()
-                if seat_added:
-                    _invalidate_license_cache_after_seat_change()
-
-                # Reload so downstream code (e.g. the oidc_expiry check) sees
-                # the upgraded fields.
-                self.user_db.session.expire(user)
-                user = await self.user_db.get(refreshed_user_id)
-                if user is None:
-                    raise RuntimeError("OAuth callback could not reload the user.")
 
             # this is needed if an organization toggles track_external_idp_expiry from
             # true to false; otherwise the oidc expiry will always be old and the user
@@ -1364,6 +1379,110 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
             remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
 
+            return user
+
+    async def magic_link_login(
+        self,
+        email: str,
+        request: Optional[Request] = None,
+        *,
+        start_new_team: bool = False,
+        referral_source: str | None = None,
+    ) -> User:
+        """Sign in the holder of ``email`` after they clicked the link we mailed.
+
+        The click proves the inbox, so a new user is created verified, with a
+        random password nobody holds. The tenant is resolved or created only
+        here, never when the link is requested, so a made-up address leaves
+        nothing behind. On the playground the provisioning step runs the
+        sign-up rules and refuses with a ``PLAYGROUND_*`` code that the web
+        turns into a page.
+
+        Shares the user creation and the placeholder promotion with
+        ``oauth_callback``. There is no OAuth account to link: the address is
+        the identity.
+        """
+        tenant_id = await fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.provisioning",
+            "get_or_provision_tenant",
+            async_return_default_schema,
+        )(
+            email=email,
+            referral_source=referral_source,
+            request=request,
+            start_new_team=start_new_team,
+        )
+        if not tenant_id:
+            raise RuntimeError("Tenant provisioning returned no tenant.")
+
+        async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
+            verify_email_in_whitelist(email, tenant_id)
+            try:
+                # Strict: the fallback defaults usually allow every domain,
+                # which would let a blocked domain in while the read fails.
+                security_settings = get_security_settings(allow_fallback=False)
+            except Exception as e:
+                logger.exception(
+                    "Could not read the security settings for %s", tenant_id
+                )
+                # The token is already used up, so the same link cannot work.
+                raise OnyxError(
+                    OnyxErrorCode.SERVICE_UNAVAILABLE,
+                    "Could not check the sign-in settings. "
+                    "Request a new link in a moment.",
+                ) from e
+            valid_email_domains = security_settings.valid_email_domains
+            verify_email_domain(email, valid_email_domains=valid_email_domains)
+
+            user = await self.user_db.get_by_email(email)
+            if user is None:
+                verify_email_domain(
+                    email,
+                    valid_email_domains=valid_email_domains,
+                    is_registration=True,
+                )
+                try:
+                    new_user = await self._insert_web_user(email, is_verified=True)
+                except IntegrityError as error:
+                    # Another request inserted a row for this address after the
+                    # lookup above, as in ``create``: a second link, a password
+                    # sign-up or a permission sync. It is an existing account
+                    # now, so it takes the checks below.
+                    await db_session.rollback()
+                    logger.warning(
+                        "IntegrityError on magic link sign-up, assuming duplicate: %s",
+                        error,
+                    )
+                    user = await self.user_db.get_by_email(email)
+                    if user is None:
+                        raise error
+                else:
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=new_user
+                    )
+                    await self.on_after_register(new_user, request)
+                    remove_user_from_invited_users_after_login(
+                        new_user.email, new_user.id, tenant_id
+                    )
+                    return new_user
+
+            # An existing account: found above, or inserted by another request.
+            if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
+                # The account's session follows its SSO provider, and that
+                # session has ended. A session from the link would be refused
+                # on the next request, so send the person to SSO now.
+                raise OnyxError(OnyxErrorCode.UNAUTHORIZED, MAGIC_LINK_USE_SSO_CODE)
+            if not user.account_type.is_web_login():
+                # A permission-sync placeholder for this address becomes the
+                # real account, the same way a first OAuth login claims it.
+                user = await self._promote_placeholder_to_web_login(
+                    db_session, user, is_verified=True
+                )
+            elif not user.is_verified:
+                # The click proved the inbox, which is all verification asks.
+                user = await self.user_db.update(user, {"is_verified": True})
+
+            remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
             return user
 
     async def on_after_login(

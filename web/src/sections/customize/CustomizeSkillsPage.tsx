@@ -28,10 +28,10 @@ import {
   type SkillStatusFilter,
 } from "@/lib/customize/skills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { useSettings } from "@/lib/settings/hooks";
 import { deleteUserSkill } from "@/lib/skills/api";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 import {
+  useChatBuiltInSkillIds,
   useSkillEnablement,
   type SkillEnablement,
   useRefreshSkillLists,
@@ -215,7 +215,6 @@ export default function CustomizeSkillsPage() {
   const skillCopy = useTranslations("skills");
   const locale = useLocale();
   const navigation = useNavigation();
-  const settings = useSettings();
   const { user, isAdmin } = useUser();
   const revalidate = useRefreshSkillLists();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
@@ -230,8 +229,8 @@ export default function CustomizeSkillsPage() {
   const [shareTarget, setShareTarget] = useState<Skill | null>(null);
   const [preview, setPreview] = useState<Skill | null>(null);
 
-  const craftEnabled = settings.onyx_craft_enabled === true;
-  const all = data ? visibleSkills(data, craftEnabled) : [];
+  const chatBuiltInIds = useChatBuiltInSkillIds();
+  const all = data ? visibleSkills(data, chatBuiltInIds) : [];
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
   const enablement = useSkillEnablement(all, refresh, (skill) => {
     if (needsAttention(skill.plugin?.needs ?? [])) setTurnedOn(skill);
@@ -239,7 +238,7 @@ export default function CustomizeSkillsPage() {
   const groups = data
     ? groupSkills(data, {
         userId: user?.id ?? null,
-        craftEnabled,
+        chatBuiltInIds,
         query,
         status,
         locale,

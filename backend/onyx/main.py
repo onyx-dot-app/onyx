@@ -42,6 +42,7 @@ from onyx.configs.app_configs import (
     GOOGLE_LOGIN_BASE_SCOPES,
     GOOGLE_OAUTH_SCOPE_OVERRIDE,
     LOG_ENDPOINT_LATENCY,
+    MAGIC_LINK_ENABLED,
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET,
     OAUTH_ENABLED,
@@ -71,6 +72,7 @@ from onyx.redis.redis_pool import log_redis_server_diagnostics
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth.captcha_api import CaptchaCookieMiddleware, LoginCaptchaMiddleware
 from onyx.server.auth.captcha_api import router as captcha_router
+from onyx.server.auth.magic_link_api import router as magic_link_router
 from onyx.server.auth.mobile import router as mobile_auth_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
@@ -752,6 +754,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         mobile_auth_router,
         prefix="/auth/mobile",
     )
+
+    # Sign in with a link sent by email. Off unless MAGIC_LINK_ENABLED.
+    if MAGIC_LINK_ENABLED:
+        include_auth_router_with_prefix(application, magic_link_router)
 
     # Env-credential Google login rides alongside provider rows when OAuth
     # credentials are configured.

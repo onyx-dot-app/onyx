@@ -1966,6 +1966,48 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     assert read_connection_secret(connection).fields == {"X-Api-Key": "abc{1}-secret"}
 
 
+def test_only_a_manager_reads_custom_tool_header_values(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    """Members read tool and agent snapshots, so they get no part of a shared
+    header secret. A manager keeps the partial mask, which Terraform compares
+    with its known value."""
+    secret = "sk-proj-AAAABBBBCCCCDDDD"
+    snapshot = tool_api.create_custom_tool(
+        CustomToolCreate(
+            name=f"shared-key-{uuid4().hex[:8]}",
+            description="Shared key",
+            definition=OPENAPI_SPEC,
+            custom_headers=[Header(key="X-Api-Key", value=secret)],
+            passthrough_auth=False,
+        ),
+        db_session,
+        admin,
+    )
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+    give_access(db_session, [integration])
+
+    managed = tool_api.get_custom_tool(snapshot.id, db_session, admin)
+    assert managed.custom_headers == [
+        {"key": "X-Api-Key", "value": mask_string(secret)}
+    ]
+    assert (
+        tool_api.get_custom_tool(snapshot.id, db_session, member).custom_headers is None
+    )
+
+    persona_id = _persona(
+        db_session, admin, tool_ids=[snapshot.id], integration_links=None
+    )
+    for reader in (member, admin):
+        agent = persona_api.get_persona(persona_id, reader, db_session)
+        tool = next(tool for tool in agent.tools if tool.id == snapshot.id)
+        assert tool.custom_headers is None
+
+
 def test_custom_tool_alias_keeps_a_passthrough_header_with_braces(
     db_session: Session, admin: User, created: Created
 ) -> None:

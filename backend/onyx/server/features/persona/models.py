@@ -288,7 +288,7 @@ class MinimalPersonaSnapshot(BaseModel):
             name=persona.name,
             description=persona.description,
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],
@@ -380,7 +380,7 @@ class PersonaSnapshot(BaseModel):
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],
@@ -464,7 +464,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             public_permission=persona.public_permission,
             sharing_status=derive_persona_sharing_status(persona),
             tools=[
-                ToolSnapshot.from_model(tool)
+                ToolSnapshot.from_model(tool, with_headers=False)
                 for tool in persona.tools
                 if should_expose_tool_to_fe(tool)
             ],

@@ -3,6 +3,16 @@ import AdminSkillsTable from "@/sections/skills/AdminSkillsTable";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import type { CustomSkill } from "@/lib/skills/types";
 
+let mockIsMobile = false;
+jest.mock("@/hooks/useScreenSize", () => ({
+  __esModule: true,
+  default: () => ({ isMobile: mockIsMobile }),
+}));
+
+afterEach(() => {
+  mockIsMobile = false;
+});
+
 const published = customFixture({
   id: "published",
   name: "weekly-report",
@@ -110,4 +120,18 @@ test("an owner gets no Share for a plugin of a personal marketplace", async () =
   expect(
     screen.queryByRole("menuitem", { name: "Share" })
   ).not.toBeInTheDocument();
+});
+
+test("at phone width a row shows only the name, switch and menu", () => {
+  mockIsMobile = true;
+  renderTable([published]);
+  const row = screen.getByRole("row", { name: "Open weekly-report" });
+  expect(within(row).getByText("weekly-report")).toBeVisible();
+  expect(within(row).getByRole("switch")).toBeInTheDocument();
+  expect(
+    within(row).getByRole("button", { name: "More for weekly-report" })
+  ).toBeInTheDocument();
+  expect(within(row).queryByText("Organization library")).toBeNull();
+  expect(within(row).queryByText("v3 · v2 live")).toBeNull();
+  expect(within(row).queryByText("Groups: Sales: Available")).toBeNull();
 });
