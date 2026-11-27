@@ -77,6 +77,7 @@ export { default as SvgOutlook } from "@opal/logos/outlook";
 export { default as SvgParallel } from "@opal/logos/parallel";
 export { default as SvgPerplexity } from "@opal/logos/perplexity";
 export { default as SvgPortkey } from "@opal/logos/portkey";
+export { default as SvgAtlascloud } from "@opal/logos/atlascloud";
 export { default as SvgVercel } from "@opal/logos/vercel";
 export { default as SvgProductboard } from "@opal/logos/productboard";
 export { default as SvgQwen } from "@opal/logos/qwen";

@@ -119,7 +119,10 @@ from onyx.llm.prompt_cache.providers.openai import (
     without_cache_breakpoint_flags,
 )
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.constants import (
+    ATLASCLOUD_DEFAULT_API_BASE,
+    VERTEX_LOCATION_KWARG,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
     llm_generation_span,
@@ -850,6 +853,11 @@ class LitellmLLM(LLM):
         self._reasoning_effort_user_default = reasoning_effort_user_default
         self._reasoning_effort_max = reasoning_effort_max
         self._supports_reasoning = supports_reasoning
+
+        # Without an explicit base the OpenAI-compatible surface would target
+        # api.openai.com, so default to the gateway itself.
+        if model_provider == LlmProviderNames.ATLASCLOUD and not self._api_base:
+            self._api_base = api_base = ATLASCLOUD_DEFAULT_API_BASE
 
         self._api_surface = resolve_api_surface(model_provider, custom_config)
 
