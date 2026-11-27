@@ -18288,7 +18288,7 @@
       "everyHours": "{count, plural, other {# 時間ごと}}",
       "everyDays": "{count, plural, other {# 日ごとの {time}}}",
       "daily": "毎日 {time}",
-      "weekly": "{days} の {time}"
+      "weekly": "毎週{days} {time}"
     },
     "list": {
       "title": "スケジュールされたタスク",
