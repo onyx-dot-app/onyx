@@ -17,17 +17,23 @@ Group or user restriction needs EE.
   Integrations (`/admin/integrations`) lists the MCP servers and apps from
   `GET /admin/integrations`, with Name (and the owner of a private one, or the
   "No access" reason for a manager with no access of its own), Type, Sign-in,
-  Install Setting and Status, a type filter, search and "Needs setup". "Add" opens the add
-  modal (also at `/admin/integrations/new` and `/app/customize/integrations/new`):
-  MCP Server or Custom API. "Browse the Catalog" opens it on the presets and
-  suggested MCP servers, with or without Craft. It posts to
-  `POST /admin/integrations`. Only a global
-  action manager sees "For the organization"; everyone else adds "For me".
+  Install Setting and Status, a type filter, search and "Needs setup". The "Add"
+  menu (here and on the Customize Integrations tab) has MCP Server and Custom
+  API. "Browse the Catalog" at the foot of both lists opens the catalog: presets
+  and suggested MCP servers in one grid, with or without Craft, where a suggested MCP server replaces
+  the preset of its service
+  ([TECH-DEBT.md](../TECH-DEBT.md#linear-and-notion-presets-hidden-from-the-catalog)).
+  Each opens the two-step
+  add modal: a name and a URL, then the detected sign-in, which posts to
+  `POST /admin/integrations`. `/admin/integrations/new` and
+  `/app/customize/integrations/new` show the list with the modal open. Only a
+  global action manager sees "For the organization" (under Advanced); everyone
+  else adds "For me".
   The install setting select (`sections/integrations/IntegrationInstallSetting.tsx`,
   in the list and on the Overview tab) is the company setting; a global action
   manager changes it through `PUT /admin/integrations/{id}/installation-policy`.
   Not available keeps the integration private: its owner and its shares use it.
-  There is no admin Plugins page: a plugin holds skills only. Group Access on
+  A plugin holds skills only. Group Access on
   the Overview tab (`sections/integrations/IntegrationGroupAccess.tsx`, reusing
   `SkillGroupAccess`) sets a group install setting through
   `PUT /admin/integrations/{id}/group-settings`; only a global action manager
@@ -62,7 +68,31 @@ Group or user restriction needs EE.
   (Upload New Version through `sections/modals/plugins/UploadPluginFlow.tsx`,
   Delete Plugin) and the switch in its header. A needed integration that is
   not added links an organization-wide manager to `/admin/integrations/new`
-  with the owner set to the organization and `return_to` the plugin page. A plugin holds custom skills only; there is no
+  with the owner set to the organization and `return_to` the plugin page.
+  Admin Panel → Plugins (`/admin/plugins`, full admin panel access) renders the
+  same page (`CustomizePluginsPage`): settings chrome with
+  Add in the header, every plugin, also the ones that are
+  not `member_visible`, except the plugins of another user's personal GitHub
+  marketplace (`db/skill.py:_not_others_personal_marketplace`), and the
+  Marketplaces section below them, as on the tab. The admin panel shows the
+  plugins in `sections/skills/AdminSkillsTable.tsx`, not in groups: the
+  Source column carries the group (marketplace, owner, Organization library).
+  Rows the admin owns or edits (`lib/skills/sharing.ts:canManageSkill`) can be
+  selected; the others show a disabled checkbox. The selection gets the Admin
+  Skills bulk actions (`sections/skills/useSkillBulkActions.tsx`: Share,
+  Enable for me, Disable for me, Delete with a confirm that lists the
+  plugins, all through `POST /skills/bulk`), with plugin copy
+  (`plugins.bulk`). Share takes the row menu's rule (`canShareSkill`: never
+  a personal marketplace's plugin), and **Everyone** needs
+  `canChangeOrganizationAccess` for every selected row (never a synced one).
+  A row's Delete opens the same confirm for that plugin.
+  Search (on both Plugins pages) also matches the owner email and the shared group names, as Admin
+  Skills did. Search and the status filter clear the selection. A failed `GET /skills`
+  shows an error in place of the list; the Marketplaces section stays.
+  `/admin/plugins/[pluginId]` renders `MemberPluginDetailPage`. These pages read their panel from the path
+  (`lib/customize/hooks.ts:usePanel`), so the links, back links, the
+  upload redirect and the delete redirect stay in the admin panel
+  (`lib/customize/paths.ts:pluginHref`, `pluginsHref`, `marketplacesHref`). A plugin holds custom skills only; there is no
   "Add integration" in its Add menu. Integrations
   (`sections/customize/CustomizeIntegrationsPage.tsx`) is a table: Integration,
   Type, Authorization and Status. Status shows the one row state of
@@ -159,13 +189,13 @@ uploaded plugins: each row has `kind` (`skill` or `plugin`) and
 for the user ([[skills#plugin-upload]]). A plugin row shows "N of M
 integrations available"; a `kind: plugin` page reads `GET /skills/{id}`
 (`lib/plugins/hooks.ts:usePluginDetail`) for its Skills and Integrations tabs
-and does not redirect to the skill page. A `kind: plugin` row opens this page
-from the admin skills table too, and the skill page redirects a `kind: plugin`
-id here. `sections/plugins/PluginNeedList.tsx`
+and does not redirect to the skill page. The admin skills table leaves out
+`kind: plugin` rows, and the skill page redirects a `kind: plugin` id here
+(`/admin/skills/<id>` to `/admin/plugins/<id>`). `sections/plugins/PluginNeedList.tsx`
 shows each need: `lib/plugins/needs.ts:liveNeedState` reads the state of the
 matched integration from `GET /integrations`, so a row follows a switch or a
 sign-in at once, and `needAction` maps the state to one action (Turn on,
-Connect, Add for your team with `newIntegrationHref` filling the Add page, or a
+Connect, Add for your team with `newIntegrationHref` filling the add modal, or a
 note). `lib/plugins/directory.ts:pluginSwitch` gives its switch
 (`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:useSkillEnablement`,
 so a skill name conflict asks to switch in `SkillSwitchModal`); when the response leaves a supported need not
@@ -324,8 +354,9 @@ only the configuration of a chat that does not exist yet.
    shown only with manage:actions.
 10. `old-admin-routes-redirect` **Old admin plugin URLs only redirect.**
     `redirects()` in `web/next.config.js` sends `/admin/mcp-actions*`,
-    `/admin/openapi-actions`, `/admin/craft/apps`, `/admin/plugins` and
+    `/admin/openapi-actions`, `/admin/craft/apps` and
     `/admin/plugins/{mcp,openapi,external-app}/[id]` to `/admin/integrations`.
+    `/admin/plugins` itself is the admin Plugins page now.
     A server, tool or app id is not an integration id, so they go to the list,
     not a detail. New links go to `/admin/integrations`.
 11. `action-policies-mcp-and-craft` **Action policies apply to Craft and to MCP
@@ -339,9 +370,9 @@ only the configuration of a chat that does not exist yet.
     (`web/src/sections/integrations/IntegrationActionsTab.tsx`) shows the
     policies with or without Craft, and so does the "Users Can Save Always
     Allow" switch on the Configuration tab. The member "Always allow" list
-    (`sections/plugins/AlwaysAllowList.tsx`) shows for an integration whose
-    `users_can_save_always_allow` is on and offers the switch only for an
-    action whose admin policy is Ask. It reads and writes
+    (`sections/plugins/AlwaysAllowList.tsx`) shows the policy tag of each
+    action to members. `users_can_save_always_allow` only controls whether an
+    Ask action offers the "Don't ask me" switch. It reads and writes
     `/action-policies/integration/{id}` (`server/features/integrations/api.py`),
     which checks plugin visibility but not Craft. The Craft catalog list
     (`/build/action-policies`) and task choices cover the integrations of the

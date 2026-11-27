@@ -10731,6 +10731,10 @@
         "saveFailed": "Impossible d’enregistrer le paramètre de groupe."
       }
     },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Importez des plugins Claude Code et Codex, et synchronisez des marketplaces depuis GitHub. Un plugin est un ensemble de skills qui indique les intégrations dont ces skills ont besoin."
+    },
     "serviceStatus": {
       "page": {
         "description": "Utilisation actuelle des ressources et santé du cluster de recherche de votre instance Onyx",
@@ -17374,10 +17378,6 @@
         "upload": {
           "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
           "title": "Téléverser une compétence"
-        },
-        "marketplace": {
-          "title": "Ajouter un marketplace",
-          "description": "Ajoutez depuis un dépôt et synchronisez ses plugins."
         }
       },
       "empty": {
@@ -17696,14 +17696,13 @@
         "saveFailed": "Enregistrement impossible. Réessayez.",
         "alwaysAsks": "Onyx demande une approbation pour chacune de ces requêtes.",
         "switch": {
-          "label": "Toujours autoriser {name}",
+          "label": "Ne pas me demander pour {name}",
           "visibleLabel": "Ne pas me demander"
         },
         "retry": {
           "label": "Réessayer"
         },
-        "readOnlyDescription": "Votre administrateur définit comment chaque action s’exécute.",
-        "readOnlyTitle": "Actions"
+        "readOnlyDescription": "Votre administrateur définit comment chaque action s’exécute."
       },
       "oauthCallback": {
         "processing": "Connexion de votre compte…",
@@ -18004,10 +18003,20 @@
       "errors": {
         "rateLimited": "La limite de l'API GitHub est atteinte. Réessayez dans quelques minutes. Connectez GitHub pour augmenter la limite.",
         "rateLimitedUntil": "La limite de l'API GitHub est atteinte. Elle se réinitialise à {time}. Connectez GitHub pour augmenter la limite."
-      },
-      "empty": {
-        "title": "Aucun marketplace pour l’instant",
-        "description": "Ajoutez un dépôt GitHub pour obtenir ses plugins."
+      }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {# plugin mis à jour} other {# plugins mis à jour}}",
+      "failed": "Impossible de mettre à jour les plugins. Réessayez.",
+      "partialFailure": "{count, plural, one {# plugin n’a pas pu être mis à jour} other {# plugins n’ont pas pu être mis à jour}}",
+      "deleteTitle": "{count, plural, one {Supprimer # plugin ?} other {Supprimer # plugins ?}}",
+      "deleteDescription": "{count, plural, one {Le plugin sélectionné sera supprimé pour toutes les personnes qui y ont accès. Cette action est irréversible.} other {Les # plugins sélectionnés seront supprimés pour toutes les personnes qui y ont accès. Cette action est irréversible.}}",
+      "shareTitle": "{count, plural, one {Mettre à jour l’accès à # plugin} other {Mettre à jour l’accès à # plugins}}",
+      "shareDescription": "Appliquez ces modifications à chaque plugin sélectionné. Les paramètres non modifiés conservent leurs valeurs actuelles.",
+      "addAccessDescription": "Ajoutez ces personnes et groupes à chaque plugin sélectionné. Les personnes et groupes indiqués reçoivent la permission choisie. Les autres conservent leur accès actuel.",
+      "apply": "{count, plural, one {Appliquer à # plugin} other {Appliquer à # plugins}}",
+      "publishWarning": {
+        "description": "Après l'application, tout le monde dans l'organisation peut utiliser les plugins sélectionnés. Les plugins publiés ne peuvent plus redevenir privés. Seul un administrateur peut les supprimer."
       }
     }
   },
@@ -18103,8 +18112,7 @@
         "upload": "Importer une compétence",
         "create": "Créer une compétence",
         "uploadPlugin": "Importer un plugin",
-        "marketplace": "Ajouter un marketplace",
-        "manageMarketplaces": "Gérer les marketplaces"
+        "marketplace": "Ajouter un marketplace"
       },
       "groups": {
         "mine": "Créées par vous",
@@ -18146,11 +18154,6 @@
         "title": "Aucune compétence correspondante",
         "description": "Essayez une autre recherche ou un autre filtre.",
         "clear": "Afficher toutes les compétences"
-      },
-      "sort": {
-        "label": "Trier",
-        "updated": "Mises à jour récemment",
-        "name": "Nom"
       }
     },
     "integrations": {

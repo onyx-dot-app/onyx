@@ -60,7 +60,7 @@ for example **3 of 5 integrations available**. Search by name,
 or use the filter to show only the plugins that are on or off.
 A plugin can be off because a plugin that is on has the same skill name. Its row then names that plugin.
 
-Admins see only the plugins that they can use here. The private plugins of other users are on the admin **Skills** page.
+Admins see only the plugins that they can use here. The private plugins of other users are on **Admin Panel → Plugins**.
 
 The **Skills** tab lists each skill, and the **Integrations** tab lists each integration with its state.
 
@@ -244,8 +244,8 @@ An admin can change the setting of one plugin later.
 
 ### Manage your marketplaces
 
-Select **Customize → Plugins**, then click **Add → Manage marketplaces**.
-The page lists each marketplace with its source, its plugins and its sync:
+Select **Customize → Plugins**. The **Marketplaces** section below the plugins lists each marketplace with its source,
+its plugins and its sync:
 
 | Column | What it shows |
 | --- | --- |
@@ -271,7 +271,7 @@ One sync of a marketplace runs at a time. A sync applies these changes:
 - An entry that is gone deletes its plugin, with its shares and settings.
 - A blocked or not supported entry keeps its plugin and its versions.
 
-If a sync fails, the page shows the reason above the list. The plugins stay as they are. Fix the cause,
+If a sync fails, the section shows the reason above the list. The plugins stay as they are. Fix the cause,
 then click **Sync now**.
 
 ### Plugins from a marketplace
@@ -279,7 +279,7 @@ then click **Sync now**.
 The content of a plugin from a marketplace comes only from GitHub. To change a skill, change it in the repository,
 then sync the marketplace. Onyx refuses to edit, upload a version of, restore, publish or delete the plugin.
 The **Versions** tab shows **This plugin syncs from GitHub,
-so you change it in GitHub.** The **Overview** tab names the marketplace and links to **Marketplaces**.
+so you change it in GitHub.** The **Overview** tab names the marketplace and links to the **Marketplaces** section.
 You can still turn the plugin on or off. You can share a plugin of a company marketplace and change its install setting.
 A plugin of a personal marketplace is only for you: you cannot share it or change its install setting.
 Remove the marketplace to delete its plugins.
@@ -315,7 +315,7 @@ The **Configuration** tab of an integration page shows the status of your connec
 | **Needs reconnect** | The reason, for example a change to the sign-in settings, and **Reconnect** | You |
 | **Not set up** | **Ask your admin** | An admin, or the owner of a personal integration |
 
-<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Actions tab of the Weather API integration with one action set to Allow and one set to Ask with its Always allow switch"/>
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Actions tab of the Support Desk integration with actions set to Allow, Ask, and Blocked, and a Don't ask me switch on each action that asks"/>
 
 To connect:
 
@@ -332,9 +332,9 @@ An integration that is not connected gives the agent no actions until you connec
 
 Your admin sets each action of an integration to **Allow**, **Ask**, or **Blocked**.
 An action set to **Ask** asks for your approval in chat.
-The **Actions** tab of the integration page lists each action with its setting. If your admin lets users save it,
-turn on **Always allow** for an action that asks, and it runs with no prompt. Some actions always ask,
-and their switch stays off with the reason. An action set to **Blocked** never runs.
+The **Actions** tab of the integration page lists each action with its setting as a tag.
+If your admin lets users save it, turn on **Don't ask me** for an action that asks, and it runs with no prompt.
+Some actions always ask, and their switch stays off with the reason. An action set to **Blocked** never runs.
 
 ### Disconnect
 

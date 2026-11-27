@@ -233,7 +233,7 @@ test("OAuth continues in this tab when the browser blocks the new tab", async ()
 
 // ── Always allow ─────────────────────────────────────────────────────────────
 
-test("an action that asks offers Always allow", async () => {
+test("an action that asks offers a switch named by its visible label", async () => {
   const policies = {
     users_can_save_always_allow: true,
     actions: [
@@ -264,11 +264,15 @@ test("an action that asks offers Always allow", async () => {
     "actions"
   );
   const toggle = await screen.findByRole("switch", {
-    name: "Always allow Create issue",
+    name: "Don't ask me for Create issue",
   });
   expect(
-    screen.queryByRole("switch", { name: "Always allow List issues" })
+    screen.queryByRole("switch", { name: "Don't ask me for List issues" })
   ).not.toBeInTheDocument();
+  // The policy is a tag; only the action that asks gets the labelled switch.
+  expect(screen.getByText("Ask")).toBeVisible();
+  expect(screen.getByText("Allow")).toBeVisible();
+  expect(screen.getAllByText("Don't ask me")).toHaveLength(1);
   await user().click(toggle);
   await waitFor(() =>
     expect(

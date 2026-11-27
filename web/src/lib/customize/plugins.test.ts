@@ -32,11 +32,28 @@ const ENTRIES = [
     name: "reports",
     section: "shared",
     ownerEmail: "other@example.com",
-    skills: [customFixture({ enabled: false })],
+    skills: [
+      customFixture({
+        enabled: false,
+        group_summaries: [
+          {
+            group_id: 1,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: null,
+          },
+        ],
+      }),
+    ],
   }),
 ];
 
-function ids(options: { status?: "all" | "on" | "off"; query?: string } = {}) {
+function ids(
+  options: {
+    status?: "all" | "on" | "off";
+    query?: string;
+  } = {}
+) {
   const groups = groupPlugins(ENTRIES, {
     userEmail: ME,
     query: options.query ?? "",
@@ -71,4 +88,9 @@ test("the status filter follows the switch and the search matches names", () => 
     marketplace: [],
     private: [],
   });
+});
+
+test("the search also matches the owner and the shared groups", () => {
+  expect(ids({ query: "admin@example" }).organization).toEqual(["org"]);
+  expect(ids({ query: "design" }).shared).toEqual(["off"]);
 });

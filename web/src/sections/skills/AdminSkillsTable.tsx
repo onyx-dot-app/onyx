@@ -11,35 +11,40 @@ import {
 } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgMoreHorizontal, SvgShare, SvgTrash } from "@opal/icons";
-import { useInstallationPolicyCopy } from "@/lib/skills/hooks";
-import { hasUnpublishedChanges } from "@/lib/skills/sharing";
+import {
+  useInstallationPolicyCopy,
+  type SkillEnablement,
+} from "@/lib/skills/hooks";
+import { canShareSkill, hasUnpublishedChanges } from "@/lib/skills/sharing";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
+import type { SkillBulkActions } from "@/sections/skills/useSkillBulkActions";
 
 interface AdminSkillsTableProps {
   skills: CustomSkill[];
-  selectedIds: ReadonlySet<string>;
-  onSelectionChange: (ids: ReadonlySet<string>) => void;
-  busy: boolean;
-  isPending: (id: string) => boolean;
-  enabledOf: (skill: CustomSkill) => boolean;
-  onEnabledChange: (skill: CustomSkill, enabled: boolean) => void;
+  bulk: Pick<SkillBulkActions, "selectedIds" | "select" | "busy">;
+  enablement: Pick<SkillEnablement, "isPending" | "enabledOf" | "setEnabled">;
   onOpen: (skill: CustomSkill) => void;
   onShare: (skill: CustomSkill) => void;
   onDelete: (skill: CustomSkill) => void;
+  /** The table's name. @default "Custom skills" */
+  label?: string;
+  /** The Source cell. @default the Organization library or the owner */
+  source?: (skill: CustomSkill) => string;
+  /** Whether a row can be selected. @default every row */
+  canSelect?: (skill: CustomSkill) => boolean;
 }
 
 export default function AdminSkillsTable({
   skills,
-  selectedIds,
-  onSelectionChange,
-  busy,
-  isPending,
-  enabledOf,
-  onEnabledChange,
+  bulk,
+  enablement,
   onOpen,
   onShare,
   onDelete,
+  label,
+  source,
+  canSelect,
 }: AdminSkillsTableProps) {
   const t = useTranslations("skills.adminTable");
   const skillCopy = useTranslations("skills");
@@ -52,6 +57,7 @@ export default function AdminSkillsTable({
     {
       kind: "qualifier",
       selectLabel: (skill) => t("select", { name: skill.name }),
+      canSelect,
     },
     {
       kind: "data",
@@ -90,9 +96,11 @@ export default function AdminSkillsTable({
       width: { weight: 18 },
       cell: (skill) => (
         <Text font="main-ui-body" color="text-03" maxLines={1}>
-          {skill.published_version_number !== null
-            ? t("organizationLibrary")
-            : (skill.owner?.email ?? t("noOwner"))}
+          {source
+            ? source(skill)
+            : skill.published_version_number !== null
+              ? t("organizationLibrary")
+              : (skill.owner?.email ?? t("noOwner"))}
         </Text>
       ),
     },
@@ -166,9 +174,13 @@ export default function AdminSkillsTable({
         >
           <InputSwitch
             aria-label={skill.name}
-            checked={enabledOf(skill)}
-            disabled={busy || isPending(skill.id) || !skill.can_toggle}
-            onCheckedChange={(checked) => onEnabledChange(skill, checked)}
+            checked={enablement.enabledOf(skill)}
+            disabled={
+              bulk.busy || enablement.isPending(skill.id) || !skill.can_toggle
+            }
+            onCheckedChange={(checked) =>
+              void enablement.setEnabled(skill, checked)
+            }
           />
         </Section>
       ),
@@ -194,8 +206,7 @@ export default function AdminSkillsTable({
             <Dropdown.Data
               label={t("menu", { name: skill.name })}
               items={[
-                ...(skill.user_permission === "OWNER" ||
-                skill.user_permission === "EDITOR"
+                ...(canShareSkill(skill)
                   ? [
                       {
                         kind: "action" as const,
@@ -230,14 +241,14 @@ export default function AdminSkillsTable({
 
   return (
     <Table
-      label={t("label")}
+      label={label ?? t("label")}
       items={skills}
       columns={columns}
       getRowId={(skill) => skill.id}
       pageSize={false}
       selectionBehavior="multi-select"
-      values={selectedIds}
-      onSelectionChange={onSelectionChange}
+      values={bulk.selectedIds}
+      onSelectionChange={bulk.select}
       onRowClick={onOpen}
       getRowLabel={(skill) => t("open", { name: skill.name })}
     />

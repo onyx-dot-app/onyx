@@ -65,13 +65,6 @@ export class MarketplacesPage {
     await expect(this.addDialog).toBeHidden();
   }
 
-  async gotoManage(): Promise<void> {
-    await this.page.goto("/app/customize/plugins/marketplaces");
-    await expect(
-      this.page.getByRole("heading", { name: "Marketplaces" })
-    ).toBeVisible();
-  }
-
   row(name: string): Locator {
     return this.table.getByRole("row").filter({ hasText: name });
   }

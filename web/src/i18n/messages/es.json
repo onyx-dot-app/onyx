@@ -10731,6 +10731,10 @@
         "saveFailed": "No se pudo guardar la configuración de grupo."
       }
     },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Sube plugins de Claude Code y Codex, y sincroniza marketplaces desde GitHub. Un plugin es un conjunto de skills e indica las integraciones que esas skills necesitan."
+    },
     "serviceStatus": {
       "page": {
         "description": "Uso actual de recursos y estado del clúster de búsqueda de tu instancia de Onyx",
@@ -17374,10 +17378,6 @@
         "upload": {
           "description": "Importa un archivo SKILL.md, un archivo ZIP o una carpeta de habilidad.",
           "title": "Subir una habilidad"
-        },
-        "marketplace": {
-          "title": "Añadir marketplace",
-          "description": "Añada desde un repositorio y sincronice sus plugins."
         }
       },
       "empty": {
@@ -17696,14 +17696,13 @@
         "saveFailed": "No se pudo guardar. Inténtelo de nuevo.",
         "alwaysAsks": "Onyx pide aprobación para cada una de estas solicitudes.",
         "switch": {
-          "label": "Permitir siempre {name}",
+          "label": "No preguntarme por {name}",
           "visibleLabel": "No preguntarme"
         },
         "retry": {
           "label": "Intentar de nuevo"
         },
-        "readOnlyDescription": "Tu administrador define cómo se ejecuta cada acción.",
-        "readOnlyTitle": "Acciones"
+        "readOnlyDescription": "Tu administrador define cómo se ejecuta cada acción."
       },
       "oauthCallback": {
         "processing": "Conectando su cuenta…",
@@ -18004,10 +18003,20 @@
       "errors": {
         "rateLimited": "Se alcanzó el límite de la API de GitHub. Inténtalo de nuevo en unos minutos. Conecta GitHub para aumentar el límite.",
         "rateLimitedUntil": "Se alcanzó el límite de la API de GitHub. Se restablece a las {time}. Conecta GitHub para aumentar el límite."
-      },
-      "empty": {
-        "title": "Aún no hay marketplaces",
-        "description": "Añada un repositorio de GitHub para obtener sus plugins."
+      }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {# plugin actualizado} other {# plugins actualizados}}",
+      "failed": "No se pudieron actualizar los plugins. Inténtalo de nuevo.",
+      "partialFailure": "{count, plural, one {No se pudo actualizar # plugin} other {No se pudieron actualizar # plugins}}",
+      "deleteTitle": "{count, plural, one {¿Eliminar # plugin?} other {¿Eliminar # plugins?}}",
+      "deleteDescription": "{count, plural, one {Esto elimina el plugin seleccionado para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina los # plugins seleccionados para todas las personas con acceso. Esta acción no se puede deshacer.}}",
+      "shareTitle": "{count, plural, one {Actualizar acceso para # plugin} other {Actualizar acceso para # plugins}}",
+      "shareDescription": "Aplica estos cambios a cada plugin seleccionado. Los ajustes que no cambies conservan sus valores actuales.",
+      "addAccessDescription": "Añade estas personas y grupos a cada plugin seleccionado. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
+      "apply": "{count, plural, one {Aplicar a # plugin} other {Aplicar a # plugins}}",
+      "publishWarning": {
+        "description": "Después de aplicar, todos en la organización pueden usar los plugins seleccionados. Los plugins publicados no se pueden volver a hacer privados. Solo un administrador puede eliminarlos."
       }
     }
   },
@@ -18103,8 +18112,7 @@
         "upload": "Subir habilidad",
         "create": "Crear una habilidad",
         "uploadPlugin": "Subir plugin",
-        "marketplace": "Añadir marketplace",
-        "manageMarketplaces": "Administrar marketplaces"
+        "marketplace": "Añadir marketplace"
       },
       "groups": {
         "mine": "Creadas por ti",
@@ -18146,11 +18154,6 @@
         "title": "No hay habilidades que coincidan",
         "description": "Prueba con otra búsqueda o filtro.",
         "clear": "Mostrar todas las habilidades"
-      },
-      "sort": {
-        "label": "Ordenar",
-        "updated": "Actualizadas recientemente",
-        "name": "Nombre"
       }
     },
     "integrations": {

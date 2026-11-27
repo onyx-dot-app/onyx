@@ -10731,6 +10731,10 @@
         "saveFailed": "グループ設定を保存できませんでした。"
       }
     },
+    "plugins": {
+      "title": "プラグイン",
+      "description": "Claude Code と Codex のプラグインをアップロードし、GitHub からマーケットプレイスを同期します。プラグインはスキルのまとまりで、それらのスキルに必要な連携を示します。"
+    },
     "serviceStatus": {
       "page": {
         "description": "Onyx インスタンスの現在のリソース使用量と検索クラスターの状態",
@@ -17374,10 +17378,6 @@
         "upload": {
           "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",
           "title": "スキルをアップロード"
-        },
-        "marketplace": {
-          "title": "マーケットプレイスを追加",
-          "description": "リポジトリから追加して、そのプラグインを同期します。"
         }
       },
       "empty": {
@@ -17696,14 +17696,13 @@
         "saveFailed": "保存できませんでした。もう一度お試しください。",
         "alwaysAsks": "Onyx はこれらのリクエストごとに承認を求めます。",
         "switch": {
-          "label": "{name} を常に許可",
+          "label": "{name} を確認しない",
           "visibleLabel": "確認しない"
         },
         "retry": {
           "label": "再試行"
         },
-        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。",
-        "readOnlyTitle": "アクション"
+        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。"
       },
       "oauthCallback": {
         "processing": "アカウントを接続中…",
@@ -18004,10 +18003,20 @@
       "errors": {
         "rateLimited": "GitHub の API レート制限に達しました。数分後にもう一度お試しください。制限を引き上げるには GitHub を接続してください。",
         "rateLimitedUntil": "GitHub の API レート制限に達しました。{time} にリセットされます。制限を引き上げるには GitHub を接続してください。"
-      },
-      "empty": {
-        "title": "マーケットプレイスはまだありません",
-        "description": "GitHub リポジトリを追加して、そのプラグインを取得します。"
+      }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {# 件のプラグインを更新しました} other {# 件のプラグインを更新しました}}",
+      "failed": "プラグインを更新できませんでした。もう一度お試しください。",
+      "partialFailure": "{count, plural, one {# 件のプラグインを更新できませんでした} other {# 件のプラグインを更新できませんでした}}",
+      "deleteTitle": "{count, plural, one {# 件のプラグインを削除しますか？} other {# 件のプラグインを削除しますか？}}",
+      "deleteDescription": "{count, plural, one {アクセス権を持つすべてのユーザーに対して、選択したプラグインを削除します。この操作は元に戻せません。} other {アクセス権を持つすべてのユーザーに対して、選択した # 件のプラグインをすべて削除します。この操作は元に戻せません。}}",
+      "shareTitle": "{count, plural, one {# 件のプラグインのアクセス権を更新} other {# 件のプラグインのアクセス権を更新}}",
+      "shareDescription": "選択したすべてのプラグインに変更を適用します。変更しない設定は現在の値を維持します。",
+      "addAccessDescription": "選択したすべてのプラグインに、これらのユーザーとグループを追加します。指定したユーザーとグループには選択した権限が設定されます。それ以外のユーザーの現在のアクセス権は変わりません。",
+      "apply": "{count, plural, one {# 件のプラグインに適用} other {# 件のプラグインに適用}}",
+      "publishWarning": {
+        "description": "適用すると、組織内の全員が選択したプラグインを使用できます。公開したプラグインを非公開に戻すことはできません。削除できるのは管理者のみです。"
       }
     }
   },
@@ -18103,8 +18112,7 @@
         "upload": "スキルをアップロード",
         "create": "スキルを作成",
         "uploadPlugin": "プラグインをアップロード",
-        "marketplace": "マーケットプレイスを追加",
-        "manageMarketplaces": "マーケットプレイスを管理"
+        "marketplace": "マーケットプレイスを追加"
       },
       "groups": {
         "mine": "自分が作成",
@@ -18146,11 +18154,6 @@
         "title": "一致するスキルはありません",
         "description": "別の検索語またはフィルターを試してください。",
         "clear": "すべてのスキルを表示"
-      },
-      "sort": {
-        "label": "並べ替え",
-        "updated": "最近更新",
-        "name": "名前"
       }
     },
     "integrations": {

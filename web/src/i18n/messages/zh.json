@@ -10731,6 +10731,10 @@
         "saveFailed": "无法保存群组设置。"
       }
     },
+    "plugins": {
+      "title": "插件",
+      "description": "上传 Claude Code 和 Codex 插件，并从 GitHub 同步市场。插件是一组技能，并列出这些技能需要的集成。"
+    },
     "serviceStatus": {
       "page": {
         "description": "Onyx 实例当前的资源使用情况和搜索集群健康状况",
@@ -17374,10 +17378,6 @@
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
           "title": "上传技能"
-        },
-        "marketplace": {
-          "title": "添加市场",
-          "description": "从仓库添加并同步其插件。"
         }
       },
       "empty": {
@@ -17696,14 +17696,13 @@
         "saveFailed": "无法保存。请重试。",
         "alwaysAsks": "Onyx 会为每个此类请求请求审批。",
         "switch": {
-          "label": "始终允许 {name}",
+          "label": "不要就 {name} 询问我",
           "visibleLabel": "不要询问我"
         },
         "retry": {
           "label": "重试"
         },
-        "readOnlyDescription": "管理员设置每个操作的运行方式。",
-        "readOnlyTitle": "操作"
+        "readOnlyDescription": "管理员设置每个操作的运行方式。"
       },
       "oauthCallback": {
         "processing": "正在连接你的账户…",
@@ -18004,10 +18003,20 @@
       "errors": {
         "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
         "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
-      },
-      "empty": {
-        "title": "还没有市场",
-        "description": "添加 GitHub 仓库以获取其插件。"
+      }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {已更新 # 个插件} other {已更新 # 个插件}}",
+      "failed": "无法更新插件。请重试。",
+      "partialFailure": "{count, plural, one {# 个插件未能更新} other {# 个插件未能更新}}",
+      "deleteTitle": "{count, plural, one {删除 # 个插件？} other {删除 # 个插件？}}",
+      "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选插件。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选插件。此操作无法撤销。}}",
+      "shareTitle": "{count, plural, one {更新 # 个插件的访问权限} other {更新 # 个插件的访问权限}}",
+      "shareDescription": "将这些更改应用于每个所选插件。未更改的设置将保留当前值。",
+      "addAccessDescription": "将这些人员和群组添加到每个所选插件。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
+      "apply": "{count, plural, one {应用于 # 个插件} other {应用于 # 个插件}}",
+      "publishWarning": {
+        "description": "应用后，组织中的所有人都可以使用所选插件。已发布的插件无法再设为私有。只有管理员可以删除它们。"
       }
     }
   },
@@ -18103,8 +18112,7 @@
         "upload": "上传技能",
         "create": "创建技能",
         "uploadPlugin": "上传插件",
-        "marketplace": "添加市场",
-        "manageMarketplaces": "管理市场"
+        "marketplace": "添加市场"
       },
       "groups": {
         "mine": "由你创建",
@@ -18146,11 +18154,6 @@
         "title": "没有匹配的技能",
         "description": "请尝试其他搜索或筛选条件。",
         "clear": "显示所有技能"
-      },
-      "sort": {
-        "label": "排序",
-        "updated": "最近更新",
-        "name": "名称"
       }
     },
     "integrations": {

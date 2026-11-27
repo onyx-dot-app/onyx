@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputSwitch, MessageCard, Text } from "@opal/components";
+import { Button, InputSwitch, MessageCard, Tag, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useMemberActionPolicies } from "@/lib/integrations/hooks";
@@ -65,7 +65,7 @@ export default function AlwaysAllowList({
     <Section gap={1} alignItems="stretch" height="auto">
       <Content
         font="secondary-action"
-        title={canSave ? t("title") : t("readOnlyTitle")}
+        title={t("title")}
         description={canSave ? t("description") : t("readOnlyDescription")}
       />
       {data.actions.map((action) => {
@@ -78,7 +78,10 @@ export default function AlwaysAllowList({
             description={
               action.always_asks
                 ? t("alwaysAsks")
-                : (action.description ?? undefined)
+                : action.description &&
+                    action.description !== action.display_name
+                  ? action.description
+                  : undefined
             }
             padding={1}
             rightChildren={
@@ -88,23 +91,30 @@ export default function AlwaysAllowList({
                 alignItems="center"
                 width="auto"
                 height="auto"
-                gap={1}
+                gap={2}
               >
-                <Text font="secondary-body" color="text-03">
-                  {policyCopy(
+                {asks && (
+                  <>
+                    <Text font="secondary-body" color="text-03">
+                      {t("switch.visibleLabel")}
+                    </Text>
+                    <InputSwitch
+                      aria-label={t("switch.label", {
+                        name: action.display_name,
+                      })}
+                      checked={action.user_policy === "allow"}
+                      disabled={savingKey !== null || action.always_asks}
+                      onCheckedChange={(checked) =>
+                        void change(action, checked)
+                      }
+                    />
+                  </>
+                )}
+                <Tag
+                  title={policyCopy(
                     `${POLICY_LABEL_KEYS[action.effective_admin_policy]}.label`
                   )}
-                </Text>
-                {asks && (
-                  <InputSwitch
-                    aria-label={t("switch.label", {
-                      name: action.display_name,
-                    })}
-                    checked={action.user_policy === "allow"}
-                    disabled={savingKey !== null || action.always_asks}
-                    onCheckedChange={(checked) => void change(action, checked)}
-                  />
-                )}
+                />
               </Section>
             }
           />

@@ -96,8 +96,9 @@ export default function CustomizeSkillPage({
     errorHandlingFetcher
   );
   useEffect(() => {
-    if (isPlugin) navigation.go(pluginHref(skillId), { replace: true });
-  }, [isPlugin, navigation, skillId]);
+    if (isPlugin)
+      navigation.go(pluginHref(skillId, undefined, from), { replace: true });
+  }, [from, isPlugin, navigation, skillId]);
   const [sharing, setSharing] = useState(false);
   const [contentsDirty, setContentsDirty] = useState(false);
   const removeModal = useCreateModal();

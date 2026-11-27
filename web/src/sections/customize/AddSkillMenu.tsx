@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
-import { SvgEdit, SvgPlus, SvgSettings, SvgUploadCloud } from "@opal/icons";
+import { SvgEdit, SvgPlus, SvgUploadCloud } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import { useNavigation } from "@opal/navigation";
-import { MARKETPLACES_PATH, newSkillHref } from "@/lib/customize/paths";
+import { usePanel } from "@/lib/customize/hooks";
+import { marketplacesHref, newSkillHref } from "@/lib/customize/paths";
 import { useMarketplaceAdded } from "@/lib/marketplaces/hooks";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { useRefreshSkillLists } from "@/lib/skills/hooks";
@@ -20,6 +21,7 @@ interface AddSkillMenuProps {
 
 export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
   const t = useTranslations("customize.skills.add");
+  const panel = usePanel();
   const navigation = useNavigation();
   const revalidate = useRefreshSkillLists();
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -35,13 +37,6 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
             icon: SvgGitHub,
             title: t("marketplace"),
             onSelect: () => setMarketplaceOpen(true),
-          },
-          {
-            kind: "action",
-            id: "manage-marketplaces",
-            icon: SvgSettings,
-            title: t("manageMarketplaces"),
-            onSelect: () => navigation.go(MARKETPLACES_PATH),
           },
         ]
       : [];
@@ -95,7 +90,10 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
         onAdded={(marketplace) => {
           setMarketplaceOpen(false);
           onMarketplaceAdded(marketplace);
-          navigation.go(MARKETPLACES_PATH);
+          navigation.go(marketplacesHref(panel));
+          // A hash change does not scroll; the section scrolls itself only
+          // when it mounts.
+          document.getElementById("marketplaces")?.scrollIntoView();
         }}
       />
     </>

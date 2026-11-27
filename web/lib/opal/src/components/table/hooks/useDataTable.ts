@@ -91,8 +91,8 @@ interface UseDataTableOptions<TData extends RowData> {
   columns: ColumnDef<TData, any>[];
   /** Rows per page. Set `Infinity` to disable pagination. @default 10 */
   pageSize?: number;
-  /** Whether rows can be selected. @default true */
-  enableRowSelection?: boolean;
+  /** Whether rows can be selected, for all rows or per row. @default true */
+  enableRowSelection?: boolean | ((row: TData) => boolean);
   /** Whether columns can be resized. @default true */
   enableColumnResizing?: boolean;
   /** Stable row identity function. TanStack tracks selection by ID instead of array index. */
@@ -350,7 +350,10 @@ export default function useDataTable<TData extends RowData>(
     // clobber our restored page index when the filter changes.
     autoResetPageIndex: false,
     columnResizeMode,
-    enableRowSelection,
+    enableRowSelection:
+      typeof enableRowSelection === "function"
+        ? (row) => enableRowSelection(row.original)
+        : enableRowSelection,
     enableColumnResizing,
     ...tableOptions,
   };
