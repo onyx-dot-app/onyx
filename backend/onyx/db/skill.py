@@ -27,6 +27,7 @@ roll back atomically.
 """
 
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -91,6 +92,7 @@ from onyx.db.plugin_access import (
     affected_user_ids_for_plugins,
     holds_one_root_skill,
     load_user_plugin_states,
+    name_order_key,
     order_skill_names,
     plugin_editable_by_user,
     plugin_in_managed_scope,
@@ -462,12 +464,14 @@ def list_chat_skills(
             for built_in in list_chat_built_in_skills(db_session)
             for plugin_skill in BUILT_IN_SKILLS[built_in.built_in_skill_id or ""].skills
         ]
+    states = _user_skill_selection(user, db_session).loaded()
     names = {
         (state.version_id, path): name
-        for state in _user_skill_selection(user, db_session).loaded()
+        for state in states
         for path, name in zip(state.skill_paths, state.skill_names, strict=True)
     }
-    version_ids = sorted({version_id for version_id, _ in names})
+    plugin_by_version = {state.version_id: state.plugin_id for state in states}
+    version_ids = list(plugin_by_version)
     if version_ids:
         skills += [
             ChatSkill(
@@ -476,6 +480,7 @@ def list_chat_skills(
                 short_description=short_description,
                 version_id=version_id,
                 path=path,
+                plugin_id=plugin_by_version[version_id],
             )
             for version_id, path, description, short_description in (
                 db_session.execute(
@@ -569,7 +574,7 @@ def enable_new_skill_if_name_available__no_commit(
             return True
         if selection.other_skills_named(state.skill_names, plugin.id):
             return False
-    with check_skill_limit(db_session, [plugin.id], user_id):
+    with check_skill_limit(db_session, user_id):
         set_plugin_preferences__no_commit(user_id, [plugin.id], True, db_session)
     return True
 
@@ -585,7 +590,7 @@ def create_custom_skill__no_commit(
     the caller's transaction. The skill starts in the author's "My uploads".
     Returns the plugin and the users the access change affects."""
     plugin_id = uuid4()
-    with check_skill_limit(db_session, [plugin_id], user.id):
+    with check_skill_limit(db_session, user.id):
         plugin = create_plugin__no_commit(
             plugin_id, ingested.canonical_name, ingested.content, user, db_session
         )
@@ -607,7 +612,7 @@ def create_uploaded_plugin__no_commit(
     if content.manifest is None:
         raise RuntimeError("Bug: an uploaded plugin has a manifest.")
     plugin_id = uuid4()
-    with check_skill_limit(db_session, [plugin_id], user.id):
+    with check_skill_limit(db_session, user.id):
         plugin = create_plugin__no_commit(
             plugin_id, name or content.manifest.name, content, user, db_session
         )
@@ -636,7 +641,7 @@ def _add_plugin_version_for_user__no_commit(
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
     refuse_if_synced(plugin)
-    with check_skill_limit(db_session, [plugin.id], user.id):
+    with check_skill_limit(db_session, user.id):
         version = add_plugin_version__no_commit(
             plugin=plugin,
             content=content,
@@ -741,7 +746,7 @@ def replace_skill_bundle(
     puts the acting user past the skill limit is refused with 413.
     """
     lock_skill_for_save(skill, user, db_session)
-    with check_skill_limit(db_session, [skill.id], user.id):
+    with check_skill_limit(db_session, user.id):
         return add_plugin_version__no_commit(
             plugin=skill,
             content=ingested.content,
@@ -828,7 +833,8 @@ def skill_user_states(
                         for other in selection.other_skills_named(
                             state.skill_names, skill_id
                         )
-                        if other.plugin_id not in selection.hidden
+                        # A holder that loses another name still wins this one.
+                        if name_order_key(other) < name_order_key(state)
                     }
                     | (built_in_names & set(state.skill_names))
                 )
@@ -913,7 +919,13 @@ def set_skill_enabled_for_user(
         raise OnyxError(
             OnyxErrorCode.CONFLICT, "This skill changed. Reload and try again."
         )
-    with check_skill_limit(db_session, locked_plugin_ids, user.id):
+    if enabled:
+        limit: AbstractContextManager[None] = check_skill_limit(db_session, user.id)
+    else:
+        # A turn-off can let a same-name skill run, but is never refused.
+        lock_user_skill_preferences(user.id, db_session)
+        limit = nullcontext()
+    with limit:
         set_plugin_preferences__no_commit(
             user.id,
             [plugin_id for plugin_id in locked_plugin_ids if plugin_id != skill.id],

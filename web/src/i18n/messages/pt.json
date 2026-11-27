@@ -17349,7 +17349,9 @@
           "publishOff": {
             "description": "Um administrador desativou a publicação na organização. Peça a um administrador para publicar este plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "O Onyx não conseguiu carregar seus grupos, então os compartilhamentos de grupo não podem mudar. Feche e abra esta caixa de diálogo para tentar novamente.",
+        "groupSharesLocked": "Esta habilidade é compartilhada com um grupo que você não gerencia, então você não pode alterar os compartilhamentos de grupo. Peça a um gerente de habilidades de toda a organização."
       },
       "tabs": {
         "details": "Detalhes",
@@ -17458,7 +17460,8 @@
         "disableFailed": "Falha ao desativar {name}",
         "enableFailed": "Falha ao ativar {name}",
         "refreshFailed": "{name} foi atualizada, mas não foi possível atualizar a lista de habilidades.",
-        "listRefreshFailed": "Não foi possível atualizar a lista de habilidades. Recarregue a página para ver a alteração."
+        "listRefreshFailed": "Não foi possível atualizar a lista de habilidades. Recarregue a página para ver a alteração.",
+        "requiredHolder": "Não é possível ativar {name}. Uma habilidade obrigatória já tem este nome."
       }
     },
     "sections": {
@@ -17501,7 +17504,8 @@
       "upload": {
         "error": {
           "readFailed": "Não foi possível ler o envio.",
-          "folderRoot": "{upload, select, plugin {A pasta selecionada deve conter SKILL.md ou um manifesto plugin.json no nível superior.} other {A pasta selecionada deve conter SKILL.md no nível superior.}}"
+          "folderRoot": "{upload, select, plugin {A pasta selecionada deve conter SKILL.md ou um manifesto plugin.json no nível superior.} other {A pasta selecionada deve conter SKILL.md no nível superior.}}",
+          "unsupportedFile": "{name} não é um arquivo ZIP ou SKILL.md. Envie um ZIP, um arquivo SKILL.md ou uma pasta de skill."
         }
       }
     },
@@ -17534,7 +17538,8 @@
       "publishWarning": {
         "title": "A publicação não pode ser desfeita",
         "description": "Depois de aplicar, todos na organização podem usar as habilidades selecionadas. Habilidades publicadas não podem voltar a ser privadas. Somente um administrador pode excluí-las."
-      }
+      },
+      "skipped": "{count, plural, one {# habilidade não pode ser ativada ou desativada por você e foi ignorada} other {# habilidades não podem ser ativadas ou desativadas por você e foram ignoradas}}"
     },
     "reviewRequests": {
       "title": "Solicitações de publicação",
@@ -17842,6 +17847,7 @@
         "newPlugin": "Novo plugin: {name}"
       },
       "willBeOff": "O plugin é salvo desativado. {names} já tem uma habilidade com o mesmo nome.",
+      "willClash": "{names} já tem uma habilidade com o mesmo nome. Apenas uma delas pode estar ativada.",
       "saveAsNew": {
         "label": "Salvar como Novo Plugin",
         "description": "Mantém sem alterações o plugin que tem este nome."
@@ -17873,7 +17879,8 @@
         "newPlugin": "{name} adicionado.",
         "newVersion": "{name} atualizado para a versão {version} do Onyx.",
         "unchanged": "Nenhuma alteração. {name} já está na versão {version} do Onyx.",
-        "off": "{name} adicionado. Está desativado porque {names} já tem uma habilidade com o mesmo nome."
+        "off": "{name} adicionado. Está desativado porque {names} já tem uma habilidade com o mesmo nome.",
+        "clash": "{name} foi atualizado para a versão {version} do Onyx. {names} já tem uma habilidade com o mesmo nome, então apenas uma delas está ativada."
       }
     },
     "turnOn": {
@@ -18054,7 +18061,8 @@
       "apply": "{count, plural, one {Aplicar a # plugin} other {Aplicar a # plugins}}",
       "publishWarning": {
         "description": "Depois de aplicar, todos na organização podem usar os plugins selecionados. Plugins publicados não podem voltar a ser privados. Somente um administrador pode excluí-los."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin não pode ser ativado ou desativado por você e foi ignorado} other {# plugins não podem ser ativados ou desativados por você e foram ignorados}}"
     }
   },
   "integrations": {
@@ -18380,7 +18388,7 @@
       },
       "confirmDelete": {
         "title": "Excluir \"{name}\"?",
-        "description": "A tarefa deixa de ser executada e o histórico de execuções é removido.",
+        "description": "A tarefa deixa de ser executada. Os chats das execuções anteriores são mantidos.",
         "submit": "Excluir"
       }
     },
@@ -18393,7 +18401,8 @@
       "markAllViewed": "Marcar tudo como visto",
       "markAllViewedFailed": "Não foi possível marcar as execuções como vistas. Tente novamente.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Executar uma vez} other {Agendamento}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: a próxima execução começou antes que alguém respondesse à aprovação.} approval_timeout {Cancelada: ninguém respondeu à aprovação em 24 horas.} user_cancelled {Interrompida por você.} agent_permission_required {Uma ação precisava de aprovação.} agent_exception {Falhou: a execução encontrou um erro.} stuck {Falhou: a execução não começou a tempo.} timeout {Falhou: a execução atingiu o limite de uma hora.} other {Falhou: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: a próxima execução começou antes que alguém respondesse à aprovação.} approval_timeout {Cancelada: ninguém respondeu à aprovação em 24 horas.} user_cancelled {Interrompida por você.} agent_permission_required {Uma ação precisava de aprovação.} agent_exception {Falhou: a execução encontrou um erro.} stuck {Falhou: a execução não começou a tempo.} timeout {Falhou: a execução atingiu o limite de uma hora.} chat_deleted {Cancelada: o chat desta execução foi excluído.} owner_cannot_chat {Falhou: você não pode mais conversar, então a tarefa foi pausada.} rate_limited {Falhou: o limite de uso foi atingido.} other {Falhou: {errorClass}}}",
+      "errorDetail": "Falhou: {detail}",
       "columns": {
         "started": "Início",
         "status": "Status",
@@ -18431,7 +18440,8 @@
         "title": "Executar conforme o agendamento",
         "label": "Executar {name} conforme o agendamento"
       },
-      "menu": "Mais ações"
+      "menu": "Mais ações",
+      "notFound": "Esta tarefa agendada foi excluída ou pertence a outro usuário."
     },
     "editor": {
       "newTitle": "Nova tarefa agendada",
@@ -18443,7 +18453,8 @@
       "saveAndRun": "Salvar e executar agora",
       "errors": {
         "nameRequired": "Insira um nome.",
-        "promptRequired": "Insira um prompt."
+        "promptRequired": "Insira um prompt.",
+        "tooLong": "Use no máximo {max, number} caracteres."
       },
       "toasts": {
         "created": "Tarefa agendada criada.",
