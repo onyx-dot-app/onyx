@@ -178,6 +178,9 @@ export function originOf(url) {
   }
 }
 
+const UNSHARED_TAB_MESSAGE =
+  "The tab is on a site that the user did not share with this chat. Ask the user to share it, or go back to a shared site.";
+
 function outsideMessage(url) {
   return `${originOf(url) ?? url} is not a site that the user shared with this chat. Ask the user to share it.`;
 }
@@ -223,8 +226,9 @@ async function sharedTab(grant, tabId) {
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   if (!tab)
     throw new OperationError("tab_not_found", "The tab closed.");
+  // The tab's own site may be private: the refusal does not name it.
   if (!isShared(grant, tab.url ?? ""))
-    throw new OperationError("failed", outsideMessage(tab.url ?? ""));
+    throw new OperationError("failed", UNSHARED_TAB_MESSAGE);
   await attach(tabId);
   return tab;
 }
@@ -306,7 +310,8 @@ async function checkPoint(grant, tabId, { x, y }) {
     y: Math.round(y),
     ignorePointerEventsNone: true,
   }).catch(() => null);
-  if (!answer) return;
+  if (!answer)
+    throw new OperationError("failed", "Chrome could not tell what is at that point. Scroll it into view and retry.");
   const frames = await frameUrls(tabId);
   const frameIds = [answer.frameId];
   const inner = await iframeFrameId(tabId, answer.backendNodeId);
@@ -659,6 +664,10 @@ async function waitForReady(tabId, readiness, deadline) {
     if (stateOf(tabId).dialog) return;
     await sleep(POLL_MS);
   }
+  throw new OperationError(
+    "timeout",
+    "The page did not finish loading in time. Check it with browser_status or browser_snapshot before you retry."
+  );
 }
 
 async function navigateTab(grant, tabId, target, readiness, deadline) {
@@ -676,7 +685,7 @@ async function navigateTab(grant, tabId, target, readiness, deadline) {
     const entry = entries[currentIndex + (target.history === "back" ? -1 : 1)];
     if (!entry) throw new OperationError("failed", `There is no page to go ${target.history} to.`);
     if (!isShared(grant, entry.url))
-      throw new OperationError("failed", outsideMessage(entry.url));
+      throw new OperationError("failed", "That page is on a site that the user did not share with this chat.");
     await send(tabId, "Page.navigateToHistoryEntry", { entryId: entry.id });
   }
   stateOf(tabId).refs.clear();
@@ -757,6 +766,11 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
         throw invalid("screenshot_path is not available in the user's Chrome.");
       await hooks.setCurrent(tabId);
       const text = await snapshotText(grant, tab, state);
+      // A page that changed sites during the read gives no snapshot.
+      await sharedTab(grant, tabId).catch((error) => {
+        state.refs.clear();
+        throw error;
+      });
       return { tab: await tabJson(grant, tabId), text };
     }
     case "act": {
@@ -812,13 +826,11 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
 }
 
 async function conditionsMet(grant, tabId, target, text, urlIncludes) {
-  if (urlIncludes !== undefined) {
-    const tab = await chrome.tabs.get(tabId);
-    if (!(tab.url ?? "").includes(urlIncludes)) return false;
-  }
-  if (text !== undefined) {
+  if (urlIncludes !== undefined || text !== undefined) {
+    // One read of one document checks both.
     const found = await send(tabId, "Runtime.evaluate", {
-      expression: `(document.body?.innerText ?? "").includes(${JSON.stringify(text)})`,
+      expression: `location.href.includes(${JSON.stringify(urlIncludes ?? "")}) &&
+        (document.body?.innerText ?? "").includes(${JSON.stringify(text ?? "")})`,
       returnByValue: true,
     }).then((answer) => answer.result?.value === true).catch(() => false);
     if (!found) return false;
@@ -890,6 +902,12 @@ async function act(grant, tabId, params, deadline) {
           tabId,
           objectId,
           function (value) {
+            // Check the value on a detached field first, so a bad value
+            // leaves the live field and its listeners alone.
+            const probe = this.ownerDocument.createElement("input");
+            probe.type = this.type;
+            probe.value = value;
+            if (probe.value !== value) return false;
             const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
             setter.call(this, value);
             this.dispatchEvent(new Event("input", { bubbles: true }));

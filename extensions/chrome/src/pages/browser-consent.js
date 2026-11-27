@@ -69,25 +69,41 @@ async function load() {
   renderOrigins(tabs);
 }
 
+// While a decision is on its way, neither button nor the tab list acts.
+function setDeciding(deciding) {
+  document.body.toggleAttribute("inert", deciding);
+  denyButton.disabled = deciding;
+  if (deciding) allowButton.disabled = true;
+}
+
 allowButton.addEventListener("click", async () => {
-  allowButton.disabled = true;
-  const answer = await ask({
-    action: BROWSER_MESSAGES.APPROVE,
-    request_id: requestId,
-    tab_ids: checkedTabIds(),
-    minutes: Number(document.getElementById("duration").value),
-    origins: shownOrigins,
-  });
-  if (answer?.ok) window.close();
-  else {
-    // Show the tabs as they are now, so the user sees what Allow shares.
-    await load();
-    errorText.textContent = answer?.error ?? "Could not share the tabs.";
+  setDeciding(true);
+  let answer;
+  try {
+    answer = await ask({
+      action: BROWSER_MESSAGES.APPROVE,
+      request_id: requestId,
+      tab_ids: checkedTabIds(),
+      minutes: Number(document.getElementById("duration").value),
+      origins: shownOrigins,
+    });
+  } catch (error) {
+    answer = { ok: false, error: `Chrome did not answer: ${error?.message ?? error}` };
   }
+  if (answer?.ok) {
+    window.close();
+    return;
+  }
+  setDeciding(false);
+  // Show the tabs and the request as they are now; a request that Chrome
+  // took meanwhile shows as expired.
+  await load();
+  errorText.textContent = answer?.error ?? "Could not share the tabs.";
 });
 
 denyButton.addEventListener("click", async () => {
-  await ask({ action: BROWSER_MESSAGES.DENY, request_id: requestId });
+  setDeciding(true);
+  await ask({ action: BROWSER_MESSAGES.DENY, request_id: requestId }).catch(() => {});
   window.close();
 });
 

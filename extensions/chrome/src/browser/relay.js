@@ -11,6 +11,8 @@ const GRANT_KEY = "onyxBrowserGrant";
 const REQUESTS_KEY = "onyxBrowserRequests";
 const STATUS_KEY = "onyxBrowserStatus";
 const INSTALLATION_KEY = "onyxBrowserInstallationId";
+// Stops that Onyx has not heard yet: sent on the next welcome.
+const PENDING_ENDS_KEY = "onyxBrowserPendingEnds";
 export const CONNECT_ALARM = "onyxBrowserConnect";
 const PING_MS = 20_000;
 const MAX_BACKOFF_MS = 60_000;
@@ -18,7 +20,6 @@ const GROUP_TITLE = "Onyx";
 
 let socket = null;
 let connecting = false;
-let pingTimer = null;
 let failures = 0;
 let retryTimer = null;
 let commands = Promise.resolve();
@@ -80,13 +81,13 @@ function scheduleRetry() {
 
 export async function connect() {
   if (socket || connecting) return;
-  if (await controlDisabled()) {
-    await setStatus({ state: "disabled" });
-    return;
-  }
   connecting = true;
   const attempt = generation;
   try {
+    if (await controlDisabled()) {
+      await setStatus({ state: "disabled" });
+      return;
+    }
     const domain = await getOnyxDomain();
     const response = await fetch(`${domain}/api/chat/browser/extension/token`, {
       method: "POST",
@@ -105,6 +106,7 @@ export async function connect() {
     const url = `${domain.replace(/^http/, "ws")}/api/chat/browser/extension/ws?token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(url);
     socket = ws;
+    let wsPing = null;
     ws.onopen = async () => {
       ws.send(
         JSON.stringify({
@@ -114,8 +116,9 @@ export async function connect() {
           version: chrome.runtime.getManifest().version,
         })
       );
-      clearInterval(pingTimer);
-      pingTimer = setInterval(() => sendMessage({ type: "ping" }), PING_MS);
+      wsPing = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
+      }, PING_MS);
     };
     ws.onmessage = (event) => {
       let message;
@@ -127,8 +130,10 @@ export async function connect() {
       void handleMessage(message).catch((error) => console.error("[Onyx browser]", error));
     };
     ws.onclose = (event) => {
-      if (socket === ws) socket = null;
-      clearInterval(pingTimer);
+      clearInterval(wsPing);
+      // An old socket's close leaves its replacement alone.
+      if (socket !== ws) return;
+      socket = null;
       void setStatus({ state: event.code === 4403 ? "disabled" : "offline" });
       scheduleRetry();
     };
@@ -155,6 +160,7 @@ async function handleMessage(message) {
     case "welcome":
       failures = 0;
       await setStatus({ state: "connected" });
+      await sendPendingEnds();
       await reportGrant();
       break;
     case "command":
@@ -270,17 +276,33 @@ async function reportGrant() {
   });
 }
 
+// Changes of the request table run one at a time, so two requests that
+// arrive together both stay.
+let requestChanges = Promise.resolve();
+
+function changeRequests(change) {
+  const run = requestChanges.then(async () => {
+    const requests = await readSession(REQUESTS_KEY, {});
+    const result = await change(requests);
+    await chrome.storage.session.set({ [REQUESTS_KEY]: requests });
+    return result;
+  });
+  requestChanges = run.catch(() => {});
+  return run;
+}
+
 async function showConsent(message) {
-  const requests = await readSession(REQUESTS_KEY, {});
-  requests[message.request_id] = {
+  const domain = await getOnyxDomain();
+  await changeRequests((requests) => {
+    requests[message.request_id] = {
     request_id: message.request_id,
     chat_session_id: message.chat_session_id,
     chat_title: message.chat_title,
     account: message.account,
     deadline: message.deadline,
-    domain: await getOnyxDomain(),
-  };
-  await chrome.storage.session.set({ [REQUESTS_KEY]: requests });
+    domain,
+    };
+  });
   await chrome.windows.create({
     url: chrome.runtime.getURL(`src/pages/browser-consent.html?request=${message.request_id}`),
     type: "popup",
@@ -290,12 +312,12 @@ async function showConsent(message) {
   });
 }
 
-async function takeRequest(requestId) {
-  const requests = await readSession(REQUESTS_KEY, {});
-  const request = requests[requestId];
-  delete requests[requestId];
-  await chrome.storage.session.set({ [REQUESTS_KEY]: requests });
-  return request ?? null;
+function takeRequest(requestId) {
+  return changeRequests((requests) => {
+    const request = requests[requestId];
+    delete requests[requestId];
+    return request ?? null;
+  });
 }
 
 /** Put the tabs that are in no group into the share's Onyx group. Tabs in
@@ -400,7 +422,29 @@ async function endGrantNow(notify) {
     if (tab && grant.group_id != null && tab.groupId === grant.group_id)
       await chrome.tabs.ungroup(tabId).catch(() => {});
   }
-  if (notify) sendMessage({ type: "grant_ended", chat_session_id: grant.chat_session_id });
+  if (notify) await notifyEnd(grant.chat_session_id);
+}
+
+/** Tell Onyx that a share ended; while offline, keep the stop for the next
+ * connection. */
+async function notifyEnd(chatSessionId) {
+  const message = { type: "grant_ended", chat_session_id: chatSessionId };
+  if (sendMessage(message)) return;
+  const pending = await readSession(PENDING_ENDS_KEY, []);
+  if (!pending.includes(chatSessionId))
+    await chrome.storage.session.set({ [PENDING_ENDS_KEY]: [...pending, chatSessionId] });
+}
+
+async function sendPendingEnds() {
+  const pending = await readSession(PENDING_ENDS_KEY, []);
+  if (pending.length === 0) return;
+  await chrome.storage.session.remove(PENDING_ENDS_KEY);
+  const current = await getGrant();
+  for (const chatSessionId of pending) {
+    // A chat shared again since then keeps its new share.
+    if (current?.chat_session_id !== chatSessionId)
+      sendMessage({ type: "grant_ended", chat_session_id: chatSessionId });
+  }
 }
 
 /** Add a tab that the agent opened to the chat's grant. A tab opened for a
