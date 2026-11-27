@@ -248,6 +248,14 @@ func (r *integrationResource) applyFollowUps(
 			diags.AddError("Failed to save the Onyx integration organization credentials", err.Error())
 			return nil
 		}
+		// Onyx only checks the key. Load the server's tools so chat can use them.
+		if remote.Kind == "mcp" {
+			if err := r.client.RefreshIntegrationActions(ctx, id); err != nil {
+				diags.AddWarning("Could not load the MCP server's actions",
+					"Onyx saved the credentials but could not list the server's tools. "+
+						"Refresh the actions in the Admin Panel when the server answers: "+err.Error())
+			}
+		}
 	}
 	if !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() && plan.Enabled.ValueBool() != remote.Enabled {
 		enabled := plan.Enabled.ValueBool()

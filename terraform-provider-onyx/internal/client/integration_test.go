@@ -105,6 +105,13 @@ func TestIntegrationFollowUpRoutes(t *testing.T) {
 		t.Errorf("fields = %v", fields)
 	}
 
+	if err := c.RefreshIntegrationActions(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if captured.Method != http.MethodPost || captured.Path != "/admin/integrations/7/actions/refresh" {
+		t.Errorf("%s %s", captured.Method, captured.Path)
+	}
+
 	if err := c.DeleteIntegration(ctx, 7); err != nil {
 		t.Fatal(err)
 	}

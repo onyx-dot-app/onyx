@@ -128,6 +128,13 @@ func (c *Client) SaveIntegrationOrganizationConnection(ctx context.Context, id i
 	return c.doJSON(ctx, http.MethodPut, path, connectionFields{Fields: fields}, nil)
 }
 
+// RefreshIntegrationActions asks the integration's server for its tools and
+// syncs the actions.
+func (c *Client) RefreshIntegrationActions(ctx context.Context, id int64) error {
+	path := fmt.Sprintf("/admin/integrations/%d/actions/refresh", id)
+	return c.doJSON(ctx, http.MethodPost, path, nil, nil)
+}
+
 // DeleteIntegration deletes an integration and its actions.
 func (c *Client) DeleteIntegration(ctx context.Context, id int64) error {
 	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/admin/integrations/%d", id), nil, nil)
