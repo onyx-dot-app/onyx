@@ -11426,6 +11426,8 @@
         "invalidScope": "Die angeforderten Berechtigungen sind nicht verfügbar.",
         "loginBadCredentials": "Dieses Konto kann sich nicht anmelden. Es ist möglicherweise deaktiviert. Wenden Sie sich an den Administrator Ihres Arbeitsbereichs.",
         "loginRequired": "Sie müssen sich zuerst bei Ihrem Identitätsanbieter anmelden.",
+        "magicLinkInvalid": "Dieser Anmeldelink ist abgelaufen oder wurde bereits verwendet. Fordern Sie einen neuen an.",
+        "magicLinkWrongEmail": "Dieser Link wurde an eine andere E-Mail-Adresse gesendet. Fordern Sie einen neuen Link an.",
         "oauthUserAlreadyExists": "Ein Konto mit dieser E-Mail-Adresse existiert bereits mit einer anderen Anmeldemethode. Melden Sie sich wie beim ersten Mal an, oder bitten Sie Ihren Administrator, diesen Anbieter zu verknüpfen.",
         "playgroundActiveTenant": "Ein Team aus Ihrem Unternehmen testet Onyx bereits. Ihrem Team beitreten oder ein neues Team starten?",
         "playgroundAskAdmin": "Bitten Sie Ihren Admin, Sie einzuladen.",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "Ihrem Team beitreten"
+      },
+      "newLinkButton": {
+        "label": "Neuen Link anfordern"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11601,6 +11606,34 @@
       },
       "workEmailField": {
         "label": "Geschäftliche E-Mail"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "Dieser Link wurde in einem anderen Browser geöffnet als dem, in dem er angefordert wurde. Geben Sie die E-Mail-Adresse ein, an die er gesendet wurde.",
+        "title": "E-Mail-Adresse bestätigen"
+      },
+      "differentEmailButton": {
+        "label": "Andere E-Mail-Adresse verwenden"
+      },
+      "redeeming": {
+        "text": "Sie werden angemeldet…"
+      },
+      "requestButton": {
+        "label": "Link per E-Mail erhalten"
+      },
+      "resendWait": {
+        "error": "An diese Adresse wurde gerade ein Anmeldelink gesendet. Prüfen Sie Ihren Posteingang oder warten Sie eine Minute und fordern Sie ihn erneut an."
+      },
+      "sendFailed": {
+        "error": "Die Anmelde-E-Mail konnte nicht gesendet werden. Versuchen Sie es gleich noch einmal."
+      },
+      "sent": {
+        "description": "Wir haben einen Anmeldelink an {email} gesendet. Er funktioniert einmal und läuft nach 15 Minuten ab.",
+        "title": "Prüfen Sie Ihre E-Mails"
+      },
+      "useSso": {
+        "error": "Melden Sie sich über Ihren SSO-Anbieter an. E-Mail-Links sind für diesen Workspace deaktiviert."
       }
     },
     "passwordRequirements": {
@@ -12937,11 +12970,10 @@
         },
         "submitError": "Ihre Antworten konnten nicht gesendet werden. Versuchen Sie es erneut.",
         "record": {
-          "answered": "Beantwortet",
+          "answeredCount": "{count, plural, one {# Frage beantwortet} other {# Fragen beantwortet}}",
           "answeredInChat": "Im Chat beantwortet",
           "cancelled": "Nicht beantwortet",
           "closed": "Wartet nicht mehr",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
@@ -17488,6 +17520,8 @@
       "updated": "{count, plural, one {# Skill aktualisiert} other {# Skills aktualisiert}}",
       "failed": "Skills konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
       "partialFailure": "{count, plural, one {# Skill konnte nicht aktualisiert werden} other {# Skills konnten nicht aktualisiert werden}}",
+      "deleted": "{count, plural, one {# Skill gelöscht} other {# Skills gelöscht}}",
+      "deleteFailure": "{count, plural, one {# Skill konnte nicht gelöscht werden} other {# Skills konnten nicht gelöscht werden}}",
       "deleteTitle": "{count, plural, one {# Skill löschen?} other {# Skills löschen?}}",
       "deleteDescription": "{count, plural, one {Der ausgewählte Skill wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Skills werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
       "shareTitle": "{count, plural, one {Zugriff für # Skill aktualisieren} other {Zugriff für # Skills aktualisieren}}",
@@ -18005,6 +18039,8 @@
       "updated": "{count, plural, one {# Plugin aktualisiert} other {# Plugins aktualisiert}}",
       "failed": "Plugins konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
       "partialFailure": "{count, plural, one {# Plugin konnte nicht aktualisiert werden} other {# Plugins konnten nicht aktualisiert werden}}",
+      "deleted": "{count, plural, one {# Plugin gelöscht} other {# Plugins gelöscht}}",
+      "deleteFailure": "{count, plural, one {# Plugin konnte nicht gelöscht werden} other {# Plugins konnten nicht gelöscht werden}}",
       "deleteTitle": "{count, plural, one {# Plugin löschen?} other {# Plugins löschen?}}",
       "deleteDescription": "{count, plural, one {Das ausgewählte Plugin wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Plugins werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
       "shareTitle": "{count, plural, one {Zugriff für # Plugin aktualisieren} other {Zugriff für # Plugins aktualisieren}}",

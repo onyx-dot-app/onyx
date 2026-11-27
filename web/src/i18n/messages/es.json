@@ -11426,6 +11426,8 @@
         "invalidScope": "Los permisos solicitados no están disponibles.",
         "loginBadCredentials": "Esta cuenta no puede iniciar sesión. Puede estar desactivada. Contacta al administrador de tu espacio de trabajo.",
         "loginRequired": "Primero debes iniciar sesión con tu proveedor de identidad.",
+        "magicLinkInvalid": "Este enlace de inicio de sesión ha caducado o ya se usó. Pide uno nuevo.",
+        "magicLinkWrongEmail": "Este enlace se envió a otra dirección de correo. Pide un enlace nuevo.",
         "oauthUserAlreadyExists": "Ya existe una cuenta con este correo con otro método de inicio de sesión. Inicia sesión como lo hiciste la primera vez, o pide a tu administrador que vincule este proveedor.",
         "playgroundActiveTenant": "Un equipo de tu empresa ya está probando Onyx. ¿Unirte a tu equipo o crear un equipo nuevo?",
         "playgroundAskAdmin": "Pide a tu administrador que te invite.",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "Unirme a mi equipo"
+      },
+      "newLinkButton": {
+        "label": "Obtener un enlace nuevo"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11601,6 +11606,34 @@
       },
       "workEmailField": {
         "label": "Correo de trabajo"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "Este enlace se abrió en un navegador distinto del que lo pidió. Escribe la dirección de correo a la que se envió.",
+        "title": "Confirma tu correo"
+      },
+      "differentEmailButton": {
+        "label": "Usar otro correo"
+      },
+      "redeeming": {
+        "text": "Iniciando sesión…"
+      },
+      "requestButton": {
+        "label": "Recibir un enlace por correo"
+      },
+      "resendWait": {
+        "error": "Hace un momento se envió un enlace de inicio de sesión a esta dirección. Revisa tu bandeja de entrada o espera un minuto y vuelve a pedirlo."
+      },
+      "sendFailed": {
+        "error": "No se pudo enviar el correo de inicio de sesión. Inténtalo de nuevo en un momento."
+      },
+      "sent": {
+        "description": "Enviamos un enlace de inicio de sesión a {email}. Funciona una vez y caduca en 15 minutos.",
+        "title": "Revisa tu correo"
+      },
+      "useSso": {
+        "error": "Inicia sesión con tu proveedor de SSO. Los enlaces por correo están desactivados en este espacio de trabajo."
       }
     },
     "passwordRequirements": {
@@ -12937,11 +12970,10 @@
         },
         "submitError": "No se pudieron enviar tus respuestas. Inténtalo de nuevo.",
         "record": {
-          "answered": "Respondida",
+          "answeredCount": "{count, plural, one {# pregunta respondida} other {# preguntas respondidas}}",
           "answeredInChat": "Respondida en el chat",
           "cancelled": "Sin respuesta",
           "closed": "Ya no está en espera",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
@@ -17488,6 +17520,8 @@
       "updated": "{count, plural, one {# habilidad actualizada} other {# habilidades actualizadas}}",
       "failed": "No se pudieron actualizar las habilidades. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # habilidad} other {No se pudieron actualizar # habilidades}}",
+      "deleted": "{count, plural, one {# habilidad eliminada} other {# habilidades eliminadas}}",
+      "deleteFailure": "{count, plural, one {No se pudo eliminar # habilidad} other {No se pudieron eliminar # habilidades}}",
       "deleteTitle": "{count, plural, one {¿Eliminar # habilidad?} other {¿Eliminar # habilidades?}}",
       "deleteDescription": "{count, plural, one {Esto elimina la habilidad seleccionada para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina las # habilidades seleccionadas para todas las personas con acceso. Esta acción no se puede deshacer.}}",
       "shareTitle": "{count, plural, one {Actualizar acceso para # habilidad} other {Actualizar acceso para # habilidades}}",
@@ -18005,6 +18039,8 @@
       "updated": "{count, plural, one {# plugin actualizado} other {# plugins actualizados}}",
       "failed": "No se pudieron actualizar los plugins. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # plugin} other {No se pudieron actualizar # plugins}}",
+      "deleted": "{count, plural, one {# plugin eliminado} other {# plugins eliminados}}",
+      "deleteFailure": "{count, plural, one {No se pudo eliminar # plugin} other {No se pudieron eliminar # plugins}}",
       "deleteTitle": "{count, plural, one {¿Eliminar # plugin?} other {¿Eliminar # plugins?}}",
       "deleteDescription": "{count, plural, one {Esto elimina el plugin seleccionado para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina los # plugins seleccionados para todas las personas con acceso. Esta acción no se puede deshacer.}}",
       "shareTitle": "{count, plural, one {Actualizar acceso para # plugin} other {Actualizar acceso para # plugins}}",

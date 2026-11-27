@@ -11426,6 +11426,8 @@
         "invalidScope": "请求的权限不可用。",
         "loginBadCredentials": "此账户无法登录，可能已被停用。请联系您的工作区管理员。",
         "loginRequired": "您需要先通过身份提供方登录。",
+        "magicLinkInvalid": "此登录链接已失效或已被使用。请重新获取。",
+        "magicLinkWrongEmail": "此链接是发送到另一个邮箱地址的。请重新获取链接。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
         "playgroundActiveTenant": "您公司的团队已经在试用 Onyx。加入您的团队，还是创建新团队？",
         "playgroundAskAdmin": "请让您的管理员邀请您。",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "加入我的团队"
+      },
+      "newLinkButton": {
+        "label": "获取新链接"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11601,6 +11606,34 @@
       },
       "workEmailField": {
         "label": "工作邮箱"
+      }
+    },
+    "magicLink": {
+      "confirmEmail": {
+        "description": "此链接是在与请求它的浏览器不同的浏览器中打开的。请输入接收此链接的邮箱地址。",
+        "title": "确认您的邮箱"
+      },
+      "differentEmailButton": {
+        "label": "使用其他邮箱"
+      },
+      "redeeming": {
+        "text": "正在登录…"
+      },
+      "requestButton": {
+        "label": "通过邮件获取链接"
+      },
+      "resendWait": {
+        "error": "刚刚已向此地址发送登录链接。请查看收件箱，或等待一分钟后再次请求。"
+      },
+      "sendFailed": {
+        "error": "无法发送登录邮件。请稍后再试。"
+      },
+      "sent": {
+        "description": "我们已向 {email} 发送登录链接。该链接只能使用一次，15 分钟后失效。",
+        "title": "请查看您的邮箱"
+      },
+      "useSso": {
+        "error": "请通过您的 SSO 提供商登录。此工作区已关闭邮件链接登录。"
       }
     },
     "passwordRequirements": {
@@ -12937,11 +12970,10 @@
         },
         "submitError": "无法发送你的答案。请重试。",
         "record": {
-          "answered": "已回答",
+          "answeredCount": "{count, plural, other {已回答 # 个问题}}",
           "answeredInChat": "已在聊天中回答",
           "cancelled": "未回答",
           "closed": "不再等待",
-          "answer": "{header}：{answer}",
           "optionAndNote": "{option}（{note}）"
         }
       },
@@ -17488,6 +17520,8 @@
       "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
       "failed": "无法更新技能。请重试。",
       "partialFailure": "{count, plural, one {# 个技能未能更新} other {# 个技能未能更新}}",
+      "deleted": "{count, plural, one {已删除 # 个技能} other {已删除 # 个技能}}",
+      "deleteFailure": "{count, plural, one {# 个技能未能删除} other {# 个技能未能删除}}",
       "deleteTitle": "{count, plural, one {删除 # 个技能？} other {删除 # 个技能？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选技能。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选技能。此操作无法撤销。}}",
       "shareTitle": "{count, plural, one {更新 # 个技能的访问权限} other {更新 # 个技能的访问权限}}",
@@ -18005,6 +18039,8 @@
       "updated": "{count, plural, one {已更新 # 个插件} other {已更新 # 个插件}}",
       "failed": "无法更新插件。请重试。",
       "partialFailure": "{count, plural, one {# 个插件未能更新} other {# 个插件未能更新}}",
+      "deleted": "{count, plural, one {已删除 # 个插件} other {已删除 # 个插件}}",
+      "deleteFailure": "{count, plural, one {# 个插件未能删除} other {# 个插件未能删除}}",
       "deleteTitle": "{count, plural, one {删除 # 个插件？} other {删除 # 个插件？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选插件。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选插件。此操作无法撤销。}}",
       "shareTitle": "{count, plural, one {更新 # 个插件的访问权限} other {更新 # 个插件的访问权限}}",
