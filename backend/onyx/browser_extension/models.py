@@ -29,6 +29,8 @@ class GrantTab(BaseModel):
     id: str = Field(max_length=50)
     title: str = Field(default="", max_length=500)
     url: str = Field(default="", max_length=2048)
+    # "human" while the user's own input holds the tab
+    controller: Literal["agent", "human"] = "agent"
 
 
 class SharedTabs(BaseModel):
