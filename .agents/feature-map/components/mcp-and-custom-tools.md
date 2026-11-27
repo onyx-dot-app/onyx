@@ -435,9 +435,12 @@ cannot save Always allow on an action whose admin value is not Ask.
 - MCP actions:
   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions` asks the server with
   the acting user's credential; the refresh writes the result as
-  `integration_action` rows. Only the create of a public server and a refresh
-  write MCP actions; the create and the update do not sync an MCP integration,
-  and no code reads MCP `tool` rows.
+  `integration_action` rows. The create of a public server, a refresh, and an
+  update that changes the server URL or the transport write MCP actions
+  (`backend/onyx/integrations/service.py:_reload_mcp_actions`). If the changed server does not answer
+  with the acting user's credential, the update saves no actions until a
+  refresh, so the old server's actions do not stay. No code reads MCP `tool`
+  rows.
 - Agents: `PersonaUpsertRequest.integrations` replaces the
   `persona__integration` links (null keeps them). An editor adds only an
   integration that the editor has access to. An old custom or MCP id in
@@ -665,8 +668,9 @@ default agent, is Blocked.
    the stored `integration_action` rows. A change on the remote server
    reaches the model only after a refresh
    (`POST /admin/integrations/{id}/actions/refresh`, which calls
-   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions`) or a
-   create of a public server. OpenAPI tools need no refresh. The refresh saves
+   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions`), a
+   create of a public server, or an update of the server URL or the transport.
+   An update to a server that does not answer clears the actions. OpenAPI tools need no refresh. The refresh saves
    the declared `outputSchema` and `annotations.readOnlyHint`, which sets the
    default policy of the action. The refresh uses the organization connection
    of a shared server and the acting admin's own connection of an individual
