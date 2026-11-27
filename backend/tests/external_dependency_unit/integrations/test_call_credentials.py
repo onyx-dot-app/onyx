@@ -14,7 +14,7 @@ from onyx.db.enums import (
 from onyx.db.integration_connection import get_connection_by_id
 from onyx.db.models import Integration, User
 from onyx.integrations.call_credentials import (
-    mark_api_key_rejected,
+    mark_credential_rejected,
     resolve_call_credentials,
     resolve_fresh_call_credentials,
 )
@@ -82,8 +82,8 @@ def test_a_rejected_key_needs_reconnect_but_its_replacement_stays(
         db_session, integration, replaced.id, ConnectionSecret(fields={"api_key": "b"})
     )
 
-    mark_api_key_rejected(rejected_call)
-    mark_api_key_rejected(replaced_call)
+    mark_credential_rejected(rejected_call)
+    mark_credential_rejected(replaced_call)
 
     assert rejected_call.connection_id is not None
     assert (
@@ -92,6 +92,35 @@ def test_a_rejected_key_needs_reconnect_but_its_replacement_stays(
     )
     assert replaced_call.connection_id == replacement.id
     assert _status(db_session, replacement.id) is IntegrationConnectionStatus.CONNECTED
+
+
+def test_a_rejected_oauth_token_needs_reconnect(
+    db_session: Session, make_test_user: MakeTestUser
+) -> None:
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url=SERVER_URL,
+        name="tokens",
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        header_template={"Authorization": "Bearer {access_token}"},
+    )
+    try:
+        user = make_test_user("rejected_token")
+        add_connection(
+            db_session, integration, user.id, ConnectionSecret(access_token="t")
+        )
+        call = _credentials(db_session, integration, user)
+
+        mark_credential_rejected(call)
+
+        assert call.connection_id is not None
+        assert (
+            _status(db_session, call.connection_id)
+            is IntegrationConnectionStatus.NEEDS_RECONNECT
+        )
+    finally:
+        delete_integrations(db_session, [integration.id])
 
 
 def test_a_call_that_resolves_again_reads_the_current_rows(

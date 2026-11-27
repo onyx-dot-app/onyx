@@ -299,8 +299,11 @@ database session for it. Only an OAuth2 or Onyx login token that expires within
 `REFRESH_SKEW` resolves again (`integrations/call_credentials.py:resolve_fresh_call_credentials`).
 For OAuth2 on a non-SSE transport, construction reads the server settings
 (`mcp_oauth_server`), and each call passes `make_integration_oauth_provider` with
-`IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401 on
-an API key connection sets it to Needs reconnect (`mark_api_key_rejected`).
+`IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401, or an
+OAuth2 grant that the SDK cannot renew without the browser
+(`MCPReauthenticationRequired`), sets an API key or OAuth2 connection to Needs
+reconnect (`mark_credential_rejected`). Refresh actions does the same and answers
+"refused the credential", not "Could not reach".
 `RestTool`, `GraphQLTool` and `PresetActionTool` do the same refresh and mark
 through `fresh_call_credentials` and `note_rejected_credential`
 (`tools/tool_implementations/http_request.py`).
@@ -732,8 +735,8 @@ default agent, is Blocked.
     user no error detail ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **A rejected credential is marked only if it is
     the one the call used.**
-    `MCPTool._run` marks an API key connection Needs reconnect for a 401
-    through `integrations/call_credentials.py:mark_api_key_rejected`. It locks
+    `MCPTool._run` marks an API key or OAuth2 connection Needs reconnect for a
+    401 through `integrations/call_credentials.py:mark_credential_rejected`. It locks
     the connection row that the call read (`connection_id`) and marks it only
     when the row still holds the key the call sent
     (`CallCredentials.secret_fingerprint`). A key saved during the call stays

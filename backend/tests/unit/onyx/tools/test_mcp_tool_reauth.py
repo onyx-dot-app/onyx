@@ -16,6 +16,7 @@ from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import ConnectionProblem
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
+from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.tools.models import (
     CUSTOM_TOOL_ERROR_RESPONSE_TYPE,
@@ -96,6 +97,7 @@ def _run(tool: MCPTool) -> ToolResult:
     [
         (_http_error(401), True),
         (_wrapped_unauthorized(), True),
+        (MCPReauthenticationRequired(), True),
         (_http_error(403), False),
         (_http_error(503), False),
         (httpx.ReadTimeout("timeout"), False),
@@ -117,7 +119,7 @@ def test_only_a_rejected_call_reports_the_credential(
     credentials = _credentials(method)
     with (
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
-        patch(f"{MODULE}.mark_api_key_rejected") as mark,
+        patch(f"{MODULE}.mark_credential_rejected") as mark,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
     ):
         response = _run(_tool(credentials))
@@ -237,7 +239,7 @@ def test_a_failed_call_tells_the_chat_how_it_failed(
 ) -> None:
     with (
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
-        patch(f"{MODULE}.mark_api_key_rejected"),
+        patch(f"{MODULE}.mark_credential_rejected"),
         patch(f"{MODULE}.record_mcp_client_tool_outcome"),
     ):
         response = _run(_tool(_credentials(IntegrationAuthMethod.API_KEY)))

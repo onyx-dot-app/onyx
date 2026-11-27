@@ -87,6 +87,7 @@ from onyx.server.features.integrations.models import (
     OpenApiConfigInput,
     PresetConfigInput,
 )
+from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 from onyx.server.features.persona import api as persona_api
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import (
@@ -1185,6 +1186,12 @@ def _unauthorized(status: int) -> HTTPStatusError:
         (
             True,
             _unauthorized(403),
+            400,
+            "{name} refused the credential. Reconnect it and try again.",
+        ),
+        (
+            True,
+            MCPReauthenticationRequired(),
             400,
             "{name} refused the credential. Reconnect it and try again.",
         ),

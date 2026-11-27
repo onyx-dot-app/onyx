@@ -175,12 +175,12 @@ def mcp_oauth_provider(
     )
 
 
-def mark_api_key_rejected(credentials: CallCredentials) -> None:
-    """Set Needs reconnect on an API key connection that the service
-    rejected, when the row still holds the key the call sent. OAuth2
-    connections are left to the refresh."""
+def mark_credential_rejected(credentials: CallCredentials) -> None:
+    """Set Needs reconnect on an API key or OAuth2 connection that the
+    service rejected, when the row still holds the secret the call sent."""
     if (
-        credentials.auth_method is not IntegrationAuthMethod.API_KEY
+        credentials.auth_method
+        not in (IntegrationAuthMethod.API_KEY, IntegrationAuthMethod.OAUTH2)
         or credentials.connection_id is None
     ):
         return
