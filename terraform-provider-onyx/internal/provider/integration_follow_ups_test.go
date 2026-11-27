@@ -83,27 +83,23 @@ func TestApplyFollowUpsSkipsRefreshWithoutCredentialsOrServerChange(t *testing.T
 	}
 }
 
-func TestUpdateSendsCredentialsWhenTheirDestinationChanges(t *testing.T) {
-	base := integrationResourceModel{
-		ServerURL:                        types.StringValue("https://mcp.example.com/mcp"),
-		OpenAPIDocument:                  types.StringNull(),
-		OrganizationCredentialsWOVersion: types.Int64Value(1),
-	}
-	newURL := base
-	newURL.ServerURL = types.StringValue("https://mcp2.example.com/mcp")
-	newDocument := base
-	newDocument.OpenAPIDocument = types.StringValue(`{"openapi":"3.0.0"}`)
+func TestUpdateSendsCredentialsForANewVersionOrAConnectionThatNeedsReconnect(t *testing.T) {
+	base := integrationResourceModel{OrganizationCredentialsWOVersion: types.Int64Value(1)}
 	newVersion := base
 	newVersion.OrganizationCredentialsWOVersion = types.Int64Value(2)
+	connected := &client.Integration{OrganizationStatus: &client.IntegrationStatus{State: "connected"}}
+	needsReconnect := &client.Integration{OrganizationStatus: &client.IntegrationStatus{State: "needs_reconnect"}}
 
-	for name, plan := range map[string]integrationResourceModel{
-		"server URL": newURL, "OpenAPI document": newDocument, "credentials version": newVersion,
-	} {
-		if !sendsOrganizationCredentials(plan, base) {
-			t.Errorf("a new %s does not send the credentials", name)
-		}
+	if !sendsOrganizationCredentials(newVersion, base, connected) {
+		t.Error("a new credentials version does not send the credentials")
 	}
-	if sendsOrganizationCredentials(base, base) {
-		t.Error("an unchanged plan sends the credentials")
+	if !sendsOrganizationCredentials(base, base, needsReconnect) {
+		t.Error("a connection that needs reconnect does not get the credentials again")
+	}
+	if sendsOrganizationCredentials(base, base, connected) {
+		t.Error("an update that keeps the connection sends the credentials")
+	}
+	if sendsOrganizationCredentials(base, base, &client.Integration{}) {
+		t.Error("an integration with no organization connection gets the credentials")
 	}
 }

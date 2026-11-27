@@ -380,12 +380,9 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	headers := stringMapFromModel(ctx, plan.HeaderTemplate, &resp.Diagnostics)
-	var credentialValues map[string]string
-	if sendsOrganizationCredentials(plan, state) {
-		var credentials types.Map
-		resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("organization_credentials_wo"), &credentials)...)
-		credentialValues = stringMapFromModel(ctx, credentials, &resp.Diagnostics)
-	}
+	var credentials types.Map
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("organization_credentials_wo"), &credentials)...)
+	configuredCredentials := stringMapFromModel(ctx, credentials, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -405,6 +402,10 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update Onyx integration", err.Error())
 		return
+	}
+	var credentialValues map[string]string
+	if sendsOrganizationCredentials(plan, state, updated) {
+		credentialValues = configuredCredentials
 	}
 	serverChanged := !plan.ServerURL.Equal(state.ServerURL) || !plan.Transport.Equal(state.Transport)
 	remote := r.applyFollowUps(ctx, id, plan, updated, credentialValues, serverChanged, &resp.Diagnostics)
@@ -435,10 +436,9 @@ func (r *integrationResource) ImportState(ctx context.Context, req resource.Impo
 }
 
 // sendsOrganizationCredentials reports whether Update sends the configured
-// shared credentials. A new server URL or OpenAPI document can move where the
-// credentials go, and Onyx then marks the connection Needs reconnect.
-func sendsOrganizationCredentials(plan, state integrationResourceModel) bool {
+// shared credentials: for a new credentials version, or when the update left
+// the connection Needs reconnect, as a new credential destination does.
+func sendsOrganizationCredentials(plan, state integrationResourceModel, updated *client.Integration) bool {
 	return writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) ||
-		!plan.ServerURL.Equal(state.ServerURL) ||
-		!plan.OpenAPIDocument.Equal(state.OpenAPIDocument)
+		(updated.OrganizationStatus != nil && updated.OrganizationStatus.State == "needs_reconnect")
 }
