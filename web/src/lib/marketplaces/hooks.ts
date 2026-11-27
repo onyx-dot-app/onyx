@@ -123,10 +123,15 @@ export interface MarketplaceCopy {
 export function useMarketplaceCopy(): MarketplaceCopy {
   const t = useTranslations("plugins.marketplaces");
   const format = useFormatter();
+  // next-intl formats in the server's zone unless told otherwise.
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const rateLimited = (resetAt: string | null) =>
     resetAt !== null
       ? t("errors.rateLimitedUntil", {
-          time: format.dateTime(new Date(resetAt), { timeStyle: "short" }),
+          time: format.dateTime(new Date(resetAt), {
+            timeStyle: "short",
+            timeZone,
+          }),
         })
       : t("errors.rateLimited");
   return {
