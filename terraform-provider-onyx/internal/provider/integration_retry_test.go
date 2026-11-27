@@ -22,6 +22,7 @@ type fakeIntegrationServer struct {
 	failSave    bool
 	failPolicy  bool
 	saves       int
+	refreshes   int
 }
 
 func (f *fakeIntegrationServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -68,8 +69,11 @@ func (f *fakeIntegrationServer) ServeHTTP(w http.ResponseWriter, r *http.Request
 		f.integration["installation_policy"] = body["installation_policy"]
 		_, _ = w.Write([]byte(`null`))
 		return
-	case r.Method == http.MethodPost && path == "/admin/integrations/1/actions/refresh",
-		r.Method == http.MethodDelete && path == "/admin/integrations/1":
+	case r.Method == http.MethodPost && path == "/admin/integrations/1/actions/refresh":
+		f.refreshes++
+		_, _ = w.Write([]byte(`null`))
+		return
+	case r.Method == http.MethodDelete && path == "/admin/integrations/1":
 		_, _ = w.Write([]byte(`null`))
 		return
 	case r.Method == http.MethodGet && path == "/admin/integrations/1":
@@ -100,6 +104,17 @@ func (f *fakeIntegrationServer) checkSaves(want int) resource.TestCheckFunc {
 		defer f.mu.Unlock()
 		if f.saves != want {
 			return fmt.Errorf("credential saves = %d, want %d", f.saves, want)
+		}
+		return nil
+	}
+}
+
+func (f *fakeIntegrationServer) checkRefreshes(want int) resource.TestCheckFunc {
+	return func(_ *terraform.State) error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.refreshes != want {
+			return fmt.Errorf("action refreshes = %d, want %d", f.refreshes, want)
 		}
 		return nil
 	}
@@ -181,6 +196,38 @@ func TestIntegrationDoesNotResendCredentialsThatAFailedApplySaved(t *testing.T) 
 				},
 				Config: fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp", "DEFAULT"),
 				Check:  fake.checkSaves(2),
+			},
+		},
+	})
+}
+
+// Onyx takes a new server URL, the key save fails, and then an admin
+// reconnects. The next apply sends no key but still loads the new server's
+// actions.
+func TestIntegrationLoadsActionsAfterAnAdminReconnectsAFailedMove(t *testing.T) {
+	fake := &fakeIntegrationServer{}
+	server := httptest.NewServer(fake)
+	t.Cleanup(server.Close)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fakeIntegrationConfig(server.URL, "https://mcp.example.com/mcp", "AVAILABLE"),
+				Check:  resource.ComposeTestCheckFunc(fake.checkSaves(1), fake.checkRefreshes(1)),
+			},
+			{
+				PreConfig:   func() { fake.set(true, false) },
+				Config:      fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp", "AVAILABLE"),
+				ExpectError: regexp.MustCompile("Failed to save the Onyx integration organization credentials"),
+			},
+			{
+				PreConfig: func() {
+					fake.set(false, false)
+					fake.setStatus("connected")
+				},
+				Config: fakeIntegrationConfig(server.URL, "https://mcp2.example.com/mcp", "AVAILABLE"),
+				Check:  resource.ComposeTestCheckFunc(fake.checkSaves(1), fake.checkRefreshes(2)),
 			},
 		},
 	})

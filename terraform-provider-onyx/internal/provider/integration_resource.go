@@ -469,11 +469,14 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 		credentialValues = configuredCredentials
 		resp.Diagnostics.Append(markWriteOnlySource(ctx, resp.Private, integrationCredentialsPendingKey, true)...)
 	}
-	serverChanged := !plan.ServerURL.Equal(state.ServerURL) || !plan.Transport.Equal(state.Transport)
+	// A pending retry means an earlier apply moved the server without loading
+	// its actions, and a refresh hid that move from the state.
+	serverChanged := pending || !plan.ServerURL.Equal(state.ServerURL) || !plan.Transport.Equal(state.Transport)
 	remote := r.applyFollowUps(ctx, id, plan, updated, credentialValues, serverChanged, resp.Private, &resp.Diagnostics)
 	if remote == nil {
 		return
 	}
+	resp.Diagnostics.Append(markWriteOnlySource(ctx, resp.Private, integrationCredentialsPendingKey, false)...)
 	applyRemoteIntegration(ctx, &plan, remote, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
