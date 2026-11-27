@@ -45,6 +45,8 @@ interface RestEndpointFieldsProps {
   onChange: (draft: RestDraft) => void;
   lineErrors: EndpointLineError[];
   showErrors: boolean;
+  /** False for a stored app with no endpoints, which may stay with none. */
+  endpointsRequired: boolean;
   /** Also true while an import runs; the parent holds that state. */
   disabled: boolean;
   onImportingChange: (importing: boolean) => void;
@@ -58,6 +60,7 @@ export default function RestEndpointFields({
   onChange,
   lineErrors,
   showErrors,
+  endpointsRequired,
   disabled,
   onImportingChange,
   importError,
@@ -221,7 +224,7 @@ export default function RestEndpointFields({
         value={draft.endpoints}
         onChange={(endpoints) => onChange({ ...draft, endpoints })}
         lineErrors={lineErrors}
-        showErrors={showErrors}
+        showErrors={showErrors && endpointsRequired}
         disabled={disabled}
       />
     </>

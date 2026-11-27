@@ -85,6 +85,7 @@ export default function IntegrationConfigurationTab({
       ? restDraftFrom(integration.config)
       : { document: null, baseUrl: "", endpoints: "" };
   const [rest, setRest] = useState<RestDraft>(savedRest);
+  const endpointsRequired = savedRest.endpoints.trim() !== "";
   const [lineErrors, setLineErrors] = useState<EndpointLineError[]>([]);
   const [graphql, setGraphql] = useState<GraphQLConfig | null>(
     integration.config.shape === "graphql" ? integration.config : null
@@ -137,7 +138,8 @@ export default function IntegrationConfigurationTab({
     if (config.shape === "openapi") {
       if (isEqual(rest, savedRest)) return undefined;
       const base = restBaseUrl(rest.baseUrl);
-      if (!base) return null;
+      // Blank lines would remove every action; a migrated app may have none.
+      if (!base || (endpointsRequired && !rest.endpoints.trim())) return null;
       return {
         shape: "openapi",
         openapi_document: rest.document,
@@ -336,6 +338,7 @@ export default function IntegrationConfigurationTab({
                   }}
                   lineErrors={lineErrors}
                   showErrors={showErrors}
+                  endpointsRequired={endpointsRequired}
                   disabled={disabled || loadingSchema}
                   onImportingChange={setLoadingSchema}
                   importError={importError}

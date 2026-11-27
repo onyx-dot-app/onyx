@@ -815,6 +815,71 @@ test("refuses a Base URL that is not a URL", async () => {
   ).toBe(false);
 });
 
+test("refuses blank endpoints", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: OPENAPI_VIEW,
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.clear(
+    await view.findByRole("textbox", { name: copy.add.rest.endpoints.title })
+  );
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+
+  expect(
+    await view.findByText(copy.add.rest.endpoints.required)
+  ).toBeInTheDocument();
+  expect(
+    fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")
+  ).toBe(false);
+});
+
+test("saves a stored app with no endpoints", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: { ...OPENAPI_VIEW, endpoints: [] },
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const baseUrl = await view.findByRole("textbox", {
+    name: copy.add.rest.baseUrl.title,
+  });
+  await u.clear(baseUrl);
+  await u.type(baseUrl, "https://staging.example.com");
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
+      config: { base_url: "https://staging.example.com", endpoints: [""] },
+    })
+  );
+  expect(
+    view.queryByText(copy.add.rest.endpoints.required)
+  ).not.toBeInTheDocument();
+});
+
 test("keeps the Base URL when an uploaded spec has a relative server", async () => {
   mockFetch({
     [URL_DETAIL]: makeDetail({
