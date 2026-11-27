@@ -373,7 +373,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     which the harness calls before the start or the write
     (`server/features/build/sandbox/harness_base.py:CommandHold`). The gate holds the request only while the
     mark names the tagged chat, writes an `action_approval` row with
-    `chat_session_id` and `command_id` (method, origin, path and body as its payload;
+    `chat_session_id` and `command_id` (method, origin, path and body as its payload,
+    the body decoded by `external_apps/presentation/decode.py:decode_payload`;
     `body_bytes` in place of a body that is not JSON or is over 64 KB),
     announces it under the command ID, and sends no notification. It checks
     the mark again after the write and expires its own row when the call

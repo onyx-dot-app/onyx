@@ -37,6 +37,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     actions_requiring_approval,
 )
+from onyx.external_apps.presentation.decode import decode_payload
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.craft import resolve_craft_action_policies
 from onyx.integrations.models import EffectivePolicy
@@ -1593,13 +1594,15 @@ def _approval_payload(
     }
     raw_bytes = len(flow.request.raw_content or b"")
     # The size check runs on the event loop: a body far over the budget is
-    # not encoded. Its JSON is at least about half as long as the raw body.
-    if (
-        matched_actions.payload
-        and raw_bytes <= 2 * _CARD_BODY_MAX_BYTES
-        and len(json.dumps(matched_actions.payload)) <= _CARD_BODY_MAX_BYTES
-    ):
-        payload["body"] = matched_actions.payload
+    # not decoded or encoded. Its JSON is at least about half as long as the
+    # raw body.
+    body = (
+        decode_payload(matched_actions.actions[0].action_type, matched_actions.payload)
+        if matched_actions.payload and raw_bytes <= 2 * _CARD_BODY_MAX_BYTES
+        else None
+    )
+    if body and len(json.dumps(body)) <= _CARD_BODY_MAX_BYTES:
+        payload["body"] = body
     elif raw_bytes:
         payload["body_bytes"] = raw_bytes
     return payload

@@ -18,6 +18,7 @@ import logging
 import threading
 from contextlib import nullcontext
 from dataclasses import dataclass
+from email.message import EmailMessage
 from typing import AbstractSet, Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -40,6 +41,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
+from onyx.external_apps.providers.gmail import GmailAction
 from onyx.sandbox_proxy import approval_cache, destination_policy
 from onyx.sandbox_proxy.addons import gate
 from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
@@ -2729,6 +2731,31 @@ def test_a_command_card_shows_the_size_of_a_body_that_is_not_json() -> None:
         "origin": "https://slack.com",
         "path": "/upload",
         "body_bytes": 300,
+    }
+
+
+def test_a_command_card_shows_a_gmail_send_decoded() -> None:
+    """The user sees the recipients, subject and body, not base64."""
+    message = EmailMessage()
+    message["To"] = "alice@example.com"
+    message["Subject"] = "Hi"
+    message.set_content("Body")
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    ctx = _ctx().model_copy(update={"chat_command_id": _COMMAND})
+    flow = make_flow(host="gmail.googleapis.com", raw_content=raw.encode())
+
+    payload = gate._approval_payload(
+        flow,
+        ctx,
+        make_matched_actions(
+            action_type=GmailAction.MESSAGES_SEND, payload={"raw": raw}
+        ),
+    )
+
+    assert payload["body"] == {
+        "to": ["alice@example.com"],
+        "subject": "Hi",
+        "body": "Body",
     }
 
 
