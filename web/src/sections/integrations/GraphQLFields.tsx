@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -8,6 +8,7 @@ import {
   InputTextArea,
   InputTypeIn,
 } from "@opal/components";
+import { SvgX } from "@opal/icons";
 import { InputVertical, Section, toast } from "@opal/layouts";
 import { introspectGraphQL } from "@/lib/integrations/svc";
 import type { GraphQLConfig } from "@/lib/integrations/types";
@@ -43,9 +44,12 @@ export default function GraphQLFields({
   // True from a file pick until its text arrives, so an empty file is told
   // apart from the clear button, which also reports "".
   const readingFileRef = useRef(false);
+  // An upload over the limit; `importError` shows its error until it is removed.
+  const [rejected, setRejected] = useState(false);
 
   /** Applies the schema when it fits; false when it is over the limit. */
   function setSchema(text: string): boolean {
+    setRejected(false);
     const over = specTextTooLarge(text);
     onImportErrorChange(over ? tAdd("api.tooLarge") : null);
     if (!over) onChange({ ...draft, graphql_schema: text });
@@ -53,6 +57,7 @@ export default function GraphQLFields({
   }
 
   async function introspect() {
+    setRejected(false);
     onLoadingChange(true);
     try {
       const view = await introspectGraphQL(draft.endpoint_url);
@@ -84,6 +89,7 @@ export default function GraphQLFields({
             variant={disabled ? "disabled" : "primary"}
             onChange={(event) => {
               // An edit discards a failed load; the schema stays as it was.
+              setRejected(false);
               onImportErrorChange(null);
               onChange({ ...draft, endpoint_url: event.target.value });
             }}
@@ -109,27 +115,48 @@ export default function GraphQLFields({
         }
       >
         <Section gap={2} alignItems="stretch" height="auto">
-          <InputSingleUpload
-            accept=".graphql,.graphqls,.gql,text/plain"
-            placeholder={t("schema.upload")}
-            variant={disabled ? "disabled" : "primary"}
-            maxSizeKb={SPEC_MAX_SIZE_KB}
-            onFileSizeExceeded={() => onImportErrorChange(tAdd("api.tooLarge"))}
-            onReadingChange={(reading) => {
-              if (reading) readingFileRef.current = true;
-              onLoadingChange(reading);
-            }}
-            setValue={(text) => {
-              const fromFile = readingFileRef.current;
-              readingFileRef.current = false;
-              if (text.trim()) setSchema(text);
-              // A blank file or paste is a failed load; a clear keeps the schema.
-              else
-                onImportErrorChange(
-                  fromFile || text ? t("schema.required") : null
-                );
-            }}
-          />
+          <Section flexDirection="row" gap={1} height="auto">
+            <InputSingleUpload
+              accept=".graphql,.graphqls,.gql,text/plain"
+              placeholder={t("schema.upload")}
+              variant={disabled ? "disabled" : "primary"}
+              maxSizeKb={SPEC_MAX_SIZE_KB}
+              onFileSizeExceeded={() => {
+                setRejected(true);
+                onImportErrorChange(tAdd("api.tooLarge"));
+              }}
+              onReadingChange={(reading) => {
+                if (reading) readingFileRef.current = true;
+                onLoadingChange(reading);
+              }}
+              setValue={(text) => {
+                const fromFile = readingFileRef.current;
+                readingFileRef.current = false;
+                setRejected(false);
+                if (text.trim()) setSchema(text);
+                // A blank file or paste is a failed load; a clear keeps the schema.
+                else
+                  onImportErrorChange(
+                    fromFile || text ? t("schema.required") : null
+                  );
+              }}
+            />
+            {/* A refused file is never attached, so the control has no clear
+                button; this one keeps the current schema. */}
+            {rejected && importError !== null && (
+              <Button
+                type="button"
+                size="sm"
+                prominence="tertiary"
+                icon={SvgX}
+                aria-label={tAdd("api.upload.remove")}
+                onClick={() => {
+                  setRejected(false);
+                  onImportErrorChange(null);
+                }}
+              />
+            )}
+          </Section>
           <InputTextArea
             aria-label={t("schema.title")}
             value={draft.graphql_schema}
