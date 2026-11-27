@@ -245,6 +245,63 @@ def test_scoped_manager_user_shares_stay_within_managed_groups(
     ) == {outsider.id}
 
 
+def test_scoped_manager_cannot_lift_the_member_rule_with_self_granted_editor(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """Editor rights that a scoped manager can grant to themselves do not let
+    them share with a user outside their groups."""
+    group = make_group(db_session)
+    manager = _manager_of(db_session, group)
+    outsider = make_user(db_session, standard_account=True)
+    author = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=author.id)
+    share_plugin_with_group(db_session, skill.id, group.id, SkillSharePermission.VIEWER)
+
+    def share_with(user: User, permission: SkillSharePermission) -> None:
+        apply_plugin_access_change__no_commit(
+            [skill.id],
+            PluginAccessChange(
+                user_grants=(PluginUserGrant(user_id=user.id, permission=permission),),
+                mode=PluginAccessMode.ADD_ONLY,
+            ),
+            manager,
+            db_session,
+        ).raise_first_failure()
+
+    with pytest.raises(OnyxError) as exc_info:
+        share_with(manager, SkillSharePermission.EDITOR)
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    assert (
+        db_session.scalar(
+            select(Plugin__User.user_id).where(Plugin__User.plugin_id == skill.id)
+        )
+        is None
+    )
+
+    apply_plugin_access_change__no_commit(
+        [skill.id],
+        PluginAccessChange(
+            group_grants=(
+                PluginGroupGrant(
+                    group_id=group.id, permission=SkillSharePermission.EDITOR
+                ),
+            ),
+            mode=PluginAccessMode.ADD_ONLY,
+        ),
+        manager,
+        db_session,
+    ).raise_first_failure()
+    with pytest.raises(OnyxError) as exc_info:
+        share_with(outsider, SkillSharePermission.VIEWER)
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+    share_plugin_with_user(
+        db_session, skill.id, manager.id, SkillSharePermission.EDITOR
+    )
+    share_with(outsider, SkillSharePermission.VIEWER)
+
+
 def test_owner_removing_a_group_share_keeps_its_setting(
     db_session: Session,
     test_user: User,  # noqa: ARG001

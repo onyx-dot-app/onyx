@@ -526,7 +526,11 @@ the app from the same rule
    rows. A scoped manager edits a private skill only when every group share is
    in their groups and every user share goes to a member of those groups. One
    SQL predicate, `db/plugin_access.py:plugin_in_managed_scope`, decides it for
-   the edit check and the response permission.
+   the edit check and the response permission. Such a manager adds a user
+   share only for a member of their groups, and cannot give themselves
+   EDITOR (403, `db/plugin.py:_check_user_shares_in_managed_scope`). Editor
+   rights that the manager could grant themselves (their own user share or a
+   managed group's share) do not lift the rule.
 4. `enablement-not-preference-row` **Never infer enablement from a preference
    row.** Use `db/plugin_access.py:load_user_plugin_states`. It reads
    `user_plugin_preference` and the install setting that applies to the user

@@ -55,7 +55,10 @@ from onyx.db.plugin_access import (
     seen_by_organization,
     visible_plugin_ids,
 )
-from onyx.db.scoped_permissions import managed_group_member_ids_subquery
+from onyx.db.scoped_permissions import (
+    managed_group_member_ids_subquery,
+    scoped_group_ids_subquery,
+)
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
     UNSET,
@@ -1356,18 +1359,46 @@ def _check_user_shares_in_managed_scope(
 ) -> None:
     """A scoped manager who edits a plugin only through their groups shares it
     only with members of those groups. Another user share moves the plugin out
-    of their scope. Removing a share stays allowed."""
+    of their scope. Removing a share stays allowed. Editor rights the manager
+    can grant to themselves (a user share or a managed group's share) do not
+    lift this rule."""
     added_user_ids = {
         user_id
         for user_id, permission in (locked.new_user_grants or {}).items()
         if locked.user_grants.get(user_id) != permission
     }
-    if not added_user_ids or db_session.scalar(
-        select(Plugin.id).where(
-            Plugin.id == locked.plugin.id, plugin_editable_by_user(Plugin, actor.id)
-        )
-    ):
+    if not added_user_ids:
         return
+    editor = SkillSharePermission.EDITOR
+    granted_editor_by_others = (
+        locked.plugin.author_user_id == actor.id
+        or locked.user_grants.get(actor.id) == editor
+        or db_session.scalar(
+            select(Plugin__UserGroup.plugin_id)
+            .join(
+                User__UserGroup,
+                User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
+            )
+            .where(
+                Plugin__UserGroup.plugin_id == locked.plugin.id,
+                Plugin__UserGroup.permission == editor,
+                User__UserGroup.user_id == actor.id,
+                Plugin__UserGroup.user_group_id.not_in(
+                    scoped_group_ids_subquery(actor)
+                ),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+    if granted_editor_by_others:
+        return
+    if (locked.new_user_grants or {}).get(actor.id) == editor:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers cannot make themselves an editor of a skill they "
+            "manage through their groups.",
+        )
     members = set(
         db_session.scalars(
             managed_group_member_ids_subquery(actor).where(
