@@ -12,7 +12,11 @@ without a pod re-provision.
 from collections.abc import Sequence
 from typing import Any
 
-from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
+from onyx.server.features.build.configs import (
+    MCP_SESSION_TAG_HEADER,
+    SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -124,6 +128,13 @@ def _build_permissions(
         for tool_name in server.disabled_tools:
             permissions[f"{server.key}_{tool_name}"] = "deny"
     return permissions
+
+
+# A tool call can wait for an Ask approval, so opencode must not end the call
+# (the MCP SDK default is 60 s) before the approval window closes.
+MCP_REQUEST_TIMEOUT_MS = (
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
+) * 1000
 
 
 def _build_session_mcp_block(
@@ -265,4 +276,7 @@ def build_provider_opencode_config(
         if session_id is None:
             raise ValueError("session_id is required when mcp_servers are provided")
         config["mcp"] = _build_session_mcp_block(mcp_servers, session_id)
+        # The default for each MCP request. The per-server ``timeout`` also
+        # sets the connect timeout, so it stays unset.
+        config["experimental"] = {"mcp_timeout": MCP_REQUEST_TIMEOUT_MS}
     return config

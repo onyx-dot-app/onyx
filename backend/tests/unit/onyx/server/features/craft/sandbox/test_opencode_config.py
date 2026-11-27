@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
+from onyx.server.features.build.configs import (
+    MCP_SESSION_TAG_HEADER,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -276,6 +279,18 @@ def test_session_config_carries_mcp_with_session_tag_header() -> None:
             "headers": {MCP_SESSION_TAG_HEADER: "sess-abc"},
         }
     }
+
+
+def test_session_config_waits_for_an_ask_approval_before_an_mcp_call_times_out() -> (
+    None
+):
+    config = build_provider_opencode_config(
+        _gateway(), mcp_servers=[_mcp("linear-7")], session_id="sess-abc"
+    )
+    assert config["experimental"]["mcp_timeout"] > (
+        SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS * 1000
+    )
+    assert "experimental" not in build_provider_opencode_config(_gateway())
 
 
 def test_session_config_requires_session_id_when_mcp_present() -> None:
