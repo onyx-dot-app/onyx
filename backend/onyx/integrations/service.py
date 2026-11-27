@@ -607,7 +607,12 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
             f"Onyx cannot fetch the spec: {e}{ssrf_error_hint(spec_url, e)}",
         ) from e
     except (requests.RequestException, urllib3.exceptions.HTTPError) as e:
-        logger.warning("Could not fetch the spec at %s: %s", spec_url, e)
+        # The URL and the error text can carry tokens of a signed spec URL.
+        logger.warning(
+            "Could not fetch the spec at host %s: %s",
+            urlparse(spec_url).hostname,
+            type(e).__name__,
+        )
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY, "Onyx could not connect to the spec URL."
         ) from e
