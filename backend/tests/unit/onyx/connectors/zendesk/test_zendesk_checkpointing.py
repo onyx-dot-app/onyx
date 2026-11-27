@@ -28,11 +28,12 @@ def mock_zendesk_client() -> MagicMock:
 
 @pytest.fixture
 def zendesk_connector(
+    monkeypatch: pytest.MonkeyPatch,
     mock_zendesk_client: MagicMock,
 ) -> Generator[ZendeskConnector, None, None]:
     """Create a Zendesk connector with mocked client"""
     connector = ZendeskConnector(content_type="articles")
-    set_request_function(connector, mock_zendesk_client.make_request)
+    set_request_function(monkeypatch, connector, mock_zendesk_client.make_request)
     yield connector
 
 
@@ -192,9 +193,7 @@ def test_load_from_checkpoint_tickets_happy_path(
 
     # Mock API responses
     mock_zendesk_client.make_request.side_effect = [
-        # First call: content tags
-        {"records": []},
-        # Second call: tickets page
+        # First call: tickets page (tickets read no content tags)
         {
             "tickets": [mock_ticket1, mock_ticket2],
             "end_of_stream": True,
@@ -207,8 +206,6 @@ def test_load_from_checkpoint_tickets_happy_path(
         # Fifth call: comments page
         {"comments": []},
     ]
-
-    set_request_function(zendesk_connector, mock_zendesk_client.make_request)
 
     # Call load_from_checkpoint
     end_time = time.time()
@@ -398,9 +395,7 @@ def test_load_from_checkpoint_with_skipped_ticket(
     # Set up mock responses with a deleted ticket
     mock_ticket = create_mock_ticket(status="deleted")
     mock_zendesk_client.make_request.side_effect = [
-        # First call: content tags
-        {"records": []},
-        # Second call: tickets page with deleted ticket
+        # First call: tickets page with deleted ticket
         {
             "tickets": [mock_ticket],
             "end_of_stream": True,

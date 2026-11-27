@@ -10,7 +10,6 @@ from collections.abc import Callable
 from typing import Any, ClassVar
 
 import requests
-from pydantic import BaseModel
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
@@ -26,7 +25,7 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     source_operation,
 )
-from onyx.connectors.zendesk.models import ZendeskUser
+from onyx.connectors.zendesk.models import ZendeskPageResponse, ZendeskUser
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -41,12 +40,6 @@ ZENDESK_EMAIL: str = "zendesk_email"
 ZENDESK_TOKEN: str = "zendesk_token"
 
 
-class ZendeskPageResponse(BaseModel):
-    data: list[dict[str, Any]]
-    meta: dict[str, Any]
-    has_more: bool
-
-
 class ZendeskSupportInactiveError(ValueError):
     """The account has no active Support product, so it has no tickets."""
 
@@ -58,6 +51,15 @@ class ZendeskRequestError(RuntimeError):
     def __init__(self, status_code: int | None, detail: str) -> None:
         super().__init__(f"Zendesk request failed ({status_code}): {detail}")
         self.status_code = status_code
+
+
+def next_cursor(meta: dict[str, Any], current: str | None) -> str:
+    """The cursor of the next page. A page that claims more items but repeats
+    or omits its cursor would make the walk loop forever."""
+    cursor: str | None = meta.get("after_cursor")
+    if not cursor or cursor == current:
+        raise ZendeskRequestError(None, "a page claimed more items but did not advance")
+    return cursor
 
 
 def subdomain_from_credential(value: str) -> str:
@@ -200,7 +202,7 @@ class ZendeskSourceOperations(SourceOperations):
                 max_pages is not None and pages >= max_pages
             ):
                 return content_tags
-            params["page[after]"] = data["meta"]["after_cursor"]
+            params["page[after]"] = next_cursor(data["meta"], params.get("page[after]"))
 
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),
@@ -282,4 +284,4 @@ class ZendeskSourceOperations(SourceOperations):
             comments.extend(data.get("comments", []))
             if not data.get("meta", {}).get("has_more", False):
                 return comments
-            params["page[after]"] = data["meta"]["after_cursor"]
+            params["page[after]"] = next_cursor(data["meta"], params.get("page[after]"))

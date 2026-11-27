@@ -39,16 +39,20 @@ def mock_zendesk_client() -> MagicMock:
 
 
 @pytest.fixture
-def article_connector(mock_zendesk_client: MagicMock) -> ZendeskConnector:
+def article_connector(
+    monkeypatch: pytest.MonkeyPatch, mock_zendesk_client: MagicMock
+) -> ZendeskConnector:
     connector = ZendeskConnector(content_type="articles")
-    set_request_function(connector, mock_zendesk_client.make_request)
+    set_request_function(monkeypatch, connector, mock_zendesk_client.make_request)
     return connector
 
 
 @pytest.fixture
-def ticket_connector(mock_zendesk_client: MagicMock) -> ZendeskConnector:
+def ticket_connector(
+    monkeypatch: pytest.MonkeyPatch, mock_zendesk_client: MagicMock
+) -> ZendeskConnector:
     connector = ZendeskConnector(content_type="tickets")
-    set_request_function(connector, mock_zendesk_client.make_request)
+    set_request_function(monkeypatch, connector, mock_zendesk_client.make_request)
     return connector
 
 
@@ -107,7 +111,6 @@ def _run_tickets(
     connector: ZendeskConnector, client: MagicMock, ticket_id: int
 ) -> list[Document | ConnectorFailure]:
     client.make_request.side_effect = [
-        {"records": []},
         {
             "tickets": [_mock_ticket(ticket_id)],
             "end_of_stream": True,

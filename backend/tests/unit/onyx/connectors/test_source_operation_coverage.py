@@ -95,8 +95,7 @@ from onyx.connectors.youtrack.models import (
     YouTrackRole,
     YouTrackUser,
 )
-from onyx.connectors.zendesk.models import ZendeskUser
-from onyx.connectors.zendesk.source_operations import ZendeskPageResponse
+from onyx.connectors.zendesk.models import ZendeskPageResponse, ZendeskUser
 from tests.unit.onyx.connectors.source_operation_harnesses import (
     compute_uncovered_units,
     import_all_source_operation_gateways,

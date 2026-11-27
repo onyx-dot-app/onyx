@@ -31,6 +31,7 @@ from onyx.connectors.zendesk.source_operations import (
     ZENDESK_SUBDOMAIN,
     ZendeskRequestError,
     ZendeskSourceOperations,
+    next_cursor,
     subdomain_from_credential,
 )
 from onyx.file_processing.html_utils import parse_html_page_basic
@@ -56,7 +57,7 @@ def _iterate_articles(
         yield from page.data
         if not page.has_more:
             return
-        after_cursor = page.meta["after_cursor"]
+        after_cursor = next_cursor(page.meta, after_cursor)
 
 
 def _iterate_tickets(
@@ -287,7 +288,11 @@ class ZendeskConnector(
         checkpoint: ZendeskConnectorCheckpoint,
     ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
         if checkpoint.cached_content_tags is None:
-            checkpoint.cached_content_tags = self.ops.list_content_tags()
+            # Tickets have no content tags, and Support-only accounts have no
+            # Help Center to read them from.
+            checkpoint.cached_content_tags = (
+                self.ops.list_content_tags() if self.content_type == "articles" else {}
+            )
             return checkpoint  # save the content tags to the checkpoint
         self.content_tags = checkpoint.cached_content_tags
 

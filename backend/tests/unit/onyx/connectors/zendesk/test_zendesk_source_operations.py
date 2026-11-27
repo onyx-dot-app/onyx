@@ -9,9 +9,11 @@ from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zendesk.source_operations import (
+    ZendeskRequestError,
     ZendeskSourceOperations,
     subdomain_from_credential,
 )
+from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.unit.onyx.connectors.zendesk.utils import (
     CREDENTIALS,
     set_request_function,
@@ -72,11 +74,15 @@ def test_server_errors_are_retried() -> None:
     assert get.call_count == 2
 
 
-def test_anonymous_user_is_a_credential_error() -> None:
-    gateway = _gateway()
-    gateway._request_cache = lambda _endpoint, _params: {"user": {"id": None}}
+def test_anonymous_user_is_a_credential_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = ZendeskConnector()
+    set_request_function(
+        monkeypatch, connector, lambda _endpoint, _params: {"user": {"id": None}}
+    )
     with pytest.raises(CredentialExpiredError):
-        gateway.get_me()
+        connector.ops.get_me()
 
 
 @pytest.mark.parametrize(
@@ -84,7 +90,7 @@ def test_anonymous_user_is_a_credential_error() -> None:
     [("articles", "help_center/articles"), ("tickets", "incremental/tickets.json")],
 )
 def test_validate_connector_settings_probes_the_content_type(
-    content_type: str, endpoint: str
+    monkeypatch: pytest.MonkeyPatch, content_type: str, endpoint: str
 ) -> None:
     make_request = MagicMock(
         return_value={
@@ -96,6 +102,46 @@ def test_validate_connector_settings_probes_the_content_type(
         }
     )
     connector = ZendeskConnector(content_type=content_type)
-    set_request_function(connector, make_request)
+    set_request_function(monkeypatch, connector, make_request)
     connector.validate_connector_settings()
     assert [c.args[0] for c in make_request.call_args_list] == [endpoint]
+
+
+def test_ticket_comments_follow_the_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
+    pages = [
+        {"comments": [{"id": 1}], "meta": {"has_more": True, "after_cursor": "c1"}},
+        {"comments": [{"id": 2}], "meta": {"has_more": False}},
+    ]
+    make_request = MagicMock(side_effect=pages)
+    connector = ZendeskConnector(content_type="tickets")
+    set_request_function(monkeypatch, connector, make_request)
+
+    comments = connector.ops.list_ticket_comments(ticket_id=5)
+
+    assert [comment["id"] for comment in comments] == [1, 2]
+    second_params = make_request.call_args_list[1].args[1]
+    assert second_params["page[after]"] == "c1"
+
+
+def test_a_cursor_that_does_not_advance_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    page = {"comments": [{"id": 1}], "meta": {"has_more": True, "after_cursor": "c1"}}
+    connector = ZendeskConnector(content_type="tickets")
+    set_request_function(monkeypatch, connector, MagicMock(return_value=page))
+
+    with pytest.raises(ZendeskRequestError):
+        connector.ops.list_ticket_comments(ticket_id=5)
+
+
+def test_ticket_indexing_reads_no_content_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Support-only account has no Help Center to read content tags from."""
+    make_request = MagicMock(
+        return_value={"tickets": [], "end_of_stream": True, "end_time": 1}
+    )
+    connector = ZendeskConnector(content_type="tickets")
+    set_request_function(monkeypatch, connector, make_request)
+
+    load_everything_from_checkpoint_connector(connector, 0, 2_000_000_000)
+
+    assert all(
+        c.args[0] == "incremental/tickets.json" for c in make_request.call_args_list
+    )

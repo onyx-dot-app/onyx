@@ -70,6 +70,9 @@ class _ArticlesCheck(CapabilityCheck[ZendeskConnectorConfig]):
             check_id="zendesk_articles",
             display_name="Help Center articles are readable",
             requires_connector_instance=False,
+            # Waits for the content type, so a credential is not failed for
+            # content it will not index.
+            requires_connector_config=True,
             remediation=(
                 "Use a token of a Guide admin or an agent who can read the Help Center."
             ),
@@ -81,27 +84,26 @@ class _ArticlesCheck(CapabilityCheck[ZendeskConnectorConfig]):
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway: ZendeskSourceOperations = gateway_from_context(context)
 
-        def read_first_article() -> bool:
-            """Whether an article's author was read."""
+        def read_first_article() -> str | None:
+            """An advisory when the author read was skipped or failed."""
             gateway.list_content_tags(page_size=PROBE_PAGE_SIZE, max_pages=1)
             page = gateway.get_article_page(start_time=0, page_size=PROBE_PAGE_SIZE)
             author_id = page.data[0].get("author_id") if page.data else None
             if not author_id:
-                return False
-            return gateway.get_user(user_id=author_id) is not None
-
-        if probe(read_first_article, "The token cannot read articles."):
-            return None
-        return CheckOutput(
-            advisories=[
-                CheckAdvisory(
-                    message=(
-                        "No article author could be read, so documents will have "
-                        "no owner. Use a token that can read users."
-                    )
+                return "No article to read, so author access was not checked."
+            if gateway.get_user(user_id=author_id) is None:
+                return (
+                    "The article's author could not be read, so documents will "
+                    "have no owner. Use a token that can read users."
                 )
-            ]
+            return None
+
+        advisory: str | None = probe(
+            read_first_article, "The token cannot read articles."
         )
+        if advisory is None:
+            return None
+        return CheckOutput(advisories=[CheckAdvisory(message=advisory)])
 
 
 class _TicketsCheck(CapabilityCheck[ZendeskConnectorConfig]):
@@ -113,6 +115,7 @@ class _TicketsCheck(CapabilityCheck[ZendeskConnectorConfig]):
             check_id="zendesk_tickets",
             display_name="Tickets and comments are readable",
             requires_connector_instance=False,
+            requires_connector_config=True,
             remediation=(
                 "Use a token of an admin. The ticket export needs admin access, and "
                 "the account needs an active Support product."
