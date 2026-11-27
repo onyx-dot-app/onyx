@@ -38,6 +38,8 @@ from onyx.connectors.microsoft_credential import (
 FAMILY_CREDENTIAL_CODECS: dict[DocumentSource, FamilyCredentialCodec[Any]] = {
     DocumentSource.CONFLUENCE: ConfluenceCredentialCodec(),
     DocumentSource.JIRA: JiraCredentialCodec(),
+    # The same Atlassian account reads service desk requests.
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: JiraCredentialCodec(),
     DocumentSource.GMAIL: GoogleCredentialCodec(),
     DocumentSource.GOOGLE_DRIVE: GoogleCredentialCodec(),
     DocumentSource.SHAREPOINT: MicrosoftCredentialCodec(SHAREPOINT_KEY_PREFIX),

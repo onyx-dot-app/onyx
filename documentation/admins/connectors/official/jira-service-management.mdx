@@ -1,0 +1,92 @@
+---
+title: "Jira Service Management"
+description: "Index requests and comments from a Jira Service Management project"
+---
+
+## How it works
+
+The Jira Service Management connector indexes the requests in one service project, and the comments on those requests.
+
+Onyx checks Jira for new and changed requests every **30** minutes.
+
+| Content | Notes |
+| --- | --- |
+| Requests | Summary, description, request type, and status. |
+| Comments | Public comments and, by default, agent-only comments. |
+| Scope | One service project, set by its project key. |
+| Attachments | Files on a request are not indexed. |
+
+The connector reads the same Jira account a Jira connector uses. On Jira Cloud, sign in with an email and an API token.
+On Jira Data Center, sign in with a personal access token and leave the email empty.
+
+The account must be an agent on the service desk. A customer account only returns the requests that customer can open.
+
+**Include Internal Comments** is on by default. Those comments are part of the request text.
+Anyone who can read the request in Onyx can read them. Turn the option off to index customer-visible comments only.
+Onyx then reindexes the project.
+
+This connector does not copy Jira Service Management permissions.
+Set who can read the requests under **Document Access**.
+
+A request that leaves the service desk leaves the index on the next prune.
+
+## Set up the account
+
+Use a dedicated Jira account. Give it the **Service Desk Team** role on the service project,
+and **Browse Projects** for that project.
+
+### Jira Cloud
+
+<Steps>
+  <Step title="Create an API token">
+    Open [Atlassian API tokens](https://id.atlassian.com/manage-profile/security/api-tokens) and create a token.
+    Copy it. Atlassian shows it only once.
+  </Step>
+
+  <Step title="Use a classic token">
+    Create a classic API token. A scoped token is not used by this connector.
+  </Step>
+</Steps>
+
+### Jira Data Center
+
+Create a personal access token for the agent account. The token needs to read service desk requests, request comments,
+and Jira issues in the project.
+
+## Index the project
+
+<Steps>
+  <Step title="Open the connector">
+    In the Admin Panel, go to **Connectors** and select **Jira Service Management**.
+  </Step>
+
+  <Step title="Enter the site">
+    Enter the Jira site, for example `https://example.atlassian.net`. On Data Center, include the context path.
+  </Step>
+
+  <Step title="Connect the account">
+    Select **Create New** and enter the account. Cloud uses the email and the API token.
+    Data Center uses the personal access token only.
+  </Step>
+
+  <Step title="Enter the project key">
+    Enter the service project key, for example `IT`. Onyx checks that the key is a service desk the account can read.
+  </Step>
+
+  <Step title="Choose the comments">
+    Leave **Include Internal Comments** on to index agent notes. Turn it off to index customer-visible comments only.
+  </Step>
+
+  <Step title="Review the checks">
+    Onyx lists each check on the form. **Create Connector** is enabled after the required checks pass.
+    A failed check names what to fix.
+  </Step>
+</Steps>
+
+## Connection checks
+
+| Check | What it tests |
+| --- | --- |
+| Jira accepts the site and account | The site URL and the token. |
+| The project is a service desk | The project key is a service desk the account can read. |
+| Requests and comments are readable | The account can list requests and read a comment. An empty desk skips the comment read. |

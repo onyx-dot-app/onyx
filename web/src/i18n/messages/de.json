@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Service-Desk-Anfragen"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -3281,6 +3284,25 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Anfragen aus einem Jira Service Management-Projekt indexieren",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site-URL",
+              "placeholder": "https://example.atlassian.net",
+              "description": "Ihre Jira-Site. Bei Data Center den Kontextpfad einschließen."
+            },
+            "project_key": {
+              "label": "Projektschlüssel",
+              "placeholder": "IT",
+              "description": "Der Schlüssel des Serviceprojekts. Das Konto muss Agent an diesem Service Desk sein."
+            },
+            "include_internal_comments": {
+              "label": "Interne Kommentare einschließen",
+              "description": "Agentenkommentare indexieren. Ausschalten, um nur für Kunden sichtbare Kommentare zu behalten. Eine Änderung indexiert das Projekt neu."
             }
           }
         },
