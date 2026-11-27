@@ -278,7 +278,10 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
       id: "sync",
       title: t("columns.sync"),
       width: { weight: 40 },
-      cell: (row) => <MarketplaceSyncStatus marketplace={row} />,
+      // The Attention cards give the reason only for rows the user can manage.
+      cell: (row) => (
+        <MarketplaceSyncStatus marketplace={row} showError={!row.can_manage} />
+      ),
     },
     {
       kind: "data",

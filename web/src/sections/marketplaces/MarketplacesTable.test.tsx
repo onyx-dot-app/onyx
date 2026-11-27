@@ -216,6 +216,28 @@ test("a member sees a company marketplace with no actions", async () => {
   ).not.toBeInTheDocument();
 });
 
+test("a failed marketplace the user cannot manage shows its reason in the table", async () => {
+  const error = "The GitHub connection of admin@example.com is gone.";
+  mockFetch({
+    "/api/marketplaces": {
+      marketplaces: [
+        summaryFixture({
+          scope: "company",
+          can_manage: false,
+          last_error: error,
+        }),
+      ],
+    },
+  });
+  render(<Table />);
+
+  const table = await screen.findByRole("table", { name: "Marketplaces" });
+  expect(within(table).getByText(error)).toBeInTheDocument();
+  expect(
+    screen.queryByText("The last sync of acme/plugins failed")
+  ).not.toBeInTheDocument();
+});
+
 test("Replace login warns when the new login has no GitHub connection", async () => {
   mockFetch({
     "/api/marketplaces": { marketplaces: [summaryFixture()] },

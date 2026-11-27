@@ -248,7 +248,7 @@ its plugins and its sync:
 | Column | What it shows |
 | --- | --- |
 | **Marketplace** | The name, the source as `owner/repo`, with the folder and `@ref` when you set them, and **Personal** or **Company** |
-| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Not synced**, with the time of the last sync or the reason of the failure |
+| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Not synced**, with the time of the last sync. A failed marketplace that you cannot manage also shows the reason of the failure |
 | **Items** | The number of plugins |
 
 Click a row to see the source, the GitHub login, the last commit and each entry with its state.
@@ -269,8 +269,8 @@ One sync of a marketplace runs at a time. A sync applies these changes:
 - An entry that is gone deletes its plugin, with its shares and settings.
 - A blocked or not supported entry keeps its plugin and its versions.
 
-If a sync fails, the section shows the reason above the list. The plugins stay as they are. Fix the cause,
-then click **Sync now**.
+If a sync of a marketplace that you manage fails, the section shows the reason above the list.
+The plugins stay as they are. Fix the cause, then click **Sync now**.
 
 ### Plugins from a marketplace
 
