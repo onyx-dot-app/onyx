@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, computed_field, field_validator
 
+from onyx.configs.constants import MASK_CREDENTIAL_SHORT
 from onyx.db.enums import ActionPolicy, IntegrationAuthMethod, IntegrationAuthMode
 from onyx.db.models import Tool
 from onyx.server.features.integrations.models import CredentialField
@@ -9,21 +10,19 @@ from onyx.server.features.tool.tool_visibility import (
     get_tool_visibility_config,
     is_openapi_tool,
 )
-from onyx.utils.encryption import mask_string
 
 
 def mask_custom_headers(headers: list[Any] | None) -> list[Any] | None:
-    """Mask header values for read paths. Header values commonly carry bearer
-    tokens, so they are masked like every other secret the API returns. Tool
-    execution reads the unmasked values from the db model, not from a snapshot.
-    """
+    """Hide header values on read paths. Members read these snapshots too, so
+    no part of a value shows. Tool execution reads the unmasked values from
+    the db model, not from a snapshot."""
     if not headers:
         return headers
 
     masked: list[Any] = []
     for header in headers:
         if isinstance(header, dict) and isinstance(header.get("value"), str):
-            masked.append({**header, "value": mask_string(header["value"])})
+            masked.append({**header, "value": MASK_CREDENTIAL_SHORT})
         else:
             masked.append(header)
     return masked

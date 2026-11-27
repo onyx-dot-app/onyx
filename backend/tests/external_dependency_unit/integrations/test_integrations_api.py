@@ -1911,6 +1911,9 @@ def test_literal_header_values_are_masked_and_kept_on_save(
     assert view.header_template is None
 
 
+LONG_HEADER_SECRET = "abc{1}-secret-0123456789"
+
+
 def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     db_session: Session, admin: User, created: Created
 ) -> None:
@@ -1943,7 +1946,7 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
         ),
         {
             "integration_id": integration.id,
-            "headers": json.dumps([{"key": "X-Api-Key", "value": "abc{1}-secret"}]),
+            "headers": json.dumps([{"key": "X-Api-Key", "value": LONG_HEADER_SECRET}]),
         },
     )
     db_session.commit()
@@ -1952,7 +1955,8 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     assert fetched.custom_headers is not None
     assert [header["key"] for header in fetched.custom_headers] == ["X-Api-Key"]
     masked = fetched.custom_headers[0]["value"]
-    assert masked != "abc{1}-secret"
+    assert LONG_HEADER_SECRET[:4] not in masked
+    assert LONG_HEADER_SECRET[-4:] not in masked
 
     tool_api.update_custom_tool(
         snapshot.id,
@@ -1963,7 +1967,9 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     db_session.expire_all()
     connection = get_connection(db_session, integration.id, None)
     assert connection is not None
-    assert read_connection_secret(connection).fields == {"X-Api-Key": "abc{1}-secret"}
+    assert read_connection_secret(connection).fields == {
+        "X-Api-Key": LONG_HEADER_SECRET
+    }
 
 
 def test_custom_tool_alias_keeps_a_passthrough_header_with_braces(

@@ -683,7 +683,9 @@ default agent, is Blocked.
    `header_template` only to a manager, and masks each value with no
    placeholder, because the migration put static header secrets there.
    `keep_masked_values` keeps the stored value when a client sends a masked
-   value back.
+   value back. `ToolSnapshot.custom_headers` hides each value completely
+   (`server/features/tool/models.py:mask_custom_headers`), because members read snapshots in
+   agent responses.
 8. `access-grants-default-chat-only` **Integration access gates chat, not
    server grants or plugins.** Chat offers an integration's actions to each
    user who can use the agent and has access to the integration, when the
