@@ -275,9 +275,12 @@ from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+CHAT_DELETE_CLEANUP = "chat-delete-cleanup"
 
 # Largest page a client can ask of `get-chat-session`.
 MAX_CHAT_SESSION_PAGE_SIZE = 200
@@ -804,13 +807,34 @@ def delete_all_chat_sessions(
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
-    delete_chat_artifacts_from_index(artifact_ids)
-    purge_deleted_chat_sessions(user.id, deleted_ids)
+    _after_chats_deleted(user.id, deleted_ids, artifact_ids)
     # Read after the delete commits: a park either commits first or refuses.
     if not HARD_DELETE_CHATS:
         _end_parked_responses(parked_response_ids(db_session, user.id))
     for incognito_id in incognito_session_ids:
         _teardown_incognito_after_delete(incognito_id, user.id, db_session)
+
+
+def _after_chats_deleted(
+    user_id: UUID, session_ids: list[UUID], artifact_ids: list[UUID]
+) -> None:
+    """After the delete of the chats commits: stop each chat's running turn,
+    then delete their artifacts from the search index and purge their
+    sandbox sessions in the background, since each can wait for a remote
+    call. A publish that the stop does not reach in time finds the chat
+    deleted and saves nothing (db/chat.py:_lock_live_chat)."""
+    cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+    for session_id in session_ids:
+        try:
+            stop_current_turn(session_id, cache)
+        except Exception:
+            logger.exception("Could not stop the turn of deleted chat %s", session_id)
+
+    def clean_up() -> None:
+        delete_chat_artifacts_from_index(artifact_ids)
+        purge_deleted_chat_sessions(user_id, session_ids)
+
+    start_thread_with_context(target=clean_up, name=CHAT_DELETE_CLEANUP, daemon=True)
 
 
 def _end_parked_responses(response_ids: list[int]) -> None:
@@ -857,8 +881,7 @@ def delete_chat_session_by_id(
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
-    delete_chat_artifacts_from_index(artifact_ids)
-    purge_deleted_chat_sessions(user_id, [session_id])
+    _after_chats_deleted(user_id, [session_id], artifact_ids)
     # Read after the delete commits: a park either commits first or refuses.
     if not actual_hard_delete:
         _end_parked_responses(parked_response_ids(db_session, user.id, session_id))

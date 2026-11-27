@@ -415,12 +415,16 @@ pending set (`retry_incognito_teardowns`).
 **Deletion and retention.** Soft delete sets `deleted` and ends the chat's
 parked responses, which nothing can decide anymore
 (`server/query_and_chat/chat_backend.py:_end_parked_responses`): their
-requests, checkpoints and program dumps go. After the commit, both delete
-routes call `server/features/build/sandbox/firecracker/purge.py:purge_deleted_chat_sessions`:
-when the user has a sandbox row, it purges each chat's sandbox directory and
-saves. A single delete purges before it returns; delete-all purges in a
-background thread. The purge is best effort: a failure is logged and the
-delete stands. A chat deleted during its first sandbox call can leave its
+requests, checkpoints and program dumps go. A delete marks the chats deleted
+before it reads their artifacts, which locks the chat rows. A publish
+share-locks its chat's row and finds it not deleted (`db/chat.py:_lock_live_chat`),
+so it either commits before the delete reads the artifacts, or waits and
+saves nothing. After the commit, both delete routes stop each chat's running
+turn (`stop_current_turn`, as Stop does), then delete the artifacts from the
+search index and call `server/features/build/sandbox/firecracker/purge.py:purge_deleted_chat_sessions`
+in one background thread (`_after_chats_deleted`): when the user has a
+sandbox row, it purges each chat's sandbox directory and saves. The purge is
+best effort: a failure is logged and the delete stands. A chat deleted during its first sandbox call can leave its
 directory until the VM stops.
 Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs

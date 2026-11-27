@@ -176,6 +176,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.chat_backend import (
+    CHAT_DELETE_CLEANUP,
     decide_approval,
     delete_all_chat_sessions,
     delete_chat_session_by_id,
@@ -2311,7 +2312,7 @@ def _wait_for_purges() -> None:
     _wait_until(
         lambda: (
             not any(
-                thread.name == "fc-session-purge" for thread in threading.enumerate()
+                thread.name == CHAT_DELETE_CLEANUP for thread in threading.enumerate()
             )
         )
     )

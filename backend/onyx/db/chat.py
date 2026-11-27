@@ -33,7 +33,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
-from sqlalchemy.sql.selectable import CTE, LateralFromClause, Select
+from sqlalchemy.sql.selectable import CTE, LateralFromClause, ScalarSelect, Select
 
 from onyx.agents.models import (
     CompactionCheckpoint,
@@ -119,6 +119,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactSort,
     ArtifactTarget,
     ArtifactVersionConflict,
+    ChatDeleted,
     KeptTitle,
     LibraryListFilters,
     ListedArtifact,
@@ -751,7 +752,9 @@ def delete_all_chat_sessions_for_user(
     ]
 
     # Only the sessions read above: one that a concurrent request creates now
-    # stays, instead of going without its cleanup.
+    # stays, instead of going without its cleanup. Marked deleted first, as
+    # in delete_chat_session.
+    _mark_chats_deleted__no_commit(db_session, chat_session_ids)
     if hard_delete:
         artifact_ids: list[UUID] = []
         for chat_session_id in chat_session_ids:
@@ -767,11 +770,6 @@ def delete_all_chat_sessions_for_user(
     else:
         artifact_ids = stop_indexing_chat_artifacts__no_commit(
             db_session, chat_session_ids
-        )
-        db_session.execute(
-            update(ChatSession)
-            .where(ChatSession.id.in_(chat_session_ids))
-            .values(deleted=True)
         )
 
     db_session.commit()
@@ -797,20 +795,31 @@ def delete_chat_session(
     if chat_session.deleted and not include_deleted:
         raise ValueError("Cannot delete an already deleted chat session")
 
+    # First, so a concurrent publish into the chat either commits before the
+    # artifacts are read below or saves nothing (_lock_live_chat).
+    _mark_chats_deleted__no_commit(db_session, [chat_session_id])
     artifact_ids = stop_indexing_chat_artifacts__no_commit(
         db_session, [chat_session_id]
     )
     if hard_delete:
         delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session_id))
-    else:
-        chat_session = get_chat_session_by_id(
-            chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
-        )
-        chat_session.deleted = True
 
     db_session.commit()
     return artifact_ids
+
+
+def _mark_chats_deleted__no_commit(
+    db_session: Session, chat_session_ids: Sequence[UUID]
+) -> None:
+    """Mark the chats deleted, which locks their rows until the commit."""
+    if chat_session_ids:
+        db_session.execute(
+            update(ChatSession)
+            .where(ChatSession.id.in_(chat_session_ids))
+            .values(deleted=True)
+            .execution_options(synchronize_session=False)
+        )
 
 
 def stop_indexing_chat_artifacts__no_commit(
@@ -1198,6 +1207,24 @@ _ARTIFACT_CHANGED_AT = func.greatest(ChatArtifact.updated_at, func.clock_timesta
 _INDEX_PENDING = {"index_status": ChatArtifactIndexStatus.PENDING, "index_attempts": 0}
 
 
+def _lock_live_chat(
+    db_session: Session, chat_session_id: UUID | ScalarSelect[UUID]
+) -> bool:
+    """Share-lock the row of the chat `chat_session_id` until the commit,
+    and return whether the chat exists and is not deleted. A chat delete
+    locks the chat's row before it reads the chat's artifacts, so a publish
+    either commits before that read, or waits and then finds the chat
+    deleted."""
+    return (
+        db_session.scalar(
+            select(ChatSession.id)
+            .where(ChatSession.id == chat_session_id, ChatSession.deleted.is_(False))
+            .with_for_update(read=True)
+        )
+        is not None
+    )
+
+
 def _delete_versionless_artifacts(
     db_session: Session, *where: ColumnElement[bool]
 ) -> list[UUID]:
@@ -1303,6 +1330,8 @@ def save_chat_artifact(
         # statements read the versions they committed.
         locked: Row[tuple[UUID, UUID, str, str | None]] | None
         if isinstance(target, ArtifactAtPath):
+            if not _lock_live_chat(db_session, target.chat_session_id):
+                raise ChatDeleted(target.chat_session_id)
             # A row without a version is what a delete that stopped after its
             # files leaves (delete_chat_artifact). The publish takes a new
             # artifact ID, so no link of the deleted artifact opens the new
@@ -1335,6 +1364,13 @@ def save_chat_artifact(
                 )
             ).one()
         else:
+            if not _lock_live_chat(
+                db_session,
+                select(ChatArtifact.chat_session_id)
+                .where(ChatArtifact.id == target.artifact_id)
+                .scalar_subquery(),
+            ):
+                raise ArtifactNotFound(target.artifact_id)
             locked = db_session.execute(
                 update(ChatArtifact)
                 .where(

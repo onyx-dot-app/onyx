@@ -3,6 +3,7 @@ Postgres, the file store and OpenSearch, with in-process embeddings: the owner f
 them and no one else does, knowledge-scoped searches leave them out, and
 every delete of the file, its chat or its owner removes them."""
 
+import threading
 from uuid import UUID, uuid4
 
 import pytest
@@ -29,6 +30,7 @@ from onyx.document_index.factory import (
 )
 from onyx.indexing.chat_artifact_index import delete_chat_artifacts_from_index
 from onyx.server.query_and_chat.chat_backend import (
+    CHAT_DELETE_CLEANUP,
     delete_all_chat_sessions,
     delete_chat_session_by_id,
 )
@@ -177,6 +179,9 @@ def test_a_deleted_chat_takes_its_files_out_of_search(
                 db_session=db_session,
             )
 
+        for thread in threading.enumerate():
+            if thread.name == CHAT_DELETE_CLEANUP:
+                thread.join(timeout=30)
         assert not _found(db_session, owner, word, document_id)
         db_session.expire_all()
         artifact = db_session.get(ChatArtifact, artifact_id)
