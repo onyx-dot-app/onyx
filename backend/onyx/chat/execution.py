@@ -380,7 +380,7 @@ class ChatTurnExecution:
             group_id=str(self.setup.chat_session_id),
             metadata=ChatTraceMetadata(
                 chat_session_id=str(self.setup.chat_session_id),
-                user_id=self.setup.user_identity.user_id,
+                user_id=str(self.user.id),
             ).model_dump(),
         ):
             try:
@@ -966,7 +966,7 @@ def host_agent_work(
         group_id=str(setup.chat_session_id),
         metadata=ChatTraceMetadata(
             chat_session_id=str(setup.chat_session_id),
-            user_id=setup.user_identity.user_id,
+            user_id=str(user.id),
         ).model_dump(),
     ):
         try:
