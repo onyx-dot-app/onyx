@@ -119,6 +119,7 @@ covers new files that match it.
 | `backend/onyx/connectors/microsoft_utils/`, `backend/onyx/connectors/sharepoint/`, `backend/onyx/connectors/onedrive/` | microsoft-graph |
 | `backend/onyx/connectors/outlook/` | outlook |
 | `backend/onyx/connectors/teams/` | teams |
+| `backend/onyx/connectors/smb/` | smb |
 | `backend/onyx/indexing/` | indexing-pipeline |
 | `backend/onyx/indexing/adapters/user_file_indexing_adapter.py` | file-store-and-user-files, indexing-pipeline |
 | `backend/onyx/indexing/adapters/chat_artifact_indexing_adapter.py`, `backend/onyx/indexing/chat_artifact_index.py` | file-store-and-user-files, indexing-pipeline |

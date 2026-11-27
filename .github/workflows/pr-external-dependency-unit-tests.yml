@@ -256,6 +256,17 @@ jobs:
           curl -sf "$ready" >/dev/null \
             || { echo "mock OIDC server never became ready"; exit 1; }
 
+      # A file server and an Active Directory domain for the Windows file
+      # share connector tests. Fail if it never becomes ready, otherwise the
+      # tests would fail for a reason that is not theirs.
+      - name: Start Samba domain controller
+        if: matrix.test-dir == 'connectors'
+        working-directory: backend/tests/external_dependency_unit/connectors/smb
+        run: |
+          echo "127.0.0.1 dc1.onyx.test" | sudo tee -a /etc/hosts
+          mkdir -p .certs
+          docker compose up -d --build --wait --wait-timeout 300
+
       - name: Run Tests for ${{ matrix.test-dir }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         env:
