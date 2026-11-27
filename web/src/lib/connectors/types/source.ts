@@ -70,6 +70,7 @@ export enum ValidSources {
   Lumapps = "lumapps",
   YouTrack = "youtrack",
   AzureDatalake = "azure_datalake",
+  Smb = "smb",
   Canvas = "canvas",
   Zoom = "zoom",
 
@@ -157,6 +158,7 @@ export interface SourceMetadata {
   oauthSupported?: boolean;
   federated?: boolean;
   federatedTooltip?: string;
+  selfHostedOnly?: boolean;
   uniqueKey?: string;
   // For federated connectors, this stores the base source type for the icon
   baseSourceType?: ValidSources;

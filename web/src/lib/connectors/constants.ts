@@ -23,6 +23,7 @@ import {
   SvgDropbox,
   SvgDrupal,
   SvgEgnyte,
+  SvgFileShare,
   SvgFireflies,
   SvgFreshdesk,
   SvgGitBook,
@@ -148,6 +149,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Lumapps]: "sources.lumapps.description",
   [ValidSources.YouTrack]: "sources.youtrack.description",
   [ValidSources.AzureDatalake]: "sources.azureDatalake.description",
+  [ValidSources.Smb]: "sources.smb.description",
   [ValidSources.Canvas]: "sources.canvas.description",
   [ValidSources.CraftFile]: "sources.craftFile.description",
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",
@@ -168,6 +170,9 @@ export interface PartialSourceMetadata {
   oauthSupported?: boolean;
   federated?: boolean;
   federatedTooltip?: string;
+  // Onyx Cloud does not offer the source, e.g. because it reaches a server on
+  // the customer's private network.
+  selfHostedOnly?: boolean;
   // federated connectors store the base source type if it's a source
   // that has both indexed connectors and federated connectors
   baseSourceType?: ValidSources;
@@ -336,6 +341,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Azure Data Lake Storage",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/azure_datalake`,
+  },
+  smb: {
+    icon: SvgFileShare,
+    displayName: "Windows File Share (SMB)",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/smb`,
+    selfHostedOnly: true,
   },
   google_cloud_storage: {
     icon: SvgGoogleCloud,

@@ -472,6 +472,18 @@ export const CREDENTIAL_SPECS = {
     },
   }),
   azure_datalake: AZURE_DATALAKE_SPEC,
+  // The backend defaults `authentication_method` to NTLM, its one method.
+  smb: defineCredentialSpec({
+    brandName: "Windows File Share",
+    fields: {
+      smb_domain: text("accountDomain", {
+        optional: true,
+        hint: { key: "smbDomain" },
+      }),
+      smb_username: text("username"),
+      smb_password: secret("password"),
+    },
+  }),
   zendesk: defineCredentialSpec({
     brandName: "Zendesk",
     fields: {

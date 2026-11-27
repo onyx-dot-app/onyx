@@ -533,6 +533,9 @@
         "azureDatalake": {
           "description": "ملفات في حاويات Azure Data Lake Storage"
         },
+        "smb": {
+          "description": "ملفات على مشاركات ملفات Windows"
+        },
         "r2": {
           "description": "حاويات التخزين السحابي"
         },
@@ -3714,6 +3717,39 @@
             }
           }
         },
+        "smb": {
+          "description": "تكوين موصل مشاركة ملفات Windows (SMB)",
+          "fields": {
+            "host": {
+              "label": "خادم الملفات",
+              "description": "اسم DNS أو عنوان IPv4 لخادم الملفات، مثل fs01.corp.example.com. لا تُضف اسم المشاركة."
+            },
+            "share": {
+              "label": "اسم المشاركة",
+              "description": "اسم المشاركة فقط، مثل `Plans` للمسار `\\\\server\\Plans`."
+            },
+            "path_prefix": {
+              "label": "بادئة المسار",
+              "description": "مجلد في المشاركة، مثل Projects/2026. اتركه فارغًا لفهرسة المشاركة بأكملها."
+            },
+            "excluded_paths": {
+              "label": "المجلدات المستبعدة",
+              "description": "المجلدات المراد تخطيها، كمسارات من جذر المشاركة، مثل Archive/2019. لا يفهرس Onyx هذه المجلدات ولا المجلدات التي بداخلها."
+            },
+            "require_encryption": {
+              "label": "طلب التشفير",
+              "description": "أوقفه فقط لخادم قديم لا يدعم تشفير SMB 3. يبقى التوقيع مطلوبًا."
+            },
+            "index_offline_files": {
+              "label": "فهرسة الملفات غير المتصلة",
+              "description": "يقرأ أيضًا الملفات الموجودة في التخزين المتدرج أو تخزين الأرشيف. كل قراءة تسترجع الملف من ذلك التخزين."
+            },
+            "port": {
+              "label": "المنفذ",
+              "description": "منفذ SMB لخادم الملفات. القيمة الافتراضية هي 445."
+            }
+          }
+        },
         "r2": {
           "description": "تهيئة موصل R2",
           "fields": {
@@ -4350,6 +4386,7 @@
         "password": "كلمة مرور {source}",
         "subdomain": "النطاق الفرعي لـ {source}",
         "domain": "نطاق {source}",
+        "accountDomain": "نطاق الحساب",
         "enterpriseId": "معرّف مؤسسة {source}",
         "teamId": "معرّف فريق {source}",
         "applicationId": "معرّف تطبيق {source}",
@@ -4383,6 +4420,7 @@
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "youtrackToken": "رمز دائم لمستخدم YouTrack يمكنه قراءة كل المشاريع المراد فهرستها. أنشئه في ملفك الشخصي في YouTrack ضمن أمان الحساب.",
         "azureDatalakeAccountKey": "في مدخل Azure، افتح حساب التخزين، ثم الأمان + الشبكات، ثم مفاتيح الوصول.",
+        "smbDomain": "اختياري. اسم NetBIOS أو اسم DNS لنطاق Active Directory. اتركه فارغًا لحساب محلي على خادم الملفات.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",

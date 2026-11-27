@@ -12,6 +12,7 @@ import type {
   ConnectorAccessFormValues,
   ConnectorGroupRestrictionFormValues,
 } from "@/lib/connectors/accessType";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { connectorConfigs } from "@/lib/connectors/connectors";
 import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
@@ -537,6 +538,14 @@ export function getSourceMetadata(sourceType: ValidSources): SourceMetadata {
   return fillSourceMetadata(partialMetadata, sourceType);
 }
 
+/** False on Onyx Cloud for a source that only a self-hosted Onyx offers. */
+export function isSourceAvailable(sourceType: ValidSources): boolean {
+  return !(
+    NEXT_PUBLIC_CLOUD_ENABLED &&
+    SOURCE_METADATA_MAP[sourceType]?.selfHostedOnly === true
+  );
+}
+
 export function listSourceMetadata(): SourceMetadata[] {
   /* This gives back all the viewable / common sources, primarily for
   display in the Add Connector page */
@@ -553,7 +562,8 @@ export function listSourceMetadata(): SourceMetadata[] {
         // chat_artifact holds files published in chat, which have no connector
         source !== "chat_artifact" &&
         // craft_file backs the Craft user library, which has its own upload UI
-        source !== "craft_file"
+        source !== "craft_file" &&
+        isSourceAvailable(source as ValidSources)
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);

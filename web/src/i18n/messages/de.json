@@ -533,6 +533,9 @@
         "azureDatalake": {
           "description": "Dateien in Azure Data Lake Storage-Containern"
         },
+        "smb": {
+          "description": "Dateien auf Windows-Dateifreigaben"
+        },
         "r2": {
           "description": "Cloud-Storage-Buckets"
         },
@@ -3714,6 +3717,39 @@
             }
           }
         },
+        "smb": {
+          "description": "Connector für Windows-Dateifreigaben (SMB) konfigurieren",
+          "fields": {
+            "host": {
+              "label": "Dateiserver",
+              "description": "Der DNS-Name oder die IPv4-Adresse des Dateiservers, z. B. fs01.corp.example.com. Fügen Sie den Freigabenamen nicht hinzu."
+            },
+            "share": {
+              "label": "Freigabename",
+              "description": "Nur der Name der Freigabe, z. B. `Plans` für `\\\\server\\Plans`."
+            },
+            "path_prefix": {
+              "label": "Pfadpräfix",
+              "description": "Ein Ordner in der Freigabe, z. B. Projects/2026. Leer lassen, um die ganze Freigabe zu indizieren."
+            },
+            "excluded_paths": {
+              "label": "Ausgeschlossene Ordner",
+              "description": "Ordner, die übersprungen werden, als Pfade ab dem Stamm der Freigabe, z. B. Archive/2019. Onyx indiziert weder diese Ordner noch ihre Unterordner."
+            },
+            "require_encryption": {
+              "label": "Verschlüsselung erzwingen",
+              "description": "Nur für einen alten Server ohne SMB-3-Verschlüsselung ausschalten. Die Signierung bleibt erforderlich."
+            },
+            "index_offline_files": {
+              "label": "Offlinedateien indizieren",
+              "description": "Liest auch Dateien im mehrstufigen Speicher oder im Archivspeicher. Jeder Lesevorgang ruft die Datei aus diesem Speicher zurück."
+            },
+            "port": {
+              "label": "Port",
+              "description": "Der SMB-Port des Dateiservers. Der Standardwert ist 445."
+            }
+          }
+        },
         "r2": {
           "description": "R2-Konnektor konfigurieren",
           "fields": {
@@ -4350,6 +4386,7 @@
         "password": "{source}-Passwort",
         "subdomain": "{source}-Subdomain",
         "domain": "{source}-Domain",
+        "accountDomain": "Kontodomäne",
         "enterpriseId": "{source}-Enterprise-ID",
         "teamId": "{source}-Team-ID",
         "applicationId": "{source}-Anwendungs-ID",
@@ -4383,6 +4420,7 @@
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indexiert wird.",
         "youtrackToken": "Ein permanentes Token eines YouTrack-Benutzers, der alle zu indexierenden Projekte lesen kann. Erstellen Sie es in Ihrem YouTrack-Profil unter Kontosicherheit.",
         "azureDatalakeAccountKey": "Öffnen Sie im Azure-Portal das Speicherkonto, dann Sicherheit + Netzwerkbetrieb, dann Zugriffsschlüssel.",
+        "smbDomain": "Optional. Der NetBIOS- oder DNS-Name der Active Directory-Domäne. Leer lassen für ein lokales Konto des Dateiservers.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder Ihre selbst gehostete URL.",
         "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",

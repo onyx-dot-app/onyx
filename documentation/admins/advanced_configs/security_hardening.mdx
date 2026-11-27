@@ -215,8 +215,8 @@ because one process serves many workspaces.
 Self-hosted only. How strictly Onyx validates outbound HTTP requests against private and internal IP ranges,
 to block server-side request forgery.
 
-- **Validate All Requests** (default): every outbound path, including the Web and GitHub connectors,
-  refuses private and internal IPs.
+- **Validate All Requests** (default): every outbound path, including the Web, GitHub,
+  and Windows File Share (SMB) connectors, refuses private and internal IPs.
 - **Validate LLM Requests**: URL fetches started by the LLM (`open_url`, MCP, OAuth) are validated.
   Connectors an admin configured can still reach private IPs.
 - **Allow Private Network**: like Validate LLM Requests, and admin-configured MCP and OAuth endpoints, OpenAPI

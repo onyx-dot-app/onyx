@@ -533,6 +533,9 @@
         "azureDatalake": {
           "description": "Azure Data Lake Storage 容器中的文件"
         },
+        "smb": {
+          "description": "Windows 文件共享中的文件"
+        },
         "r2": {
           "description": "云存储桶"
         },
@@ -3714,6 +3717,39 @@
             }
           }
         },
+        "smb": {
+          "description": "配置 Windows 文件共享 (SMB) 连接器",
+          "fields": {
+            "host": {
+              "label": "文件服务器",
+              "description": "文件服务器的 DNS 名称或 IPv4 地址，例如 fs01.corp.example.com。不要包含共享名称。"
+            },
+            "share": {
+              "label": "共享名称",
+              "description": "仅填写共享名称，例如 `\\\\server\\Plans` 对应 `Plans`。"
+            },
+            "path_prefix": {
+              "label": "路径前缀",
+              "description": "共享中的文件夹，例如 Projects/2026。留空则为整个共享编制索引。"
+            },
+            "excluded_paths": {
+              "label": "排除的文件夹",
+              "description": "要跳过的文件夹，以从共享根目录开始的路径填写，例如 Archive/2019。Onyx 不会为这些文件夹及其下级文件夹编制索引。"
+            },
+            "require_encryption": {
+              "label": "要求加密",
+              "description": "仅当旧服务器不支持 SMB 3 加密时才关闭。签名仍为必需。"
+            },
+            "index_offline_files": {
+              "label": "索引脱机文件",
+              "description": "同时读取分层存储或归档存储中的文件。每次读取都会从该存储中召回文件。"
+            },
+            "port": {
+              "label": "端口",
+              "description": "文件服务器的 SMB 端口。默认值为 445。"
+            }
+          }
+        },
         "r2": {
           "description": "配置 R2 连接器",
           "fields": {
@@ -4350,6 +4386,7 @@
         "password": "{source} 密码",
         "subdomain": "{source} 子域名",
         "domain": "{source} 域名",
+        "accountDomain": "帐户域",
         "enterpriseId": "{source} 企业 ID",
         "teamId": "{source} 团队 ID",
         "applicationId": "{source} 应用 ID",
@@ -4383,6 +4420,7 @@
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "youtrackToken": "可读取所有待索引项目的 YouTrack 用户的永久令牌。请在 YouTrack 个人资料的“账户安全”中创建。",
         "azureDatalakeAccountKey": "在 Azure 门户中打开存储帐户,然后打开“安全性 + 网络”,再打开“访问密钥”。",
+        "smbDomain": "可选。Active Directory 域的 NetBIOS 名称或 DNS 名称。如果是文件服务器的本地帐户，请留空。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",

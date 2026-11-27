@@ -1904,6 +1904,66 @@ export const connectorConfigs: Record<
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  smb: {
+    description: "connectors.smb.description",
+    values: [
+      {
+        type: "text",
+        label: "connectors.smb.fields.host.label",
+        name: "host",
+        description: "connectors.smb.fields.host.description",
+        optional: false,
+      },
+      {
+        type: "text",
+        label: "connectors.smb.fields.share.label",
+        name: "share",
+        description: "connectors.smb.fields.share.description",
+        optional: false,
+      },
+      {
+        type: "text",
+        label: "connectors.smb.fields.path_prefix.label",
+        name: "path_prefix",
+        description: "connectors.smb.fields.path_prefix.description",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "connectors.smb.fields.excluded_paths.label",
+        name: "excluded_paths",
+        description: "connectors.smb.fields.excluded_paths.description",
+        optional: true,
+        default: [],
+      },
+      {
+        type: "checkbox",
+        label: "connectors.smb.fields.require_encryption.label",
+        name: "require_encryption",
+        description: "connectors.smb.fields.require_encryption.description",
+        optional: true,
+        default: true,
+      },
+      {
+        type: "checkbox",
+        label: "connectors.smb.fields.index_offline_files.label",
+        name: "index_offline_files",
+        description: "connectors.smb.fields.index_offline_files.description",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "number",
+        label: "connectors.smb.fields.port.label",
+        name: "port",
+        description: "connectors.smb.fields.port.description",
+        optional: true,
+        default: 445,
+      },
+    ],
+  },
   r2: {
     description: "connectors.r2.description",
     values: [

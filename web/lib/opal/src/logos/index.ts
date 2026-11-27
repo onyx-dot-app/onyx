@@ -28,6 +28,7 @@ export { default as SvgEgnyte } from "@opal/logos/egnyte";
 export { default as SvgElevenLabs } from "@opal/logos/elevenlabs";
 export { default as SvgExa } from "@opal/logos/exa";
 export { default as SvgFigma } from "@opal/logos/figma";
+export { default as SvgFileShare } from "@opal/logos/file-share";
 export { default as SvgFirecrawl } from "@opal/logos/firecrawl";
 export { default as SvgFireflies } from "@opal/logos/fireflies";
 export { default as SvgFreshdesk } from "@opal/logos/freshdesk";
