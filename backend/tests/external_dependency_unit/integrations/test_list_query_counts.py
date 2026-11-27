@@ -214,9 +214,12 @@ def test_persona_detail_batches_openapi_snapshots(
                     )
                 )
                 db_session.flush()
-                expected[tool.id] = tool_api.openapi_tool_snapshot(
-                    tool, integration, db_session
-                ).model_dump()
+                # An agent response carries no header values.
+                expected[tool.id] = (
+                    tool_api.openapi_tool_snapshot(tool, integration, db_session)
+                    .model_copy(update={"custom_headers": None})
+                    .model_dump()
+                )
             db_session.commit()
 
             def read(expected_size: int = size) -> None:

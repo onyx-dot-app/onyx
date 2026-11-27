@@ -450,9 +450,9 @@ repos:
           )$
       - id: bun-install
         name: bun install
-        description: "Automatically run 'bun install' after a checkout, pull or rebase"
+        description: "Install locked dependencies after a checkout, pull or rebase"
         language: system
-        entry: bash -c 'cd web && bun install'
+        entry: bash -c 'cd web && bun install --frozen-lockfile --prefer-offline'
         pass_filenames: false
         files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
         stages: [post-checkout, post-merge, post-rewrite]
@@ -496,9 +496,9 @@ repos:
 
       - id: root-bun-install
         name: root bun install
-        description: "Automatically run 'bun install' at the repo root after a checkout, pull or rebase"
+        description: "Install locked dependencies at the repo root after a checkout, pull or rebase"
         language: system
-        entry: bun install
+        entry: bun install --frozen-lockfile --prefer-offline
         pass_filenames: false
         files: ^(package\.json|bun\.lock|(widget|examples/widget)/package\.json)$
         stages: [post-checkout, post-merge, post-rewrite]
@@ -582,9 +582,9 @@ repos:
       # absent in CI (the auto-install hook only fires on post-checkout/merge/rewrite).
       - id: mobile-bun-install
         name: mobile bun install
-        description: "Automatically run 'bun install' in mobile/ after a checkout, pull or rebase"
+        description: "Install locked dependencies in mobile/ after a checkout, pull or rebase"
         language: system
-        entry: bash -c 'cd mobile && bun install'
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile --prefer-offline'
         pass_filenames: false
         files: ^mobile/(package\.json|bun\.lock)$
         stages: [post-checkout, post-merge, post-rewrite]

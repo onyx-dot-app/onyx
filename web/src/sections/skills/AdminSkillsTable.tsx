@@ -15,6 +15,7 @@ import {
   useInstallationPolicyCopy,
   type SkillEnablement,
 } from "@/lib/skills/hooks";
+import useScreenSize from "@/hooks/useScreenSize";
 import { canShareSkill, hasUnpublishedChanges } from "@/lib/skills/sharing";
 import type { CustomSkill } from "@/lib/skills/types";
 import { skillIcon } from "@/sections/customize/skillIcon";
@@ -52,6 +53,7 @@ export default function AdminSkillsTable({
   const cardCopy = useTranslations("cards");
   const format = useFormatter();
   const policyCopy = useInstallationPolicyCopy();
+  const { isMobile } = useScreenSize();
 
   const columns: TableColumn<CustomSkill>[] = [
     {
@@ -238,12 +240,18 @@ export default function AdminSkillsTable({
       ),
     },
   ];
+  // A phone has no room for the detail columns: the name, switch and menu.
+  const phoneColumns = columns
+    .filter((column) => column.kind !== "display" || column.id === "enabled")
+    .map((column) =>
+      column.kind === "data" ? { ...column, weight: 100 } : column
+    );
 
   return (
     <Table
       label={label ?? t("label")}
       items={skills}
-      columns={columns}
+      columns={isMobile ? phoneColumns : columns}
       getRowId={(skill) => skill.id}
       pageSize={false}
       selectionBehavior="multi-select"

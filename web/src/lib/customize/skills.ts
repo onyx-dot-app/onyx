@@ -16,8 +16,8 @@ export type GroupedSkills = Record<SkillGroup, Skill[]>;
 
 export interface SkillListOptions {
   userId: string | null;
-  /** Built-in skills need the Craft sandbox, as `list_chat_skills` says. */
-  craftEnabled: boolean;
+  /** The built-ins that chat offers (`useChatBuiltInSkillIds`). */
+  chatBuiltInIds: ReadonlySet<string>;
   query: string;
   status: SkillStatusFilter;
   locale: string;
@@ -31,10 +31,10 @@ export function skillGroup(skill: Skill, userId: string | null): SkillGroup {
   return "shared";
 }
 
-function visible(skill: Skill, craftEnabled: boolean): boolean {
+function visible(skill: Skill, chatBuiltInIds: ReadonlySet<string>): boolean {
   return skill.source === "custom"
     ? skill.member_visible
-    : craftEnabled && skill.is_available !== null;
+    : chatBuiltInIds.has(skill.id);
 }
 
 function matches(skill: Skill, options: SkillListOptions): boolean {
@@ -58,10 +58,10 @@ function compare(a: Skill, b: Skill, locale: string): number {
 
 export function visibleSkills(
   list: SkillsList,
-  craftEnabled: boolean
+  chatBuiltInIds: ReadonlySet<string>
 ): Skill[] {
   return [...list.customs, ...list.builtins].filter((skill) =>
-    visible(skill, craftEnabled)
+    visible(skill, chatBuiltInIds)
   );
 }
 
@@ -76,7 +76,7 @@ export function groupSkills(
     shared: [],
     builtin: [],
   };
-  for (const skill of visibleSkills(list, options.craftEnabled)) {
+  for (const skill of visibleSkills(list, options.chatBuiltInIds)) {
     if (matches(skill, options))
       groups[skillGroup(skill, options.userId)].push(skill);
   }
