@@ -65,7 +65,6 @@ def open_tool_approval(
     details: ToolApprovalDetails,
     arguments: dict[str, JsonValue],
     scope: ToolApprovalScope,
-    signed_out: bool,
 ) -> PendingToolInput | ToolResult | None:
     """A request for the call to wait for, an error result for a call that
     cannot run or wait, or None when a session grant approves the action.
@@ -92,13 +91,6 @@ def open_tool_approval(
             ):
                 return None
             return _disabled_result(tool_name)
-        if signed_out:
-            # An anonymous user cannot decide.
-            return ToolResult(
-                content=f"The {tool_name} call needs the user's approval, and the "
-                "user must sign in to Onyx to approve it, so it did not run.",
-                is_error=True,
-            )
         approval_id = create_approval_request__no_commit(
             db_session,
             chat_session_id=chat_session_id,

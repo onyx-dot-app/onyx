@@ -12264,6 +12264,9 @@
         },
         "timedOut": {
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
+        },
+        "approvalExpired": {
+          "text": "L’exécution planifiée s’est arrêtée, car personne n’a répondu à temps à sa demande d’approbation."
         }
       },
       "callout": {

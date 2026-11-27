@@ -63,8 +63,8 @@
   and a run of the Discord bot's service key have no approver, so an action
   that is still Ask is not offered. Evals run Ask actions with no question.
   Usage-only incognito
-  chats and anonymous users cannot wait: an Ask call gives the model an error
-  that names the cause. Agent runs, foreground or background, ask and park as
+  chats and anonymous users cannot wait, so they also have no approver and an
+  Ask action is not offered. Agent runs, foreground or background, ask and park as
   the root does
   ([[#chat-approval-needs-waiting-client]]). The upgrade
   migration (`backend/alembic/versions/7c00f53ab75f_chat_tool_approvals.py`)
@@ -514,7 +514,6 @@ agents/tool_execution.py:ToolBatch.decide_call   (direct calls, and program call
         (default: the tool's display name and the call's arguments)
      -> chat/tool_approvals.py:open_tool_approval
         session grant (action_now_blocked is false) -> run
-        signed out -> error result
         else ApprovalRequest row (headline, payload)
           -> PendingToolInput(display_name, display_arguments)
      the runtime marks the request PendingToolInput.approval
@@ -756,10 +755,11 @@ default agent, is Blocked.
 15. `chat-approval-needs-waiting-client` **Every client handles approvals;
     any run of a signed-in owner's chat can wait.**
     `chat/run_store.py:ChatRunStore.request_approval` opens the request for
-    the root run and for agent runs alike; for an anonymous user,
-    `chat/tool_approvals.py:open_tool_approval` (`signed_out`) returns the
-    call's error result instead. A `USAGE_ONLY` incognito turn has no run
-    store, so the runtime's own error applies. Nothing about approvals goes
+    the root run and for agent runs alike. An anonymous user and a
+    `USAGE_ONLY` incognito turn (no run store) cannot wait:
+    `chat/process_message.py:prepare_chat_turn` sets `NO_APPROVER`, so no Ask
+    action is built. The runtime's "this run cannot ask" error stays as a
+    safety net. Nothing about approvals goes
     into the system prompt or tool descriptions. The root agent's question
     tool ([[tools-framework]]) asks the user where an approval can wait: a
     signed-in user's single-model turn that keeps content, asks for approval

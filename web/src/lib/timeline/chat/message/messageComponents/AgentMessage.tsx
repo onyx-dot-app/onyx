@@ -553,6 +553,17 @@ const AgentMessage = React.memo(function AgentMessage({
         ),
       });
     }
+    if (stopPacketSeen && stopReason === StopReason.APPROVAL_EXPIRED) {
+      lines.push({
+        kind: "text",
+        key: "approval-expired",
+        node: (
+          <Text as="p" font="secondary-body" color="text-04">
+            {t("agentMessage.approvalExpired.text")}
+          </Text>
+        ),
+      });
+    }
     return lines;
   };
 

@@ -21,7 +21,7 @@ from uuid import UUID
 from celery import Task, shared_task
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import RunStatus
+from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.run_store import (
@@ -120,6 +120,17 @@ def _sync_chat_runs(db_session: Session, tenant_id: str, now: datetime) -> None:
             task_logger.exception("Error syncing scheduled run %s", run.id)
 
 
+_EXPIRED_APPROVAL_MESSAGES = {
+    ScheduledTaskErrorClass.SUPERSEDED_BY_NEXT_FIRE: (
+        "The next scheduled run started before anyone answered the approval "
+        "request, so this run stopped."
+    ),
+    ScheduledTaskErrorClass.APPROVAL_TIMEOUT: (
+        "Nobody answered the approval request in time, so this run stopped."
+    ),
+}
+
+
 def _cancel_parked_runs(
     db_session: Session,
     tenant_id: str,
@@ -137,7 +148,13 @@ def _cancel_parked_runs(
             else None
         )
         if response is not None and cancel_parked_response(
-            cache, tenant_id, response.id
+            cache,
+            tenant_id,
+            response.id,
+            RunFailure(
+                kind=RunFailureKind.APPROVAL_EXPIRED,
+                message=_EXPIRED_APPROVAL_MESSAGES[error_class],
+            ),
         ):
             mark_run_status(
                 db_session=db_session,

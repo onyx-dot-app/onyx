@@ -35,7 +35,10 @@ from onyx.db.models import (
     ScheduledTaskRun,
     User,
 )
-from onyx.db.notification import create_notification
+from onyx.db.notification import (
+    create_notification,
+    dismiss_user_notifications_with_value,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.craft import replace_task_integrations__no_commit
@@ -420,6 +423,18 @@ def mark_run_status(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
     if status.has_results() and run.status != status:
         run.version += 1
+    if (
+        run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
+        and status != ScheduledTaskRunStatus.AWAITING_APPROVAL
+    ):
+        # The run no longer waits, so its approval notification is stale.
+        dismiss_user_notifications_with_value(
+            user_id=run.task.user_id,
+            notif_type=NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL,
+            key="run_id",
+            value=str(run.id),
+            db_session=db_session,
+        )
     run.status = status
     if chat_session_id is not None:
         run.chat_session_id = chat_session_id
