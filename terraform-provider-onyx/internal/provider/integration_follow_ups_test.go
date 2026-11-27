@@ -17,6 +17,11 @@ import (
 // Onyx created turned on, and returns the requests in order.
 func followUpCalls(t *testing.T, enabled bool) []string {
 	t.Helper()
+	return followUpCallsWith(t, enabled, map[string]string{"api_key": "k"}, false)
+}
+
+func followUpCallsWith(t *testing.T, enabled bool, credentials map[string]string, serverChanged bool) []string {
+	t.Helper()
 	var calls []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
@@ -33,7 +38,7 @@ func followUpCalls(t *testing.T, enabled bool) []string {
 	plan := integrationResourceModel{Enabled: types.BoolValue(enabled), InstallationPolicy: types.StringNull()}
 	remote := &client.Integration{ID: 7, Kind: "mcp", Enabled: true, InstallationPolicy: "AVAILABLE"}
 	var diags diag.Diagnostics
-	r.applyFollowUps(context.Background(), 7, plan, remote, map[string]string{"api_key": "k"}, &diags)
+	r.applyFollowUps(context.Background(), 7, plan, remote, credentials, serverChanged, &diags)
 	if diags.HasError() {
 		t.Fatalf("applyFollowUps: %v", diags)
 	}
@@ -57,5 +62,23 @@ func TestApplyFollowUpsSkipsSwitchWhenAlreadyOn(t *testing.T) {
 	calls := followUpCalls(t, true)
 	if slices.Contains(calls, "PATCH /admin/integrations/7") {
 		t.Fatalf("calls = %v, want no switch change", calls)
+	}
+}
+
+func TestApplyFollowUpsRefreshesActionsAfterServerChange(t *testing.T) {
+	calls := followUpCallsWith(t, true, nil, true)
+	want := []string{
+		"POST /admin/integrations/7/actions/refresh",
+		"GET /admin/integrations/7",
+	}
+	if !slices.Equal(calls, want) {
+		t.Fatalf("calls = %v, want %v", calls, want)
+	}
+}
+
+func TestApplyFollowUpsSkipsRefreshWithoutCredentialsOrServerChange(t *testing.T) {
+	calls := followUpCallsWith(t, true, nil, false)
+	if slices.Contains(calls, "POST /admin/integrations/7/actions/refresh") {
+		t.Fatalf("calls = %v, want no action refresh", calls)
 	}
 }

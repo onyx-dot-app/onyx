@@ -259,6 +259,7 @@ func (r *integrationResource) applyFollowUps(
 	plan integrationResourceModel,
 	remote *client.Integration,
 	credentials map[string]string,
+	serverChanged bool,
 	diags *diag.Diagnostics,
 ) *client.Integration {
 	switchChange := !plan.Enabled.IsNull() && !plan.Enabled.IsUnknown() && plan.Enabled.ValueBool() != remote.Enabled
@@ -274,13 +275,14 @@ func (r *integrationResource) applyFollowUps(
 			diags.AddError("Failed to save the Onyx integration organization credentials", err.Error())
 			return nil
 		}
-		// Onyx only checks the key. Load the server's tools so chat can use them.
-		if remote.Kind == "mcp" {
-			if err := r.client.RefreshIntegrationActions(ctx, id); err != nil {
-				diags.AddWarning("Could not load the MCP server's actions",
-					"Onyx saved the credentials but could not list the server's tools. "+
-						"Refresh the actions in the Admin Panel when the server answers: "+err.Error())
-			}
+	}
+	// Onyx only checks a saved key, and older servers keep the old server's
+	// actions after a URL change. Load the server's tools so chat can use them.
+	if remote.Kind == "mcp" && (len(credentials) > 0 || serverChanged) {
+		if err := r.client.RefreshIntegrationActions(ctx, id); err != nil {
+			diags.AddWarning("Could not load the MCP server's actions",
+				"Onyx saved the integration but could not list the server's tools. "+
+					"Refresh the actions in the Admin Panel when the server answers: "+err.Error())
 		}
 	}
 	if switchChange && plan.Enabled.ValueBool() {
@@ -341,7 +343,7 @@ func (r *integrationResource) Create(ctx context.Context, req resource.CreateReq
 	applyRemoteIntegration(ctx, &plan, created, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 
-	remote := r.applyFollowUps(ctx, created.ID, planned, created, credentialValues, &resp.Diagnostics)
+	remote := r.applyFollowUps(ctx, created.ID, planned, created, credentialValues, false, &resp.Diagnostics)
 	if remote == nil {
 		return
 	}
@@ -404,7 +406,8 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 		resp.Diagnostics.AddError("Failed to update Onyx integration", err.Error())
 		return
 	}
-	remote := r.applyFollowUps(ctx, id, plan, updated, credentialValues, &resp.Diagnostics)
+	serverChanged := !plan.ServerURL.Equal(state.ServerURL) || !plan.Transport.Equal(state.Transport)
+	remote := r.applyFollowUps(ctx, id, plan, updated, credentialValues, serverChanged, &resp.Diagnostics)
 	if remote == nil {
 		return
 	}
