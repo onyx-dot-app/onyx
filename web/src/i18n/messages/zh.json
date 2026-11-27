@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "无法读取上传的内容。",
-          "folderRoot": "{upload, select, plugin {所选文件夹的顶层必须包含 SKILL.md 或 plugin.json 清单。} other {所选文件夹的顶层必须包含 SKILL.md。}}"
+          "folderRoot": "{upload, select, plugin {所选文件夹的顶层必须包含 SKILL.md 或 plugin.json 清单。} other {所选文件夹的顶层必须包含 SKILL.md。}}",
+          "unsupportedFile": "{name} 不是 ZIP 或 SKILL.md 文件。请上传 ZIP、SKILL.md 文件或技能文件夹。"
         }
       }
     },
@@ -17518,6 +17519,7 @@
       "disable": "为我禁用",
       "delete": "删除",
       "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
+      "deleted": "{count, plural, other {已删除 # 个技能}}",
       "failed": "无法更新技能。请重试。",
       "partialFailure": "{count, plural, one {# 个技能未能更新} other {# 个技能未能更新}}",
       "deleteTitle": "{count, plural, one {删除 # 个技能？} other {删除 # 个技能？}}",
@@ -18034,6 +18036,7 @@
     },
     "bulk": {
       "updated": "{count, plural, one {已更新 # 个插件} other {已更新 # 个插件}}",
+      "deleted": "{count, plural, other {已删除 # 个插件}}",
       "failed": "无法更新插件。请重试。",
       "partialFailure": "{count, plural, one {# 个插件未能更新} other {# 个插件未能更新}}",
       "deleteTitle": "{count, plural, one {删除 # 个插件？} other {删除 # 个插件？}}",

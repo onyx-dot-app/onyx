@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "No se pudo leer el archivo subido.",
-          "folderRoot": "{upload, select, plugin {La carpeta seleccionada debe contener SKILL.md o un manifiesto plugin.json en su nivel superior.} other {La carpeta seleccionada debe contener SKILL.md en su nivel superior.}}"
+          "folderRoot": "{upload, select, plugin {La carpeta seleccionada debe contener SKILL.md o un manifiesto plugin.json en su nivel superior.} other {La carpeta seleccionada debe contener SKILL.md en su nivel superior.}}",
+          "unsupportedFile": "{name} no es un archivo ZIP ni SKILL.md. Sube un ZIP, un archivo SKILL.md o una carpeta de skill."
         }
       }
     },
@@ -17518,6 +17519,7 @@
       "disable": "Desactivar para mí",
       "delete": "Eliminar",
       "updated": "{count, plural, one {# habilidad actualizada} other {# habilidades actualizadas}}",
+      "deleted": "{count, plural, one {# skill eliminada} other {# skills eliminadas}}",
       "failed": "No se pudieron actualizar las habilidades. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # habilidad} other {No se pudieron actualizar # habilidades}}",
       "deleteTitle": "{count, plural, one {¿Eliminar # habilidad?} other {¿Eliminar # habilidades?}}",
@@ -18034,6 +18036,7 @@
     },
     "bulk": {
       "updated": "{count, plural, one {# plugin actualizado} other {# plugins actualizados}}",
+      "deleted": "{count, plural, one {# plugin eliminado} other {# plugins eliminados}}",
       "failed": "No se pudieron actualizar los plugins. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # plugin} other {No se pudieron actualizar # plugins}}",
       "deleteTitle": "{count, plural, one {¿Eliminar # plugin?} other {¿Eliminar # plugins?}}",

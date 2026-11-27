@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "アップロードされたファイルを読み込めませんでした。",
-          "folderRoot": "{upload, select, plugin {選択したフォルダーの最上位に SKILL.md または plugin.json マニフェストが必要です。} other {選択したフォルダーの最上位に SKILL.md が必要です。}}"
+          "folderRoot": "{upload, select, plugin {選択したフォルダーの最上位に SKILL.md または plugin.json マニフェストが必要です。} other {選択したフォルダーの最上位に SKILL.md が必要です。}}",
+          "unsupportedFile": "{name} は ZIP または SKILL.md ファイルではありません。ZIP、SKILL.md ファイル、またはスキルフォルダーをアップロードしてください。"
         }
       }
     },
@@ -17518,6 +17519,7 @@
       "disable": "自分用に無効化",
       "delete": "削除",
       "updated": "{count, plural, one {# 件のスキルを更新しました} other {# 件のスキルを更新しました}}",
+      "deleted": "{count, plural, other {# 件のスキルを削除しました}}",
       "failed": "スキルを更新できませんでした。もう一度お試しください。",
       "partialFailure": "{count, plural, one {# 件のスキルを更新できませんでした} other {# 件のスキルを更新できませんでした}}",
       "deleteTitle": "{count, plural, one {# 件のスキルを削除しますか？} other {# 件のスキルを削除しますか？}}",
@@ -18034,6 +18036,7 @@
     },
     "bulk": {
       "updated": "{count, plural, one {# 件のプラグインを更新しました} other {# 件のプラグインを更新しました}}",
+      "deleted": "{count, plural, other {# 件のプラグインを削除しました}}",
       "failed": "プラグインを更新できませんでした。もう一度お試しください。",
       "partialFailure": "{count, plural, one {# 件のプラグインを更新できませんでした} other {# 件のプラグインを更新できませんでした}}",
       "deleteTitle": "{count, plural, one {# 件のプラグインを削除しますか？} other {# 件のプラグインを削除しますか？}}",

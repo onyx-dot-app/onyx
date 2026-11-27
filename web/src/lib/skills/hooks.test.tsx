@@ -110,6 +110,19 @@ test("a row delete keeps the selection of other plugins", async () => {
   expect(screen.getByTestId("selection")).toHaveTextContent(toggling.id);
 });
 
+test("a finished delete says the plugins were deleted", async () => {
+  mockBulkUpdateSkills.mockResolvedValue({
+    succeeded: [target.id],
+    failed: [],
+  });
+  const success = jest.spyOn(toast, "success");
+  const user = setupUser();
+  render(<Harness items={[toggling, target]} />);
+  await deleteTarget(user);
+  await waitFor(() => expect(success).toHaveBeenCalledWith("1 plugin deleted"));
+  success.mockRestore();
+});
+
 test("a failed delete shows an error toast", async () => {
   mockBulkUpdateSkills.mockResolvedValue({
     succeeded: [],

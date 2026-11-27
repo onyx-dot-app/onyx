@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "Impossible de lire le fichier téléversé.",
-          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}"
+          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}",
+          "unsupportedFile": "{name} n'est pas un fichier ZIP ou SKILL.md. Importez un ZIP, un fichier SKILL.md ou un dossier de skill."
         }
       }
     },
@@ -17518,6 +17519,7 @@
       "disable": "Désactiver pour moi",
       "delete": "Supprimer",
       "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
+      "deleted": "{count, plural, one {# skill supprimée} other {# skills supprimées}}",
       "failed": "Impossible de mettre à jour les compétences. Réessayez.",
       "partialFailure": "{count, plural, one {# compétence n’a pas pu être mise à jour} other {# compétences n’ont pas pu être mises à jour}}",
       "deleteTitle": "{count, plural, one {Supprimer # compétence ?} other {Supprimer # compétences ?}}",
@@ -18034,6 +18036,7 @@
     },
     "bulk": {
       "updated": "{count, plural, one {# plugin mis à jour} other {# plugins mis à jour}}",
+      "deleted": "{count, plural, one {# plugin supprimé} other {# plugins supprimés}}",
       "failed": "Impossible de mettre à jour les plugins. Réessayez.",
       "partialFailure": "{count, plural, one {# plugin n’a pas pu être mis à jour} other {# plugins n’ont pas pu être mis à jour}}",
       "deleteTitle": "{count, plural, one {Supprimer # plugin ?} other {Supprimer # plugins ?}}",

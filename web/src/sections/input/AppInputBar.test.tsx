@@ -1041,6 +1041,32 @@ describe("`@` skill mentions", () => {
     }
   });
 
+  test("fetches the chat skills again when the window gains focus", async () => {
+    mockChatSkills = null;
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () => new Response(JSON.stringify([])));
+    try {
+      renderHook(() => useChatSkills({ builtIns: true }), {
+        wrapper: ({ children }) => (
+          <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+            {children}
+          </SWRConfig>
+        ),
+      });
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      // Past SWR's focus throttle.
+      const later = Date.now() + 10_000;
+      jest.spyOn(Date, "now").mockReturnValue(later);
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
   test("a row shows the skill's short description when it has one", async () => {
     mockChatSkills = null;
     const skills: ChatSkill[] = [

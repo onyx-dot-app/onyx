@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "업로드한 파일을 읽지 못했습니다.",
-          "folderRoot": "{upload, select, plugin {선택한 폴더의 최상위에 SKILL.md 또는 plugin.json 매니페스트가 있어야 합니다.} other {선택한 폴더의 최상위에 SKILL.md가 있어야 합니다.}}"
+          "folderRoot": "{upload, select, plugin {선택한 폴더의 최상위에 SKILL.md 또는 plugin.json 매니페스트가 있어야 합니다.} other {선택한 폴더의 최상위에 SKILL.md가 있어야 합니다.}}",
+          "unsupportedFile": "{name}은(는) ZIP 또는 SKILL.md 파일이 아닙니다. ZIP, SKILL.md 파일 또는 스킬 폴더를 업로드하세요."
         }
       }
     },
@@ -17518,6 +17519,7 @@
       "disable": "내 스킬 비활성화",
       "delete": "삭제",
       "updated": "{count, plural, one {스킬 #개 업데이트됨} other {스킬 #개 업데이트됨}}",
+      "deleted": "{count, plural, other {스킬 #개 삭제됨}}",
       "failed": "스킬을 업데이트하지 못했습니다. 다시 시도하세요.",
       "partialFailure": "{count, plural, one {스킬 #개를 업데이트하지 못했습니다} other {스킬 #개를 업데이트하지 못했습니다}}",
       "deleteTitle": "{count, plural, one {스킬 #개를 삭제할까요?} other {스킬 #개를 삭제할까요?}}",
@@ -18034,6 +18036,7 @@
     },
     "bulk": {
       "updated": "{count, plural, one {플러그인 #개 업데이트됨} other {플러그인 #개 업데이트됨}}",
+      "deleted": "{count, plural, other {플러그인 #개 삭제됨}}",
       "failed": "플러그인을 업데이트하지 못했습니다. 다시 시도하세요.",
       "partialFailure": "{count, plural, one {플러그인 #개를 업데이트하지 못했습니다} other {플러그인 #개를 업데이트하지 못했습니다}}",
       "deleteTitle": "{count, plural, one {플러그인 #개를 삭제할까요?} other {플러그인 #개를 삭제할까요?}}",

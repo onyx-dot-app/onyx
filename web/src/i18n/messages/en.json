@@ -17501,7 +17501,8 @@
       "upload": {
         "error": {
           "readFailed": "Could not read the upload.",
-          "folderRoot": "{upload, select, plugin {The selected folder must contain SKILL.md or a plugin.json manifest at its top level.} other {The selected folder must contain SKILL.md at its top level.}}"
+          "folderRoot": "{upload, select, plugin {The selected folder must contain SKILL.md or a plugin.json manifest at its top level.} other {The selected folder must contain SKILL.md at its top level.}}",
+          "unsupportedFile": "{name} is not a ZIP or SKILL.md file. Upload a ZIP, a SKILL.md file, or a skill folder."
         }
       }
     },
@@ -17518,6 +17519,7 @@
       "disable": "Disable for me",
       "delete": "Delete",
       "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
+      "deleted": "{count, plural, one {# skill deleted} other {# skills deleted}}",
       "failed": "Could not update skills. Try again.",
       "partialFailure": "{count, plural, one {# skill could not be updated} other {# skills could not be updated}}",
       "deleteTitle": "{count, plural, one {Delete # skill?} other {Delete # skills?}}",
@@ -18034,6 +18036,7 @@
     },
     "bulk": {
       "updated": "{count, plural, one {# plugin updated} other {# plugins updated}}",
+      "deleted": "{count, plural, one {# plugin deleted} other {# plugins deleted}}",
       "failed": "Could not update plugins. Try again.",
       "partialFailure": "{count, plural, one {# plugin could not be updated} other {# plugins could not be updated}}",
       "deleteTitle": "{count, plural, one {Delete # plugin?} other {Delete # plugins?}}",

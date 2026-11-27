@@ -89,8 +89,7 @@ export interface ChatSkillEntries {
 
 /** The skills that the user's chat agents get (`GET /api/skills/chat`).
  * Skill changes made in this app fetch them again (`lib/skills/cache.ts`).
- * Changes from elsewhere show after the chat input gains focus; a window
- * focus does not fetch them. */
+ * Changes from elsewhere show after the chat input or the window gains focus. */
 export function useChatSkills({
   builtIns,
 }: {
@@ -104,8 +103,7 @@ export function useChatSkills({
     (url: string) => {
       lastFetchRef.current = Date.now();
       return errorHandlingFetcher<ChatSkill[]>(url);
-    },
-    { revalidateOnFocus: false }
+    }
   );
   const onInputFocus = useCallback(() => {
     if (Date.now() - lastFetchRef.current < CHAT_SKILLS_FOCUS_THROTTLE_MS)
@@ -750,7 +748,11 @@ export function useSkillBulkSelection({
         }))
       );
       if (result.succeeded.length)
-        toast.success(nounCopy("updated", { count: result.succeeded.length }));
+        toast.success(
+          nounCopy(action === "delete" ? "deleted" : "updated", {
+            count: result.succeeded.length,
+          })
+        );
       // The report sits at the top of the list, out of view of a row menu.
       if (result.failed.length)
         toast.error(
