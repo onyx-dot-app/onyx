@@ -181,6 +181,7 @@ from onyx.server.security.models import outbound_ssrf_params, ssrf_error_hint
 from onyx.server.security.store import get_security_settings
 from onyx.tools.tool_implementations.api_app.graphql_tool import introspection_to_sdl
 from onyx.tools.tool_implementations.api_app.openapi_parsing import (
+    check_nesting_depth,
     openapi_to_url,
     parse_openapi_document,
     validate_openapi_schema,
@@ -552,6 +553,7 @@ def _imported_view(document: str) -> OpenApiConfigView:
             "This is not an OpenAPI spec: it has no `openapi` field.",
         )
     try:
+        check_nesting_depth(spec)
         document, skipped = drop_uncallable_operations(document, spec)
         validate_openapi_schema(spec, check_server_url=False)
     except (ValueError, TypeError, KeyError, AttributeError) as e:

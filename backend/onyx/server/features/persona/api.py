@@ -747,7 +747,8 @@ def get_persona(
     snapshot.integrations = list_persona_integration_snapshots(persona.id, db_session)
     # Old custom and MCP tool ids come from the integration links, so they
     # round-trip through tool_ids. A tool of an integration that the viewer
-    # has no access to keeps its id and gives nothing else of the tool.
+    # has no access to keeps its id and gives nothing else of the tool. Each
+    # reader of the agent gets no header values: they can hold shared secrets.
     visible_integrations = (
         None
         if has_global_permission(user, Permission.MANAGE_ACTIONS)
@@ -763,7 +764,7 @@ def get_persona(
 
     def viewer_snapshot(integration_id: int, tool: ToolSnapshot) -> ToolSnapshot:
         if visible_integrations is None or integration_id in visible_integrations:
-            return tool
+            return tool.model_copy(update={"custom_headers": None})
         return tool.model_copy(
             update={
                 "description": "",

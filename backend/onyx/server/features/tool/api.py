@@ -470,6 +470,8 @@ def _openapi_snapshots(
         )
         if include_managed:
             snapshot.permissions = tool_permissions(can_manage=can_manage)
+        if not can_manage:
+            snapshot.custom_headers = None
         snapshots.append(snapshot)
     return snapshots
 

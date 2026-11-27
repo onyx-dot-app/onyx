@@ -4,9 +4,10 @@ import { getUserInitials } from "@/lib/users/svc";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, isNotFoundError } from "@/lib/fetcher";
+import { refreshSkillLists } from "@/lib/skills/cache";
 import useShareableGroups, {
   type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
@@ -107,6 +108,7 @@ type ShareSkillModalProps = {
 export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { open, onClose } = props;
   const skillId = props.mode === "edit" ? props.skillId : null;
+  const { mutate } = useSWRConfig();
   const {
     data: loadedSkill,
     error: loadError,
@@ -114,7 +116,13 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     mutate: refreshSkill,
   } = useSWR<CustomSkill>(
     open && skillId ? SWR_KEYS.skillSharing(skillId) : null,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      // Deleted elsewhere: the refreshed list drops it.
+      onError: (error) => {
+        if (isNotFoundError(error)) void refreshSkillLists(mutate);
+      },
+    }
   );
   const skill = props.mode === "create" ? props.draft : loadedSkill;
   const t = useTranslations("skills.modals");

@@ -18,6 +18,7 @@ FENCED_PACKAGE_FILES: list[str | None] = [
 ALLOWED_READERS: set[str] = {
     "external_permissions/azure_datalake/group_sync.py",
     "external_permissions/github/doc_sync.py",
+    "external_permissions/teams/group_sync.py",
 }
 
 
