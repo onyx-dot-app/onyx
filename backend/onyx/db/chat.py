@@ -728,13 +728,38 @@ def save_generated_chat_session_name(
     return saved_id is not None
 
 
+OnChatsMarkedDeleted = Callable[[list[UUID], list[UUID], list[int]], None]
+"""Gets the chats to stop, their artifacts and their running responses."""
+
+
+def running_response_ids(
+    db_session: Session, chat_session_ids: Collection[UUID]
+) -> list[int]:
+    """The running responses of the chats and of the agents below them."""
+    running: list[int] = []
+    for chat_session_id in chat_session_ids:
+        sessions = session_descendants(chat_session_id)
+        running.extend(
+            db_session.scalars(
+                select(ChatMessage.id)
+                .join(sessions, sessions.c.id == ChatMessage.chat_session_id)
+                .where(ChatMessage.response_status == RunStatus.RUNNING)
+            )
+        )
+    return running
+
+
 def delete_all_chat_sessions_for_user(
-    user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
+    user: User,
+    db_session: Session,
+    hard_delete: bool = HARD_DELETE_CHATS,
+    on_marked: OnChatsMarkedDeleted | None = None,
 ) -> tuple[list[UUID], list[UUID]]:
     """Returns the ids of the chat sessions that were not deleted before (of
     every chat for a hard delete, which removes the chats that a failed one
     left), and the ids of the artifacts of every deleted chat, which the caller deletes
-    from the search index after this commits."""
+    from the search index after this commits. `on_marked` gets them after the
+    deleted mark commits, so it runs even when the hard cleanup fails."""
     user_id = user.id
 
     chat_sessions = (
@@ -758,6 +783,11 @@ def delete_all_chat_sessions_for_user(
     _mark_chats_deleted__no_commit(db_session, chat_session_ids)
     artifact_ids = stop_indexing_chat_artifacts__no_commit(db_session, chat_session_ids)
     db_session.commit()
+    # A hard delete that failed leaves its chats marked deleted, and they
+    # still need the stop and purge.
+    stop_ids = chat_session_ids if hard_delete else newly_deleted_ids
+    if on_marked is not None:
+        on_marked(stop_ids, artifact_ids, running_response_ids(db_session, stop_ids))
     if hard_delete:
         for chat_session_id in chat_session_ids:
             delete_messages_and_files_from_chat_session(chat_session_id, db_session)
@@ -765,10 +795,7 @@ def delete_all_chat_sessions_for_user(
             delete(ChatSession).where(ChatSession.id.in_(chat_session_ids))
         )
         db_session.commit()
-        # A hard delete that failed leaves its chats marked deleted, and they
-        # still need the stop and purge.
-        newly_deleted_ids = chat_session_ids
-    return newly_deleted_ids, artifact_ids
+    return stop_ids, artifact_ids
 
 
 def delete_chat_session(
@@ -777,9 +804,11 @@ def delete_chat_session(
     db_session: Session,
     include_deleted: bool = False,
     hard_delete: bool = HARD_DELETE_CHATS,
+    on_marked: OnChatsMarkedDeleted | None = None,
 ) -> list[UUID]:
     """Returns the ids of the chat's artifacts, which the caller deletes from
-    the search index after this commits."""
+    the search index after this commits. `on_marked` runs after the deleted
+    mark commits, so it runs even when the hard cleanup fails."""
     chat_session = get_chat_session_by_id(
         chat_session_id=chat_session_id,
         user_id=user_id,
@@ -799,6 +828,12 @@ def delete_chat_session(
         db_session, [chat_session_id]
     )
     db_session.commit()
+    if on_marked is not None:
+        on_marked(
+            [chat_session_id],
+            artifact_ids,
+            running_response_ids(db_session, [chat_session_id]),
+        )
     if hard_delete:
         delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session_id))

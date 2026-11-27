@@ -16,8 +16,10 @@ import pytest
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
+from onyx.agents.models import RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
+from onyx.chat.run_store import _stop_key
 from onyx.chat.stop_signal_checker import is_stop_requested
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db import chat as db_chat
@@ -1135,10 +1137,17 @@ def test_a_hard_delete_of_all_chats_cleans_up_the_chats_a_failed_one_left(
     monkeypatch.setattr(
         db_chat, "delete_messages_and_files_from_chat_session", clean_up_one_chat
     )
+    stopped: list[UUID] = []
     with pytest.raises(RuntimeError):
-        db_chat.delete_all_chat_sessions_for_user(owner, db_session, hard_delete=True)
+        db_chat.delete_all_chat_sessions_for_user(
+            owner,
+            db_session,
+            hard_delete=True,
+            on_marked=lambda ids, _artifacts, _running: stopped.extend(ids),
+        )
     db_session.rollback()
     monkeypatch.undo()
+    assert {chat.id for chat in chats} <= set(stopped)
 
     deleted_ids, _ = db_chat.delete_all_chat_sessions_for_user(
         owner, db_session, hard_delete=True
@@ -1188,3 +1197,41 @@ def test_a_chat_delete_stops_the_running_turn(db_session: Session, owner: User) 
     finally:
         turn.release()
         cache.delete(f"chatsessionstop_fence_{chat.id}_41")
+
+
+def test_a_chat_delete_stops_its_running_background_agents(
+    db_session: Session, owner: User
+) -> None:
+    chat = _chat(db_session, owner)
+    spawn = ChatMessage(
+        chat_session_id=chat.id,
+        message="Started an agent",
+        token_count=1,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(spawn)
+    db_session.flush()
+    agent = ChatSession(id=uuid4(), spawned_by_message_id=spawn.id)
+    db_session.add(agent)
+    db_session.flush()
+    running, done = (
+        ChatMessage(
+            chat_session_id=agent.id,
+            message="",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+            response_status=status,
+        )
+        for status in (RunStatus.RUNNING, RunStatus.COMPLETE)
+    )
+    db_session.add_all([running, done])
+    db_session.commit()
+    cache = get_cache_backend()
+    try:
+        delete_chat_session_by_id(
+            chat.id, hard_delete=False, user=owner, db_session=db_session
+        )
+        assert cache.get(_stop_key(running.id)) == b"user"
+        assert cache.get(_stop_key(done.id)) is None
+    finally:
+        cache.delete(_stop_key(running.id))

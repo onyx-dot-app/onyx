@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from datetime import timedelta
+from functools import partial
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -802,12 +803,13 @@ def delete_all_chat_sessions(
             "Some generated files could not be deleted yet. Try again shortly.",
         )
     try:
-        deleted_ids, artifact_ids = delete_all_chat_sessions_for_user(
-            user=user, db_session=db_session
+        delete_all_chat_sessions_for_user(
+            user=user,
+            db_session=db_session,
+            on_marked=partial(_after_chats_deleted, user.id),
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
-    _after_chats_deleted(user.id, deleted_ids, artifact_ids)
     # Read after the delete commits: a park either commits first or refuses.
     if not HARD_DELETE_CHATS:
         _end_parked_responses(parked_response_ids(db_session, user.id))
@@ -816,19 +818,31 @@ def delete_all_chat_sessions(
 
 
 def _after_chats_deleted(
-    user_id: UUID, session_ids: list[UUID], artifact_ids: list[UUID]
+    user_id: UUID,
+    session_ids: list[UUID],
+    artifact_ids: list[UUID],
+    running_ids: list[int],
 ) -> None:
-    """After the delete of the chats commits: stop each chat's running turn,
-    then delete their artifacts from the search index and purge their
-    sandbox sessions in the background, since each can wait for a remote
-    call. A publish that the stop does not reach in time finds the chat
-    deleted and saves nothing (db/chat.py:_lock_live_chat)."""
+    """After the deleted mark of the chats commits: stop each chat's running
+    turn and its running responses, which include background agents that run
+    after the turn releases admission. Then delete their artifacts from the
+    search index and purge their sandbox sessions in the background, since
+    each can wait for a remote call. A publish that the stop does not reach
+    in time finds the chat deleted and saves nothing
+    (db/chat.py:_lock_live_chat)."""
     cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     for session_id in session_ids:
         try:
             stop_current_turn(session_id, cache)
         except Exception:
             logger.exception("Could not stop the turn of deleted chat %s", session_id)
+    for response_id in running_ids:
+        try:
+            request_response_stop(cache, response_id, "user")
+        except Exception:
+            logger.exception(
+                "Could not stop response %s of a deleted chat", response_id
+            )
 
     def clean_up() -> None:
         delete_chat_artifacts_from_index(artifact_ids)
@@ -878,16 +892,16 @@ def delete_chat_session_by_id(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
                 "Some generated files could not be deleted yet. Try again shortly.",
             )
-        artifact_ids = delete_chat_session(
+        delete_chat_session(
             user_id,
             session_id,
             db_session,
             include_deleted=actual_hard_delete,
             hard_delete=actual_hard_delete,
+            on_marked=partial(_after_chats_deleted, user_id),
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
-    _after_chats_deleted(user_id, [session_id], artifact_ids)
     # Read after the delete commits: a park either commits first or refuses.
     if not actual_hard_delete:
         _end_parked_responses(parked_response_ids(db_session, user.id, session_id))
