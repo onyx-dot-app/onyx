@@ -463,6 +463,8 @@ export interface SkillToggleTarget {
   enabled: boolean;
   /** False for a skill the user cannot turn off, such as a required one. */
   can_toggle?: boolean;
+  /** A plugin's name is its label, not the names of the skills inside it. */
+  kind?: "skill" | "plugin";
 }
 
 export interface SkillEnablement {
@@ -519,7 +521,11 @@ export function useSkillEnablement(
         candidate.name === item.name &&
         candidate.enabled
     );
-    if (enabled && holders.some((holder) => holder.can_toggle === false)) {
+    if (
+      enabled &&
+      item.kind !== "plugin" &&
+      holders.some((holder) => holder.can_toggle === false)
+    ) {
       switchModal.toggle(false);
       toast.error(t("page.toasts.requiredHolder", { name: item.name }));
       return;
@@ -712,9 +718,11 @@ export function useSkillBulkSelection({
         ? deleteTargets
         : action === "share"
           ? selectedItems
-          : toggleableItems.filter(
-              (item) => item.enabled !== (action === "enable")
-            );
+          : action === "enable"
+            ? toggleableItems.filter((item) => !item.enabled)
+            : // A same-name loser shows off but would run once the winner
+              // turns off, so disable sends every toggleable row.
+              toggleableItems;
     const skipped =
       action === "enable" || action === "disable"
         ? selectedItems.filter(

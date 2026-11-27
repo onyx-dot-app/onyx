@@ -54,6 +54,10 @@ function Harness({ items }: { items: CustomSkill[] }) {
         select locked
       </button>
       <button onClick={() => void bulk.run("enable")}>run enable</button>
+      <button onClick={() => bulk.select(new Set(items.map(({ id }) => id)))}>
+        select all
+      </button>
+      <button onClick={() => void bulk.run("disable")}>run disable</button>
       <p data-testid="delete-open">{String(bulk.deleteModal.isOpen)}</p>
       <p data-testid="selection">{[...bulk.selectedIds].join(",")}</p>
       <p data-testid="busy">{String(bulk.busy)}</p>
@@ -220,6 +224,26 @@ test("a bulk enable of only locked plugins sends nothing and says so", async () 
   info.mockRestore();
 });
 
+test("a bulk disable also sends a plugin that shows off but is saved on", async () => {
+  mockBulkUpdateSkills.mockResolvedValue({
+    succeeded: [target.id, "loser"],
+    failed: [],
+  });
+  const loser = customFixture({ id: "loser", name: "loser", enabled: false });
+  const user = setupUser();
+  render(<Harness items={[target, loser]} />);
+
+  await user.click(screen.getByRole("button", { name: "select all" }));
+  await user.click(screen.getByRole("button", { name: "run disable" }));
+
+  await waitFor(() =>
+    expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
+      action: "disable",
+      skill_ids: [target.id, "loser"],
+    })
+  );
+});
+
 function EnablementHarness({ items }: { items: CustomSkill[] }) {
   const enablement = useSkillEnablement(items, jest.fn());
   return (
@@ -258,5 +282,33 @@ test("turning on a skill whose name a required skill holds does not offer a swit
   );
   expect(screen.getByTestId("switch-open")).toHaveTextContent("false");
   expect(mockSetSkillEnabled).not.toHaveBeenCalled();
+  error.mockRestore();
+});
+
+test("a required plugin with the same label does not block turning on another", async () => {
+  mockSetSkillEnabled.mockResolvedValue(
+    customFixture({ id: "candidate", kind: "plugin", enabled: true })
+  );
+  const error = jest.spyOn(toast, "error");
+  const required = customFixture({
+    id: "required",
+    kind: "plugin",
+    name: "shared",
+    enabled: true,
+    can_toggle: false,
+    required_for_user: true,
+  });
+  const candidate = customFixture({
+    id: "candidate",
+    kind: "plugin",
+    name: "shared",
+    enabled: false,
+  });
+  const user = setupUser();
+  render(<EnablementHarness items={[required, candidate]} />);
+
+  await user.click(screen.getByRole("button", { name: "turn on second" }));
+
+  expect(error).not.toHaveBeenCalled();
   error.mockRestore();
 });
