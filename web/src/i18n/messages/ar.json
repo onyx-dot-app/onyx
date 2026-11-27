@@ -17799,7 +17799,8 @@
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "يحدّث {name} إلى إصدار Onyx {version}",
-        "newPlugin": "إضافة جديدة: {name}"
+        "newPlugin": "إضافة جديدة: {name}",
+        "unchanged": "لا توجد تغييرات. {name} بالفعل على إصدار Onyx {version}."
       },
       "willBeOff": "يُحفظ المكون الإضافي متوقفًا. لدى {names} مهارة بالاسم نفسه.",
       "saveAsNew": {

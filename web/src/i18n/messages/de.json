@@ -17799,7 +17799,8 @@
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "Aktualisiert {name} auf Onyx-Version {version}",
-        "newPlugin": "Neues Plugin: {name}"
+        "newPlugin": "Neues Plugin: {name}",
+        "unchanged": "Keine Änderungen. {name} ist bereits auf Onyx-Version {version}."
       },
       "willBeOff": "Das Plugin wird deaktiviert gespeichert. {names} hat bereits einen Skill mit demselben Namen.",
       "saveAsNew": {

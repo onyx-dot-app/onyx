@@ -17799,7 +17799,8 @@
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "{name} を Onyx バージョン {version} に更新します",
-        "newPlugin": "新しいプラグイン: {name}"
+        "newPlugin": "新しいプラグイン: {name}",
+        "unchanged": "変更はありません。{name} はすでに Onyx バージョン {version} です。"
       },
       "willBeOff": "プラグインはオフで保存されます。{names} に同じ名前のスキルがあります。",
       "saveAsNew": {

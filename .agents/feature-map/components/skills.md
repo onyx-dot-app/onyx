@@ -69,7 +69,9 @@
 - **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
   ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
   MCP servers the plugin needs with their state for the user, the parts Onyx
-  does not use, and the save target. `POST /skills/plugins` saves it. On the
+  does not use, and the save target, or that the files equal the current
+  version (`db/plugin.py:unchanged_current_version`, the check of a save).
+  `POST /skills/plugins` saves it. On the
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill

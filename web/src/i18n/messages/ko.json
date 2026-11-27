@@ -17799,7 +17799,8 @@
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "{name}을(를) Onyx 버전 {version}(으)로 업데이트합니다",
-        "newPlugin": "새 플러그인: {name}"
+        "newPlugin": "새 플러그인: {name}",
+        "unchanged": "변경 사항이 없습니다. {name}은(는) 이미 Onyx 버전 {version}입니다."
       },
       "willBeOff": "플러그인이 꺼진 상태로 저장됩니다. {names}에 같은 이름의 스킬이 이미 있습니다.",
       "saveAsNew": {

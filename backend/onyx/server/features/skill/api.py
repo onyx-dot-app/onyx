@@ -30,6 +30,7 @@ from onyx.db.plugin import (
     next_version_number,
     refuse_if_synced,
     set_marketplace_default__no_commit,
+    unchanged_current_version,
     version_is_skill,
 )
 from onyx.db.plugin_access import affected_user_ids_for_plugins, get_version_user_runs
@@ -121,6 +122,7 @@ from onyx.skills.bundle import (
     bundle_files_from_manifest,
     check_skill_md_size,
     compute_bundle_manifest,
+    compute_bundle_sha256,
     inspect_custom_bundle,
     normalize_custom_bundle,
     open_bundle_zip,
@@ -710,6 +712,20 @@ def inspect_plugin_upload(
 ) -> PluginUploadPreview:
     plugin_bundle = _read_plugin_upload(bundle)
     target = _upload_target(plugin_bundle, save_as_new, plugin_id, user, db_session)
+    current_version = (
+        unchanged_current_version(
+            target.plugin_id,
+            compute_bundle_manifest(plugin_bundle.content),
+            compute_bundle_sha256(plugin_bundle.content),
+            db_session,
+        )
+        if target.plugin_id is not None
+        else None
+    )
+    if current_version is not None:
+        target = target.model_copy(
+            update={"version_number": current_version.version_number}
+        )
     name_conflicts = (
         []
         if target.plugin_id is not None
@@ -740,6 +756,7 @@ def inspect_plugin_upload(
             else not name_conflicts
         ),
         name_conflicts=name_conflicts,
+        unchanged=current_version is not None,
     )
 
 

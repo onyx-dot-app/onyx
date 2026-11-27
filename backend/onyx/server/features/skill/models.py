@@ -361,6 +361,8 @@ class PluginUploadPreview(BaseModel):
     # The skills and plugins that keep a new plugin off: they hold one of
     # its skill names.
     name_conflicts: list[str]
+    # The files equal the current version's files, so a save adds no version.
+    unchanged: bool
 
 
 class PluginUploadResponse(BaseModel):

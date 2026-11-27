@@ -840,8 +840,15 @@ def test_an_unchanged_upload_adds_no_version(
 ) -> None:
     author, _, _ = users
     first = _save(author, _plugin_zip("same-files", ["one"]), db_session)
+    preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("same-files", ["one"]),
+        save_as_new=False,
+        user=author,
+        db_session=db_session,
+    )
     again = _save(author, _plugin_zip("same-files", ["one"]), db_session)
 
+    assert (preview.unchanged, preview.target.version_number) == (True, 1)
     assert first.unchanged is False
     assert (again.unchanged, again.target.kind, again.target.version_number) == (
         True,

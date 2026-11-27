@@ -17799,7 +17799,8 @@
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "Updates {name} to Onyx version {version}",
-        "newPlugin": "New plugin: {name}"
+        "newPlugin": "New plugin: {name}",
+        "unchanged": "No changes. {name} is already at Onyx version {version}."
       },
       "willBeOff": "The plugin is saved off. {names} already has a skill with the same name.",
       "saveAsNew": {

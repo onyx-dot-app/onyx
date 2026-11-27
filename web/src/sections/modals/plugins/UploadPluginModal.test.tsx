@@ -82,6 +82,7 @@ function preview(over: Partial<PluginUploadPreview> = {}): PluginUploadPreview {
     },
     will_enable: true,
     name_conflicts: [],
+    unchanged: false,
     ...over,
   };
 }
@@ -239,4 +240,28 @@ test("a skill name clash says the plugin is saved off", async () => {
       "The plugin is off after the save, so the save turns on no integrations."
     )
   ).toBeInTheDocument();
+});
+
+test("a zip with the files of the current version says it changes nothing", async () => {
+  mockFetch({
+    "/api/integrations": [],
+    "POST /api/skills/plugins/inspect": preview({
+      unchanged: true,
+      target: {
+        kind: "new_version",
+        plugin_id: "11111111-1111-4111-8111-111111111111",
+        plugin_name: "review-kit",
+        version_number: 2,
+      },
+    }),
+  });
+  renderModal();
+  await choose(zip("review-kit.zip"));
+
+  expect(
+    await screen.findByText(
+      "No changes. review-kit is already at Onyx version 2."
+    )
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/Updates review-kit/)).not.toBeInTheDocument();
 });

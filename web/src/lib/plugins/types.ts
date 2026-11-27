@@ -82,4 +82,6 @@ export interface PluginUploadPreview {
   target: PluginUploadTarget;
   will_enable: boolean;
   name_conflicts: string[];
+  /** The files equal the current version's files, so a save adds no version. */
+  unchanged: boolean;
 }

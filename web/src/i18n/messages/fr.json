@@ -17799,7 +17799,8 @@
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "Met à jour {name} vers la version Onyx {version}",
-        "newPlugin": "Nouveau plugin : {name}"
+        "newPlugin": "Nouveau plugin : {name}",
+        "unchanged": "Aucun changement. {name} est déjà à la version Onyx {version}."
       },
       "willBeOff": "Le plugin est enregistré désactivé. {names} a déjà une compétence du même nom.",
       "saveAsNew": {

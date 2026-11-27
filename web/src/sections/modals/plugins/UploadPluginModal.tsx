@@ -97,12 +97,12 @@ function PluginPreview({
         outerPadding={1}
         innerPadding={1}
         title={
-          target.kind === "new_version"
-            ? t("target.newVersion", {
+          target.kind === "new_plugin"
+            ? t("target.newPlugin", { name: target.plugin_name })
+            : t(preview.unchanged ? "target.unchanged" : "target.newVersion", {
                 name: target.plugin_name,
                 version: target.version_number,
               })
-            : t("target.newPlugin", { name: target.plugin_name })
         }
         bottomChildren={
           showSaveAsNew ? (
