@@ -44,8 +44,8 @@ which one you are touching before you change it.
 | Mechanism | Limits | Scope | Storage | Entry point |
 |---|---|---|---|---|
 | Token and cost budgets | LLM tokens or cents in a period, on all models or one, set by an admin | GLOBAL, USER, USER_GROUP, USER_GROUP_MEMBER | `user_usage` daily rollup | `check_token_rate_limits`, `check_model_spend_limits` |
-| Tenant usage limits | Weekly LLM cost, indexed chunks, API calls, non-streaming calls, set by the Onyx control plane | Tenant, trial or paid | `tenant_usage` fixed window | `check_usage_and_raise`, `check_llm_cost_limit_for_provider` |
-| API key and PAT call cap | One tenant usage limit, counted per request | Tenant | `tenant_usage.api_calls` | `check_api_key_usage` |
+| Tenant usage limits | Weekly LLM cost, indexed chunks, API calls, non-streaming calls, set by the Onyx control plane | Tenant, trial or paid | `tenant_usage_counter`, one row per usage type per period | `check_usage_and_raise`, `check_llm_cost_limit_for_provider` |
+| API key and PAT call cap | One tenant usage limit, counted per request | Tenant | `tenant_usage_counter` row for `api_calls` | `check_api_key_usage` |
 | HTTP rate limits | Requests to the auth and OAuth provider routers, and to chat feedback | IP and User-Agent, or user | Redis (`fastapi_limiter`) | `get_auth_rate_limiters`, `get_feedback_rate_limiters` |
 | Signup and invite limits | Scripted abuse on cloud | IP, admin, tenant | Cache backend, plus `tenant_invite_counter` | `enforce_signup_rate_limit`, `enforce_invite_rate_limit` |
 
@@ -138,14 +138,19 @@ other limit resets through the admin-only
 card replace keeps a current reset and its baselines on the new row for the
 same bucket (`backend/ee/onyx/db/token_limit.py:replace_card_token_rate_limits`).
 
-**Tenant usage limits.** These are synchronous counters on `tenant_usage`.
+**Tenant usage limits.** These are synchronous counters on `tenant_usage_counter`,
+one row per usage type per period (`backend/onyx/db/usage.py`). A period has
+a start, an end (none for a period that never ends) and what it follows
+(`WindowAnchor`). An add is one upsert statement, so concurrent adds are not
+lost. The old `tenant_usage` table is no longer read or written
+([TECH-DEBT](../TECH-DEBT.md)).
 `backend/onyx/server/usage_limits.py` holds one `LimitPolicy` per plan
 (`CLOUD_TRIAL`, `CLOUD_PAID`). A policy lists an `Allowance` per usage type: the
 amount, its window, whose usage counts, where the usage is read from, and the
 override-record field that replaces the amount for one tenant. Each of these can
 differ between policies, and a usage type a policy does not list is unlimited
 under it. The types are in `backend/onyx/server/models.py`. A counter allowance
-must use `CALENDAR_WEEK`, the only window `tenant_usage` reads and writes for now
+must use `CALENDAR_WEEK`, the only window the counter reads and writes for now
 ([TECH-DEBT](../TECH-DEBT.md)); another window fails at import. Each check picks the plan from the trial status, reads a per-tenant
 override from the control plane
 (`backend/ee/onyx/server/tenant_usage_limits.py`, refreshed every 24 h), then
@@ -330,7 +335,7 @@ rejected signup attempt still counts.
   admin page (`web/src/views/admin/SpendingLimitsPage/`). A scope that names a group
   also goes in the `ck_token_rate_limit_group` check on `token_rate_limit`.
 - `add-tenant-usage-type` **Add a tenant usage type.** Copy `UsageType.NON_STREAMING_API_CALLS`: add it to
-  `backend/onyx/db/usage.py:UsageType`, the `tenant_usage` columns, the env
+  `backend/onyx/db/enums.py:UsageType` (the counter table needs no new column), the env
   defaults in `shared_configs/configs.py`, the override model
   `TenantUsageLimitOverrides`, and one `Allowance` line on each policy in
   `backend/onyx/server/usage_limits.py` that limits it. The policy test fails

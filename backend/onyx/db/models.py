@@ -156,8 +156,10 @@ from onyx.db.enums import (
     TaskStatus,
     ThemePreference,
     UsageActorKind,
+    UsageType,
     UserFileStatus,
     VectorQuantization,
+    WindowAnchor,
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
@@ -8158,10 +8160,9 @@ class License(Base):
 
 class TenantUsage(Base):
     """
-    Tracks per-tenant usage statistics within a time window for cloud usage limits.
-
-    Each row represents usage for a specific tenant during a specific time window.
-    A new row is created when the window rolls over (typically weekly).
+    The old per-week usage table. Nothing reads or writes it now:
+    ``TenantUsageCounter`` replaced it. It is kept for one release so that a
+    rollback still finds its data. See TECH-DEBT.md.
     """
 
     __tablename__ = "tenant_usage"
@@ -8195,6 +8196,72 @@ class TenantUsage(Base):
     __table_args__ = (
         # Ensure only one row per window start (tenant_id is in the schema name)
         UniqueConstraint("window_start", name="uq_tenant_usage_window"),
+    )
+
+
+# A period that never ends has no window_end. Postgres treats two NULLs as
+# different, so the unique index keys it as the epoch. Upserts must name this
+# exact expression as the conflict target.
+TENANT_USAGE_COUNTER_PERIOD_END_KEY = text(
+    "COALESCE(window_end, '1970-01-01 00:00:00+00'::timestamp with time zone)"
+)
+
+
+class TenantUsageCounter(Base):
+    """
+    How much of one usage type a tenant used in one period, for tenant usage
+    limits. One row per usage type per period. The tenant is the schema.
+    """
+
+    __tablename__ = "tenant_usage_counter"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usage_type: Mapped[UsageType] = mapped_column(
+        Enum(
+            UsageType,
+            native_enum=False,
+            length=40,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    # Whether the period follows the calendar or the tenant's trial start. Part
+    # of the key, so two kinds of period that start at the same time stay apart.
+    window_anchor: Mapped[WindowAnchor] = mapped_column(
+        Enum(
+            WindowAnchor,
+            native_enum=False,
+            length=20,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    # When the period ends, and so when the limit opens again. None means the
+    # period never ends.
+    window_end: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Exact decimal, so many small additions do not drift.
+    amount: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        # One row per usage type per period.
+        Index(
+            "uq_tenant_usage_counter_period",
+            "usage_type",
+            "window_anchor",
+            "window_start",
+            TENANT_USAGE_COUNTER_PERIOD_END_KEY,
+            unique=True,
+        ),
     )
 
 
