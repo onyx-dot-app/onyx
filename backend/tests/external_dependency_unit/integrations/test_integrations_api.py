@@ -2387,7 +2387,26 @@ def test_a_request_cannot_repeat_a_group_or_an_agent_integration() -> None:
         IntegrationGroupSettingChange,
         IntegrationGroupSettingsUpdate,
     )
+    from onyx.server.features.persona.models import PersonaUpsertRequest
 
     change = IntegrationGroupSettingChange(group_id=1, installation_policy=None)
     with pytest.raises(ValidationError):
         IntegrationGroupSettingsUpdate(group_settings=[change, change])
+
+    def agent(links: list[PersonaIntegrationLink] | None) -> PersonaUpsertRequest:
+        return PersonaUpsertRequest(
+            name="agent",
+            description="",
+            system_prompt="",
+            task_prompt="",
+            datetime_aware=False,
+            document_set_ids=[],
+            tool_ids=[],
+            integrations=links,
+        )
+
+    first = PersonaIntegrationLink(integration_id=1)
+    with pytest.raises(ValidationError):
+        agent([first, PersonaIntegrationLink(integration_id=1)])
+    assert agent([first, PersonaIntegrationLink(integration_id=2)]).integrations
+    assert agent(None).integrations is None
