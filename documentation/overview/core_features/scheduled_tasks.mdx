@@ -32,9 +32,9 @@ The run uses the current Onyx permissions and company knowledge access of the ta
 The run can use only the [integrations](/overview/core_features/plugins) that you turn on for the task.
 Tasks can use MCP servers, OpenAPI and GraphQL integrations,
 and built-in [Craft Apps](/overview/core_features/craft_apps).
-A custom Craft App with URL patterns has no tools in chat, and the task form does not show it.
-If a task has one turned on,
-commands that the run starts in its sandbox can still call the app through the sandbox proxy.
+A custom Craft App with URL patterns has no tools in chat, and you cannot turn it on for a new task.
+If a task already has one turned on, the task form still shows it, but runs cannot use it.
+Each request to the app needs approval, and a run cannot show an approval card, so Onyx refuses the request.
 
 Each run starts in a new chat,
 so it does **not** inherit the messages or attachments of the chat where you tested the prompt.
