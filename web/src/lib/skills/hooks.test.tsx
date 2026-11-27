@@ -229,9 +229,19 @@ test("a bulk disable also sends a plugin that shows off but is saved on", async 
     succeeded: [target.id, "loser"],
     failed: [],
   });
-  const loser = customFixture({ id: "loser", name: "loser", enabled: false });
+  const loser = customFixture({
+    id: "loser",
+    name: "loser",
+    enabled: false,
+    name_held_by: ["target"],
+  });
+  const available = customFixture({
+    id: "available",
+    name: "available",
+    enabled: false,
+  });
   const user = setupUser();
-  render(<Harness items={[target, loser]} />);
+  render(<Harness items={[target, loser, available]} />);
 
   await user.click(screen.getByRole("button", { name: "select all" }));
   await user.click(screen.getByRole("button", { name: "run disable" }));

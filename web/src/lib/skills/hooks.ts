@@ -720,9 +720,11 @@ export function useSkillBulkSelection({
           ? selectedItems
           : action === "enable"
             ? toggleableItems.filter((item) => !item.enabled)
-            : // A same-name loser shows off but would run once the winner
-              // turns off, so disable sends every toggleable row.
-              toggleableItems;
+            : // A row the user turned on that a same-name skill holds shows
+              // off, but would run once the holder turns off.
+              toggleableItems.filter(
+                (item) => item.enabled || item.name_held_by.length > 0
+              );
     const skipped =
       action === "enable" || action === "disable"
         ? selectedItems.filter(
