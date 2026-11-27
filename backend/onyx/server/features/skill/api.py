@@ -253,7 +253,8 @@ def _import_response(
 
 
 def _skill_name(skill: Plugin, db_session: Session) -> str:
-    """A skill name never changes, so the current version holds it."""
+    """The name in the current version's SKILL.md. A rename changes only
+    ``Plugin.name``, so a renamed skill keeps its former name here."""
     name = get_stored_version_content(skill.current_version_id, db_session).name
     if name is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -1110,6 +1111,7 @@ def replace_current_user_skill_bundle(
         bundle.filename,
         file_store,
         expected_name=_skill_name(skill, db_session),
+        public_name=skill.name,
     ) as ingested:
         # An upload always adds a version, also for the same zip.
         replace_skill_bundle(
