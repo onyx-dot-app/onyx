@@ -4,31 +4,31 @@
   brings in-flight runs up to the status of their chat response, then claims
   due tasks with ``FOR UPDATE SKIP LOCKED``, advances ``next_run_at``, and
   writes a QUEUED run (enqueued after commit) or a SKIPPED run. A fire
-  cancels a prior run that still waits for approval, and a still-QUEUED prior
-  run takes the fire and is sent again.
+  cancels a prior run that still waits for approval, and is skipped while a
+  prior run is QUEUED or RUNNING.
 - ``run_scheduled_task(run_id)`` (``scheduled_tasks`` queue): runs the task
   as a chat turn.
 - ``cleanup_stuck_scheduled_runs`` (primary queue, hourly): fails runs that
   stayed QUEUED, and cancels runs that waited for approval for 24 hours.
+  The wait counts from the latest approval request of the run's chat.
 """
 
 from __future__ import annotations
 
-import time
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from celery import Task, shared_task
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import RunStatus
+from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.run_store import (
     cancel_parked_response,
     interrupt_ownerless_responses,
 )
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ScheduledTaskErrorClass,
@@ -47,9 +47,10 @@ from onyx.db.scheduled_task import (
     list_chat_runs_in_flight,
     mark_run_status,
     missing_chat_session_ids,
-    requeue_queued_run__no_commit,
+    pause_scheduled_task__no_commit,
     sync_chat_run__no_commit,
 )
+from onyx.scheduled_tasks.enqueue import send_scheduled_run
 from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
 
 # --- Tunables -----------------------------------------------------------------
@@ -60,14 +61,19 @@ from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SE
 # concurrent ticks just see "no rows" and exit.
 DISPATCH_BATCH_SIZE = 50
 
-# Celery expiry and the stuck-QUEUED sweep are one policy: a run that sat
-# queued past the residency limit is dropped unexecuted and its row reclaimed
-# by the same threshold.
-RUN_EXPIRES_SECONDS = SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
+# Celery expiry (send_scheduled_run) and the stuck-QUEUED sweep are one
+# policy: a run that sat queued past the residency limit is dropped
+# unexecuted and its row reclaimed by the same threshold.
 STUCK_QUEUED_OLDER_THAN = timedelta(seconds=SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS)
 # A started run makes its chat response within seconds; counted from the start.
 NO_RESPONSE_OLDER_THAN = timedelta(minutes=15)
 APPROVAL_WAIT_LIMIT = timedelta(hours=24)
+# The chat of a run that nobody approved in time says that it hit a time
+# limit, not that the user stopped it.
+_APPROVAL_WAIT_ENDED = RunFailure(
+    kind=RunFailureKind.DEADLINE,
+    message="Nobody answered the approval request in time.",
+)
 
 
 def _sync_chat_runs(db_session: Session, tenant_id: str, now: datetime) -> None:
@@ -95,13 +101,13 @@ def _sync_chat_runs(db_session: Session, tenant_id: str, now: datetime) -> None:
     for run in runs:
         try:
             if run.chat_session_id in deleted_chats:
-                # The owner hard-deleted the run's chat.
                 mark_run_status(
                     db_session=db_session,
                     run_id=run.id,
                     status=ScheduledTaskRunStatus.CANCELLED,
-                    error_class=ScheduledTaskErrorClass.USER_CANCELLED,
-                    error_detail="chat deleted",
+                    error_class=ScheduledTaskErrorClass.CHAT_DELETED,
+                    error_detail="The chat of this run was deleted",
+                    clear_chat_session=True,
                 )
             elif (
                 responses.get(run.id) is None
@@ -137,7 +143,7 @@ def _cancel_parked_runs(
             else None
         )
         if response is not None and cancel_parked_response(
-            cache, tenant_id, response.id
+            cache, tenant_id, response.id, _APPROVAL_WAIT_ENDED
         ):
             mark_run_status(
                 db_session=db_session,
@@ -162,11 +168,10 @@ def _cancel_parked_runs(
 def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
     """Claim due ``ScheduledTask`` rows and dispatch executor tasks.
 
-    Returns the number of fires handled (queued, sent again, or skipped).
+    Returns the number of fires handled (queued or skipped).
     """
     now = datetime.now(tz=timezone.utc)
     dispatched_count = 0
-    requeued_count = 0
     skipped_count = 0
 
     with get_session_with_current_tenant() as db_session:
@@ -210,25 +215,16 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                         parked,
                         ScheduledTaskErrorClass.SUPERSEDED_BY_NEXT_FIRE,
                     )
-                    # A QUEUED prior run takes this fire: it restarts its queue
-                    # age and is sent again. Duplicate sends are safe, because
-                    # _start_run only starts a QUEUED run, under its row lock.
-                    requeued_run_id = requeue_queued_run__no_commit(
-                        db_session, task.id, now
-                    )
-                    if requeued_run_id is not None:
-                        task_run_ids.append(requeued_run_id)
-                        requeued_count += 1
                     # A parked run that did not cancel (its response is still
                     # parking) stays in flight; the next fire tries again.
-                    elif has_in_flight_run_for_task(
+                    if has_in_flight_run_for_task(
                         db_session=db_session, task_id=task.id
                     ) or any(
                         run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
                         for run in parked
                     ):
-                        # A prior run is still running. Write a skipped row so the
-                        # user can see the miss, then advance next_run_at.
+                        # A prior run is still queued or running. Write a skipped
+                        # row so the user can see the miss.
                         insert_run(
                             db_session=db_session,
                             task_id=task.id,
@@ -253,27 +249,23 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                 to_enqueue.extend(task_run_ids)
             except Exception:
                 task_logger.exception(
-                    "Error dispatching scheduled task %s (skipping)", task.id
+                    "Error dispatching scheduled task %s; pausing it", task.id
                 )
+                # Its next_run_at did not advance, so it would fail again on
+                # every tick.
+                try:
+                    with db_session.begin_nested():
+                        pause_scheduled_task__no_commit(db_session, task.id)
+                except Exception:
+                    task_logger.exception("Could not pause scheduled task %s", task.id)
 
         db_session.commit()
 
     # Post-commit enqueues. If we crash between commit and enqueue, the
-    # next fire sends the QUEUED run again, or the stuck-run sweeper fails it
-    # after the residency limit.
+    # stuck-run sweeper fails the QUEUED run after the residency limit.
     for run_id in to_enqueue:
         try:
-            self.app.send_task(
-                OnyxCeleryTask.SCHEDULED_TASKS_RUN,
-                kwargs={
-                    "run_id": str(run_id),
-                    "tenant_id": tenant_id,
-                },
-                queue=OnyxCeleryQueues.SCHEDULED_TASKS,
-                priority=OnyxCeleryPriority.MEDIUM,
-                expires=RUN_EXPIRES_SECONDS,
-                headers={"enqueued_at": time.time()},
-            )
+            send_scheduled_run(self.app, run_id, tenant_id)
         except Exception:
             task_logger.exception(
                 "Failed to enqueue scheduled run %s; "
@@ -281,17 +273,15 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                 run_id,
             )
 
-    if dispatched_count or requeued_count or skipped_count:
+    if dispatched_count or skipped_count:
         task_logger.info(
-            "dispatch_due_scheduled_tasks tenant=%s dispatched=%d requeued=%d "
-            "skipped=%d",
+            "dispatch_due_scheduled_tasks tenant=%s dispatched=%d skipped=%d",
             tenant_id,
             dispatched_count,
-            requeued_count,
             skipped_count,
         )
 
-    return dispatched_count + requeued_count + skipped_count
+    return dispatched_count + skipped_count
 
 
 # --- Run executor wrapper ----------------------------------------------------
@@ -365,7 +355,7 @@ def cleanup_stuck_scheduled_runs(self: Task, *, tenant_id: str) -> int:
         expired = list_chat_runs_in_flight(
             db_session=db_session,
             status=ScheduledTaskRunStatus.AWAITING_APPROVAL,
-            started_before=datetime.now(tz=timezone.utc) - APPROVAL_WAIT_LIMIT,
+            parked_before=datetime.now(tz=timezone.utc) - APPROVAL_WAIT_LIMIT,
         )
         _cancel_parked_runs(
             db_session, tenant_id, expired, ScheduledTaskErrorClass.APPROVAL_TIMEOUT

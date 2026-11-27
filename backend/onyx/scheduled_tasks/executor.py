@@ -24,6 +24,7 @@ from onyx.db.scheduled_task import (
     get_run,
     mark_run_status,
     notify_run_owner__no_commit,
+    pause_scheduled_task__no_commit,
     sync_chat_run__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -88,10 +89,21 @@ def _start_run(run_id: UUID) -> tuple[User, UUID, str] | None:
         # The checks of a chat send: an owner who can no longer chat, or who
         # is over budget, fails the run before its chat exists.
         if not user.is_active or not has_global_permission(user, Permission.WRITE_CHAT):
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "The task owner can no longer chat",
+            # Every later fire would fail the same way, so the task pauses
+            # and the owner gets one notification.
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.FAILED,
+                error_class=ScheduledTaskErrorClass.OWNER_CANNOT_CHAT,
+                error_detail="The task owner can no longer chat. The task is paused.",
             )
+            pause_scheduled_task__no_commit(db_session, task.id)
+            notify_run_owner__no_commit(
+                db_session, run, NotificationType.SCHEDULED_TASK_FAILED
+            )
+            db_session.commit()
+            return None
         check_token_rate_limits(user)
         # The chat and the RUNNING status commit together, under the run lock.
         chat_session = create_chat_session__no_commit(
@@ -111,6 +123,28 @@ def _start_run(run_id: UUID) -> tuple[User, UUID, str] | None:
         return user, chat_session.id, task.prompt
 
 
+_ERROR_CLASS_BY_CODE = {
+    OnyxErrorCode.RATE_LIMITED: ScheduledTaskErrorClass.RATE_LIMITED,
+    OnyxErrorCode.INSUFFICIENT_PERMISSIONS: ScheduledTaskErrorClass.OWNER_CANNOT_CHAT,
+}
+
+
+def _error_class(error: Exception) -> ScheduledTaskErrorClass:
+    if isinstance(error, OnyxError):
+        return _ERROR_CLASS_BY_CODE.get(
+            error.error_code, ScheduledTaskErrorClass.AGENT_EXCEPTION
+        )
+    return ScheduledTaskErrorClass.AGENT_EXCEPTION
+
+
+def _error_detail(error: Exception) -> str:
+    """The owner sees this text. An ``OnyxError`` detail is written for users;
+    any other message can hold internals, so only its type is kept."""
+    if isinstance(error, OnyxError):
+        return error.detail[:ERROR_DETAIL_MAX_CHARS]
+    return f"Unexpected error ({type(error).__name__})"
+
+
 def _fail(run_id: UUID, error: Exception) -> None:
     try:
         with get_session_with_current_tenant() as db_session:
@@ -121,10 +155,8 @@ def _fail(run_id: UUID, error: Exception) -> None:
                 db_session=db_session,
                 run_id=run_id,
                 status=ScheduledTaskRunStatus.FAILED,
-                error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
-                error_detail=f"{type(error).__name__}: {error}"[
-                    :ERROR_DETAIL_MAX_CHARS
-                ],
+                error_class=_error_class(error),
+                error_detail=_error_detail(error),
             )
             notify_run_owner__no_commit(
                 db_session, run, NotificationType.SCHEDULED_TASK_FAILED

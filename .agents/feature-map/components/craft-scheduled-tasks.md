@@ -32,7 +32,8 @@ in the same chat; those turns keep the task's integration settings.
 When a run reaches an Ask action, the turn parks, the run shows "Awaiting
 approval", and the owner gets a notification. The owner approves in the chat
 and the turn continues. A run that nobody approves is cancelled at the next
-fire (which then runs) or after 24 hours. Reject skips the action and the
+fire (which then runs) or 24 hours after its last approval request. The
+approval notification is dismissed when the run stops waiting. Reject skips the action and the
 turn finishes. A Stop in the chat cancels a running run, not a parked one.
 
 A blue dot marks runs the owner has not opened: on each run, on each task row
@@ -85,19 +86,23 @@ Beat (per tenant, every 30 s, primary queue)
 
 run_scheduled_task -> onyx/scheduled_tasks/executor.py:run_scheduled_task_logic
   1 run must still be QUEUED (Celery may redeliver)
-    owner must be active, hold WRITE_CHAT and be in budget, as a chat send
+    owner must be active, hold WRITE_CHAT and be in budget, as a chat send;
+    an owner who cannot chat -> FAILED (owner_cannot_chat), task PAUSED,
+    one notification
   2 create the chat (default agent), link run.chat_session_id, RUNNING:
     one commit, under the run's row lock
   3 run_chat_turn(prompt, approval_mode=INTERACTIVE)  completes or parks
   4 sync_chat_run__no_commit: the response status gives the run status
-  any exception -> FAILED (agent_exception) + notification
+  any exception -> FAILED + notification; executor.py:_error_class maps
+    OnyxError codes to error classes, and only an OnyxError detail is shown
 
 Approval in the chat -> the turn resumes on an API server; the next dispatch
 tick moves the run to RUNNING and then to its end status.
 
 Beat (per tenant, hourly, primary queue)
   cleanup_stuck_scheduled_runs  QUEUED too long -> FAILED (stuck)
-                                AWAITING_APPROVAL > 24 h -> CANCELLED
+                                AWAITING_APPROVAL, no approval request in
+                                24 h -> CANCELLED (approval_timeout)
 ```
 
 **Run status.** `db/scheduled_task.py:sync_chat_run__no_commit` maps the
@@ -144,14 +149,13 @@ tools.
    The executor must not see a run row that rolls back. If the process dies
    between commit and send, the run stays `QUEUED` and the sweeper fails it.
 3. `send-expires-and-tenant` **Every send needs `expires=` and `tenant_id`.**
-   The dispatcher and `server/features/build/scheduled_tasks/api.py:_enqueue_executor` both expire after
+   The dispatcher and Run once both send through
+   `scheduled_tasks/enqueue.py:send_scheduled_run`, which expires after
    `SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS` (3 h), which is also the
    stuck-queued threshold of `cleanup_stuck_scheduled_runs`. While a run is
-   QUEUED, `started_at` is its queue clock: a fire that sends it again resets
-   it. `_start_run` sets it to the real start, and `_sync_chat_runs` fails a
-   started run with no chat response after `NO_RESPONSE_OLDER_THAN` (15 min).
-   `find_stuck_runs` locks its candidates (`SKIP LOCKED`), so a sweep cannot
-   fail a run that a fire requeues at the same time.
+   QUEUED, `started_at` is its queue clock. `_start_run` sets it to the real
+   start, and `_sync_chat_runs` fails a started run with no chat response
+   after `NO_RESPONSE_OLDER_THAN` (15 min).
 4. `link-session-before-turn` **The response is the run's source of truth.**
    Write run status only through `sync_chat_run__no_commit` or a cancel.
    The turn can end on any API server after an approval, so nothing at the
@@ -169,7 +173,8 @@ tools.
    `db/chat.py:not_a_scheduled_run_chat`. The executor creates the chat and
    links it in one commit, so a run chat is never listed. The link has no
    foreign key, because adding one would lock `chat_session`; the dispatcher
-   cancels a run whose chat was hard-deleted.
+   cancels a run whose chat was hard-deleted (`chat_deleted`) and clears its
+   chat id.
 7. `executor-never-reraises` **Do not re-raise from the executor.** A Celery
    retry would run the prompt and its side effects twice.
 8. `failure-paths-notify` **New failure paths must notify.** Use
@@ -177,10 +182,10 @@ tools.
 9. `dispatch-on-primary` **Keep the dispatcher and sweeper on the primary
    queue.** Long executor runs on `scheduled_tasks` would stall dispatch.
 10. `cancel-before-fire` **A fire cancels a parked run, not a running one.**
-    Only AWAITING_APPROVAL runs are cancelled; a RUNNING run makes the fire
-    SKIPPED, and a QUEUED run takes the fire and is sent again. Two messages
-    for one run are safe: `_start_run` starts only a QUEUED run, under its
-    row lock. "Run once" cancels nothing. An approval can resume the
+    Only AWAITING_APPROVAL runs are cancelled; a RUNNING or QUEUED run makes
+    the fire SKIPPED and is not sent again. A redelivered message is safe:
+    `_start_run` starts only a QUEUED run, under its row lock. "Run once"
+    cancels nothing and returns 409 while a run is QUEUED or RUNNING. An approval can resume the
     response before the run status follows, so cancel only through
     `chat/run_store.py:cancel_parked_response`, which leaves an owned
     response alone; `stop_response` would stop the approved work.

@@ -31,7 +31,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as celery_app
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     Permission,
@@ -45,6 +44,7 @@ from onyx.db.scheduled_task import (
     create_scheduled_task,
     get_run_of_chat_session,
     get_scheduled_task,
+    has_in_flight_run_for_task,
     insert_run,
     latest_runs_for_tasks,
     list_runs_for_task,
@@ -58,6 +58,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.craft import list_task_integration_views
 from onyx.integrations.policy import parse_action_settings
+from onyx.scheduled_tasks.enqueue import send_scheduled_run
 from onyx.server.features.build.models import TaskIntegrationView
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EDITOR_PAYLOAD_MODELS,
@@ -67,7 +68,6 @@ from onyx.server.features.build.scheduled_tasks.schedule import (
     human_readable,
     next_n_fires,
 )
-from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
 from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
@@ -108,7 +108,13 @@ class _Forbid(BaseModel):
 TaskName = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
 ]
-TaskPrompt = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+TASK_PROMPT_MAX_CHARS = 20_000
+TaskPrompt = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TASK_PROMPT_MAX_CHARS
+    ),
+]
 
 
 def _dispatch_editor_payload(data: Any) -> Any:
@@ -188,6 +194,7 @@ class RunSummary(BaseModel):
     summary: str | None
     skip_reason: str | None
     error_class: str | None
+    error_detail: str | None
     revision: int
     viewed_revision: int | None
 
@@ -205,6 +212,7 @@ class RunSummary(BaseModel):
             summary=run.summary,
             skip_reason=run.skip_reason,
             error_class=run.error_class,
+            error_detail=run.error_detail,
             revision=run.version,
             viewed_revision=run.viewed_revision,
         )
@@ -331,27 +339,6 @@ def _detail(db_session: Session, task: ScheduledTask) -> ScheduledTaskDetail:
     )
 
 
-def _enqueue_executor(run_id: UUID) -> None:
-    """Enqueue the headless executor for a run.
-
-    The executor task definition lives in the background-workers package
-    (a sibling agent owns that). We only need its name + queue + an
-    ``expires=`` (per CLAUDE.md).
-
-    Passes ``tenant_id`` so ``TenantAwareTask`` sets the per-task
-    contextvar on the executor — without it, the run would execute
-    against the default schema.
-    """
-    tenant_id = get_current_tenant_id()
-    celery_app.send_task(
-        OnyxCeleryTask.SCHEDULED_TASKS_RUN,
-        kwargs={"run_id": str(run_id), "tenant_id": tenant_id},
-        queue=OnyxCeleryQueues.SCHEDULED_TASKS,
-        priority=OnyxCeleryPriority.MEDIUM,
-        expires=SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS,
-    )
-
-
 def _encode_cursor(run: ScheduledTaskRun) -> str:
     raw = f"{run.started_at.isoformat()}|{run.id}"
     return base64.urlsafe_b64encode(raw.encode()).decode()
@@ -464,7 +451,7 @@ def create_task(
         db_session.commit()
         # Enqueue only after the row is durably persisted so the worker
         # cannot race ahead of its own input.
-        _enqueue_executor(run.id)
+        send_scheduled_run(celery_app, run.id, get_current_tenant_id())
     else:
         db_session.commit()
 
@@ -525,9 +512,8 @@ def delete_task(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    """Soft-delete a task. Idempotent — calling on a missing or already-
-    deleted task is a no-op (matches ``soft_delete_scheduled_task``).
-    """
+    """Soft-delete a task. Deleting an already-deleted task is a no-op; a
+    task that is missing or owned by another user is a 404."""
     soft_delete_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
     db_session.commit()
     return Response(status_code=204)
@@ -541,10 +527,17 @@ def run_now(
 ) -> RunNowResponse:
     """Fire a one-off ``manual_run_now`` execution.
 
-    Allowed on PAUSED tasks. Does NOT mutate ``next_run_at`` — that's
+    Allowed on PAUSED tasks. A 409 while a run is QUEUED or RUNNING. Does NOT mutate ``next_run_at`` — that's
     the dispatcher's job for recurring fires.
     """
-    task = get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
+    # The task row lock serializes run-now calls, so only one run starts.
+    task = get_scheduled_task(
+        db_session=db_session, task_id=task_id, user_id=user.id, lock=True
+    )
+    if has_in_flight_run_for_task(db_session=db_session, task_id=task.id):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "A run of this task is already in progress"
+        )
     run = insert_run(
         db_session=db_session,
         task_id=task.id,
@@ -552,7 +545,7 @@ def run_now(
         status=ScheduledTaskRunStatus.QUEUED,
     )
     db_session.commit()
-    _enqueue_executor(run.id)
+    send_scheduled_run(celery_app, run.id, get_current_tenant_id())
     return RunNowResponse(run_id=str(run.id), status=run.status)
 
 

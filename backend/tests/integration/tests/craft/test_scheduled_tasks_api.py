@@ -319,6 +319,34 @@ def test_run_now_on_paused_task_allowed(admin_user: DATestUser) -> None:
     )
 
 
+def test_run_now_is_refused_while_a_run_is_in_flight(admin_user: DATestUser) -> None:
+    response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+    with get_session_with_current_tenant() as db_session:
+        insert_run(
+            db_session=db_session,
+            task_id=task_id,
+            trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+        )
+        db_session.commit()
+
+    response = _run_now(admin_user, task_id)
+
+    assert response.status_code == 409
+    assert len(_get_runs_for_task(task_id)) == 1
+
+
+def test_a_prompt_over_the_limit_is_rejected(admin_user: DATestUser) -> None:
+    response = _create_task(admin_user, prompt="x" * 20_001)
+
+    assert response.status_code == 422
+
+
+def test_delete_of_a_missing_task_is_not_found(admin_user: DATestUser) -> None:
+    assert _delete_task(admin_user, uuid4()).status_code == 404
+
+
 def test_delete_task_is_idempotent_soft_delete(admin_user: DATestUser) -> None:
     response = _create_task(admin_user)
     response.raise_for_status()

@@ -16,7 +16,7 @@ from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, case, desc, func, literal, or_, select, update
+from sqlalchemy import and_, case, desc, exists, func, literal, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from onyx.agents.models import RunFailureKind, RunStatus
@@ -29,13 +29,17 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
 )
 from onyx.db.models import (
+    ApprovalRequest,
     ChatMessage,
     ChatSession,
     ScheduledTask,
     ScheduledTaskRun,
     User,
 )
-from onyx.db.notification import create_notification
+from onyx.db.notification import (
+    create_notification,
+    dismiss_notifications_by_data_value,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.craft import replace_task_integrations__no_commit
@@ -216,7 +220,8 @@ def soft_delete_scheduled_task(
     task_id: UUID,
     user_id: UUID,
 ) -> None:
-    """Mark a task as deleted. Idempotent.
+    """Mark a task as deleted. Idempotent for the owner; raises
+    ``OnyxError(NOT_FOUND)`` when no task of ``user_id`` has this id.
 
     The row + its runs are retained so users can still open past runs from
     the task's run history; the dispatcher excludes deleted tasks from its
@@ -229,13 +234,22 @@ def soft_delete_scheduled_task(
         )
     ).scalar_one_or_none()
     if task is None:
-        # Idempotent — no-op if the row was never visible to this user.
-        return
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task not found")
     if task.deleted:
         return
     task.deleted = True
     task.next_run_at = None
     db_session.flush()
+
+
+def pause_scheduled_task__no_commit(db_session: Session, task_id: UUID) -> None:
+    """Pause a task that cannot run, so it stops firing."""
+    db_session.execute(
+        update(ScheduledTask)
+        .where(ScheduledTask.id == task_id)
+        .values(status=ScheduledTaskStatus.PAUSED, next_run_at=None)
+        .execution_options(synchronize_session="fetch")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +286,7 @@ def claim_due_scheduled_tasks(
         batch_size: Maximum number of tasks to claim in one tick.
 
     Returns:
-        The claimed task rows, newest-due first.
+        The claimed task rows, oldest-due first.
     """
     if batch_size <= 0:
         return []
@@ -324,8 +338,7 @@ def has_in_flight_run_for_task(
     """Return True if ``task_id`` has a run currently QUEUED or RUNNING.
 
     The dispatcher writes a ``skipped`` run row for a fire while a prior run
-    is RUNNING. A QUEUED prior run takes the fire instead
-    (``requeue_queued_run__no_commit``).
+    is in flight, and run-now refuses to start a second run.
     """
     stmt = (
         select(literal(1))
@@ -341,28 +354,6 @@ def has_in_flight_run_for_task(
         .limit(1)
     )
     return db_session.execute(stmt).first() is not None
-
-
-def requeue_queued_run__no_commit(
-    db_session: Session, task_id: UUID, now: datetime
-) -> UUID | None:
-    """Give a new fire to the task's QUEUED run, if it has one: its queue age
-    starts again at ``now``. Returns the run id to send again."""
-    run = db_session.scalars(
-        select(ScheduledTaskRun)
-        .where(
-            ScheduledTaskRun.task_id == task_id,
-            ScheduledTaskRun.status == ScheduledTaskRunStatus.QUEUED,
-        )
-        .order_by(desc(ScheduledTaskRun.started_at))
-        .limit(1)
-        .with_for_update()
-    ).first()
-    if run is None:
-        return None
-    run.started_at = now
-    db_session.flush()
-    return run.id
 
 
 def insert_run(
@@ -401,6 +392,7 @@ def mark_run_status(
     error_detail: str | None = None,
     summary: str | None = None,
     started_at: datetime | None = None,
+    clear_chat_session: bool = False,
 ) -> ScheduledTaskRun:
     """Update a run row's status + optional fields.
 
@@ -420,8 +412,20 @@ def mark_run_status(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
     if status.has_results() and run.status != status:
         run.version += 1
+    if (
+        run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
+        and status != ScheduledTaskRunStatus.AWAITING_APPROVAL
+    ):
+        dismiss_notifications_by_data_value(
+            NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL,
+            "run_id",
+            str(run.id),
+            db_session,
+        )
     run.status = status
-    if chat_session_id is not None:
+    if clear_chat_session:
+        run.chat_session_id = None
+    elif chat_session_id is not None:
         run.chat_session_id = chat_session_id
     if skip_reason is not None:
         run.skip_reason = skip_reason
@@ -616,9 +620,10 @@ def list_chat_runs_in_flight(
     db_session: Session,
     task_id: UUID | None = None,
     status: ScheduledTaskRunStatus | None = None,
-    started_before: datetime | None = None,
+    parked_before: datetime | None = None,
 ) -> list[ScheduledTaskRun]:
-    """Runs whose chat response has not ended."""
+    """Runs whose chat response has not ended. With ``parked_before``, only
+    runs that started and made their latest approval request before it."""
     stmt = select(ScheduledTaskRun).where(
         ScheduledTaskRun.chat_session_id.is_not(None),
         ScheduledTaskRun.status.in_(_CHAT_IN_FLIGHT),
@@ -627,8 +632,14 @@ def list_chat_runs_in_flight(
         stmt = stmt.where(ScheduledTaskRun.task_id == task_id)
     if status is not None:
         stmt = stmt.where(ScheduledTaskRun.status == status)
-    if started_before is not None:
-        stmt = stmt.where(ScheduledTaskRun.started_at < started_before)
+    if parked_before is not None:
+        stmt = stmt.where(
+            ScheduledTaskRun.started_at < parked_before,
+            ~exists().where(
+                ApprovalRequest.chat_session_id == ScheduledTaskRun.chat_session_id,
+                ApprovalRequest.created_at >= parked_before,
+            ),
+        )
     return list(db_session.scalars(stmt))
 
 
