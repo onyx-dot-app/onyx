@@ -86,6 +86,10 @@ def _group_row(
     [
         ("admin", False, None),
         ("admin", True, None),
+        # Group settings need organization-wide MANAGE_PLUGINS.
+        ("manager", True, OnyxErrorCode.INSUFFICIENT_PERMISSIONS),
+        ("manager", False, OnyxErrorCode.INSUFFICIENT_PERMISSIONS),
+        ("manager_shared_outside", False, OnyxErrorCode.INSUFFICIENT_PERMISSIONS),
     ],
 )
 def test_group_install_setting_rules(
@@ -101,6 +105,13 @@ def test_group_install_setting_rules(
     else:
         actor = _manager_of(db_session, group)
     skill = make_skill(db_session, is_public=published, author_user_id=actor.id)
+    if actor_kind == "manager_shared_outside":
+        share_plugin_with_user(
+            db_session,
+            skill.id,
+            make_user(db_session, standard_account=True).id,
+            SkillSharePermission.VIEWER,
+        )
 
     if expected is None:
         apply_plugin_access_change__no_commit(
