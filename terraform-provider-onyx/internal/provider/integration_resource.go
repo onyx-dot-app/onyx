@@ -125,9 +125,10 @@ func (r *integrationResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"auth_method": schema.StringAttribute{
 				Optional: true,
-				MarkdownDescription: "How to sign in: `api_key`, `oauth2` or `onyx_login`. Required unless " +
-					"`auth_mode` is `none`.",
-				Validators: []validator.String{stringvalidator.OneOf("api_key", "oauth2", "onyx_login")},
+				MarkdownDescription: "How to sign in: `api_key` or `onyx_login`. Required unless `auth_mode` " +
+					"is `none`. This resource cannot set OAuth client settings, so set up OAuth sign-in in the " +
+					"Admin Panel.",
+				Validators: []validator.String{stringvalidator.OneOf("api_key", "onyx_login")},
 			},
 			"header_template": schema.MapAttribute{
 				Optional:    true,

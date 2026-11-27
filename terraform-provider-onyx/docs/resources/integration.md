@@ -52,7 +52,7 @@ resource "onyx_integration" "tickets" {
 
 > **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
 
-- `auth_method` (String) How to sign in: `api_key`, `oauth2` or `onyx_login`. Required unless `auth_mode` is `none`.
+- `auth_method` (String) How to sign in: `api_key` or `onyx_login`. Required unless `auth_mode` is `none`. This resource cannot set OAuth client settings, so set up OAuth sign-in in the Admin Panel.
 - `description` (String) Description that users and the model see.
 - `enabled` (Boolean) When `false`, no user can use the integration. Onyx sets `true` on create.
 - `header_template` (Map of String) HTTP headers sent on each call. Values can use `{placeholder}` fields, for example `{ Authorization = "Bearer {api_key}" }`. The connection supplies the field values.
