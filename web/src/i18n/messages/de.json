@@ -10645,7 +10645,7 @@
           "owner": "Eigentümer",
           "urlPatternApp": {
             "title": "Diese App verwendet URL-Muster",
-            "description": "Onyx fügt keine Apps mit URL-Mustern mehr hinzu. Um diese App zu ersetzen, fügen Sie den Dienst erneut als eigene REST-App hinzu. Führen Sie die Einrichtungsschritte aus der Dokumentation aus, bevor Sie diese App löschen."
+            "description": "Onyx fügt keine Apps mit URL-Mustern mehr hinzu. Um diese App zu ersetzen, fügen Sie für jeden Host, den ihre URL-Muster erreichen, eine eigene REST-App hinzu. Führen Sie die Einrichtungsschritte aus der Dokumentation aus, bevor Sie diese App löschen."
           }
         },
         "configuration": {

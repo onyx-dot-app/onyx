@@ -244,7 +244,7 @@ It does not have an action catalog.
   add a custom REST API with one action for each endpoint. See [OpenAPI](/admins/plugins/openapi).
   Craft calls a custom REST API through the sandbox proxy, as it calls a custom App.
   An existing custom App keeps working in Craft, but Chat does not use it.
-  Its **Overview** tab asks you to add it again as a custom REST API.
+  Its **Overview** tab asks you to replace it with a custom REST API for each host that it reaches.
 </Note>
 
 The upgrade to this release turns a custom App with one URL pattern of the form `https://host/path/*` into a custom REST
@@ -255,7 +255,8 @@ Craft scripts still reach the App through the sandbox proxy. A custom App with o
 You cannot change the URL patterns of an existing custom App. To change them, replace the App with a custom REST API.
 The new API does not get the connections, shares or approval settings of the old App. To replace the App:
 
-1. Add the API again as a custom REST API. See [OpenAPI](/admins/plugins/openapi).
+1. Add a custom REST API for each host that the App's URL patterns reach. A custom REST API has one base URL.
+   See [OpenAPI](/admins/plugins/openapi).
 2. Set up its sign-in. See [Sign-in](/admins/plugins/openapi#sign-in).
    If the sign-in mode is **Each user signs in**, tell each user to connect again.
 3. Share it with the same users and groups, and set the same install setting.
