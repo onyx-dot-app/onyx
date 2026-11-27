@@ -6,27 +6,38 @@ root chats that are not deleted."""
 
 import contextvars
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from itertools import count, product
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
+from onyx.agents.models import InputSource, RunStatus
+from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
+from onyx.chat.run_store import _stop_key
+from onyx.chat.stop_signal_checker import is_stop_requested
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.db import chat as db_chat
 from onyx.db.chat import (
+    delete_chat_session,
     get_or_create_root_message,
     get_user_artifact_search_candidates,
     get_user_published_file,
     get_user_published_files,
     save_chat_artifact,
+    update_chat_session_updated_at_timestamp,
 )
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import (
     ChatArtifact,
     ChatArtifactVersion,
+    ChatInput,
     ChatMessage,
     ChatSession,
     FileRecord,
@@ -45,7 +56,10 @@ from onyx.server.features.build.sandbox.models import (
     HarnessSandboxRef,
     session_workspace,
 )
-from onyx.server.query_and_chat.chat_backend import get_chat_artifact
+from onyx.server.query_and_chat.chat_backend import (
+    delete_chat_session_by_id,
+    get_chat_artifact,
+)
 from onyx.server.query_and_chat.models import ChatArtifactFile
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.sandbox import artifact_operations
@@ -59,6 +73,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ArtifactCursor,
     ArtifactSort,
     ArtifactVersionConflict,
+    ChatDeleted,
     FileUri,
     LibraryListFilters,
     LibraryReplaceLibraryFileArguments,
@@ -460,7 +475,7 @@ def test_only_the_users_own_root_chats_that_are_not_deleted_are_listed(
     db_session: Session, owner: User, other: User
 ) -> None:
     own = _chat(db_session, owner, "Mine")
-    deleted = _chat(db_session, owner, "Deleted", deleted=True)
+    deleted = _chat(db_session, owner, "Deleted")
     public_of_other = _chat(db_session, other, "Shared with all", shared=True)
     private_of_other = _chat(db_session, other, "Private")
     root_message = get_or_create_root_message(own.id, db_session)
@@ -476,6 +491,8 @@ def test_only_the_users_own_root_chats_that_are_not_deleted_are_listed(
 
     mine = _publish(db_session, own, "/w/mine.txt")
     in_deleted = _publish(db_session, deleted, "/w/deleted.txt")
+    deleted.deleted = True
+    db_session.commit()
     in_public = _publish(db_session, public_of_other, "/w/public.txt")
     in_private = _publish(db_session, private_of_other, "/w/private.txt")
     in_child = _publish(db_session, child, "/w/child.txt")
@@ -998,3 +1015,240 @@ def test_an_update_keeps_a_title_published_after_its_lookup(
         )
         == "New"
     )
+
+
+def test_a_publish_into_a_chat_that_a_delete_holds_waits_and_saves_nothing(
+    db_session: Session, owner: User
+) -> None:
+    """A publish to a new path waits for the lock of a chat delete in progress,
+    then finds the chat deleted and saves no artifact."""
+    chat = _chat(db_session, owner)
+    outcome: list[BaseException | PublishedFile] = []
+
+    def publish() -> None:
+        try:
+            outcome.append(
+                save_chat_artifact(
+                    b"late",
+                    name="late.md",
+                    mime_type="text/plain",
+                    target=ArtifactAtPath(chat_session_id=chat.id, path="/w/late.md"),
+                    title=None,
+                    thumbnail=None,
+                    preview_pdf=None,
+                )
+            )
+        except BaseException as error:
+            outcome.append(error)
+
+    with get_session_with_current_tenant() as deleting:
+        deleting.execute(
+            update(ChatSession).where(ChatSession.id == chat.id).values(deleted=True)
+        )
+        publisher = threading.Thread(
+            target=contextvars.copy_context().run, args=(publish,)
+        )
+        publisher.start()
+        deadline = time.monotonic() + 10
+        while publisher.is_alive() and not deleting.scalar(
+            text(
+                "SELECT count(*) FROM pg_stat_activity"
+                " WHERE pg_backend_pid() = ANY(pg_blocking_pids(pid))"
+            )
+        ):
+            assert time.monotonic() < deadline, "the publish did not wait"
+            publisher.join(timeout=0.05)
+        deleting.commit()
+        publisher.join(timeout=10)
+
+    [result] = outcome
+    assert isinstance(result, ChatDeleted)
+    assert (
+        db_session.scalars(
+            select(ChatArtifact.id).where(ChatArtifact.chat_session_id == chat.id)
+        ).all()
+        == []
+    )
+
+
+def test_a_hard_delete_does_not_deadlock_with_a_send_that_adds_a_message(
+    db_session: Session, owner: User
+) -> None:
+    """A send holds a message of the chat (a response reservation updates the
+    parent of its response) and then updates the chat's row. The hard delete
+    of the chat waits for the send, and the send does not wait for the
+    delete."""
+    chat = _chat(db_session, owner)
+    root_id = get_or_create_root_message(chat.id, db_session).id
+    db_session.commit()
+    outcome: list[BaseException | None] = []
+
+    def hard_delete() -> None:
+        try:
+            with get_session_with_current_tenant() as deleting:
+                delete_chat_session(owner.id, chat.id, deleting, hard_delete=True)
+            outcome.append(None)
+        except BaseException as error:
+            outcome.append(error)
+
+    with get_session_with_current_tenant() as sending:
+        sending.execute(
+            update(ChatMessage)
+            .where(ChatMessage.id == root_id)
+            .values(latest_child_message_id=None)
+        )
+        deleter = threading.Thread(
+            target=contextvars.copy_context().run, args=(hard_delete,)
+        )
+        deleter.start()
+        deadline = time.monotonic() + 10
+        while deleter.is_alive() and not sending.scalar(
+            text(
+                "SELECT count(*) FROM pg_stat_activity"
+                " WHERE pg_backend_pid() = ANY(pg_blocking_pids(pid))"
+            )
+        ):
+            assert time.monotonic() < deadline, "the delete did not wait"
+            deleter.join(timeout=0.05)
+        sending.execute(text("SET LOCAL lock_timeout = '5s'"))
+        update_chat_session_updated_at_timestamp(chat.id, sending)
+        sending.commit()
+        deleter.join(timeout=10)
+
+    assert outcome == [None]
+    assert (
+        db_session.scalar(select(ChatSession.id).where(ChatSession.id == chat.id))
+        is None
+    )
+
+
+def test_a_hard_delete_of_all_chats_cleans_up_the_chats_a_failed_one_left(
+    db_session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chats = [_chat(db_session, owner), _chat(db_session, owner)]
+    delete_messages = db_chat.delete_messages_and_files_from_chat_session
+    cleaned: list[UUID] = []
+
+    def clean_up_one_chat(chat_session_id: UUID, session: Session) -> None:
+        if cleaned:
+            raise RuntimeError("file store down")
+        delete_messages(chat_session_id, session)
+        cleaned.append(chat_session_id)
+
+    monkeypatch.setattr(
+        db_chat, "delete_messages_and_files_from_chat_session", clean_up_one_chat
+    )
+    stopped: list[UUID] = []
+    with pytest.raises(RuntimeError):
+        db_chat.delete_all_chat_sessions_for_user(
+            owner,
+            db_session,
+            hard_delete=True,
+            on_marked=lambda ids, _artifacts, _running: stopped.extend(ids),
+        )
+    db_session.rollback()
+    monkeypatch.undo()
+    assert {chat.id for chat in chats} <= set(stopped)
+
+    deleted_ids, _ = db_chat.delete_all_chat_sessions_for_user(
+        owner, db_session, hard_delete=True
+    )
+    assert {chat.id for chat in chats} <= set(deleted_ids)
+
+
+def test_a_hard_delete_of_a_chat_that_a_failed_one_left_removes_it(
+    db_session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chat = _chat(db_session, owner)
+    with monkeypatch.context() as failing:
+        failing.setattr(
+            db_chat,
+            "delete_messages_and_files_from_chat_session",
+            MagicMock(side_effect=RuntimeError("file store down")),
+        )
+        with pytest.raises(RuntimeError):
+            delete_chat_session_by_id(
+                chat.id, hard_delete=True, user=owner, db_session=db_session
+            )
+    db_session.rollback()
+    assert db_session.scalar(
+        select(ChatSession.deleted).where(ChatSession.id == chat.id)
+    )
+
+    delete_chat_session_by_id(
+        chat.id, hard_delete=True, user=owner, db_session=db_session
+    )
+    assert (
+        db_session.scalar(select(ChatSession.id).where(ChatSession.id == chat.id))
+        is None
+    )
+
+
+def test_a_chat_delete_stops_the_running_turn(db_session: Session, owner: User) -> None:
+    chat = _chat(db_session, owner)
+    cache = get_cache_backend()
+    turn = ChatTurnAdmission(cache)
+    turn.claim(chat.id)
+    try:
+        turn.publish(41, [])
+        delete_chat_session_by_id(
+            chat.id, hard_delete=False, user=owner, db_session=db_session
+        )
+        assert is_stop_requested(chat.id, cache, stream_id=41)
+    finally:
+        turn.release()
+        cache.delete(f"chatsessionstop_fence_{chat.id}_41")
+
+
+def test_a_chat_delete_stops_its_running_background_agents(
+    db_session: Session, owner: User
+) -> None:
+    chat = _chat(db_session, owner)
+    spawn = ChatMessage(
+        chat_session_id=chat.id,
+        message="Started an agent",
+        token_count=1,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(spawn)
+    db_session.flush()
+    agent = ChatSession(id=uuid4(), spawned_by_message_id=spawn.id)
+    db_session.add(agent)
+    db_session.flush()
+    running, done = (
+        ChatMessage(
+            chat_session_id=agent.id,
+            message="",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+            response_status=status,
+        )
+        for status in (RunStatus.RUNNING, RunStatus.COMPLETE)
+    )
+    db_session.add_all([running, done])
+    db_session.flush()
+    # Queued work would start a run after the delete
+    queued = ChatInput(
+        recipient_session_id=agent.id,
+        message_id="queued",
+        source=InputSource.AGENT_RESULT,
+        source_response_id=done.id,
+        root_response_id=spawn.id,
+        content="A result",
+    )
+    db_session.add(queued)
+    db_session.commit()
+    queued_id = queued.id
+    cache = get_cache_backend()
+    try:
+        delete_chat_session_by_id(
+            chat.id, hard_delete=False, user=owner, db_session=db_session
+        )
+        assert cache.get(_stop_key(running.id)) == b"user"
+        assert cache.get(_stop_key(done.id)) is None
+        assert (
+            db_session.scalar(select(ChatInput.id).where(ChatInput.id == queued_id))
+            is None
+        )
+    finally:
+        cache.delete(_stop_key(running.id))

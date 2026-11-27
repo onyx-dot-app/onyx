@@ -544,6 +544,13 @@ class ArtifactNotFound(Exception):
         super().__init__(f"No published file {artifact_id} in your chats")
 
 
+class ChatDeleted(ArtifactNotFound):
+    """The chat of a publish is gone or deleted; nothing was saved."""
+
+    def __init__(self, chat_session_id: UUID) -> None:
+        Exception.__init__(self, f"The chat {chat_session_id} is deleted")
+
+
 class _CursorBase(BaseModel):
     sort_order: SortOrder
     artifact_id: UUID
