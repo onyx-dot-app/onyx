@@ -132,7 +132,8 @@ You cannot turn on an action that your admin set to **Blocked**.
 
 A [Scheduled Task](/overview/core_features/scheduled_tasks) runs in chat,
 so it can use a built-in App that you turned on. Turn on the App in the **Integrations** section of the task.
-A custom App with URL patterns has no tools in chat, so a task cannot use it.
+A custom App with URL patterns has no tools in chat and does not appear in the task form.
+If a task already has one linked, its sandbox commands can still call it through the sandbox proxy.
 
 ## Disconnect an app
 
