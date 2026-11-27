@@ -54,12 +54,19 @@ jest.mock("@/hooks/useShareableGroups", () => ({
 }));
 let mockPickerGroups: { id: number; name: string }[] | undefined;
 let mockPickerError: Error | undefined;
+let mockPickerLoading = false;
+const mockRetryPickerGroups = jest.fn();
 jest.mock("@/lib/skills/hooks", () => ({
   ...jest.requireActual("@/lib/skills/hooks"),
-  useSkillShareableGroups: () =>
-    mockPickerError
-      ? { data: undefined, error: mockPickerError }
-      : { data: mockPickerGroups ?? mockGroups },
+  useSkillShareableGroups: () => ({
+    data:
+      mockPickerError || mockPickerLoading
+        ? undefined
+        : (mockPickerGroups ?? mockGroups),
+    error: mockPickerError,
+    isLoading: mockPickerLoading,
+    mutate: mockRetryPickerGroups,
+  }),
 }));
 jest.mock("@/lib/skills/api", () => ({
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
@@ -78,6 +85,8 @@ describe("ShareSkillModal", () => {
     mockGroups = [];
     mockPickerGroups = undefined;
     mockPickerError = undefined;
+    mockPickerLoading = false;
+    mockRetryPickerGroups.mockReset();
     mockIsAdmin = true;
     mockPublishing = "OPEN";
     mockSharing = undefined;
@@ -809,8 +818,30 @@ describe("ShareSkillModal", () => {
     expect(screen.queryByText("Group Access")).not.toBeInTheDocument();
   });
 
-  it("says when the groups to share with did not load", async () => {
+  it("says when the groups to share with did not load and retries", async () => {
     mockPickerError = new Error("boom");
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: null })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByText("Could not load the groups you can share with.")
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mockRetryPickerGroups).toHaveBeenCalledTimes(1);
+  });
+
+  it("says when the groups to share with are loading", async () => {
+    mockPickerLoading = true;
     mockLoadSkill.mockResolvedValue(
       customFixture({ user_permission: "OWNER", public_permission: null })
     );
@@ -824,10 +855,11 @@ describe("ShareSkillModal", () => {
       />
     );
     expect(
-      await screen.findByText(
-        "Could not load the groups you can share with. Close and open this dialog again."
-      )
+      await screen.findByText("Loading the groups you can share with...")
     ).toBeVisible();
+    expect(
+      screen.queryByText("Could not load the groups you can share with.")
+    ).not.toBeInTheDocument();
   });
 
   it("keeps groups a member cannot share with read-only", async () => {

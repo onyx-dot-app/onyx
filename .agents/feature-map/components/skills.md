@@ -96,6 +96,7 @@
   side of the group share check in `check_access_change`): every group for
   organization-wide `MANAGE_PLUGINS`, the managed groups for a group manager in
   scope, else none. A shared group out of reach stays read-only, with a note.
+  While that list loads the dialog says so; if it fails, it shows a retry.
   Only organization-wide
   `MANAGE_PLUGINS` deletes a skill that is required for anyone
   (`db/plugin_access.py:plugin_required_for_anyone`: a REQUIRED company setting,

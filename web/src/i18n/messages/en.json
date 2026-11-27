@@ -17327,7 +17327,9 @@
           "description": "An admin turned off sharing with people and groups. Ask a skill manager to share this skill."
         },
         "groupsOutOfReach": "You can share only with groups that you manage. Ask a skill manager to share with other groups.",
-        "groupsLoadFailed": "Could not load the groups you can share with. Close and open this dialog again.",
+        "groupsLoadFailed": "Could not load the groups you can share with.",
+        "groupsLoading": "Loading the groups you can share with...",
+        "groupsRetry": "Try again",
         "groupAccess": {
           "title": "Group Access",
           "description": "By default, every group uses the organization setting. A group setting replaces it for the group's members, also when it is stricter.",

@@ -17327,7 +17327,9 @@
           "description": "Um administrador desativou o compartilhamento com pessoas e grupos. Peça a um gerenciador de skills para compartilhar este skill."
         },
         "groupsOutOfReach": "Você só pode compartilhar com os grupos que gerencia. Peça a um gerente de habilidades para compartilhar com outros grupos.",
-        "groupsLoadFailed": "Não foi possível carregar os grupos com os quais você pode compartilhar. Feche e abra esta caixa de diálogo novamente.",
+        "groupsLoadFailed": "Não foi possível carregar os grupos com os quais você pode compartilhar.",
+        "groupsLoading": "Carregando os grupos com os quais você pode compartilhar...",
+        "groupsRetry": "Tentar novamente",
         "groupAccess": {
           "title": "Acesso de grupos",
           "description": "Por padrão, cada grupo usa a configuração da organização. Uma configuração de grupo a substitui para os membros do grupo, também quando é mais restrita.",
