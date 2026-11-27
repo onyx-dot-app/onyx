@@ -568,8 +568,17 @@ export default function AddIntegrationModal({
               tabIndex={0}
               state="empty"
               onClick={() => {
-                // The same tile again restores its draft.
-                if (pickedTile.current === tile.id && detection !== null) {
+                // The same tile again restores its draft; a failed server
+                // check runs again.
+                const failedCheck =
+                  detection?.shape === "mcp_server" &&
+                  (detection.probe.kind === "unreachable" ||
+                    detection.probe.kind === "forbidden");
+                if (
+                  pickedTile.current === tile.id &&
+                  detection !== null &&
+                  !failedCheck
+                ) {
                   setStep("setup");
                   return;
                 }

@@ -488,6 +488,25 @@ describe("Catalog", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("the same tile again checks a server that was unreachable", async () => {
+    mockProbe
+      .mockResolvedValueOnce({
+        kind: "unreachable",
+        reason: "connection_failed",
+      })
+      .mockResolvedValueOnce(OAUTH_PROBE);
+    mockFetch({ "/api/admin/integrations/presets": [] });
+    const { user } = open({ kind: "catalog" });
+    await user.click(await screen.findByRole("button", { name: "Notion" }));
+    await waitFor(() => expect(mockProbe).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: add.back }));
+
+    await user.click(await screen.findByRole("button", { name: "Notion" }));
+
+    expect(await screen.findByText(add.mcp.probe.oauth)).toBeInTheDocument();
+    expect(mockProbe).toHaveBeenCalledTimes(2);
+  });
+
   test("the same tile again keeps the entered credentials", async () => {
     mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
     const { user } = open({ kind: "catalog" });
