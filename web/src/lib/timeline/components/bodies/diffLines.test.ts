@@ -33,7 +33,8 @@ test("a patch splits by file with counts and line types", () => {
     { type: "added", content: "two", newLineNum: 2 },
   ]);
   expect(updated).toMatchObject({
-    path: "old.py → moved.py",
+    path: "moved.py",
+    movedFrom: "old.py",
     added: 2,
     removed: 1,
   });

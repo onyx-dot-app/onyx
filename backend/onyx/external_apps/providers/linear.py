@@ -134,14 +134,14 @@ class LinearProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                     secret=True,
                 ),
             ],
-            setup_instructions=(
-                "In Linear: Settings → API → OAuth applications → New OAuth "
-                "application. Fill in name, developer email, and description. "
-                "Add this Onyx instance's callback URL "
-                "(/craft/v1/apps/oauth/callback) to Callback URLs. Save. Then "
-                "paste the Client ID and Client Secret below. The agent will "
-                "be granted read+write access to issues, projects, and comments."
-            ),
+            setup_steps=[
+                "Open OAuth applications, then create a new OAuth application.",
+                "Enter a name, a developer email and a description.",
+                "Add the callback URL to Callback URLs.",
+                "Save the application.",
+                "Paste the Client ID and Client Secret into the fields.",
+            ],
+            setup_url="https://linear.app/settings/api",
         ),
         endpoint_catalog=_ENDPOINTS,
     )

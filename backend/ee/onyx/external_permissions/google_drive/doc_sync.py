@@ -286,7 +286,8 @@ def get_external_access_for_folder(
     google_domain: str,
     ops: GoogleDriveSourceOperations,
     user_email: str,
-) -> ExternalAccess:
+    admin_email: str | None = None,
+) -> ExternalAccess | None:
     """
     Extract ExternalAccess from a folder's permissions.
 
@@ -297,10 +298,14 @@ def get_external_access_for_folder(
         folder: The folder metadata from Google Drive API (must include permissionIds field)
         google_domain: The company's Google Workspace domain (e.g., "company.com")
         ops: The gateway that fetches the permission details
-        user_email: The user to read the permissions as
+        user_email: The user to read the permissions as first, usually the
+            user who found the folder
+        admin_email: The user to read the permissions not found as
+            ``user_email``. A shared drive need not include the admin.
 
     Returns:
-        ExternalAccess with extracted permission info
+        ExternalAccess with extracted permission info, or None when no
+        permission could be read, so the stored access stays.
     """
     folder_id = folder.get("id")
     if not folder_id:
@@ -321,13 +326,33 @@ def get_external_access_for_folder(
             is_public=False,
         )
 
-    # Fetch full permission objects using the permission IDs
-    permissions_list = get_permissions_by_ids(
-        ops=ops,
-        user_email=user_email,
-        doc_id=folder_id,
-        permission_ids=permission_ids,
-    )
+    def _get_permissions(email: str) -> list[GoogleDrivePermission]:
+        try:
+            return get_permissions_by_ids(
+                ops=ops,
+                user_email=email,
+                doc_id=folder_id,
+                permission_ids=permission_ids,
+            )
+        except GoogleDriveRefreshError as error:
+            logger.warning(
+                "Could not impersonate %s for folder %s: %s", email, folder_id, error
+            )
+            return []
+
+    permissions_list = _get_permissions(user_email)
+    if (
+        len(permissions_list) != len(permission_ids)
+        and admin_email
+        and admin_email != user_email
+    ):
+        permissions_list = _merge_permissions_lists(
+            [permissions_list, _get_permissions(admin_email)]
+        )
+    if not permissions_list:
+        # An unread ACL is never written as no access.
+        logger.warning("Could not read the permissions of folder %s", folder_id)
+        return None
 
     user_emails: set[str] = set()
     group_emails: set[str] = set()

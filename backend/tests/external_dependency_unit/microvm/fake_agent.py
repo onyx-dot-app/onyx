@@ -6,6 +6,7 @@ import io
 import itertools
 import posixpath
 import shlex
+import socket
 import tarfile
 import threading
 import time
@@ -16,6 +17,7 @@ from concurrent import futures
 from dataclasses import dataclass, field
 
 import grpc
+import grpc.aio
 from google.rpc import error_details_pb2, status_pb2
 
 from onyx.microvm.agent_client import (
@@ -25,6 +27,7 @@ from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentErrorReason,
 )
+from onyx.microvm.browser_protocol import BROWSER_SERVICE_PROTOCOL
 from onyx.microvm.daemon_client import (
     SANDBOX_ID_HEADER,
     SANDBOXD_ERROR_DOMAIN,
@@ -249,6 +252,16 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # Like grpc-go, the agent resets a stream with CANCELLED at its
         # deadline; this many seconds early models a reset that wins the race.
         self.stream_reset_lead_seconds: float | None = None
+        # Dial relays (sandbox_id, guest_port) to this TCP address; a port
+        # without one is unreachable.
+        self.dial_targets: dict[tuple[str, int], tuple[str, int]] = {}
+        # BrowserStart fails with this status code (None: it works).
+        self.browser_start_error: grpc.StatusCode | None = None
+        # The service protocol that BrowserStart reports.
+        self.browser_service_protocol = BROWSER_SERVICE_PROTOCOL
+        # Browser and session save calls in order: "browser_start:<profile>",
+        # "browser_stop", "capture:<session>".
+        self.events: list[str] = []
 
     def add_vm(
         self,
@@ -489,6 +502,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 request.generation,
                 request.sandboxd_key,
             )
+            self.events.append(f"capture:{request.session_id}")
             roots = list(request.roots) or ["attachments"]
             exclude = set(request.exclude_names) or {"node_modules"}
             selected = {
@@ -534,6 +548,62 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             )
             response.expires_at.GetCurrentTime()
             return response
+
+    def Dial(  # noqa: N802
+        self,
+        request_iterator: Iterator[hostagent_pb2.DialFrame],
+        context: grpc.ServicerContext,
+    ) -> Iterator[hostagent_pb2.DialFrame]:
+        """Like the agent: relay the stream to the guest port (here a TCP
+        address) until the guest closes; no half-close."""
+        first = next(request_iterator)
+        with self.lock:
+            vm = self.vms.get(first.sandbox_id)
+            if vm is None or vm.state != hostagent_pb2.VM_STATE_RUNNING:
+                abort_with_reason(
+                    context, HostAgentErrorReason.VM_NOT_RUNNING, "no running VM"
+                )
+                raise AssertionError("unreachable")
+            if first.generation and vm.generation != first.generation:
+                abort_with_reason(
+                    context, HostAgentErrorReason.INSTANCE_MISMATCH, "other instance"
+                )
+            target = self.dial_targets.get((first.sandbox_id, first.guest_port))
+        if target is None:
+            abort_with_reason(
+                context,
+                HostAgentErrorReason.GUEST_UNREACHABLE,
+                f"guest port {first.guest_port}: connection refused",
+            )
+            raise AssertionError("unreachable")
+        conn = socket.create_connection(target)
+
+        def hang_up() -> None:
+            # Wakes the blocked recv below; a close alone does not.
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+        context.add_callback(hang_up)
+
+        def upload() -> None:
+            try:
+                if first.data:
+                    conn.sendall(first.data)
+                for frame in request_iterator:
+                    conn.sendall(frame.data)
+            except (OSError, grpc.RpcError):
+                conn.close()
+
+        threading.Thread(target=upload, daemon=True).start()
+        try:
+            while data := conn.recv(32 << 10):
+                yield hostagent_pb2.DialFrame(data=data)
+        except OSError:
+            return
+        finally:
+            conn.close()
 
     def UploadCapture(  # noqa: N802
         self, request: hostagent_pb2.UploadCaptureRequest, context: grpc.ServicerContext
@@ -1690,6 +1760,32 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             )
         )
 
+    def BrowserStart(  # noqa: N802
+        self,
+        request: sandboxd_pb2.BrowserStartRequest,
+        context: grpc.ServicerContext,
+    ) -> sandboxd_pb2.BrowserStartResponse:
+        with self.agent.lock:
+            sandbox_id, key = self._route(context)
+            self._check_key(context, sandbox_id, key)
+            if self.agent.browser_start_error is not None:
+                context.abort(self.agent.browser_start_error, "no browser")
+            self.agent.events.append(f"browser_start:{request.profile_session_id}")
+            return sandboxd_pb2.BrowserStartResponse(
+                service_protocol=self.agent.browser_service_protocol
+            )
+
+    def BrowserStop(  # noqa: N802
+        self,
+        request: sandboxd_pb2.BrowserStopRequest,  # noqa: ARG002
+        context: grpc.ServicerContext,
+    ) -> sandboxd_pb2.BrowserStopResponse:
+        with self.agent.lock:
+            sandbox_id, key = self._route(context)
+            self._check_key(context, sandbox_id, key)
+            self.agent.events.append("browser_stop")
+            return sandboxd_pb2.BrowserStopResponse()
+
 
 class RunningFakeAgent:
     def __init__(
@@ -1738,6 +1834,15 @@ class InsecureClientFactory(HostAgentClientFactory):
             )
             self._channels[address] = channel
         return _KeepOpenClient(channel)
+
+    def aio_channel(self, address: str) -> grpc.aio.Channel:
+        return grpc.aio.insecure_channel(
+            address,
+            [
+                ("grpc.max_receive_message_length", MAX_MESSAGE_BYTES),
+                ("grpc.max_send_message_length", MAX_MESSAGE_BYTES),
+            ],
+        )
 
     def close(self) -> None:
         for channel in self._channels.values():

@@ -133,20 +133,31 @@ export function ApplyPatchToolRenderer({
           key={index}
           title={stripBidiControls(file.path) || t("sandbox.patch.title")}
           copyText={index === 0 ? patch : undefined}
-          lines={
-            // A delete or an empty new file has no lines; the panel names the
-            // operation, which holds before and after the call ends.
-            file.change !== "update" && file.lines.length === 0
+          lines={[
+            // The title is the new path, so a cut title keeps where it went
+            ...(file.movedFrom !== null
               ? [
                   {
-                    type: "header",
+                    type: "header" as const,
+                    content: t("sandbox.patch.movedFrom.label", {
+                      path: stripBidiControls(file.movedFrom),
+                    }),
+                  },
+                ]
+              : []),
+            // A delete or an empty new file has no lines; the panel names the
+            // operation, which holds before and after the call ends.
+            ...(file.change !== "update" && file.lines.length === 0
+              ? [
+                  {
+                    type: "header" as const,
                     content: t("sandbox.patch.noLines.label", {
                       change: file.change,
                     }),
                   },
                 ]
-              : file.lines
-          }
+              : file.lines),
+          ]}
           counts={{ added: file.added, removed: file.removed }}
         />
       ))}

@@ -47,6 +47,8 @@ test.describe("MCP tool approval in chat @code-mode", () => {
   let qualifiedToolName: string;
   let qualifiedSlowToolName: string;
   let toolDisplayName: string;
+  // The card's headline: the action and its integration.
+  let cardHeadline: string;
 
   test.beforeAll(async ({ browser }, workerInfo) => {
     let serverUrl = SHARED_SERVER_URL;
@@ -99,6 +101,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
       );
     }
     toolDisplayName = tool.display_name;
+    cardHeadline = `${toolDisplayName} in ${serverName}`;
     qualifiedToolName = qualifiedMcpToolName(
       integrationId,
       serverName,
@@ -260,7 +263,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const { nonce, answer } = await askForToolCall(page);
 
     const card = new ToolApprovalCard(page);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     await card.expectArgument(nonce);
     const chat = new ChatPage(page);
     await chat.inputBar.expectAcceptsSend();
@@ -279,16 +282,16 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await card.approve();
 
     await test.step("the reply continues in the same message", async () => {
-      await card.expectApproved(toolDisplayName);
+      await card.expectApproved(cardHeadline);
       await chat.expectLatestReplyComplete();
       await expect(chat.answerText(answer)).toBeVisible();
       await expect(chat.aiMessages).toHaveCount(1);
       await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
-      await card.expectApproved(toolDisplayName);
+      await card.expectApproved(cardHeadline);
     });
 
     await chat.reload();
-    await card.expectApproved(toolDisplayName);
+    await card.expectApproved(cardHeadline);
   });
 
   test("Reject skips the tool and the answer continues", async ({ page }) => {
@@ -297,10 +300,10 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const { answer, conversation } = await askForToolCall(page);
 
     const card = new ToolApprovalCard(page);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     await card.reject();
 
-    await card.expectNotApproved(toolDisplayName);
+    await card.expectNotApproved(cardHeadline);
     const chat = new ChatPage(page);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(answer)).toBeVisible();
@@ -325,9 +328,9 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const first = await askForToolCall(page);
 
     const card = new ToolApprovalCard(page);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     await card.approveForChat();
-    await card.expectApprovedForChat(toolDisplayName);
+    await card.expectApprovedForChat(cardHeadline);
     const chat = new ChatPage(page);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(first.answer)).toBeVisible();
@@ -356,17 +359,17 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const { answer } = await askForToolCall(page);
 
     const card = new ToolApprovalCard(page);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     const chat = new ChatPage(page);
     await chat.inputBar.expectAcceptsSend();
     await chat.reload();
 
     // The saved response replays the request; no stream runs.
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     await card.expectPendingInView();
     await chat.inputBar.expectAcceptsSend();
     await card.approve();
-    await card.expectApproved(toolDisplayName);
+    await card.expectApproved(cardHeadline);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(answer)).toBeVisible();
     await expect(chat.aiMessages).toHaveCount(1);
@@ -382,7 +385,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const chat = new ChatPage(page);
 
     const card = new ToolApprovalCard(page);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     await card.expectAgentRequest("mailer", toolDisplayName);
     await card.expectPendingInView();
     await chat.inputBar.expectAcceptsSend();
@@ -392,9 +395,9 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await expect(chat.answerText(followUp, 1)).toBeVisible({
       timeout: 60_000,
     });
-    await card.expectApproved(toolDisplayName);
+    await card.expectApproved(cardHeadline);
     await chat.reload();
-    await card.expectApproved(toolDisplayName);
+    await card.expectApproved(cardHeadline);
   });
 
   test("A background agent's card stays actionable after a reload and does not block sends", async ({
@@ -405,12 +408,12 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const { followUp } = await startBackgroundAgent(page);
     const chat = new ChatPage(page);
     const card = new ToolApprovalCard(page);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     await chat.expectLatestReplyComplete();
 
     // The session load replays the agent's waiting request.
     await chat.reload();
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     await card.expectAgentRequest("mailer", toolDisplayName);
 
     await test.step("a send runs while the agent's card waits", async () => {
@@ -424,14 +427,14 @@ test.describe("MCP tool approval in chat @code-mode", () => {
       await chat.inputBar.send();
       await chat.expectLatestReplyComplete();
       await expect(chat.answerText(`Hello beside ${nonce}`, 1)).toBeVisible();
-      await card.expectPending(toolDisplayName);
+      await card.expectPending(cardHeadline);
     });
 
     await card.approve();
     await expect(chat.answerText(followUp, 2)).toBeVisible({
       timeout: 60_000,
     });
-    await card.expectApproved(toolDisplayName);
+    await card.expectApproved(cardHeadline);
   });
 
   test("A background agent that asks again after a decision shows its next card without a reload", async ({
@@ -444,20 +447,20 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     });
     const chat = new ChatPage(page);
     const card = new ToolApprovalCard(page);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     await chat.expectLatestReplyComplete();
 
     // The decision starts no stream; the chat reads its status until the
     // resumed agent parks on its next request.
     await card.approve();
     await card.expectArgument(secondArgument, 60_000);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
 
     await card.approve();
     await expect(chat.answerText(followUp, 1)).toBeVisible({
       timeout: 60_000,
     });
-    await card.expectApproved(toolDisplayName);
+    await card.expectApproved(cardHeadline);
   });
 
   test("Always allow on the integration page runs later calls without a card", async ({
@@ -500,10 +503,10 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await askForToolCall(page, { answers: false, slowSibling: true });
 
     const card = new ToolApprovalCard(page);
-    await card.expectPending(toolDisplayName);
+    await card.expectPending(cardHeadline);
     const chat = new ChatPage(page);
     await chat.stop();
-    await card.expectNotApproved(toolDisplayName, 30_000);
+    await card.expectNotApproved(cardHeadline, 30_000);
     await chat.inputBar.expectIdle(30_000);
 
     const nonce = mockLlmNonce();
@@ -518,8 +521,8 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await expect(chat.answerText(`Hello again ${nonce}`, 1)).toBeVisible();
 
     // The stopped answer has settled; its record stays, also after a reload.
-    await card.expectNotApproved(toolDisplayName);
+    await card.expectNotApproved(cardHeadline);
     await chat.reload();
-    await card.expectNotApproved(toolDisplayName);
+    await card.expectNotApproved(cardHeadline);
   });
 });

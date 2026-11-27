@@ -67,7 +67,7 @@ import {
   useIsFetchingChatMessages,
   useSourcesShown,
   useCurrentIsStreamDraining,
-  useFilesShown,
+  useRightPanelShown,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
@@ -77,6 +77,7 @@ import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/lib/chatScroll/components/ChatScrollContainer";
 import ChatFind from "@/sections/chat/ChatFind";
+import { SubagentBar, SubagentView } from "@/sections/chat/SubagentView";
 import {
   ProjectContextPanel,
   ProjectChatSessionList,
@@ -186,6 +187,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   });
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // A subagent of the open chat that the main view shows in its place
+  const shownSubagentId = appPosition.isChat()
+    ? (searchParams?.get(SEARCH_PARAM_NAMES.SUBAGENT_ID) ?? null)
+    : null;
 
   // Use SWR hooks for data fetching
   const {
@@ -357,7 +362,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (state) => state.updateCurrentRightPanel
   );
   const selectedNodeForDocDisplay = useSelectedNodeForDocDisplay();
-  const publishedFilesPanelOpen = useFilesShown();
+  const rightPanelShown = useRightPanelShown();
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
   // A chat opened for the first time has nothing to show until its fetch
@@ -779,7 +784,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // A stable element: the app chrome's slot renders again only when one of
   // these inputs changes, not on each streamed packet or panel change
   const rightPanelOpen =
-    (!!retrievalEnabled && sourcesPanelVisible) || publishedFilesPanelOpen;
+    rightPanelShown && (!!retrievalEnabled || !sourcesPanelVisible);
   const rightPanel = useMemo(
     () => (
       <CurrentChatRightPanel
@@ -982,42 +987,52 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           />
                         </div>
                       )}
-                      {/* The store's session, not the URL's: the store takes
-                          the URL's chat one effect late, and the scroll reset
-                          must see the messages of the chat it opens. */}
-                      <ChatScrollContainer
-                        ref={scrollContainerRef}
-                        sessionId={storeSessionId ?? undefined}
-                        anchorSelector={anchorSelector}
-                        autoScroll={autoScrollEnabled}
-                        pauseFollowing={isStreamDraining}
-                        isStreaming={isStreaming}
-                        onScrollButtonVisibilityChange={setShowScrollButton}
-                        wide={wideChatActive}
-                        overlay={<ChatFind />}
-                        footer={
-                          <div
-                            aria-hidden
-                            className="shrink-0 h-(--app-composer-height)"
-                          />
-                        }
-                      >
-                        <ChatUI
-                          activeAgent={activeAgent!}
-                          llmManager={llmManager}
-                          deepResearchEnabled={
-                            deepResearchEnabledForCurrentWorkflow
-                          }
+                      {currentChatSessionId && shownSubagentId ? (
+                        <SubagentView
+                          key={shownSubagentId}
+                          sessionId={currentChatSessionId}
+                          agentId={shownSubagentId}
+                          parentTitle={currentChatSession?.name || null}
                           setPresentingDocument={setPresentingDocument}
-                          onSubmit={onSubmit}
-                          onMessageSelection={onMessageSelection}
-                          stopGenerating={stopGenerating}
-                          onResubmit={handleResubmitLastMessage}
-                          anchorNodeId={anchorNodeId}
-                          wideChat={wideChatActive}
-                          onEditMessage={editMessage}
                         />
-                      </ChatScrollContainer>
+                      ) : (
+                        // The store's session, not the URL's: the store takes
+                        // the URL's chat one effect late, and the scroll reset
+                        // must see the messages of the chat it opens.
+                        <ChatScrollContainer
+                          ref={scrollContainerRef}
+                          sessionId={storeSessionId ?? undefined}
+                          anchorSelector={anchorSelector}
+                          autoScroll={autoScrollEnabled}
+                          pauseFollowing={isStreamDraining}
+                          isStreaming={isStreaming}
+                          onScrollButtonVisibilityChange={setShowScrollButton}
+                          wide={wideChatActive}
+                          overlay={<ChatFind />}
+                          footer={
+                            <div
+                              aria-hidden
+                              className="shrink-0 h-(--app-composer-height)"
+                            />
+                          }
+                        >
+                          <ChatUI
+                            activeAgent={activeAgent!}
+                            llmManager={llmManager}
+                            deepResearchEnabled={
+                              deepResearchEnabledForCurrentWorkflow
+                            }
+                            setPresentingDocument={setPresentingDocument}
+                            onSubmit={onSubmit}
+                            onMessageSelection={onMessageSelection}
+                            stopGenerating={stopGenerating}
+                            onResubmit={handleResubmitLastMessage}
+                            anchorNodeId={anchorNodeId}
+                            wideChat={wideChatActive}
+                            onEditMessage={editMessage}
+                          />
+                        </ChatScrollContainer>
+                      )}
                     </Section>
                   </Presence>
 
@@ -1191,28 +1206,30 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <div className="absolute bottom-full inset-x-0 h-6 bg-linear-to-t from-background to-transparent pointer-events-none" />
                     )}
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
-                    {appPosition.isChat() && showScrollButton && (
-                      <div className="absolute -top-11 self-center">
-                        <Button
-                          icon={SvgChevronDown}
-                          onClick={handleScrollToBottom}
-                          aria-label={
-                            jumpToLatestReason
-                              ? undefined
-                              : t("scrollToBottomButton.label")
-                          }
-                          prominence="secondary"
-                          size="sm"
-                          rounding="full"
-                        >
-                          {jumpToLatestReason
-                            ? t(
-                                `scrollToBottomButton.reason.${jumpToLatestReason}`
-                              )
-                            : undefined}
-                        </Button>
-                      </div>
-                    )}
+                    {appPosition.isChat() &&
+                      showScrollButton &&
+                      !shownSubagentId && (
+                        <div className="absolute -top-11 self-center">
+                          <Button
+                            icon={SvgChevronDown}
+                            onClick={handleScrollToBottom}
+                            aria-label={
+                              jumpToLatestReason
+                                ? undefined
+                                : t("scrollToBottomButton.label")
+                            }
+                            prominence="secondary"
+                            size="sm"
+                            rounding="full"
+                          >
+                            {jumpToLatestReason
+                              ? t(
+                                  `scrollToBottomButton.reason.${jumpToLatestReason}`
+                                )
+                              : undefined}
+                          </Button>
+                        </div>
+                      )}
 
                     {/* OnboardingUI */}
                     {onboardingVisible && (
@@ -1257,40 +1274,50 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
-                      {appPosition.isChat() && activeAgent && (
-                        <div className="pb-1">
-                          <MultiModelSelector
-                            selectedModels={multiModel.selectedModels}
-                            onAdd={multiModel.addModel}
-                            onRemove={multiModel.removeModel}
-                            onReplace={multiModel.replaceModel}
-                            temperatureManager={llmManager}
-                            reasoningManager={llmManager}
+                      {currentChatSessionId && shownSubagentId ? (
+                        <SubagentBar
+                          sessionId={currentChatSessionId}
+                          agentId={shownSubagentId}
+                        />
+                      ) : (
+                        <>
+                          {appPosition.isChat() && activeAgent && (
+                            <div className="pb-1">
+                              <MultiModelSelector
+                                selectedModels={multiModel.selectedModels}
+                                onAdd={multiModel.addModel}
+                                onRemove={multiModel.removeModel}
+                                onReplace={multiModel.replaceModel}
+                                temperatureManager={llmManager}
+                                reasoningManager={llmManager}
+                              />
+                            </div>
+                          )}
+                          <AppInputBar
+                            queue={queue}
+                            toolConfiguration={toolConfiguration}
+                            ref={chatInputBarRef}
+                            deepResearchEnabled={
+                              deepResearchEnabledForCurrentWorkflow
+                            }
+                            toggleDeepResearch={toggleDeepResearch}
+                            isMultiModelActive={multiModel.isMultiModelActive}
+                            llmManager={llmManager}
+                            initialMessage={
+                              searchParams?.get(
+                                SEARCH_PARAM_NAMES.USER_PROMPT
+                              ) || ""
+                            }
+                            stopGenerating={stopGenerating}
+                            onSubmit={handleAppInputBarSubmit}
+                            chatState={currentChatState}
+                            activeAgent={activeAgent}
+                            handleFileUpload={handleMessageSpecificFileUpload}
+                            setPresentingDocument={setPresentingDocument}
+                            disabled={composerDisabled}
                           />
-                        </div>
+                        </>
                       )}
-                      <AppInputBar
-                        queue={queue}
-                        toolConfiguration={toolConfiguration}
-                        ref={chatInputBarRef}
-                        deepResearchEnabled={
-                          deepResearchEnabledForCurrentWorkflow
-                        }
-                        toggleDeepResearch={toggleDeepResearch}
-                        isMultiModelActive={multiModel.isMultiModelActive}
-                        llmManager={llmManager}
-                        initialMessage={
-                          searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
-                          ""
-                        }
-                        stopGenerating={stopGenerating}
-                        onSubmit={handleAppInputBarSubmit}
-                        chatState={currentChatState}
-                        activeAgent={activeAgent}
-                        handleFileUpload={handleMessageSpecificFileUpload}
-                        setPresentingDocument={setPresentingDocument}
-                        disabled={composerDisabled}
-                      />
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",

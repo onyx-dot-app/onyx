@@ -50,6 +50,7 @@ from onyx.agents.runtime import (
 from onyx.agents.tools import HumanToolAnswer, InputMode, PendingToolInput
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
+from onyx.chat.agent_stream import BackgroundRunStream, is_background_run
 from onyx.chat.checkpoint import (
     CheckpointVersionError,
     deserialize_checkpoint,
@@ -443,6 +444,8 @@ class _OwnedRun:
         self.run = run
         self.lease = lease
         self.owner = lease.owner
+        # A background run's live output (`agent_stream.py`)
+        self.stream: BackgroundRunStream | None = None
 
 
 class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
@@ -1085,6 +1088,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                         db_session=session,
                         assistant_message=response,
                         request_params=display.request_params,
+                        pre_answer_processing_time=display.pre_answer_processing_time,
                         response_record=record,
                         presentation=display.presentation,
                     )
@@ -1302,13 +1306,29 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             ):
                 raise TimeoutError("Response ownership renewal took too long")
             lease.refreshed = started
+        owned = _OwnedRun(run, lease)
+        if is_background_run(run):
+            try:
+                owned.stream = BackgroundRunStream(
+                    self.cache,
+                    self.tenant_id,
+                    self.chat_session_id,
+                    run,
+                    self._tool_ids,
+                )
+            except Exception:
+                # The agent's output still reaches its saved history.
+                logger.exception("Agent response %d has no live stream", response_id)
         with self._lock:
-            self._owned[response_id] = _OwnedRun(run, lease)
+            self._owned[response_id] = owned
 
     def abort_start(self, run_id: str) -> None:
         response_id = int(run_id)
         with self._lock:
             lease = self._leases.get(response_id)
+            started = self._owned.get(response_id)
+        if started is not None and started.stream is not None:
+            started.stream.close()
         if lease is None:
             with _ownership_lock(self.cache, response_id):
                 if self._owner(response_id) is not None:
@@ -1381,6 +1401,8 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         if owned is None:
             return
         is_child = response_id != self.response_id
+        if owned.stream is not None:
+            owned.stream.close()
         with owned.lease.lock:
             owned.lease.released = True
         # Only the root asks, and only a run that called the question tool

@@ -26,11 +26,18 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentState, ExecutionCheckpoint, RunStatus
+from onyx.agents.models import (
+    AgentState,
+    ExecutionCheckpoint,
+    ExecutionStatus,
+    RunStatus,
+    StepRecord,
+)
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
+    PendingToolInput,
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
@@ -40,8 +47,9 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatFeatureState,
     ChatInbox,
+    ResponseRecord,
 )
-from onyx.chat.presentation import ResponsePresenter
+from onyx.chat.presentation import ResponsePresenter, replay_response
 from onyx.chat.run_store import (
     RESUME_FAILED_MESSAGE,
     RESUME_UPDATED_MESSAGE,
@@ -49,11 +57,13 @@ from onyx.chat.run_store import (
     fail_suspended_response,
     resume_failure,
 )
+from onyx.chat.tool_approvals import open_tool_approval
 from onyx.chat.tool_questions import CANCELLED_QUESTION_MESSAGE
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.chat_inputs import read_chat_inbox
+from onyx.db.chat_response import load_chat_approvals
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import (
     ApprovalDecidedVia,
@@ -74,6 +84,7 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
 from onyx.file_store.file_store import (
     FileStore,
@@ -139,6 +150,7 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
+    make_app_integration,
     make_mcp_integration,
     set_policy,
 )
@@ -2133,3 +2145,104 @@ def test_an_action_with_no_integration_needs_a_builtin_key() -> None:
     with pytest.raises(ValidationError):
         ToolApprovalScope(integration_id=None, action_id=ACTION)
     assert ToolApprovalScope(integration_id=None, action_id=BUILTIN_ACTION)
+
+
+def _ask_for_request_tool(
+    chat: ApprovalChat, action_id: str
+) -> PendingToolInput | ToolResult | None:
+    return open_tool_approval(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=chat.chat_session_id,
+        response_id=chat.response_id,
+        user_id=chat.user.id,
+        tool_call_id=f"call-{uuid4().hex[:8]}",
+        tool_name="app__1__request",
+        details=ToolApprovalDetails(display_name="Any other request"),
+        arguments={},
+        scope=ToolApprovalScope(
+            integration_id=chat.integration_id, action_id=action_id
+        ),
+        signed_out=False,
+    )
+
+
+def _replayed_request(
+    db_session: Session, chat: ApprovalChat, pending: PendingToolInput
+) -> ToolApprovalRequest:
+    """The card of the saved request, as a reload of the suspended response
+    shows it."""
+    [row] = [row for row in chat.rows(db_session) if str(row.id) == pending.request_id]
+    call = ToolCall(id=row.tool_call_id, name=row.tool_name, arguments={})
+    response = ResponseRecord(
+        run_id=str(chat.response_id),
+        status=RunStatus.SUSPENDED,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="message", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+    )
+    requests = load_chat_approvals(
+        db_session, chat.chat_session_id, [chat.response_id]
+    ).requests[chat.response_id]
+    [card] = [
+        packet.obj
+        for packet in replay_response(
+            response,
+            {},
+            {},
+            {},
+            approvals={(response.run_id, call.id): requests},
+        )
+        if isinstance(packet.obj, ToolApprovalRequest)
+    ]
+    return card
+
+
+def test_an_approval_for_the_chat_does_not_cover_the_request_tool(
+    db_session: Session, chat: ApprovalChat
+) -> None:
+    """The other-request action of an app (`unspecified`) asks each time: an
+    approval for the chat is saved as a single approval, and the next call
+    asks again."""
+    integration, _ = make_app_integration(
+        db_session, upstream_url_patterns=["https://api.example.com/*"]
+    )
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    app_chat = _saved_turn(db_session, chat.user, integration.id)
+    try:
+        first = _ask_for_request_tool(app_chat, OTHER_REQUEST_ACTION_KEY)
+        assert isinstance(first, PendingToolInput)
+        assert not first.can_approve_for_chat
+        assert not _replayed_request(db_session, app_chat, first).can_approve_for_chat
+
+        app_chat.decide(db_session, first.request_id, ApprovalChoice.APPROVE_SESSION)
+
+        [row] = app_chat.rows(db_session)
+        assert (row.decision, row.decided_via) == (
+            ApprovalDecision.APPROVED,
+            ApprovalDecidedVia.USER,
+        )
+        assert isinstance(
+            _ask_for_request_tool(app_chat, OTHER_REQUEST_ACTION_KEY),
+            PendingToolInput,
+        )
+    finally:
+        db_session.rollback()
+        delete_messages_and_files_from_chat_session(
+            app_chat.chat_session_id, db_session
+        )
+        delete_integrations(db_session, [integration.id])
+
+
+def test_an_mcp_tool_named_like_the_request_tool_can_be_approved_for_the_chat(
+    db_session: Session, chat: ApprovalChat
+) -> None:
+    pending = _ask_for_request_tool(chat, OTHER_REQUEST_ACTION_KEY)
+
+    assert isinstance(pending, PendingToolInput)
+    assert pending.can_approve_for_chat
+    assert _replayed_request(db_session, chat, pending).can_approve_for_chat

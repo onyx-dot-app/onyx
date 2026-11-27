@@ -68,11 +68,13 @@ import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
+  openBrowserInChat,
   useChatSessionStore,
   useCurrentMessageTree,
   useCurrentMessageHistory,
   type SessionError,
 } from "@/app/app/stores/useChatSessionStore";
+import { isBrowserOpenStart } from "@/lib/chat/browser/stream";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
@@ -1352,6 +1354,10 @@ export default function useChatController({
             } else if (Object.hasOwn(packet, "obj")) {
               const typedPacket = packet as Packet;
               const packetObj = typedPacket.obj;
+
+              // The agent opens a page: the live chat shows its Browser tab
+              if (isBrowserOpenStart(packetObj))
+                openBrowserInChat(frozenSessionId);
 
               if (isMultiModel) {
                 // Multi-model: route packet by placement.model_index.

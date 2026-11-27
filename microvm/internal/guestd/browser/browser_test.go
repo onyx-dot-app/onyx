@@ -25,16 +25,16 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func newFake(t *testing.T, mode string) (*Browser, []string) {
+// newFake returns a Browser of fake Chromes, their env and a profile dir.
+func newFake(t *testing.T, mode string) (*Browser, []string, string) {
 	t.Helper()
 	b := New(Config{
 		Binary:       browsertest.Binary(t),
-		ProfileDir:   filepath.Join(t.TempDir(), "home", ".config", "onyx-browser"),
 		Isolator:     execs.ProcessGroups{},
 		StartTimeout: 10 * time.Second,
 	})
 	t.Cleanup(func() { _, _ = b.Stop() })
-	return b, []string{browsertest.EnvMode + "=" + mode}
+	return b, []string{browsertest.EnvMode + "=" + mode}, filepath.Join(t.TempDir(), "chrome")
 }
 
 func answers(port int) bool {
@@ -57,10 +57,10 @@ func runningPID(b *Browser) int {
 }
 
 func TestStartReusesAndRelaunches(t *testing.T) {
-	b, env := newFake(t, browsertest.ModeServe)
+	b, env, profile := newFake(t, browsertest.ModeServe)
 	ctx := context.Background()
 
-	port, started, err := b.Start(ctx, env)
+	port, started, err := b.Start(ctx, profile, env)
 	if err != nil || !started || port == 0 {
 		t.Fatalf("first start: port %d started %v err %v", port, started, err)
 	}
@@ -69,7 +69,7 @@ func TestStartReusesAndRelaunches(t *testing.T) {
 	}
 	pid := runningPID(b)
 
-	port2, started, err := b.Start(ctx, env)
+	port2, started, err := b.Start(ctx, profile, env)
 	if err != nil || started || port2 != port || runningPID(b) != pid {
 		t.Fatalf("second start: port %d started %v err %v pid %d, want pid %d", port2, started, err, runningPID(b), pid)
 	}
@@ -77,7 +77,7 @@ func TestStartReusesAndRelaunches(t *testing.T) {
 	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
-	port, started, err = b.Start(ctx, env)
+	port, started, err = b.Start(ctx, profile, env)
 	if err != nil || !started {
 		t.Fatalf("start after a crash: started %v err %v", started, err)
 	}
@@ -90,11 +90,11 @@ func TestStartReusesAndRelaunches(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
-	b, env := newFake(t, browsertest.ModeServe)
+	b, env, profile := newFake(t, browsertest.ModeServe)
 	if stopped, err := b.Stop(); err != nil || stopped {
 		t.Fatalf("stop with no browser: %v %v", stopped, err)
 	}
-	port, _, err := b.Start(context.Background(), env)
+	port, _, err := b.Start(context.Background(), profile, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestStop(t *testing.T) {
 	if answers(port) {
 		t.Fatal("the port still answers after Stop")
 	}
-	if _, err := os.Stat(filepath.Join(b.cfg.ProfileDir, browsertest.FlushedFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(profile, browsertest.FlushedFile)); err != nil {
 		t.Fatalf("Stop did not let chrome exit cleanly and flush its profile: %v", err)
 	}
 	if stopped, err := b.Stop(); err != nil || stopped {
@@ -113,8 +113,8 @@ func TestStop(t *testing.T) {
 }
 
 func TestStartFailureHasStderr(t *testing.T) {
-	b, env := newFake(t, browsertest.ModeFail)
-	_, _, err := b.Start(context.Background(), env)
+	b, env, profile := newFake(t, browsertest.ModeFail)
+	_, _, err := b.Start(context.Background(), profile, env)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("start of a failing chrome: %v", err)
 	}
@@ -129,9 +129,9 @@ func TestStartIgnoresAnotherDevToolsServer(t *testing.T) {
 	}))
 	defer other.Close()
 	otherPort := other.Listener.Addr().(*net.TCPAddr).Port
-	b, env := newFake(t, browsertest.ModeFail)
-	stale := filepath.Join(b.cfg.ProfileDir, "DevToolsActivePort")
-	if err := os.MkdirAll(b.cfg.ProfileDir, 0o700); err != nil {
+	b, env, profile := newFake(t, browsertest.ModeFail)
+	stale := filepath.Join(profile, "DevToolsActivePort")
+	if err := os.MkdirAll(profile, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(stale, []byte(strconv.Itoa(otherPort)+"\n"), 0o600); err != nil {
@@ -141,21 +141,21 @@ func TestStartIgnoresAnotherDevToolsServer(t *testing.T) {
 	if err := os.Chtimes(stale, old, old); err != nil {
 		t.Fatal(err)
 	}
-	if port, _, err := b.Start(context.Background(), env); err == nil {
+	if port, _, err := b.Start(context.Background(), profile, env); err == nil {
 		t.Fatalf("start reported the other server on port %d as its browser", port)
 	}
 }
 
 func TestCanceledStartKeepsTheBrowser(t *testing.T) {
-	b, env := newFake(t, browsertest.ModeServe)
-	port, _, err := b.Start(context.Background(), env)
+	b, env, profile := newFake(t, browsertest.ModeServe)
+	port, _, err := b.Start(context.Background(), profile, env)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pid := runningPID(b)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := b.Start(ctx, env); !errors.Is(err, context.Canceled) {
+	if _, _, err := b.Start(ctx, profile, env); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled start: %v", err)
 	}
 	if runningPID(b) != pid || !answers(port) {
@@ -164,16 +164,13 @@ func TestCanceledStartKeepsTheBrowser(t *testing.T) {
 }
 
 func TestActivePortIgnoresAFIFO(t *testing.T) {
-	b, _ := newFake(t, browsertest.ModeServe)
-	if err := os.MkdirAll(b.cfg.ProfileDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	profile := t.TempDir()
 	start := time.Now().Add(-time.Hour)
-	if err := syscall.Mkfifo(filepath.Join(b.cfg.ProfileDir, "DevToolsActivePort"), 0o600); err != nil {
+	if err := syscall.Mkfifo(filepath.Join(profile, "DevToolsActivePort"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	got := make(chan int, 1)
-	go func() { got <- b.activePort(start) }()
+	go func() { got <- activePort(profile, start) }()
 	select {
 	case port := <-got:
 		if port != 0 {
@@ -200,26 +197,26 @@ type stuckGroup struct{ execs.Group }
 func (stuckGroup) Close() error { return errors.New("device or resource busy") }
 
 func TestStartAfterAGroupThatDidNotClose(t *testing.T) {
-	b, env := newFake(t, browsertest.ModeServe)
+	b, env, profile := newFake(t, browsertest.ModeServe)
 	b.cfg.Isolator = &stuckIsolator{made: map[string]bool{}}
-	if _, _, err := b.Start(context.Background(), env); err != nil {
+	if _, _, err := b.Start(context.Background(), profile, env); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.Stop(); err == nil {
 		t.Fatal("stop: want the close error")
 	}
-	if _, started, err := b.Start(context.Background(), env); err != nil || !started {
+	if _, started, err := b.Start(context.Background(), profile, env); err != nil || !started {
 		t.Fatalf("start after a group that did not close: started %v err %v", started, err)
 	}
 }
 
 func TestChromeArgsProxy(t *testing.T) {
-	cfg := Config{ProfileDir: "/home/sandbox/.config/onyx-browser"}
-	with := chromeArgs(cfg, []string{"PATH=/bin", "HTTPS_PROXY=http://127.0.0.1:3128"})
+	profile := "/home/onyx/workspaces/sbx-1/chrome"
+	with := chromeArgs(profile, []string{"PATH=/bin", "HTTPS_PROXY=http://127.0.0.1:3128"})
 	if !slices.Contains(with, "--proxy-server=http://127.0.0.1:3128") {
 		t.Fatalf("HTTPS_PROXY set: %v", with)
 	}
-	for _, want := range []string{"--remote-debugging-port=0", "--user-data-dir=/home/sandbox/.config/onyx-browser", "--remote-debugging-address=127.0.0.1"} {
+	for _, want := range []string{"--remote-debugging-port=0", "--user-data-dir=/home/onyx/workspaces/sbx-1/chrome", "--remote-debugging-address=127.0.0.1"} {
 		if !slices.Contains(with, want) {
 			t.Errorf("missing %s in %v", want, with)
 		}
@@ -227,12 +224,19 @@ func TestChromeArgsProxy(t *testing.T) {
 	if with[len(with)-1] != "about:blank" {
 		t.Errorf("last arg %q", with[len(with)-1])
 	}
-	if fallback := chromeArgs(cfg, []string{"HTTP_PROXY=http://127.0.0.1:3128"}); !slices.Contains(fallback, "--proxy-server=http://127.0.0.1:3128") {
+	if fallback := chromeArgs(profile, []string{"HTTP_PROXY=http://127.0.0.1:3128"}); !slices.Contains(fallback, "--proxy-server=http://127.0.0.1:3128") {
 		t.Errorf("HTTP_PROXY fallback: %v", fallback)
 	}
-	for _, a := range chromeArgs(cfg, []string{"PATH=/bin"}) {
+	for _, a := range chromeArgs(profile, []string{"PATH=/bin"}) {
 		if strings.HasPrefix(a, "--proxy-server") {
 			t.Fatalf("no proxy env, got %s", a)
 		}
+	}
+}
+
+func TestNewDefaultsNodeNotServiceScript(t *testing.T) {
+	b := New(Config{})
+	if b.cfg.Node != DefaultNode || b.cfg.ServiceScript != "" {
+		t.Fatalf("node %q service script %q", b.cfg.Node, b.cfg.ServiceScript)
 	}
 }

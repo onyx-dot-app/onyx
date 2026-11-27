@@ -195,16 +195,8 @@ test.describe("Plugin upload", () => {
       "pw-sign-in",
       /^Connect PW Plugin pw-sign-in/
     );
-    await plugins.expectNeed(
-      "pw-disabled",
-      "Turned off",
-      "Turned off by your admin"
-    );
-    await plugins.expectNeed(
-      "pw-local",
-      "Not supported",
-      "Not supported in Onyx"
-    );
+    await plugins.expectNeed("pw-disabled", "Turned off");
+    await plugins.expectNeed("pw-local", "Not supported");
     await plugins.expectNeed("pw-missing", "Not added");
 
     await plugins.expectNeed("pw-off", "On");

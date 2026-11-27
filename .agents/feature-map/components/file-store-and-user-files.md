@@ -451,7 +451,7 @@ own id, so `/chat/file/{preview id}` is a 404.
   blobs, then the rows. No task deletes a `USER_FILE` blob or `FileRecord`
   that no `UserFile` references.
 - **Custom tool output has no session stamp.**
-  `tools/tool_implementations/custom/custom_tool.py` saves response files as
+  `tools/tool_implementations/api_app/rest_tool.py` saves response files as
   `FileOrigin.CHAT_UPLOAD` with no session. Such a file can be read only
   through the `ChatMessage.files` branch of [[#read-check-404]].
 - **Agent files ignore group shares when served.** See

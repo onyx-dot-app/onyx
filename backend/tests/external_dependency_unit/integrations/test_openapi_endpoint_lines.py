@@ -1,0 +1,449 @@
+"""Endpoint lines through the admin API: a create from typed lines, and line
+edits of an imported spec that keep what the spec said about the other
+operations."""
+
+import json
+from typing import Any
+from uuid import uuid4
+
+import pytest
+import yaml
+from sqlalchemy.orm import Session
+
+from onyx.db.enums import IntegrationAuthMode
+from onyx.db.models import Integration, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.integrations.kinds.api import ApiKindHandler
+from onyx.integrations.models import EffectivePolicy
+from onyx.integrations.openapi_endpoints import EndpointLineError
+from onyx.sandbox_proxy.usable_integrations import load_match_targets
+from onyx.server.features.integrations import admin_api
+from onyx.server.features.integrations.models import (
+    IntegrationActionsUpdate,
+    IntegrationCreate,
+    IntegrationUpdate,
+    OpenApiConfigInput,
+    OpenApiConfigView,
+    OpenApiEndpointsRequest,
+)
+from tests.external_dependency_unit.conftest import MakeTestUser
+
+BASE_URL = "https://tickets.example.com/api"
+
+IMPORTED: dict[str, Any] = {
+    "openapi": "3.0.3",
+    "info": {"title": "Tickets", "description": "Tickets", "version": "2.0"},
+    "servers": [{"url": "https://old.example.com/api"}],
+    "paths": {
+        "/tickets": {
+            "get": {
+                "operationId": "listTickets",
+                "summary": "List tickets",
+                "description": "Lists the open tickets.",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {"type": "string", "enum": ["open", "closed"]},
+                    }
+                ],
+                "responses": {"200": {"description": "OK"}},
+            },
+            "post": {
+                "operationId": "createTicket",
+                "summary": "Create a ticket",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {"title": {"type": "string"}},
+                            }
+                        }
+                    }
+                },
+                "responses": {"201": {"description": "Created"}},
+            },
+        },
+        "/tickets/{id}": {
+            "get": {
+                "operationId": "getTicket",
+                "summary": "Read a ticket",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": "integer"},
+                    }
+                ],
+                "responses": {"200": {"description": "OK"}},
+            },
+            "delete": {
+                "operationId": "deleteTicket",
+                "summary": "Delete a ticket",
+                "parameters": [
+                    {"name": "id", "in": "path", "required": True, "schema": {}}
+                ],
+                "responses": {"204": {"description": "Deleted"}},
+            },
+        },
+    },
+}
+
+
+@pytest.fixture
+def admin(make_test_user: MakeTestUser) -> User:
+    return make_test_user("endpoint-lines-admin", is_admin=True)
+
+
+def _create(db_session: Session, admin: User, config: OpenApiConfigInput) -> int:
+    detail = admin_api.create_integration(
+        IntegrationCreate(
+            name=f"tickets-{uuid4().hex[:8]}",
+            auth_mode=IntegrationAuthMode.NONE,
+            config=config,
+        ),
+        admin,
+        db_session,
+    )
+    return detail.id
+
+
+def _view(db_session: Session, admin: User, integration_id: int) -> OpenApiConfigView:
+    config = admin_api.get_integration_admin(integration_id, admin, db_session).config
+    assert isinstance(config, OpenApiConfigView)
+    return config
+
+
+def _operations(document: str) -> dict[str, dict[str, Any]]:
+    spec = yaml.safe_load(document)
+    return {
+        operation["operationId"]: operation
+        for item in spec["paths"].values()
+        for operation in item.values()
+    }
+
+
+def _new_keys(document: str) -> dict[str, str]:
+    """The action key of each new operation, by ``METHOD /path``."""
+    spec = yaml.safe_load(document)
+    return {
+        f"{method.upper()} {path}": operation["operationId"]
+        for path, item in spec["paths"].items()
+        for method, operation in item.items()
+    }
+
+
+def _action_keys(db_session: Session, admin: User, integration_id: int) -> set[str]:
+    return {
+        action.key
+        for action in admin_api.get_integration_actions(
+            integration_id, admin, db_session
+        ).actions
+    }
+
+
+def test_typed_lines_make_a_document_and_actions(
+    db_session: Session, admin: User
+) -> None:
+    integration_id = _create(
+        db_session,
+        admin,
+        OpenApiConfigInput(
+            base_url=BASE_URL,
+            endpoints=[
+                "GET /tickets/{id} Read a ticket",
+                "",
+                "GET /tickets?status&limit List tickets",
+                "post /tickets Create a ticket",
+            ],
+        ),
+    )
+
+    view = _view(db_session, admin, integration_id)
+    assert view.base_url == BASE_URL
+    assert view.endpoints == [
+        "GET /tickets/{id} Read a ticket",
+        "GET /tickets?status&limit List tickets",
+        "POST /tickets Create a ticket",
+    ]
+    operations = _operations(view.openapi_document)
+    keys = _new_keys(view.openapi_document)
+    assert keys["GET /tickets/{id}"].startswith("get_tickets_id_")
+    assert operations[keys["GET /tickets/{id}"]]["parameters"] == [
+        {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
+    ]
+    assert [
+        (param["name"], param["required"])
+        for param in operations[keys["GET /tickets"]]["parameters"]
+    ] == [("status", False), ("limit", False)]
+    assert operations[keys["POST /tickets"]]["requestBody"]["content"][
+        "application/json"
+    ]["schema"] == {"type": "object", "additionalProperties": True}
+    assert "requestBody" not in operations[keys["GET /tickets"]]
+    assert _action_keys(db_session, admin, integration_id) == set(keys.values())
+
+
+def test_a_line_edit_keeps_the_rest_of_an_imported_yaml_spec(
+    db_session: Session, admin: User
+) -> None:
+    document = yaml.safe_dump(IMPORTED, sort_keys=False)
+    imported = admin_api.import_openapi_spec(
+        OpenApiEndpointsRequest(openapi_document=document), admin
+    )
+    assert imported.base_url == "https://old.example.com/api"
+    assert imported.endpoints == [
+        "GET /tickets?status List tickets",
+        "POST /tickets Create a ticket",
+        "GET /tickets/{id} Read a ticket",
+        "DELETE /tickets/{id} Delete a ticket",
+    ]
+    integration_id = _create(
+        db_session,
+        admin,
+        OpenApiConfigInput(
+            openapi_document=imported.openapi_document,
+            base_url=BASE_URL,
+            endpoints=imported.endpoints,
+        ),
+    )
+    admin_api.set_integration_actions(
+        integration_id,
+        IntegrationActionsUpdate(
+            actions={
+                "createTicket": EffectivePolicy.BLOCKED,
+                "getTicket": EffectivePolicy.ASK,
+            }
+        ),
+        admin,
+        db_session,
+    )
+
+    admin_api.update_integration(
+        integration_id,
+        IntegrationUpdate(
+            config=OpenApiConfigInput(
+                base_url=BASE_URL,
+                endpoints=[
+                    # Kept as it was.
+                    "POST /tickets Create a ticket",
+                    # Renamed.
+                    "GET /tickets/{id} Show one ticket",
+                    # The method changed: a new operation.
+                    "PATCH /tickets/{id} Update a ticket",
+                    # New. The removed lines are GET /tickets and DELETE.
+                    "GET /users List users",
+                ],
+            )
+        ),
+        admin,
+        db_session,
+    )
+
+    view = _view(db_session, admin, integration_id)
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(view.openapi_document)
+    spec = yaml.safe_load(view.openapi_document)
+    assert spec["info"] == IMPORTED["info"]
+    assert spec["servers"] == [{"url": BASE_URL}]
+    operations = _operations(view.openapi_document)
+    keys = _new_keys(view.openapi_document)
+    patch_key = keys["PATCH /tickets/{id}"]
+    assert set(operations) == {
+        "createTicket",
+        "getTicket",
+        patch_key,
+        keys["GET /users"],
+    }
+    assert operations["createTicket"] == IMPORTED["paths"]["/tickets"]["post"]
+    assert operations["getTicket"] == {
+        **IMPORTED["paths"]["/tickets/{id}"]["get"],
+        "summary": "Show one ticket",
+    }
+    assert operations[patch_key]["summary"] == "Update a ticket"
+
+    actions = {
+        action.key: action
+        for action in admin_api.get_integration_actions(
+            integration_id, admin, db_session
+        ).actions
+    }
+    assert set(actions) == set(operations)
+    assert actions["createTicket"].admin_policy is EffectivePolicy.BLOCKED
+    assert actions["getTicket"].admin_policy is EffectivePolicy.ASK
+    assert actions["getTicket"].display_name == "Show one ticket"
+    assert actions[patch_key].admin_policy is None
+
+
+def test_unchanged_lines_keep_the_document_text(
+    db_session: Session, admin: User
+) -> None:
+    document = "# Kept\n" + yaml.safe_dump(
+        {**IMPORTED, "servers": [{"url": BASE_URL}]}, sort_keys=False
+    )
+    integration_id = _create(
+        db_session, admin, OpenApiConfigInput(openapi_document=document)
+    )
+    view = _view(db_session, admin, integration_id)
+    admin_api.update_integration(
+        integration_id,
+        IntegrationUpdate(
+            config=OpenApiConfigInput(base_url=BASE_URL, endpoints=view.endpoints)
+        ),
+        admin,
+        db_session,
+    )
+    assert _view(db_session, admin, integration_id).openapi_document == document
+
+
+@pytest.mark.parametrize("suffix", ["?version=2", "#v2"])
+def test_a_base_url_with_a_query_or_fragment_is_refused(
+    db_session: Session, admin: User, suffix: str
+) -> None:
+    with pytest.raises(OnyxError) as error:
+        _create(
+            db_session,
+            admin,
+            OpenApiConfigInput(
+                base_url=BASE_URL + suffix, endpoints=["GET /tickets List"]
+            ),
+        )
+    db_session.rollback()
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+    assert "query or a fragment" in error.value.detail
+
+
+def test_each_bad_line_gets_its_own_error(db_session: Session, admin: User) -> None:
+    integration_id = _create(
+        db_session,
+        admin,
+        OpenApiConfigInput(base_url=BASE_URL, endpoints=["GET /tickets List"]),
+    )
+    with pytest.raises(OnyxError) as error:
+        admin_api.update_integration(
+            integration_id,
+            IntegrationUpdate(
+                config=OpenApiConfigInput(
+                    base_url=BASE_URL,
+                    endpoints=[
+                        "GET /tickets List",
+                        "FETCH /tickets List",
+                        "GET tickets List",
+                        "GET /tickets/{id",
+                        "GET /tickets Again",
+                        "GET /search?q=1 Search",
+                    ],
+                )
+            ),
+            admin,
+            db_session,
+        )
+    db_session.rollback()
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+    assert error.value.extra is not None
+    line_errors = error.value.extra["line_errors"]
+    assert isinstance(line_errors, list)
+    assert [
+        EndpointLineError.model_validate(line_error).line for line_error in line_errors
+    ] == [1, 2, 3, 4, 5]
+    assert _view(db_session, admin, integration_id).endpoints == ["GET /tickets List"]
+
+
+def test_a_replaced_endpoint_does_not_take_the_policy_of_the_old_one(
+    db_session: Session, admin: User
+) -> None:
+    """``/a_b`` and ``/a-b`` are different endpoints, so they get different
+    action keys, and the Allow of the old one does not apply to the new one."""
+    integration_id = _create(
+        db_session,
+        admin,
+        OpenApiConfigInput(base_url=BASE_URL, endpoints=["POST /a_b Archive"]),
+    )
+    (old_key,) = _action_keys(db_session, admin, integration_id)
+    admin_api.set_integration_actions(
+        integration_id,
+        IntegrationActionsUpdate(actions={old_key: EffectivePolicy.ALLOW}),
+        admin,
+        db_session,
+    )
+
+    admin_api.update_integration(
+        integration_id,
+        IntegrationUpdate(
+            config=OpenApiConfigInput(
+                base_url=BASE_URL,
+                endpoints=["POST /a-b Delete everything"],
+            )
+        ),
+        admin,
+        db_session,
+    )
+
+    actions = {
+        action.key: action
+        for action in admin_api.get_integration_actions(
+            integration_id, admin, db_session
+        ).actions
+    }
+    (new_key,) = actions
+    assert new_key != old_key
+    assert actions[new_key].admin_policy is None
+
+
+def _matched_keys(
+    db_session: Session, integration_id: int, url: str
+) -> list[str] | None:
+    integration = db_session.get(Integration, integration_id)
+    assert integration is not None
+    (target,) = load_match_targets(db_session, integration_id)
+    match = ApiKindHandler().match_request(
+        integration,
+        target,
+        ProxiedRequest(
+            method="POST", path=url.removeprefix("https://tickets.example.com"), url=url
+        ),
+        db_session,
+    )
+    return None if match is None else [action.action_key for action in match.actions]
+
+
+def test_a_rest_app_with_no_endpoints_saves_and_matches_any_request(
+    db_session: Session, admin: User
+) -> None:
+    """A base URL with no endpoints, as the URL-pattern migration writes: VM
+    scripts reach it through the proxy as the other-request action."""
+    integration_id = _create(
+        db_session, admin, OpenApiConfigInput(base_url=BASE_URL, endpoints=[])
+    )
+    assert _view(db_session, admin, integration_id).endpoints == []
+
+    admin_api.update_integration(
+        integration_id,
+        IntegrationUpdate(
+            name="Renamed tickets",
+            config=OpenApiConfigInput(base_url=BASE_URL, endpoints=[]),
+        ),
+        admin,
+        db_session,
+    )
+    assert (
+        admin_api.refresh_integration_actions(integration_id, admin, db_session).actions
+        == []
+    )
+    admin_api.set_integration_actions(
+        integration_id,
+        IntegrationActionsUpdate(default_policy=EffectivePolicy.BLOCKED),
+        admin,
+        db_session,
+    )
+
+    assert _matched_keys(db_session, integration_id, f"{BASE_URL}/tickets/7/close") == [
+        "unspecified"
+    ]
+    assert (
+        _matched_keys(db_session, integration_id, "https://tickets.example.com/other")
+        is None
+    )

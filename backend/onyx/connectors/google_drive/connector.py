@@ -793,13 +793,17 @@ class GoogleDriveConnector(
         folder: GoogleDriveFileType,
         permission_sync_context: PermissionSyncContext | None,
         raw_id: str | None = None,
+        reader_email: str | None = None,
     ) -> HierarchyNode:
+        """``reader_email`` is a user who can see the folder. Its permissions
+        are read as that user, then as the admin."""
         # None when this run did not read permissions: the stored access stays.
         external_access = (
             get_external_access_for_folder(
                 folder,
                 permission_sync_context.google_domain,
                 self.ops,
+                reader_email or self.primary_admin_email,
                 self.primary_admin_email,
             )
             if permission_sync_context
@@ -845,7 +849,9 @@ class GoogleDriveConnector(
                 **drive_file,
                 "permissionIds": fields.get("permissionIds") or [],
             }
-        return self._folder_node(drive_file, permission_sync_context)
+        return self._folder_node(
+            drive_file, permission_sync_context, reader_email=folder.user_email
+        )
 
     def _get_folder_metadata(
         self,
@@ -2360,7 +2366,9 @@ class GoogleDriveConnector(
         )
         if folder is None or not _get_parent_id_from_file(folder):
             return None
-        return self._folder_node(folder, permission_sync_context, raw_id=folder_id)
+        return self._folder_node(
+            folder, permission_sync_context, raw_id=folder_id, reader_email=email
+        )
 
     def _read_unlisted_folder(
         self,
@@ -2404,12 +2412,16 @@ class GoogleDriveConnector(
             if folder_id in checkpoint.seen_hierarchy_node_raw_ids:
                 return _FolderRead(None, None, None, None)
             folder, email = parentless
-            node = self._folder_node(folder, permission_sync_context, raw_id=folder_id)
+            node = self._folder_node(
+                folder, permission_sync_context, raw_id=folder_id, reader_email=email
+            )
             return _FolderRead(node, None, email, folder.get("driveId"))
         if folder is None:
             # Documents under it keep their STUB parent.
             return _FolderRead(None, None, None, None)
-        node = self._folder_node(folder, permission_sync_context, raw_id=folder_id)
+        node = self._folder_node(
+            folder, permission_sync_context, raw_id=folder_id, reader_email=email
+        )
         if checkpoint.listing is not None:
             _remember_folder_name(
                 checkpoint.listing,

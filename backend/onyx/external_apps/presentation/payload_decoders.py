@@ -84,6 +84,10 @@ def _summarize_message(message: EmailMessage) -> dict[str, Any]:
         summary["subject"] = str(subject)
     if body := _plain_body(message):
         summary["body"] = body
+    # The recipient may see the HTML version, so show it when it differs.
+    html = _part_text(message, "html")
+    if html and html != body:
+        summary["html_body"] = html
     if attachments := _attachments(message):
         summary["attachments"] = attachments
     return summary
@@ -102,7 +106,12 @@ def _addresses(values: list[Any] | None) -> list[str]:
 
 def _plain_body(message: EmailMessage) -> str:
     """The message's text body, preferring plaintext over HTML."""
-    body_part = message.get_body(preferencelist=("plain", "html"))
+    return _part_text(message, "plain", "html")
+
+
+def _part_text(message: EmailMessage, *kinds: str) -> str:
+    """The text of the message's first body part of ``kinds``."""
+    body_part = message.get_body(preferencelist=kinds)
     if body_part is None:
         return ""
     try:

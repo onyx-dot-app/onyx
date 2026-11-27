@@ -52,6 +52,7 @@ from fastapi_users.manager import UserManagerDependency
 from fastapi_users.openapi import OpenAPIResponseType
 from fastapi_users.router.common import ErrorCode, ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
 from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
@@ -2839,9 +2840,58 @@ async def current_user_from_websocket(
         CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
 
 
+def _cookie_strategy(db_session: AsyncSession) -> Strategy[User, uuid.UUID]:
+    """The cookie backend's strategy, with Postgres auth's token store on
+    `db_session`."""
+    if AUTH_BACKEND == AuthBackend.POSTGRES:
+        return get_database_strategy(
+            SQLAlchemyAccessTokenDatabase(db_session, AccessToken)
+        )
+    if AUTH_BACKEND == AuthBackend.REDIS:
+        return get_redis_strategy()
+    if AUTH_BACKEND == AuthBackend.JWT:
+        return get_jwt_strategy()
+    raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
+
+
+async def read_websocket_cookie_user(websocket: WebSocket) -> User | None:
+    """The active user with basic access whose session the websocket's
+    cookie holds, read again from the session store and the database; None
+    when the session or the user no longer qualifies. Call it in the
+    tenant's scope. A long-lived websocket calls it again to notice a
+    logout, a deactivation or a lost permission."""
+    token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not token:
+        return None
+    # Build the user manager and the strategy inside the tenant scope, in a
+    # session that closes after the read. As route-level Depends they would
+    # open a DB session before the tenant is set and hold it for the
+    # websocket's life.
+    get_user_db_context = asynccontextmanager(get_user_db)
+    get_user_manager_context = asynccontextmanager(get_user_manager)
+    async with get_async_session_context_manager() as db_session:
+        async with get_user_db_context(db_session) as user_db:
+            async with get_user_manager_context(user_db) as user_manager:
+                user = await _cookie_strategy(db_session).read_token(
+                    token, user_manager
+                )
+
+    if user is None or not user.is_active:
+        return None
+
+    try:
+        user = await double_check_user(user)
+    except BasicAuthenticationError:
+        return None
+
+    if Permission.BASIC_ACCESS not in get_effective_permissions(user):
+        logger.warning("WS auth: user %s lacks basic access", user.email)
+        return None
+    return user
+
+
 async def current_user_from_websocket_cookie(
     websocket: WebSocket,
-    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
 ) -> AsyncGenerator[User, None]:
     """WebSocket authentication dependency using the session cookie.
 
@@ -2874,25 +2924,8 @@ async def current_user_from_websocket_cookie(
 
     tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        # Build the user manager inside the tenant scope. As a route-level
-        # Depends it would open its DB session before the tenant is set.
-        get_user_db_context = asynccontextmanager(get_user_db)
-        get_user_manager_context = asynccontextmanager(get_user_manager)
-        async with get_async_session_context_manager() as db_session:
-            async with get_user_db_context(db_session) as user_db:
-                async with get_user_manager_context(user_db) as user_manager:
-                    user = await strategy.read_token(token, user_manager)
-
-        if user is None or not user.is_active:
-            raise WebSocketException(code=1008)
-
-        try:
-            user = await double_check_user(user)
-        except BasicAuthenticationError as e:
-            raise WebSocketException(code=1008) from e
-
-        if Permission.BASIC_ACCESS not in get_effective_permissions(user):
-            logger.warning("WS auth: user %s lacks basic access", user.email)
+        user = await read_websocket_cookie_user(websocket)
+        if user is None:
             raise WebSocketException(code=1008)
 
         logger.debug("WS auth: authenticated %s", user.email)

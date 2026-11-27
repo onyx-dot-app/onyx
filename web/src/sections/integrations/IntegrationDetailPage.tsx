@@ -28,7 +28,10 @@ import CustomizeDetailLayout, {
   BackLink,
   type DetailTab,
 } from "@/sections/customize/CustomizeDetailLayout";
-import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
+import {
+  INTEGRATION_SHAPE_ICONS,
+  useIntegrationLabels,
+} from "@/sections/integrations/integrationLabels";
 import IntegrationOverviewTab from "@/sections/integrations/IntegrationOverviewTab";
 import EditIntegrationDetailsModal from "@/sections/integrations/EditIntegrationDetailsModal";
 import IntegrationConfigurationTab from "@/sections/integrations/IntegrationConfigurationTab";
@@ -113,7 +116,7 @@ export default function IntegrationDetailPage({
             <IntegrationConfigurationTab
               key={`${data.id}:${data.auth_mode}:${data.auth_method ?? ""}`}
               integration={data}
-              onChanged={() => void mutate()}
+              onChanged={() => mutate()}
             />
           ),
         },
@@ -134,7 +137,7 @@ export default function IntegrationDetailPage({
   return (
     <CustomizeDetailLayout
       back={<BackLink to="/admin/integrations" label={t("back")} />}
-      icon={SvgPlug}
+      icon={data ? INTEGRATION_SHAPE_ICONS[data.shape] : SvgPlug}
       title={data?.name ?? t("title")}
       description={data ? labels.shape(data) : undefined}
       loading={isLoading}
@@ -162,7 +165,6 @@ export default function IntegrationDetailPage({
           icon={SvgTrash}
           color="error"
           title={overviewCopy("delete.confirmTitle", { name: data.name })}
-          description={overviewCopy("delete.confirmDescription")}
           onClose={busy ? undefined : () => setConfirmDelete(false)}
           submit={
             <Button
@@ -173,7 +175,9 @@ export default function IntegrationDetailPage({
               {overviewCopy("delete.confirm")}
             </Button>
           }
-        />
+        >
+          {overviewCopy("delete.confirmDescription")}
+        </ConfirmationModalLayout>
       )}
     </CustomizeDetailLayout>
   );
@@ -208,7 +212,10 @@ export default function IntegrationDetailPage({
         : []),
     ];
     return [
-      <Badge key="status" size={6} {...badge} />,
+      // The switch shows on and off, so the badge shows only a problem.
+      ...(badge.color === "warning"
+        ? [<Badge key="status" size={6} {...badge} />]
+        : []),
       ...(menu.length > 0
         ? [
             <Dropdown key="menu" align="end">

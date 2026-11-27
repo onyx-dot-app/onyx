@@ -25,6 +25,10 @@ from onyx.tools.models import (
     CodeModeResultSpec,
     LlmPythonExecutionResult,
 )
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
+    openapi_to_method_specs,
+)
+from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
 from onyx.tools.tool_implementations.code_mode.sandbox import PRELUDE_STUBS
 from onyx.tools.tool_implementations.code_mode.shapes import (
     CLAUDE_CODE_MODE,
@@ -44,10 +48,6 @@ from onyx.tools.tool_implementations.code_mode.stubs import (
     tool_arguments,
 )
 from onyx.tools.tool_implementations.code_mode.tool_search import MAX_TOOL_SEARCH_LIMIT
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
-    openapi_to_method_specs,
-)
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OPEN_URL_SHAPES,
     OPEN_URL_TOOL_NAMES,
@@ -75,6 +75,7 @@ from onyx.tools.tool_implementations.subagents.subagent_tools import (
     InterruptAgentTool,
     ListAgentsTool,
 )
+from tests.unit.fakes import NO_CREDENTIALS
 from tests.unit.onyx.tools.code_mode.fakes import (
     FakeImageGenerationTool,
     FakeMCPTool,
@@ -1100,7 +1101,15 @@ def test_tool_search_matches_openapi_query_parameter_descriptions() -> None:
             },
         }
     )
-    tool = CustomTool(integration_id=1, method_spec=method, base_url="http://x")
+    tool = RestTool(
+        integration_id=1,
+        method_spec=method,
+        base_url="http://x",
+        headers={},
+        approval=None,
+        action_key=method.raw_name,
+        credentials=NO_CREDENTIALS,
+    )
     stubs = build_tool_stubs(OPENAI_CODE_MODE, [tool])
 
     assert "sev: Severity bucket of the outage." in stubs.functions[tool.name].stub

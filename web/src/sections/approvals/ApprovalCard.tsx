@@ -30,8 +30,11 @@ export interface ApprovalCardProps {
   payload: Record<string, unknown>;
   /** ISO 8601 deadline shown while the request waits. */
   expiresAt?: string | null;
-  /** What "approve for session" covers: a Craft session or a chat. */
-  sessionScope?: "session" | "chat";
+  /**
+   * What "approve for session" covers: a Craft session, a chat, or the rest of
+   * a VM command, which submits "approve_command".
+   */
+  sessionScope?: "session" | "chat" | "command";
   canApproveForSession?: boolean;
   status: ApprovalStatus;
   /**
@@ -58,6 +61,13 @@ export default function ApprovalCard({
   const t = useTranslations("common.approvalCard");
   const format = useFormatter();
   const [isOpen, setIsOpen] = useState(true);
+  const deadlineTime = expiresAt
+    ? format.dateTime(new Date(expiresAt), {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+  const deadline = deadlineTime ? t("deadline", { time: deadlineTime }) : null;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
 
@@ -98,22 +108,35 @@ export default function ApprovalCard({
           count: actions.length,
           app: appName ?? "",
         });
-  const sessionCopy =
-    sessionScope === "chat" ? "approveChat" : "approveSession";
+  const scopeCopy = {
+    session: {
+      decision: "approve_session",
+      button: "approveSession",
+      record: "approvedForSession",
+    },
+    chat: {
+      decision: "approve_session",
+      button: "approveChat",
+      record: "approvedForChat",
+    },
+    command: {
+      decision: "approve_command",
+      button: "approveCommand",
+      record: "approvedForCommand",
+    },
+  } as const satisfies Record<
+    NonNullable<ApprovalCardProps["sessionScope"]>,
+    { decision: ApprovalSubmitDecision; button: string; record: string }
+  >;
+  const scope = scopeCopy[sessionScope];
+  const sessionCopy = scope.button;
   // A decided request leaves a one-line record in the timeline.
   const record =
     status === "pending"
       ? null
-      : t(
-          `record.${
-            status !== "approvedForSession"
-              ? status
-              : sessionScope === "chat"
-                ? "approvedForChat"
-                : "approvedForSession"
-          }`,
-          { headline }
-        );
+      : t(`record.${status !== "approvedForSession" ? status : scope.record}`, {
+          headline,
+        });
 
   const single = actions.length === 1;
 
@@ -172,7 +195,16 @@ export default function ApprovalCard({
         <CometEdge active tone="info" speedSeconds={3.6}>
           <div className="rounded-08 border border-status-info-03 overflow-hidden bg-background-neutral-00">
             <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
-              <Collapsible.Trigger className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02">
+              {/* The spinner and the decisions show the wait; only screen
+                  readers hear "Approval requested". */}
+              <Collapsible.Trigger
+                aria-label={
+                  deadlineTime
+                    ? t("header.requiredBy", { headline, time: deadlineTime })
+                    : t("header.required", { headline })
+                }
+                className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02"
+              >
                 <SvgLoader className="size-4 shrink-0 stroke-status-info-05 motion-safe:animate-spin" />
                 <span className="min-w-0 flex-1">
                   <Text
@@ -180,21 +212,16 @@ export default function ApprovalCard({
                     color="text-04"
                     wordWrap="wrap-anywhere"
                   >
-                    {t("header.required", { headline })}
+                    {headline}
                   </Text>
                 </span>
-                {expiresAt && (
+                {deadline && (
                   <Text
                     font="secondary-body"
                     color="text-03"
                     wordWrap="whitespace-nowrap"
                   >
-                    {t("deadline", {
-                      time: format.dateTime(new Date(expiresAt), {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      }),
-                    })}
+                    {deadline}
                   </Text>
                 )}
                 <SvgChevronDown
@@ -235,7 +262,7 @@ export default function ApprovalCard({
                       prominence="secondary"
                       size="sm"
                       disabled={submitting}
-                      onClick={() => void decide("approve_session")}
+                      onClick={() => void decide(scope.decision)}
                       aria-label={t(`${sessionCopy}.tooltip`)}
                     >
                       {t(`${sessionCopy}.button`)}

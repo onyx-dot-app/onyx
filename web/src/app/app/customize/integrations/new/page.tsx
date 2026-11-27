@@ -1,5 +1,5 @@
-import AddIntegrationPage from "@/sections/integrations/AddIntegrationPage";
+import CustomizeIntegrationsPage from "@/sections/customize/CustomizeIntegrationsPage";
 
 export default function Page() {
-  return <AddIntegrationPage from="customize" />;
+  return <CustomizeIntegrationsPage openAdd />;
 }

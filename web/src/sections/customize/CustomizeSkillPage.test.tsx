@@ -632,7 +632,7 @@ test("a skill synced from GitHub offers no content changes, and says why", async
   ).not.toBeInTheDocument();
 });
 
-test("an uploaded plugin opens its plugin page without skill-only requests", async () => {
+test("an uploaded plugin opens its admin plugin page without skill-only requests", async () => {
   window.history.replaceState(null, "", "/admin/skills/custom-1");
   const plugin = customFixture({
     id: "custom-1",
@@ -645,7 +645,7 @@ test("an uploaded plugin opens its plugin page without skill-only requests", asy
   });
   render(<CustomizeSkillPage skillId="custom-1" from="admin" />);
   await waitFor(() =>
-    expect(window.location.pathname).toBe("/app/customize/plugins/custom-1")
+    expect(window.location.pathname).toBe("/admin/plugins/custom-1")
   );
   expect(
     fetchMock.mock.calls

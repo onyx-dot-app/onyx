@@ -25,8 +25,13 @@ from onyx.external_apps.providers.registry import (
 )
 from onyx.integrations.connections import preset_organization_values
 from onyx.integrations.policy import admin_blocked_actions
+from onyx.server.features.build.configs import (
+    SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.skills.built_in import iter_builtin_skill_files
 from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
+from onyx.tools.tool_name import preset_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -144,6 +149,37 @@ def build_action_availability_section(
     return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
 
 
+def build_app_tools_section(integration_id: int) -> str:
+    """How the commands of the skill and the chat tools of the app divide the
+    work. A chat has one tool for each action of the app. A tool, and a
+    command that exec_command waits on, can ask the user for approval."""
+    prefix = preset_tool_name(integration_id, "")
+    client_timeout = (
+        SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
+    )
+    return "\n".join(
+        [
+            f"When you have tools whose names start with `{prefix}`, each one "
+            "is one action of this app:",
+            "",
+            "- Use the tool for a single call. The tool asks the user for "
+            "approval when the action needs it.",
+            "- Use the commands below in a script for work with many calls. "
+            "When a request of the script needs approval, the user sees an "
+            "approval card while exec_command waits on the script, and the "
+            "request waits for the decision for up to "
+            f"**{SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds**. Set a client "
+            f"timeout of **at least {client_timeout} seconds** so you don't "
+            "give up before the user decides. A rejected or expired request "
+            "fails with a 403.",
+            "- A request that needs approval from a background process fails "
+            "with `approval_needs_tool`. Do not retry it in the background. "
+            "Run the script in the foreground, or send the request through "
+            "the tool that the error names.",
+        ]
+    )
+
+
 def resolve_skill_dir_placeholder(skill_md: str, skill_dir: str) -> str:
     """Replace each ``${CLAUDE_SKILL_DIR}`` with the skill's absolute folder."""
     return skill_md.replace(CLAUDE_SKILL_DIR_PLACEHOLDER, skill_dir)
@@ -162,11 +198,13 @@ def render_external_app_skill(
     app_type: ExternalAppType,
     blocked: Collection[str],
     app_values: Mapping[str, str] | None = None,
+    integration_id: int | None = None,
 ) -> str:
     """Pure template rendering for an external-app SKILL.md: apply the cloud
     description override, resolve the cloud-scope blocks, substitute the
     provider's ``{{APP:<key>}}`` values, then fill the action-availability
-    placeholder."""
+    placeholder with the chat tools of the app (``integration_id``) and the
+    unavailable actions."""
     is_cloud = uses_cloud_scope(app_type)
 
     cloud_description = _CLOUD_DESCRIPTION_RE.search(template)
@@ -183,7 +221,14 @@ def render_external_app_skill(
 
     template = _CLOUD_SCOPE_BLOCK_RE.sub(_resolve_block, template)
     template = substitute_app_values(template, app_values or {})
-    section = build_action_availability_section(app_type, blocked)
+    section = "\n\n".join(
+        part
+        for part in (
+            build_app_tools_section(integration_id) if integration_id else "",
+            build_action_availability_section(app_type, blocked),
+        )
+        if part
+    )
     if section:
         rendered = template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
     else:
@@ -265,7 +310,11 @@ def render_external_app_files(
     )
     rendered = {
         SKILL_MD_NAME: render_external_app_skill(
-            (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, blocked, values
+            (source_dir / _SKILL_TEMPLATE_NAME).read_text(),
+            app_type,
+            blocked,
+            values,
+            integration_id,
         )
     }
     for path in iter_builtin_skill_files(source_dir):

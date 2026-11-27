@@ -6,7 +6,6 @@ import { BackendChatSession } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/lib/timeline/chat/message/HumanMessage";
-import AgentResultsDivider from "@/lib/timeline/chat/message/AgentResultsDivider";
 import { ErrorBanner } from "@/lib/timeline/chat/message/Resubmit";
 import AgentMessage from "@/lib/timeline/chat/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/lib/timeline/chat/message/MultiModelResponseView";
@@ -281,16 +280,8 @@ export default function SharedChatDisplay({
                   );
                 }
 
-                if (message.type === "agent_results") {
-                  return (
-                    <div
-                      key={message.messageId}
-                      className="w-[min(50rem,100%)]"
-                    >
-                      <AgentResultsDivider />
-                    </div>
-                  );
-                }
+                // The follow-up continues the turn, as T3 Code shows it
+                if (message.type === "agent_results") return null;
 
                 // Non-user (assistant or error): skip the single child the
                 // chain surfaced when its parent is a multi-model turn. The
@@ -336,7 +327,11 @@ export default function SharedChatDisplay({
                           llmManager={null}
                           otherMessagesCanSwitchTo={undefined}
                           onMessageSelection={undefined}
-                          hideFooter={message.type === "error"}
+                          // A turn's actions show once, under its last answer
+                          hideFooter={
+                            message.type === "error" ||
+                            messages[i + 1]?.type === "agent_results"
+                          }
                           disableTTS={message.type === "error"}
                         />
                       )}

@@ -12,8 +12,6 @@ export type SkillGroup = (typeof SKILL_GROUPS)[number];
 
 export type SkillStatusFilter = "all" | "on" | "off";
 
-export type SkillSort = "updated" | "name";
-
 export type GroupedSkills = Record<SkillGroup, Skill[]>;
 
 export interface SkillListOptions {
@@ -22,7 +20,6 @@ export interface SkillListOptions {
   craftEnabled: boolean;
   query: string;
   status: SkillStatusFilter;
-  sort: SkillSort;
   locale: string;
 }
 
@@ -51,12 +48,12 @@ function matches(skill: Skill, options: SkillListOptions): boolean {
   );
 }
 
-function compare(a: Skill, b: Skill, options: SkillListOptions): number {
-  const byName = a.name.localeCompare(b.name, options.locale, {
-    sensitivity: "base",
-  });
-  if (options.sort === "name") return byName;
-  return (b.updated_at ?? "").localeCompare(a.updated_at ?? "") || byName;
+/** Most recently updated first, then by name. */
+function compare(a: Skill, b: Skill, locale: string): number {
+  return (
+    (b.updated_at ?? "").localeCompare(a.updated_at ?? "") ||
+    a.name.localeCompare(b.name, locale, { sensitivity: "base" })
+  );
 }
 
 export function visibleSkills(
@@ -84,6 +81,6 @@ export function groupSkills(
       groups[skillGroup(skill, options.userId)].push(skill);
   }
   for (const group of SKILL_GROUPS)
-    groups[group].sort((a, b) => compare(a, b, options));
+    groups[group].sort((a, b) => compare(a, b, options.locale));
   return groups;
 }

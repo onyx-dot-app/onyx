@@ -28,7 +28,7 @@ test.describe("Required integration gate @exclusive", () => {
     oauth_client: null,
     config: {
       shape: "openapi",
-      openapi_spec: {
+      openapi_document: JSON.stringify({
         openapi: "3.0.0",
         info: {
           title: integrationName,
@@ -45,7 +45,7 @@ test.describe("Required integration gate @exclusive", () => {
             },
           },
         },
-      },
+      }),
     },
   };
 

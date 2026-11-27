@@ -76,12 +76,26 @@ const nextConfig = {
   },
   async rewrites() {
     return [
+      // Preset sign-ins return here with Craft off too, so serve the
+      // callback outside the gated /craft layout. Proxy still sees this path.
+      {
+        source: "/craft/v1/apps/oauth/callback",
+        destination: "/mcp/oauth/callback",
+      },
       {
         source:
           "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
         }/build/sessions/:sessionId/webapp/_next/:hmrEndpoint`,
+      },
+      // The chat browser's websocket, as Craft's HMR above: in dev the page's
+      // origin passes the upgrade and the auth cookie on to the backend
+      {
+        source: "/api/chat/sessions/:sessionId/browser/ws",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/chat/sessions/:sessionId/browser/ws`,
       },
       {
         source: "/ph_ingest/static/:path*",
@@ -179,11 +193,6 @@ const nextConfig = {
         permanent: false,
       },
       {
-        source: "/admin/plugins",
-        destination: "/admin/integrations",
-        permanent: false,
-      },
-      {
         source: "/admin/plugins/mcp/:id",
         destination: "/admin/integrations",
         permanent: false,
@@ -197,6 +206,12 @@ const nextConfig = {
         source: "/admin/plugins/external-app/:id",
         destination: "/admin/integrations",
         permanent: false,
+      },
+      // Marketplaces moved into a section of the Plugins page.
+      {
+        source: "/app/customize/plugins/marketplaces",
+        destination: "/app/customize/plugins#marketplaces",
+        permanent: true,
       },
       // The member plugin and skill pages moved to Customize. Next.js passes
       // the query of the old URL on to the new one.

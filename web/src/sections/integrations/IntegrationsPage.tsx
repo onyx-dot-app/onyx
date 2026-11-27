@@ -4,8 +4,6 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Badge,
-  Button,
-  InputSingleSelect,
   InputTypeIn,
   Table,
   Text,
@@ -18,16 +16,14 @@ import {
   SettingsLayouts,
   Toolbar,
 } from "@opal/layouts";
-import { SvgLink, SvgPlus } from "@opal/icons";
+import { SvgLink } from "@opal/icons";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { useNavigation } from "@opal/navigation";
+import { useScreenSize } from "@opal/hooks";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useAdminIntegrations } from "@/lib/integrations/hooks";
-import type {
-  AdminIntegration,
-  IntegrationKind,
-} from "@/lib/integrations/types";
+import type { AdminIntegration } from "@/lib/integrations/types";
 import {
   integrationDetailHref,
   sortIntegrations,
@@ -36,14 +32,22 @@ import {
   INTEGRATION_SHAPE_ICONS,
   useIntegrationLabels,
 } from "@/sections/integrations/integrationLabels";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import AddIntegrationMenu from "@/sections/integrations/AddIntegrationMenu";
+import IntegrationCatalogSection from "@/sections/integrations/IntegrationCatalogSection";
 import IntegrationInstallSetting from "@/sections/integrations/IntegrationInstallSetting";
+import IntegrationKindFilter, {
+  type IntegrationKindFilterValue,
+} from "@/sections/integrations/IntegrationKindFilter";
 import { useIntegrationStateCopy } from "@/sections/customize/IntegrationAccessControls";
 
-type KindFilter = "all" | IntegrationKind;
-const KIND_FILTERS: readonly KindFilter[] = ["all", "mcp", "api"];
+interface IntegrationsPageProps {
+  /** The `/new` route: the add modal opens at once. */
+  openAdd?: boolean;
+}
 
-export default function IntegrationsPage() {
+export default function IntegrationsPage({
+  openAdd = false,
+}: IntegrationsPageProps) {
   const t = useTranslations("admin.integrations");
   const locale = useLocale();
   const navigation = useNavigation();
@@ -55,7 +59,8 @@ export default function IntegrationsPage() {
   const canCreate = isGlobalHolder || isScopedManager;
   const { data, error, isLoading } = useAdminIntegrations();
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<KindFilter>("all");
+  const [kind, setKind] = useState<IntegrationKindFilterValue>("all");
+  const { isMobile } = useScreenSize();
 
   const search = query.trim().toLocaleLowerCase();
   const integrations = sortIntegrations(data ?? [], locale).filter(
@@ -66,28 +71,7 @@ export default function IntegrationsPage() {
         .includes(search)
   );
 
-  const columns: TableColumn<AdminIntegration>[] = [
-    {
-      kind: "data",
-      field: "name",
-      title: t("columns.name"),
-      weight: 28,
-      truncate: true,
-      cell: (name, row) => (
-        <Content
-          icon={INTEGRATION_SHAPE_ICONS[row.shape]}
-          title={name}
-          description={
-            accessCopy.reason(row) ??
-            (row.access.owner_email
-              ? t("ownedBy", { owner: row.access.owner_email })
-              : (row.description ?? undefined))
-          }
-          titleMaxLines={1}
-          descriptionMaxLines={1}
-        />
-      ),
-    },
+  const detailColumns: TableColumn<AdminIntegration>[] = [
     {
       kind: "display",
       id: "type",
@@ -125,6 +109,32 @@ export default function IntegrationsPage() {
         </Section>
       ),
     },
+  ];
+
+  const columns: TableColumn<AdminIntegration>[] = [
+    {
+      kind: "data",
+      field: "name",
+      title: t("columns.name"),
+      weight: 28,
+      truncate: true,
+      cell: (name, row) => (
+        <Content
+          icon={INTEGRATION_SHAPE_ICONS[row.shape]}
+          title={name}
+          description={
+            accessCopy.reason(row) ??
+            (row.description ||
+              (row.access.owner_email
+                ? t("ownedBy", { owner: row.access.owner_email })
+                : undefined))
+          }
+          titleMaxLines={1}
+          descriptionMaxLines={1}
+        />
+      ),
+    },
+    ...(isMobile ? [] : detailColumns),
     {
       kind: "display",
       id: "status",
@@ -148,15 +158,11 @@ export default function IntegrationsPage() {
         actions={
           canCreate
             ? [
-                <Button
+                <AddIntegrationMenu
                   key="add"
-                  icon={SvgPlus}
-                  {...navigation.linkTo(
-                    `${ADMIN_ROUTES.INTEGRATIONS.path}/new`
-                  )}
-                >
-                  {t("add.label")}
-                </Button>,
+                  from="admin"
+                  openOnLoad={openAdd}
+                />,
               ]
             : []
         }
@@ -172,23 +178,7 @@ export default function IntegrationsPage() {
               onChange={(event) => setQuery(event.target.value)}
             />
           }
-          filters={[
-            <InputSingleSelect
-              key="filter"
-              placeholder={t("filters.label")}
-              value={kind}
-              defaultOption="all"
-              options={KIND_FILTERS.map((value) => ({
-                value,
-                title: t(`filters.${value}`),
-              }))}
-              onValueChange={(value) =>
-                setKind(
-                  KIND_FILTERS.find((option) => option === value) ?? "all"
-                )
-              }
-            />,
-          ]}
+          actions={<IntegrationKindFilter value={kind} onChange={setKind} />}
         />
         <Table
           label={t("title")}
@@ -214,6 +204,7 @@ export default function IntegrationsPage() {
             />
           }
         />
+        {canCreate && <IntegrationCatalogSection from="admin" />}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

@@ -139,6 +139,10 @@ class Settings(BaseModel):
     # every gateway route rejects requests. Default on.
     llm_gateway_enabled: bool = True
 
+    # Workspace-wide switch for the chat browser: the agent's browser tools
+    # in the chat VM and the live view of its tabs. Default on.
+    browser_enabled: bool = True
+
     # Who can publish skills to the organization. Organization-wide skill
     # managers always publish at once.
     plugin_publishing: PluginPublishingPolicy = PluginPublishingPolicy.OPEN
@@ -183,6 +187,9 @@ class UserSettings(Settings):
     vector_db_enabled: bool = True
     # HIDE_ONYX_BRANDING env var, honored only on the Enterprise tier.
     hide_onyx_branding: bool = False
+    # True when the user's chats can use the browser: a signed-in user,
+    # harness sandboxes run in this deployment and browser_enabled is on.
+    chat_browser_available: bool = False
     # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
     # True on the playground deployment (IS_PLAYGROUND env var). The web app

@@ -163,7 +163,7 @@ func main() {
 	flag.StringVar(&f.tlsCert, "tls-cert", "", "server certificate file (PEM) for --listen")
 	flag.StringVar(&f.tlsKey, "tls-key", "", "server key file (PEM) for --listen")
 	flag.StringVar(&f.clientCA, "client-ca", "", "api_server client CA file (PEM); only clients it signed are accepted")
-	flag.StringVar(&f.dialPorts, "dial-ports", "3010", "guest vsock ports that Dial allows (never --daemon-port)")
+	flag.StringVar(&f.dialPorts, "dial-ports", formatPorts(server.DefaultDialPorts), "guest vsock ports that Dial allows (never --daemon-port)")
 	flag.StringVar(&f.clientSANs, "client-allowed-sans", "", "comma-separated DNS or URI SANs; a client cert must have one (empty: any cert from --client-ca)")
 	flag.IntVar(&f.dialMax, "dial-max-streams", server.DefaultMaxDialsPerVM, "most open Dial streams per VM")
 	flag.UintVar(&f.daemonPort, "daemon-port", server.DefaultDaemonPort, "guest vsock port of the guest daemon (craft.sandboxd.v1.Sandboxd pass-through)")
@@ -593,6 +593,15 @@ func egressCASource(f flags) (egressca.Source, error) {
 		return egressca.ConfigMap{Getter: c, Namespace: ns, Name: name, Key: key}, nil
 	}
 	return nil, nil
+}
+
+// formatPorts is the --dial-ports form of ports.
+func formatPorts(ports []uint32) string {
+	s := make([]string, len(ports))
+	for i, p := range ports {
+		s[i] = strconv.FormatUint(uint64(p), 10)
+	}
+	return strings.Join(s, ",")
 }
 
 func parsePorts(s string) ([]uint32, error) {

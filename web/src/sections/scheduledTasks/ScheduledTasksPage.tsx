@@ -170,18 +170,13 @@ export default function ScheduledTasksPage() {
       id: "status",
       title: t("columns.status"),
       width: { weight: 16 },
-      cell: (row) => (
-        <Section
-          flexDirection="row"
-          justifyContent="end"
-          alignItems="center"
-          height="auto"
-          gap={1}
-        >
-          <TaskStatusBadge status={row.status} />
-          <ScheduledTaskMenu task={row} />
-        </Section>
-      ),
+      cell: (row) => <TaskStatusBadge status={row.status} />,
+    },
+    {
+      kind: "actions",
+      showColumnVisibility: false,
+      showSorting: false,
+      cell: (row) => <ScheduledTaskMenu task={row} />,
     },
   ];
 

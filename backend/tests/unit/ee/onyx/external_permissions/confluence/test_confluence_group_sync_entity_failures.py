@@ -29,6 +29,7 @@ def _user(user_id: str) -> ConfluenceUser:
 def _run_confluence_group_sync(
     user_groups: dict[str, list[str] | Exception],
     reported: list[ExternalUserGroup | SyncEntityFailure] | None = None,
+    is_cloud: bool = True,
 ) -> list[ExternalUserGroup | SyncEntityFailure]:
     """Runs the sync. ``reported`` collects each yielded item as it arrives, so
     a test can read what was yielded before the sync raised."""
@@ -48,7 +49,7 @@ def _run_confluence_group_sync(
     source_operations.list_users.return_value = [_user(uid) for uid in user_groups]
     source_operations.list_user_groups.side_effect = _list_user_groups
     cc_pair = MagicMock()
-    cc_pair.connector.connector_specific_config = {"is_cloud": True}
+    cc_pair.connector.connector_specific_config = {"is_cloud": is_cloud}
     with (
         patch.object(group_sync, "OnyxDBCredentialsProvider"),
         patch.object(
@@ -88,6 +89,21 @@ def test_failing_user_is_skipped_whole_and_reported() -> None:
         "sales": {"carol@a.com"},
         ALL_CONF_EMAILS_GROUP_NAME: {"alice@a.com", "carol@a.com"},
     }
+
+
+def test_server_yields_the_all_users_group() -> None:
+    """Server/DC spaces with anonymous read grant the all-users group too, so
+    group sync must store its members there as well."""
+    items = _run_confluence_group_sync(
+        {"alice": ["engineering"], "carol": ["sales"]}, is_cloud=False
+    )
+
+    groups = {
+        item.id: set(item.user_emails)
+        for item in items
+        if isinstance(item, ExternalUserGroup)
+    }
+    assert groups[ALL_CONF_EMAILS_GROUP_NAME] == {"alice@a.com", "carol@a.com"}
 
 
 def test_too_many_failed_users_fail_the_sync_after_reporting_them() -> None:

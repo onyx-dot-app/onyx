@@ -69,6 +69,8 @@ from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 CALL = ToolCall(id="send-call", name="send_email", arguments={"to": "team"})
+# The integration of the call's action, which the card names.
+APP_NAME = "Mail"
 
 
 APPROVAL_ID = UUID("8f9a6a52-4c4e-4d55-9a0e-2f43e7d1c001")
@@ -85,6 +87,7 @@ class _Approvals(ToolApprovals):
             request_id=str(APPROVAL_ID),
             prompt="Allow?",
             mode=InputMode.EXECUTE,
+            app_name=APP_NAME,
         )
 
     def withdraw_approval(self, request_id: str) -> None:  # noqa: ARG002
@@ -102,6 +105,7 @@ def _saved(
         id=approval_id,
         chat_message_id=1,
         tool_call_id=CALL.id,
+        action_id="send_email",
         tool_name=CALL.name,
         display_name="Send email",
         arguments={"to": "team"},
@@ -109,6 +113,7 @@ def _saved(
         decision=decision,
         decided_via=decided_via,
         decided_at=created_at if decision is not None else None,
+        app_name=APP_NAME,
     )
 
 
@@ -191,6 +196,8 @@ def test_a_program_call_that_ends_without_a_decision_reports_how(
         ToolApprovalResolved,
     ]
     assert approval[0].placement == approval[1].placement
+    assert isinstance(approval[0].obj, ToolApprovalRequest)
+    assert approval[0].obj.app_name == APP_NAME
     assert approval[1].obj == ToolApprovalResolved(
         approval_id=str(APPROVAL_ID), outcome=ends
     )
@@ -261,6 +268,7 @@ _REQUEST = ToolApprovalRequest(
     tool_name=CALL.name,
     display_name="Send email",
     arguments={"to": "team"},
+    app_name=APP_NAME,
 )
 
 

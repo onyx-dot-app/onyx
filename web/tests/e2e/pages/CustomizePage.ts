@@ -71,10 +71,10 @@ export class CustomizePage {
       .click();
   }
 
-  /** An off skill shows Disabled and a Turn on button in its row. */
+  /** An off skill shows Off and a Turn on button in its row. */
   async expectSkillOff(name: string): Promise<void> {
     const row = this.skillRow(name);
-    await expect(row.getByText("Disabled", { exact: true })).toBeVisible();
+    await expect(row.getByText("Off", { exact: true })).toBeVisible();
     await expect(
       row.getByRole("button", { name: "Turn on", exact: true })
     ).toBeVisible();
@@ -152,9 +152,9 @@ export class CustomizePage {
     await this.page.getByRole("button", { name: "Add", exact: true }).click();
   }
 
-  /** Adds a personal MCP server from the Add page of the Integrations tab
+  /** Adds a personal MCP server from the Add menu of the Integrations tab
    * ("For me" only) and returns the new integration id. The page then shows
-   * the integration on its Configuration tab. */
+   * the integration on its Overview tab. */
   async addMcpServer(details: {
     name: string;
     url: string;
@@ -163,21 +163,12 @@ export class CustomizePage {
   }): Promise<number> {
     await this.openAddMenu();
     await this.page
-      .getByRole("menuitem", { name: "Add integration", exact: true })
+      .getByRole("menuitem", { name: "MCP server", exact: true })
       .click();
-    await expect(this.page).toHaveURL(/\/app\/customize\/integrations\/new$/);
     const addPage = new AdminIntegrationsPage(this.page);
     const form = addPage.addForm;
-    await form.getByRole("radio", { name: "MCP Server", exact: true }).click();
-    await form
-      .getByRole("textbox", { name: "Name", exact: true })
-      .fill(details.name);
-    await form
-      .getByRole("textbox", { name: "Server URL", exact: true })
-      .fill(details.url);
-    await expect(
-      form.getByRole("combobox", { name: "Owner", exact: true })
-    ).toHaveCount(0);
+    await expect(form).toBeVisible();
+    await addPage.fillMcpServer(details);
     if (details.oauth) {
       await addPage.expectOAuthProbe();
       if (details.oauth.client) {
@@ -187,6 +178,10 @@ export class CustomizePage {
         );
       }
     }
+    await addPage.openAdvanced();
+    await expect(
+      form.getByRole("combobox", { name: "Owner", exact: true })
+    ).toHaveCount(0);
     const response = this.page.waitForResponse(
       (candidate) =>
         new URL(candidate.url()).pathname === "/api/admin/integrations" &&
@@ -197,7 +192,7 @@ export class CustomizePage {
     expect(created.ok(), await created.text()).toBeTruthy();
     const body: { id: number } = await created.json();
     await expect(this.page).toHaveURL(
-      new RegExp(`/app/customize/integrations/${body.id}\\?tab=configuration`)
+      new RegExp(`/app/customize/integrations/${body.id}$`)
     );
     return body.id;
   }

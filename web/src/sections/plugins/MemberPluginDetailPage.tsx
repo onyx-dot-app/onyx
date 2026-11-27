@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import {
-  Badge,
   Button,
   Card,
   Dropdown,
@@ -25,7 +24,6 @@ import {
   SvgTrash,
   SvgUploadCloud,
 } from "@opal/icons";
-import { SvgGitHub } from "@opal/logos";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -34,11 +32,13 @@ import {
   pluginSwitch,
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
+import { usePanel } from "@/lib/customize/hooks";
 import {
-  MARKETPLACES_PATH,
-  customizeTabHref,
+  adminSkillHref,
+  marketplacesHref,
   parsePluginPageTab,
   pluginHref,
+  pluginsHref,
   skillHref,
   type PluginPageTab,
 } from "@/lib/customize/paths";
@@ -106,7 +106,6 @@ function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
 
 interface OverviewTabProps extends PluginTabProps {
   plugin: PluginDetail | null;
-  enablement: SkillEnablement;
 }
 
 interface ManagedNoteProps {
@@ -117,6 +116,7 @@ interface ManagedNoteProps {
 function ManagedNote({ marketplace }: ManagedNoteProps) {
   const t = useTranslations("plugins.member.detail.managed");
   const navigation = useNavigation();
+  const panel = usePanel();
   return (
     <MessageCard
       variant="info"
@@ -130,7 +130,7 @@ function ManagedNote({ marketplace }: ManagedNoteProps) {
         <Button
           prominence="secondary"
           size="sm"
-          {...navigation.linkTo(MARKETPLACES_PATH)}
+          {...navigation.linkTo(marketplacesHref(panel))}
         >
           {t("open")}
         </Button>
@@ -139,46 +139,41 @@ function ManagedNote({ marketplace }: ManagedNoteProps) {
   );
 }
 
-function OverviewTab({ entry, plugin, enablement }: OverviewTabProps) {
+/** The header shows the description and the switch, and the tabs count the
+ * skills, so the overview lists only the other facts, and why the switch is
+ * disabled or the plugin is off. */
+function OverviewTab({ entry, plugin }: OverviewTabProps) {
   const t = useTranslations("plugins.member.detail.overview");
   const switchCopy = useTranslations("plugins.member.detail.switch");
+  const customizeCopy = useTranslations("customize");
+  const { blocked } = pluginSwitch(entry);
+  const heldBy = entry.skills[0]?.name_held_by ?? [];
   const sections = useTranslations("plugins.member.sections");
   const unusedCopy = useTranslations("plugins.upload.unusedParts");
-  const { blocked } = pluginSwitch(entry);
-  const skill = entry.skills[0];
-  const heldBy = skill?.name_held_by ?? [];
-  const enabled = skill ? enablement.enabledOf(skill) : false;
   const manifest = plugin?.manifest ?? null;
-  const skillNames = plugin
-    ? plugin.skills.map((item) => item.name)
-    : entry.skills.map((item) => item.name);
   const author = manifest?.author?.name ?? manifest?.author?.email ?? null;
   const link = manifest?.homepage ?? manifest?.repository ?? null;
-  const location = entry.marketplace
-    ? t("marketplace", {
-        name: entry.marketplace.name,
-        scope: entry.marketplace.personal ? "personal" : "company",
-        repository: entry.marketplace.repository ?? "",
-      })
-    : sections(entry.section);
   return (
     <Section gap={2} alignItems="stretch" height="auto">
       {entry.marketplace && <ManagedNote marketplace={entry.marketplace} />}
       <DetailOverview
-        descriptionLabel={t("description")}
-        description={entry.description ?? t("noDescription")}
         facts={[
-          {
-            label: switchCopy("title"),
-            value: blocked
-              ? switchCopy(blocked)
-              : heldBy.length > 0
-                ? switchCopy("nameHeld", { names: heldBy.join(", ") })
-                : enabled
-                  ? switchCopy("on")
-                  : switchCopy("off"),
-          },
-          { label: t("location"), value: location },
+          ...(blocked
+            ? [{ label: switchCopy("title"), value: switchCopy(blocked) }]
+            : heldBy.length > 0
+              ? [
+                  {
+                    label: switchCopy("title"),
+                    value: customizeCopy("plugins.nameHeld", {
+                      names: heldBy.join(", "),
+                    }),
+                  },
+                ]
+              : []),
+          // The managed card names the marketplace of a synced plugin.
+          ...(entry.marketplace
+            ? []
+            : [{ label: t("location"), value: sections(entry.section) }]),
           ...(entry.ownerEmail
             ? [{ label: t("owner"), value: entry.ownerEmail }]
             : []),
@@ -186,12 +181,11 @@ function OverviewTab({ entry, plugin, enablement }: OverviewTabProps) {
             ? [{ label: t("version"), value: manifest.version }]
             : []),
           ...(author ? [{ label: t("author"), value: author }] : []),
-          ...(link ? [{ label: t("homepage"), value: link, mono: true }] : []),
+          ...(link
+            ? [{ label: t("homepage"), value: link, mono: true, oneLine: true }]
+            : []),
           ...(manifest?.license
             ? [{ label: t("license"), value: manifest.license }]
-            : []),
-          ...(skillNames.length > 0
-            ? [{ label: t("skills"), value: skillNames.join(", ") }]
             : []),
           ...(manifest && manifest.unused_parts.length > 0
             ? [
@@ -249,7 +243,7 @@ function PluginSkillModal({ pluginId, skill, onClose }: PluginSkillModalProps) {
   );
 }
 
-function SkillsTab({ entry, plugin }: Omit<OverviewTabProps, "enablement">) {
+function SkillsTab({ entry, plugin }: OverviewTabProps) {
   const t = useTranslations("plugins.member.detail.skills");
   const [reading, setReading] = useState<PluginSkillSummary | null>(null);
   if (plugin)
@@ -326,6 +320,7 @@ interface MemberPluginDetailPageProps {
   pluginId: string;
 }
 
+/** Its links stay in the panel that the page sits in. */
 export default function MemberPluginDetailPage({
   pluginId,
 }: MemberPluginDetailPageProps) {
@@ -334,6 +329,7 @@ export default function MemberPluginDetailPage({
   const pageCopy = useTranslations("customize.pluginPage");
   const locale = useLocale();
   const navigation = useNavigation();
+  const panel = usePanel();
   const searchParams = useSearchParams();
   const { user } = useUser();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
@@ -371,12 +367,17 @@ export default function MemberPluginDetailPage({
     skills.data && entry !== undefined && !isPlugin && entry.skills.length === 1
       ? entry.skills[0]?.id
       : undefined;
+  const listHref = pluginsHref(panel);
   useEffect(() => {
-    if (skillOnlyId) navigation.go(skillHref(skillOnlyId), { replace: true });
-  }, [navigation, skillOnlyId]);
+    if (skillOnlyId)
+      navigation.go(
+        panel === "admin"
+          ? adminSkillHref(skillOnlyId)
+          : skillHref(skillOnlyId),
+        { replace: true }
+      );
+  }, [panel, navigation, skillOnlyId]);
   const skill = entry?.skills.length === 1 ? entry.skills[0] : undefined;
-  const syncedFrom =
-    skill?.marketplace?.kind === "github" ? skill.marketplace.repository : null;
   const showVersions =
     skill !== undefined &&
     (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
@@ -384,9 +385,6 @@ export default function MemberPluginDetailPage({
     ? plugin.skills.length
     : (entry?.skills.length ?? 0);
   const needCount = plugin?.needs.length ?? 0;
-  // The supported needs only, as the plugin list counts them.
-  const supportedNeedCount =
-    plugin?.needs.filter((need) => need.supported).length ?? 0;
   const canEdit =
     skill !== undefined &&
     (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
@@ -399,13 +397,7 @@ export default function MemberPluginDetailPage({
         {
           value: "overview",
           label: t("tabs.overview"),
-          content: (
-            <OverviewTab
-              entry={entry}
-              plugin={plugin}
-              enablement={enablement}
-            />
-          ),
+          content: <OverviewTab entry={entry} plugin={plugin} />,
         },
         ...(skillCount > 0
           ? [
@@ -420,9 +412,7 @@ export default function MemberPluginDetailPage({
           ? [
               {
                 value: "integrations" as const,
-                label: pageCopy("tabs.integrations", {
-                  count: supportedNeedCount,
-                }),
+                label: pageCopy("tabs.integrations", { count: needCount }),
                 content: (
                   <IntegrationsTab
                     plugin={plugin}
@@ -462,7 +452,7 @@ export default function MemberPluginDetailPage({
       await deleteUserSkill(skill.id);
       refreshLists();
       toast.success(removeCopy("done", { name: skill.name }));
-      navigation.go(customizeTabHref("plugins"), { replace: true });
+      navigation.go(listHref, { replace: true });
     } catch (failure) {
       toast.error(
         failure instanceof Error && failure.message
@@ -513,20 +503,10 @@ export default function MemberPluginDetailPage({
 
   return (
     <CustomizeDetailLayout
-      back={
-        <BackLink to={customizeTabHref("plugins")} label={tabCopy("plugins")} />
-      }
+      back={<BackLink to={listHref} label={tabCopy("plugins")} />}
       icon={SvgBlocks}
       title={entry?.name ?? t("title")}
       description={entry?.description ?? undefined}
-      tags={
-        syncedFrom ? (
-          <Badge
-            icon={SvgGitHub}
-            title={t("syncedFrom", { repository: syncedFrom })}
-          />
-        ) : undefined
-      }
       loading={loading || skillOnlyId !== undefined}
       error={
         loading
@@ -540,7 +520,7 @@ export default function MemberPluginDetailPage({
       tabs={tabs}
       tab={tab}
       onTabChange={(next) =>
-        navigation.go(pluginHref(pluginId, next), {
+        navigation.go(pluginHref(pluginId, next, panel), {
           replace: true,
           scroll: false,
         })

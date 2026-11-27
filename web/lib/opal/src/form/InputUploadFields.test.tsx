@@ -1,5 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Formik, type FormikProps } from "formik";
@@ -164,6 +170,39 @@ describe("InputSingleUploadField", () => {
     await waitFor(() => expect(form?.values.key).toBe('{"a":1}'));
     expect(screen.getByText("key.json")).toBeInTheDocument();
     expect(form?.touched.key).toBe(true);
+  });
+
+  test("text mode: a failed read does not clear text pasted after it", async () => {
+    const user = userEvent.setup({ delay: null });
+    const readers: FileReader[] = [];
+    const RealFileReader = window.FileReader;
+    jest.spyOn(window, "FileReader").mockImplementation(() => {
+      const reader = new RealFileReader();
+      reader.readAsText = () => {};
+      readers.push(reader);
+      return reader;
+    });
+    let form: FormikProps<KeyForm> | null = null;
+    const { container } = render(
+      <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
+        {(formik) => {
+          form = formik;
+          return (
+            <InputSingleUploadField name="key" placeholder="Upload a key" />
+          );
+        }}
+      </Formik>
+    );
+
+    await user.upload(picker(container), new File(["old"], "old.txt"));
+    await user.click(screen.getByRole("button", { name: "Upload a key" }));
+    await user.paste("pasted");
+    await waitFor(() => expect(form?.values.key).toBe("pasted"));
+    act(() => readers[0]?.onerror?.(new ProgressEvent("error")));
+
+    expect(form?.values.key).toBe("pasted");
+    expect(screen.getByText("Pasted text")).toBeInTheDocument();
+    jest.restoreAllMocks();
   });
 
   test("text mode: a form reset clears the field", async () => {

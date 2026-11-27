@@ -111,18 +111,29 @@ class OAuthFlowSpec(BaseModel):
     extra_authorize_params: dict[str, str] = {}
     supports_pkce: bool = False
 
+    def requested_scopes(self) -> list[str]:
+        """Every scope the authorize URL asks for, the optional ones last."""
+        return [
+            *(parse_granted_scopes(self.scope) or []),
+            *(parse_granted_scopes(self.optional_scope) or []),
+        ]
+
 
 class AdminDescriptorSpec(BaseModel):
-    """Everything the admin Configure modal renders and the egress gateway
-    needs. Surfaced verbatim through ``BuiltInExternalAppDescriptor`` so the
-    frontend can render the modal without knowing any provider specifics."""
+    """Everything the admin setup panel renders and the egress gateway needs,
+    so the frontend can render the panel without knowing any provider
+    specifics."""
 
     model_config = ConfigDict(frozen=True)
 
     upstream_url_patterns: list[str]
     auth_template: dict[str, str]
     required_org_credential_fields: list[OrgCredentialField]
-    setup_instructions: str
+    # Short steps, one action each. The setup panel shows the callback URL
+    # and the scopes on their own, so the steps only refer to them.
+    setup_steps: list[str]
+    # The vendor page where the admin creates the OAuth app.
+    setup_url: str | None = None
 
 
 class ProviderSpec(BaseModel):

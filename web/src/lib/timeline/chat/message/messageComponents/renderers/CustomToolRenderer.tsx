@@ -29,6 +29,7 @@ import {
   isEmptyPayload,
   type ToolField,
 } from "@/lib/timeline/chat/toolPayload";
+import { readToolApprovals } from "@/lib/chat/toolApprovals";
 
 function constructCustomToolState(
   packets: CustomToolPacket[],
@@ -58,6 +59,15 @@ function constructCustomToolState(
 
   const isRunning = Boolean(toolStart && !toolEnd);
   const isComplete = Boolean(toolStart && toolEnd);
+  // A call whose approval did not pass never ran. A background agent's
+  // request shows in the card of the call that started it, which ran.
+  const notRun = readToolApprovals(packets).entries.some(
+    (entry) =>
+      entry.request.agent_name === null &&
+      (entry.outcome === "rejected" ||
+        entry.outcome === "disabled" ||
+        entry.outcome === "cancelled")
+  );
 
   return {
     toolName,
@@ -68,6 +78,7 @@ function constructCustomToolState(
     error,
     isRunning,
     isComplete,
+    notRun,
   };
 }
 
@@ -75,7 +86,7 @@ interface ToolFieldsProps {
   fields: ToolField[];
 }
 
-function ToolFields({ fields }: ToolFieldsProps) {
+export function ToolFields({ fields }: ToolFieldsProps) {
   return (
     <Section
       alignItems="stretch"
@@ -120,6 +131,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     error,
     isRunning,
     isComplete,
+    notRun,
   } = constructCustomToolState(packets, t("customTool.fallbackName.label"));
 
   useEffect(() => {
@@ -136,6 +148,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const doneStatus = useMemo(() => {
     if (!isComplete) return null;
     const chip = codeSpan(toolName);
+    if (notRun)
+      return markdown(t("customTool.blockedStatus.text", { toolName: chip }));
     if (error) {
       if (error.is_unreachable)
         return markdown(
@@ -164,7 +178,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     if (responseType === "csv")
       return markdown(t("customTool.fileStatus.text", { toolName: chip }));
     return markdown(t("customTool.completedStatus.text", { toolName: chip }));
-  }, [toolName, responseType, error, isComplete, t]);
+  }, [toolName, responseType, error, isComplete, notRun, t]);
 
   const icon = STEP_ICONS.tool;
 

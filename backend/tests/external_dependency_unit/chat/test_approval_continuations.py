@@ -36,12 +36,13 @@ from onyx.db.chat import (
     delete_messages_and_files_from_chat_session,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import PluginInstallationPolicy
+from onyx.db.enums import ChatSessionSharedStatus, PluginInstallationPolicy
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatSession,
+    Integration,
     User,
 )
 from onyx.llm.cancellation import CancellationSignal
@@ -464,6 +465,39 @@ def test_the_latest_page_reaches_back_to_a_waiting_reply(
             db_session=session,
         )
         assert len(older.messages) <= 2
+
+
+def test_a_shared_replay_does_not_name_the_integration(
+    turns: ApprovalTurns, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The owner's replay names the integration of a waiting request; a shared
+    view does not, as the viewer may not have access to it."""
+    stops = turns.start(monkeypatch, Script(turns.tool))
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
+    [request] = turns.requests()
+    with get_session_with_current_tenant() as session:
+        session.get_one(
+            ChatSession, turns.chat_session_id
+        ).shared_status = ChatSessionSharedStatus.PUBLIC
+        session.commit()
+        name = session.get_one(Integration, request.integration_id).name
+
+        def app_names(is_shared: bool) -> list[str | None]:
+            detail = get_chat_session(
+                turns.chat_session_id,
+                is_shared=is_shared,
+                user=turns.user,
+                db_session=session,
+            )
+            return [
+                packet.obj.app_name
+                for packets in detail.packets
+                for packet in packets
+                if isinstance(packet.obj, ToolApprovalRequest)
+            ]
+
+        assert app_names(is_shared=False) == [name]
+        assert app_names(is_shared=True) == [None]
 
 
 def test_two_decided_roots_are_not_agents(

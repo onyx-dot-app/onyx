@@ -12,6 +12,7 @@ from onyx.db.enums import ExternalAppType, IntegrationKind
 from onyx.db.integration import (
     get_external_app_for_integration,
     list_enabled_integrations_by_id,
+    list_external_apps_by_integration,
     list_integrations_by_ids,
 )
 from onyx.db.integration_access import load_user_integration_states
@@ -22,17 +23,18 @@ from onyx.db.integration_policy import (
 from onyx.db.models import ExternalApp, Integration, IntegrationAction, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.models import (
     ActionSettings,
+    ApiShape,
     ApprovalMode,
     EffectivePolicy,
     UsableIntegrationIds,
 )
 from onyx.integrations.policy import (
+    always_asks,
     parse_action_settings,
     resolve_action_policies,
 )
@@ -40,7 +42,9 @@ from onyx.server.features.build.models import TaskActionView, TaskIntegrationVie
 from onyx.tools.models import IntegrationLinkConfiguration
 
 
-def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integration]:
+def list_turned_on_integrations(
+    db_session: Session, user_id: UUID
+) -> list[Integration]:
     """The integrations that are on for the user, in integration order."""
     return list_enabled_integrations_by_id(
         db_session,
@@ -71,7 +75,7 @@ def list_connectable_apps(db_session: Session, user: User) -> list[ExternalApp]:
     still connect: Not connected or Needs reconnect. The agent offers to
     connect them."""
     apps: list[ExternalApp] = []
-    for integration in list_runnable_integrations(db_session, user.id):
+    for integration in list_turned_on_integrations(db_session, user.id):
         if integration.kind is not IntegrationKind.API:
             continue
         app = get_external_app_for_integration(integration.id, db_session)
@@ -119,29 +123,13 @@ def resolve_craft_action_policies(
     )
 
 
-def always_asks(kind: IntegrationKind, action_key: str) -> bool:
-    """The sandbox proxy asks for each request that matches no action of an
-    API integration, whatever the policy is, unless the policy is Blocked."""
-    return kind is IntegrationKind.API and action_key == WHOLE_DOMAIN_ACTION_TYPE
-
-
-def _shown_policy(
-    integration: Integration, action_key: str, policy: EffectivePolicy
-) -> EffectivePolicy:
-    if (
-        always_asks(integration.kind, action_key)
-        and policy is not EffectivePolicy.BLOCKED
-    ):
-        return EffectivePolicy.ASK
-    return policy
-
-
 def _integration_view(
     db_session: Session,
     integration: Integration,
     actions: Sequence[IntegrationAction],
     user: User,
     settings: ActionSettings | None,
+    app: ExternalApp | None,
 ) -> TaskIntegrationView:
     # A scheduled run ignores the owner's Always allow choices.
     inherited = _interactive_policies(
@@ -151,11 +139,6 @@ def _integration_view(
         [action.key for action in actions],
         None,
         ActionSettings(),
-    )
-    app = (
-        get_external_app_for_integration(integration.id, db_session)
-        if integration.kind is IntegrationKind.API
-        else None
     )
     return TaskIntegrationView(
         id=integration.id,
@@ -169,15 +152,13 @@ def _integration_view(
             if settings is not None
             else None
         ),
-        runnable=_chat_runnable(integration),
+        runnable=_has_chat_tools(integration, app),
         actions=[
             TaskActionView(
                 key=action.key,
                 display_name=action.display_name,
                 description=action.description,
-                integration_policy=_shown_policy(
-                    integration, action.key, inherited[action.key]
-                ),
+                integration_policy=inherited[action.key],
                 locked=inherited[action.key] is EffectivePolicy.BLOCKED
                 or not integration.users_can_save_always_allow
                 or always_asks(integration.kind, action.key),
@@ -187,12 +168,18 @@ def _integration_view(
     )
 
 
-def _chat_runnable(integration: Integration) -> bool:
-    """Chat runs an API integration only through its OpenAPI tool
-    (``build_integration_chat_tools``)."""
-    return integration.enabled and not (
-        integration.kind is IntegrationKind.API and integration.tool_id is None
-    )
+def _has_chat_tools(integration: Integration, app: ExternalApp | None) -> bool:
+    """An enabled integration whose actions are chat tools
+    (``build_integration_chat_tools``): each one but a URL-pattern app, or an
+    API integration with neither an ``api_app`` nor an ``external_app``."""
+    if not integration.enabled:
+        return False
+    if (
+        integration.kind is not IntegrationKind.API
+        or integration.api_app_id is not None
+    ):
+        return True
+    return app is not None and ApiShape.of_external_app(app.app_type).has_chat_tools
 
 
 def _known_actions(settings: ActionSettings, keys: set[str]) -> ActionSettings:
@@ -227,6 +214,7 @@ def list_task_integration_views(
         state.integration_id: state
         for state in load_user_integration_states([user.id], db_session)
     }
+    apps = list_external_apps_by_integration(list(states), db_session)
     views = [
         _integration_view(
             db_session,
@@ -234,10 +222,14 @@ def list_task_integration_views(
             integration_actions(integration.id, db_session),
             user,
             links.get(integration.id),
+            apps.get(integration.id),
         )
         for integration in list_integrations_by_ids(list(states), db_session)
         if integration.id in links
-        or (states[integration.id].on and _chat_runnable(integration))
+        or (
+            states[integration.id].on
+            and _has_chat_tools(integration, apps.get(integration.id))
+        )
     ]
     return sorted(views, key=lambda view: (view.name.lower(), view.id))
 

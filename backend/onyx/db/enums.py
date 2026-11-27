@@ -555,6 +555,8 @@ class ApprovalDecidedVia(str, PyEnum):
     SESSION_GRANT = "SESSION_GRANT"
     # The action policy blocked the action when the user approved it.
     POLICY = "POLICY"
+    # Approved for the rest of one chat VM command (`action_approval` only).
+    COMMAND_GRANT = "COMMAND_GRANT"
 
 
 class QuestionOutcome(str, PyEnum):

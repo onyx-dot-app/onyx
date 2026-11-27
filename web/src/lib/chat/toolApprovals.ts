@@ -41,6 +41,7 @@ export interface ToolApproval {
 const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
   "approved",
   "approved_for_chat",
+  "approved_for_command",
   "rejected",
   "disabled",
   "cancelled",
@@ -165,6 +166,7 @@ export function toolApprovalStatus(
     case null:
       return localStatus ?? "pending";
     case "approved_for_chat":
+    case "approved_for_command":
       return "approvedForSession";
     case "cancelled":
       return "closed";
@@ -321,7 +323,8 @@ export function decidedStatus(
 ): ApprovalStatus {
   if (response.decided_via === "POLICY") return "disabled";
   if (response.decision === "REJECTED") return "rejected";
-  return response.decided_via === "SESSION_GRANT"
+  return response.decided_via === "SESSION_GRANT" ||
+    response.decided_via === "COMMAND_GRANT"
     ? "approvedForSession"
     : "approved";
 }

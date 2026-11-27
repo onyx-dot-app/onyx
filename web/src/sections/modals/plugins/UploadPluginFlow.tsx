@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useNavigation } from "@opal/navigation";
 import { toast } from "@opal/layouts";
+import { usePanel } from "@/lib/customize/hooks";
 import { newSkillHref, pluginHref } from "@/lib/customize/paths";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { useRefreshSkillLists } from "@/lib/skills/hooks";
@@ -22,6 +23,7 @@ export default function UploadPluginFlow({
   onClose,
 }: UploadPluginFlowProps) {
   const uploadCopy = useTranslations("plugins.upload");
+  const panel = usePanel();
   const navigation = useNavigation();
   const revalidate = useRefreshSkillLists();
   const { mutate } = useSWRConfig();
@@ -63,9 +65,8 @@ export default function UploadPluginFlow({
               : uploadCopy("saved.newPlugin", values)
           );
         }
-        navigation.go(
-          pluginHref(plugin.id, needsAttention ? "integrations" : undefined)
-        );
+        const tab = needsAttention ? "integrations" : undefined;
+        navigation.go(pluginHref(plugin.id, tab, panel));
       }}
     />
   );

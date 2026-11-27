@@ -268,30 +268,24 @@ paths read it; find them with `git grep -n load_settings backend`.
    does. Without the lock, two writers drop each other's field. Without
    `raise_on_error`, a read error stores defaults over every field, including
    access-control fields such as `invite_only_enabled`.
-9. `admin-page-sends-whole-settings` **The Chat Preferences page sends the whole
-   settings object.** The server merges only the fields it receives, under the
-   lock. But `saveSettings` in `web/src/views/admin/ChatPreferencesPage.tsx`
-   spreads its copy of every field into each PATCH. A stale page can revert
-   another admin's change. `web/src/lib/settings/svc.ts:updateAdminSettings`
-   sends only the changed fields; use it in new pages.
-10. `settings-record-validates-whole` **One invalid field resets the whole
-    record on read.** `load_settings` validates the stored record as one
-    `Settings` model. If a field's type or constraint changes so that an old
-    stored value fails validation, readers without `raise_on_error` get every field
-    at its default, and the admin PATCH fails. Keep a changed field able to
-    read its old stored values. Some defaults turn a feature on. A reader that
-    gates a costly or unsafe path must load with `raise_on_error=True` and fall
-    back to off on error, as
-    `configs/llm_configs.py:get_image_extraction_and_analysis_enabled` does.
-    The default for image extraction is on. A failed read in a test without a
-    database would otherwise start image extraction and its storage writes.
-11. `settings-field-removal-breaks-clients` **Do not remove a `Settings` field
+9. `settings-record-validates-whole` **One invalid field resets the whole
+   record on read.** `load_settings` validates the stored record as one
+   `Settings` model. If a field's type or constraint changes so that an old
+   stored value fails validation, readers without `raise_on_error` get every field
+   at its default, and the admin PATCH fails. Keep a changed field able to
+   read its old stored values. Some defaults turn a feature on. A reader that
+   gates a costly or unsafe path must load with `raise_on_error=True` and fall
+   back to off on error, as
+   `configs/llm_configs.py:get_image_extraction_and_analysis_enabled` does.
+   The default for image extraction is on. A failed read in a test without a
+   database would otherwise start image extraction and its storage writes.
+10. `settings-field-removal-breaks-clients` **Do not remove a `Settings` field
     that external clients still send or read.** Older Terraform provider
     releases send `image_analysis_max_size_mb` and read
     `opensearch_indexing_enabled`. The model keeps both, unused, so that those
     clients keep working. Remove such a field only after a provider release
     without it.
-12. `search-model-one-default` **The Search Decision Model row keeps at most
+11. `search-model-one-default` **The Search Decision Model row keeps at most
     one of DECISION and SEARCH_SELECTION set, but only on the client.**
     `web/src/views/admin/ChatTaskModelSettings.tsx:SearchDecisionModelSetting`
     sets one default and then clears the other, in two API calls. A model

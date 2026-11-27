@@ -72,6 +72,8 @@ export function useMarketplaces(enabled = true) {
   };
 }
 
+export type MarketplacesState = ReturnType<typeof useMarketplaces>;
+
 export function useMarketplace(marketplaceId: string | null) {
   const { data, error, isLoading, mutate } = useSWR<MarketplaceDetail, Error>(
     marketplaceId ? SWR_KEYS.marketplace(marketplaceId) : null,
@@ -92,9 +94,12 @@ export function useMarketplaceAdded(): (
 ) => void {
   const t = useTranslations("plugins.marketplaces.add");
   const { mutate } = useSWRConfig();
+  const refreshSkillLists = useRefreshSkillLists();
   return (marketplace) => {
     toast.success(t("added", { name: marketplace.name }));
-    void mutate(SWR_KEYS.marketplaces);
+    // useMarketplaces refreshes the plugins only on a change after its first
+    // response, and that response may already show this sync as finished.
+    void mutate(SWR_KEYS.marketplaces).then(refreshSkillLists);
   };
 }
 

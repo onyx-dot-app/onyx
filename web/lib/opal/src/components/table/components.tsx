@@ -238,6 +238,11 @@ export function Table<TData>(props: DataTableProps<TData>) {
     values,
     initialViewSelected,
     getRowId,
+    // From the column definition: a hidden qualifier still limits selection.
+    enableRowSelection:
+      qualifierColDef?.kind === "qualifier"
+        ? (qualifierColDef.canSelect ?? true)
+        : true,
     onSelectionChange,
     query,
     serverSide: serverSide
@@ -411,6 +416,12 @@ export function Table<TData>(props: DataTableProps<TData>) {
                             {isMultiSelect && (
                               <InputCheckbox
                                 aria-label={strings.selectAll}
+                                disabled={
+                                  selectedCount === 0 &&
+                                  !table
+                                    .getFilteredRowModel()
+                                    .flatRows.some((row) => row.getCanSelect())
+                                }
                                 checked={isAllRowsSelected}
                                 indeterminate={
                                   !isAllRowsSelected && selectedCount > 0
@@ -563,7 +574,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                       }
                       if (onRowClick) {
                         onRowClick(row.original);
-                      } else if (isSelectable) {
+                      } else if (isSelectable && row.getCanSelect()) {
                         if (!isMultiSelect) {
                           // single-select: clear all, then select this row
                           table.toggleAllRowsSelected(false);
@@ -594,6 +605,9 @@ export function Table<TData>(props: DataTableProps<TData>) {
                               background={qDef.background}
                               avatar={qDef.avatar}
                               selectable={showQualifierCheckbox}
+                              disabled={
+                                showQualifierCheckbox && !row.getCanSelect()
+                              }
                               selected={
                                 showQualifierCheckbox && row.getIsSelected()
                               }

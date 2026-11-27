@@ -23,6 +23,8 @@ command -v "${AGENT_BROWSER_EXECUTABLE_PATH:?Browser path must be set}" >/dev/nu
 "$AGENT_BROWSER_EXECUTABLE_PATH" --version
 python -m pip check
 agent-browser --version
+node /opt/onyx/browser-service/main.ts --check | grep -qx 'browser-service ok'
+test -f /opt/onyx/browser-service/LICENSE-T3
 uv --version
 gh --version
 fc-match Carlito

@@ -85,27 +85,42 @@ class McpServerConfig(BaseModel):
 
 
 class ApiShape(str, Enum):
-    # An OpenAPI custom tool: the spec gives the actions.
+    # A REST app: the operations of its OpenAPI spec give the actions.
     OPENAPI = "openapi"
+    # A GraphQL app: the root fields of its schema give the actions.
+    GRAPHQL = "graphql"
     # An external app with a built-in provider: the catalog gives the actions.
     PRESET = "preset"
-    # An external app with no provider: one action for all of its URLs.
-    CUSTOM = "custom"
+    # An external app with no provider: one action for all of its URL
+    # patterns. The value "custom" is stored and sent to the web app.
+    URL_PATTERN = "custom"
+
+    @classmethod
+    def of_external_app(cls, app_type: ExternalAppType) -> "ApiShape":
+        return cls.URL_PATTERN if app_type == ExternalAppType.CUSTOM else cls.PRESET
+
+    @property
+    def has_chat_tools(self) -> bool:
+        """A URL-pattern app has no chat tools: the sandbox VM reaches it
+        only with proxied requests."""
+        return self is not ApiShape.URL_PATTERN
 
 
 class ApiConfig(BaseModel):
-    """The settings of an ``api`` integration, from its OpenAPI ``tool`` row or
-    its ``external_app`` row."""
+    """The settings of an ``api`` integration, from its ``api_app`` row or its
+    ``external_app`` row."""
 
     model_config = ConfigDict(frozen=True)
 
     shape: ApiShape
-    # Set for OPENAPI.
-    tool_id: int | None = None
-    openapi_spec: dict[str, Any] | None = None
     base_url: str | None = None
-    # Set for PRESET and CUSTOM.
+    openapi_spec: dict[str, Any] | None = None
+    # The schema as SDL, for GRAPHQL.
+    graphql_schema: str | None = None
+    # Set for PRESET and URL_PATTERN.
     app_type: ExternalAppType | None = None
+    # The regexes of the URLs that the credential of the app can go to.
+    url_regexes: tuple[str, ...] = ()
 
 
 IntegrationConfig = McpServerConfig | ApiConfig

@@ -223,9 +223,12 @@ const (
 	// ApprovalOutcomeApprovedForChat: a grant for the session's later calls of
 	// the tool approved the request.
 	ApprovalOutcomeApprovedForChat = "approved_for_chat"
-	ApprovalOutcomeRejected        = "rejected"
-	ApprovalOutcomeDisabled        = "disabled"
-	ApprovalOutcomeCancelled       = "cancelled"
+	// ApprovalOutcomeApprovedForCommand: a grant for the rest of a VM
+	// command approved the command's app request.
+	ApprovalOutcomeApprovedForCommand = "approved_for_command"
+	ApprovalOutcomeRejected           = "rejected"
+	ApprovalOutcomeDisabled           = "disabled"
+	ApprovalOutcomeCancelled          = "cancelled"
 )
 
 // ToolApprovalResolvedEvent reports how an approval request ended.

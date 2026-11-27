@@ -25,9 +25,12 @@ class ResolvedSandbox(BaseModel):
     sandbox_name: str
     sandbox_ip: str
 
-    def with_session(self, session_id: UUID) -> "SessionContext":
+    def with_session(
+        self, session_id: UUID, chat_command_id: UUID | None = None
+    ) -> "SessionContext":
         return SessionContext(
             session_id=session_id,
+            chat_command_id=chat_command_id,
             user_id=self.user_id,
             sandbox_id=self.sandbox_id,
             tenant_id=self.tenant_id,
@@ -42,6 +45,9 @@ class SessionContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     session_id: UUID
+    # The chat VM command that sent the request; `session_id` is then its
+    # chat. None for a Craft session and for a chat request with no command.
+    chat_command_id: UUID | None = None
     user_id: UUID
     sandbox_id: UUID
     tenant_id: str
