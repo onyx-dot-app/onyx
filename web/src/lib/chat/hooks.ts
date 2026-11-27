@@ -622,11 +622,6 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       };
     })
   );
-  const tree = useCurrentMessageTree();
-  const requestWaits = useMemo(
-    () => (tree ? readWaitingToolRequests(tree).length > 0 : false),
-    [tree]
-  );
   const pendingKey =
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
   // An incognito chat has no server queue, but its background agents' requests
