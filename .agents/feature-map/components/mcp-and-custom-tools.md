@@ -226,7 +226,11 @@ rollback but have no model (`backend/alembic/env.py` notes it). The models that
 remain for old tables are `OAuthConfig` and `MCPConnectionConfig` (the targets
 of `Tool.oauth_config_id` and `MCPServer.admin_connection_config_id`),
 `GatedApp` (the rollback key on approval rows) and `MCPServer__UserGroup` (a
-group delete and the community downgrade remove its rows).
+group delete and the community downgrade remove its rows). The old sign-in
+columns of `MCPServer` and `ExternalApp.organization_credentials` are mapped
+with `deferred_raiseload`, so a read raises.
+`backend/tests/unit/onyx/db/test_old_sign_in_tables_are_not_read.py` checks
+that, and fails when `onyx/` or `ee/` names an old sign-in table.
 
 **Access.** `backend/onyx/db/integration_access.py` holds the rule, and its
 module docstring states it. `_user_integration_pairs` is the one query that

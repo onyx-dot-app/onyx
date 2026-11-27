@@ -8,7 +8,9 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from fastapi.routing import APIRoute
 
+from onyx.server.features.integrations.admin_api import router as admin_router
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.integration import IntegrationManager
@@ -117,16 +119,54 @@ def test_create_each_shape(admin_user: DATestUser) -> None:
     }
 
 
+# Each admin route, with "{id}" for an integration that exists.
+_ADMIN_ROUTES = [
+    ("GET", ""),
+    ("GET", "/presets"),
+    ("POST", ""),
+    ("GET", "/{id}"),
+    ("PATCH", "/{id}"),
+    ("DELETE", "/{id}"),
+    ("PUT", "/{id}/installation-policy"),
+    ("PUT", "/{id}/group-settings"),
+    ("GET", "/{id}/actions"),
+    ("PUT", "/{id}/actions"),
+    ("POST", "/{id}/actions/refresh"),
+    ("PUT", "/{id}/organization-connection"),
+    ("DELETE", "/{id}/organization-connection"),
+]
+
+
 def test_basic_user_cannot_use_admin_routes(
     admin_user: DATestUser, basic_user: DATestUser, created: list[int]
 ) -> None:
-    assert IntegrationManager.create_raw(_openapi_body(), basic_user).status_code == 403
     detail = IntegrationManager.create(_openapi_body(), admin_user)
     created.append(detail.id)
-    assert (
-        IntegrationManager.update_raw(detail.id, {"name": "x"}, basic_user).status_code
-        == 403
-    )
+    refused = {
+        (method, path): client.request(
+            method,
+            f"{API_SERVER_URL}/admin/integrations" + path.format(id=detail.id),
+            json={} if method in ("POST", "PUT", "PATCH") else None,
+            headers=basic_user.headers,
+        ).status_code
+        for method, path in _ADMIN_ROUTES
+    }
+    assert refused == dict.fromkeys(_ADMIN_ROUTES, 403)
+    assert IntegrationManager.get_admin(detail.id, admin_user).name == detail.name
+
+
+def test_admin_route_list_names_each_admin_route() -> None:
+    assert {
+        (
+            method,
+            route.path.removeprefix(admin_router.prefix).replace(
+                "{integration_id}", "{id}"
+            ),
+        )
+        for route in admin_router.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods
+    } == set(_ADMIN_ROUTES)
 
 
 def test_only_global_manager_sets_onyx_login(

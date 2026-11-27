@@ -9,10 +9,12 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import Response
+from sqlalchemy import select, update
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision, ExternalAppType
 from onyx.db.external_app import get_built_in_external_app
+from onyx.db.models import ExternalApp
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -124,7 +126,11 @@ def _set_slack_org_credentials(value: dict[str, str]) -> None:
     with get_session_with_tenant(tenant_id="public") as db:
         app = get_built_in_external_app(db, ExternalAppType.SLACK)
         assert app is not None, "slack_external_app fixture must seed the row"
-        app.organization_credentials = value  # ty: ignore[invalid-assignment]
+        db.execute(
+            update(ExternalApp)
+            .where(ExternalApp.id == app.id)
+            .values(organization_credentials=value)
+        )
         db.commit()
 
 
@@ -210,8 +216,11 @@ def test_ask_without_credentials_still_requires_approval(
     with get_session_with_tenant(tenant_id="public") as db:
         app = get_built_in_external_app(db, ExternalAppType.SLACK)
         assert app is not None, "slack_external_app fixture must seed the row"
+        stored = db.scalar(
+            select(ExternalApp.organization_credentials).where(ExternalApp.id == app.id)
+        )
         saved_credentials = dict(
-            app.organization_credentials.get_value(apply_mask=False) or {}
+            stored.get_value(apply_mask=False) or {} if stored is not None else {}
         )
 
     # Strip Slack's org credential so app_is_available -> False.

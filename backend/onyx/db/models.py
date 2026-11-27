@@ -7772,33 +7772,59 @@ class MCPServer(Base):
     transport: Mapped[MCPTransport | None] = mapped_column(
         Enum(MCPTransport, native_enum=False), nullable=True
     )
+    # The sign-in columns below are old: integration and integration_oauth_client
+    # hold sign-in now. They stay mapped for a rollback, and a read raises.
     # Auth type: "none", "api_token", or "oauth"
     auth_type: Mapped[MCPAuthenticationType | None] = mapped_column(
-        Enum(MCPAuthenticationType, native_enum=False), nullable=True
+        Enum(MCPAuthenticationType, native_enum=False),
+        nullable=True,
+        deferred=True,
+        deferred_raiseload=True,
     )
     # Who performs authentication for this server (ADMIN or PER_USER)
     auth_performer: Mapped[MCPAuthenticationPerformer | None] = mapped_column(
-        Enum(MCPAuthenticationPerformer, native_enum=False), nullable=True
+        Enum(MCPAuthenticationPerformer, native_enum=False),
+        nullable=True,
+        deferred=True,
+        deferred_raiseload=True,
     )
     oauth_provider_mode: Mapped[MCPOAuthProviderMode] = mapped_column(
         Enum(MCPOAuthProviderMode, native_enum=False),
         nullable=False,
         server_default=MCPOAuthProviderMode.AUTO_DISCOVERY.value,
+        deferred=True,
+        deferred_raiseload=True,
     )
     oauth_authorization_endpoint: Mapped[str | None] = mapped_column(
-        Text, nullable=True
+        Text,
+        nullable=True,
+        deferred=True,
+        deferred_raiseload=True,
     )
-    oauth_token_endpoint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    oauth_token_endpoint: Mapped[str | None] = mapped_column(
+        Text, nullable=True, deferred=True, deferred_raiseload=True
+    )
     oauth_scopes_override: Mapped[list[str] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
+        postgresql.JSONB(),
+        nullable=True,
+        deferred=True,
+        deferred_raiseload=True,
     )
     oauth_additional_auth_params: Mapped[dict[str, str] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
+        postgresql.JSONB(),
+        nullable=True,
+        deferred=True,
+        deferred_raiseload=True,
     )
     # CIMD makes the authorization server fetch this deployment's client metadata
     # document. When off, auto-discovery registers through DCR instead.
     oauth_cimd_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+        deferred=True,
+        deferred_raiseload=True,
     )
     # Status tracking for configuration flow
     status: Mapped[MCPServerStatus] = mapped_column(
@@ -7817,6 +7843,8 @@ class MCPServer(Base):
         Integer,
         ForeignKey("mcp_connection_config.id", ondelete="SET NULL"),
         nullable=True,
+        deferred=True,
+        deferred_raiseload=True,
     )
 
     # When True, any user may add this server's tools to their agents.
@@ -9208,10 +9236,13 @@ class ExternalApp(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    # Old: integration_connection holds the credentials. A read raises.
     organization_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
         EncryptedJson(),
         nullable=False,
         default=dict,
+        deferred=True,
+        deferred_raiseload=True,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
