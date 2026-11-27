@@ -203,3 +203,20 @@ def test_resolve_chat_session_refuses_a_chat_of_a_deactivated_owner(
     assert (
         resolver.resolve_chat_session(chat_id, user_id, POSTGRES_DEFAULT_SCHEMA) is None
     )
+
+
+def test_resolve_chat_session_refuses_a_chat_of_an_owner_without_chat_access(
+    db_session: Session,
+    seeded_sandbox: tuple[UUID, UUID, UUID],
+) -> None:
+    sandbox_id, user_id, _ = seeded_sandbox
+    resolver = _resolver_with(_identity_for(sandbox_id))
+    chat_id = create_chat_session(db_session, "proxy tag", user_id, None).id
+    user = db_session.get(User, user_id)
+    assert user is not None
+    user.effective_permissions = []
+    db_session.commit()
+
+    assert (
+        resolver.resolve_chat_session(chat_id, user_id, POSTGRES_DEFAULT_SCHEMA) is None
+    )
