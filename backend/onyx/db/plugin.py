@@ -1013,9 +1013,6 @@ class AccessRows(BaseModel):
     # The grants and rows after the change; None when they do not change.
     new_user_grants: dict[UUID, SkillSharePermission] | None = None
     new_group_rows: dict[int, PluginGroupRow] | None = None
-    # The actor edits it only as a manager of its groups, not as its author or
-    # an editor.
-    edited_through_manager_scope: bool = False
 
 
 class _LockedPlugin(AccessRows):
@@ -1193,29 +1190,6 @@ def check_access_change(
         )
         if adds_share:
             check_sharing_allowed(subject)
-        # A user share outside the managed groups moves the item out of the
-        # manager's scope. Removing a share stays allowed.
-        added_user_ids = sorted(
-            {
-                user_id
-                for locked in items
-                if locked.edited_through_manager_scope
-                for user_id, permission in (locked.new_user_grants or {}).items()
-                if locked.user_grants.get(user_id) != permission
-            }
-        )
-        if added_user_ids and set(added_user_ids) - set(
-            db_session.scalars(
-                managed_group_member_ids_subquery(actor).where(
-                    User__UserGroup.user_id.in_(added_user_ids)
-                )
-            )
-        ):
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                f"Group managers can only share a {subject} with members of the "
-                "groups they manage.",
-            )
     if change.group_grants is None and change.group_settings is None:
         return
     requested_group_ids = sorted(
@@ -1377,6 +1351,38 @@ def _write_group_rows__no_commit(
         raise
 
 
+def _check_user_shares_in_managed_scope(
+    locked: _LockedPlugin, actor: User, db_session: Session
+) -> None:
+    """A scoped manager who edits a plugin only through their groups shares it
+    only with members of those groups. Another user share moves the plugin out
+    of their scope. Removing a share stays allowed."""
+    added_user_ids = {
+        user_id
+        for user_id, permission in (locked.new_user_grants or {}).items()
+        if locked.user_grants.get(user_id) != permission
+    }
+    if not added_user_ids or db_session.scalar(
+        select(Plugin.id).where(
+            Plugin.id == locked.plugin.id, plugin_editable_by_user(Plugin, actor.id)
+        )
+    ):
+        return
+    members = set(
+        db_session.scalars(
+            managed_group_member_ids_subquery(actor).where(
+                User__UserGroup.user_id.in_(added_user_ids)
+            )
+        )
+    )
+    if added_user_ids - members:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers can only share a skill with members of the groups "
+            "they manage.",
+        )
+
+
 def _apply_to_plugin__no_commit(
     locked: _LockedPlugin,
     change: PluginAccessChange,
@@ -1384,6 +1390,12 @@ def _apply_to_plugin__no_commit(
     db_session: Session,
 ) -> None:
     plugin = locked.plugin
+    if (
+        actor is not None
+        and has_permission(actor, Permission.MANAGE_PLUGINS)
+        is PermissionAuthority.SCOPED
+    ):
+        _check_user_shares_in_managed_scope(locked, actor, db_session)
     if change.publish:
         if (
             actor is not None
@@ -1441,21 +1453,6 @@ def apply_plugin_access_change__no_commit(
     if not ids:
         return PluginAccessResult(affected_user_ids=set(), failures={})
     plugins, failures = _lock_for_access_change(ids, change, db_session)
-    if (
-        actor is not None
-        and has_permission(actor, Permission.MANAGE_PLUGINS)
-        is PermissionAuthority.SCOPED
-    ):
-        editable = set(
-            db_session.scalars(
-                select(Plugin.id).where(
-                    Plugin.id.in_(list(plugins)),
-                    plugin_editable_by_user(Plugin, actor.id),
-                )
-            )
-        )
-        for plugin_id, locked in plugins.items():
-            locked.edited_through_manager_scope = plugin_id not in editable
     check_access_change(plugins.values(), change, actor, db_session)
 
     before = affected_user_ids_for_plugins(plugins, db_session)

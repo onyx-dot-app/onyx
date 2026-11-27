@@ -186,8 +186,8 @@ def test_scoped_manager_user_shares_stay_within_managed_groups(
     test_user: User,  # noqa: ARG001
 ) -> None:
     """A scoped manager cannot share a plugin they reach only through their
-    groups with a user outside those groups. The author can, and the manager
-    can still add and remove shares for members."""
+    groups with a user outside those groups. The author can, also in the same
+    bulk change, and the manager can still add and remove member shares."""
     group = make_group(db_session)
     manager = _manager_of(db_session, group)
     member = make_user(db_session, standard_account=True)
@@ -216,7 +216,7 @@ def test_scoped_manager_user_shares_stay_within_managed_groups(
     with pytest.raises(OnyxError) as exc_info:
         apply_plugin_access_change__no_commit(
             [skill.id], user_shares(member, outsider), manager, db_session
-        )
+        ).raise_first_failure()
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     assert shared_user_ids() == set()
 
@@ -233,9 +233,16 @@ def test_scoped_manager_user_shares_stay_within_managed_groups(
     share_plugin_with_group(
         db_session, own_skill.id, group.id, SkillSharePermission.VIEWER
     )
-    apply_plugin_access_change__no_commit(
-        [own_skill.id], user_shares(outsider), manager, db_session
-    ).raise_first_failure()
+    result = apply_plugin_access_change__no_commit(
+        [skill.id, own_skill.id], user_shares(outsider), manager, db_session
+    )
+    assert set(result.failures) == {skill.id}
+    assert shared_user_ids() == set()
+    assert set(
+        db_session.scalars(
+            select(Plugin__User.user_id).where(Plugin__User.plugin_id == own_skill.id)
+        )
+    ) == {outsider.id}
 
 
 def test_owner_removing_a_group_share_keeps_its_setting(
