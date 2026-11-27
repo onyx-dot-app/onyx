@@ -6,6 +6,7 @@ from urllib.parse import quote, unquote, urlparse
 
 import requests
 from pydantic import BaseModel, ConfigDict
+from requests.structures import CaseInsensitiveDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -203,7 +204,7 @@ def github_default_branch(
     with response:
         if response.status_code != 200:
             raise _github_failure(
-                response.status_code, dict(response.headers), used_authorization
+                response.status_code, response.headers, used_authorization
             )
         try:
             branch = response.json().get("default_branch")
@@ -253,7 +254,7 @@ def resolve_github_revision(
         for index in range(len(ref_parts), 0, -1)
     ]
     last_status = 404
-    last_headers: dict[str, str] = {}
+    last_headers: Mapping[str, str] = CaseInsensitiveDict()
     used_authorization = False
     for candidate_ref, candidate_subpath in candidates:
         commit_url = (
@@ -271,7 +272,7 @@ def resolve_github_revision(
         with response:
             # GitHub answers 422 for a branch, tag or commit that does not exist.
             last_status = 404 if response.status_code == 422 else response.status_code
-            last_headers = dict(response.headers)
+            last_headers = response.headers
             if response.status_code != 200:
                 continue
             try:
