@@ -124,8 +124,8 @@ export default function AdminSidebar() {
   const disabledGroups = groupBySection(disabled);
 
   return (
-    <SidebarLayouts.Root rail={<AppRail />}>
-      <BrandedSidebarHeader>
+    <SidebarLayouts.Root rail={<AppRail />} brand={<BrandedSidebarHeader />}>
+      <SidebarLayouts.Header>
         <InputTypeIn
           variant="internal"
           icon="search"
@@ -134,7 +134,7 @@ export default function AdminSidebar() {
           onChange={(e) => setQuery(e.target.value)}
           clearButton
         />
-      </BrandedSidebarHeader>
+      </SidebarLayouts.Header>
 
       <SidebarLayouts.Body scrollKey="admin-sidebar">
         {enabledGroups.map((group, groupIndex) => (

@@ -40,24 +40,25 @@ Sidebar entry point. Handles three viewport sizes:
 | ---------- | ----------- | ------- | ------------------------------------------------ |
 | `foldable` | `boolean`   | `false` | Enable fold/unfold (and ⌘E / Ctrl+E) on desktop  |
 | `rail`     | `ReactNode` | —       | A `SidebarLayouts.Rail` shown before the sidebar |
+| `brand`    | `ReactNode` | —       | With `rail`: a `Header` with `logo` and `wordmark` above both |
 | `children` | `ReactNode` | —       | `Header`, `Body`, `Footer`, `Section`, `Divider` |
 
 With a `rail`, the sidebar always folds, and folding hides it fully while the
 rail stays. Folded: the desktop column and the small-screen spacer are as wide
 as the rail (`--sidebar-width-folded`); on mobile the rail and the sidebar
 slide out together. Tabs in the rail are always folded: icons with label
-tooltips. Under a rail, `Header` shows only the `wordmark`; the rail holds the
-mark and the fold control.
+tooltips. The `brand` row spans the rail and the sidebar, so the mark and the
+wordmark stay together. Folded, it keeps only the mark, and hover shows the
+fold button in its place. Under a rail, `Header` takes no branding and shows
+only its pinned content.
 
 ### `SidebarLayouts.Rail`
 
-A thin column of window tabs, passed to `Root` as `rail`. Hover or keyboard
-focus on the logo shows the fold button in its place.
+A thin column of window tabs below the brand row, passed to `Root` as `rail`.
 
 | Prop       | Type        | Default | Description                                       |
 | ---------- | ----------- | ------- | ------------------------------------------------- |
-| `logo`     | `ReactNode` | —       | The logo mark at the top                          |
-| `footer`   | `ReactNode` | —       | Bottom items, below the fold toggle               |
+| `footer`   | `ReactNode` | —       | Bottom items                                      |
 | `children` | `ReactNode` | —       | Window tabs: `SidebarTab`s with an icon and label |
 
 ### `SidebarLayouts.Header`
@@ -72,7 +73,7 @@ focused from the keyboard.
 
 | Prop                 | Type                                                      | Default | Description                                                                                                                     |
 | -------------------- | --------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `renderAppLogo`      | `(folded: boolean \| undefined) => IconFunctionComponent` | —       | Logo factory; receives the effective fold state (`undefined` when non-foldable) and returns a component rendered at `size={28}` |
+| `renderAppLogo`      | `(folded: boolean) => IconFunctionComponent`             | —       | Logo factory; receives the effective fold state (`false` when non-foldable) and returns a component rendered at `size={28}` |
 | `logo`               | `ReactNode`                                               | —       | The logo mark, shown in both fold states. With `wordmark`, replaces `renderAppLogo`                                             |
 | `wordmark`           | `ReactNode`                                               | —       | The name beside the mark. Fades in place on fold (`--duration-sidebar-wordmark-fade`)                                           |
 | `showLogoWhenFolded` | `boolean`                                                 | `true`  | When `false`, hides the logo and shows only the fold button when collapsed                                                      |
