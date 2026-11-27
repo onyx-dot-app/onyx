@@ -260,7 +260,7 @@ export default function MarketplacesTable({ list }: MarketplacesTableProps) {
                 .filter(Boolean)
                 .join(" · ")
             }
-            descriptionMaxLines={failure ? undefined : 1}
+            descriptionMaxLines={failure ? 2 : 1}
             badge={{
               title: t(`sync.state.${marketplaceSyncState(row)}`),
               color: SYNC_STATE_COLOR[marketplaceSyncState(row)],
