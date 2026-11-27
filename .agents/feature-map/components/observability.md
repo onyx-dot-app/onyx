@@ -176,6 +176,10 @@ response, none for a parked run), search in `backend/onyx/server/features/search
 the gateway in the tracing processor `backend/ee/onyx/tracing/audit_processor.py`, and chat file
 downloads. Query text reaches an event only through `query_text=`, and only when
 `audit_include_query_text` is on and query history is `normal`.
+Each written event also counts in `backend/ee/onyx/utils/audit_stats.py`: a bounded queue and one
+writer thread per process keep the cache write off the caller (hourly buckets, last event time at
+most once a minute per process; a full queue drops counts), which
+`GET /admin/security/audit-status` (`backend/ee/onyx/server/security/api.py`) reports.
 
 **Log export.** `ee/onyx/server/log_export/api.py:start_log_export` sends a
 collect task to the queue of each worker type, collects its own logs inline,
