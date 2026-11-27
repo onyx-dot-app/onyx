@@ -168,8 +168,13 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     chromeAvailable ? sessionId : null,
     open && state.chromeOpen
   );
-  // A failed refresh does not count as a share: the next turn may not use it
-  const grant = chrome.error ? undefined : chrome.data?.grant;
+  // A refused refresh (Chrome turned off, or the user's access) ends the
+  // share in the panel; a transient failure keeps the last state
+  const refused =
+    chrome.error !== undefined &&
+    chrome.error.status >= 400 &&
+    chrome.error.status < 500;
+  const grant = refused ? undefined : chrome.data?.grant;
   const chromeShared = !!grant && grant.expires_at * 1000 > Date.now();
   // A turn picks its browser when it starts. A sandbox browser that was open
   // before the share began belongs to a turn that still uses the sandbox,
