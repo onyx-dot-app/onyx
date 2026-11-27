@@ -906,7 +906,6 @@ def test_an_admin_list_marks_a_members_private_plugin_not_member_visible(
     admin = make_user(db_session, is_admin=True)
     db_session.commit()
     created_user_ids.append(admin.id)
-    created_user_ids.append(admin.id)
     private = _save(author, _plugin_zip("private-kit", ["one"]), db_session)
     own = _save(admin, _plugin_zip("admin-kit", ["two"]), db_session)
 
