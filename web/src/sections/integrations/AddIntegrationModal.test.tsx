@@ -471,6 +471,23 @@ describe("Catalog", () => {
     expect(screen.getByText(add.owner.personalDescription)).toBeInTheDocument();
   });
 
+  test("the same tile again keeps the entered credentials", async () => {
+    mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
+    const { user } = open({ kind: "catalog" });
+    await user.click(await screen.findByRole("button", { name: "GitHub" }));
+    await user.type(
+      screen.getByRole("textbox", { name: /GitHub organization/ }),
+      "acme-dev"
+    );
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.click(await screen.findByRole("button", { name: "GitHub" }));
+
+    expect(
+      screen.getByRole("textbox", { name: /GitHub organization/ })
+    ).toHaveValue("acme-dev");
+  });
+
   test("a preset shows its setup steps, callback URL and scopes beside the fields", async () => {
     mockFetch({ "/api/admin/integrations/presets": [GITHUB_PRESET] });
     const { user } = open({ kind: "catalog" });

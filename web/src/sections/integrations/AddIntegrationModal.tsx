@@ -568,7 +568,12 @@ export default function AddIntegrationModal({
               tabIndex={0}
               state="empty"
               onClick={() => {
-                if (pickedTile.current !== tile.id) setOwnerChoice(null);
+                // The same tile again restores its draft.
+                if (pickedTile.current === tile.id && detection !== null) {
+                  setStep("setup");
+                  return;
+                }
+                setOwnerChoice(null);
                 pickedTile.current = tile.id;
                 tile.onPick();
               }}
