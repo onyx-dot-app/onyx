@@ -1159,6 +1159,9 @@ class IntegrationOAuthProviderMode(str, PyEnum):
 class IntegrationConnectionStatus(str, PyEnum):
     CONNECTED = "connected"
     NEEDS_RECONNECT = "needs_reconnect"
+    # A user who disconnected from a custom app whose old organization values
+    # would otherwise connect them again.
+    DISCONNECTED = "disconnected"
 
 
 class IntegrationLegacyFormat(str, PyEnum):

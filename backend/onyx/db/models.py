@@ -6573,7 +6573,7 @@ class IntegrationConnection(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('connected', 'needs_reconnect')",
+            "status IN ('connected', 'needs_reconnect', 'disconnected')",
             name="ck_integration_connection_status",
         ),
         Index("ix_integration_connection_integration_id", "integration_id"),

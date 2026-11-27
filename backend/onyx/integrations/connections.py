@@ -33,6 +33,7 @@ from onyx.db.integration import (
     lock_integration__no_commit,
 )
 from onyx.db.integration_connection import (
+    delete_connection__no_commit,
     get_connection_by_id,
     get_connection_with_organization,
     get_oauth_client,
@@ -164,7 +165,10 @@ def _connection_or_problem(
     db_session: Session,
     refresh: bool,
 ) -> ResolvedConnection | ConnectionProblem:
-    if connection is None:
+    if (
+        connection is None
+        or connection.status is IntegrationConnectionStatus.DISCONNECTED
+    ):
         return missing
     record = read_connection(connection)
     if refresh and _needs_refresh(record, datetime.now(timezone.utc)):
@@ -288,6 +292,7 @@ def _with_legacy_defaults(
     if isinstance(resolved, ConnectionProblem):
         if (
             signed_in_user is not None
+            and user_row is None
             and organization.legacy_format
             == IntegrationLegacyFormat.EXTERNAL_APP_ORG.value
             and integration.header_template
@@ -1158,6 +1163,31 @@ def connect_with_fields__no_commit(
         secret=ConnectionSecret(fields=dict(fields)).model_dump(mode="json"),
         expires_at=None,
         granted_scopes=None,
+    )
+
+
+def disconnect__no_commit(
+    integration: Integration, user: User, db_session: Session
+) -> None:
+    """Remove the user's connection. When old organization values of a custom
+    app would connect the user again, keep a row that marks the user as
+    disconnected."""
+    organization, _ = get_connection_with_organization(db_session, integration.id, None)
+    if not (
+        _may_have_legacy_defaults(integration)
+        and organization is not None
+        and organization.legacy_format == IntegrationLegacyFormat.EXTERNAL_APP_ORG.value
+    ):
+        delete_connection__no_commit(db_session, integration.id, user.id)
+        return
+    upsert_connection__no_commit(
+        db_session,
+        integration_id=integration.id,
+        user_id=user.id,
+        secret=ConnectionSecret().model_dump(mode="json"),
+        expires_at=None,
+        granted_scopes=None,
+        status=IntegrationConnectionStatus.DISCONNECTED,
     )
 
 

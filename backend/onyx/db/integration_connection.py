@@ -126,16 +126,16 @@ def upsert_connection__no_commit(
     secret: dict[str, Any],
     expires_at: datetime.datetime | None,
     granted_scopes: list[str] | None,
+    status: IntegrationConnectionStatus = IntegrationConnectionStatus.CONNECTED,
 ) -> IntegrationConnection:
-    """Write a new credential as connected, in the new format. Replaces an
-    existing row."""
+    """Write a new credential in the new format. Replaces an existing row."""
     stmt = insert(IntegrationConnection).values(
         integration_id=integration_id,
         user_id=user_id,
         secret=secret,
         expires_at=expires_at,
         granted_scopes=granted_scopes,
-        status=IntegrationConnectionStatus.CONNECTED,
+        status=status,
         status_reason=None,
         legacy_format=None,
     )
@@ -191,7 +191,10 @@ def mark_integration_connections_needs_reconnect__no_commit(
 ) -> None:
     db_session.execute(
         update(IntegrationConnection)
-        .where(IntegrationConnection.integration_id == integration_id)
+        .where(
+            IntegrationConnection.integration_id == integration_id,
+            IntegrationConnection.status != IntegrationConnectionStatus.DISCONNECTED,
+        )
         .values(
             status=IntegrationConnectionStatus.NEEDS_RECONNECT,
             status_reason=reason,
