@@ -1121,6 +1121,47 @@ def check_connection_mode(integration: Integration, for_organization: bool) -> N
         )
 
 
+def _is_header_safe(value: str) -> bool:
+    """Whether an HTTP header can carry ``value``: latin-1 with no control
+    characters."""
+    try:
+        value.encode("latin-1")
+    except UnicodeEncodeError:
+        return False
+    return not any(ord(char) < 0x20 or ord(char) == 0x7F for char in value)
+
+
+def checked_credential_fields(
+    integration: Integration, fields: Mapping[str, str]
+) -> dict[str, str]:
+    """The credential fields with no outer whitespace. Each field needs a
+    value that an HTTP header can carry; other keys are refused."""
+    keys = credential_field_keys(integration)
+    unknown = sorted(set(fields) - set(keys))
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Unknown fields: " + ", ".join(unknown)
+        )
+    fields = {key: value.strip() for key, value in fields.items()}
+    missing = [key for key in keys if not fields.get(key)]
+    if missing:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Fill in: " + ", ".join(missing))
+    unsendable = sorted(
+        key for key, value in fields.items() if not _is_header_safe(value)
+    )
+    if unsendable:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "These fields have characters that cannot be sent: "
+            + ", ".join(unsendable),
+        )
+    try:
+        reject_masked_credentials(dict(fields))
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    return fields
+
+
 def connect_with_fields__no_commit(
     integration: Integration,
     user: User | None,
@@ -1138,19 +1179,7 @@ def connect_with_fields__no_commit(
             f"{integration.name} does not sign in with an API key.",
         )
     check_connection_mode(integration, for_organization=user is None)
-    keys = credential_field_keys(integration)
-    unknown = sorted(set(fields) - set(keys))
-    if unknown:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, "Unknown fields: " + ", ".join(unknown)
-        )
-    missing = [key for key in keys if not fields.get(key, "").strip()]
-    if missing:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Fill in: " + ", ".join(missing))
-    try:
-        reject_masked_credentials(dict(fields))
-    except ValueError as error:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    fields = checked_credential_fields(integration, fields)
     upsert_connection__no_commit(
         db_session,
         integration_id=integration.id,

@@ -400,15 +400,24 @@ def replace_integration_actions__no_commit(
             continue
         db_session.add(integration_action_from_spec(integration_id, spec))
 
-    stale_ids = [
-        action.id
+    stale = {
+        key: action.id
         for key, action in existing_by_key.items()
         if action.source == source and key not in kept_keys
-    ]
-    if stale_ids:
+    }
+    if stale:
         db_session.execute(
             delete(IntegrationAction)
-            .where(IntegrationAction.id.in_(stale_ids))
+            .where(IntegrationAction.id.in_(stale.values()))
+            .execution_options(synchronize_session="fetch")
+        )
+        # A policy of a removed action must not come back with the action.
+        db_session.execute(
+            delete(IntegrationActionPolicy)
+            .where(
+                IntegrationActionPolicy.integration_id == integration_id,
+                IntegrationActionPolicy.action.in_(stale.keys()),
+            )
             .execution_options(synchronize_session="fetch")
         )
     db_session.flush()

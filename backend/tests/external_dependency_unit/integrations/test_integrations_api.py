@@ -2152,3 +2152,236 @@ def test_the_custom_tool_alias_refuses_a_spec_over_5_mb(
             snapshot.id, CustomToolUpdate(definition=large), db_session, admin
         )
     assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
+
+
+# Edits that must not leave stale state
+
+
+def _mcp_spec(key: str) -> IntegrationActionSpec:
+    return IntegrationActionSpec(
+        key=key,
+        source=IntegrationActionSource.MCP,
+        display_name=key,
+        description=None,
+        read_only=None,
+        default_policy=IntegrationActionPolicyValue.ASK,
+    )
+
+
+def test_a_server_url_change_replaces_the_actions_of_the_old_server(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://old.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("old_tool",),
+    )
+    created.add(integration.id)
+
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        return_value=[_mcp_spec("new_tool")],
+    ):
+        admin_api.update_integration(
+            integration.id,
+            IntegrationUpdate(
+                config=McpServerConfigInput(server_url="https://new.example.com/mcp")
+            ),
+            admin,
+            db_session,
+        )
+    assert [a.key for a in list_integration_actions(integration.id, db_session)] == [
+        "new_tool"
+    ]
+
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        side_effect=ConnectError("down"),
+    ):
+        admin_api.update_integration(
+            integration.id,
+            IntegrationUpdate(
+                config=McpServerConfigInput(server_url="https://down.example.com/mcp")
+            ),
+            admin,
+            db_session,
+        )
+    assert list_integration_actions(integration.id, db_session) == []
+
+
+def test_the_policy_of_a_removed_action_does_not_come_back(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    from onyx.db.models import IntegrationActionPolicy
+    from onyx.integrations.models import EffectivePolicy
+
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("tool",),
+    )
+    created.add(integration.id)
+    admin_api.set_integration_actions(
+        integration.id,
+        IntegrationActionsUpdate(actions={"tool": EffectivePolicy.BLOCKED}),
+        admin,
+        db_session,
+    )
+
+    for actions in ([], [_mcp_spec("tool")]):
+        with patch("onyx.integrations.service.fetch_mcp_actions", return_value=actions):
+            admin_api.refresh_integration_actions(integration.id, admin, db_session)
+
+    assert (
+        db_session.scalars(
+            select(IntegrationActionPolicy).where(
+                IntegrationActionPolicy.integration_id == integration.id,
+                IntegrationActionPolicy.action == "tool",
+            )
+        ).all()
+        == []
+    )
+
+
+def test_a_switch_from_oauth_to_no_sign_in_drops_the_token_template(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(
+        _oauth_create().model_copy(
+            update={"header_template": {"Authorization": "Bearer {access_token}"}}
+        ),
+        admin,
+        db_session,
+    )
+    created.add(detail.id)
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(auth_mode=IntegrationAuthMode.NONE, auth_method=None),
+        admin,
+        db_session,
+    )
+
+    assert updated.header_template is None
+
+
+def test_a_preset_that_needs_a_sign_in_cannot_be_added_with_none(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    with pytest.raises(OnyxError) as error:
+        detail = admin_api.create_integration(
+            IntegrationCreate(
+                for_organization=True,
+                name=f"github-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.NONE,
+                config=PresetConfigInput(preset_id="GITHUB"),
+            ),
+            admin,
+            db_session,
+        )
+        created.add(detail.id)
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+    assert error.value.detail == "This integration needs a sign-in."
+    db_session.rollback()
+
+
+def test_a_spec_with_a_blocked_server_url_is_refused_on_import() -> None:
+    from onyx.integrations.service import import_openapi_document
+    from onyx.server.features.integrations.models import OpenApiEndpointsRequest
+
+    spec = {**OPENAPI_SPEC, "servers": [{"url": "http://169.254.169.254"}]}
+    with pytest.raises(OnyxError) as error:
+        import_openapi_document(
+            OpenApiEndpointsRequest(openapi_document=json.dumps(spec))
+        )
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+
+
+def test_a_key_is_trimmed_and_a_key_that_a_header_cannot_carry_is_refused(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]
+    ):
+        integration = admin_api.create_integration(
+            IntegrationCreate(
+                for_organization=True,
+                name=f"mcp-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.INDIVIDUAL,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"Authorization": "Bearer {api_key}"},
+                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+            ),
+            admin,
+            db_session,
+        )
+    created.add(integration.id)
+
+    with pytest.raises(OnyxError) as error:
+        api.save_member_connection(
+            integration.id,
+            ConnectionFieldsRequest(fields={"api_key": "key\u2713"}),
+            member,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+    db_session.rollback()
+
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]
+    ) as discover:
+        api.save_member_connection(
+            integration.id,
+            ConnectionFieldsRequest(fields={"api_key": "  right-key \n"}),
+            member,
+            db_session,
+        )
+    assert discover.call_args.args[1] == {"Authorization": "Bearer right-key"}
+
+
+def test_a_member_can_clear_always_allow_after_the_admin_turns_it_off(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    api.save_action_grants(
+        detail.id,
+        ActionGrantsUpdate(actions={"set_alert": "allow"}),
+        member,
+        db_session,
+    )
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(users_can_save_always_allow=False),
+        admin,
+        db_session,
+    )
+
+    with pytest.raises(OnyxError):
+        api.save_action_grants(
+            detail.id,
+            ActionGrantsUpdate(actions={"set_alert": "allow"}),
+            member,
+            db_session,
+        )
+    db_session.rollback()
+    api.save_action_grants(
+        detail.id, ActionGrantsUpdate(actions={"set_alert": None}), member, db_session
+    )
+    assert all(
+        action.user_policy is None
+        for action in api.get_action_grants(detail.id, member, db_session).actions
+    )
+
+
+def test_a_request_cannot_repeat_a_group_or_an_agent_integration() -> None:
+    from onyx.server.features.integrations.models import (
+        IntegrationGroupSettingChange,
+        IntegrationGroupSettingsUpdate,
+    )
+
+    change = IntegrationGroupSettingChange(group_id=1, installation_policy=None)
+    with pytest.raises(ValidationError):
+        IntegrationGroupSettingsUpdate(group_settings=[change, change])

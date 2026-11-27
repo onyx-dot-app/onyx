@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import (
@@ -204,6 +204,17 @@ class PersonaUpsertRequest(BaseModel):
     replace_base_system_prompt: bool = False
     task_prompt: str
     datetime_aware: bool
+
+    @field_validator("integrations")
+    @classmethod
+    def _one_link_for_each_integration(
+        cls, value: list[PersonaIntegrationLink] | None
+    ) -> list[PersonaIntegrationLink] | None:
+        if value is not None:
+            ids = [link.integration_id for link in value]
+            if len(ids) != len(set(ids)):
+                raise ValueError("Each integration can appear only one time.")
+        return value
 
 
 class MinimalPersonaSnapshot(BaseModel):

@@ -96,6 +96,7 @@ from onyx.integrations.connection_models import (
 from onyx.integrations.connections import (
     IntegrationStatus,
     MissingHeaderValueError,
+    checked_credential_fields,
     connect_with_fields__no_commit,
     credential_field_keys,
     credential_fields_json,
@@ -437,7 +438,7 @@ def _allowed_methods(
     return list(_TOKEN_METHODS)
 
 
-def _check_no_query_or_fragment(server_url: str) -> None:
+def _check_server_url(server_url: str) -> None:
     try:
         parsed = urlparse(server_url)
     except ValueError as e:
@@ -451,16 +452,7 @@ def _check_no_query_or_fragment(server_url: str) -> None:
             OnyxErrorCode.VALIDATION_ERROR,
             f"Server URL '{server_url}' cannot have a query or a fragment.",
         )
-
-
-def validate_openapi_definition(definition: dict[str, Any]) -> None:
     try:
-        validate_openapi_schema(definition)
-    except (ValueError, TypeError, KeyError, AttributeError) as e:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
-    server_url = openapi_to_url(definition)
-    try:
-        _check_no_query_or_fragment(server_url)
         # No DNS at save time; each call resolves and checks again.
         validate_api_app_url(server_url, resolve_dns=False)
     except (SSRFException, ValueError) as e:
@@ -468,6 +460,14 @@ def validate_openapi_definition(definition: dict[str, Any]) -> None:
             OnyxErrorCode.VALIDATION_ERROR,
             f"Server URL '{server_url}' is not allowed: {e}",
         ) from e
+
+
+def validate_openapi_definition(definition: dict[str, Any]) -> None:
+    try:
+        validate_openapi_schema(definition)
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+    _check_server_url(openapi_to_url(definition))
 
 
 def check_api_document_size(text: str, label: str) -> None:
@@ -568,7 +568,7 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
     GraphQL endpoint that only takes POST."""
     if request.openapi_document is not None:
         check_api_document_size(request.openapi_document, "spec")
-        return _imported_view(request.openapi_document)
+        return _checked_import(_imported_view(request.openapi_document))
     if request.spec_url is None:
         raise RuntimeError("Bug: the model requires the spec text or a URL.")
     spec_url = request.spec_url.strip()
@@ -607,13 +607,18 @@ def import_openapi_document(request: OpenApiEndpointsRequest) -> OpenApiConfigVi
             f"Onyx cannot fetch the spec: {e}{ssrf_error_hint(spec_url, e)}",
         ) from e
     except (requests.RequestException, urllib3.exceptions.HTTPError) as e:
+        logger.warning("Could not fetch the spec at %s: %s", spec_url, e)
         raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY, f"Onyx could not fetch the spec: {e}"
+            OnyxErrorCode.BAD_GATEWAY, "Onyx could not connect to the spec URL."
         ) from e
-    view = _imported_view(body.decode("utf-8", errors="replace"))
+    return _checked_import(_imported_view(body.decode("utf-8", errors="replace")))
+
+
+def _checked_import(view: OpenApiConfigView) -> OpenApiConfigView:
     # The client hides the base URL field for the single server URL of a
-    # fetched spec, so the admin cannot correct it after the import.
-    _check_no_query_or_fragment(view.base_url)
+    # spec, so the admin cannot correct it after the import.
+    if view.base_url.strip():
+        _check_server_url(view.base_url)
     return view
 
 
@@ -682,16 +687,23 @@ def introspect_graphql_endpoint(
 _TOKEN_PLACEHOLDERS = frozenset({"access_token", "refresh_token", "token_type"})
 
 
+def _unfillable_placeholders(
+    auth_method: IntegrationAuthMethod | None,
+    header_template: Mapping[str, str] | None,
+) -> list[str]:
+    if auth_method is IntegrationAuthMethod.API_KEY or not header_template:
+        return []
+    allowed = _TOKEN_PLACEHOLDERS if auth_method is not None else frozenset()
+    return sorted(set(header_field_keys(header_template)) - allowed)
+
+
 def _check_template_fits(
     auth_method: IntegrationAuthMethod | None,
     header_template: Mapping[str, str] | None,
 ) -> None:
     """A header template may use only the placeholders the sign-in method
     fills; an API key method fills the fields that the template names."""
-    if auth_method is IntegrationAuthMethod.API_KEY or not header_template:
-        return
-    allowed = _TOKEN_PLACEHOLDERS if auth_method is not None else frozenset()
-    unknown = sorted(set(header_field_keys(header_template)) - allowed)
+    unknown = _unfillable_placeholders(auth_method, header_template)
     if unknown:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -715,6 +727,14 @@ def _validate_sign_in(
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "An integration with no sign-in has no sign-in method.",
+            )
+        if (
+            shape is IntegrationShape.PRESET
+            and preset is not None
+            and None not in _preset_methods(preset)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "This integration needs a sign-in."
             )
         return
     if auth_method is None:
@@ -1098,9 +1118,13 @@ def _apply_config(
         server = get_mcp_server_for_integration(integration.id, db_session)
         if server is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "The MCP server is missing.")
+        changed = (server.server_url, server.transport) != (
+            config.server_url,
+            config.transport,
+        )
         server.server_url = config.server_url
         server.transport = config.transport
-        return False
+        return changed
     if isinstance(config, OpenApiConfigInput):
         stored = get_api_app_for_integration(integration.id, db_session)
         document, spec = _openapi_document(
@@ -1162,11 +1186,12 @@ def _updated_header_template(
             if request.header_template is not None
             else None
         )
-    if (
-        integration.auth_method is IntegrationAuthMethod.API_KEY
-        and auth_method is not IntegrationAuthMethod.API_KEY
+    if auth_method is integration.auth_method:
+        return integration.header_template
+    if integration.auth_method is IntegrationAuthMethod.API_KEY or (
+        _unfillable_placeholders(auth_method, integration.header_template)
     ):
-        # The API key placeholders cannot be filled with another method.
+        # The new method cannot fill the placeholders of the old one.
         return None
     return integration.header_template
 
@@ -1291,8 +1316,32 @@ def update_integration__no_commit(
     if before != after or not set(credential_field_keys(integration)) <= fields_before:
         mark_sign_in_settings_changed(integration.id, db_session)
     if needs_sync:
-        sync_integration_actions__no_commit(integration, db_session)
+        if integration.kind is IntegrationKind.MCP:
+            _reload_mcp_actions(integration, user, db_session)
+        else:
+            sync_integration_actions__no_commit(integration, db_session)
     return integration
+
+
+def _reload_mcp_actions(
+    integration: Integration, user: User, db_session: Session
+) -> None:
+    """The actions of a changed MCP server. A server that does not answer
+    with the current credential leaves no actions until a refresh, so the
+    old server's actions do not stay."""
+    try:
+        with _reaching(integration.name):
+            actions = fetch_mcp_actions(integration, user, db_session)
+    except OnyxError as error:
+        logger.info(
+            "Integration %s: no actions until a refresh: %s",
+            integration.id,
+            error.detail,
+        )
+        actions = []
+    replace_integration_actions__no_commit(
+        integration.id, IntegrationActionSource.MCP, actions, db_session
+    )
 
 
 def delete_integration_for_user__no_commit(
@@ -1732,6 +1781,7 @@ def save_connection_fields__no_commit(
     """Check the key with the server of an MCP integration, then save the
     connection of ``user``, or of the organization when ``user`` is None.
     The check runs before the save locks the integration row."""
+    fields = checked_credential_fields(integration, fields)
     check_mcp_credential_fields(
         integration, fields, user.email if user is not None else None, db_session
     )
@@ -1985,7 +2035,8 @@ def set_action_grants__no_commit(
     db_session: Session,
 ) -> None:
     lock_integration__no_commit(integration.id, db_session)
-    if not integration.users_can_save_always_allow:
+    saves_allow = any(value == "allow" for value in grants.values())
+    if saves_allow and not integration.users_can_save_always_allow:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             f"Your admin does not let users save Always allow for {integration.name}.",
