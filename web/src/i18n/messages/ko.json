@@ -11603,6 +11603,27 @@
         "label": "회사 이메일"
       }
     },
+    "magicLink": {
+      "differentEmailButton": {
+        "label": "다른 이메일 사용"
+      },
+      "requestButton": {
+        "label": "이메일로 링크 받기"
+      },
+      "resendWait": {
+        "error": "방금 이 주소로 로그인 링크를 보냈습니다. 받은편지함을 확인하거나 1분 후에 다시 요청하세요."
+      },
+      "sendFailed": {
+        "error": "로그인 이메일을 보낼 수 없습니다. 잠시 후 다시 시도하세요."
+      },
+      "sent": {
+        "description": "{email}(으)로 로그인 링크를 보냈습니다. 링크는 한 번만 사용할 수 있으며 15분 후에 만료됩니다.",
+        "title": "이메일을 확인하세요"
+      },
+      "useSso": {
+        "error": "SSO 공급자로 로그인하세요. 이 워크스페이스에서는 이메일 링크가 꺼져 있습니다."
+      }
+    },
     "passwordRequirements": {
       "digit": {
         "label": "숫자를 포함합니다."

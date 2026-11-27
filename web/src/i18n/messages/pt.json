@@ -11603,6 +11603,27 @@
         "label": "E-mail de trabalho"
       }
     },
+    "magicLink": {
+      "differentEmailButton": {
+        "label": "Usar outro e-mail"
+      },
+      "requestButton": {
+        "label": "Receber um link por e-mail"
+      },
+      "resendWait": {
+        "error": "Um link de acesso foi enviado para este endereço há pouco. Verifique sua caixa de entrada ou aguarde um minuto e peça novamente."
+      },
+      "sendFailed": {
+        "error": "Não foi possível enviar o e-mail de acesso. Tente novamente em instantes."
+      },
+      "sent": {
+        "description": "Enviamos um link de acesso para {email}. Ele funciona uma vez e expira em 15 minutos.",
+        "title": "Verifique seu e-mail"
+      },
+      "useSso": {
+        "error": "Entre com seu provedor de SSO. Os links por e-mail estão desativados neste espaço de trabalho."
+      }
+    },
     "passwordRequirements": {
       "digit": {
         "label": "Contém número."

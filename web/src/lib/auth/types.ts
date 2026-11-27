@@ -6,6 +6,13 @@ export enum SessionEndReason {
   UNRECOGNIZED = "SESSION_UNRECOGNIZED",
 }
 
+// Error details of the magic link routes that the sign-in page turns into its
+// own message (`backend/onyx/auth/magic_link.py` and the playground hooks).
+export enum MagicLinkRefusal {
+  USE_SSO = "MAGIC_LINK_USE_SSO",
+  PLAYGROUND_FREE_MAIL = "PLAYGROUND_FREE_MAIL",
+}
+
 // Error body of the fastapi-users routes (`fastapi_users.router.common.ErrorModel`).
 // The register and reset-password routes send an object when the password is
 // invalid.
@@ -36,6 +43,9 @@ export interface AuthTypeMetadata {
   oauthEnabled: boolean;
   // Admin kill switch (single-tenant). False hides password login and signup.
   passwordAuthEnabled: boolean;
+  // "Get a link by email" is on, mail is configured and SSO is not the only
+  // way in. On multi-tenant it takes the password form's place.
+  magicLinkEnabled: boolean;
   // Enabled DB-backed SSO providers, one login button each. Empty on cloud
   // and when no provider rows exist.
   ssoProviders?: SSOProviderOption[];

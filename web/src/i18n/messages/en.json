@@ -11603,6 +11603,27 @@
         "label": "Work Email"
       }
     },
+    "magicLink": {
+      "differentEmailButton": {
+        "label": "Use a different email"
+      },
+      "requestButton": {
+        "label": "Get a link by email"
+      },
+      "resendWait": {
+        "error": "A sign-in link was sent to this address a moment ago. Check your inbox, or wait a minute and ask again."
+      },
+      "sendFailed": {
+        "error": "Could not send the sign-in email. Try again in a moment."
+      },
+      "sent": {
+        "description": "We sent a sign-in link to {email}. It works once and expires in 15 minutes.",
+        "title": "Check your email"
+      },
+      "useSso": {
+        "error": "Sign in with your SSO provider. Email links are turned off for this workspace."
+      }
+    },
     "passwordRequirements": {
       "digit": {
         "label": "Contains number."
