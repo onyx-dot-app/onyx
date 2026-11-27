@@ -191,6 +191,10 @@ it("asks before it leaves edits made while the save was pending", async () => {
   ).toBeInTheDocument();
   expect(window.location.pathname).toBe("/app/scheduled-tasks/new");
   await user.click(screen.getByRole("button", { name: "Cancel" }));
+  // The task exists now, so it can only be updated.
+  expect(
+    screen.queryByTestId("save-and-run-scheduled-task")
+  ).not.toBeInTheDocument();
   jest.mocked(updateScheduledTask).mockResolvedValue(savedTask);
   await user.click(screen.getByTestId("save-scheduled-task"));
 

@@ -243,17 +243,17 @@ function TaskForm({ task }: TaskFormProps) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgClock}
-        title={task ? t("editTitle") : t("newTitle")}
+        title={target ? t("editTitle") : t("newTitle")}
         description={t("description")}
         back={
           <BackLink
-            to={task ? scheduledTaskHref(task.id) : SCHEDULED_TASKS_PATH}
+            to={target ? scheduledTaskHref(target.id) : SCHEDULED_TASKS_PATH}
             label={t("back")}
           />
         }
         divider
         actions={[
-          ...(task
+          ...(target
             ? []
             : [
                 <Button
