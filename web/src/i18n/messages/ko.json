@@ -12877,7 +12877,7 @@
                 "status": "{phase, select, running {요소 클릭 중} failed {요소를 클릭할 수 없음} canceled {취소됨} other {요소를 클릭함}}"
               },
               "type": {
-                "status": "{phase, select, running {“{text}” 입력 중} failed {“{text}”을(를) 입력할 수 없음} canceled {취소됨} other {“{text}”을(를) 입력함}}"
+                "status": "{phase, select, running {“{text}” 입력 중} failed {텍스트를 입력할 수 없음} canceled {취소됨} other {“{text}”을(를) 입력함}}"
               },
               "hover": {
                 "status": "{phase, select, running {요소 위로 커서 이동 중} failed {요소 위로 커서를 이동할 수 없음} canceled {취소됨} other {요소 위로 커서를 이동함}}"

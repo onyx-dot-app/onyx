@@ -12877,7 +12877,7 @@
                 "status": "{phase, select, running {Clic sur un élément} failed {Impossible de cliquer sur l’élément} canceled {Annulé} other {Clic effectué sur un élément}}"
               },
               "type": {
-                "status": "{phase, select, running {Saisie de « {text} »} failed {Impossible de saisir « {text} »} canceled {Annulé} other {« {text} » saisi}}"
+                "status": "{phase, select, running {Saisie de « {text} »} failed {Impossible de saisir le texte} canceled {Annulé} other {« {text} » saisi}}"
               },
               "hover": {
                 "status": "{phase, select, running {Survol d’un élément} failed {Impossible de survoler l’élément} canceled {Annulé} other {Élément survolé}}"

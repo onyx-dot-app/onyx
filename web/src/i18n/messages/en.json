@@ -12877,7 +12877,7 @@
                 "status": "{phase, select, running {Clicking an element} failed {Could not click the element} canceled {Canceled} other {Clicked an element}}"
               },
               "type": {
-                "status": "{phase, select, running {Typing “{text}”} failed {Could not type “{text}”} canceled {Canceled} other {Typed “{text}”}}"
+                "status": "{phase, select, running {Typing “{text}”} failed {Could not type the text} canceled {Canceled} other {Typed “{text}”}}"
               },
               "hover": {
                 "status": "{phase, select, running {Hovering over an element} failed {Could not hover over the element} canceled {Canceled} other {Hovered over an element}}"

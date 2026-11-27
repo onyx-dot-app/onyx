@@ -12877,7 +12877,7 @@
                 "status": "{phase, select, running {正在点击元素} failed {无法点击元素} canceled {已取消} other {已点击元素}}"
               },
               "type": {
-                "status": "{phase, select, running {正在输入“{text}”} failed {无法输入“{text}”} canceled {已取消} other {已输入“{text}”}}"
+                "status": "{phase, select, running {正在输入“{text}”} failed {无法输入文本} canceled {已取消} other {已输入“{text}”}}"
               },
               "hover": {
                 "status": "{phase, select, running {正在悬停在元素上} failed {无法悬停在元素上} canceled {已取消} other {已悬停在元素上}}"
