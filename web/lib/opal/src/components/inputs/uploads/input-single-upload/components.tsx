@@ -68,6 +68,8 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
   const reportedRef = useRef<string | undefined>(undefined);
   // Bumped by each report and each new read, so a superseded read is ignored.
   const readIdRef = useRef(0);
+  // The last file read started; only its end stops the reading state.
+  const startedReadRef = useRef(0);
   const outsideText = props.mode !== "file" ? props.value : undefined;
   useEffect(() => {
     if (outsideText !== undefined && outsideText !== reportedRef.current) {
@@ -124,15 +126,16 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
     }
     const onReadingChange = props.onReadingChange;
     const readId = ++readIdRef.current;
+    startedReadRef.current = readId;
     const reader = new FileReader();
     reader.onload = () => {
-      onReadingChange?.(false);
+      if (readId === startedReadRef.current) onReadingChange?.(false);
       if (readId !== readIdRef.current) return;
       setSource({ kind: "file", name: file.name });
       reportText(typeof reader.result === "string" ? reader.result : "");
     };
     reader.onerror = () => {
-      onReadingChange?.(false);
+      if (readId === startedReadRef.current) onReadingChange?.(false);
       if (readId === readIdRef.current) clear();
     };
     onReadingChange?.(true);
