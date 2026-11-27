@@ -94,7 +94,11 @@ from onyx.tools.tool_implementations.question.models import (
     ToolQuestion,
     ToolQuestionAnswer,
 )
-from onyx.tools.tool_implementations.sandbox.models import PublishedFile, VmChatFile
+from onyx.tools.tool_implementations.sandbox.models import (
+    BrowserTarget,
+    PublishedFile,
+    VmChatFile,
+)
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 
@@ -998,9 +1002,9 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     # The turn offers the sandbox tools (sandbox_tools.py:SANDBOX_TOOLS).
     sandbox_tools: bool
-    # With the sandbox tools, also the browser tools (the browser_enabled
-    # setting when the turn began).
-    browser_tools: bool = False
+    # The browser that the turn's browser tools drive; None: no browser
+    # tools (the browser settings when the turn began).
+    browser_target: BrowserTarget | None = None
     # The chat's files in its sandbox (chat/files.py:place_chat_files); none
     # without the sandbox tools.
     vm_chat_files: list[VmChatFile]

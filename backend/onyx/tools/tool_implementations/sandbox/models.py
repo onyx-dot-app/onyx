@@ -1255,6 +1255,15 @@ _BROWSER_MAX_TEXT_CHARS = 64_000
 _BROWSER_MAX_SELECTOR_CHARS = 2048
 _BROWSER_MAX_LIST_ITEMS = 100
 _BROWSER_MAX_UPLOAD_PATHS = 20
+
+
+class BrowserTarget(str, Enum):
+    """The browser that a chat's browser tools drive."""
+
+    SANDBOX = "sandbox"
+    CHROME = "chrome"
+
+
 # The service's default and largest wait of one call.
 BROWSER_DEFAULT_TIMEOUT_MS = 15_000
 BROWSER_MAX_TIMEOUT_MS = 60_000
