@@ -1011,6 +1011,58 @@ def test_a_request_that_expires_during_the_policy_lookup_is_a_conflict(
     assert row is not None and row.decision is None
 
 
+def test_a_covered_request_that_expires_during_the_policy_lookup_stays_waiting(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The command grant takes the waiting cutoff after the policy lookup of
+    the covered requests, so a covered request that expires during the lookup
+    is not approved."""
+    command_id = uuid4()
+    gate = _gate()
+    ctx = _ctx(chat, command_id)
+    first_id = gate._persist_approval_row(ctx, _matched(chat.integration_id), {})
+    second_id = gate._persist_approval_row(ctx, _matched(chat.integration_id), {})
+    created = [
+        row.created_at
+        for row in (
+            db_session.get(ActionApproval, first_id),
+            db_session.get(ActionApproval, second_id),
+        )
+        if row is not None
+    ]
+    assert len(created) == 2
+    lookups: list[bool] = []
+    lookup = command_approvals.current_chat_action_policies
+
+    def recording_lookup(
+        *args: Any, **kwargs: Any
+    ) -> dict[str, EffectivePolicy] | None:
+        lookups.append(True)
+        return lookup(*args, **kwargs)
+
+    def cutoff() -> datetime:
+        if len(lookups) < 2:
+            return min(created) - timedelta(seconds=1)
+        return max(created) + timedelta(seconds=1)
+
+    monkeypatch.setattr(
+        command_approvals, "current_chat_action_policies", recording_lookup
+    )
+    monkeypatch.setattr(command_approvals.action_approval, "waiting_cutoff", cutoff)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA)
+    try:
+        assert (
+            _decide(db_session, chat, first_id, ApprovalChoice.APPROVE_COMMAND)
+            == ApprovalDecidedVia.COMMAND_GRANT
+        )
+        assert len(lookups) == 2
+        db_session.expire_all()
+        second = db_session.get(ActionApproval, second_id)
+        assert second is not None and second.decision is None
+    finally:
+        cache.delete_prefix(f"approval:command:{command_id}:")
+
+
 def test_the_card_of_a_request_that_the_policies_now_block_ends_disabled(
     db_session: Session, chat: _Chat
 ) -> None:

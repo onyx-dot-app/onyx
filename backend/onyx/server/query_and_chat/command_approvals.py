@@ -180,6 +180,8 @@ def _grant_command_to_pending_requests(
         if covered_rows
         else None
     )
+    # After the policy lookup, so a request that expires during it stays undecided.
+    write_cutoff = action_approval.waiting_cutoff()
     approved_ids: list[UUID] = []
     blocked_ids: list[UUID] = []
     for other in covered_rows:
@@ -193,7 +195,7 @@ def _grant_command_to_pending_requests(
             approval_id=other.approval_id,
             decision=decision,
             decided_via=decided_via,
-            created_after=cutoff,
+            created_after=write_cutoff,
         ):
             (blocked_ids if blocked else approved_ids).append(other.approval_id)
     # Commit the decisions before the proxy wakes and reads them.
