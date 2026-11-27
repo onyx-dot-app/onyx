@@ -364,9 +364,16 @@ def _dump_like(document: str, spec: dict[str, Any]) -> str:
         json.loads(document)
     except json.JSONDecodeError:
         return yaml.safe_dump(spec, sort_keys=False, allow_unicode=True)
-    if "\n" not in document.strip():
-        return json.dumps(spec, separators=(",", ":"), ensure_ascii=False)
-    return json.dumps(spec, indent=2, ensure_ascii=False)
+    layout: dict[str, Any] = (
+        {"separators": (",", ":")} if "\n" not in document.strip() else {"indent": 2}
+    )
+    dumped = json.dumps(spec, ensure_ascii=False, **layout)
+    try:
+        dumped.encode()
+    except UnicodeEncodeError:
+        # An unpaired surrogate has no UTF-8 form; only a JSON escape keeps it.
+        return json.dumps(spec, **layout)
+    return dumped
 
 
 def drop_uncallable_operations(
