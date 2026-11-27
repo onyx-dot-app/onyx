@@ -21,6 +21,11 @@ _MONDAY = datetime(2026, 11, 23, tzinfo=timezone.utc)
 
 
 class TestCurrentCalendarPeriod:
+    @pytest.fixture(autouse=True)
+    def _weekly(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The default period, whatever the test environment sets."""
+        monkeypatch.setattr("onyx.db.usage.USAGE_LIMIT_WINDOW_SECONDS", 604800)
+
     def test_is_the_week_from_monday(self) -> None:
         wednesday = datetime(2026, 11, 25, 14, 7, tzinfo=timezone.utc)
         assert current_calendar_period(wednesday) == UsagePeriod(
@@ -77,9 +82,17 @@ class TestCheckUsageLimit:
         assert get_usage.call_args.args[2] == period
 
     def test_defaults_to_the_current_calendar_period(self) -> None:
-        with patch("onyx.db.usage.get_usage", return_value=0.0) as get_usage:
+        current = UsagePeriod(
+            anchor=WindowAnchor.CALENDAR,
+            start=_MONDAY,
+            end=_MONDAY + timedelta(days=7),
+        )
+        with (
+            patch("onyx.db.usage.current_calendar_period", return_value=current),
+            patch("onyx.db.usage.get_usage", return_value=0.0) as get_usage,
+        ):
             check_usage_limit(MagicMock(), UsageType.API_CALLS, 10)
-        assert get_usage.call_args.args[2] == current_calendar_period()
+        assert get_usage.call_args.args[2] == current
 
 
 def test_error_message_names_the_usage_type_and_values() -> None:

@@ -35,11 +35,8 @@ def start() -> Generator[datetime, None, None]:
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
     ) as session:
         session.execute(
-            delete(TenantUsageCounter).where(
-                TenantUsageCounter.window_start.between(
-                    start - timedelta(days=1), start + timedelta(days=30)
-                )
-            )
+            # Every add in this file uses exactly this start.
+            delete(TenantUsageCounter).where(TenantUsageCounter.window_start == start)
         )
         session.commit()
 
