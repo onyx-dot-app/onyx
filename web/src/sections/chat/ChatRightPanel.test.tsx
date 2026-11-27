@@ -1832,6 +1832,13 @@ describe("the user's Chrome", () => {
     expect(panel().activeId).toBe("chrome");
   });
 
+  test("My Chrome opened first does not mark the chat's files as seen", async () => {
+    renderChat([[REPORT]]);
+    update({ type: "openChrome" });
+    await screen.findByText("Share Chrome tabs with this chat");
+    expect(panel().seenInitialized).toBe(false);
+  });
+
   test("My Chrome closes when the workspace turns it off", async () => {
     const view = renderChat([[REPORT]]);
     await openChrome();

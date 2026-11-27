@@ -330,13 +330,22 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       open &&
       shown !== RIGHT_PANEL_SOURCES_TAB &&
       !browser.shown &&
+      !chromeShown &&
       !seenInitialized
     )
       dispatch({
         type: "initializeSeen",
         fileIds: files.map((file) => file.file_id),
       });
-  }, [open, shown, browser.shown, seenInitialized, files, dispatch]);
+  }, [
+    open,
+    shown,
+    browser.shown,
+    chromeShown,
+    seenInitialized,
+    files,
+    dispatch,
+  ]);
   // A shown file counts as seen, also a new version that its open tab
   // moves to
   const shownFileId = open ? shownFile?.file_id : undefined;
