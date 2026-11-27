@@ -60,14 +60,31 @@ class OnyxTokenVerifier(TokenVerifier):
                 f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/me",
                 headers={"Authorization": f"Bearer {token}"},
             )
-        except Exception as exc:
+        except httpx.RequestError as error:
             record_mcp_auth_result(MCPAuthResult.ERROR)
             logger.error(
-                "MCP server failed to reach API /me for authentication: %s",
-                exc,
-                exc_info=True,
+                "MCP server failed to reach API /me for authentication: %s", error
             )
-            return None
+            raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE) from error
+
+        if response.status_code == OnyxErrorCode.SUBSCRIPTION_INACTIVE.status_code:
+            record_mcp_auth_result(MCPAuthResult.REJECTED)
+            raise OnyxError(
+                OnyxErrorCode.SUBSCRIPTION_INACTIVE,
+                "MCP access is blocked by billing or license restrictions.",
+            )
+        # A 401 or 403 rejects the token; any other failure is an outage, so
+        # clients retry instead of asking the user to sign in again.
+        if response.status_code not in (
+            200,
+            OnyxErrorCode.UNAUTHENTICATED.status_code,
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS.status_code,
+        ):
+            record_mcp_auth_result(MCPAuthResult.ERROR)
+            logger.error(
+                "API /me failed MCP authentication with %s", response.status_code
+            )
+            raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE)
 
         if response.status_code != 200:
             record_mcp_auth_result(MCPAuthResult.REJECTED)

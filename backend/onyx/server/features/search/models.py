@@ -28,6 +28,9 @@ class SearchRequest(BaseSearchRequest):
     model: str | None = None
 
     skip_query_expansion: bool = False
+    # Skips live search of federated sources such as Slack. Their results
+    # have ids that GET /document/content cannot read.
+    skip_federated_search: bool = False
 
     message_history: list[ChatMinimalTextMessage] | None = None
 
@@ -49,6 +52,8 @@ class RawSearchRequest(BaseSearchRequest):
 
 class SearchResult(BaseModel):
     citation_id: int | None
+    # Stable across searches; read the full text with GET /document/content.
+    document_id: str | None = None
     title: str
     # Section text, with any surrounding chunks the search added. Results from
     # one document share a citation_id.

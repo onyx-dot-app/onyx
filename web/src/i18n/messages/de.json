@@ -18509,5 +18509,13 @@
         "label": "Führung"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "Dokument nicht gefunden",
+      "description": "Dokument nicht gefunden oder Sie haben keinen Zugriff"
+    },
+    "loadFailed": "Dieses Dokument konnte nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
+    "openSource": "Quelle öffnen"
   }
 }

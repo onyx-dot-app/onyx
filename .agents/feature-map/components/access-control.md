@@ -218,7 +218,7 @@ their own ACL columns or the user's connector access.
    call `onyx/access/access.py:censor_chunks_for_user`.** Censoring-only documents are public in the
    index. Callers are the search pipeline, search context expansion
    (`tools/tool_implementations/search/search_utils.py:_retrieve_adjacent_chunks`),
-   the document chunk-info and size-info routes (`server/documents/document.py`),
+   the document chunk-info, size-info and content routes (`server/documents/document.py`),
    and the Open URL tool. A new reader of indexed chunk text that skips it leaks
    Salesforce fields in EE.
 10. `acl-clause-size-limit` **The ACL clause is a separate `bool` clause** so

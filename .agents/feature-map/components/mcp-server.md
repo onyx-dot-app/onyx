@@ -5,7 +5,7 @@
 > a separate process with no database that forwards every call, with the
 > caller's token, to the API server.
 
-**Verified against:** `a4e97fcea1` (2026-10-29)
+**Verified against:** `a287fcfb94` (2026-11-25)
 **Edition:** CE
 
 ---
@@ -18,14 +18,19 @@
   `WEB_DOMAIN` is HTTPS, or HTTP on localhost), the client can instead sign the
   user in through the browser and get a token scoped to `read:search` and `read:chat`. `backend/onyx/mcp_server/mcp.json.template` shows the client
   configuration.
-- **The client's model** can then call `search_indexed_documents` for ranked
-  results from the knowledge base, and `search_web` and `open_urls` for the
-  web. It can read resources that list the indexed sources, the document sets
+- **The client's model** can then call `search` to find documents (one
+  `{id, title, url}` per document) and `fetch` to read one document's indexed
+  text by that `id`, the standard search/fetch pair that ChatGPT company
+  knowledge expects. `search_indexed_documents` gives ranked sections with
+  source, document set, tag, date and agent filters, `query_metadata` gives
+  exact counts and listings, and `search_web` and `open_urls` cover the
+  web. A `url` is the source link when it is an absolute http(s) URL, else
+  the Onyx page `/app/document?id=<id>`, which shows the indexed text to a
+  signed-in user who can access the document. It can read resources that list the indexed sources, the document sets
   and the agents that the user can use, so it can narrow a search before it
   runs one. Results contain only documents the user can see in Onyx. The
-  server's connect-time instructions tell the model to call
-  `search_indexed_documents` before any other retrieval tool for questions
-  about the user's organization.
+  server's connect-time instructions tell the model to search Onyx before any
+  other retrieval tool for questions about the user's organization.
 - **A Claude Code or Codex user** installs the plugin in `extensions/agent-plugin/`
   (one directory with a Claude Code manifest in `.claude-plugin/` and a
   Codex manifest in `.codex-plugin/`, listed for Codex by the repo
@@ -41,13 +46,18 @@
   search tool is still worth a call, and with strict retrieval nudges one when
   a question turn ends on the prefetch alone.
   `extensions/agent-plugin/README.md` is the user-facing description.
-- **When it fails**, a bad or expired token gets a 401. A PAT or API key
-  gets a 401 for every rejection, including an API server outage. An OAuth
-  token that the API server refuses for scope gets a 403 `insufficient_scope`
-  challenge, an inactive subscription gets a 402, and an API server outage
-  gets a 503. A tool call with an unknown source, document set or agent
-  returns an error that names the valid values when the list is short. A deployment with no indexed sources, or with no vector database,
-  returns an error from the search tool. The source list comes from
+- **When it fails**, a bad or expired token gets a 401. An OAuth token that
+  the API server refuses for scope gets a 403 `insufficient_scope`
+  challenge. For any token, an inactive subscription gets a 402 and an API
+  server outage gets a 503, so the client retries instead of asking the user
+  to sign in again. A failed tool call returns `isError: true` with a JSON
+  `{"error": ...}` body. A tool call with an unknown source, document set or
+  agent, or a malformed `time_cutoff`, fails with a message that names the
+  valid values when the list is short. `fetch` of a missing or inaccessible
+  document fails with the same message, and a document over the read limit
+  fails instead of returning cut text. A deployment with no indexed sources
+  returns a successful empty result with a note from
+  `search_indexed_documents`; one with no vector database fails the search. The source list comes from
   `GET /manage/indexed-sources?include_ingestion_api=true`, which adds
   `ingestion_api` only when an Ingestion API connector holds documents
   (`backend/onyx/db/connector.py:fetch_unique_document_sources`). The default Ingestion API
@@ -96,6 +106,8 @@ MCP client --bearer--> /mcp  (nginx or ingress)  --> mcp_server process (port 80
     POST /search  (same bearer)  -> require_permission(READ_SEARCH)
                                  -> SearchTool(user=caller, emitter=NullEmitter())
     POST /search/raw  (retrieval_only, same bearer and permission)
+  search  -> POST /search (or /search/raw), one result per SearchResult.document_id
+  fetch   -> GET /document/content?document_id=  (ACL-filtered id retrieval)
 ```
 
 **No state of its own.** Nothing in `backend/onyx/mcp_server/` opens a
@@ -109,11 +121,19 @@ applies permissions, ACLs and budgets, and does the work.
 `oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS` is set, it wraps the
 verifier in a `RemoteAuthProvider` that serves protected-resource metadata and
 names the Onyx issuer. `OnyxTokenVerifier.verify_token` is async and runs on
-every request. A PAT or API key goes to `/me`, and any failure returns no
-token, which FastMCP reports as a 401. An `onyx_oat_` token goes to
-`verify_oauth_token`, which raises `OnyxError` for a 402, a 403 or an outage.
-`MCPAuthErrorMiddleware` turns that error into a JSON response, so these cases
-are not reported as a bad token.
+every request. A PAT or API key goes to `/me`: a 401 or 403 returns no
+token, which FastMCP reports as a 401, and a 402 or an outage raises
+`OnyxError`. An `onyx_oat_` token goes to `verify_oauth_token`, which raises
+`OnyxError` for a 402, a 403 or an outage. `MCPAuthErrorMiddleware` turns
+that error into a JSON response, so these cases are not reported as a bad
+token.
+
+**Transport.** `create_mcp_fastapi_app` serves streamable HTTP with
+`stateless_http=True`: no `Mcp-Session-Id`, and any replica answers any
+request. FastMCP's Host/Origin guard is on (`host_origin_protection="auto"`)
+with `WEB_DOMAIN` and `MCP_SERVER_CORS_ORIGINS` as the allowed origins. A
+request with another browser `Origin` gets a 403; a request with no `Origin`,
+which is what host apps send, passes.
 
 **Routing.** The advertised resource is `{WEB_DOMAIN}/mcp/`
 (`oauth_provider/config.py`). Discovery advertises it without the trailing
@@ -166,11 +186,19 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    `search_indexed_documents` returns a `ToolResult` with one JSON text block
    (`mcp_server/tools/search.py:_as_tool_result`), so it has no output schema and no
    `structuredContent` copy of the results. `_to_mcp_dict` omits empty
-   `metadata` to keep results small.
-5. `errors-as-results` **Errors come back as a result, not as an MCP error.**
-   `mcp_server/tools/search.py:_error_payload` returns `{"error": ...,
-   "results": []}`. A client sees a successful call whose content is the error
-   text.
+   `metadata` to keep results small. `search` and `fetch` follow OpenAI's
+   search/fetch contract: they return Pydantic models, so FastMCP declares an
+   output schema and sends `structuredContent` plus the same JSON as text.
+   Their `id` is the Onyx document id and must stay stable across searches.
+   `search` sends `skip_federated_search`, because federated Slack results
+   ([[federated-search]]) have ids that are not in the index, so `fetch`
+   could not read them. `search_indexed_documents` keeps them.
+5. `errors-are-tool-errors` **A failed call raises `ToolError`; an empty result
+   does not.** `mcp_server/tools/search.py:_tool_error` wraps the
+   `{"error": ..., "results": []}` body in a `ToolError`, which the client
+   gets as `isError: true` with the body as text. Catch-all handlers re-raise
+   `ToolError` before they wrap other exceptions. Zero matches, and no indexed
+   sources, are successful results.
 6. `unknown-filter-fails` **An unknown filter value fails; it is never dropped.**
    `mcp_server/tools/search.py:_resolve_filters` raises `_FilterError` for an
    unknown source, document set or agent, because a dropped filter widens the
@@ -212,9 +240,16 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
 
 ## Known issues
 
-- A malformed `time_cutoff` is logged and ignored, so the search runs with no
-  time bound. This breaks the "fail, do not widen" rule of
-  [[#unknown-filter-fails]].
+- `fetch` reads at most `DOCUMENT_CONTENT_MAX_CHARS` (100,000) characters or
+  `DOCUMENT_CONTENT_MAX_CHUNKS` chunks (`server/documents/models.py`). A larger
+  document fails with no continuation; the client must use search sections.
+- Claude Cowork and ChatGPT Work installs are not tested in CI. The MCP
+  Compatibility workflow covers Claude Code and Codex only.
+- `backend/tests/integration/tests/mcp/` is excluded from the PR integration
+  job (`.github/workflows/pr-integration-tests.yml`). Run it by hand against a
+  stack with an MCP server.
+  `backend/tests/integration/tests/mcp/test_mcp_server_auth.py` sends MCP URLs through
+  the in-process API client and fails when run that way.
 - A shared code change (`SearchTool`, `Permission`, `/search`) does not start
   this process in most local flows. Run the MCP integration tests to catch a
   regression here.
@@ -249,7 +284,10 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
   Import a new module in the package `__init__.py`. Call an API route; do not
   query the database ([[#acl-from-search-route]]). Add the route to
   `_ACCESS_ROUTES` if OAuth clients may use it
-  ([[#oauth-token-route-allowlist]]). Add a
+  ([[#oauth-token-route-allowlist]]). Give it a `title` and the read-only
+  annotations, and raise `_tool_error` for a failure
+  ([[#errors-are-tool-errors]]). Put an output model in
+  `mcp_server/models.py`. Add a
   `server/metrics/mcp_server.py:MCPServerToolName` value for a tool, and update
   `backend/onyx/mcp_server/README.md`.
 - `run-mcp-server-locally` **Run and probe the server locally.** Run `python -m onyx.mcp_server_main`

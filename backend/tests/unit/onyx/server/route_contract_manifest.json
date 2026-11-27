@@ -212,6 +212,7 @@
   "GET /connector/oauth/callback/{source}": "basic",
   "GET /connector/oauth/details/{source}": "basic",
   "GET /document/chunk-info": "basic",
+  "GET /document/content": "read:search",
   "GET /document/document-size-info": "basic",
   "GET /enterprise-settings": "none",
   "GET /enterprise-settings/custom-analytics-script": "none",

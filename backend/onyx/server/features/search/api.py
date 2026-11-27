@@ -27,7 +27,12 @@ from onyx.auth.permissions import (
 )
 from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_TOOL
 from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
-from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
+from onyx.context.search.models import (
+    BaseFilters,
+    PersonaSearchInfo,
+    SearchDocsResponse,
+    TimeRange,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import (
@@ -184,7 +189,7 @@ def search(
         project_id_filter=None,
         persona_id_filter=None,
         slack_context=None,
-        enable_slack_search=True,
+        enable_slack_search=not request.skip_federated_search,
         include_link=True,
         auto_detect_filters=auto_detect_filters,
     )
@@ -416,10 +421,16 @@ def _run_search(
     # Map LLM-facing JSON entries to SearchResults (one per merged section).
     llm_facing_text = tool_response.text
     entries = json.loads(llm_facing_text)["results"] if llm_facing_text else []
+    citation_mapping = (
+        tool_response.details.citation_mapping
+        if isinstance(tool_response.details, SearchDocsResponse)
+        else {}
+    )
     return SearchResponse(
         results=[
             SearchResult(
                 citation_id=entry["document"],
+                document_id=citation_mapping.get(entry["document"]),
                 title=entry["title"],
                 content=entry["content"],
                 link=entry.get("url"),

@@ -91,6 +91,23 @@ class DocumentInfo(BaseModel):
     num_tokens: int
 
 
+# Bounds a document read so one MCP tool result stays usable in a host's
+# context window (Claude Code caps MCP output at 25k tokens by default).
+DOCUMENT_CONTENT_MAX_CHARS = 100_000
+DOCUMENT_CONTENT_MAX_CHUNKS = 200
+
+
+class DocumentContent(BaseModel):
+    document_id: str
+    title: str
+    # The indexed chunks in order. Not refreshed from the source.
+    content: str
+    link: str | None
+    source_type: DocumentSource
+    updated_at: datetime | None
+    metadata: dict[str, str | list[str]]
+
+
 class ChunkInfo(BaseModel):
     content: str
     num_tokens: int

@@ -561,6 +561,9 @@ export const SWR_KEYS = {
     return `/api/manage/admin/cc-pair/${ccPairId}/sync-errors?${params.toString()}`;
   },
 
+  documentContent: (documentId: string) =>
+    `/api/document/content?document_id=${encodeURIComponent(documentId)}`,
+
   // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────
   // `scheduledTaskRuns` is a base URL — the run-history table appends
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with

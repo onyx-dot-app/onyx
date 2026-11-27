@@ -73,6 +73,14 @@ def _extract_tool_payload(result: CallToolResult) -> dict[str, Any]:
     return json.loads(text_blocks[-1])
 
 
+def _extract_error_payload(result: CallToolResult) -> dict[str, Any]:
+    """Extract the JSON error body of a failed MCP tool call."""
+    assert result.isError, result
+    (block,) = result.content
+    assert isinstance(block, TextContent)
+    return json.loads(block.text)
+
+
 def _call_search_tool(
     headers: dict[str, str],
     query: str,
@@ -301,7 +309,7 @@ def test_mcp_search_filters_by_document_set(
 
     # A name that does not resolve must fail with a usable hint rather than be
     # dropped, which would return a wider result set that looks scoped.
-    unknown_payload = _extract_tool_payload(
+    unknown_payload = _extract_error_payload(
         _call_search_tool(
             headers,
             shared_phrase,
@@ -402,7 +410,7 @@ def test_mcp_search_scopes_to_agent(
 
     # An unresolvable agent must fail loudly and name the valid options, rather
     # than silently falling back to an unscoped search.
-    unknown_payload = _extract_tool_payload(
+    unknown_payload = _extract_error_payload(
         _call_search_tool(headers, shared_phrase, agent="no-such-agent")
     )
     assert unknown_payload["results"] == []
@@ -493,7 +501,7 @@ def _query_metadata_counts_and_lists_documents(
     )
     assert f"Test Document {doc.id}" in _extract_tool_payload(listing_result)["result"]
     assert (
-        "only to document listings" in _extract_tool_payload(rejected_result)["error"]
+        "only to document listings" in _extract_error_payload(rejected_result)["error"]
     )
 
 
@@ -525,5 +533,5 @@ def _query_chat_history_with_search_only_token(headers: dict[str, str]) -> None:
         ]
 
     chat_result, document_result = _run_with_mcp_session(headers, _action)
-    assert "read:chat" in _extract_tool_payload(chat_result)["error"]
+    assert "read:chat" in _extract_error_payload(chat_result)["error"]
     assert "matching documents" in _extract_tool_payload(document_result)["result"]

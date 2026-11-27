@@ -18509,5 +18509,13 @@
         "label": "Leadership"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "Document not found",
+      "description": "Document not found or you do not have access"
+    },
+    "loadFailed": "Could not load this document. Reload the page to try again.",
+    "openSource": "Open source"
   }
 }

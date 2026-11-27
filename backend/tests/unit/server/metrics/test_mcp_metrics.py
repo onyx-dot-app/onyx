@@ -5,10 +5,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from fastmcp.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent
 
 from onyx.agents.tools import ToolInvocation, ToolResult, ToolUpdate
 from onyx.db.enums import IntegrationAuthMethod
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import ConnectionProblem
@@ -22,7 +25,7 @@ from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.metrics.mcp_server import MCPAuthResult, MCPServerToolName
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
-from tests.unit.onyx.mcp_server.tool_result import tool_payload
+from tests.unit.onyx.mcp_server.tool_result import error_payload, tool_payload
 
 _MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 
@@ -196,9 +199,10 @@ def test_server_upstream_failure_is_recorded_once() -> None:
         ),
         patch.object(search, "record_mcp_server_tool_outcome") as outcome,
     ):
-        response = asyncio.run(search.search_web("query"))
+        with pytest.raises(ToolError) as exc:
+            asyncio.run(search.search_web("query"))
 
-    assert response["error"] == "unavailable"
+    assert error_payload(exc.value)["error"] == "unavailable"
     outcome.assert_called_once()
     assert outcome.call_args.args[2] == MCPToolCallStatus.ERROR
 
@@ -226,7 +230,7 @@ def test_auth_verifier_records_success() -> None:
     record.assert_called_once_with(MCPAuthResult.SUCCESS)
 
 
-def test_auth_verifier_records_rejection_and_backend_error() -> None:
+def test_auth_verifier_records_rejection() -> None:
     client = MagicMock()
     client.get = AsyncMock(return_value=MagicMock(status_code=401))
     with (
@@ -236,12 +240,25 @@ def test_auth_verifier_records_rejection_and_backend_error() -> None:
         assert asyncio.run(OnyxTokenVerifier().verify_token("token")) is None
     record.assert_called_once_with(MCPAuthResult.REJECTED)
 
-    client.get = AsyncMock(side_effect=RuntimeError("offline"))
+
+@pytest.mark.parametrize(
+    "outage",
+    [
+        AsyncMock(side_effect=httpx.ConnectError("offline")),
+        AsyncMock(return_value=MagicMock(status_code=503)),
+    ],
+)
+def test_auth_verifier_raises_unavailable_for_api_outage(outage: AsyncMock) -> None:
+    client = MagicMock()
+    client.get = outage
     with (
         patch("onyx.mcp_server.auth.get_http_client", return_value=client),
         patch("onyx.mcp_server.auth.record_mcp_auth_result") as record,
+        pytest.raises(OnyxError) as exc,
     ):
-        assert asyncio.run(OnyxTokenVerifier().verify_token("token")) is None
+        asyncio.run(OnyxTokenVerifier().verify_token("token"))
+
+    assert exc.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
     record.assert_called_once_with(MCPAuthResult.ERROR)
 
 

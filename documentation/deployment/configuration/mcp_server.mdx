@@ -93,6 +93,11 @@ The release migration moves earlier registrations out of `public` and keeps thei
 Keep the background workers and scheduled tasks running for expired-grant cleanup.
 Expired credentials stop working at their expiration time even if cleanup has not yet removed their database records.
 
+## Run several replicas
+
+The MCP server is stateless. It does not issue an `Mcp-Session-Id`, and any replica can serve any request.
+You can run several MCP server replicas behind a load balancer. You do not need sticky sessions.
+
 ## Configure public routing
 
 The bundled nginx configuration and Helm templates provide these routes.
@@ -181,7 +186,8 @@ Check these permissions if a user cannot approve a connection.
 For clients that accept bearer tokens instead of OAuth,
 use a [personal access token](/developers/overview#personal-access-tokens)
 or an [API key](/admins/user_management/api_keys).
-A personal token is appropriate when access should follow an individual user.
+A personal token is appropriate when access should follow an individual user. If the Onyx API is down,
+a personal access token or API key request returns `503`, so the client can retry. It does not return `401`.
 
 ### OAuth client requirements
 
@@ -233,7 +239,7 @@ the client must obtain a new user authorization to reconnect.
 | `WEB_DOMAIN` | Deployment-specific | Public web address used to derive OAuth issuer and MCP resource URLs. |
 | `MCP_SERVER_HOST` | `0.0.0.0` | MCP service bind address. |
 | `MCP_SERVER_PORT` | `8090` | MCP service listening port. |
-| `MCP_SERVER_CORS_ORIGINS` | Empty | Comma-separated additional allowed browser origins. |
+| `MCP_SERVER_CORS_ORIGINS` | Empty | Comma-separated browser origins that can call the MCP server, in addition to `WEB_DOMAIN`. A browser request with any other `Origin` header gets `403`. MCP host apps send no `Origin` header and are not affected. |
 | `MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS` | `300` | Read timeout for MCP requests to the API service. |
 | `MCP_SERVER_SEARCH_RETRIEVAL_ONLY` | `false` | Run every `search_indexed_documents` call with `retrieval_only`, so MCP searches make no LLM calls. |
 | `API_SERVER_PROTOCOL` | `http` | Protocol used by MCP to reach the API service. |
@@ -255,6 +261,7 @@ it does not change the public OAuth issuer or MCP resource.
 | `401 Unauthorized` after previously working | Reconnect if credentials expired or were revoked; check that the client saved the latest rotated refresh token. |
 | `402 Payment Required` | Check the deployment's billing or license restrictions. Repeated sign-in does not remove these restrictions. |
 | `403 Forbidden` | Check user permissions and the requested scope; OAuth supports `read:search` and `read:chat`. |
+| `403 Forbidden` from a browser app | The request `Origin` is not `WEB_DOMAIN` and not in `MCP_SERVER_CORS_ORIGINS`. Add the origin to the setting. |
 | `503 Service Unavailable` | Check API availability and the MCP service's API connection. During sign-in, a `503` can also mean Onyx could not fetch the client's Client ID Metadata Document. |
 | Search succeeds but expected documents are absent | Check indexing status and that the connected user has permission to those documents. |
 

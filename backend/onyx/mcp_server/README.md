@@ -60,7 +60,8 @@ Each refresh deletes the grant's expired access tokens. The primary worker delet
 - In local development, `DEV_MODE=true` forces MCP backend calls to port 8080. To use `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` with a different local port, run the MCP process with `DEV_MODE=false`.
 
 ### Default Configuration
-- **Transport**: HTTP POST (MCP over HTTP)
+- **Transport**: stateless streamable HTTP. No `Mcp-Session-Id`; any replica serves any request, so no sticky routing is needed.
+- **Origin check**: a browser `Origin` other than `WEB_DOMAIN` or one in `MCP_SERVER_CORS_ORIGINS` gets a 403. Requests with no `Origin` pass.
 - **Port**: 8090 (shares domain with API server)
 - **Framework**: FastMCP with FastAPI wrapper
 - **Database**: None (all work delegates to the API server)
@@ -124,9 +125,28 @@ Most MCP clients support HTTP transport with custom headers. Refer to your clien
 
 ### Tools
 
-The server provides four tools for searching and retrieving information:
+The server provides six read-only tools. Each has a title and MCP annotations
+(`readOnlyHint`; `openWorldHint` only on the web tools). A failed call returns
+`isError: true` with a JSON `{"error": ...}` body as its text. A call that finds
+nothing is a successful, empty result.
 
-1. `search_indexed_documents`
+1. `search` and `fetch`
+The standard search/fetch pair that ChatGPT company knowledge and other hosts
+expect. `search(query)` runs the same Onyx search as `search_indexed_documents`,
+without live federated results such as Slack, whose ids `fetch` cannot read,
+and returns `{"results": [{"id", "title", "url"}]}`, one entry per document in
+ranked order. `fetch(id)` returns `{"id", "title", "text", "url", "metadata"}`
+with the document's full indexed text, through `GET /api/document/content`.
+Both declare an output schema and send `structuredContent` plus the same JSON as
+text. The `id` is the Onyx document id and stays the same across searches.
+`url` is the source link when it is an absolute http(s) URL, otherwise
+`WEB_DOMAIN/app/document?id=<id>`, an Onyx page that shows the indexed text to a
+signed-in user with access. `fetch` checks the caller's access on every call. A
+missing document and one the caller cannot access fail with the same message. A
+document over 100,000 characters fails with an error; the text is never cut.
+The text is Onyx's indexed copy, not a live read of the source.
+
+2. `search_indexed_documents`
 Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content and, when the source supplies it, `metadata` such as a Jira reporter or assignee. The result is one JSON text block, with no `structuredContent` copy.
 
 Pass `tags` (a list of `{"tag_key", "tag_value"}` pairs) to keep documents that match at least one pair.
@@ -137,15 +157,15 @@ Pass `agent` with an agent name to run the search as that Onyx agent. The search
 
 Pass `retrieval_only` to skip every LLM step (query expansion, filter detection, federated Slack search and document selection). The tool then calls `POST /search/raw` and returns up to 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. `MCP_SERVER_SEARCH_RETRIEVAL_ONLY=true` turns it on for every search.
 
-Filter values resolve on the search call, so clients do not need a lookup call first. `agent`, `source_types` and `document_set_names` are all validated: a value that does not resolve returns an error naming close matches, or the available values when there are few of them, rather than being dropped. A dropped filter would return a wider result set that looks correctly scoped, so these fail instead.
+Filter values resolve on the search call, so clients do not need a lookup call first. `agent`, `source_types`, `document_set_names` and `time_cutoff` are all validated: a value that does not resolve returns an error naming close matches, or the available values when there are few of them, rather than being dropped. A dropped filter would return a wider result set that looks correctly scoped, so these fail instead.
 
-2. `search_web`
+3. `search_web`
 Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.
 
-3. `query_metadata`
+4. `query_metadata`
 Exact counts and listings over the metadata of the user's accessible documents and over the user's own Onyx chat history (the chat `postgres_query` tool, through `POST /search/postgres-query`). Takes the same filters as that tool, plus `agent` to stay inside an agent's knowledge scope.
 
-4. `open_urls`
+5. `open_urls`
 Retrieve the complete text content from specific web URLs. Useful for fetching full page content after finding relevant URLs via `search_web`.
 
 ### Resources
@@ -230,7 +250,7 @@ Expected response:
 **MCP Server Configuration:**
 - `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
 - `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
-- `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
+- `MCP_SERVER_CORS_ORIGINS`: Comma-separated browser origins (optional). The Origin check allows them in addition to `WEB_DOMAIN`, and accepts port patterns such as `http://localhost:*`. CORS allows only exact origins or `*`.
 - `MCP_SERVER_SEARCH_RETRIEVAL_ONLY`: Run every document search with no LLM calls (default: false)
 
 **API Server Connection:**

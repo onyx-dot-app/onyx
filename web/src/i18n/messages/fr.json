@@ -18509,5 +18509,13 @@
         "label": "Direction"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "Document introuvable",
+      "description": "Document introuvable ou vous n'y avez pas accès"
+    },
+    "loadFailed": "Impossible de charger ce document. Rechargez la page pour réessayer.",
+    "openSource": "Ouvrir la source"
   }
 }

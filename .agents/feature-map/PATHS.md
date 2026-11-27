@@ -289,6 +289,7 @@ covers new files that match it.
 | `web/src/sections/Suggestions.tsx` | chat-frontend |
 | `web/src/lib/richInputTile.ts`, `web/src/lib/contentEditable.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
+| `web/src/app/app/document/`, `web/src/sections/documentView/`, `web/src/lib/documentView/` | mcp-server |
 | `web/src/app/app/customize/`, `web/src/sections/customize/`, `web/src/lib/customize/` | plugins, skills, chat-frontend |
 | `web/src/app/app/settings/usage/` | observability |
 | `web/src/views/settings/`, `web/src/app/app/settings/account/`, `web/src/app/app/settings/appearance/`, `web/src/app/app/settings/chat-preferences/`, `web/src/app/app/settings/layout.tsx`, `web/src/providers/WideChatProvider.tsx`, `web/src/providers/AppearancePreferencesProvider.tsx`, `web/src/lib/appearance/` | chat-preferences |

@@ -8,10 +8,12 @@ from typing import Any
 import httpx
 import pytest
 import pytest_asyncio
+from fastmcp.exceptions import ToolError
 from fastmcp.server.auth.auth import AccessToken
 
 import onyx.mcp_server.tools.search as search_module
 import onyx.mcp_server.utils as utils_module
+from tests.unit.onyx.mcp_server.tool_result import error_payload
 
 _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
 
@@ -81,21 +83,24 @@ async def test_agent_resolves_to_its_persona(stub: _Stub) -> None:
     await search_module.query_metadata(table="document", agent="Support")
     assert stub.requests[0]["persona_id"] == 7
 
-    unknown = await search_module.query_metadata(table="document", agent="Nobody")
-    assert "Agent 'Nobody' not found" in unknown["error"]
+    with pytest.raises(ToolError) as unknown:
+        await search_module.query_metadata(table="document", agent="Nobody")
+    assert "Agent 'Nobody' not found" in error_payload(unknown.value)["error"]
     assert len(stub.requests) == 1
 
 
 @pytest.mark.asyncio
 async def test_rejected_query_and_disabled_tool_return_errors(stub: _Stub) -> None:
     stub.response = {"result": "Invalid order_by 'score'.", "is_error": True}
-    rejected = await search_module.query_metadata(table="document")
-    assert rejected["error"] == "Invalid order_by 'score'."
+    with pytest.raises(ToolError) as rejected:
+        await search_module.query_metadata(table="document")
+    assert error_payload(rejected.value)["error"] == "Invalid order_by 'score'."
 
     stub.status = 403
     stub.response = {
         "error_code": "FEATURE_DISABLED",
         "detail": "postgres_query is turned off.",
     }
-    disabled = await search_module.query_metadata(table="document")
-    assert disabled["error"] == "postgres_query is turned off."
+    with pytest.raises(ToolError) as disabled:
+        await search_module.query_metadata(table="document")
+    assert error_payload(disabled.value)["error"] == "postgres_query is turned off."

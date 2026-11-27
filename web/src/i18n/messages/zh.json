@@ -18509,5 +18509,13 @@
         "label": "管理层"
       }
     }
+  },
+  "documentView": {
+    "notFound": {
+      "title": "未找到文档",
+      "description": "未找到文档或您无权访问"
+    },
+    "loadFailed": "无法加载此文档。请刷新页面重试。",
+    "openSource": "打开来源"
   }
 }
