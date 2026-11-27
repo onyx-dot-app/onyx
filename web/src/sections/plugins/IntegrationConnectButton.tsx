@@ -25,7 +25,7 @@ interface IntegrationConnectOptions {
   /** Called when a connect attempt fails or is abandoned. */
   onConnectFailed?: () => void;
   /** Called before a blocked popup moves the sign-in to this tab. */
-  onRedirect?: () => void | Promise<void>;
+  onRedirect?: () => void;
 }
 
 /** Connects one integration: an OAuth sign-in, or the API key modal. Render

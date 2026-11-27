@@ -208,7 +208,7 @@ test("turning on an integration with no sign-in turns it on after the API key co
   );
 });
 
-test("turning on an OAuth integration turns it on before a blocked tab moves the sign-in here", async () => {
+test("a blocked tab moves the OAuth sign-in here without turning the integration on", async () => {
   jest.spyOn(window, "open").mockReturnValue(null);
   const fetchMock = open(
     makeMemberIntegration({
@@ -222,15 +222,61 @@ test("turning on an OAuth integration turns it on before a blocked tab moves the
       "POST /api/integrations/1/oauth/start": {
         authorization_url: AUTHORIZATION_URL,
       },
-      "PUT /api/integrations/1/enabled": makeMemberIntegration(),
     }
   );
   await user().click(await screen.findByRole("switch", { name: "Use Linear" }));
   await waitFor(() =>
     expect(mockLoadPage).toHaveBeenCalledWith(AUTHORIZATION_URL)
   );
-  expect(requestBody(fetchMock, "PUT", "/api/integrations/1/enabled")).toEqual({
-    enabled: true,
+  expect(() =>
+    requestBody(fetchMock, "PUT", "/api/integrations/1/enabled")
+  ).toThrow();
+});
+
+describe("after a sign-in that moved here", () => {
+  const turnOn = makeAccess({
+    state: "turn_on",
+    user_choice: null,
+    user_enabled: false,
+  });
+
+  beforeEach(() => {
+    window.sessionStorage.setItem("onyx:integration-pending-turn-on", "1");
+  });
+
+  afterEach(() => window.sessionStorage.clear());
+
+  test("a connected integration turns on", async () => {
+    const fetchMock = open(
+      makeMemberIntegration({ status: connected, access: turnOn }),
+      { "PUT /api/integrations/1/enabled": makeMemberIntegration() }
+    );
+    await waitFor(() =>
+      expect(
+        requestBody(fetchMock, "PUT", "/api/integrations/1/enabled")
+      ).toEqual({ enabled: true })
+    );
+    expect(
+      window.sessionStorage.getItem("onyx:integration-pending-turn-on")
+    ).toBeNull();
+  });
+
+  test("a cancelled sign-in keeps the integration off", async () => {
+    const fetchMock = open(
+      makeMemberIntegration({
+        status: { state: "not_connected", reason: null },
+        access: turnOn,
+      })
+    );
+    expect(
+      await screen.findByRole("switch", { name: "Use Linear" })
+    ).toHaveAttribute("aria-checked", "false");
+    expect(() =>
+      requestBody(fetchMock, "PUT", "/api/integrations/1/enabled")
+    ).toThrow();
+    expect(
+      window.sessionStorage.getItem("onyx:integration-pending-turn-on")
+    ).toBeNull();
   });
 });
 

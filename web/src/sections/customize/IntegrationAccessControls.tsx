@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import {
@@ -47,6 +47,26 @@ export function useIntegrationStateCopy() {
   };
 }
 
+const PENDING_TURN_ON_KEY = "onyx:integration-pending-turn-on";
+
+/** The integration whose sign-in left this tab to turn it on. */
+function readPendingTurnOn(): number | null {
+  try {
+    const id = window.sessionStorage.getItem(PENDING_TURN_ON_KEY);
+    return id ? Number(id) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storePendingTurnOn(integrationId: number | null): void {
+  try {
+    if (integrationId === null)
+      window.sessionStorage.removeItem(PENDING_TURN_ON_KEY);
+    else window.sessionStorage.setItem(PENDING_TURN_ON_KEY, `${integrationId}`);
+  } catch {}
+}
+
 interface IntegrationSwitchProps {
   integration: MemberIntegration;
   /** Where the OAuth callback returns when no waiting tab closes it. */
@@ -68,11 +88,17 @@ export function IntegrationSwitch({
   const signIn = useIntegrationConnect(integration, {
     returnPath,
     onConnected: () => void change(true),
-    // The sign-in leaves this page, so turn the integration on first.
-    onRedirect: async () => {
-      await setIntegrationEnabled(integration.id, true);
-    },
+    // The sign-in leaves this page. Turn the integration on when it comes
+    // back connected, so a cancelled sign-in leaves the switch off.
+    onRedirect: () => storePendingTurnOn(integration.id),
   });
+
+  useEffect(() => {
+    if (readPendingTurnOn() !== integration.id) return;
+    storePendingTurnOn(null);
+    if (connectAction(integration) === null && !integration.access.user_enabled)
+      void change(true);
+  }, [integration]);
 
   async function change(enabled: boolean) {
     setBusy(true);
