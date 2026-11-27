@@ -6,13 +6,16 @@ import { MinimalUserSnapshot } from "@/lib/types";
 
 export interface UseShareableUsersParams {
   includeApiKeys: boolean;
+  /** False skips the fetch, for a dialog that is closed. */
+  enabled?: boolean;
 }
 
 export default function useShareableUsers({
   includeApiKeys,
+  enabled = true,
 }: UseShareableUsersParams) {
   const { data, error, mutate, isLoading } = useSWR<MinimalUserSnapshot[]>(
-    `/api/users?include_api_keys=${includeApiKeys}`,
+    enabled ? `/api/users?include_api_keys=${includeApiKeys}` : null,
     errorHandlingFetcher
   );
 

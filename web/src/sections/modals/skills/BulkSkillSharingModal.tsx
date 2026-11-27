@@ -75,8 +75,12 @@ export default function BulkSkillSharingModal({
   const companyOptions = usePolicyOptions({
     inherit: { scope: "skill", policy: null },
   });
-  const { data: users } = useShareableUsers({ includeApiKeys: true });
-  const { data: groups } = useShareableGroups();
+  // The parent keeps this modal mounted; fetch only while it is open.
+  const { data: users } = useShareableUsers({
+    includeApiKeys: true,
+    enabled: open,
+  });
+  const { data: groups } = useShareableGroups(open);
   // Publishing is one-way, so bulk can publish but never make skills private.
   const [stagedScope, setScope] = useState<"KEEP" | "PUBLIC">("KEEP");
   // A selection that loses organization access drops a staged publish.

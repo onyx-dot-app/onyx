@@ -21,21 +21,46 @@ jest.mock("@/providers/UserProvider", () => ({
     adminCapabilities: [],
   }),
 }));
+const mockUseShareableUsers = jest.fn((_params: { enabled?: boolean }) => ({
+  data: [
+    { id: "user-1", email: "subash@onyx.app" },
+    { id: "user-2", email: "thomas@onyx.app" },
+  ],
+}));
+const mockUseShareableGroups = jest.fn((_enabled?: boolean) => ({
+  data: [{ id: 7, name: "Cash Kings" }],
+}));
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
-  default: () => ({
-    data: [
-      { id: "user-1", email: "subash@onyx.app" },
-      { id: "user-2", email: "thomas@onyx.app" },
-    ],
-  }),
+  default: (params: { enabled?: boolean }) => mockUseShareableUsers(params),
 }));
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: [{ id: 7, name: "Cash Kings" }] }),
+  default: (enabled?: boolean) => mockUseShareableGroups(enabled),
 }));
 
 describe("BulkSkillSharingModal", () => {
+  it("loads users and groups only while open", () => {
+    const props = {
+      items: owned(2),
+      saving: false,
+      onClose: jest.fn(),
+      onSave: jest.fn(),
+    };
+    const { rerender } = render(
+      <BulkSkillSharingModal open={false} {...props} />
+    );
+    expect(mockUseShareableUsers).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+    expect(mockUseShareableGroups).toHaveBeenLastCalledWith(false);
+
+    rerender(<BulkSkillSharingModal open {...props} />);
+    expect(mockUseShareableUsers).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true })
+    );
+    expect(mockUseShareableGroups).toHaveBeenLastCalledWith(true);
+  });
   it("shares all selected skills organization-wide without changing their installation policy", async () => {
     const user = setupUser();
     const onSave = jest.fn().mockResolvedValue(undefined);

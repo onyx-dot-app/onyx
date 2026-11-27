@@ -112,7 +112,8 @@
   omitted visibility and installation settings remain unchanged. Failed items
   stay selected. Admin Skills filters by exact group. Admin Plugins filters by
   status, and its search also matches group names. Search and filter changes
-  clear selection.
+  clear selection. The bulk Share dialog loads users and groups only while it
+  is open.
   `SkillResponse.group_summaries` lists the `plugin__user_group` rows (group,
   permission or none, setting) to a caller who may edit the skill, and to a
   scoped manager only the rows of their groups. The admin table shows them in
