@@ -1794,6 +1794,23 @@ describe("the user's Chrome", () => {
     expect(panel().browserOpen).toBe(true);
   });
 
+  test("a sandbox browser that was open before the share stays open", async () => {
+    renderChat([[REPORT]]);
+    act(() => openBrowserInChat("session"));
+    expect(panel().browserOpen).toBe(true);
+    // The user shares tabs while the sandbox turn still runs
+    grant = { expires_at: Date.now() / 1000 + 600 };
+    await openChrome();
+    // The open tab polls; its next fetch sees the share
+    await screen.findByText(
+      "This chat uses 1 tab in your Chrome",
+      {},
+      { timeout: 5000 }
+    );
+    expect(panel().browserOpen).toBe(true);
+    expect(screen.getByRole("tab", { name: "Browser" })).toBeInTheDocument();
+  });
+
   test("My Chrome closes when the workspace turns it off", async () => {
     const view = renderChat([[REPORT]]);
     await openChrome();

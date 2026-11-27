@@ -495,8 +495,9 @@ const CHROME_POLL_MS = 2_000;
 
 /**
  * The chat's use of the user's own Chrome; no fetch for a null chat. It
- * polls while `polling` and while the chat shares tabs, so a share that
- * ends anywhere leaves the panel soon.
+ * polls while `polling`, while a share request waits and while the chat
+ * shares tabs, so a share that starts or ends anywhere shows soon. A failed
+ * fetch retries.
  */
 export function useChromeBrowserState(
   sessionId: string | null,
@@ -506,8 +507,11 @@ export function useChromeBrowserState(
     sessionId === null ? null : SWR_KEYS.chatChromeBrowser(sessionId),
     errorHandlingFetcher,
     {
-      refreshInterval: (data) => (polling || data?.grant ? CHROME_POLL_MS : 0),
-      shouldRetryOnError: false,
+      refreshInterval: (data) =>
+        polling || data?.grant || data?.request === "pending"
+          ? CHROME_POLL_MS
+          : 0,
+      errorRetryInterval: CHROME_POLL_MS,
     }
   );
 }

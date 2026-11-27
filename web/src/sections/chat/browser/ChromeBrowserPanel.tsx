@@ -51,7 +51,8 @@ export function ChromeBrowserPanel({
       </Section>
     );
 
-  if (error || !data)
+  // A failed refresh keeps the last state, so Stop stays at hand
+  if (!data)
     return (
       <Section gap={2} padding={4}>
         <IllustrationContent

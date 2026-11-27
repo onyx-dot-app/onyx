@@ -164,12 +164,21 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     chromeAvailable ? sessionId : null,
     open && state.chromeOpen
   );
-  const grant = chrome.data?.grant;
+  // A failed refresh does not count as a share: the next turn may not use it
+  const grant = chrome.error ? undefined : chrome.data?.grant;
   const chromeShared = !!grant && grant.expires_at * 1000 > Date.now();
+  // A sandbox browser that was open before the share began belongs to a
+  // turn that still uses the sandbox, so it stays. A browser that opens
+  // during the share is the agent's Chrome.
+  const [sandboxBeforeShare, setSandboxBeforeShare] = useState(false);
+  if (!state.browserOpen && sandboxBeforeShare) setSandboxBeforeShare(false);
+  if (state.browserOpen && !chromeShared && !sandboxBeforeShare)
+    setSandboxBeforeShare(true);
+  const redirectBrowser = chromeShared && !sandboxBeforeShare;
   const browser = useChatBrowserTabs({
     sessionId,
     open,
-    state: chromeShared ? { ...state, browserOpen: false } : state,
+    state: redirectBrowser ? { ...state, browserOpen: false } : state,
     dispatch,
     onInsideChange: () => {
       insideChangeRef.current = true;
@@ -177,11 +186,11 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   });
   const closeBrowser = browser.closeTab;
   useEffect(() => {
-    if (!chromeShared || !state.browserOpen) return;
+    if (!redirectBrowser || !state.browserOpen) return;
     // The browser's close also drops pages queued for the sandbox
     closeBrowser(RIGHT_PANEL_BROWSER_TAB);
     dispatch({ type: "openChrome" });
-  }, [chromeShared, state.browserOpen, closeBrowser, dispatch]);
+  }, [redirectBrowser, state.browserOpen, closeBrowser, dispatch]);
   useEffect(() => {
     if (!chromeAvailable && state.chromeOpen)
       dispatch({ type: "closeTab", tabId: RIGHT_PANEL_CHROME_TAB });
