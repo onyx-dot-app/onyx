@@ -70,6 +70,7 @@ function stateOf(tabId) {
       agentInputUntil: 0,
       dialogWaiters: [],
       ready: null,
+      humanTimer: null,
     };
     tabStates.set(tabId, state);
   }
@@ -88,10 +89,18 @@ const grantEndedError = () =>
   new OperationError("no_grant", "The user's share of Chrome with this chat ended.");
 
 export function forgetTab(tabId) {
+  clearTimeout(tabStates.get(tabId)?.humanTimer);
   tabStates.delete(tabId);
 }
 
-function isHumanControlled(tabId) {
+// Called with a tab ID when the user takes or gives back a tab.
+let controlListener = () => {};
+
+export function onControlChange(listener) {
+  controlListener = listener;
+}
+
+export function isHumanControlled(tabId) {
   return (tabStates.get(tabId)?.humanUntil ?? 0) > Date.now();
 }
 
@@ -165,8 +174,12 @@ export function handleEvent(source, method, params) {
         params.name === HUMAN_BINDING &&
         Date.now() > state.agentInputUntil + AGENT_INPUT_MARGIN_MS
       ) {
+        const taken = state.humanUntil <= Date.now();
         state.humanUntil = Date.now() + HUMAN_HOLD_MS;
         state.refs.clear();
+        clearTimeout(state.humanTimer);
+        state.humanTimer = setTimeout(() => controlListener(tabId), HUMAN_HOLD_MS + 50);
+        if (taken) controlListener(tabId);
       }
       break;
     default:

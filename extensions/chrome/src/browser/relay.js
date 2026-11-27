@@ -281,6 +281,7 @@ async function tabsFor(grant) {
       id: String(tab.id),
       title: shared ? (tab.title ?? "").slice(0, MAX_TITLE_CHARS) : "",
       url: shared ? (tab.url ?? "").slice(0, MAX_URL_CHARS) : "",
+      controller: driver.isHumanControlled(tab.id) ? "human" : "agent",
     });
   }
   return tabs;
@@ -539,6 +540,12 @@ export async function onTabRemoved(tabId) {
   });
   if (changed) await reportGrant();
 }
+
+// The web panel shows who uses each shared tab.
+driver.onControlChange(async (tabId) => {
+  const grant = await getGrant();
+  if (grant?.tabs.includes(tabId)) await reportGrant();
+});
 
 export async function onTabUpdated(tabId, changeInfo) {
   if (!changeInfo.url && !changeInfo.title) return;
