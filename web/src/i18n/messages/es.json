@@ -17327,6 +17327,7 @@
           "description": "Un administrador desactivó el uso compartido con personas y grupos. Pide a un administrador de skills que comparta este skill."
         },
         "groupsOutOfReach": "Solo puedes compartir con los grupos que administras. Pide a un administrador de habilidades que comparta con otros grupos.",
+        "groupsLoadFailed": "No se pudieron cargar los grupos con los que puedes compartir. Cierra y vuelve a abrir este cuadro de diálogo.",
         "groupAccess": {
           "title": "Acceso de grupos",
           "description": "De forma predeterminada, cada grupo usa la configuración de la organización. Una configuración de grupo la reemplaza para los miembros del grupo, también cuando es más estricta.",

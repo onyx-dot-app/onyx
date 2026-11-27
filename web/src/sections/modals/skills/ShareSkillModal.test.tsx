@@ -53,9 +53,13 @@ jest.mock("@/hooks/useShareableGroups", () => ({
   default: () => ({ data: mockGroups }),
 }));
 let mockPickerGroups: { id: number; name: string }[] | undefined;
+let mockPickerError: Error | undefined;
 jest.mock("@/lib/skills/hooks", () => ({
   ...jest.requireActual("@/lib/skills/hooks"),
-  useSkillShareableGroups: () => ({ data: mockPickerGroups ?? mockGroups }),
+  useSkillShareableGroups: () =>
+    mockPickerError
+      ? { data: undefined, error: mockPickerError }
+      : { data: mockPickerGroups ?? mockGroups },
 }));
 jest.mock("@/lib/skills/api", () => ({
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
@@ -73,6 +77,7 @@ describe("ShareSkillModal", () => {
   beforeEach(() => {
     mockGroups = [];
     mockPickerGroups = undefined;
+    mockPickerError = undefined;
     mockIsAdmin = true;
     mockPublishing = "OPEN";
     mockSharing = undefined;
@@ -802,6 +807,27 @@ describe("ShareSkillModal", () => {
     );
     await screen.findByText("Ownership");
     expect(screen.queryByText("Group Access")).not.toBeInTheDocument();
+  });
+
+  it("says when the groups to share with did not load", async () => {
+    mockPickerError = new Error("boom");
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: null })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByText(
+        "Could not load the groups you can share with. Close and open this dialog again."
+      )
+    ).toBeVisible();
   });
 
   it("keeps groups a member cannot share with read-only", async () => {

@@ -129,7 +129,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     includeApiKeys: false,
   });
   const { data: shareableGroupsData } = useShareableGroups();
-  const { data: pickerGroupsData } = useSkillShareableGroups(skillId, open);
+  const { data: pickerGroupsData, error: pickerGroupsError } =
+    useSkillShareableGroups(skillId, open);
   const { isAdmin, user: currentUser } = useUser();
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -625,6 +626,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               )}
             />
             {canEditShares && !sharingAllowed && <SharingOffNotice />}
+            {canEditShares && sharingAllowed && pickerGroupsError && (
+              <Text as="p" font="secondary-body" color="text-03">
+                {t("share.groupsLoadFailed")}
+              </Text>
+            )}
             {canEditShares && sharingAllowed && hasGroupsOutOfReach && (
               <Text as="p" font="secondary-body" color="text-03">
                 {t("share.groupsOutOfReach")}
