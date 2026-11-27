@@ -325,11 +325,16 @@ export default function AddIntegrationModal({
       return;
     }
     if (detected.shape === "openapi") setBaseUrl(detected.view.base_url);
-    setEndpoints("");
+    // A check again of the same REST API keeps the draft.
+    const sameRestApi =
+      detected.shape === "rest" &&
+      detection?.shape === "rest" &&
+      detected.baseUrl === detection.baseUrl;
+    if (!sameRestApi) setEndpoints("");
     // Most APIs take a key; the method is ready for a later choice of sign-in.
     enterSetup(
       detected,
-      { ...DEFAULT_SIGN_IN, authMethod: "api_key" },
+      sameRestApi ? signIn : { ...DEFAULT_SIGN_IN, authMethod: "api_key" },
       detected.shape === "rest" && detected.warning !== null
         ? null
         : { url: apiUrl, file }

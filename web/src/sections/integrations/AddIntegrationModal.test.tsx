@@ -985,6 +985,41 @@ describe("Custom API", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("Back to rename after a warning keeps the endpoints", async () => {
+    const detail = "The URL timed out.";
+    const fetchMock = mockFetch({
+      "POST /api/admin/integrations/openapi-import": () =>
+        new Response(JSON.stringify({ error_code: "BAD_GATEWAY", detail }), {
+          status: 502,
+        }),
+      "POST /api/admin/integrations": makeDetail({ id: 15 }),
+      "/api/admin/integrations": [],
+    });
+    const { user } = open({ kind: "api" });
+    await fillConnect(
+      user,
+      "Billing",
+      add.api.url.title,
+      "https://billing.internal/"
+    );
+    await user.type(
+      await screen.findByRole("textbox", { name: add.rest.endpoints.title }),
+      "GET /invoices List invoices"
+    );
+
+    await user.click(screen.getByRole("button", { name: add.back }));
+    await user.type(
+      screen.getByRole("textbox", { name: add.name.title }),
+      " API"
+    );
+    await user.click(screen.getByRole("button", { name: add.continue }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByRole("textbox", { name: add.rest.endpoints.title })
+    ).toHaveValue("GET /invoices List invoices");
+  });
+
   test("a URL whose answer is over the spec size limit warns and is a REST base URL", async () => {
     const detail = "The spec is larger than 5 MB.";
     const fetchMock = mockFetch({
