@@ -165,6 +165,9 @@ export function usePluginBulkActions({
     />
   );
 
+  const singleDeleteTarget =
+    deleteTargets.length === 1 ? deleteTargets[0] : undefined;
+
   const modals = (
     <>
       <BulkSkillSharingModal
@@ -184,10 +187,16 @@ export function usePluginBulkActions({
       <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgAlertTriangle}
-          title={nounCopy("deleteTitle", { count: deleteTargets.length })}
-          description={nounCopy("deleteDescription", {
-            count: deleteTargets.length,
-          })}
+          title={
+            singleDeleteTarget
+              ? nounCopy("deleteOneTitle", { name: singleDeleteTarget.name })
+              : nounCopy("deleteTitle", { count: deleteTargets.length })
+          }
+          description={
+            singleDeleteTarget
+              ? nounCopy("deleteOneDescription")
+              : nounCopy("deleteDescription", { count: deleteTargets.length })
+          }
           onClose={() => {
             if (!busy) deleteModal.toggle(false);
           }}

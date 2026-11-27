@@ -231,7 +231,8 @@ Publishing means reviewing that Skill and then sharing it with the intended audi
 
 <Note>
   Publishing a Skill to the whole organization requires being its author or an Admin. Publishing cannot be undone:
-  a published Skill cannot become private again. Only Admins can delete a published Skill.
+  a published Skill cannot become private again.
+  Only a user with the organization-wide `manage:plugins` permission can delete a published Skill.
   You can delete a private Skill that you own or can edit.
 </Note>
 
@@ -331,7 +332,8 @@ A Skill has at most one pending request. A newer request replaces the older one.
 | **Organization**    | Everyone can use and preview the Skill.                   | Not available. Give **Can edit** to specific people or groups.                           |
 
 Users with **Can edit** can change instructions and files, update sharing within their permissions,
-and enable or disable the Skill. They can delete a private Skill. Only Admins can delete a published Skill.
+and enable or disable the Skill. They can delete a private Skill.
+Only a user with the organization-wide `manage:plugins` permission can delete a published Skill.
 
 A save on a published Skill does not reach the organization at once.
 The organization keeps the published version until the author or an Admin selects **Publish update** in the Skill's
@@ -359,7 +361,7 @@ and choose a value under **Installation**:
 | Policy | Effect |
 | --- | --- |
 | **Default access** | The Skill has no policy of its own and uses the **Default Access** setting. The option shows the current value. |
-| **Required** | Installed and always on. Members cannot turn it off. Only Admins can delete it. |
+| **Required** | Installed and always on. Members cannot turn it off. Only a user with the organization-wide `manage:plugins` permission can delete it. |
 | **Installed** | Installed for every member. Members can turn it off. |
 | **Available** | Members find it and turn it on if they want it. |
 | **Not available** | Hidden. Members cannot find it or turn it on, unless a share or a more open group setting gives them access. |
@@ -512,9 +514,8 @@ Do not transfer ownership to bots, service accounts, limited accounts, or inacti
 **Enable for me** and **Disable for me** change your personal library only.
 Use **Installed** or **Required** under **Installation** to deploy Skills to people with access.
 Open **More actions** for personal enablement and deletion. **Delete** removes selected Skills for everyone with access.
-Only an admin can delete a Skill that is published to the organization.
-This needs the organization-wide `manage:plugins` permission.
-The confirmation lists each selected Skill before deletion.
+Only a user with the organization-wide `manage:plugins` permission can delete a Skill that is published to the
+organization. The confirmation lists each selected Skill before deletion.
 
 ### Set access during upload
 

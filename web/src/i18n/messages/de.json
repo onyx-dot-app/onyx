@@ -17405,7 +17405,7 @@
         },
         "publishWarning": {
           "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
-          "description": "Nach dem Speichern kann jeder in der Organisation diesen Skill verwenden. Sie können ihn danach nicht wieder privat machen. Nur ein Administrator kann ihn löschen.",
+          "description": "Nach dem Speichern kann jeder in der Organisation diesen Skill verwenden. Sie können ihn danach nicht wieder privat machen. Nur ein organisationsweiter Skill-Manager kann ihn löschen.",
           "reviewDescription": "Der Skill bleibt privat, bis ein Admin die Anfrage genehmigt. Nach der Genehmigung können Sie ihn nicht wieder privat machen."
         },
         "reviewRequestedToast": {
@@ -17436,7 +17436,7 @@
             "description": "Veröffentlicht. Alle in der Organisation können dieses Plugin verwenden."
           },
           "publishWarning": {
-            "description": "Nach dem Speichern können alle in der Organisation dieses Plugin verwenden. Sie können es nicht wieder privat machen. Nur ein Admin kann es löschen.",
+            "description": "Nach dem Speichern können alle in der Organisation dieses Plugin verwenden. Sie können es nicht wieder privat machen. Nur ein organisationsweiter Skill-Manager kann es löschen.",
             "reviewDescription": "Das Plugin bleibt privat, bis ein Admin die Anfrage genehmigt. Nach der Genehmigung können Sie es nicht wieder privat machen."
           },
           "publishOff": {
@@ -17622,6 +17622,8 @@
       "deleteFailure": "{count, plural, one {# Skill konnte nicht gelöscht werden} other {# Skills konnten nicht gelöscht werden}}",
       "deleteTitle": "{count, plural, one {# Skill löschen?} other {# Skills löschen?}}",
       "deleteDescription": "{count, plural, one {Der ausgewählte Skill wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Skills werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
+      "deleteOneTitle": "{name} löschen?",
+      "deleteOneDescription": "Der Skill wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.",
       "shareTitle": "{count, plural, one {Zugriff für # Skill aktualisieren} other {Zugriff für # Skills aktualisieren}}",
       "shareDescription": "Diese Änderungen auf jeden ausgewählten Skill anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
       "unchanged": "Unverändert lassen",
@@ -17631,7 +17633,7 @@
       "moreActions": "Weitere Aktionen",
       "publishWarning": {
         "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
-        "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Skills verwenden. Veröffentlichte Skills können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
+        "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Skills verwenden. Veröffentlichte Skills können nicht wieder privat gemacht werden. Nur ein organisationsweiter Skill-Manager kann sie löschen."
       },
       "skipped": "{count, plural, one {# Skill kann von dir nicht ein- oder ausgeschaltet werden und wurde übersprungen} other {# Skills können von dir nicht ein- oder ausgeschaltet werden und wurden übersprungen}}"
     },
@@ -18149,12 +18151,14 @@
       "deleteFailure": "{count, plural, one {# Plugin konnte nicht gelöscht werden} other {# Plugins konnten nicht gelöscht werden}}",
       "deleteTitle": "{count, plural, one {# Plugin löschen?} other {# Plugins löschen?}}",
       "deleteDescription": "{count, plural, one {Das ausgewählte Plugin wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Plugins werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
+      "deleteOneTitle": "{name} löschen?",
+      "deleteOneDescription": "Das Plugin wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.",
       "shareTitle": "{count, plural, one {Zugriff für # Plugin aktualisieren} other {Zugriff für # Plugins aktualisieren}}",
       "shareDescription": "Diese Änderungen auf jedes ausgewählte Plugin anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
       "addAccessDescription": "Diese Personen und Gruppen zu jedem ausgewählten Plugin hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
       "apply": "{count, plural, one {Auf # Plugin anwenden} other {Auf # Plugins anwenden}}",
       "publishWarning": {
-        "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Plugins verwenden. Veröffentlichte Plugins können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
+        "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Plugins verwenden. Veröffentlichte Plugins können nicht wieder privat gemacht werden. Nur ein organisationsweiter Skill-Manager kann sie löschen."
       },
       "skipped": "{count, plural, one {# Plugin kann von dir nicht ein- oder ausgeschaltet werden und wurde übersprungen} other {# Plugins können von dir nicht ein- oder ausgeschaltet werden und wurden übersprungen}}"
     }

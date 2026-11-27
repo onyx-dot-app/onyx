@@ -250,3 +250,24 @@ def test_bulk_delete_preserves_required_skill_for_non_admin(
         f"{API_SERVER_URL}/skills/{ordinary_skill.id}", headers=basic_user.headers
     )
     assert missing.status_code == 404
+
+
+def test_bulk_actions_report_a_deleted_skill_with_one_message(
+    admin_user: DATestUser,
+) -> None:
+    skill = SkillManager.create_custom(admin_user)
+    client.delete(
+        f"{API_SERVER_URL}/skills/custom/{skill.id}", headers=admin_user.headers
+    ).raise_for_status()
+    for action in ("enable", "disable", "delete"):
+        response = client.post(
+            f"{API_SERVER_URL}/skills/bulk",
+            headers=admin_user.headers,
+            json={"skill_ids": [str(skill.id)], "action": action},
+        )
+        response.raise_for_status()
+        result = SkillBulkResponse.model_validate(response.json())
+        assert result.succeeded == []
+        assert [(f.skill_id, f.detail) for f in result.failed] == [
+            (skill.id, "Skill not found")
+        ], action

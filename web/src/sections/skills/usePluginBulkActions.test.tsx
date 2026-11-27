@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { render, screen, setupUser } from "@tests/setup/test-utils";
+import { render, screen, setupUser, within } from "@tests/setup/test-utils";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import type { CustomSkill } from "@/lib/skills/types";
 import { usePluginBulkActions } from "@/sections/skills/usePluginBulkActions";
@@ -39,6 +39,12 @@ function Harness({ items }: { items: CustomSkill[] }) {
       <button onClick={() => bulk.select(new Set([target.id]))}>
         select target
       </button>
+      <button onClick={() => bulk.confirmDelete([target])}>
+        delete target
+      </button>
+      <button onClick={() => bulk.confirmDelete([toggling, target])}>
+        delete both
+      </button>
       {bulk.toolbarActions}
       {bulk.modals}
     </>
@@ -68,4 +74,28 @@ test("Share closes when a sync removes every selected plugin", async () => {
   rerender(<Harness items={[toggling]} />);
 
   expect(mockSharingOpen).toBe(false);
+});
+
+test("a single delete confirm names the plugin", async () => {
+  const user = setupUser();
+  render(<Harness items={[toggling, target]} />);
+  await user.click(screen.getByRole("button", { name: "delete target" }));
+
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog).toHaveTextContent("Delete target?");
+  expect(dialog).toHaveTextContent(
+    "This deletes the plugin for everyone who has access. This cannot be undone."
+  );
+  expect(dialog).not.toHaveTextContent(/selected/);
+  expect(within(dialog).getByRole("list")).toHaveTextContent("target");
+});
+
+test("a delete confirm for many plugins counts them", async () => {
+  const user = setupUser();
+  render(<Harness items={[toggling, target]} />);
+  await user.click(screen.getByRole("button", { name: "delete both" }));
+
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog).toHaveTextContent("Delete 2 plugins?");
+  expect(within(dialog).getByRole("list")).toHaveTextContent("toggling");
 });

@@ -17405,7 +17405,7 @@
         },
         "publishWarning": {
           "title": "La publicación no se puede deshacer",
-          "description": "Después de guardar, todos en la organización pueden usar esta habilidad. No podrás volver a hacerla privada. Solo un administrador puede eliminarla.",
+          "description": "Después de guardar, todos en la organización pueden usar esta habilidad. No podrás volver a hacerla privada. Solo un administrador de skills de toda la organización puede eliminarla.",
           "reviewDescription": "La habilidad sigue privada hasta que un administrador apruebe la solicitud. Después de la aprobación, no podrás volver a hacerla privada."
         },
         "reviewRequestedToast": {
@@ -17436,7 +17436,7 @@
             "description": "Publicado. Todos en la organización pueden usar este plugin."
           },
           "publishWarning": {
-            "description": "Después de guardar, todos en la organización pueden usar este plugin. No puedes volver a hacerlo privado. Solo un administrador puede eliminarlo.",
+            "description": "Después de guardar, todos en la organización pueden usar este plugin. No puedes volver a hacerlo privado. Solo un administrador de skills de toda la organización puede eliminarlo.",
             "reviewDescription": "El plugin sigue siendo privado hasta que un administrador apruebe la solicitud. Después de la aprobación, no puedes volver a hacerlo privado."
           },
           "publishOff": {
@@ -17622,6 +17622,8 @@
       "deleteFailure": "{count, plural, one {No se pudo eliminar # habilidad} other {No se pudieron eliminar # habilidades}}",
       "deleteTitle": "{count, plural, one {¿Eliminar # habilidad?} other {¿Eliminar # habilidades?}}",
       "deleteDescription": "{count, plural, one {Esto elimina la habilidad seleccionada para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina las # habilidades seleccionadas para todas las personas con acceso. Esta acción no se puede deshacer.}}",
+      "deleteOneTitle": "¿Eliminar {name}?",
+      "deleteOneDescription": "Esto elimina la habilidad para todas las personas con acceso. Esta acción no se puede deshacer.",
       "shareTitle": "{count, plural, one {Actualizar acceso para # habilidad} other {Actualizar acceso para # habilidades}}",
       "shareDescription": "Aplica estos cambios a cada habilidad seleccionada. Los ajustes que no cambies conservan sus valores actuales.",
       "unchanged": "Mantener sin cambios",
@@ -17631,7 +17633,7 @@
       "moreActions": "Más acciones",
       "publishWarning": {
         "title": "La publicación no se puede deshacer",
-        "description": "Después de aplicar, todos en la organización pueden usar las habilidades seleccionadas. Las habilidades publicadas no se pueden volver a hacer privadas. Solo un administrador puede eliminarlas."
+        "description": "Después de aplicar, todos en la organización pueden usar las habilidades seleccionadas. Las habilidades publicadas no se pueden volver a hacer privadas. Solo un administrador de skills de toda la organización puede eliminarlas."
       },
       "skipped": "{count, plural, one {# habilidad no se puede activar ni desactivar y se omitió} other {# habilidades no se pueden activar ni desactivar y se omitieron}}"
     },
@@ -18149,12 +18151,14 @@
       "deleteFailure": "{count, plural, one {No se pudo eliminar # plugin} other {No se pudieron eliminar # plugins}}",
       "deleteTitle": "{count, plural, one {¿Eliminar # plugin?} other {¿Eliminar # plugins?}}",
       "deleteDescription": "{count, plural, one {Esto elimina el plugin seleccionado para todas las personas con acceso. Esta acción no se puede deshacer.} other {Esto elimina los # plugins seleccionados para todas las personas con acceso. Esta acción no se puede deshacer.}}",
+      "deleteOneTitle": "¿Eliminar {name}?",
+      "deleteOneDescription": "Esto elimina el plugin para todas las personas con acceso. Esta acción no se puede deshacer.",
       "shareTitle": "{count, plural, one {Actualizar acceso para # plugin} other {Actualizar acceso para # plugins}}",
       "shareDescription": "Aplica estos cambios a cada plugin seleccionado. Los ajustes que no cambies conservan sus valores actuales.",
       "addAccessDescription": "Añade estas personas y grupos a cada plugin seleccionado. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
       "apply": "{count, plural, one {Aplicar a # plugin} other {Aplicar a # plugins}}",
       "publishWarning": {
-        "description": "Después de aplicar, todos en la organización pueden usar los plugins seleccionados. Los plugins publicados no se pueden volver a hacer privados. Solo un administrador puede eliminarlos."
+        "description": "Después de aplicar, todos en la organización pueden usar los plugins seleccionados. Los plugins publicados no se pueden volver a hacer privados. Solo un administrador de skills de toda la organización puede eliminarlos."
       },
       "skipped": "{count, plural, one {# plugin no se puede activar ni desactivar y se omitió} other {# plugins no se pueden activar ni desactivar y se omitieron}}"
     }
