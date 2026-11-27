@@ -27,15 +27,13 @@ import pytest
 from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
+from tests.unit.onyx.connectors.zendesk.utils import set_request_function
 
 
 @pytest.fixture
 def mock_zendesk_client() -> MagicMock:
-    from onyx.connectors.zendesk.connector import ZendeskClient
-
-    mock = MagicMock(spec=ZendeskClient)
-    mock.base_url = "https://test.zendesk.com/api/v2"
-    mock.auth = ("test@example.com/token", "test_token")
+    """Stands in for the gateway's request function: make_request(endpoint, params)."""
+    mock = MagicMock()
     mock.make_request = MagicMock()
     return mock
 
@@ -43,14 +41,14 @@ def mock_zendesk_client() -> MagicMock:
 @pytest.fixture
 def article_connector(mock_zendesk_client: MagicMock) -> ZendeskConnector:
     connector = ZendeskConnector(content_type="articles")
-    connector.client = mock_zendesk_client
+    set_request_function(connector, mock_zendesk_client.make_request)
     return connector
 
 
 @pytest.fixture
 def ticket_connector(mock_zendesk_client: MagicMock) -> ZendeskConnector:
     connector = ZendeskConnector(content_type="tickets")
-    connector.client = mock_zendesk_client
+    set_request_function(connector, mock_zendesk_client.make_request)
     return connector
 
 

@@ -1,6 +1,6 @@
 import time
 from collections.abc import Callable, Generator
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,16 +13,15 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.models import Document
-from onyx.connectors.zendesk.connector import ZendeskClient, ZendeskConnector
+from onyx.connectors.zendesk.connector import ZendeskConnector
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
+from tests.unit.onyx.connectors.zendesk.utils import CREDENTIALS, set_request_function
 
 
 @pytest.fixture
 def mock_zendesk_client() -> MagicMock:
-    """Create a mock Zendesk client"""
-    mock = MagicMock(spec=ZendeskClient)
-    mock.base_url = "https://test.zendesk.com/api/v2"
-    mock.auth = ("test@example.com/token", "test_token")
+    """Stands in for the gateway's request function: make_request(endpoint, params)."""
+    mock = MagicMock()
     mock.make_request = MagicMock()
     return mock
 
@@ -33,7 +32,7 @@ def zendesk_connector(
 ) -> Generator[ZendeskConnector, None, None]:
     """Create a Zendesk connector with mocked client"""
     connector = ZendeskConnector(content_type="articles")
-    connector.client = mock_zendesk_client
+    set_request_function(connector, mock_zendesk_client.make_request)
     yield connector
 
 
@@ -41,9 +40,7 @@ def zendesk_connector(
 def unmocked_zendesk_connector() -> Generator[ZendeskConnector, None, None]:
     """Create a Zendesk connector with unmocked client"""
     zendesk_connector = ZendeskConnector(content_type="articles")
-    zendesk_connector.client = ZendeskClient(
-        "test", "test@example.com/token", "test_token"
-    )
+    zendesk_connector.load_credentials(CREDENTIALS)
     yield zendesk_connector
 
 
@@ -211,7 +208,7 @@ def test_load_from_checkpoint_tickets_happy_path(
         {"comments": []},
     ]
 
-    zendesk_connector.client = mock_zendesk_client
+    set_request_function(zendesk_connector, mock_zendesk_client.make_request)
 
     # Call load_from_checkpoint
     end_time = time.time()
@@ -274,7 +271,7 @@ def test_load_from_checkpoint_with_rate_limit(
     }
 
     # Mock requests.get to simulate rate limit then success
-    with patch("onyx.connectors.zendesk.connector.requests.get") as mock_get:
+    with patch("onyx.connectors.zendesk.source_operations.requests.get") as mock_get:
         mock_get.side_effect = [
             # First call: content tags
             MagicMock(
@@ -291,7 +288,9 @@ def test_load_from_checkpoint_with_rate_limit(
 
         # Call load_from_checkpoint
         end_time = time.time()
-        with patch("onyx.connectors.zendesk.connector.time.sleep") as mock_sleep:
+        with patch(
+            "onyx.connectors.zendesk.source_operations.time.sleep"
+        ) as mock_sleep:
             outputs = load_everything_from_checkpoint_connector(
                 zendesk_connector, 0, end_time
             )
@@ -442,6 +441,7 @@ def test_load_from_checkpoint_with_skipped_ticket(
 )
 def test_validate_connector_settings_errors(
     zendesk_connector: ZendeskConnector,
+    mock_zendesk_client: MagicMock,
     status_code: int,
     expected_exception: type[Exception],
     expected_message: str,
@@ -451,7 +451,6 @@ def test_validate_connector_settings_errors(
     mock_response.status_code = status_code
     error = HTTPError(response=mock_response)
 
-    mock_zendesk_client = cast(MagicMock, zendesk_connector.client)
     mock_zendesk_client.make_request.side_effect = error
 
     with pytest.raises(expected_exception) as excinfo:

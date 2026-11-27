@@ -45,6 +45,7 @@ from onyx.connectors.source_operations import get_source_operations_class
 from onyx.connectors.youtrack.capability_checks import (
     build_youtrack_indexing_checks,
 )
+from onyx.connectors.zendesk.capability_checks import build_zendesk_indexing_checks
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 # INDEXING checks per source. Checks must be enumerable without an instantiated
@@ -63,6 +64,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.SHAREPOINT: build_sharepoint_indexing_checks(),
     DocumentSource.GITHUB: build_github_indexing_checks(),
     DocumentSource.YOUTRACK: build_youtrack_indexing_checks(),
+    DocumentSource.ZENDESK: build_zendesk_indexing_checks(),
     DocumentSource.ASANA: build_asana_indexing_checks(),
     DocumentSource.AZURE_DATALAKE: build_azure_datalake_indexing_checks(),
     DocumentSource.EGNYTE: build_egnyte_indexing_checks(),

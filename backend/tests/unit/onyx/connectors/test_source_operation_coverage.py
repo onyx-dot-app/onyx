@@ -95,6 +95,8 @@ from onyx.connectors.youtrack.models import (
     YouTrackRole,
     YouTrackUser,
 )
+from onyx.connectors.zendesk.models import ZendeskUser
+from onyx.connectors.zendesk.source_operations import ZendeskPageResponse
 from tests.unit.onyx.connectors.source_operation_harnesses import (
     compute_uncovered_units,
     import_all_source_operation_gateways,
@@ -357,6 +359,21 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_zendesk_spy(spy: MagicMock) -> None:
+    """One article with an author and one ticket, so the checks reach the
+    author read and the comment read."""
+    spy.get_me.return_value = ZendeskUser(id=1)
+    spy.list_content_tags.return_value = {}
+    spy.get_article_page.return_value = ZendeskPageResponse(
+        data=[{"id": 1, "author_id": 1}], meta={}, has_more=False
+    )
+    spy.get_user.return_value = ZendeskUser(id=1)
+    spy.get_ticket_page.return_value = ZendeskPageResponse(
+        data=[{"id": 1}], meta={"end_time": 1}, has_more=False
+    )
+    spy.list_ticket_comments.return_value = []
+
+
 def _configure_azure_datalake_spy(spy: MagicMock) -> None:
     """A container holding one file, so the read check reaches the download,
     in an account that Azure Resource Manager lists with one role assignment,
@@ -457,6 +474,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],
     DocumentSource.YOUTRACK: [_configure_youtrack_spy],
+    DocumentSource.ZENDESK: [_configure_zendesk_spy],
     DocumentSource.AZURE_DATALAKE: [_configure_azure_datalake_spy],
     DocumentSource.EGNYTE: [_configure_egnyte_spy],
 }
@@ -490,6 +508,8 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
         {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
     ],
     DocumentSource.EGNYTE: [{"folder_path": "/Shared/Docs"}],
+    # Each content type has its own check.
+    DocumentSource.ZENDESK: [{"content_type": "articles"}, {"content_type": "tickets"}],
 }
 
 

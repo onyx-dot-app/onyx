@@ -1,25 +1,15 @@
 import copy
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from typing import Any, cast
 
-import requests
-from pydantic import BaseModel
-from requests.exceptions import HTTPError
 from typing_extensions import override
 
-from onyx.configs.app_configs import (
-    REQUEST_TIMEOUT_SECONDS,
-    ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS,
-)
+from onyx.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.exceptions import (
-    ConnectorValidationError,
-    CredentialExpiredError,
-    InsufficientPermissionsError,
-)
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnector,
     CheckpointOutput,
@@ -37,16 +27,17 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
+from onyx.connectors.zendesk.source_operations import (
+    ZENDESK_SUBDOMAIN,
+    ZendeskRequestError,
+    ZendeskSourceOperations,
+    subdomain_from_credential,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.utils.retry_after import parse_retry_after_seconds
-from onyx.utils.retry_wrapper import retry_builder
 
-MAX_PAGE_SIZE = 30  # Zendesk API maximum
 MAX_AUTHOR_MAP_SIZE = 50_000  # Reset author map cache if it gets too large
 _SLIM_BATCH_SIZE = 1000
-# Upper bound on how long we'll honor a server-provided Retry-After.
-_MAX_RETRY_AFTER_SLEEP_SECONDS = 60
 
 
 class ZendeskCredentialsNotSetUpError(PermissionError):
@@ -56,182 +47,51 @@ class ZendeskCredentialsNotSetUpError(PermissionError):
         )
 
 
-class ZendeskClient:
-    def __init__(
-        self,
-        subdomain: str,
-        email: str,
-        token: str,
-        calls_per_minute: int | None = None,
-    ):
-        self.base_url = f"https://{subdomain}.zendesk.com/api/v2"
-        self.auth = (f"{email}/token", token)
-        self.make_request = request_with_rate_limit(self, calls_per_minute)
-
-
-def request_with_rate_limit(
-    client: ZendeskClient, max_calls_per_minute: int | None = None
-) -> Callable[[str, dict[str, Any]], dict[str, Any]]:
-    @retry_builder()
-    @(
-        rate_limit_builder(max_calls=max_calls_per_minute, period=60)
-        if max_calls_per_minute
-        else lambda x: x
-    )
-    def make_request(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
-        response = requests.get(
-            f"{client.base_url}/{endpoint}",
-            auth=client.auth,
-            params=params,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-
-        if response.status_code == 429:
-            retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
-            if retry_after is not None:
-                # Sleep for the duration indicated by the Retry-After header
-                time.sleep(min(retry_after, _MAX_RETRY_AFTER_SLEEP_SECONDS))
-
-        elif (
-            response.status_code == 403
-            and response.json().get("error") == "SupportProductInactive"
-        ):
-            return response.json()
-
-        response.raise_for_status()
-        return response.json()
-
-    return make_request
-
-
-class ZendeskPageResponse(BaseModel):
-    data: list[dict[str, Any]]
-    meta: dict[str, Any]
-    has_more: bool
-
-
-def _get_content_tag_mapping(client: ZendeskClient) -> dict[str, str]:
-    content_tags: dict[str, str] = {}
-    params = {"page[size]": MAX_PAGE_SIZE}
-
-    try:
-        while True:
-            data = client.make_request("guide/content_tags", params)
-
-            for tag in data.get("records", []):
-                content_tags[tag["id"]] = tag["name"]
-
-            # Check if there are more pages
-            if data.get("meta", {}).get("has_more", False):
-                params["page[after]"] = data["meta"]["after_cursor"]
-            else:
-                break
-
-        return content_tags
-    except Exception as e:
-        raise Exception(f"Error fetching content tags: {str(e)}")
-
-
-def _get_articles(
-    client: ZendeskClient, start_time: int | None = None, page_size: int = MAX_PAGE_SIZE
+def _iterate_articles(
+    ops: ZendeskSourceOperations, start_time: int | None
 ) -> Iterator[dict[str, Any]]:
-    params = {"page[size]": page_size, "sort_by": "updated_at", "sort_order": "asc"}
-    if start_time is not None:
-        params["start_time"] = start_time
-
+    after_cursor: str | None = None
     while True:
-        data = client.make_request("help_center/articles", params)
-        for article in data["articles"]:
-            yield article
-
-        if not data.get("meta", {}).get("has_more"):
-            break
-        params["page[after]"] = data["meta"]["after_cursor"]
+        page = ops.get_article_page(start_time=start_time, after_cursor=after_cursor)
+        yield from page.data
+        if not page.has_more:
+            return
+        after_cursor = page.meta["after_cursor"]
 
 
-def _get_article_page(
-    client: ZendeskClient,
-    start_time: int | None = None,
-    after_cursor: str | None = None,
-    page_size: int = MAX_PAGE_SIZE,
-) -> ZendeskPageResponse:
-    params = {"page[size]": page_size, "sort_by": "updated_at", "sort_order": "asc"}
-    if start_time is not None:
-        params["start_time"] = start_time
-    if after_cursor is not None:
-        params["page[after]"] = after_cursor
-
-    data = client.make_request("help_center/articles", params)
-    return ZendeskPageResponse(
-        data=data["articles"],
-        meta=data["meta"],
-        has_more=bool(data["meta"].get("has_more", False)),
-    )
-
-
-def _get_tickets(
-    client: ZendeskClient, start_time: int | None = None
+def _iterate_tickets(
+    ops: ZendeskSourceOperations, start_time: int | None
 ) -> Iterator[dict[str, Any]]:
-    params = {"start_time": start_time or 0}
-
+    next_start_time: int | None = start_time
     while True:
-        data = client.make_request("incremental/tickets.json", params)
-        for ticket in data["tickets"]:
-            yield ticket
-
-        if not data.get("end_of_stream", False):
-            params["start_time"] = data["end_time"]
-        else:
-            break
-
-
-# TODO: maybe these don't need to be their own functions?
-def _get_tickets_page(
-    client: ZendeskClient, start_time: int | None = None
-) -> ZendeskPageResponse:
-    params = {"start_time": start_time or 0}
-
-    # NOTE: for some reason zendesk doesn't seem to be respecting the start_time param
-    # in my local testing with very few tickets. We'll look into it if this becomes an
-    # issue in larger deployments
-    data = client.make_request("incremental/tickets.json", params)
-    if data.get("error") == "SupportProductInactive":
-        raise ValueError(
-            "Zendesk Support Product is not active for this account, No tickets to index"
-        )
-    return ZendeskPageResponse(
-        data=data["tickets"],
-        meta={"end_time": data["end_time"]},
-        has_more=not bool(data.get("end_of_stream", False)),
-    )
+        page = ops.get_ticket_page(start_time=next_start_time)
+        yield from page.data
+        if not page.has_more:
+            return
+        next_start_time = page.meta["end_time"]
 
 
 def _fetch_author(
-    client: ZendeskClient, author_id: str | int
+    ops: ZendeskSourceOperations, author_id: str | int
 ) -> BasicExpertInfo | None:
     # Skip fetching if author_id is invalid
     # cast to str to avoid issues with zendesk changing their types
     if not author_id or str(author_id) == "-1":
         return None
 
-    try:
-        author_data = client.make_request(f"users/{author_id}", {})
-        user = author_data.get("user")
-        return (
-            BasicExpertInfo(display_name=user.get("name"), email=user.get("email"))
-            if user and user.get("name") and user.get("email")
-            else None
-        )
-    except requests.exceptions.HTTPError:
-        # Handle any API errors gracefully
-        return None
+    user = ops.get_user(user_id=author_id)
+    return (
+        BasicExpertInfo(display_name=user.name, email=user.email)
+        if user and user.name and user.email
+        else None
+    )
 
 
 def _article_to_document(
     article: dict[str, Any],
     content_tags: dict[str, str],
     author_map: dict[str, BasicExpertInfo],
-    client: ZendeskClient,
+    ops: ZendeskSourceOperations,
 ) -> tuple[dict[str, BasicExpertInfo] | None, Document]:
     author_id = article.get("author_id")
     if not author_id:
@@ -240,7 +100,7 @@ def _article_to_document(
         author = (
             author_map.get(author_id)
             if author_id in author_map
-            else _fetch_author(client, author_id)
+            else _fetch_author(ops, author_id)
         )
 
     new_author_mapping = {author_id: author} if author_id and author else None
@@ -283,7 +143,7 @@ def _article_to_document(
 def _get_comment_text(
     comment: dict[str, Any],
     author_map: dict[str, BasicExpertInfo],
-    client: ZendeskClient,
+    ops: ZendeskSourceOperations,
 ) -> tuple[dict[str, BasicExpertInfo] | None, str]:
     author_id = comment.get("author_id")
     if not author_id:
@@ -292,7 +152,7 @@ def _get_comment_text(
         author = (
             author_map.get(author_id)
             if author_id in author_map
-            else _fetch_author(client, author_id)
+            else _fetch_author(ops, author_id)
         )
 
     new_author_mapping = {author_id: author} if author_id and author else None
@@ -306,7 +166,7 @@ def _get_comment_text(
 def _ticket_to_document(
     ticket: dict[str, Any],
     author_map: dict[str, BasicExpertInfo],
-    client: ZendeskClient,
+    ops: ZendeskSourceOperations,
     default_subdomain: str,
 ) -> tuple[dict[str, BasicExpertInfo] | None, Document]:
     submitter_id = ticket.get("submitter")
@@ -316,7 +176,7 @@ def _ticket_to_document(
         submitter = (
             author_map.get(submitter_id)
             if submitter_id in author_map
-            else _fetch_author(client, submitter_id)
+            else _fetch_author(ops, submitter_id)
         )
 
     new_author_mapping = (
@@ -338,15 +198,11 @@ def _ticket_to_document(
     if ticket_type := ticket.get("type"):
         metadata["ticket_type"] = ticket_type
 
-    # Fetch comments for the ticket
-    comments_data = client.make_request(f"tickets/{ticket.get('id')}/comments", {})
-    comments = comments_data.get("comments", [])
+    comments = ops.list_ticket_comments(ticket_id=ticket["id"])
 
     comment_texts = []
     for comment in comments:
-        new_author_mapping, comment_text = _get_comment_text(
-            comment, author_map, client
-        )
+        new_author_mapping, comment_text = _get_comment_text(comment, author_map, ops)
         if new_author_mapping:
             author_map.update(new_author_mapping)
         comment_texts.append(comment_text)
@@ -405,21 +261,21 @@ class ZendeskConnector(
         # Fetch all tags ahead of time
         self.content_tags: dict[str, str] = {}
         self.calls_per_minute = calls_per_minute
+        self._ops: ZendeskSourceOperations | None = None
+
+    @property
+    def ops(self) -> ZendeskSourceOperations:
+        if self._ops is None:
+            raise ZendeskCredentialsNotSetUpError()
+        return self._ops
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        # Subdomain is actually the whole URL
-        subdomain = (
-            credentials["zendesk_subdomain"]
-            .replace("https://", "")
-            .split(".zendesk.com")[0]
-        )
-        self.subdomain = subdomain
-
-        self.client = ZendeskClient(
-            subdomain,
-            credentials["zendesk_email"],
-            credentials["zendesk_token"],
-            calls_per_minute=self.calls_per_minute,
+        self.subdomain = subdomain_from_credential(credentials[ZENDESK_SUBDOMAIN])
+        self._ops = ZendeskSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.ZENDESK.value, credentials
+            ),
+            connector_specific_config={"calls_per_minute": self.calls_per_minute},
         )
         return None
 
@@ -430,11 +286,8 @@ class ZendeskConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: ZendeskConnectorCheckpoint,
     ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
-        if self.client is None:
-            raise ZendeskCredentialsNotSetUpError()
-
         if checkpoint.cached_content_tags is None:
-            checkpoint.cached_content_tags = _get_content_tag_mapping(self.client)
+            checkpoint.cached_content_tags = self.ops.list_content_tags()
             return checkpoint  # save the content tags to the checkpoint
         self.content_tags = checkpoint.cached_content_tags
 
@@ -459,8 +312,7 @@ class ZendeskConnector(
         after_cursor = checkpoint.after_cursor_articles
         doc_batch: list[Document] = []
 
-        response = _get_article_page(
-            self.client,
+        response = self.ops.get_article_page(
             start_time=int(start) if start else None,
             after_cursor=after_cursor,
         )
@@ -480,7 +332,7 @@ class ZendeskConnector(
 
             try:
                 new_author_map, document = _article_to_document(
-                    article, self.content_tags, author_map, self.client
+                    article, self.content_tags, author_map, self.ops
                 )
             except Exception as e:
                 yield ConnectorFailure(
@@ -526,14 +378,12 @@ class ZendeskConnector(
         checkpoint: ZendeskConnectorCheckpoint,
     ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
         checkpoint = copy.deepcopy(checkpoint)
-        if self.client is None:
-            raise ZendeskCredentialsNotSetUpError()
 
         author_map: dict[str, BasicExpertInfo] = checkpoint.cached_author_map or {}
 
         doc_batch: list[Document] = []
         next_start_time = int(checkpoint.next_start_time_tickets or start or 0)
-        ticket_response = _get_tickets_page(self.client, start_time=next_start_time)
+        ticket_response = self.ops.get_ticket_page(start_time=next_start_time)
         tickets = ticket_response.data
         has_more = ticket_response.has_more
         next_start_time = ticket_response.meta["end_time"]
@@ -545,7 +395,7 @@ class ZendeskConnector(
                 new_author_map, document = _ticket_to_document(
                     ticket=ticket,
                     author_map=author_map,
-                    client=self.client,
+                    ops=self.ops,
                     default_subdomain=self.subdomain,
                 )
             except Exception as e:
@@ -590,8 +440,8 @@ class ZendeskConnector(
     ) -> GenerateSlimDocumentOutput:
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
         if self.content_type == "articles":
-            articles = _get_articles(
-                self.client, start_time=int(start) if start else None
+            articles = _iterate_articles(
+                self.ops, start_time=int(start) if start else None
             )
             for article in articles:
                 created_at = article.get("created_at")
@@ -607,8 +457,8 @@ class ZendeskConnector(
                     yield slim_doc_batch
                     slim_doc_batch = []
         elif self.content_type == "tickets":
-            tickets = _get_tickets(
-                self.client, start_time=int(start) if start else None
+            tickets = _iterate_tickets(
+                self.ops, start_time=int(start) if start else None
             )
             for ticket in tickets:
                 created_at = ticket.get("created_at")
@@ -630,29 +480,17 @@ class ZendeskConnector(
 
     @override
     def validate_connector_settings(self) -> None:
-        if self.client is None:
-            raise ZendeskCredentialsNotSetUpError()
-
         try:
-            _get_article_page(self.client, start_time=0)
-        except HTTPError as e:
-            # Check for HTTP status codes
-            if e.response.status_code == 401:
-                raise CredentialExpiredError(
-                    "Your Zendesk credentials appear to be invalid or expired (HTTP 401)."
-                ) from e
-            elif e.response.status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Your Zendesk token does not have sufficient permissions (HTTP 403)."
-                ) from e
-            elif e.response.status_code == 404:
+            if self.content_type == "tickets":
+                self.ops.get_ticket_page(start_time=0, per_page=1)
+            else:
+                self.ops.get_article_page(start_time=0, page_size=1)
+        except ZendeskRequestError as e:
+            if e.status_code == 404:
                 raise ConnectorValidationError(
                     "Zendesk resource not found (HTTP 404)."
                 ) from e
-            else:
-                raise ConnectorValidationError(
-                    f"Unexpected Zendesk error (status={e.response.status_code}): {e}"
-                ) from e
+            raise ConnectorValidationError(f"Unexpected Zendesk error: {e}") from e
 
     @override
     def validate_checkpoint_json(

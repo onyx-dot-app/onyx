@@ -43,12 +43,15 @@ def test_zendesk_client_per_minute_rate_limiting(
 ) -> None:
     # Import here to allow monkeypatching modules safely
     import onyx.connectors.cross_connector_utils.rate_limit_wrapper as rlw
-    import onyx.connectors.zendesk.connector as zendesk_mod
-    from onyx.connectors.zendesk.connector import ZendeskClient
+    import onyx.connectors.zendesk.source_operations as zendesk_mod
+    from onyx.configs.constants import DocumentSource
+    from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+    from onyx.connectors.zendesk.source_operations import ZendeskSourceOperations
+    from tests.unit.onyx.connectors.zendesk.utils import CREDENTIALS
 
     fake_time = _FakeTime()
 
-    # Patch time in both the rate limit wrapper and the zendesk connector module
+    # Patch time in both the rate limit wrapper and the zendesk gateway module
     monkeypatch.setattr(rlw, "time", fake_time, raising=True)
     monkeypatch.setattr(zendesk_mod, "time", fake_time, raising=True)
 
@@ -69,16 +72,21 @@ def test_zendesk_client_per_minute_rate_limiting(
         zendesk_mod, "requests", types.SimpleNamespace(get=_fake_get), raising=True
     )
 
-    # Build client with a small limit: 2 calls per 60 seconds
-    client = ZendeskClient("subd", "e", "t", calls_per_minute=2)
+    # Build a gateway with a small limit: 2 calls per 60 seconds
+    ops = ZendeskSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, DocumentSource.ZENDESK.value, CREDENTIALS
+        ),
+        connector_specific_config={"calls_per_minute": 2},
+    )
 
     # Make three calls in quick succession. The third should be rate limited
-    client.make_request("help_center/articles", {"page[size]": 1})
-    client.make_request("help_center/articles", {"page[size]": 1})
+    ops.get_article_page(page_size=1)
+    ops.get_article_page(page_size=1)
 
     # At this point we've used up the 2 allowed calls within the 60s window
     # The next call should trigger sleeps with exponential backoff until >60s elapsed
-    client.make_request("help_center/articles", {"page[size]": 1})
+    ops.get_article_page(page_size=1)
 
     # Ensure we did not actually wait in real time but logically advanced beyond a minute
     assert fake_time.monotonic() >= 60
