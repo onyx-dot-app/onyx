@@ -30,6 +30,7 @@ export enum ValidSources {
   Hubspot = "hubspot",
   Document360 = "document360",
   File = "file",
+  Directory = "directory",
   UserFile = "user_file",
   ChatArtifact = "chat_artifact",
   GoogleSites = "google_sites",

@@ -598,6 +598,7 @@ export const CREDENTIAL_SPECS = {
   xenforo: null,
   google_sites: null,
   file: null,
+  directory: null,
   user_file: null,
   chat_artifact: null, // Files published in chat - no credential
   craft_file: null, // User Library - managed through dedicated UI
