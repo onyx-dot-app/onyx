@@ -27,6 +27,7 @@ from onyx.db.plugin import (
     list_plugin_versions,
     lock_plugin,
     next_version_number,
+    refuse_if_synced,
     set_marketplace_default__no_commit,
     version_is_skill,
 )
@@ -638,11 +639,40 @@ def _read_plugin_upload(upload: UploadFile) -> PluginBundle:
     return read_plugin_bundle(read_bundle_file(upload.file, filename=upload.filename))
 
 
+def _bound_upload_target(
+    plugin_id: UUID, name: str, user: User, db_session: Session
+) -> Plugin:
+    plugin = fetch_editable_skill(
+        plugin_id, user=user, db_session=db_session, any_plugin=True
+    )
+    if plugin is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    refuse_if_synced(plugin)
+    if plugin.name != name:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"This file holds the plugin {name}, not {plugin.name}. "
+            f"Upload a file of {plugin.name}.",
+        )
+    return plugin
+
+
 def _upload_target(
-    bundle: PluginBundle, save_as_new: bool, user: User, db_session: Session
+    bundle: PluginBundle,
+    save_as_new: bool,
+    plugin_id: UUID | None,
+    user: User,
+    db_session: Session,
 ) -> PluginUploadTarget:
+    """``plugin_id`` binds the upload to that plugin: a new version of it.
+    Without it, the manifest name picks the plugin (``find_upload_target``)."""
     name = bundle.manifest.name
-    target = None if save_as_new else find_upload_target(name, user.id, db_session)
+    if save_as_new:
+        target = None
+    elif plugin_id is not None:
+        target = _bound_upload_target(plugin_id, name, user, db_session)
+    else:
+        target = find_upload_target(name, user.id, db_session)
     if target is not None:
         return PluginUploadTarget(
             kind="new_version",
@@ -667,11 +697,12 @@ def _upload_target(
 def inspect_plugin_upload(
     bundle: UploadFile = File(...),
     save_as_new: Annotated[bool, Form()] = False,
+    plugin_id: Annotated[UUID | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginUploadPreview:
     plugin_bundle = _read_plugin_upload(bundle)
-    target = _upload_target(plugin_bundle, save_as_new, user, db_session)
+    target = _upload_target(plugin_bundle, save_as_new, plugin_id, user, db_session)
     name_conflicts = (
         []
         if target.plugin_id is not None
@@ -710,6 +741,7 @@ def save_plugin_upload(
     bundle: UploadFile = File(...),
     save_as_new: Annotated[bool, Form()] = False,
     auto_enable: Annotated[bool, Form()] = True,
+    plugin_id: Annotated[UUID | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginUploadResponse:
@@ -721,7 +753,7 @@ def save_plugin_upload(
         # Two uploads of one new name at the same time make one plugin with
         # two versions: the second one finds the first under the lock.
         lock_user_skill_preferences(user.id, db_session)
-        target = _upload_target(plugin_bundle, save_as_new, user, db_session)
+        target = _upload_target(plugin_bundle, save_as_new, plugin_id, user, db_session)
         if target.plugin_id is not None:
             plugin, version, added = add_uploaded_plugin_version__no_commit(
                 target.plugin_id, content, user, db_session

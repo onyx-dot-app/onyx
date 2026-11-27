@@ -29,7 +29,11 @@ from onyx.db.plugin import (
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
 )
-from onyx.db.skill import list_chat_skills, list_runtime_skills_for_user
+from onyx.db.skill import (
+    list_chat_skills,
+    list_runtime_skills_for_user,
+    publish_skill__no_commit,
+)
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -150,12 +154,18 @@ def no_craft_reload() -> Iterator[None]:
 
 
 def _save(
-    user: User, upload: UploadFile, db_session: Session, *, save_as_new: bool = False
+    user: User,
+    upload: UploadFile,
+    db_session: Session,
+    *,
+    save_as_new: bool = False,
+    plugin_id: UUID | None = None,
 ) -> api.PluginUploadResponse:
     return api.save_plugin_upload(
         bundle=upload,
         save_as_new=save_as_new,
         auto_enable=True,
+        plugin_id=plugin_id,
         user=user,
         db_session=db_session,
     )
@@ -778,6 +788,37 @@ def test_an_editor_share_uploads_a_new_version_of_the_shared_plugin(
     )
 
 
+def test_an_upload_for_a_plugin_adds_a_version_to_that_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    created_user_ids: list[UUID],
+) -> None:
+    """An admin who opens another user's published plugin and uploads a new
+    version adds it to that plugin, not to a new plugin of their own."""
+    author, _, _ = users
+    admin = make_user(db_session, is_admin=True)
+    db_session.commit()
+    created_user_ids.append(admin.id)
+    plugin_id = _save(author, _plugin_zip("org-kit", ["one"]), db_session).plugin.id
+    plugin = db_session.get(Plugin, plugin_id)
+    assert plugin is not None
+    publish_skill__no_commit(plugin, None, admin, db_session)
+    db_session.commit()
+
+    saved = _save(
+        admin, _plugin_zip("org-kit", ["one", "two"]), db_session, plugin_id=plugin_id
+    )
+
+    assert (saved.plugin.id, saved.target.kind, saved.target.version_number) == (
+        plugin_id,
+        "new_version",
+        2,
+    )
+    with pytest.raises(OnyxError, match="holds the plugin other-kit"):
+        _save(admin, _plugin_zip("other-kit", ["one"]), db_session, plugin_id=plugin_id)
+
+
 def test_an_unchanged_upload_adds_no_version(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -850,6 +891,7 @@ def test_an_admin_list_marks_a_members_private_plugin_not_member_visible(
     author, _, _ = users
     admin = make_user(db_session, is_admin=True)
     db_session.commit()
+    created_user_ids.append(admin.id)
     created_user_ids.append(admin.id)
     private = _save(author, _plugin_zip("private-kit", ["one"]), db_session)
     own = _save(admin, _plugin_zip("admin-kit", ["two"]), db_session)

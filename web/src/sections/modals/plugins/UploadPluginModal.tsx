@@ -39,6 +39,9 @@ type UploadStep =
 
 interface UploadPluginModalProps {
   open: boolean;
+  /** Upload a new version of this plugin instead of the plugin that the
+   * manifest name picks. */
+  pluginId?: string;
   onClose: () => void;
   onContinueSkill: (draft: SkillCreationDraft) => void;
   onSaved: (result: PluginUploadResult, needsAttention: boolean) => void;
@@ -197,6 +200,7 @@ function UploadPluginModalContent({
   onClose,
   onContinueSkill,
   onSaved,
+  pluginId,
   onBusyChange,
 }: Omit<UploadPluginModalProps, "open"> & {
   onBusyChange: (busy: boolean) => void;
@@ -231,11 +235,15 @@ function UploadPluginModalContent({
     setBusy("read");
     setError(null);
     try {
-      if ((await pluginUploadKind(bundle)) === "skill") {
+      if (!pluginId && (await pluginUploadKind(bundle)) === "skill") {
         setState({ step: "skill", bundle });
         return;
       }
-      const preview = await inspectPluginUpload(bundle.file, saveAsNew);
+      const preview = await inspectPluginUpload(
+        bundle.file,
+        saveAsNew,
+        pluginId
+      );
       setState({ step: "plugin", bundle, preview, saveAsNew });
     } catch (caught) {
       setState({ step: "pick", bundle });
@@ -274,7 +282,7 @@ function UploadPluginModalContent({
     setBusy("save");
     setError(null);
     try {
-      const result = await savePluginUpload(bundle.file, saveAsNew);
+      const result = await savePluginUpload(bundle.file, saveAsNew, pluginId);
       onSaved(
         result,
         result.enabled && needsAttention(result.plugin.plugin?.needs ?? [])
@@ -389,6 +397,7 @@ function UploadPluginModalContent({
 
 export default function UploadPluginModal({
   open,
+  pluginId,
   onClose,
   onContinueSkill,
   onSaved,
@@ -399,6 +408,7 @@ export default function UploadPluginModal({
       <Modal.Content width="md" maxHeight="85dvh">
         {open && (
           <UploadPluginModalContent
+            pluginId={pluginId}
             onClose={onClose}
             onContinueSkill={onContinueSkill}
             onSaved={onSaved}

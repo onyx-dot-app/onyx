@@ -13,6 +13,8 @@ import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
 
 interface UploadPluginFlowProps {
   open: boolean;
+  /** Upload a new version of this plugin. */
+  pluginId?: string;
   onClose: () => void;
 }
 
@@ -20,6 +22,7 @@ interface UploadPluginFlowProps {
  * plugin page. */
 export default function UploadPluginFlow({
   open,
+  pluginId,
   onClose,
 }: UploadPluginFlowProps) {
   const uploadCopy = useTranslations("plugins.upload");
@@ -30,6 +33,7 @@ export default function UploadPluginFlow({
   return (
     <UploadPluginModal
       open={open}
+      pluginId={pluginId}
       onClose={onClose}
       onContinueSkill={(draft) => {
         onClose();
