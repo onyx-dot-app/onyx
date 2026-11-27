@@ -3838,13 +3838,16 @@ def test_user_stop_after_run_deadline_keeps_live_and_saved_timeout(
 
 
 def test_an_agent_host_runs_its_agents_inside_a_trace() -> None:
-    """Generation spans record usage only inside a trace."""
+    """Generation spans record usage only inside a trace. The trace names the
+    user by ID, not by email."""
     from onyx.tracing.framework.scope import Scope
 
     setup = _make_setup(n_models=1)
     setup.chat_session_id = uuid4()
-    setup.user_identity.user_id = str(uuid4())
-    traces: list[object | None] = []
+    setup.user_identity.user_id = "user@example.com"
+    user = MagicMock()
+    user.id = uuid4()
+    traces: list[Any] = []
     store = MagicMock()
     store.has_owned_work = False
     store.poll_control.side_effect = lambda: traces.append(Scope.get_current_trace())
@@ -3853,6 +3856,7 @@ def test_an_agent_host_runs_its_agents_inside_a_trace() -> None:
         patch("onyx.chat.execution.bind_run_store", return_value=(store, None)),
         patch("onyx.chat.execution.load_settings"),
     ):
-        host_agent_work(setup, MagicMock(), MagicMock())
+        host_agent_work(setup, user, MagicMock())
     assert traces and traces[0] is not None
+    assert traces[0].metadata["user_id"] == str(user.id)
     setup.admission.release.assert_called_once()
