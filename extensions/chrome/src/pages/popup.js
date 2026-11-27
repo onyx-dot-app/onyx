@@ -3,6 +3,7 @@ import {
   setUseOnyxAsDefaultNewTab,
   isNewTabOverrideManaged,
 } from "../utils/storage.js";
+import { BROWSER_MESSAGES } from "../utils/constants.js";
 
 document.addEventListener("DOMContentLoaded", async function () {
   const defaultNewTabToggle = document.getElementById("defaultNewTabToggle");
@@ -51,7 +52,37 @@ document.addEventListener("DOMContentLoaded", async function () {
     window.close();
   }
 
+  const STATE_LABELS = {
+    connected: "Connected",
+    offline: "Offline",
+    signed_out: "Sign in to Onyx",
+    disabled: "Turned off",
+  };
+
+  async function loadBrowserControl() {
+    const answer = await chrome.runtime.sendMessage({
+      action: BROWSER_MESSAGES.STATE,
+    });
+    const status = answer?.value?.status ?? { state: "offline" };
+    const grant = answer?.value?.grant;
+    document.getElementById("browserState").textContent =
+      STATE_LABELS[status.state] ?? "Offline";
+    const grantRow = document.getElementById("browserGrant");
+    grantRow.hidden = !grant;
+    if (grant) {
+      const count = grant.tabs.length;
+      document.getElementById("browserGrantText").textContent =
+        `Onyx is using ${count} tab${count === 1 ? "" : "s"} for "${grant.chat_title || "a chat"}".`;
+    }
+  }
+
+  document.getElementById("browserStop").addEventListener("click", async () => {
+    await chrome.runtime.sendMessage({ action: BROWSER_MESSAGES.STOP });
+    await loadBrowserControl();
+  });
+
   await loadSetting();
+  await loadBrowserControl();
 
   if (defaultNewTabToggle) {
     defaultNewTabToggle.addEventListener("change", toggleSetting);

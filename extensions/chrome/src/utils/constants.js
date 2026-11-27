@@ -30,6 +30,7 @@ export const CHROME_SPECIFIC_STORAGE_KEYS = {
   DARK_BG_URL: "onyxExtensionDarkBgUrl",
   LIGHT_BG_URL: "onyxExtensionLightBgUrl",
   ONBOARDING_COMPLETE: "onyxExtensionOnboardingComplete",
+  BROWSER_CONTROL_DISABLED: "onyxBrowserControlDisabled",
 };
 
 export const CHROME_MESSAGE = {
@@ -46,4 +47,11 @@ export const CHROME_MESSAGE = {
 
 export const WEB_MESSAGE = {
   PAGE_CHANGE: "PAGE_CHANGE",
+};
+
+export const BROWSER_MESSAGES = {
+  APPROVE: "onyxBrowserApprove",
+  DENY: "onyxBrowserDeny",
+  STOP: "onyxBrowserStop",
+  STATE: "onyxBrowserState",
 };
