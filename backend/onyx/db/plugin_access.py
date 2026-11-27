@@ -705,7 +705,12 @@ def load_user_plugin_states(
                 can_run=can_run,
                 created_at=row.created_at,
                 plugin_name=row.plugin_name,
-                skill_names=tuple(row.skill_names or ()),
+                # Onyx owns a skill's name: its plugin name, not the frontmatter.
+                skill_names=(
+                    (row.plugin_name,)
+                    if row.skill_paths == [""]
+                    else tuple(row.skill_names or ())
+                ),
                 skill_paths=tuple(row.skill_paths or ()),
                 usage=(
                     None
@@ -878,7 +883,7 @@ class PluginAccess(BaseModel):
     # The version waiting for review, if any.
     pending_version_number: int | None
     version_user_runs: UUID
-    name: str | None
+    name: str
     description: str
     # Lazy validity of the version the user runs.
     is_valid: bool | None
@@ -942,7 +947,7 @@ def load_plugin_access(
             published.version_number,
             pending.version_number,
             runs,
-            case((holds_one_root_skill(runs), frontmatter_in_version("name", runs))),
+            Plugin.name,
             func.coalesce(
                 case(
                     (

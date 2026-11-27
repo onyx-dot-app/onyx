@@ -37,6 +37,7 @@ from onyx.db.enums import (
     IntegrationActionPolicyValue,
     IntegrationAuthMode,
     IntegrationOAuthProviderMode,
+    MarketplaceKind,
     PluginInstallationPolicy,
     SandboxStatus,
     SkillSharePermission,
@@ -53,6 +54,7 @@ from onyx.db.models import (
     Integration__User,
     IntegrationActionPolicy,
     IntegrationOAuthClient,
+    Marketplace,
     Plugin,
     Plugin__User,
     Plugin__UserGroup,
@@ -206,10 +208,13 @@ def make_skill(
     description: str = "d",
     bundle_file_id: str | None = None,
     bundle_sha256: str = "0" * 64,
+    marketplace_id: UUID | None = None,
 ) -> Plugin:
     """Create the plugin of a custom skill: version 1 with one skill at the
     root. A public skill is in the Organization library, published; others are
     in the author's "My uploads". A public skill may have no author.
+    ``marketplace_id`` puts it in another marketplace, such as one from
+    ``make_org_marketplace``.
 
     Without ``bundle_file_id`` the bundle fields hold placeholder values;
     tests that need a real bundle should use the ``seeded_skill`` fixture
@@ -218,12 +223,13 @@ def make_skill(
     if author_user_id is None and not is_public:
         author_user_id = make_user(db_session, standard_account=True).id
     skill_name = name or f"helper-skill-{uuid4().hex[:8]}"
-    if is_public or author_user_id is None:
-        marketplace_id = get_or_create_organization_library__no_commit(db_session)
-    else:
-        marketplace_id = get_or_create_user_uploads__no_commit(
-            author_user_id, db_session
-        )
+    if marketplace_id is None:
+        if is_public or author_user_id is None:
+            marketplace_id = get_or_create_organization_library__no_commit(db_session)
+        else:
+            marketplace_id = get_or_create_user_uploads__no_commit(
+                author_user_id, db_session
+            )
     plugin_id = uuid4()
     version_id = uuid4()
     plugin = Plugin(
@@ -256,6 +262,21 @@ def make_skill(
     )
     db_session.flush()
     return plugin
+
+
+def make_org_marketplace(db_session: Session) -> UUID:
+    """A GitHub marketplace with no owner. The organization sees its plugins
+    as published, so a published skill there can share a name with one in the
+    Organization library."""
+    marketplace = Marketplace(
+        id=uuid4(),
+        kind=MarketplaceKind.GITHUB,
+        name=f"org-marketplace-{uuid4().hex[:8]}",
+        repository=f"acme/skills-{uuid4().hex[:8]}",
+    )
+    db_session.add(marketplace)
+    db_session.flush()
+    return marketplace.id
 
 
 def set_current_version_validity(

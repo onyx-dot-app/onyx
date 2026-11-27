@@ -35,7 +35,6 @@ from sqlalchemy import (
     ColumnElement,
     Row,
     Select,
-    case,
     delete,
     exists,
     or_,
@@ -90,14 +89,12 @@ from onyx.db.plugin import (
 from onyx.db.plugin_access import (
     UserPluginState,
     affected_user_ids_for_plugins,
-    frontmatter_in_version,
     holds_one_root_skill,
     load_user_plugin_states,
     order_skill_names,
     plugin_editable_by_user,
     plugin_in_managed_scope,
     plugin_required_for_anyone,
-    version_user_runs,
     visible_plugin_ids,
 )
 from onyx.db.skill_limit import check_skill_limit, lock_user_skill_preferences
@@ -315,19 +312,12 @@ def _not_others_personal_marketplace(user: User) -> ColumnElement[bool]:
 
 
 def _visible_custom_skill_select(user: User) -> Select[tuple[Plugin]]:
-    runs = version_user_runs(Plugin, user.id)
     stmt = select(Plugin)
     if has_global_permission(user, Permission.MANAGE_PLUGINS):
         stmt = stmt.where(_not_others_personal_marketplace(user))
     else:
         stmt = stmt.where(Plugin.id.in_(visible_plugin_ids(user.id)))
-    return stmt.order_by(
-        case(
-            (holds_one_root_skill(runs), frontmatter_in_version("name", runs)),
-            else_=Plugin.name,
-        ),
-        Plugin.id,
-    )
+    return stmt.order_by(Plugin.name, Plugin.id)
 
 
 def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
@@ -411,11 +401,7 @@ def list_runtime_skills_for_user(
     return selection.built_ins + [
         RuntimeSkill(
             id=state.plugin_id,
-            name=(
-                state.skill_names[0]
-                if is_skill_version(state.skill_paths)
-                else state.plugin_name
-            ),
+            name=state.plugin_name,
             plugin_skills=(
                 ()
                 if is_skill_version(state.skill_paths)
@@ -476,24 +462,26 @@ def list_chat_skills(
             for built_in in list_chat_built_in_skills(db_session)
             for plugin_skill in BUILT_IN_SKILLS[built_in.built_in_skill_id or ""].skills
         ]
-    version_ids = [
-        state.version_id for state in _user_skill_selection(user, db_session).loaded()
-    ]
+    names = {
+        (state.version_id, path): name
+        for state in _user_skill_selection(user, db_session).loaded()
+        for path, name in zip(state.skill_paths, state.skill_names, strict=True)
+    }
+    version_ids = sorted({version_id for version_id, _ in names})
     if version_ids:
         skills += [
             ChatSkill(
-                name=name,
+                name=names[(version_id, path)],
                 description=description,
                 short_description=short_description,
                 version_id=version_id,
                 path=path,
             )
-            for version_id, path, name, description, short_description in (
+            for version_id, path, description, short_description in (
                 db_session.execute(
                     select(
                         PluginSkill.plugin_version_id,
                         PluginSkill.path,
-                        PluginSkill.frontmatter["name"].astext,
                         PluginSkill.frontmatter["description"].astext,
                         PluginSkill.frontmatter[
                             ("metadata", "short-description")
@@ -1296,7 +1284,7 @@ def list_review_requests(db_session: Session) -> Sequence[Row[Any]]:
     return db_session.execute(
         select(
             Plugin.id.label("skill_id"),
-            frontmatter_in_version("name", pending.id.expression).label("name"),
+            Plugin.name.label("name"),
             pending.id.label("version_id"),
             pending.version_number.label("version_number"),
             published.version_number.label("published_version_number"),

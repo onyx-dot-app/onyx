@@ -286,3 +286,15 @@ def serialize_skill_md(
         allow_unicode=True,
     ).strip()
     return f"---\n{serialized_frontmatter}\n---\n\n{instructions_markdown.strip()}\n"
+
+
+def with_skill_md_name(skill_md: str, name: str) -> str:
+    """The SKILL.md with frontmatter ``name`` set to ``name``. Unchanged when
+    it already holds that name."""
+    frontmatter, instructions_markdown = parse_skill_md_frontmatter(
+        skill_md.encode("utf-8")
+    )
+    if frontmatter.get("name") == name:
+        return skill_md
+    frontmatter["name"] = name
+    return serialize_skill_md(frontmatter, instructions_markdown)

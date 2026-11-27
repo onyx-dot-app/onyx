@@ -27,15 +27,17 @@ from onyx.db.skill import (
     replace_skill_bundle,
     set_skill_enabled_for_user,
     set_skill_installation_policy,
+    transfer_private_plugins__no_commit,
 )
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.models import CHAT_SKILLS_PATH
+from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.skills.built_in import CHAT_BUILT_IN_SKILL_IDS
 from onyx.skills.content import read_chat_skills_md, read_versions_skill_md
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
 from onyx.skills.models import ChatSkill, ChatSkillFiles
-from onyx.skills.push import build_chat_skill_files
+from onyx.skills.push import build_chat_skill_files, build_skills_fileset_for_user
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
@@ -375,3 +377,59 @@ def test_a_custom_chat_skill_copies_its_folder_and_names_it(
     )
     text = read_chat_skills_md([only_md], author.id, db_session, with_sandbox=True)
     assert text[(only_md.version_id, only_md.path)].startswith("---\nname: only-")
+
+
+def test_a_renamed_skill_takes_its_plugin_name_everywhere(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    bundle_ids: list[str],
+    users: tuple[User, User],
+) -> None:
+    leaver, heir = users
+    name = f"zeta-{leaver.id.hex[:8]}"
+    files = {"SKILL.md": f"---\nname: {name}\ndescription: Zeta\n---\n\nHi.\n"}
+    _, moved, moved_bundle = make_chat_custom_skill(db_session, leaver, files)
+    _, kept, kept_bundle = make_chat_custom_skill(db_session, heir, files)
+    bundle_ids.extend([moved_bundle, kept_bundle])
+
+    transfer = transfer_private_plugins__no_commit(
+        user_id=leaver.id, new_owner_user_id=heir.id, db_session=db_session
+    )
+    db_session.commit()
+    renamed = f"{name}-2"
+    assert [(r.plugin_id, r.new_name) for r in transfer.renames] == [
+        (moved.id, renamed)
+    ]
+
+    response = skill_response_for_user(moved, heir, db_session)
+    assert (response.name, response.name_held_by) == (renamed, [])
+    assert skill_response_for_user(kept, heir, db_session).name == name
+    runtime_names = {
+        runtime.name
+        for runtime in list_runtime_skills_for_user(db_session=db_session, user=heir)
+    }
+    assert {name, renamed} <= runtime_names
+
+    chat_skills = {
+        skill.name: skill
+        for skill in list_chat_skills(db_session, heir, with_sandbox=True)
+    }
+    assert chat_skills[renamed].version_id == moved.current_version_id
+    skill_md = read_chat_skills_md(
+        [chat_skills[renamed]], heir.id, db_session, with_sandbox=False
+    )
+    assert skill_md[(moved.current_version_id, "")].startswith(
+        f"---\nname: {renamed}\n"
+    )
+    chat_files = _files(build_chat_skill_files(chat_skills[renamed], heir, db_session))
+    assert (
+        chat_files[f"{renamed}/SKILL.md"].decode().startswith(f"---\nname: {renamed}\n")
+    )
+
+    sandbox_files = build_skills_fileset_for_user(heir, db_session)
+    assert (
+        sandbox_files[f"{renamed}/SKILL.md"]
+        .decode()
+        .startswith(f"---\nname: {renamed}\n")
+    )
+    assert sandbox_files[f"{name}/SKILL.md"].decode().startswith(f"---\nname: {name}\n")
