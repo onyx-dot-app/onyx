@@ -30,6 +30,13 @@ rss: true
 
   See [Plugins](https://docs.onyx.app/admins/plugins/overview).
 
+  ## [Update] Deprecated Action and MCP Server Routes
+
+  The admin routes for custom tools (`/admin/tool/custom`) and MCP servers (`/admin/mcp/servers`, `/admin/mcp/server`)
+  are deprecated. A later release removes them. Use the integrations API (`/admin/integrations`) instead.
+
+  The Terraform provider adds the `onyx_integration` resource, and deprecates `onyx_mcp_server` and `onyx_custom_tool`.
+
 </Update>
 
 <Update label="v5.0.0" description="October 23rd, 2026" tags={["New Features", "Deployment Changes", "Bug Fixes"]}>

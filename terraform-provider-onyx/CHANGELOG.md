@@ -21,10 +21,22 @@ BREAKING CHANGES:
 
 FEATURES:
 
+* **New resource:** `onyx_integration` (Onyx v5.1+). It manages an MCP server or an OpenAPI
+  app on the integrations API (`/admin/integrations`), with its sign-in, organization
+  credentials, switch and install setting.
 * **New resource:** `onyx_agent_label`.
 * **New data source:** `onyx_tools`. Use it to find built-in action ids for
   `onyx_agent.tool_ids`.
 * **New data source:** `onyx_user_groups` (Enterprise Edition).
+
+DEPRECATIONS:
+
+* resource/onyx_mcp_server: use `onyx_integration` with `server_url`. A later release removes it.
+* resource/onyx_custom_tool: use `onyx_integration` with `openapi_document`. A later release
+  removes it.
+* The integration ids are not the old resource ids. To move, add an `onyx_integration`
+  with `terraform import` of the integration id from **Admin Panel → Integrations**, then
+  remove the old resource from state with `terraform state rm`.
 
 ENHANCEMENTS:
 

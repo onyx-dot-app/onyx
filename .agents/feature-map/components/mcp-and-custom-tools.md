@@ -464,8 +464,9 @@ cannot save Always allow on an action whose admin value is not Ask.
   choice on the integration. A
   save of an OAuth integration keeps its sign-in when the headers and
   `passthrough_auth` are the values the read returned, and refuses others.
-- The four admin MCP server routes of the public API, which the Terraform
-  provider calls (`POST /admin/mcp/servers/create`,
+- The four admin MCP server routes of the public API, which the deprecated
+  Terraform `onyx_mcp_server` resource calls (they are `deprecated` in OpenAPI;
+  the `onyx_integration` resource uses `/admin/integrations`) (`POST /admin/mcp/servers/create`,
   `GET /admin/mcp/servers/{id}`, `PATCH` and `DELETE /admin/mcp/server/{id}`,
   in `server/features/mcp/api.py`), are aliases on `mcp` integrations and take
   and return the `mcp_server` row id. `API_TOKEN` maps to `api_key`: `ADMIN` is

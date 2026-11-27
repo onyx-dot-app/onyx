@@ -67,7 +67,10 @@ func (r *mcpServerResource) Metadata(_ context.Context, req resource.MetadataReq
 
 func (r *mcpServerResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "An MCP server Onyx connects to, so its tools can be attached to agents.\n\n" +
+		DeprecationMessage: "Use onyx_integration with server_url instead. A later release removes " +
+			"onyx_mcp_server and the Onyx routes it calls.",
+		MarkdownDescription: "**Deprecated:** use `onyx_integration` with `server_url`.\n\n" +
+			"An MCP server Onyx connects to, so its tools can be attached to agents.\n\n" +
 			"Only servers that need no interactive sign-in can be managed here: `NONE` and " +
 			"`API_TOKEN`. An OAuth server is refused while the plan is built, because the flow " +
 			"needs a browser round-trip that Terraform cannot perform.\n\n" +
