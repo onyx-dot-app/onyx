@@ -8,6 +8,8 @@ export interface ErrorResponseBody {
   error_code?: string;
   message?: string;
   line_errors?: EndpointLineError[];
+  /** The name a CONFLICT refused because it is already in use. */
+  taken_name?: string;
 }
 
 export class FetchError extends Error {

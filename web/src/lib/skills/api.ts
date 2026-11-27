@@ -104,21 +104,28 @@ export async function bulkUpdateSkills(
   return result;
 }
 
-function pluginUploadForm(bundle: File, saveAsNew: boolean): FormData {
+function pluginUploadForm(
+  bundle: File,
+  saveAsNew: boolean,
+  name?: string
+): FormData {
   const form = new FormData();
   form.append("bundle", bundle);
   form.append("save_as_new", String(saveAsNew));
+  if (name) form.append("name", name);
   return form;
 }
 
+/** `name` names a new plugin. The manifest name is the default. */
 export async function inspectPluginUpload(
   bundle: File,
-  saveAsNew: boolean
+  saveAsNew: boolean,
+  name?: string
 ): Promise<PluginUploadPreview> {
   return handle<PluginUploadPreview>(
     await fetch("/api/skills/plugins/inspect", {
       method: "POST",
-      body: pluginUploadForm(bundle, saveAsNew),
+      body: pluginUploadForm(bundle, saveAsNew, name),
     })
   );
 }
@@ -133,12 +140,13 @@ export interface PluginUploadResult {
 
 export async function savePluginUpload(
   bundle: File,
-  saveAsNew: boolean
+  saveAsNew: boolean,
+  name?: string
 ): Promise<PluginUploadResult> {
   return handle<PluginUploadResult>(
     await fetch("/api/skills/plugins", {
       method: "POST",
-      body: pluginUploadForm(bundle, saveAsNew),
+      body: pluginUploadForm(bundle, saveAsNew, name),
     })
   );
 }
@@ -188,6 +196,12 @@ export function skillNameConflictNames(error: unknown): string[] {
   return Array.isArray(names)
     ? names.filter((name): name is string => typeof name === "string")
     : [];
+}
+
+/** The plugin name that a 409 refused because its marketplace holds it. */
+export function takenPluginName(error: unknown): string | null {
+  if (!(error instanceof FetchError) || error.status !== 409) return null;
+  return error.info?.taken_name ?? null;
 }
 
 export function isSkillVersionStale(error: unknown): boolean {
@@ -307,7 +321,7 @@ export async function updateSkillShares(
 
 export async function transferSkillOwnership(
   skillId: string,
-  payload: { new_owner_user_id: string }
+  payload: { new_owner_user_id: string; name?: string }
 ): Promise<CustomSkill> {
   const res = await fetch(`/api/skills/custom/${skillId}/transfer-ownership`, {
     method: "POST",

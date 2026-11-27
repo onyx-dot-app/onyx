@@ -35,7 +35,12 @@ import {
   StaticPermissionLabel,
   TransferTrailingButton,
 } from "@/sections/modals/ShareModalPermissionControls";
-import { updateSkillShares, transferSkillOwnership } from "@/lib/skills/api";
+import {
+  updateSkillShares,
+  takenPluginName,
+  transferSkillOwnership,
+} from "@/lib/skills/api";
+import TakenNameField, { canUseName } from "@/sections/skills/TakenNameField";
 import type {
   CustomSkill,
   SkillSharePermission,
@@ -156,6 +161,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     useState<SkillSharePermission>("VIEWER");
   const [transferTarget, setTransferTarget] =
     useState<TransferOwnershipTarget>(null);
+  // Names the new owner already holds. Set from a refused transfer.
+  const [transferTakenNames, setTransferTakenNames] = useState<string[]>([]);
+  const [transferName, setTransferName] = useState("");
   const [view, setView] = useState<ShareModalView>("share");
   const [installationPolicy, setInstallationPolicy] =
     useState<SkillInstallationPolicy | null>(null);
@@ -443,13 +451,21 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
 
     setSaving(true);
     try {
-      await transferSkillOwnership(props.skillId, {
+      const request: { new_owner_user_id: string; name?: string } = {
         new_owner_user_id: transferTarget.value.replace("user-", ""),
-      });
+      };
+      if (transferTakenNames.length > 0) request.name = transferName;
+      await transferSkillOwnership(props.skillId, request);
       toast.success(t("share.transferredToast.message"));
       props.onSaved();
       closeModal();
     } catch (err) {
+      const taken = takenPluginName(err);
+      if (taken !== null) {
+        setTransferTakenNames((names) => [...names, taken]);
+        setTransferName(taken);
+        return;
+      }
       console.error("Failed to transfer skill ownership", err);
       toast.error(
         err instanceof Error
@@ -790,13 +806,26 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           ) : !skill || !draftState ? (
             <Text>{t("share.loading.message")}</Text>
           ) : view === "transfer" ? (
-            <TransferOwnershipView
-              agent={{ owner: skill.owner, owner_group: null }}
-              groups={[]}
-              onSelectedTargetChange={setTransferTarget}
-              selectedTarget={transferTarget}
-              users={transferableUsersData ?? []}
-            />
+            <>
+              <TransferOwnershipView
+                agent={{ owner: skill.owner, owner_group: null }}
+                groups={[]}
+                onSelectedTargetChange={(target) => {
+                  setTransferTarget(target);
+                  setTransferTakenNames([]);
+                }}
+                selectedTarget={transferTarget}
+                users={transferableUsersData ?? []}
+              />
+              {transferTakenNames.length > 0 && (
+                <TakenNameField
+                  value={transferName}
+                  takenNames={transferTakenNames}
+                  disabled={saving}
+                  onChange={setTransferName}
+                />
+              )}
+            </>
           ) : (
             renderSharingContent()
           )}
@@ -808,6 +837,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               icon={SvgArrowLeft}
               onClick={() => {
                 setTransferTarget(null);
+                setTransferTakenNames([]);
                 setView("share");
               }}
               prominence="secondary"
@@ -831,7 +861,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             {view === "transfer" ? (
               <Button
                 disabled={
-                  !transferTarget || transferTarget.type !== "user" || saving
+                  !transferTarget ||
+                  transferTarget.type !== "user" ||
+                  saving ||
+                  (transferTakenNames.length > 0 &&
+                    !canUseName(transferName, transferTakenNames))
                 }
                 onClick={handleTransfer}
               >

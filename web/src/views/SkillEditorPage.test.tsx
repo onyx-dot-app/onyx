@@ -17,6 +17,7 @@ import SkillEditorPage from "@/views/SkillEditorPage";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 import { toast } from "@opal/layouts";
 import messages from "@/i18n/messages/en.json";
+import { FetchError } from "@/lib/fetcher";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockUploadUserSkillFiles = jest.fn();
@@ -430,6 +431,35 @@ describe("SkillEditorPage", () => {
     expect(
       screen.queryByText("Create another “report-writer” skill?")
     ).not.toBeInTheDocument();
+  });
+
+  it("blocks Create for a name that a create refused as taken", async () => {
+    const user = setupUser();
+    const mockToastError = jest.spyOn(toast, "error");
+    const taken = new FetchError(
+      "You already have a skill or plugin named 'report-writer'. Pick a different name.",
+      409,
+      { error_code: "CONFLICT", taken_name: "report-writer" }
+    );
+    mockCreateCustomSkillFromEditor.mockRejectedValueOnce(taken);
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith(
+        "report-writer is already in use. Pick a different name."
+      )
+    );
+    expect(
+      screen.queryByText("Create another “report-writer” skill?")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    mockToastError.mockRestore();
   });
 
   it("keeps the confirmation open when disabled creation fails", async () => {

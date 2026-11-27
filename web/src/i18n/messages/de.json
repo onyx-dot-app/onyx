@@ -17624,6 +17624,12 @@
       "share": "Teilen",
       "delete": "Löschen",
       "select": "{name} auswählen"
+    },
+    "takenName": {
+      "title": "Name",
+      "description": "Dieser Name wird bereits verwendet. Wählen Sie einen anderen Namen.",
+      "taken": "{name} wird bereits verwendet. Wählen Sie einen anderen Namen.",
+      "invalid": "Verwenden Sie Kleinbuchstaben, Ziffern und einzelne Bindestriche, höchstens {max} Zeichen."
     }
   },
   "plugins": {

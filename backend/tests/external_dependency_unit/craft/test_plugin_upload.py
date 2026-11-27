@@ -31,6 +31,7 @@ from onyx.db.plugin import (
 )
 from onyx.db.skill import list_chat_skills, list_runtime_skills_for_user
 from onyx.db.users import delete_user_from_db__no_commit
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.integrations.models import PluginNeedState
@@ -150,12 +151,18 @@ def no_craft_reload() -> Iterator[None]:
 
 
 def _save(
-    user: User, upload: UploadFile, db_session: Session, *, save_as_new: bool = False
+    user: User,
+    upload: UploadFile,
+    db_session: Session,
+    *,
+    save_as_new: bool = False,
+    name: str | None = None,
 ) -> api.PluginUploadResponse:
     return api.save_plugin_upload(
         bundle=upload,
         save_as_new=save_as_new,
         auto_enable=True,
+        name=name,
         user=user,
         db_session=db_session,
     )
@@ -276,6 +283,7 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
         "plugin_id": plugin_id,
         "plugin_name": "same-kit",
         "version_number": 2,
+        "name_taken": False,
     }
     second = _save(author, _plugin_zip("same-kit", ["one", "two"]), db_session)
 
@@ -289,8 +297,30 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
     }
     assert second.plugin.enabled is True
 
-    copy = _save(author, _plugin_zip("same-kit", ["one"]), db_session, save_as_new=True)
-    assert (copy.target.kind, copy.plugin.name) == ("new_plugin", "same-kit-2")
+    copy_preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("same-kit", ["one"]),
+        save_as_new=True,
+        user=author,
+        db_session=db_session,
+    )
+    assert (copy_preview.target.plugin_name, copy_preview.target.name_taken) == (
+        "same-kit",
+        True,
+    )
+    with pytest.raises(OnyxError) as taken:
+        _save(author, _plugin_zip("same-kit", ["one"]), db_session, save_as_new=True)
+    assert taken.value.error_code is OnyxErrorCode.CONFLICT
+    assert taken.value.extra == {"taken_name": "same-kit"}
+    assert "same-kit" in taken.value.detail
+    db_session.rollback()
+    copy = _save(
+        author,
+        _plugin_zip("same-kit", ["one"]),
+        db_session,
+        save_as_new=True,
+        name="same-kit-copy",
+    )
+    assert (copy.target.kind, copy.plugin.name) == ("new_plugin", "same-kit-copy")
 
     apply_plugin_access_change__no_commit(
         [plugin_id], PluginAccessChange(publish=True), None, db_session

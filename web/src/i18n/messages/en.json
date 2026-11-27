@@ -17624,6 +17624,12 @@
       "share": "Share",
       "delete": "Delete",
       "select": "Select {name}"
+    },
+    "takenName": {
+      "title": "Name",
+      "description": "This name is already in use. Pick a different name.",
+      "taken": "{name} is already in use. Pick a different name.",
+      "invalid": "Use lowercase letters, numbers and single hyphens, at most {max} characters."
     }
   },
   "plugins": {
