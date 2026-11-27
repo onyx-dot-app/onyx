@@ -321,7 +321,12 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
     ).raise_first_failure()
     db_session.commit()
     published_version_id = db_session.get_one(Plugin, plugin_id).published_version_id
-    editor_save = _save(editor, _plugin_zip("same-kit", ["one", "three"]), db_session)
+    editor_save = _save(
+        editor,
+        _plugin_zip("same-kit", ["one", "three"]),
+        db_session,
+        plugin_id=plugin_id,
+    )
     assert (editor_save.target.kind, editor_save.target.version_number) == (
         "new_version",
         3,
@@ -793,7 +798,12 @@ def test_an_editor_share_uploads_a_new_version_of_the_shared_plugin(
     ).raise_first_failure()
     db_session.commit()
 
-    saved = _save(editor, _plugin_zip("shared-kit", ["one", "two"]), db_session)
+    saved = _save(
+        editor,
+        _plugin_zip("shared-kit", ["one", "two"]),
+        db_session,
+        plugin_id=plugin_id,
+    )
 
     assert (saved.plugin.id, saved.target.kind, saved.target.version_number) == (
         plugin_id,
@@ -808,7 +818,7 @@ def test_a_plugin_manager_uploads_a_new_version_of_another_users_plugin(
     users: tuple[User, User, User],
 ) -> None:
     """An organization-wide MANAGE_PLUGINS holder who is not an admin edits
-    every plugin, so an upload of the same name adds a version to it."""
+    every plugin, so Upload New Version adds a version to it."""
     author, manager, _ = users
     group = make_group(db_session)
     group_id = group.id
@@ -830,7 +840,12 @@ def test_a_plugin_manager_uploads_a_new_version_of_another_users_plugin(
             author, _plugin_zip("managed-kit", ["one"]), db_session
         ).plugin.id
 
-        saved = _save(manager, _plugin_zip("managed-kit", ["one", "two"]), db_session)
+        saved = _save(
+            manager,
+            _plugin_zip("managed-kit", ["one", "two"]),
+            db_session,
+            plugin_id=plugin_id,
+        )
 
         assert (saved.plugin.id, saved.target.kind, saved.target.version_number) == (
             plugin_id,
@@ -884,7 +899,12 @@ def test_a_group_manager_uploads_a_new_version_of_a_plugin_in_scope(
             )
         db_session.commit()
 
-        in_scope = _save(manager, _plugin_zip("scoped-kit", ["one", "two"]), db_session)
+        in_scope = _save(
+            manager,
+            _plugin_zip("scoped-kit", ["one", "two"]),
+            db_session,
+            plugin_id=in_scope_id,
+        )
         private = _save(manager, _plugin_zip("private-kit", ["one", "two"]), db_session)
 
         assert (in_scope.plugin.id, in_scope.target.kind) == (
@@ -951,6 +971,36 @@ def test_an_upload_for_a_plugin_adds_a_version_to_that_plugin(
     assert (saved_copy.plugin.id, saved_copy.target.version_number) == (
         copy.plugin.id,
         2,
+    )
+
+
+def test_a_general_upload_adds_no_version_to_another_users_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    created_user_ids: list[UUID],
+) -> None:
+    """An admin's general upload of a name another user's plugin has makes the
+    admin's own plugin. Upload New Version is the way to change the other."""
+    author, _, _ = users
+    admin = make_user(db_session, is_admin=True)
+    db_session.commit()
+    created_user_ids.append(admin.id)
+    theirs = _save(author, _plugin_zip("same-name-kit", ["one"]), db_session).plugin
+    plugin = db_session.get(Plugin, theirs.id)
+    assert plugin is not None
+    publish_skill__no_commit(plugin, None, admin, db_session)
+    db_session.commit()
+
+    mine = _save(admin, _plugin_zip("same-name-kit", ["one", "two"]), db_session)
+
+    assert mine.plugin.id != theirs.id
+    assert mine.target.kind == "new_plugin"
+    assert (
+        db_session.scalar(
+            select(func.count()).where(PluginVersion.plugin_id == theirs.id)
+        )
+        == 1
     )
 
 

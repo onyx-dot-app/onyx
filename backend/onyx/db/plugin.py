@@ -49,7 +49,6 @@ from onyx.db.models import (
 from onyx.db.plugin_access import (
     affected_user_ids_for_plugins,
     holds_one_root_skill,
-    plugin_editable_by_user,
     seen_by_organization,
     visible_plugin_ids,
 )
@@ -683,9 +682,9 @@ def create_synced_plugin__no_commit(
 
 
 def find_upload_target(name: str, user: User, db_session: Session) -> Plugin | None:
-    """The plugin an upload of ``name`` adds a version to: one the user can
-    edit (``plugin_editable_by_user``), in the user's uploads, then in another
-    user's uploads, then in the organization library."""
+    """The plugin an upload of ``name`` adds a version to: one the user
+    authored, in the user's uploads, then in the organization library. A new
+    version of another user's plugin is a bound upload (``plugin_id``)."""
     return db_session.scalars(
         select(Plugin)
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
@@ -694,15 +693,11 @@ def find_upload_target(name: str, user: User, db_session: Session) -> Plugin | N
             Marketplace.kind.in_(
                 (MarketplaceKind.USER_UPLOADS, MarketplaceKind.ORGANIZATION_LIBRARY)
             ),
-            plugin_editable_by_user(user),
+            Plugin.author_user_id == user.id,
             ~holds_one_root_skill(Plugin.current_version_id.expression),
         )
         .order_by(
-            case(
-                (Marketplace.owner_user_id == user.id, 0),
-                (Marketplace.kind == MarketplaceKind.USER_UPLOADS, 1),
-                else_=2,
-            ),
+            case((Marketplace.owner_user_id == user.id, 0), else_=1),
             Plugin.id,
         )
         .limit(1)

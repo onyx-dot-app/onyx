@@ -517,7 +517,7 @@ the app from the same rule
    the plugin tables through `db/plugin_access.py`: visibility and the install
    setting come only from `db/plugin_access.py:_user_plugin_pairs` (through
    `visible_plugin_ids`, `load_user_plugin_states` and
-   `affected_user_ids_for_plugins`); edits and new versions (`db/plugin.py:find_upload_target`) use
+   `affected_user_ids_for_plugins`); edits and Upload New Version use
    `plugin_editable_by_user`: the author, an EDITOR share, a group manager in
    scope, or an organization-wide MANAGE_PLUGINS holder. A `plugin__user_group`
    row with no permission holds only a group install setting and grants
@@ -916,9 +916,10 @@ the app from the same rule
     URL. One match gives that integration's member state; two give
     `more_than_one`. The save
     (`server/features/skill/api.py:save_plugin_upload`) adds a version to a
-    plugin with the same name that the user edits and that is not a skill:
-    the user's uploads first, then another user's uploads,
-    then the Organization library (`db/plugin.py:find_upload_target`);
+    plugin with the same name that the user authored and that is not a skill:
+    the user's uploads first, then the Organization library
+    (`db/plugin.py:find_upload_target`). A new version of another user's
+    plugin needs Upload New Version (`plugin_id`);
     `save_as_new` makes a new plugin with the next free name. The save stores
     the bundle, then takes the user row lock and finds the target under it, so
     two uploads of one new name make one plugin with two versions. A new version
