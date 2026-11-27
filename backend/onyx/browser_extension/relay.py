@@ -347,20 +347,22 @@ def save_grant(
     chat_session_id = report.chat_session_id
     with cache.lock(_grant_lock_key(chat_session_id), timeout=_GRANT_LOCK_SECONDS):
         existing = _load(cache, _grant_key(chat_session_id), ChromeGrant)
-        if report.request_id is not None:
-            if (
-                _pending_request(
-                    cache, user_id, installation_id, chat_session_id, report.request_id
-                )
-                is None
-            ):
-                return None
+        holds_grant = (
+            existing is not None
+            and existing.user_id == user_id
+            and existing.installation_id == installation_id
+        )
+        pending = report.request_id is not None and (
+            _pending_request(
+                cache, user_id, installation_id, chat_session_id, report.request_id
+            )
+            is not None
+        )
+        # An approval sent again (a tab change or a reconnect before the
+        # ack) is a change of the grant that it made.
+        if pending:
             cache.delete(_request_key(chat_session_id))
-        elif (
-            existing is None
-            or existing.user_id != user_id
-            or existing.installation_id != installation_id
-        ):
+        elif not holds_grant:
             return None
         now = time.time()
         expires_at = min(report.expires_at, now + MAX_GRANT_SECONDS)

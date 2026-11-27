@@ -248,3 +248,31 @@ def test_a_chat_that_moved_keeps_its_grant() -> None:
     grant = relay.load_grant(_TENANT, chat_x, user_id)
     assert grant is not None and grant.installation_id == home.installation_id
     assert relay.load_grant(_TENANT, chat_y, user_id) is not None
+
+
+def test_an_approval_sent_again_keeps_the_grant() -> None:
+    """A tab change before the ack sends the approval again, with the same
+    request; the grant stays."""
+    user_id, chat_id = uuid4(), uuid4()
+    presence = _connect(user_id)
+    request = relay.request_grant(
+        _TENANT, user_id, chat_id, presence, chat_title="Chat", account="a@example.com"
+    )
+    report = GrantReport(
+        chat_session_id=chat_id,
+        request_id=request.request_id,
+        tabs=[GrantTab(id="1", title="Wiki", url="https://wiki.example/")],
+        origins=["https://wiki.example"],
+        expires_at=time.time() + 600,
+    )
+    assert relay.save_grant(_TENANT, user_id, presence.installation_id, report)
+    renamed = report.model_copy(
+        update={
+            "tabs": [GrantTab(id="1", title="Wiki home", url="https://wiki.example/")]
+        }
+    )
+    saved = relay.save_grant(_TENANT, user_id, presence.installation_id, renamed)
+    assert saved is not None and saved.tabs[0].title == "Wiki home"
+    # Another installation cannot use the spent request.
+    other = _connect(user_id)
+    assert relay.save_grant(_TENANT, user_id, other.installation_id, report) is None
