@@ -144,6 +144,11 @@ class Allowance(BaseModel):
     scope: LimitScope = LimitScope.TENANT
     measure: LimitMeasure = LimitMeasure.COUNTER
     # Required for a COUNTER; it picks the period the count is added up in.
+    # Changing a counter's window starts its count again from 0: the new
+    # period is a new row, and the usage counted under the old window is not
+    # carried over (its rows stay, unread). Changing only ``limit`` keeps the
+    # count. To carry usage over, add the old total into the new period's row
+    # when the change ships, or read the old window's usage alongside the new.
     window: LimitWindow | None = None
     # Field of cloud's override record that replaces ``limit`` for one tenant.
     override_field: TenantUsageLimitKeys | None = None
