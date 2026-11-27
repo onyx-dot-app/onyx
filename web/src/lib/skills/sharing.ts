@@ -26,15 +26,22 @@ export type SkillSharingDraft = Pick<
 > &
   Partial<Pick<CustomSkill, "content_locked">>;
 
+/** An owner or an editor manages a skill: shares it, edits it, deletes it. */
+export function canManageSkill(
+  skill: Pick<CustomSkill, "user_permission">
+): boolean {
+  return (
+    skill.user_permission === "OWNER" || skill.user_permission === "EDITOR"
+  );
+}
+
 /** An owner or an editor shares a skill. Only the owner of a personal GitHub
  * marketplace gets its plugins, so they are never shared. */
 export function canShareSkill(
   skill: Pick<CustomSkill, "user_permission" | "marketplace">
 ): boolean {
   if (skill.marketplace?.personal) return false;
-  return (
-    skill.user_permission === "OWNER" || skill.user_permission === "EDITOR"
-  );
+  return canManageSkill(skill);
 }
 
 /** The author, or an organization-wide skill manager, changes organization

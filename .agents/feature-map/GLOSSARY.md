@@ -245,7 +245,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Session workspace | The sandbox directory of one Craft session (`/workspace/sessions/<id>`), with its outputs, attachments and agent config. Not the tenant-wide workspace. See [[craft-sandboxes]]. |
 | Action policy | `ALWAYS` (Allow), `ASK` (Ask) or `DENY` (Blocked); the integration API writes `allow`, `ask` or `blocked` for each catalog action or MCP tool. Chat applies it to MCP tools too. See [[craft-external-apps]]. |
 | Workspace policy, personal choice, task choice | The three policy layers. See [[craft-external-apps]]. |
-| `unspecified` | The synthetic whole-domain action for a connected-app request that matches no catalog action. See [[craft-external-apps]]. |
+| `unspecified` | The other-request action (`OTHER_REQUEST_ACTION_KEY`), shown as "Any other request": a request to an API app that matches no other action. It asks unless it is Blocked. A preset sends it with the chat tool `app__<id>__request`; a REST or GraphQL app has no chat tool for it. See [[craft-external-apps]]. |
 | Session grant | "Approve for session" for specific Ask actions in one Craft session. Chat has its own, "Approve for this chat" ([[mcp-and-custom-tools]]). See [[craft-external-apps]]. |
 | Sandbox sleep | Snapshot, then remove the pod. See [[craft-sandboxes]]. |
 | Prompt slot | A renewable per-session cache lease (`server/features/build/sandbox/serve_transport.py`) that serializes the work on one opencode session. It is not the active-turn lock. See [[craft-sessions]]. |

@@ -141,44 +141,6 @@
         "tooltip": "{description}\n在此聊天中优先使用此工具。智能体也可能不使用该工具直接回答。"
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "取消"
-      },
-      "copyButton": {
-        "tooltip": "复制定义"
-      },
-      "definition": {
-        "invalidJson": "JSON 格式无效",
-        "placeholder": "在此输入您的 OpenAPI 架构",
-        "required": "必须填写 OpenAPI 架构定义",
-        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此插件一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 插件]({docsUrl})。",
-        "title": "OpenAPI 架构定义"
-      },
-      "empty": {
-        "description": "提供 OpenAPI 架构后即可在此预览操作。",
-        "title": "未找到操作"
-      },
-      "formatButton": {
-        "tooltip": "格式化定义"
-      },
-      "method": {
-        "noSummary": "未提供摘要"
-      },
-      "toasts": {
-        "actionCreated": "OpenAPI 插件创建成功",
-        "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效"
-      },
-      "humanDescription": {
-        "title": "面向用户的描述",
-        "hint": "显示在插件卡片和插件详情中。"
-      },
-      "agentDescription": {
-        "title": "面向智能体的描述",
-        "hint": "编辑 OpenAPI 架构中的 info.description。",
-        "disabled": "请输入有效的架构以编辑此字段。"
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "（已断开连接）"
@@ -360,10 +322,8 @@
       "detectedTransport": "传输方式：{transport}",
       "authenticationUndetected": "在下一页选择身份验证方式。",
       "details": "详细信息",
-      "checking": "正在检查服务器…",
       "serverDetails": "服务器详情",
       "authentication": "身份验证",
-      "continue": "继续",
       "back": "返回"
     },
     "policyEditor": {
@@ -1521,6 +1481,10 @@
           "description": "搜索网络以获取实时信息和最新结果。",
           "title": "网络搜索"
         }
+      },
+      "browser": {
+        "title": "浏览器",
+        "description": "允许智能体在其沙盒中使用网页浏览器。用户可以在聊天面板中观看并接管控制。"
       }
     },
     "codeInterpreter": {
@@ -10392,51 +10356,22 @@
     },
     "integrations": {
       "title": "集成",
-      "description": "连接 MCP 服务器和应用。每个集成都有所有者、安装设置和自己的共享。",
+      "description": "连接 MCP 服务器和应用。",
       "search": "搜索集成",
       "open": "打开 {name}",
       "loadFailed": "无法加载集成。",
       "add": {
         "label": "添加",
-        "title": "添加集成",
-        "description": "连接服务，以便人们在对话和 Craft 中使用它。",
         "created": "已添加 {name}。",
         "createFailed": "无法添加集成。",
-        "openapi": {
-          "title": "添加 OpenAPI 应用",
-          "schema": {
-            "title": "架构",
-            "description": "添加定义操作的 OpenAPI 架构。",
-            "added": "{count, plural, other {该架构有 # 个路径。}}",
-            "required": "请添加架构。",
-            "add": "添加架构",
-            "edit": "编辑架构"
-          }
-        },
         "preset": {
-          "title": "起点",
           "loadFailed": "无法加载预设。",
-          "instructions": "设置说明",
-          "credentialRequired": "请填写此值。",
-          "description": "预设会填写内置应用的名称和登录方式。选择“自定义应用”可设置任意 HTTP 服务。",
-          "custom": "自定义应用"
+          "credentialRequired": "请填写此值。"
         },
         "name": {
           "title": "名称",
           "placeholder": "添加名称",
           "required": "请添加名称。"
-        },
-        "descriptionField": {
-          "title": "描述",
-          "placeholder": "添加描述"
-        },
-        "custom": {
-          "patterns": {
-            "title": "URL 模式",
-            "description": "每行填写一个 URL 模式，例如 https://api.example.com/*。",
-            "placeholder": "https://api.example.com/*",
-            "required": "请至少添加一个 URL 模式。"
-          }
         },
         "mcp": {
           "url": {
@@ -10445,7 +10380,6 @@
             "error": "请输入有效的服务器 URL。"
           },
           "probe": {
-            "checking": "正在检查服务器…",
             "public": "找到 {count, plural, one {# 个工具} other {# 个工具}}。该服务器无需登录。",
             "oauth": "该服务器使用 OAuth 登录。",
             "authUnknown": "该服务器需要登录。请添加 API 密钥请求头或 OAuth。",
@@ -10456,8 +10390,7 @@
             "title": "传输方式",
             "streamableHttp": "可流式 HTTP",
             "sse": "服务器发送事件 (SSE)"
-          },
-          "suggested": "推荐的服务器"
+          }
         },
         "owner": {
           "title": "所有者",
@@ -10469,31 +10402,118 @@
         "submit": "添加",
         "adding": "正在添加…",
         "cancel": "取消",
-        "type": {
-          "title": "类型",
-          "description": "选择 Onyx 连接该服务的方式。",
-          "mcp_server": {
-            "title": "MCP 服务器",
-            "description": "通过 URL 连接远程 MCP 服务器。"
+        "rest": {
+          "import": {
+            "title": "导入规范",
+            "description": "上传或粘贴 JSON 或 YAML 格式的 OpenAPI 规范，或从 URL 导入。Onyx 会填写基础 URL，并为每个操作生成一个端点。",
+            "upload": "上传或粘贴规范",
+            "url": "规范 URL",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "导入",
+            "done": "{count, plural, other {已导入 # 个端点。}}",
+            "failed": "无法导入规范。",
+            "noActions": "Onyx 跳过了规范中的所有操作，因此当前端点保持不变。请使用其他规范。"
           },
-          "openapi": {
-            "title": "OpenAPI 应用",
-            "description": "根据 OpenAPI 架构创建操作。"
+          "baseUrl": {
+            "title": "基础 URL",
+            "placeholder": "https://api.example.com",
+            "required": "请添加基础 URL。"
           },
-          "app": {
-            "title": "应用",
-            "description": "从 GitHub 等预设或自定义应用开始。"
+          "endpoints": {
+            "title": "端点",
+            "description": "每行一个端点：方法、路径、可选的查询参数和名称。每个端点都会成为一个操作。",
+            "placeholder": "GET /tickets?status&limit 列出工单",
+            "required": "请至少添加一个端点。",
+            "lineError": "第 {line} 行（{text}）：{message}"
           }
         },
-        "details": {
-          "title": "详细信息"
+        "graphql": {
+          "endpointUrl": {
+            "title": "端点 URL",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "请添加端点 URL。"
+          },
+          "schema": {
+            "title": "架构",
+            "description": "粘贴 GraphQL SDL 架构、上传 .graphql 文件，或从端点加载。每个查询和变更都会成为一个操作。",
+            "upload": "上传 .graphql 文件",
+            "required": "请添加架构。"
+          },
+          "introspect": {
+            "submit": "从端点加载",
+            "done": "已加载架构。",
+            "failed": "无法加载架构。"
+          }
         },
-        "signIn": {
-          "title": "登录"
+        "menu": {
+          "mcpServer": "MCP 服务器",
+          "customApi": "自定义 API",
+          "fromCatalog": "从目录"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "添加 MCP 服务器",
+            "description": "通过 URL 连接远程 MCP 服务器。"
+          },
+          "api": {
+            "title": "添加自定义 API",
+            "description": "连接 REST 或 GraphQL API。Onyx 会从 URL 或规范中找到端点。"
+          },
+          "catalog": {
+            "title": "从目录添加",
+            "description": "选择要设置的应用或 MCP 服务器。"
+          },
+          "namedTitle": "添加 {name}"
+        },
+        "catalog": {
+          "title": "浏览目录",
+          "description": "Onyx 已经知道如何连接的应用和托管 MCP 服务器。",
+          "browse": "浏览"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "OpenAPI 规范 URL、GraphQL 端点或基础 URL",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "请输入有效的 URL，或上传规范。",
+            "needed": "请添加 API 的 URL。规范中没有提供。"
+          },
+          "upload": {
+            "label": "上传规范文件",
+            "chosen": "规范：{file}",
+            "remove": "移除规范"
+          },
+          "failed": "无法读取规范。",
+          "specError": "无法添加该规范：{detail}",
+          "tooLarge": "文件大于 5 MB。",
+          "checkFailed": "Onyx 无法检查该 URL。请重试。",
+          "noActions": "Onyx 跳过了规范中的所有操作，因此没有可用的操作。请使用其他规范，或移除规范并输入 API 基础 URL 以手动添加端点。"
+        },
+        "detected": {
+          "openapi": "REST API，{count, plural, other {# 个端点}}",
+          "openapiSkipped": "REST API，{count, plural, other {# 个端点}}。已跳过 {skipped} 个。",
+          "skippedTitle": "已跳过的端点",
+          "rest": "没有规范的 REST API。请在下方添加端点。",
+          "restUnreachable": "Onyx 无法访问该 URL：{detail} 你仍然可以将其添加为没有规范的 REST API。请在下方添加端点。",
+          "restTooLarge": "Onyx 无法检查该 URL 是否有规范：{detail} 你仍然可以将其添加为没有规范的 REST API，或上传更小的规范文件。请在下方添加端点。",
+          "graphql": "GraphQL API，{queries, plural, other {# 个查询}}和{mutations, plural, other {# 个变更}}",
+          "preset": "内置应用。Onyx 调用其 API。"
+        },
+        "continue": "继续",
+        "back": "返回",
+        "detecting": "正在检查 URL…",
+        "advanced": "高级",
+        "setup": {
+          "title": "设置 {name}",
+          "callbackUrl": "回调 URL",
+          "copyCallbackUrl": "复制回调 URL",
+          "scopes": "作用域",
+          "open": "打开 {name}"
         }
       },
       "filters": {
         "label": "集成类型",
+        "selected": "集成类型：{type}",
         "all": "所有类型",
         "mcp": "MCP 服务器",
         "api": "应用"
@@ -10513,9 +10533,10 @@
       },
       "shape": {
         "mcp_server": "MCP 服务器",
-        "openapi": "OpenAPI 应用",
+        "openapi": "REST 应用",
         "preset": "应用",
-        "custom": "自定义应用"
+        "custom": "URL 模式应用",
+        "graphql": "GraphQL 应用"
       },
       "signInSummary": "{mode, select, none {无需登录} shared {{method, select, oauth2 {组织账户 (OAuth)} api_key {组织 API 密钥} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {组织账户}}} individual {{method, select, oauth2 {每个用户 (OAuth)} api_key {每个用户 (API 密钥)} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {每个用户}}} other {未知}}",
       "status": {
@@ -10592,7 +10613,6 @@
         "overview": {
           "readOnly": "您可以查看此集成，但无法更改。",
           "noDescription": "无描述",
-          "type": "类型",
           "signIn": "登录",
           "createdBy": "添加者",
           "needsSetup": "需要设置",
@@ -10623,19 +10643,18 @@
           },
           "description": "描述",
           "menu": "更多操作",
-          "owner": "所有者"
+          "owner": "所有者",
+          "urlPatternApp": {
+            "title": "此应用使用 URL 模式",
+            "description": "Onyx 不再添加 URL 模式应用。要替换此应用，请为其 URL 模式涉及的每个主机添加一个自定义 REST 应用。删除此应用前，请完成文档中的设置步骤。"
+          }
         },
         "configuration": {
           "readOnly": "您可以查看此集成，但无法更改。",
           "connection": {
             "title": "连接",
             "serverUrl": "服务器 URL",
-            "serverUrlError": "请输入有效的服务器 URL。",
-            "urlPatterns": "URL 模式",
-            "urlPatternsDescription": "每行填写一个 URL 模式。",
-            "schema": "OpenAPI 架构",
-            "schemaDescription": "保存修改后的架构时，Onyx 会重新同步操作。",
-            "schemaError": "请以 JSON 对象的形式输入架构。"
+            "serverUrlError": "请输入有效的服务器 URL。"
           },
           "signIn": {
             "title": "登录",
@@ -10683,11 +10702,11 @@
           },
           "usesDefault": "使用默认值",
           "setByAdmin": "由管理员设置",
-          "alwaysAsks": "对于不匹配任何其他操作的每个请求，Craft 都会先询问。您无法设置为允许。",
+          "alwaysAsks": "对于不匹配任何其他操作的每个请求，Onyx 都会先询问。您无法设置为允许。",
           "useDefaults": "使用默认值",
-          "readOnly": "只读操作 ({count})",
-          "write": "写入操作 ({count})",
-          "other": "其他操作 ({count})",
+          "readOnly": "只读操作",
+          "write": "写入操作",
+          "other": "其他操作",
           "empty": "此集成没有操作。",
           "connectFirst": {
             "title": "请先连接服务器",
@@ -10703,8 +10722,8 @@
         "saved": "{name} 现在为 {policy}。",
         "saveFailed": "无法保存安装设置。",
         "title": "安装设置",
-        "description": "谁可以使用此集成。不可用会使其保持私有：只有所有者、共享对象以及拥有自身设置的群组可以使用。要将其限制为所有者和共享对象，请移除这些群组设置。",
-        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。",
+        "description": "组织中谁可以使用此集成。",
+        "notAvailable": "私有。只有所有者和共享对象可以使用。",
         "required": "使用自己账号登录的成员必须先连接它，才能使用聊天和 Craft。"
       },
       "ownedBy": "所有者：{owner}",
@@ -10712,6 +10731,10 @@
         "saved": "已保存 {name} 的群组设置。",
         "saveFailed": "无法保存群组设置。"
       }
+    },
+    "plugins": {
+      "title": "插件",
+      "description": "上传 Claude Code 和 Codex 插件，并从 GitHub 同步市场。插件是一组技能，并列出这些技能需要的集成。"
     },
     "serviceStatus": {
       "page": {
@@ -11049,7 +11072,7 @@
         "loadFailed": "无法加载集成。",
         "lock": {
           "adminBlocked": "无法选择允许：管理员已阻止此操作。",
-          "alwaysAsks": "无法使用允许：Craft 会为每个此类请求请求批准。",
+          "alwaysAsks": "无法使用允许：Onyx 会为每个此类请求请求批准。",
           "adminFinal": "无法选择允许：此集成的管理员设置为最终设置。"
         },
         "noActions": "此集成还没有操作。",
@@ -12210,9 +12233,6 @@
           "text": "回复已达到时间限制，因此已停止。"
         }
       },
-      "agentResults": {
-        "received": "已收到子代理结果"
-      },
       "callout": {
         "note": {
           "title": "备注"
@@ -12776,6 +12796,9 @@
             },
             "noLines": {
               "label": "{change, select, delete {删除文件} other {空文件}}"
+            },
+            "movedFrom": {
+              "label": "从 {path} 移动"
             }
           },
           "stopped": {
@@ -12787,6 +12810,62 @@
             },
             "failed": {
               "status": "发布失败"
+            }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {正在打开 {target}} failed {无法打开 {target}} canceled {已取消} other {已打开 {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {正在打开新标签页} failed {无法打开新标签页} canceled {已取消} other {已打开新标签页}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {正在前往 {target}} failed {无法前往 {target}} canceled {已取消} other {已前往 {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {正在读取页面} failed {无法读取页面} canceled {已取消} other {已读取页面}}"
+            },
+            "act": {
+              "status": "{phase, select, running {正在操作页面} failed {无法操作页面} canceled {已取消} other {已操作页面}}",
+              "click": {
+                "status": "{phase, select, running {正在点击元素} failed {无法点击元素} canceled {已取消} other {已点击元素}}"
+              },
+              "type": {
+                "status": "{phase, select, running {正在输入“{text}”} failed {无法输入“{text}”} canceled {已取消} other {已输入“{text}”}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {正在悬停在元素上} failed {无法悬停在元素上} canceled {已取消} other {已悬停在元素上}}"
+              },
+              "select": {
+                "status": "{phase, select, running {正在选择选项} failed {无法选择选项} canceled {已取消} other {已选择选项}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {正在拖动元素} failed {无法拖动元素} canceled {已取消} other {已拖动元素}}"
+              },
+              "press": {
+                "status": "{phase, select, running {正在按 {key}} failed {无法按 {key}} canceled {已取消} other {已按 {key}}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {正在滚动页面} failed {无法滚动页面} canceled {已取消} other {已滚动页面}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {正在上传文件} failed {无法上传文件} canceled {已取消} other {已上传文件}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {正在等待页面} failed {页面未就绪} canceled {已取消} other {已等待页面}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {正在运行页面脚本} failed {页面脚本运行失败} canceled {已取消} other {已运行页面脚本}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {正在响应页面对话框} failed {无法响应页面对话框} canceled {已取消} other {已响应页面对话框}}"
+            },
+            "check": {
+              "status": "{phase, select, running {正在检查浏览器} failed {无法检查浏览器} canceled {已取消} other {已检查浏览器}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {正在后退} forward {正在前进} other {正在重新加载页面}}} failed {无法切换页面} canceled {已取消} other {{history, select, back {已后退} forward {已前进} other {已重新加载页面}}}}"
             }
           }
         },
@@ -12809,14 +12888,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "正在启动子代理 {name}",
-            "done": "已启动子代理 {name}",
-            "failed": "无法启动子代理 {name}",
-            "runningUnnamed": "正在启动子代理",
-            "doneUnnamed": "已启动子代理",
-            "failedUnnamed": "无法启动子代理"
-          },
           "send": {
             "running": "正在向 {name} 发送消息",
             "done": "已向 {name} 发送消息",
@@ -12833,6 +12904,17 @@
             "doneUnnamed": "已中断子代理",
             "failedUnnamed": "无法中断子代理"
           }
+        },
+        "agentGroup": {
+          "title": "{count, plural, other {# 个子智能体}}",
+          "summary": {
+            "working": "{count, number} 个工作中",
+            "done": "{count, number} 个已完成",
+            "failed": "{count, number} 个失败",
+            "stopped": "{count, number} 个已停止"
+          },
+          "activity": "正在使用 {tool}",
+          "open": "打开 {name}"
         }
       },
       "toolApproval": {
@@ -13567,6 +13649,9 @@
       },
       "resizeHandle": {
         "label": "调整面板大小"
+      },
+      "browserTab": {
+        "label": "浏览器"
       }
     },
     "export": {
@@ -13627,6 +13712,126 @@
       "next": "下一个匹配项",
       "placeholder": "在会话中查找",
       "previous": "上一个匹配项"
+    },
+    "subagents": {
+      "status": {
+        "starting": "正在启动",
+        "running": "运行中",
+        "waiting": "等待中",
+        "completed": "已完成",
+        "stopped": "已停止",
+        "failed": "失败",
+        "limit": "已达步骤上限"
+      },
+      "timedStatus": {
+        "running": "运行中 {elapsed}",
+        "waiting": "等待中 {elapsed}",
+        "completed": "用时 {elapsed} 完成"
+      },
+      "view": {
+        "parent": "子智能体",
+        "parentOf": "子智能体 · 上级：{title}",
+        "openParentChat": "打开上级聊天",
+        "empty": "此智能体还没有消息。",
+        "failed": "无法加载此智能体的对话。"
+      },
+      "bar": {
+        "runsOnItsOwn": "独立运行",
+        "openParent": "打开上级",
+        "announcement": "{model} 子智能体：{status}",
+        "announcementUnnamed": "子智能体：{status}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "浏览器页面",
+        "inputDescription": "按 Shift+Esc 离开浏览器页面。"
+      },
+      "download": {
+        "action": "下载",
+        "saved": "浏览器已下载 {fileName}"
+      },
+      "error": "浏览器无法完成此操作。请重试。",
+      "clearData": {
+        "action": "清除浏览器数据",
+        "title": "清除浏览器数据？",
+        "description": "这会让你在浏览器中退出所有网站，并删除所有聊天的 Cookie、历史记录和已保存的数据。",
+        "confirm": "清除数据",
+        "done": "已清除浏览器数据",
+        "error": "无法清除浏览器数据。请重试。"
+      },
+      "urlBar": {
+        "back": "后退",
+        "forward": "前进",
+        "reload": "重新加载",
+        "label": "地址",
+        "placeholder": "输入网址"
+      },
+      "moreMenu": {
+        "label": "更多浏览器操作"
+      },
+      "tabs": {
+        "new": "新建标签页"
+      },
+      "control": {
+        "you": "你正在控制此标签页",
+        "agent": "智能体正在控制此标签页",
+        "anotherViewer": "另一个窗口正在控制此标签页",
+        "none": "没有人在控制此标签页",
+        "take": "接管控制",
+        "release": "释放控制"
+      },
+      "status": {
+        "connecting": "正在连接浏览器",
+        "starting": "正在启动浏览器",
+        "blank": {
+          "title": "还没有页面",
+          "description": "在上方输入 URL 以打开页面。"
+        },
+        "noTabs": {
+          "title": "没有打开的页面",
+          "description": "智能体打开的页面会显示在这里。你也可以打开新标签页。"
+        },
+        "disconnected": {
+          "title": "浏览器已断开连接",
+          "description": "正在尝试重新连接。"
+        },
+        "disabled": {
+          "title": "浏览器已关闭",
+          "description": "管理员关闭了浏览器，或者你无法查看此聊天的浏览器。"
+        },
+        "unreachable": {
+          "title": "无法连接到浏览器",
+          "description": "请确认你已登录并已联网，然后重试。"
+        },
+        "error": {
+          "title": "浏览器不可用",
+          "description": "无法启动此聊天的沙盒。请稍后重试。"
+        },
+        "retry": "重试"
+      },
+      "dialog": {
+        "label": "页面对话框",
+        "from": "{origin} 显示",
+        "response": "对话框回复",
+        "responsePlaceholder": "输入回复",
+        "dismiss": "关闭",
+        "accept": "接受",
+        "takeControl": "接管控制以进行回复。"
+      },
+      "fileChooser": {
+        "label": "为页面选择文件",
+        "askOne": "页面请求一个文件。",
+        "askMany": "页面请求多个文件。",
+        "askOneFrom": "{origin} 请求一个文件。",
+        "askManyFrom": "{origin} 请求多个文件。",
+        "cancel": "取消",
+        "chooseOne": "选择文件",
+        "chooseMany": "选择多个文件",
+        "inputLabel": "页面文件",
+        "error": "无法上传文件。请重试。"
+      },
+      "answerError": "无法响应该页面。请重试。"
     }
   },
   "common": {
@@ -14254,6 +14459,10 @@
         "button": "在此聊天中批准",
         "tooltip": "立即批准，并在此聊天的剩余时间内运行此工具而不再询问"
       },
+      "approveCommand": {
+        "button": "为此命令批准",
+        "tooltip": "立即批准，并在命令结束前允许此操作而不再询问"
+      },
       "approveOnce": {
         "ariaLabel": "仅批准此操作一次",
         "button": "批准一次"
@@ -14264,7 +14473,8 @@
       },
       "deadline": "请在 {time} 前批准",
       "header": {
-        "required": "已请求批准：{headline}"
+        "required": "已请求批准：{headline}",
+        "requiredBy": "已请求批准：{headline}。请在 {time} 前批准"
       },
       "headline": {
         "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
@@ -14281,6 +14491,7 @@
         "expired": "已超时：{headline}",
         "rejected": "未批准：{headline}",
         "approvedForChat": "已在此聊天中批准：{headline}",
+        "approvedForCommand": "已为此命令批准：{headline}",
         "approvedForSession": "已在此会话中批准：{headline}"
       },
       "submitError": "无法提交你的决定。请重试。",
@@ -16603,6 +16814,9 @@
         "integrations": {
           "label": "集成"
         },
+        "plugins": {
+          "label": "插件"
+        },
         "slackBot": {
           "label": "Slack 机器人"
         },
@@ -17166,15 +17380,11 @@
           "title": "从头开始"
         },
         "trigger": {
-          "label": "创建技能"
+          "label": "创建一个技能"
         },
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
           "title": "上传技能"
-        },
-        "marketplace": {
-          "title": "添加市场",
-          "description": "从仓库添加并同步其插件。"
         }
       },
       "empty": {
@@ -17403,17 +17613,13 @@
           "versions": "版本"
         },
         "overview": {
-          "noDescription": "无描述。",
           "location": "位置",
           "owner": "所有者",
-          "skills": "技能",
-          "description": "描述",
           "version": "plugin.json 中的版本",
           "author": "作者",
           "homepage": "主页",
           "license": "许可证",
-          "notUsed": "Onyx 不使用的部分",
-          "marketplace": "{name} 市场，{scope, select, personal {个人} other {公司}}（{repository}）"
+          "notUsed": "Onyx 不使用的部分"
         },
         "skills": {
           "off": "已关闭",
@@ -17427,11 +17633,7 @@
           "title": "使用此插件",
           "label": "使用 {name}",
           "required": "管理员已将此插件设为必需。你无法将其关闭。",
-          "unavailable": "你无法开启或关闭此插件。",
-          "failed": "无法更改插件。",
-          "on": "已开启。默认智能体可以使用此插件。",
-          "off": "已关闭。开启后，默认智能体即可使用此插件。",
-          "nameHeld": "已关闭，因为 {names} 使用了相同的技能名称。开启此插件即可改用它。"
+          "unavailable": "你无法开启或关闭此插件。"
         },
         "actions": {
           "share": "分享",
@@ -17447,7 +17649,6 @@
           "done": "已删除 {name}。",
           "failed": "无法删除插件。"
         },
-        "syncedFrom": "同步自 {repository}",
         "managed": {
           "title": "由 {name} 市场管理",
           "description": "Onyx 从 {repository} 同步此插件。请在 GitHub 中更改，然后同步市场。",
@@ -17487,18 +17688,17 @@
         }
       },
       "alwaysAllow": {
-        "title": "始终允许",
-        "description": "无需确认即可运行需要审批的操作。",
+        "description": "管理员设置每个操作的运行方式。开启“不要询问我”后，需要审批的操作将直接运行，不再提示。",
         "loadFailed": "无法加载操作。",
         "saveFailed": "无法保存。请重试。",
-        "alwaysAsks": "Craft 会为每个此类请求请求批准。",
+        "alwaysAsks": "Onyx 会为每个此类请求请求审批。",
         "switch": {
-          "label": "始终允许 {name}"
+          "label": "不要就 {name} 询问我",
+          "visibleLabel": "不要询问我"
         },
         "retry": {
           "label": "重试"
         },
-        "readOnlyTitle": "操作",
         "readOnlyDescription": "管理员设置每个操作的运行方式。"
       },
       "oauthCallback": {
@@ -17562,10 +17762,7 @@
         "not_supported": "不支持"
       },
       "note": {
-        "askAdmin": "请询问管理员",
-        "turnedOff": "已被您的管理员关闭",
-        "moreThanOne": "有多个集成匹配",
-        "notSupported": "Onyx 不支持"
+        "askAdmin": "请询问管理员"
       },
       "localServer": "本地服务器",
       "noUrl": "无服务器 URL",
@@ -17717,7 +17914,8 @@
         "duplicate": {
           "personal": "你已添加此市场。",
           "company": "你的组织已经在使用此市场。"
-        }
+        },
+        "advanced": "高级"
       },
       "sync": {
         "now": "立即同步",
@@ -17742,10 +17940,6 @@
       "open": "打开 {name}",
       "menu": "{name} 的操作",
       "loadFailed": "无法加载市场。",
-      "empty": {
-        "title": "还没有市场",
-        "description": "添加 GitHub 仓库以获取其插件。"
-      },
       "page": {
         "title": "市场",
         "description": "你获取插件的 GitHub 仓库及其来源。同步市场可获取 GitHub 中的更改。"
@@ -17804,6 +17998,20 @@
       "errors": {
         "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
         "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
+      }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {已更新 # 个插件} other {已更新 # 个插件}}",
+      "failed": "无法更新插件。请重试。",
+      "partialFailure": "{count, plural, one {# 个插件未能更新} other {# 个插件未能更新}}",
+      "deleteTitle": "{count, plural, one {删除 # 个插件？} other {删除 # 个插件？}}",
+      "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选插件。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选插件。此操作无法撤销。}}",
+      "shareTitle": "{count, plural, one {更新 # 个插件的访问权限} other {更新 # 个插件的访问权限}}",
+      "shareDescription": "将这些更改应用于每个所选插件。未更改的设置将保留当前值。",
+      "addAccessDescription": "将这些人员和群组添加到每个所选插件。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
+      "apply": "{count, plural, one {应用于 # 个插件} other {应用于 # 个插件}}",
+      "publishWarning": {
+        "description": "应用后，组织中的所有人都可以使用所选插件。已发布的插件无法再设为私有。只有管理员可以删除它们。"
       }
     }
   },
@@ -17894,18 +18102,12 @@
         "on": "已开启",
         "off": "已关闭"
       },
-      "sort": {
-        "label": "排序",
-        "updated": "最近更新",
-        "name": "名称"
-      },
       "add": {
         "label": "添加",
         "upload": "上传技能",
         "create": "创建技能",
         "uploadPlugin": "上传插件",
-        "marketplace": "添加市场",
-        "manageMarketplaces": "管理市场"
+        "marketplace": "添加市场"
       },
       "groups": {
         "mine": "由你创建",
@@ -17926,7 +18128,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "已停用",
+        "off": "已关闭",
         "required": "必需",
         "pending": "待审核",
         "invalid": "无效"
@@ -17961,15 +18163,11 @@
       "status": {
         "connected": "已连接"
       },
-      "add": {
-        "label": "添加",
-        "integration": "添加集成",
-        "manage": "管理集成"
-      },
       "open": "打开 {name}",
       "empty": {
         "title": "还没有集成",
-        "description": "请让管理员添加集成。"
+        "description": "请让管理员添加集成。",
+        "descriptionCanAdd": "添加一个，或浏览目录。"
       },
       "noMatches": {
         "title": "没有匹配的集成",
@@ -17983,14 +18181,13 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "上传插件、从 GitHub 添加市场，或创建技能。每个技能都是一个插件。",
+        "description": "上传插件，或从 GitHub 添加市场。",
         "upload": "上传插件"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。根目录中仅有一个 SKILL.md 的插件显示在“技能”标签页中。",
       "integrations": "{needed} 个集成中有 {available} 个可用",
       "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },
@@ -18058,26 +18255,19 @@
       "loadFailed": "你无法使用此集成。",
       "tabs": {
         "overview": "概览",
-        "configuration": "配置",
         "actions": "操作"
       },
       "overview": {
-        "description": "描述",
-        "noDescription": "没有描述。",
         "type": "类型",
         "signIn": "登录",
         "url": "服务器 URL",
         "owner": "所有者",
         "organization": "组织",
-        "status": "状态",
         "switch": {
           "title": "使用此集成",
           "description": "开启后，你可以在对话和 Craft 中使用它。",
           "required": "管理员已将此集成设为必需。你无法将其关闭。"
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {你与此集成的连接。只有你使用它。} shared {此集成的账户。所有有权访问的人都使用它。} other {此集成无需登录。}}"
       }
     },
     "pluginPage": {

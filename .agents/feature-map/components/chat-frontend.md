@@ -104,9 +104,10 @@
   composer shows no subagent status. The input stays usable. While
   subagents run, status polling finds automatic follow-up responses in an idle
   chat and loads them through the normal refresh and replay path. Internal
-  agent results do not become user message bubbles. A "Subagent results received" divider shows above each
-  automatic follow-up response. That response shows its model label but
-  cannot be regenerated.
+  agent results do not become user message bubbles. An automatic follow-up
+  response continues the turn that spawned the agents, as T3 Code shows it: no
+  divider, and the turn's actions show once, under its last answer. That
+  response shows its model label but cannot be regenerated.
 - **A tool call needs approval.** An approval card shows the payload that
   the tool gives for the call (`ToolApprovalRequest.arguments`), or the call's arguments
   when the tool gives none. Every card that waits for a decision shows in one region after
@@ -114,11 +115,18 @@
   `ChatUI`), oldest response first and in packet order, from the replies and
   from their background subagents alike. A multi-model card names its model;
   a subagent's card (`agent_name` set) names the subagent. The request has no
-  deadline. The user approves once, approves for the chat, or rejects; the
-  card then becomes a record of the outcome, or of "No longer
-  waiting" when the server returns 409 or 404. The record is a closed
-  timeline step (`RunStep`) titled with the outcome; it opens onto the
-  request details. The record shows in the region
+  deadline. The user approves once, approves for the chat, or rejects. A card
+  with `can_approve_for_command` (an app request of a VM command,
+  [[craft-external-apps#chat-command-approvals]]) offers "Approve for this
+  command" (`ApprovalCard` `sessionScope="command"`, which sends
+  `approve_command`) in place of the chat choice. Any card of a VM command's
+  app request, also one that offers only approve once and reject, shows its
+  `expires_at` deadline; it waits only while its call runs. A reconnect to the live stream
+  buffer can send the card and its outcome again; a saved session does not
+  rebuild it. The card then becomes a record of the
+  outcome, or of "No longer waiting" when the server returns 409 or 404. The
+  record is a closed timeline step (`RunStep`) titled with the outcome; it
+  opens onto the request details. The record shows in the region
   until the resolution packet arrives; from then on the reply's timeline
   shows it next to its tool call (`AgentMessage:buildSectionSegments`), and
   a reload replays it there. While the turn waits, its stream ends with
@@ -272,6 +280,33 @@
   and digits. The timeline step lists the
   files that the call asked for and how it ended. Shared chats show the same
   cards.
+- **Each page of the chat's sandbox browser is a tab of the right panel.**
+  The page tabs sit in the strip with Files, Sources and the file tabs
+  (display ID `browser:<page id>`; `RIGHT_PANEL_BROWSER_TAB` stands for the
+  browser until the stream lists its pages). The browser service owns the
+  page list and each viewer's selection: the `tabs` message's `selected`
+  marks the active page tab, and a tab click sends `selectTab`, close sends
+  `closeTab` (without a connection, close shuts the whole browser in the
+  panel). The browser opens by itself when a live stream starts the
+  agent's `browser_open` tool in the open chat, also on a followed
+  continuation (`followChatSession`), but not on reload or replay,
+  and from the strip's "+" menu (shown when
+  `settings.chat_browser_available`), which sends `newTab`. It closes when
+  the last page of a live browser closes. `ChatRightPanel` gets the stream
+  and the page tabs from `useChatBrowserTabs`, which owns the stream
+  (`useBrowserStream`) and the download and error toasts: its websocket
+  (`/api/chat/sessions/{id}/browser/ws`, cookie auth, owner only) is open
+  while the panel and the chat's browser are open. One view
+  (`sections/chat/browser/`, ported from T3 Code) serves all page tabs; only
+  the viewer that controls the tab can send input or navigate, and the
+  service adds a missing URL scheme. Page dialogs and file choosers name
+  the asking frame's origin when the service knows it. Close code 4403 shows the browser as
+  off, 4404 and 4503 as unavailable with a retry; other drops reconnect,
+  and six connects in a row that do not open stop with a retry. A
+  page's download goes to the sandbox's `downloads/`, not to Files: its toast
+  downloads it from `/api/chat/sessions/{id}/browser/downloads/{name}`. The
+  admin switch is "Browser" on the chat preferences page
+  (`browser_enabled`).
 - **A chat has a right panel, with a toggle at the far end of its header**
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the
@@ -307,7 +342,8 @@
   the chat and the panel shows the panel over the page, without the size
   button. A panel over the page covers only the page column,
   not the sidebar, and the page under it cannot be focused. Files and Sources
-  lead the tab strip when they have content, or while they are active. A citation's Sources control opens the panel on Sources. The
+  lead the tab strip while they are open. Each has at most one tab, which
+  stays while other tabs show; opening it again shows that tab. A citation's Sources control opens the panel on Sources. The
   Files tab shows Craft's output tiles for the files published in the chat,
   on every branch, also by answers that are not loaded and by subagents: one
   tile per artifact, its newest version, newest artifact first (a new
@@ -328,8 +364,10 @@
   with a click or the arrow keys, reorder by drag or Alt+arrow among the
   file tabs (on a touch screen, a swipe scrolls the strip and a press and
   hold starts the drag), and closing
-  the active tab returns to the tab used before it, else to Files. Files and
-  Sources cannot close or move, and a file tab cannot move before them. File
+  the active tab returns to the tab used before it, else to Sources, else to
+  the browser; with no tab left, the panel closes. Files and Sources close
+  with their close buttons but cannot move, and a file tab cannot move
+  before them. File
   tabs of one shown name show their paths. An artifact has one tab, which
   follows its newest version: a reload's list or a live publish of a newer
   version updates an open tab. A card of an older version, or an artifact
@@ -534,8 +572,9 @@ session's `uncaughtError`, a `SessionError` with the error code and details.
 The reader returns a rejected send’s error when it finishes. Completion and
 Stop both read that result before releasing the input.
 An automatic follow-up response has a hidden `agent_results` question node as
-its parent. `ChatUI` and the shared chat view render that node with
-`web/src/lib/timeline/chat/message/AgentResultsDivider.tsx`, with no message controls. Checks that
+its parent. `ChatUI` keeps that node as an empty row, which takes no room but
+stays the scroll anchor while the follow-up streams. The shared chat view and
+the subagent view skip it. The answer before it hides its footer. Checks that
 look for the last `user` node skip it, and export omits it. A multi-model turn
 is unresolved only while the chain tip's parent is its user message
 (`web/src/lib/timeline/chat/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
@@ -697,12 +736,25 @@ packet, stripped where it renders.
 
 The panel's state and its transitions are one pure module,
 `lib/chat/rightPanel.ts:rightPanelReducer`, which owns the tabs: the mode
-(closed, medium or full, as Craft's), the open files (Files and Sources
-are fixed tabs, so only the active tab and the history name them), width,
+(closed, medium or full, as Craft's), the open files (`filesOpen` and
+`sourcesOpen` say whether Files and Sources have tabs; only the active tab
+and the history name them), width,
 search and seen files. The Files list and the file tabs follow the shared
 tab rules (`lib/outputPanel/tabs.ts:openPanelTab`, `closePanelTab`), with
-the Files list first, so closing the last file tab shows the Files list;
-Sources stands apart. A file that the panel shows counts as seen
+the open Files list first;
+Sources and the browser stand apart: `browserOpen` says whether the
+browser's pages show as tabs (`openBrowser`; `closeTab` of
+`RIGHT_PANEL_BROWSER_TAB` closes it), and `RIGHT_PANEL_BROWSER_TAB` is the
+active tab while the browser shows. The page list and the selected page come
+from the stream, not from this state; `useChatBrowserTabs` gives each page a
+display tab ID `browser:<page id>`. `isFilesTab` excludes Sources and the
+browser. The browser protocol
+(`lib/chat/browser/types.ts`), the stream client and pure input mapping
+(`lib/chat/browser/stream.ts`), and the view's state
+(`lib/chat/browser/hooks.ts:useBrowserStream`, `useChatBrowserTabs`) match the
+api_server's browser route. In dev, `next.config.js` rewrites the
+websocket to the backend, as Craft's HMR route. A file that the panel shows
+counts as seen
 (`markSeen`); the first time the panel shows files, the panel marks the
 listed files seen once (`initializeSeen`). The store keeps one state per
 session and applies the reducer (`updateCurrentRightPanel`); the shared view
@@ -958,6 +1010,55 @@ overlaid `Hoverable.Item`s, so the Stop stays in the tab order; a touch screen
 shows the Stop): `useChatSubagents().stopAgent` posts
 `/api/chat/chat-session/{id}/stop-subagents` with `{ "agent_id": ... }`, then
 reloads the status and the list. A finished row shows its outcome and no time.
+A row opens the agent in the main view (`lib/chat/subagents.ts:useSubagentNavigation`).
+
+**Subagent view.** As T3 Code's, a subagent opens in the main view in place
+of the chat. `useSubagentNavigation().open` pushes the URL with
+`?subagent={id}` (`SEARCH_PARAM_NAMES.SUBAGENT_ID`) and keeps the other
+parameters; `openParent` removes it. `views/AppPage.tsx` reads the parameter
+while a chat is open: it renders `SubagentView` in the ChatUI slot (no
+`ChatScrollContainer`, no `ChatFind`) and `SubagentBar` in place of
+`MultiModelSelector` and `AppInputBar`. The sidebar and right panel stay the
+parent chat's; subagents never open in the output panel. The header title
+reads `{chat title} / {subagent name}` (`layouts/chromes/AppChrome.tsx:ChatTitle`),
+and the chat title gives way first on a narrow screen.
+`sections/chat/SubagentView.tsx:SubagentView` starts with T3 Code's "Subagent
+of · {chat title}" divider, a pill that opens the parent, then renders the
+agent's conversation read-only, as the shared view does (`HumanMessage`,
+`AgentMessage`), in the chat column's width, with its own scroller that keeps
+to the end unless the user scrolled up. It reads
+`GET .../agents/{agent_id}/history`. `useSubagentTranscript` follows the live
+stream that the history names (`.../agents/{agent_id}/stream`, one batch of
+packets per frame); its packets replace the running response's saved ones.
+A stream that drops before its stop packet resumes from its last cursor. The
+history reloads when the stream ends or the agents list names another
+`stream_id`, or none. The view lists the agent's messages by ID, not by the
+latest-child chain: a reply never links to the next instruction its parent
+sends. The history reads approvals under the root chat and adds the stop packet
+that a child's saved reply lacks. `SubagentBar` copies T3 Code's read-only
+composer bar: the agent's `model`, its state (`Starting`, `Running 12s`,
+`Waiting 12s`, `Completed in 1m 53s` from `duration_seconds`, else the label),
+an sr-only `role="status"` announcement without the ticking time, "Runs on its
+own", Stop while it is live, and **Open parent**. An agent that the list does
+not hold shows the empty text and only **Open parent**.
+`SubagentPathContext` gives the path of the agent whose conversation renders,
+so its spawns resolve to `{path}/{name}`, with each `/` of a Claude-family
+description turned into `-` as the server names it; a refused spawn links to
+no agent. `SubagentLinksContext` is false on the extension page, which shows
+no subagent view: its rows and cards open nothing.
+In the timeline, each spawn is T3 Code's subagent card
+(`lib/timeline/chat/renderers/agent/SubagentCard.tsx`): an avatar with a
+state dot (blue working, green done, red failed or at its limit, grey
+stopped), the name over the current activity (`activity_tool`) or task, the
+state while not completed, the run time or saved duration, and a chevron.
+A single spawn renders as the card alone, with no step header
+(`lib/timeline/chat/renderers/agent/AgentToolRenderer.tsx`, `timelineLayout: "content"`); send and interrupt
+steps keep their header. Consecutive spawns of one turn form one step
+(`lib/timeline/chat/transformers.ts:groupSpawnSteps`) that
+`lib/timeline/chat/renderers/agent/AgentGroupRenderer.tsx` draws as T3 Code's
+subagent group: the count, a summary such as "2 working · 1 done · 1 failed"
+(blue while any works, red when any failed), the group's run time, and a
+card per agent.
 The card portals into the page column's
 `activitySlot` (`layouts/chromes/AppWorkspace.tsx`) and pins under the header
 at the chat region's top end, so the header keeps its width and buttons. With
@@ -976,7 +1077,11 @@ panel. Agents come from
 which reads `load_session_agent_metadata` for the selected branch and keeps
 the `spawn_agent` children (`ChatConfiguration`; Deep Research workers are
 foreground): `id`, `path`, `status`, `stopped_by_user`, and the latest run's
-`started_at` (its response's `time_sent`), with no transcript. The list loads again when the status changes
+`started_at` (its response's `time_sent`), with no transcript. One more query
+(`db/chat_subagents.py:agent_run_summaries`) gives each latest run's `model`
+(`model_display_name`, copied from the spawning response when the run is
+reserved) and `duration_seconds` (`processing_duration_seconds`, saved with
+a finished child's reply). The list loads again when the status changes
 `has_active_subagents` or `latest_response_id`, and polls while agents are
 active. The status it reads also polls while a reply streams, so agents that
 the reply starts show. An idle chat that sees a running or unknown

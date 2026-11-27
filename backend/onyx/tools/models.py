@@ -321,6 +321,9 @@ class CustomToolCallSummary(BaseModel):
         union_mode="left_to_right"
     )
     error: CustomToolErrorInfo | None = None
+    # The integration of an app tool, which has no tool row. The chat reads
+    # it to open the sign-in of the integration after an auth error.
+    integration_id: Annotated[int | None, OMITTED_WHEN_NONE] = None
     # The server's structured content, which code mode programs receive in
     # place of `tool_result`. Live only: not saved or streamed.
     structured_result: dict[str, JsonValue] | None = Field(default=None, exclude=True)
@@ -457,6 +460,9 @@ class ToolContext(BaseModel):
     # its program function's (ChatFeature.called_name). Results that tell the
     # model to call another tool name it so.
     called_name: Callable[[str], str] = Field(default=str, exclude=True)
+    # A client shows the call's progress as it streams, so an app request of
+    # a VM command can wait for an approval card (sandbox/command_approvals.py).
+    shows_command_approvals: bool = False
 
 
 class ToolCallInfo(BaseModel):

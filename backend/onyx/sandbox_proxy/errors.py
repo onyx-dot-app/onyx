@@ -28,6 +28,7 @@ class SandboxProxyError(str, Enum):
     POLICY_DENIED = "policy_denied"
     CREDENTIAL_ERROR = "credential_error"
     DESTINATION_BLOCKED = "destination_blocked"
+    APPROVAL_NEEDS_TOOL = "approval_needs_tool"
 
     @property
     def message(self) -> str:
@@ -47,9 +48,9 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "requests are currently failing and stop attempting this call."
     ),
     SandboxProxyError.NO_ACTIVE_SESSION: (
-        "This request needs to be tied to an active Craft session for approval, "
-        "but no such session could be found, so it was blocked. This usually "
-        "means the session ended or the request was made outside of a Craft "
+        "This request needs to be tied to an active chat or Craft session for "
+        "approval, but no such session could be found, so it was blocked. This "
+        "usually means the session ended or the request was made outside of a "
         "session. Retrying the same request will not help — tell the user the "
         "action could not be authorized and ask how they want to proceed."
     ),
@@ -89,8 +90,7 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "The proxy could not obtain the credentials needed to authenticate this "
         "request, so it was blocked. The integration is likely not connected, or "
         "its saved credentials have expired or been revoked. Ask the user to "
-        "connect or reconnect this integration in their Craft settings, then "
-        "retry."
+        "connect or reconnect this integration, then retry."
     ),
     SandboxProxyError.DESTINATION_BLOCKED: (
         "This request targets an internal network address that sandboxes are not "
@@ -98,6 +98,14 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "the public internet and the Onyx API server are reachable from here. "
         "This is a fixed security boundary, not a transient error — do not retry "
         "against internal hosts (databases, caches, metadata endpoints, etc.)."
+    ),
+    SandboxProxyError.APPROVAL_NEEDS_TOOL: (
+        "This request needs the user's approval, and nobody could ask the "
+        "user for it: the command runs in the background, or this chat shows "
+        "no approval cards. It was not performed. When the chat can ask the "
+        "user, run the command in the foreground and wait for it. Otherwise "
+        "send the request through the chat tool that the detail names. If "
+        "the detail names no tool, the request cannot run in this chat."
     ),
 }
 

@@ -56,6 +56,12 @@ export interface TableQualifierColumn<TData> {
   imageAlt?: (row: TData) => string;
   /** The row's selection checkbox label. @default "Select row" */
   selectLabel?: (row: TData) => string;
+  /**
+   * Whether the row can be selected; select-all skips a row that cannot.
+   * Its checkbox shows disabled in a `"checkbox"` qualifier and stays
+   * hidden over an icon or image. @default every row
+   */
+  canSelect?: (row: TData) => boolean;
   /** A tinted tile behind the icon or image. @default false */
   background?: boolean;
   /**

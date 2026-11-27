@@ -2,6 +2,7 @@
 !deployment/
 !deployment/craft-runtime/
 !deployment/craft-runtime/**
+deployment/craft-runtime/browser-service/node_modules
 !backend/
 !backend/onyx/
 !backend/onyx/server/

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import threading
 from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -26,7 +25,13 @@ from onyx.utils.playwright_fetch import (
     fetch_rendered_html,
     looks_like_cloudflare_challenge,
 )
-from onyx.utils.url import SSRFException, ssrf_safe_get
+from onyx.utils.url import (
+    BodyReadError,
+    BodyReadFailure,
+    SSRFException,
+    read_bounded_body,
+    ssrf_safe_get,
+)
 from onyx.utils.web_content import (
     decode_html_bytes,
     extract_pdf_text,
@@ -43,7 +48,6 @@ DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
 DEFAULT_MAX_PDF_SIZE_BYTES = OPEN_URL_MAX_PDF_SIZE_BYTES
 DEFAULT_MAX_HTML_SIZE_BYTES = OPEN_URL_MAX_HTML_SIZE_BYTES
 DEFAULT_MAX_WORKERS = 5
-_BODY_CHUNK_SIZE = 64 * 1024
 
 # Headers that, when present on a 4xx response, signal that the upstream
 # is a Cloudflare-style bot challenge (vs. a real auth/not-found error)
@@ -92,53 +96,10 @@ def _failed_result(url: str, failure_reason: str | None = None) -> WebContent:
     )
 
 
-class _BodyReadError(Exception):
-    def __init__(self, failure_reason: str) -> None:
-        super().__init__(failure_reason)
-        self.failure_reason = failure_reason
-
-
-def _read_bounded_body(
-    response: requests.Response, *, max_bytes: int, deadline_seconds: float
-) -> bytes:
-    """Read the decoded body, stopping once it exceeds ``max_bytes`` or the
-    wall-clock deadline passes. Raises ``_BodyReadError``."""
-    declared = response.headers.get("Content-Length")
-    if declared is not None and declared.isdigit() and int(declared) > max_bytes:
-        raise _BodyReadError(FailureReason.OVERSIZED_BODY)
-
-    deadline_hit = threading.Event()
-
-    def _on_deadline() -> None:
-        deadline_hit.set()
-        # Shutting down the read side ends a read blocked on a stalled server.
-        try:
-            response.raw.shutdown()
-        except Exception:
-            pass
-
-    timer = threading.Timer(deadline_seconds, _on_deadline)
-    timer.daemon = True
-    timer.start()
-    chunks: list[bytes] = []
-    total = 0
-    try:
-        # read1 returns what is available; urllib3 bounds decoded output.
-        while chunk := response.raw.read1(_BODY_CHUNK_SIZE, decode_content=True):
-            if deadline_hit.is_set():
-                break
-            total += len(chunk)
-            if total > max_bytes:
-                raise _BodyReadError(FailureReason.OVERSIZED_BODY)
-            chunks.append(chunk)
-    except urllib3.exceptions.HTTPError:
-        if not deadline_hit.is_set():
-            raise
-    finally:
-        timer.cancel()
-    if deadline_hit.is_set():
-        raise _BodyReadError(FailureReason.BODY_TIMEOUT)
-    return b"".join(chunks)
+_BODY_READ_FAILURE_REASONS: dict[BodyReadFailure, str] = {
+    BodyReadFailure.TOO_LARGE: FailureReason.OVERSIZED_BODY,
+    BodyReadFailure.DEADLINE: FailureReason.BODY_TIMEOUT,
+}
 
 
 def _has_cloudflare_signals(response: requests.Response) -> bool:
@@ -371,14 +332,14 @@ class OnyxWebCrawler(WebContentProvider):
 
         content_type = response.headers.get("Content-Type", "")
         try:
-            content = _read_bounded_body(
+            content = read_bounded_body(
                 response,
                 max_bytes=self._max_body_bytes,
                 deadline_seconds=self._body_deadline_seconds,
-            )
-        except _BodyReadError as exc:
+            ).content
+        except BodyReadError as exc:
             logger.warning("Onyx crawler rejected body of %s: %s", url, exc)
-            return _failed_result(url, exc.failure_reason)
+            return _failed_result(url, _BODY_READ_FAILURE_REASONS[exc.failure])
         except (requests.RequestException, urllib3.exceptions.HTTPError) as exc:
             logger.warning(
                 "Onyx crawler failed to read %s (%s)", url, exc.__class__.__name__

@@ -20,7 +20,7 @@ from typing import Any
 _BASE = "https://gmail.googleapis.com/gmail/v1/users/me/"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 25
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 # Each listed message needs its own metadata GET (Gmail's list returns only
 # id/threadId), so fan them out concurrently rather than N sequential calls.
 _MAX_FETCH_WORKERS = 8

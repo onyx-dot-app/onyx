@@ -86,11 +86,11 @@ test("groups actions with an unknown read-only state apart from write actions", 
   expect(
     await screen.findByText(copy.other.replace("{count}", "1"))
   ).toBeInTheDocument();
-  expect(screen.getByText("Write Actions (1)")).toBeInTheDocument();
-  expect(screen.getByText("Read-Only Actions (2)")).toBeInTheDocument();
+  expect(screen.getByText("Write Actions")).toBeInTheDocument();
+  expect(screen.getByText("Read-Only Actions")).toBeInTheDocument();
 });
 
-test("shows the default row, then read-only and write actions with counts", async () => {
+test("shows the default row, then read-only and write actions with their counts", async () => {
   mockFetch({ [URL_ACTIONS]: { default_policy: null, actions } });
   render(
     <IntegrationActionsTab
@@ -100,8 +100,8 @@ test("shows the default row, then read-only and write actions with counts", asyn
   );
   expect(await screen.findByText(copy.default.title)).toBeInTheDocument();
   expect(screen.getByText(copy.default.unset)).toBeInTheDocument();
-  expect(screen.getByText("Read-Only Actions (2)")).toBeInTheDocument();
-  expect(screen.getByText("Write Actions (1)")).toBeInTheDocument();
+  expect(screen.getByText("Read-Only Actions")).toBeInTheDocument();
+  expect(screen.getByText("Write Actions")).toBeInTheDocument();
   expect(screen.getByText("2 actions")).toBeInTheDocument();
   expect(screen.getByText("1 action")).toBeInTheDocument();
   expect(
@@ -280,7 +280,7 @@ test("Use defaults clears the admin values of a group", async () => {
       onOpenConfiguration={jest.fn()}
     />
   );
-  await screen.findByText("Write Actions (1)");
+  await screen.findByText("Write Actions");
   const selects = screen.getAllByRole("combobox");
   await u.click(selects[selects.length - 1] as HTMLElement);
   await u.click(await screen.findByRole("option", { name: copy.useDefaults }));
@@ -308,8 +308,10 @@ test("refreshes the actions of an MCP server", async () => {
     />
   );
   expect(await screen.findByText(copy.empty)).toBeInTheDocument();
+  expect(screen.queryByLabelText(copy.search)).not.toBeInTheDocument();
   await u.click(screen.getByRole("button", { name: copy.refresh }));
-  expect(await screen.findByText("Read-Only Actions (2)")).toBeInTheDocument();
+  expect(await screen.findByText("Read-Only Actions")).toBeInTheDocument();
+  expect(screen.getByLabelText(copy.search)).toBeInTheDocument();
   expect(
     fetchMock.mock.calls.some(
       ([input, init]) =>
@@ -370,7 +372,7 @@ test("has no Refresh button for an app and no edits without manage access", asyn
       onOpenConfiguration={jest.fn()}
     />
   );
-  await screen.findByText("Write Actions (1)");
+  await screen.findByText("Write Actions");
   expect(
     screen.queryByRole("button", { name: copy.refresh })
   ).not.toBeInTheDocument();

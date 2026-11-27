@@ -45,6 +45,7 @@ export interface ToolApproval {
 const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
   "approved",
   "approved_for_chat",
+  "approved_for_command",
   "rejected",
   "disabled",
   "cancelled",
@@ -85,6 +86,8 @@ export function toolApprovalStatus(
       return localStatus ?? "pending";
     case "approved_for_chat":
       return "approvedForSession";
+    case "approved_for_command":
+      return "approved";
     case "cancelled":
       return "closed";
     default:

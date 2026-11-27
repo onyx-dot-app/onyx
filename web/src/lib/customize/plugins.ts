@@ -44,6 +44,11 @@ function matches(
         entry.name,
         entry.description ?? "",
         ...entry.skills.map((skill) => skill.name),
+        entry.ownerEmail ?? "",
+        entry.marketplace?.name ?? "",
+        ...entry.skills.flatMap((skill) =>
+          skill.group_summaries.map((summary) => summary.group_name)
+        ),
       ]
         .join(" ")
         .toLocaleLowerCase(options.locale)

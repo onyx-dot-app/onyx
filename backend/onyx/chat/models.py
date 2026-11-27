@@ -40,6 +40,7 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
     IncognitoRecordMode,
+    IntegrationKind,
     QuestionAnsweredVia,
     QuestionOutcome,
 )
@@ -84,11 +85,11 @@ from onyx.tools.models import (
     ToolOptions,
     ToolPreference,
 )
+from onyx.tools.tool_implementations.api_app.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeExecutionResult,
     SavedCodeCell,
 )
-from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.question.models import (
     ToolQuestion,
     ToolQuestionAnswer,
@@ -111,6 +112,13 @@ class PendingChatMessage(BaseModel):
     deep_research: bool = False
     llm_override: LLMOverride | None = None
     mentions: Mentions
+
+
+class AgentStreamPointer(BaseModel):
+    """The live stream of a background run, and the tool call it last started."""
+
+    stream_id: int
+    activity_tool: str | None = None
 
 
 class QueuedChatTurn(BaseModel):
@@ -990,6 +998,9 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     # The turn offers the sandbox tools (sandbox_tools.py:SANDBOX_TOOLS).
     sandbox_tools: bool
+    # With the sandbox tools, also the browser tools (the browser_enabled
+    # setting when the turn began).
+    browser_tools: bool = False
     # The chat's files in its sandbox (chat/files.py:place_chat_files); none
     # without the sandbox tools.
     vm_chat_files: list[VmChatFile]
@@ -1133,6 +1144,7 @@ class SavedToolApproval(BaseModel):
     # belongs to.
     chat_message_id: int
     tool_call_id: str
+    action_id: str
     tool_name: str
     display_name: str
     arguments: dict[str, JsonValue]
@@ -1140,6 +1152,11 @@ class SavedToolApproval(BaseModel):
     decision: ApprovalDecision | None
     decided_via: ApprovalDecidedVia | None
     decided_at: datetime | None
+    # The kind of the request's integration. None for a built-in action and
+    # after the integration is deleted.
+    integration_kind: IntegrationKind | None = None
+    # The integration's name; None when it is gone or the loader skips it.
+    app_name: str | None = None
 
 
 class SavedToolQuestion(BaseModel):

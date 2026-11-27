@@ -6,6 +6,13 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
+import { customFixture } from "@/lib/skills/__fixtures__/picker";
+
+function owned(count: number) {
+  return Array.from({ length: count }, (_, index) =>
+    customFixture({ id: `skill-${index}`, user_permission: "OWNER" })
+  );
+}
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
@@ -14,28 +21,52 @@ jest.mock("@/providers/UserProvider", () => ({
     adminCapabilities: [],
   }),
 }));
+const mockUseShareableUsers = jest.fn((_params: { enabled?: boolean }) => ({
+  data: [
+    { id: "user-1", email: "subash@onyx.app" },
+    { id: "user-2", email: "thomas@onyx.app" },
+  ],
+}));
+const mockUseShareableGroups = jest.fn((_enabled?: boolean) => ({
+  data: [{ id: 7, name: "Cash Kings" }],
+}));
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
-  default: () => ({
-    data: [
-      { id: "user-1", email: "subash@onyx.app" },
-      { id: "user-2", email: "thomas@onyx.app" },
-    ],
-  }),
+  default: (params: { enabled?: boolean }) => mockUseShareableUsers(params),
 }));
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: [{ id: 7, name: "Cash Kings" }] }),
+  default: (enabled?: boolean) => mockUseShareableGroups(enabled),
 }));
 
 describe("BulkSkillSharingModal", () => {
+  it("loads users and groups only while open", () => {
+    const props = {
+      items: owned(2),
+      saving: false,
+      onClose: jest.fn(),
+      onSave: jest.fn(),
+    };
+    const { rerender } = render(
+      <BulkSkillSharingModal open={false} {...props} />
+    );
+    expect(mockUseShareableUsers).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
+    expect(mockUseShareableGroups).toHaveBeenLastCalledWith(false);
+
+    rerender(<BulkSkillSharingModal open {...props} />);
+    expect(mockUseShareableUsers).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true })
+    );
+    expect(mockUseShareableGroups).toHaveBeenLastCalledWith(true);
+  });
   it("shares all selected skills organization-wide without changing their installation policy", async () => {
     const user = setupUser();
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
       <BulkSkillSharingModal
-        count={80}
-        canChangeOrgAccess
+        items={owned(80)}
         open
         saving={false}
         onClose={jest.fn()}
@@ -68,8 +99,7 @@ describe("BulkSkillSharingModal", () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
       <BulkSkillSharingModal
-        count={2}
-        canChangeOrgAccess
+        items={owned(2)}
         open
         saving={false}
         onClose={jest.fn()}
@@ -93,8 +123,7 @@ describe("BulkSkillSharingModal", () => {
     const user = setupUser();
     const onClose = jest.fn();
     const props = {
-      count: 2,
-      canChangeOrgAccess: true,
+      items: owned(2),
       saving: false,
       onClose,
       onSave: jest.fn(),
@@ -120,13 +149,51 @@ describe("BulkSkillSharingModal", () => {
       screen.getByRole("button", { name: "Apply to 2 skills" })
     ).toBeDisabled();
   });
+  it("drops a staged publish once the selection loses organization access", async () => {
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    const props = {
+      open: true,
+      saving: false,
+      onClose: jest.fn(),
+      onSave,
+    };
+    const { rerender } = render(
+      <BulkSkillSharingModal items={owned(2)} {...props} />
+    );
+    await user.click(screen.getByRole("button", { name: "Who can access" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: "Everyone in the organization" })
+    );
+    rerender(
+      <BulkSkillSharingModal
+        items={[
+          ...owned(1),
+          customFixture({ id: "locked", content_locked: true }),
+        ]}
+        {...props}
+      />
+    );
+    await user.type(
+      screen.getByRole("combobox", { name: "Add users, groups, and accounts" }),
+      "sub"
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: /subash@onyx\.app/ })
+    );
+    await user.click(screen.getByRole("button", { name: "Apply to 2 skills" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        user_shares: [{ user_id: "user-1", permission: "VIEWER" }],
+      })
+    );
+  });
   it("adds people picked from the suggestion list to every selected skill", async () => {
     const user = setupUser();
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
       <BulkSkillSharingModal
-        count={2}
-        canChangeOrgAccess
+        items={owned(2)}
         open
         saving={false}
         onClose={jest.fn()}

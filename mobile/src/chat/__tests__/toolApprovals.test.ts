@@ -61,6 +61,7 @@ describe("toolApprovalStatus", () => {
   it.each([
     ["approved", "approved"],
     ["approved_for_chat", "approvedForSession"],
+    ["approved_for_command", "approved"],
     ["rejected", "rejected"],
     ["disabled", "disabled"],
     ["cancelled", "closed"],

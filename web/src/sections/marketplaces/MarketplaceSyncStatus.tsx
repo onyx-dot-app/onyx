@@ -34,14 +34,18 @@ export function useLastSyncCopy(
 
 interface MarketplaceSyncStatusProps {
   marketplace: MarketplaceSummary;
+  /** Show the failure reason under the last sync time. */
+  showError?: boolean;
 }
 
 export default function MarketplaceSyncStatus({
   marketplace,
+  showError = false,
 }: MarketplaceSyncStatusProps) {
   const t = useTranslations("plugins.marketplaces.sync");
   const lastSync = useLastSyncCopy();
   const state = marketplaceSyncState(marketplace);
+  const error = showError && state === "failed" ? marketplace.last_error : null;
   return (
     <Section flexDirection="row" justifyContent="start" gap={1} height="auto">
       <Badge title={t(`state.${state}`)} color={SYNC_STATE_COLOR[state]} />
@@ -53,10 +57,18 @@ export default function MarketplaceSyncStatus({
           maxLines={2}
           overflowTooltip
         >
-          {state === "failed" && marketplace.last_error
-            ? marketplace.last_error
-            : lastSync(marketplace)}
+          {lastSync(marketplace)}
         </Text>
+        {error && (
+          <Text
+            font="secondary-body"
+            color="status-error-05"
+            maxLines={2}
+            overflowTooltip
+          >
+            {error}
+          </Text>
+        )}
       </Section>
     </Section>
   );

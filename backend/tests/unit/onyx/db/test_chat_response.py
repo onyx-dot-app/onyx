@@ -427,8 +427,11 @@ def test_saved_cancelled_answer_preserves_the_stop_reason(
     assert save.call_args.kwargs["pre_answer_processing_time"] >= 5
 
 
-def test_history_keeps_deadline_cancellation_out_of_error_fields() -> None:
-    failure = RunFailure(kind=RunFailureKind.DEADLINE, message="Deadline reached")
+@pytest.mark.parametrize(
+    "kind", [RunFailureKind.DEADLINE, RunFailureKind.STOPPED_BY_USER]
+)
+def test_history_keeps_a_stop_out_of_error_fields(kind: RunFailureKind) -> None:
+    failure = RunFailure(kind=kind, message="Stopped")
     message = ChatMessage(
         mentions=[],
         id=1,

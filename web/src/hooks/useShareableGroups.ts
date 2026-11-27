@@ -13,13 +13,16 @@ export interface MinimalUserGroupSnapshot {
 // TODO (@raunakab):
 // Refactor this hook to live inside of a special `ee` directory.
 
-export default function useShareableGroups() {
+/** `enabled` false skips the fetch, for a dialog that is closed. */
+export default function useShareableGroups(enabled = true) {
   const settings = useSettings();
   const isPaidEnterpriseFeaturesEnabled =
     !settings.isLoading && settings.enterprise !== null;
 
   const { data, error, isLoading } = useSWR<MinimalUserGroupSnapshot[]>(
-    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.shareableGroups : null,
+    isPaidEnterpriseFeaturesEnabled && enabled
+      ? SWR_KEYS.shareableGroups
+      : null,
     errorHandlingFetcher
   );
 

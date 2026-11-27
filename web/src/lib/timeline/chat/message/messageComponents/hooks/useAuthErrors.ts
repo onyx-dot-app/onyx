@@ -11,6 +11,8 @@ export interface AuthError {
   turnIndex: number;
   toolName: string;
   toolId: number | null;
+  /** The integration of an app tool, which has no tool ID. */
+  integrationId: number | null;
 }
 
 export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
@@ -58,8 +60,13 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
       continue;
     }
 
+    // One card for each integration: an app has a tool for each action.
     const key =
-      delta.tool_id != null ? `id:${delta.tool_id}` : `name:${delta.tool_name}`;
+      delta.tool_id != null
+        ? `id:${delta.tool_id}`
+        : delta.integration_id != null
+          ? `integration:${delta.integration_id}`
+          : `name:${delta.tool_name}`;
     if (seen.has(key)) {
       continue;
     }
@@ -68,6 +75,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
       turnIndex: packet.placement.turn_index,
       toolName: labels.get(callKey(packet.placement)) ?? delta.tool_name,
       toolId: delta.tool_id ?? null,
+      integrationId: delta.integration_id ?? null,
     });
   }
 

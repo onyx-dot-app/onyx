@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob b64a60dc3c36eb519c6bdd345a91460604c787c0)
-# at commit e39a377074 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 1f734b2c927287620f006a68e99723a5557598ee)
+# at commit 3be401fe6a by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -778,16 +778,16 @@ class InstallSkillResponse(_message.Message):
     def __init__(self, installed: bool = ..., files: _Optional[int] = ..., expanded_bytes: _Optional[int] = ...) -> None: ...
 
 class BrowserStartRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("profile_session_id",)
+    PROFILE_SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    profile_session_id: str
+    def __init__(self, profile_session_id: _Optional[str] = ...) -> None: ...
 
 class BrowserStartResponse(_message.Message):
-    __slots__ = ("cdp_port", "started")
-    CDP_PORT_FIELD_NUMBER: _ClassVar[int]
-    STARTED_FIELD_NUMBER: _ClassVar[int]
-    cdp_port: int
-    started: bool
-    def __init__(self, cdp_port: _Optional[int] = ..., started: bool = ...) -> None: ...
+    __slots__ = ("service_protocol",)
+    SERVICE_PROTOCOL_FIELD_NUMBER: _ClassVar[int]
+    service_protocol: int
+    def __init__(self, service_protocol: _Optional[int] = ...) -> None: ...
 
 class BrowserStopRequest(_message.Message):
     __slots__ = ()

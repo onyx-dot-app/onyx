@@ -426,7 +426,9 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     expect(screen.getByText("Edited 2 files")).toBeInTheDocument();
     // Each patch shows each file's diff under a header with its path.
     expect(screen.getAllByText("new.py")).toHaveLength(2);
-    expect(screen.getAllByText("old.py → moved.py")).toHaveLength(2);
+    // A moved file's title is where it went; its first row, where from.
+    expect(screen.getAllByText("moved.py")).toHaveLength(2);
+    expect(screen.getAllByText("Moved from old.py")).toHaveLength(2);
     expect(screen.getAllByText("print('hi')")).toHaveLength(2);
     expect(screen.getAllByText("a = 2")).toHaveLength(2);
     // The diffs name the changed files, so no file list repeats them.

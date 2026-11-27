@@ -208,12 +208,14 @@ def _folder_access(permissions: list[GoogleDrivePermission]) -> ExternalAccess:
         "ee.onyx.external_permissions.google_drive.doc_sync.get_permissions_by_ids",
         return_value=permissions,
     ):
-        return get_external_access_for_folder(
+        access = get_external_access_for_folder(
             folder={"id": "folder-1", "permissionIds": ["p1"]},
             google_domain=COMPANY_DOMAIN,
             ops=_mock_ops(),
             user_email=ADMIN_EMAIL,
         )
+    assert access is not None
+    return access
 
 
 def _folder_domain_permission(

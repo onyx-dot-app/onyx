@@ -14,3 +14,9 @@ export const ANSWER_REMARK_PLUGINS: PluggableList = [
   remarkGithubAlerts,
   remarkDetails,
 ];
+
+/** For the last block of a streaming answer: hides a tag still arriving. */
+export const STREAMING_ANSWER_REMARK_PLUGINS: PluggableList = [
+  ...ANSWER_REMARK_PLUGINS.slice(0, -1),
+  [remarkDetails, { streaming: true }],
+];

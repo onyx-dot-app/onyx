@@ -112,6 +112,16 @@ export interface ChatSubagent {
   stopped_by_user: boolean;
   /** When its current or latest run started, as an ISO date. */
   started_at: string | null;
+  /** Its current or latest run; another branch's run has another id. */
+  latest_run_id: number | null;
+  /** The live stream of its running response, while it runs. */
+  stream_id: number | null;
+  /** The tool that its running response last called. */
+  activity_tool: string | null;
+  /** The model of its current or latest run. */
+  model: string | null;
+  /** How long its latest run worked, once saved. */
+  duration_seconds: number | null;
 }
 
 /** The chat's background agents, as `useChatSubagents` gives them. */
@@ -163,7 +173,8 @@ export interface ApprovalDecisionResponse {
   approval_id: string;
   decision: "APPROVED" | "REJECTED";
   // "POLICY": the action policy disabled the tool, so the approval rejected it.
-  decided_via: "USER" | "SESSION_GRANT" | "POLICY";
+  // "COMMAND_GRANT": approved for the rest of a VM command.
+  decided_via: "USER" | "SESSION_GRANT" | "POLICY" | "COMMAND_GRANT";
   /** The stream that continues the suspended response, when it runs. */
   continuation: ChatStream | null;
 }

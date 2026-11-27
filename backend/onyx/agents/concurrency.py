@@ -343,6 +343,11 @@ class EventDelivery:
         self._owns_dispatcher = dispatcher is None
         self.dispatcher = dispatcher if dispatcher is not None else EventDispatcher()
 
+    @property
+    def forwards_to_parent(self) -> bool:
+        """Whether a foreground parent's listeners also receive these events."""
+        return self._parent is not None
+
     def subscribe(self, listener: Callable[[AgentEvent], None]) -> Callable[[], None]:
         with self._lock:
             if not self._closing:

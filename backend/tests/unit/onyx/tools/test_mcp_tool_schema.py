@@ -22,14 +22,15 @@ from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
 from onyx.tools.ordering import ToolRank
+from onyx.tools.tool_implementations.api_app.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.api_app.rest_tool import RestTool
 from onyx.tools.tool_implementations.code_mode.shapes import OPENAI_CODE_MODE
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,
     _normalize_parameters_schema,
 )
+from tests.unit.fakes import NO_CREDENTIALS
 
 
 class TestNormalizeParametersSchema:
@@ -199,8 +200,14 @@ class TestMCPToolLLMNames:
             spec={},
         )
         custom_tools = [
-            CustomTool(
-                integration_id=id, method_spec=method, base_url="https://example.com"
+            RestTool(
+                integration_id=id,
+                method_spec=method,
+                base_url="https://example.com",
+                headers={},
+                approval=None,
+                action_key=method.raw_name,
+                credentials=NO_CREDENTIALS,
             )
             for id in (1, 2)
         ]
@@ -243,10 +250,14 @@ class TestMCPToolLLMNames:
             )
             tools.extend(
                 [
-                    CustomTool(
+                    RestTool(
                         integration_id=1,
                         method_spec=method,
                         base_url="https://example.com",
+                        headers={},
+                        approval=None,
+                        action_key=method.raw_name,
+                        credentials=NO_CREDENTIALS,
                     ),
                     _make_tool({}, tool_name=name, server_name="server" * 20),
                 ]

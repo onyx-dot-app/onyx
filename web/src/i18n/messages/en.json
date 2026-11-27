@@ -141,44 +141,6 @@
         "tooltip": "{description}\nPrefer this tool for this chat. The agent may answer without using it."
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "Cancel"
-      },
-      "copyButton": {
-        "tooltip": "Copy definition"
-      },
-      "definition": {
-        "invalidJson": "Invalid JSON format",
-        "placeholder": "Enter your OpenAPI schema here",
-        "required": "OpenAPI schema definition is required",
-        "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this plugin. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI plugins]({docsUrl}).",
-        "title": "OpenAPI Schema Definition"
-      },
-      "empty": {
-        "description": "Provide OpenAPI schema to preview actions here.",
-        "title": "No Actions Found"
-      },
-      "formatButton": {
-        "tooltip": "Format definition"
-      },
-      "method": {
-        "noSummary": "No summary provided"
-      },
-      "toasts": {
-        "actionCreated": "OpenAPI plugin created successfully",
-        "invalidJson": "Invalid JSON format in OpenAPI schema definition"
-      },
-      "humanDescription": {
-        "title": "Description for Humans",
-        "hint": "Displayed on the plugin card and in plugin details."
-      },
-      "agentDescription": {
-        "title": "Description for Agents",
-        "hint": "Edits info.description in the OpenAPI schema.",
-        "disabled": "Enter a valid schema to edit this field."
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(Disconnected)"
@@ -360,10 +322,8 @@
       "detectedTransport": "Transport: {transport}",
       "authenticationUndetected": "Choose the authentication method on the next page.",
       "details": "Details",
-      "checking": "Checking server…",
       "serverDetails": "Server details",
       "authentication": "Authentication",
-      "continue": "Continue",
       "back": "Back"
     },
     "policyEditor": {
@@ -1521,6 +1481,10 @@
           "description": "Search the web for real-time information and up-to-date results.",
           "title": "Web Search"
         }
+      },
+      "browser": {
+        "title": "Browser",
+        "description": "Let the agent use a web browser in its sandbox. Users can watch it and take control in the chat panel."
       }
     },
     "codeInterpreter": {
@@ -10392,51 +10356,22 @@
     },
     "integrations": {
       "title": "Integrations",
-      "description": "Connect MCP servers and apps. Each integration has an owner, an install setting and its own shares.",
+      "description": "Connect MCP servers and apps.",
       "search": "Search integrations",
       "open": "Open {name}",
       "loadFailed": "Could not load the integrations.",
       "add": {
         "label": "Add",
-        "title": "Add an Integration",
-        "description": "Connect a service so people can use it in chat and Craft.",
         "created": "Added {name}.",
         "createFailed": "Could not add the integration.",
-        "openapi": {
-          "title": "Add an OpenAPI App",
-          "schema": {
-            "title": "Schema",
-            "description": "Add the OpenAPI schema that defines the actions.",
-            "added": "{count, plural, one {The schema has # path.} other {The schema has # paths.}}",
-            "required": "Add a schema.",
-            "add": "Add schema",
-            "edit": "Edit schema"
-          }
-        },
         "preset": {
-          "title": "Start From",
           "loadFailed": "Could not load the presets.",
-          "instructions": "Setup instructions",
-          "credentialRequired": "Add this value.",
-          "description": "A preset fills in the name and sign-in of a built-in app. Choose Custom app to set up any HTTP service.",
-          "custom": "Custom app"
+          "credentialRequired": "Add this value."
         },
         "name": {
           "title": "Name",
           "placeholder": "Add a name",
           "required": "Add a name."
-        },
-        "descriptionField": {
-          "title": "Description",
-          "placeholder": "Add a description"
-        },
-        "custom": {
-          "patterns": {
-            "title": "URL Patterns",
-            "description": "Put one URL pattern on each line, for example https://api.example.com/*.",
-            "placeholder": "https://api.example.com/*",
-            "required": "Add at least one URL pattern."
-          }
         },
         "mcp": {
           "url": {
@@ -10445,7 +10380,6 @@
             "error": "Enter a valid server URL."
           },
           "probe": {
-            "checking": "Checking the server…",
             "public": "Found {count, plural, one {# tool} other {# tools}}. The server needs no sign-in.",
             "oauth": "The server uses OAuth sign-in.",
             "authUnknown": "The server needs sign-in. Add an API key header or OAuth.",
@@ -10456,8 +10390,7 @@
             "title": "Transport",
             "streamableHttp": "Streamable HTTP",
             "sse": "Server-sent events (SSE)"
-          },
-          "suggested": "Suggested Servers"
+          }
         },
         "owner": {
           "title": "Owner",
@@ -10469,31 +10402,118 @@
         "submit": "Add",
         "adding": "Adding…",
         "cancel": "Cancel",
-        "type": {
-          "title": "Type",
-          "description": "Choose how Onyx connects to the service.",
-          "mcp_server": {
-            "title": "MCP Server",
-            "description": "Connect a remote MCP server by its URL."
+        "rest": {
+          "import": {
+            "title": "Import a Spec",
+            "description": "Upload or paste an OpenAPI spec in JSON or YAML, or import it from a URL. Onyx fills in the base URL and one endpoint for each operation.",
+            "upload": "Upload or paste a spec",
+            "url": "Spec URL",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "Import",
+            "done": "{count, plural, one {Imported # endpoint.} other {Imported # endpoints.}}",
+            "failed": "Could not import the spec.",
+            "noActions": "Onyx skipped every operation in the spec, so the current endpoints stay. Use another spec."
           },
-          "openapi": {
-            "title": "OpenAPI App",
-            "description": "Make actions from an OpenAPI schema."
+          "baseUrl": {
+            "title": "Base URL",
+            "placeholder": "https://api.example.com",
+            "required": "Add a base URL."
           },
-          "app": {
-            "title": "App",
-            "description": "Start from a preset, such as GitHub, or a custom app."
+          "endpoints": {
+            "title": "Endpoints",
+            "description": "Put one endpoint on each line: the method, the path, optional query parameters and a name. Each endpoint becomes an action.",
+            "placeholder": "GET /tickets?status&limit List tickets",
+            "required": "Add at least one endpoint.",
+            "lineError": "Line {line} ({text}): {message}"
           }
         },
-        "details": {
-          "title": "Details"
+        "graphql": {
+          "endpointUrl": {
+            "title": "Endpoint URL",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "Add an endpoint URL."
+          },
+          "schema": {
+            "title": "Schema",
+            "description": "Paste the schema in GraphQL SDL, upload a .graphql file, or load it from the endpoint. Each query and mutation becomes an action.",
+            "upload": "Upload a .graphql file",
+            "required": "Add a schema."
+          },
+          "introspect": {
+            "submit": "Load from Endpoint",
+            "done": "Loaded the schema.",
+            "failed": "Could not load the schema."
+          }
         },
-        "signIn": {
-          "title": "Sign-In"
+        "menu": {
+          "mcpServer": "MCP server",
+          "customApi": "Custom API",
+          "fromCatalog": "From catalog"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "Add MCP Server",
+            "description": "Connect a remote MCP server by its URL."
+          },
+          "api": {
+            "title": "Add Custom API",
+            "description": "Connect a REST or GraphQL API. Onyx finds the endpoints from the URL or a spec."
+          },
+          "catalog": {
+            "title": "Add from Catalog",
+            "description": "Pick an app or an MCP server to set up."
+          },
+          "namedTitle": "Add {name}"
+        },
+        "catalog": {
+          "title": "Browse the Catalog",
+          "description": "Apps and hosted MCP servers that Onyx already knows how to connect.",
+          "browse": "Browse"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "An OpenAPI spec URL, a GraphQL endpoint or a base URL",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "Enter a valid URL, or upload a spec.",
+            "needed": "Add the URL of the API. The spec does not give one."
+          },
+          "upload": {
+            "label": "Upload a spec file",
+            "chosen": "Spec: {file}",
+            "remove": "Remove the spec"
+          },
+          "failed": "Could not read the spec.",
+          "specError": "The spec cannot be added: {detail}",
+          "tooLarge": "The file is larger than 5 MB.",
+          "checkFailed": "Onyx could not check the URL. Try again.",
+          "noActions": "Onyx skipped every operation in the spec, so it gives no actions. Use another spec, or remove the spec and enter the API base URL to add the endpoints by hand."
+        },
+        "detected": {
+          "openapi": "REST API, {count, plural, one {# endpoint} other {# endpoints}}",
+          "openapiSkipped": "REST API, {count, plural, one {# endpoint} other {# endpoints}}. {skipped} skipped.",
+          "skippedTitle": "Skipped endpoints",
+          "rest": "REST API with no spec. Add the endpoints below.",
+          "restUnreachable": "Onyx cannot reach the URL: {detail} You can still add it as a REST API with no spec. Add the endpoints below.",
+          "restTooLarge": "Onyx cannot check the URL for a spec: {detail} You can still add it as a REST API with no spec, or upload a smaller spec file. Add the endpoints below.",
+          "graphql": "GraphQL API, {queries, plural, one {# query} other {# queries}} and {mutations, plural, one {# mutation} other {# mutations}}",
+          "preset": "Built-in app. Onyx calls its API."
+        },
+        "continue": "Continue",
+        "back": "Back",
+        "detecting": "Checking the URL…",
+        "advanced": "Advanced",
+        "setup": {
+          "title": "Set Up {name}",
+          "callbackUrl": "Callback URL",
+          "copyCallbackUrl": "Copy the callback URL",
+          "scopes": "Scopes",
+          "open": "Open {name}"
         }
       },
       "filters": {
         "label": "Integration type",
+        "selected": "Integration type: {type}",
         "all": "All types",
         "mcp": "MCP servers",
         "api": "Apps"
@@ -10513,9 +10533,10 @@
       },
       "shape": {
         "mcp_server": "MCP server",
-        "openapi": "OpenAPI app",
+        "openapi": "REST app",
         "preset": "App",
-        "custom": "Custom app"
+        "custom": "URL-pattern app",
+        "graphql": "GraphQL app"
       },
       "signInSummary": "{mode, select, none {No sign-in} shared {{method, select, oauth2 {Organization account (OAuth)} api_key {Organization API key} onyx_login {Onyx login} managed {Managed by Onyx} other {Organization account}}} individual {{method, select, oauth2 {Each user (OAuth)} api_key {Each user (API key)} onyx_login {Onyx login} managed {Managed by Onyx} other {Each user}}} other {Unknown}}",
       "status": {
@@ -10592,7 +10613,6 @@
         "overview": {
           "readOnly": "You can see this integration. You cannot change it.",
           "noDescription": "No description",
-          "type": "Type",
           "signIn": "Sign-in",
           "createdBy": "Added by",
           "needsSetup": "Needs setup",
@@ -10623,19 +10643,18 @@
           },
           "description": "Description",
           "menu": "More actions",
-          "owner": "Owner"
+          "owner": "Owner",
+          "urlPatternApp": {
+            "title": "This app uses URL patterns",
+            "description": "Onyx no longer adds URL-pattern apps. To replace this app, add a custom REST app for each host that its URL patterns reach. Do the setup steps in the docs before you delete this app."
+          }
         },
         "configuration": {
           "readOnly": "You can see this integration. You cannot change it.",
           "connection": {
             "title": "Connection",
             "serverUrl": "Server URL",
-            "serverUrlError": "Enter a valid server URL.",
-            "urlPatterns": "URL Patterns",
-            "urlPatternsDescription": "Put one URL pattern on each line.",
-            "schema": "OpenAPI Schema",
-            "schemaDescription": "Onyx syncs the actions again when you save a changed schema.",
-            "schemaError": "Enter the schema as a JSON object."
+            "serverUrlError": "Enter a valid server URL."
           },
           "signIn": {
             "title": "Sign-in",
@@ -10683,11 +10702,11 @@
           },
           "usesDefault": "Uses default",
           "setByAdmin": "Set by admin",
-          "alwaysAsks": "Craft asks before each request that matches no other action. You cannot set Allow.",
+          "alwaysAsks": "Onyx asks before each request that matches no other action. You cannot set Allow.",
           "useDefaults": "Use defaults",
-          "readOnly": "Read-Only Actions ({count})",
-          "write": "Write Actions ({count})",
-          "other": "Other Actions ({count})",
+          "readOnly": "Read-Only Actions",
+          "write": "Write Actions",
+          "other": "Other Actions",
           "empty": "This integration has no actions.",
           "connectFirst": {
             "title": "Connect the server first",
@@ -10703,8 +10722,8 @@
         "saved": "{name} is now {policy}.",
         "saveFailed": "Could not save the install setting.",
         "title": "Install Setting",
-        "description": "Who gets this integration. Not available keeps it private: only its owner, the people it is shared with and the groups with their own setting use it. Remove those group settings to limit it to the owner and the shares.",
-        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it.",
+        "description": "Who in the organization gets this integration.",
+        "notAvailable": "Private. Only the owner and the people it is shared with use it.",
         "required": "Members who sign in with their own account must connect it before they can use chat and Craft."
       },
       "ownedBy": "Owned by {owner}",
@@ -10712,6 +10731,10 @@
         "saved": "Group settings of {name} saved.",
         "saveFailed": "Could not save the group setting."
       }
+    },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Upload Claude Code and Codex plugins, and sync marketplaces from GitHub. A plugin is a set of skills, and it lists the integrations that those skills need."
     },
     "serviceStatus": {
       "page": {
@@ -11049,7 +11072,7 @@
         "loadFailed": "Could not load the integrations.",
         "lock": {
           "adminBlocked": "Allow is not available: an admin blocked this action.",
-          "alwaysAsks": "Allow is not available: Craft asks for approval for each of these requests.",
+          "alwaysAsks": "Allow is not available: Onyx asks for approval for each of these requests.",
           "adminFinal": "Allow is not available: the admin setting of this integration is final."
         },
         "noActions": "This integration has no actions yet.",
@@ -12210,9 +12233,6 @@
           "text": "The response stopped because it reached its time limit."
         }
       },
-      "agentResults": {
-        "received": "Subagent results received"
-      },
       "callout": {
         "note": {
           "title": "Note"
@@ -12776,6 +12796,9 @@
             },
             "noLines": {
               "label": "{change, select, delete {Delete file} other {Empty file}}"
+            },
+            "movedFrom": {
+              "label": "Moved from {path}"
             }
           },
           "stopped": {
@@ -12787,6 +12810,62 @@
             },
             "failed": {
               "status": "Publish failed"
+            }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {Opening {target}} failed {Could not open {target}} canceled {Canceled} other {Opened {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Opening a new tab} failed {Could not open a new tab} canceled {Canceled} other {Opened a new tab}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Going to {target}} failed {Could not go to {target}} canceled {Canceled} other {Went to {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Reading the page} failed {Could not read the page} canceled {Canceled} other {Read the page}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Using the page} failed {Could not use the page} canceled {Canceled} other {Used the page}}",
+              "click": {
+                "status": "{phase, select, running {Clicking an element} failed {Could not click the element} canceled {Canceled} other {Clicked an element}}"
+              },
+              "type": {
+                "status": "{phase, select, running {Typing “{text}”} failed {Could not type “{text}”} canceled {Canceled} other {Typed “{text}”}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {Hovering over an element} failed {Could not hover over the element} canceled {Canceled} other {Hovered over an element}}"
+              },
+              "select": {
+                "status": "{phase, select, running {Selecting an option} failed {Could not select the option} canceled {Canceled} other {Selected an option}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {Dragging an element} failed {Could not drag the element} canceled {Canceled} other {Dragged an element}}"
+              },
+              "press": {
+                "status": "{phase, select, running {Pressing {key}} failed {Could not press {key}} canceled {Canceled} other {Pressed {key}}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {Scrolling the page} failed {Could not scroll the page} canceled {Canceled} other {Scrolled the page}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {Uploading files} failed {Could not upload the files} canceled {Canceled} other {Uploaded files}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Waiting for the page} failed {The page did not get ready} canceled {Canceled} other {Waited for the page}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Running a page script} failed {The page script failed} canceled {Canceled} other {Ran a page script}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Answering a page dialog} failed {Could not answer the page dialog} canceled {Canceled} other {Answered a page dialog}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Checking the browser} failed {Could not check the browser} canceled {Canceled} other {Checked the browser}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Going back} forward {Going forward} other {Reloading the page}}} failed {Could not change the page} canceled {Canceled} other {{history, select, back {Went back} forward {Went forward} other {Reloaded the page}}}}"
             }
           }
         },
@@ -12809,14 +12888,6 @@
           }
         },
         "agentTool": {
-          "spawn": {
-            "running": "Spawning subagent {name}",
-            "done": "Spawned subagent {name}",
-            "failed": "Could not spawn subagent {name}",
-            "runningUnnamed": "Spawning subagent",
-            "doneUnnamed": "Spawned subagent",
-            "failedUnnamed": "Could not spawn subagent"
-          },
           "send": {
             "running": "Sending message to {name}",
             "done": "Sent message to {name}",
@@ -12833,6 +12904,17 @@
             "doneUnnamed": "Interrupted subagent",
             "failedUnnamed": "Could not interrupt subagent"
           }
+        },
+        "agentGroup": {
+          "title": "{count, plural, one {# subagent} other {# subagents}}",
+          "summary": {
+            "working": "{count, number} working",
+            "done": "{count, number} done",
+            "failed": "{count, number} failed",
+            "stopped": "{count, number} stopped"
+          },
+          "activity": "Using {tool}",
+          "open": "Open {name}"
         }
       },
       "toolApproval": {
@@ -13567,6 +13649,9 @@
       },
       "resizeHandle": {
         "label": "Resize panel"
+      },
+      "browserTab": {
+        "label": "Browser"
       }
     },
     "export": {
@@ -13627,6 +13712,126 @@
       "next": "Next match",
       "placeholder": "Find in session",
       "previous": "Previous match"
+    },
+    "subagents": {
+      "status": {
+        "starting": "Starting",
+        "running": "Running",
+        "waiting": "Waiting",
+        "completed": "Completed",
+        "stopped": "Stopped",
+        "failed": "Failed",
+        "limit": "Hit step limit"
+      },
+      "timedStatus": {
+        "running": "Running {elapsed}",
+        "waiting": "Waiting {elapsed}",
+        "completed": "Completed in {elapsed}"
+      },
+      "view": {
+        "parent": "Subagent of",
+        "parentOf": "Subagent of · {title}",
+        "openParentChat": "Open parent chat",
+        "empty": "This agent has no messages yet.",
+        "failed": "Could not load this agent's conversation."
+      },
+      "bar": {
+        "runsOnItsOwn": "Runs on its own",
+        "openParent": "Open parent",
+        "announcement": "{model} subagent: {status}",
+        "announcementUnnamed": "Subagent: {status}"
+      }
+    },
+    "browser": {
+      "surface": {
+        "inputLabel": "Browser page",
+        "inputDescription": "Press Shift+Escape to leave the browser page."
+      },
+      "download": {
+        "action": "Download",
+        "saved": "The browser downloaded {fileName}"
+      },
+      "error": "The browser could not do that. Try again.",
+      "clearData": {
+        "action": "Clear browser data",
+        "title": "Clear Browser Data?",
+        "description": "This signs you out of every site in the browser and deletes its cookies, history and saved data, for all your chats.",
+        "confirm": "Clear data",
+        "done": "Browser data cleared",
+        "error": "Could not clear the browser data. Try again."
+      },
+      "urlBar": {
+        "back": "Back",
+        "forward": "Forward",
+        "reload": "Reload",
+        "label": "Address",
+        "placeholder": "Enter a URL"
+      },
+      "moreMenu": {
+        "label": "More browser actions"
+      },
+      "tabs": {
+        "new": "New tab"
+      },
+      "control": {
+        "you": "You control this tab",
+        "agent": "The agent controls this tab",
+        "anotherViewer": "Another window controls this tab",
+        "none": "No one controls this tab",
+        "take": "Take control",
+        "release": "Release control"
+      },
+      "status": {
+        "connecting": "Connecting to the browser",
+        "starting": "Starting the browser",
+        "blank": {
+          "title": "No page yet",
+          "description": "Type a URL above to open a page."
+        },
+        "noTabs": {
+          "title": "No page is open",
+          "description": "Pages the agent opens show here. You can also open a new tab."
+        },
+        "disconnected": {
+          "title": "The browser disconnected",
+          "description": "Trying to connect again."
+        },
+        "disabled": {
+          "title": "The browser is off",
+          "description": "An admin turned off the browser, or you cannot view this chat's browser."
+        },
+        "unreachable": {
+          "title": "Could not reach the browser",
+          "description": "Check that you are signed in and online, then try again."
+        },
+        "error": {
+          "title": "The browser is unavailable",
+          "description": "The chat's sandbox could not start. Try again later."
+        },
+        "retry": "Retry"
+      },
+      "dialog": {
+        "label": "Page dialog",
+        "from": "{origin} says",
+        "response": "Dialog response",
+        "responsePlaceholder": "Type a response",
+        "dismiss": "Dismiss",
+        "accept": "Accept",
+        "takeControl": "Take control to respond."
+      },
+      "fileChooser": {
+        "label": "Choose files for the page",
+        "askOne": "The page asks for a file.",
+        "askMany": "The page asks for files.",
+        "askOneFrom": "{origin} asks for a file.",
+        "askManyFrom": "{origin} asks for files.",
+        "cancel": "Cancel",
+        "chooseOne": "Choose file",
+        "chooseMany": "Choose files",
+        "inputLabel": "Files for the page",
+        "error": "Could not upload the files. Try again."
+      },
+      "answerError": "Could not answer the page. Try again."
     }
   },
   "common": {
@@ -14254,6 +14459,10 @@
         "button": "Approve for this chat",
         "tooltip": "Approve now and run this tool without asking again for the rest of this chat"
       },
+      "approveCommand": {
+        "button": "Approve for this command",
+        "tooltip": "Approve now and allow this action without asking again until the command ends"
+      },
       "approveOnce": {
         "ariaLabel": "Approve this action once",
         "button": "Approve once"
@@ -14264,7 +14473,8 @@
       },
       "deadline": "Approve by {time}",
       "header": {
-        "required": "Approval requested: {headline}"
+        "required": "Approval requested: {headline}",
+        "requiredBy": "Approval requested: {headline}. Approve by {time}"
       },
       "headline": {
         "multiAction": "{count, plural, one {# action} other {# actions}} in {app}",
@@ -14281,6 +14491,7 @@
         "expired": "Timed out: {headline}",
         "rejected": "Not approved: {headline}",
         "approvedForChat": "Approved for this chat: {headline}",
+        "approvedForCommand": "Approved for this command: {headline}",
         "approvedForSession": "Approved for this session: {headline}"
       },
       "submitError": "Could not submit your decision. Try again.",
@@ -16603,6 +16814,9 @@
         "integrations": {
           "label": "Integrations"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "slackBot": {
           "label": "Slack Bot"
         },
@@ -17166,15 +17380,11 @@
           "title": "Start from scratch"
         },
         "trigger": {
-          "label": "Create skill"
+          "label": "Create a skill"
         },
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",
           "title": "Upload a skill"
-        },
-        "marketplace": {
-          "title": "Add marketplace",
-          "description": "Add from a repository and sync its plugins."
         }
       },
       "empty": {
@@ -17403,17 +17613,13 @@
           "versions": "Versions"
         },
         "overview": {
-          "noDescription": "No description.",
           "location": "Location",
           "owner": "Owner",
-          "skills": "Skills",
-          "description": "Description",
           "version": "Version in plugin.json",
           "author": "Author",
           "homepage": "Homepage",
           "license": "License",
-          "notUsed": "Not used in Onyx",
-          "marketplace": "{name} marketplace, {scope, select, personal {personal} other {company}} ({repository})"
+          "notUsed": "Not used in Onyx"
         },
         "skills": {
           "off": "Off",
@@ -17427,11 +17633,7 @@
           "title": "Use this plugin",
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
-          "unavailable": "You cannot turn this plugin on or off.",
-          "failed": "Could not change the plugin.",
-          "on": "On. The default agent can use this plugin.",
-          "off": "Off. Turn it on to let the default agent use this plugin.",
-          "nameHeld": "Off because {names} uses the same skill name. Turn this plugin on to use it instead."
+          "unavailable": "You cannot turn this plugin on or off."
         },
         "actions": {
           "share": "Share",
@@ -17447,7 +17649,6 @@
           "done": "Deleted {name}.",
           "failed": "Could not delete the plugin."
         },
-        "syncedFrom": "Synced from {repository}",
         "managed": {
           "title": "Managed by the {name} marketplace",
           "description": "Onyx syncs this plugin from {repository}. Change it in GitHub, then sync the marketplace.",
@@ -17487,18 +17688,17 @@
         }
       },
       "alwaysAllow": {
-        "title": "Always Allow",
-        "description": "Run an action that asks for approval with no prompt.",
+        "description": "Your admin sets how each action runs. Turn on Don't ask me to run an action that asks without a prompt.",
         "loadFailed": "Could not load the actions.",
         "saveFailed": "Could not save. Try again.",
-        "alwaysAsks": "Craft asks for approval for each of these requests.",
+        "alwaysAsks": "Onyx asks for approval for each of these requests.",
         "switch": {
-          "label": "Always allow {name}"
+          "label": "Don't ask me for {name}",
+          "visibleLabel": "Don't ask me"
         },
         "retry": {
           "label": "Try again"
         },
-        "readOnlyTitle": "Actions",
         "readOnlyDescription": "Your admin sets how each action runs."
       },
       "oauthCallback": {
@@ -17562,10 +17762,7 @@
         "not_supported": "Not supported"
       },
       "note": {
-        "askAdmin": "Ask an admin",
-        "turnedOff": "Turned off by your admin",
-        "moreThanOne": "More than one integration matches",
-        "notSupported": "Not supported in Onyx"
+        "askAdmin": "Ask an admin"
       },
       "localServer": "Local server",
       "noUrl": "No server URL",
@@ -17717,7 +17914,8 @@
         "duplicate": {
           "personal": "You already added this marketplace.",
           "company": "Your organization already gets this marketplace."
-        }
+        },
+        "advanced": "Advanced"
       },
       "sync": {
         "now": "Sync now",
@@ -17742,10 +17940,6 @@
       "open": "Open {name}",
       "menu": "Actions for {name}",
       "loadFailed": "Could not load the marketplaces.",
-      "empty": {
-        "title": "No marketplaces yet",
-        "description": "Add a GitHub repository to get its plugins."
-      },
       "page": {
         "title": "Marketplaces",
         "description": "The GitHub repositories that you get plugins from, with their source. Sync a marketplace to get the changes from GitHub."
@@ -17804,6 +17998,20 @@
       "errors": {
         "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
         "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
+      }
+    },
+    "bulk": {
+      "updated": "{count, plural, one {# plugin updated} other {# plugins updated}}",
+      "failed": "Could not update plugins. Try again.",
+      "partialFailure": "{count, plural, one {# plugin could not be updated} other {# plugins could not be updated}}",
+      "deleteTitle": "{count, plural, one {Delete # plugin?} other {Delete # plugins?}}",
+      "deleteDescription": "{count, plural, one {This deletes the selected plugin for everyone who has access. This cannot be undone.} other {This deletes all # selected plugins for everyone who has access. This cannot be undone.}}",
+      "shareTitle": "{count, plural, one {Update Access for # Plugin} other {Update Access for # Plugins}}",
+      "shareDescription": "Apply these changes to every selected plugin. Settings left unchanged keep their current values.",
+      "addAccessDescription": "Add these people and groups to every selected plugin. People and groups you list get the chosen permission. Everyone else keeps their current access.",
+      "apply": "{count, plural, one {Apply to # plugin} other {Apply to # plugins}}",
+      "publishWarning": {
+        "description": "After you apply, everyone in the organization can use the selected plugins. Published plugins cannot be made private again. Only an admin can delete them."
       }
     }
   },
@@ -17894,18 +18102,12 @@
         "on": "Turned on",
         "off": "Turned off"
       },
-      "sort": {
-        "label": "Sort",
-        "updated": "Recently updated",
-        "name": "Name"
-      },
       "add": {
         "label": "Add",
         "upload": "Upload skill",
         "create": "Create a skill",
         "uploadPlugin": "Upload plugin",
-        "marketplace": "Add marketplace",
-        "manageMarketplaces": "Manage marketplaces"
+        "marketplace": "Add marketplace"
       },
       "groups": {
         "mine": "Created by you",
@@ -17926,7 +18128,7 @@
       },
       "subtitle": "{source} · {description}",
       "tag": {
-        "off": "Disabled",
+        "off": "Off",
         "required": "Required",
         "pending": "Pending review",
         "invalid": "Not valid"
@@ -17961,15 +18163,11 @@
       "status": {
         "connected": "Connected"
       },
-      "add": {
-        "label": "Add",
-        "integration": "Add integration",
-        "manage": "Manage integrations"
-      },
       "open": "Open {name}",
       "empty": {
         "title": "No integrations yet",
-        "description": "Ask your admin to add an integration."
+        "description": "Ask your admin to add an integration.",
+        "descriptionCanAdd": "Add one, or browse the catalog."
       },
       "noMatches": {
         "title": "No matching integrations",
@@ -17983,14 +18181,13 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin.",
-        "upload": "Upload Plugin"
+        "description": "Upload a plugin or add a marketplace from GitHub.",
+        "upload": "Upload plugin"
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. A plugin that holds only a SKILL.md at its root is on the Skills tab.",
       "integrations": "{available} of {needed} integrations available",
       "nameHeld": "Off: {names} uses the same skill name"
     },
@@ -18058,26 +18255,19 @@
       "loadFailed": "This integration is not available to you.",
       "tabs": {
         "overview": "Overview",
-        "configuration": "Configuration",
         "actions": "Actions"
       },
       "overview": {
-        "description": "Description",
-        "noDescription": "No description.",
         "type": "Type",
         "signIn": "Sign-in",
         "url": "Server URL",
         "owner": "Owner",
         "organization": "Organization",
-        "status": "Status",
         "switch": {
           "title": "Use This Integration",
           "description": "When this is on, you can use it in chats and in Craft.",
           "required": "Your admin made this integration required. You cannot turn it off."
         }
-      },
-      "configuration": {
-        "description": "{mode, select, individual {Your connection to this integration. Only you use it.} shared {The account of this integration. Everyone with access uses it.} other {This integration needs no sign-in.}}"
       }
     },
     "pluginPage": {

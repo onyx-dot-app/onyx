@@ -176,12 +176,22 @@ export interface ToolApprovalRequest {
   arguments: Record<string, unknown>;
   // The subagent that asks; null or absent for the root agent's own requests
   agent_name?: string | null;
+  // False when the card must not offer "Approve for this chat"
+  can_approve_for_chat?: boolean;
+  // An app request of a command: the card offers "Approve for this command"
+  // in place of "Approve for this chat"
+  can_approve_for_command?: boolean;
+  // The app of such a request
+  app_name?: string | null;
+  // When a command's request expires; set only for a command's requests
+  expires_at?: string | null;
 }
 
 export interface ToolApprovalResolved {
   type: "tool_approval_resolved";
   approval_id: string;
-  // approved | approved_for_chat | rejected | disabled | cancelled;
+  // approved | approved_for_chat | approved_for_command | rejected | disabled |
+  // cancelled;
   // anything else is ignored
   outcome: string;
 }

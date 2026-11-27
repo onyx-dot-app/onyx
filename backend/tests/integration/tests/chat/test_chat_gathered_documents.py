@@ -7,6 +7,7 @@ from uuid import uuid4
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.mock_llm import (
     MockLLMScript,
     tool_call_reply,
@@ -41,8 +42,10 @@ def test_two_searches_show_each_document_once_live_and_on_reload(
     # Two documents that both searches find. The search index keeps documents
     # of earlier tests, so the documents and queries share a unique term.
     term = f"project{uuid4().hex[:12]}"
-    seeded = document_builder([f"{term} budget notes", f"{term} staffing notes"])
+    contents = [f"{term} budget notes", f"{term} staffing notes"]
+    seeded = document_builder(contents)
     seeded_ids = {document.id for document in seeded}
+    DocumentManager.wait_until_searchable(contents, admin_user)
 
     # The model searches, searches again for the same documents, then answers
     # with citations.

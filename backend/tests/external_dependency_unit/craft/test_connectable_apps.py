@@ -18,7 +18,7 @@ from onyx.db.models import (
     Integration__User,
 )
 from onyx.integrations.connection_models import ConnectionSecret
-from onyx.integrations.craft import list_connectable_apps, list_runnable_integrations
+from onyx.integrations.craft import list_connectable_apps, list_turned_on_integrations
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
@@ -125,7 +125,7 @@ def test_a_share_makes_an_integration_runnable_when_the_user_turns_it_on(
     def runnable(user_id: UUID) -> list[int]:
         return [
             integration.id
-            for integration in list_runnable_integrations(db_session, user_id)
+            for integration in list_turned_on_integrations(db_session, user_id)
             if integration.id == private.id
         ]
 

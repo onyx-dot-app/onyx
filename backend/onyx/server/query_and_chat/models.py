@@ -530,6 +530,25 @@ class ChatSubagent(BaseModel):
     stopped_by_user: bool
     # When its current or latest run started
     started_at: datetime | None = None
+    # Its current or latest run; another run on another branch has another id
+    latest_run_id: int | None = None
+    # The live stream of its running response (`.../agents/{id}/stream`)
+    stream_id: int | None = None
+    # The tool that its running response last called
+    activity_tool: str | None = None
+    # The model of its current or latest run
+    model: str | None = None
+    # How long its latest run worked, once saved
+    duration_seconds: float | None = None
+
+
+class ChatSubagentHistory(BaseModel):
+    """A background agent's saved conversation, as a chat session's."""
+
+    messages: list[ChatMessageDetail]
+    packets: list[list[Packet]]
+    # The live stream of its running response; its saved packets lag it
+    stream: CurrentStreamInfo | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -596,6 +615,12 @@ class ChatSearchResponse(BaseModel):
     groups: list[ChatSessionGroup]
     has_more: bool
     next_page: int | None = None
+
+
+class BrowserUploadResponse(BaseModel):
+    """Paths of uploaded files, relative to the chat session directory."""
+
+    paths: list[str]
 
 
 # How a user may open an artifact link (GET /chat/artifacts/{artifact_id}):

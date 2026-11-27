@@ -1,6 +1,6 @@
-"""A later release can write an integration that this code cannot read, e.g.
-an API app with only an ``api_app`` row. After a rollback, each list skips
-that integration and still shows the others."""
+"""An API app with only an ``api_app`` row is a GraphQL app: each list shows
+it next to the others. An integration with no settings of a known shape (one
+that a later release wrote) is left out of a list, so the list still works."""
 
 from collections.abc import Generator
 from typing import Any
@@ -25,15 +25,17 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
 )
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.service import (
+    _shapes,
     admin_detail,
     agent_catalog,
     list_admin_integrations,
     list_member_integrations,
 )
-from onyx.server.features.integrations.models import MemberIntegrationState
+from onyx.server.features.integrations.models import (
+    IntegrationShape,
+    MemberIntegrationState,
+)
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.integration_helpers import (
@@ -110,61 +112,70 @@ class _Rows(BaseModel):
 
     admin: User
     member: User
-    readable: Integration
-    readable_grouped: Integration
-    unreadable: Integration
-    unreadable_grouped: Integration
+    openapi: Integration
+    openapi_grouped: Integration
+    graphql: Integration
+    graphql_grouped: Integration
 
 
 @pytest.fixture
 def rows(db_session: Session, make_test_user: MakeTestUser, group: UserGroup) -> _Rows:
-    """Two readable and two unreadable integrations. Each user has access to
+    """Two openapi and two graphql integrations. Each user has access to
     one of each; the others are limited to a group that no user is in."""
-    readable, _ = make_openapi_integration(db_session, openapi_schema=OPENAPI_SPEC)
-    readable_grouped, _ = make_openapi_integration(
+    openapi, _ = make_openapi_integration(db_session, openapi_schema=OPENAPI_SPEC)
+    openapi_grouped, _ = make_openapi_integration(
         db_session, openapi_schema=OPENAPI_SPEC
     )
-    unreadable = _graphql_integration(db_session)
-    unreadable_grouped = _graphql_integration(db_session)
-    give_access(db_session, [readable, unreadable])
-    for integration in (readable_grouped, unreadable_grouped):
+    graphql = _graphql_integration(db_session)
+    graphql_grouped = _graphql_integration(db_session)
+    give_access(db_session, [openapi, graphql])
+    for integration in (openapi_grouped, graphql_grouped):
         _limit_to_group(db_session, integration, group)
     return _Rows(
         admin=make_test_user("skip-shape-admin", is_admin=True),
         member=make_test_user("skip-shape-member"),
-        readable=readable,
-        readable_grouped=readable_grouped,
-        unreadable=unreadable,
-        unreadable_grouped=unreadable_grouped,
+        openapi=openapi,
+        openapi_grouped=openapi_grouped,
+        graphql=graphql,
+        graphql_grouped=graphql_grouped,
     )
 
 
-def test_admin_list_skips_an_unknown_shape(db_session: Session, rows: _Rows) -> None:
+def test_admin_list_shows_a_graphql_app(db_session: Session, rows: _Rows) -> None:
     ids = {view.id for view in list_admin_integrations(rows.admin, db_session)}
-    assert {rows.readable.id, rows.readable_grouped.id} <= ids
-    assert not {rows.unreadable.id, rows.unreadable_grouped.id} & ids
+    assert {
+        rows.openapi.id,
+        rows.openapi_grouped.id,
+        rows.graphql.id,
+        rows.graphql_grouped.id,
+    } <= ids
 
 
-def test_member_list_skips_an_unknown_shape(db_session: Session, rows: _Rows) -> None:
+def test_member_list_shows_a_graphql_app(db_session: Session, rows: _Rows) -> None:
     views = {
         view.id: view for view in list_member_integrations(rows.member, db_session)
     }
-    assert views[rows.readable.id].access.state is not MemberIntegrationState.NO_ACCESS
+    assert views[rows.graphql.id].access.state is not MemberIntegrationState.NO_ACCESS
     assert (
-        views[rows.readable_grouped.id].access.state is MemberIntegrationState.NO_ACCESS
+        views[rows.graphql_grouped.id].access.state is MemberIntegrationState.NO_ACCESS
     )
-    assert not {rows.unreadable.id, rows.unreadable_grouped.id} & set(views)
+    assert rows.openapi.id in views
 
 
-def test_agent_catalog_skips_an_unknown_shape(db_session: Session, rows: _Rows) -> None:
+def test_agent_catalog_shows_a_graphql_app(db_session: Session, rows: _Rows) -> None:
     ids = {option.id for option in agent_catalog(rows.member, db_session)}
-    assert rows.readable.id in ids
-    assert rows.unreadable.id not in ids
+    assert {rows.openapi.id, rows.graphql.id} <= ids
 
 
-def test_a_direct_read_of_an_unknown_shape_is_not_found(
+def test_a_direct_read_of_a_graphql_app_has_its_shape(
     db_session: Session, rows: _Rows
 ) -> None:
-    with pytest.raises(OnyxError) as error:
-        admin_detail(rows.admin, rows.unreadable, db_session)
-    assert error.value.error_code is OnyxErrorCode.NOT_FOUND
+    assert admin_detail(rows.admin, rows.graphql, db_session).shape is (
+        IntegrationShape.GRAPHQL
+    )
+
+
+def test_a_list_skips_an_integration_of_no_known_shape() -> None:
+    unknown = Integration(id=-1, kind=IntegrationKind.API, name="later-release")
+
+    assert _shapes([unknown], {}, skip_unknown=True) == {}

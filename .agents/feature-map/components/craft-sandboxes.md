@@ -62,10 +62,26 @@ This component owns:
   root, but it runs each command as the sandbox user (uid 1000,
   `--command-user`). `BrowserStart` and `BrowserStop` run one headless
   Chrome per VM, owned by the daemon outside the command cgroups, so it
-  outlives each command; clients attach to its DevTools (CDP) port.
+  outlives each command; clients attach to its DevTools (CDP) port. With
+  Chrome it starts the browser service, which owns the tabs of each chat,
+  and relays vsock port 3011 to it. The API server reaches the service
+  through the node agent's `Dial`, in the service's length-prefixed frames:
+  one exchange per agent browser call (`HarnessSandbox.browser_call`), and
+  one long stream per live view (`open_browser_stream`), which the chat's
+  browser websocket route pumps to the owner's browser. The view re-reads the
+  session cookie and the user at each lease renewal and closes on a logout,
+  a deactivation or a lost permission. A check that cannot complete closes
+  the view with 1012, and the reconnect checks again. The routes refuse the
+  browser when the settings cannot be read. The same routes write file chooser
+  uploads, serve the files that the browser downloaded into the chat's
+  `downloads/` (`GET /chat/sessions/{id}/browser/downloads/{name}`), and
+  clear browser data.
   Session saves in this
-  runtime hold only `attachments/`, without dependencies
-  (tar + zstd). The node agent moves the archive to and from object storage
+  runtime hold each session's top-level files and directories, the chat's
+  browser `downloads/` included. They leave out dependencies, caches, the
+  file copies in `attachments/` and browser uploads (tar + zstd). The
+  browser profile, with its sign-in cookies, is a session save too: the
+  session named by the sandbox ID. The node agent moves the archive to and from object storage
   with presigned URLs from the API server.
 
 Neighbours:
@@ -361,7 +377,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   search result files use them: see
   the docstring of `tools/tool_implementations/sandbox/file_copies.py`
   ([[code-execution]])), and busy signals (turn,
-  background-copy and parked-approval marks).
+  background-copy, parked-approval and live view marks; an open live view
+  renews its `browser_view:<chat>` mark).
   `read_file`, `write_file`,
   `delete_file` and `delete_listed_files` also take an absolute path under
   `ONYX_VM_FILES_ROOT` (`/tmp/onyx`,
@@ -447,6 +464,15 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   placement is still that instance. Session setup takes no command slot.
   The stop renews its sandbox lock before each session's save and keeps the
   VM if it lost the lock. A session with no directory keeps its last save.
+  The browser profile (the user's sign-ins) is the session named by the
+  sandbox ID (`chrome/` in it): the browser calls restore it like a chat
+  session before Chrome starts (and set up the chat's own session, where its
+  downloads go), chat retention keeps it (`get_retained_session_ids`), a stop closes Chrome (`BrowserStop`) before
+  it saves the sessions so the cookies are written, its save leaves out
+  Chrome's caches and locks (`BROWSER_PROFILE_EXCLUDED_NAMES`), a turn end
+  never saves it, and a sandbox purge and "clear browser data" delete it.
+  A clear whose VM is on a node that is not registered drops the
+  placement record, so that VM never serves the old profile again.
   A configuration error in the eviction
   policy turns idle eviction off; it never fails the node report.
   On a draining node (NodeInfo drain state, read by each report) every VM
@@ -628,8 +654,9 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   toward the Kubernetes limit. Because sleep is fail-closed, a Kubernetes
   session above the limit can keep its sandbox awake. These consequences are
   reasoned from the code, not tested.
-- Agent browser state lives outside the session workspace and is lost on
-  sleep. Saving it would put login cookies in FileStore snapshots.
+- In Craft (pod and Docker), agent browser state lives outside the session
+  workspace and is lost on sleep. The Firecracker chat browser saves its
+  profile, login cookies included, in the file store as a session save.
 - Docker mode mounts the host Docker socket in the API server and background
   worker. Only enable it on hosts you control (see the sandbox `README.md`).
 

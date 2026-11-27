@@ -2,6 +2,7 @@
 against the database: the integrations an agent runs, the user's on/off
 switch, the install setting, the shares, publishing and the member states."""
 
+import json
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import patch
@@ -120,7 +121,7 @@ def _create(
             ),
             auth_method=IntegrationAuthMethod.API_KEY if sign_in else None,
             header_template={"X-Api-Key": "{api_key}"} if sign_in else None,
-            config=OpenApiConfigInput(openapi_spec=OPENAPI_SPEC),
+            config=OpenApiConfigInput(openapi_document=json.dumps(OPENAPI_SPEC)),
         ),
         user,
         db_session,

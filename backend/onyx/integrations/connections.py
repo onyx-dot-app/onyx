@@ -18,6 +18,7 @@ from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    ApiAppType,
     IntegrationAuthMethod,
     IntegrationAuthMode,
     IntegrationConnectionStatus,
@@ -26,9 +27,9 @@ from onyx.db.enums import (
     IntegrationOAuthProviderMode,
 )
 from onyx.db.integration import (
+    get_api_app_for_integration,
     get_external_app_for_integration,
     get_mcp_server_for_integration,
-    get_openapi_tool_for_integration,
     lock_integration__no_commit,
 )
 from onyx.db.integration_connection import (
@@ -95,7 +96,10 @@ from onyx.server.features.mcp.oauth import (
     oauth_token_from_secret,
 )
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
-from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
+from onyx.tools.tool_implementations.api_app.openapi_parsing import (
+    openapi_to_url,
+    parse_openapi_document,
+)
 from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
@@ -824,17 +828,22 @@ def _refresh_with_token_url(
 
 def sign_in_host(integration: Integration, db_session: Session) -> str | None:
     """Where the credentials go: the MCP server URL, or the OpenAPI server
-    URL, the app URL patterns and the preset host values."""
+    URL, the GraphQL endpoint URL, the app URL patterns and the preset host
+    values."""
     if integration.kind is IntegrationKind.MCP:
         mcp_server = get_mcp_server_for_integration(integration.id, db_session)
         return mcp_server.server_url if mcp_server is not None else None
     destinations: dict[str, JsonValue] = {}
-    tool = get_openapi_tool_for_integration(integration.id, db_session)
-    if tool is not None and tool.openapi_schema is not None:
+    api_app = get_api_app_for_integration(integration.id, db_session)
+    if api_app is not None and api_app.openapi_document is not None:
         try:
-            destinations["openapi_url"] = openapi_to_url(tool.openapi_schema)
+            destinations["openapi_url"] = openapi_to_url(
+                parse_openapi_document(api_app.openapi_document)
+            )
         except ValueError:
             destinations["openapi_url"] = None
+    elif api_app is not None and api_app.api_type is ApiAppType.GRAPHQL:
+        destinations["graphql_url"] = api_app.base_url
     app = get_external_app_for_integration(integration.id, db_session)
     if app is not None:
         destinations["upstream_url_patterns"] = sorted(app.upstream_url_patterns)

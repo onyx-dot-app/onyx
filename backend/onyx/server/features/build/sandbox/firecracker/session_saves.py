@@ -7,9 +7,11 @@ the cache before the old file is deleted. Restore: before a session's first
 use on a new VM instance, its last save comes back through a presigned GET.
 
 A stop saves every session of the VM first (`SessionSaveCheckpointer`) and
-keeps a busy VM. The node-report idle evictor runs the save and the stop in
-the background (`BackgroundIdleStop`); on a draining node it does so without
-the idle timeout. A call that asks for the sandbox cancels a stop's save in
+keeps a busy VM. The browser profile is the session named by the sandbox ID:
+a stop closes Chrome before it saves it, and a turn end never saves it. The
+node-report idle evictor runs the save and the stop in the background
+(`BackgroundIdleStop`); on a draining node it does so without the idle
+timeout. A call that asks for the sandbox cancels a stop's save in
 progress, so the call does not wait for it. The end of a turn saves that
 session in the background (`BackgroundTurnSave`).
 
@@ -71,6 +73,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
 )
 from onyx.server.features.build.sandbox.firecracker.models import SessionSave
 from onyx.server.features.build.sandbox.harness_base import (
+    BROWSER_UPLOADS_DIR,
     CHAT_FILES_DIR,
     HarnessSandboxError,
 )
@@ -82,10 +85,13 @@ logger = setup_logger()
 
 # Top-level names never saved. The daemon also skips its own excludes
 # (node_modules, venvs, caches) at any depth inside each root. Chat files are
-# copies of file store files, copied again after a restart.
+# copies of file store files, copied again after a restart. Browser uploads
+# are copies that the page already took, up to 2 GiB per upload, over the
+# archive limit.
 SAVE_EXCLUDED_ROOTS: frozenset[str] = frozenset(
     {
         CHAT_FILES_DIR,
+        BROWSER_UPLOADS_DIR,
         "node_modules",
         ".venv",
         "venv",
@@ -102,6 +108,25 @@ SAVE_EXCLUDED_ROOTS: frozenset[str] = frozenset(
         ".turbo",
         ".parcel-cache",
     }
+)
+# Names never saved in the browser profile session (the sandbox ID's session,
+# its chrome directory), at any depth: Chrome's caches, crash
+# reports, and the profile locks of the VM's Chrome. They replace the
+# daemon's default excludes for that session.
+BROWSER_PROFILE_EXCLUDED_NAMES: tuple[str, ...] = (
+    "SingletonLock",
+    "SingletonSocket",
+    "SingletonCookie",
+    "Cache",
+    "Code Cache",
+    "GPUCache",
+    "GrShaderCache",
+    "ShaderCache",
+    "DawnCache",
+    "DawnGraphiteCache",
+    "DawnWebGPUCache",
+    "CacheStorage",
+    "Crashpad",
 )
 # One session's save (capture and upload, 15 min each at most) ends within
 # this time. A stop renews its sandbox lock for each session.
@@ -290,7 +315,13 @@ def save_session(
     if roots:
         try:
             capture = agent.capture_session(
-                instance, session_id=str(session_id), roots=roots, cancelled=cancelled
+                instance,
+                session_id=str(session_id),
+                roots=roots,
+                exclude_names=list(BROWSER_PROFILE_EXCLUDED_NAMES)
+                if session_id == sandbox_id
+                else None,
+                cancelled=cancelled,
             )
         except HostAgentCallCancelledError as e:
             raise SessionSaveCancelledError(f"save of {session_id} cancelled") from e
@@ -428,9 +459,36 @@ def restore_session(
     )
 
 
+def _stop_browser(daemon: SandboxDaemonClient, sandbox_id: UUID) -> None:
+    """Close Chrome cleanly before its profile is saved: only a clean exit
+    writes its recent cookies. A failure saves the profile as it is."""
+    try:
+        daemon.browser_stop()
+    except (HostAgentError, SandboxDaemonError):
+        logger.warning(
+            "sandbox_fc_browser_stop_failed sandbox=%s", sandbox_id, exc_info=True
+        )
+
+
+def _restart_browser(
+    tenant_cache: CacheBackend, daemon: SandboxDaemonClient, sandbox_id: UUID
+) -> None:
+    """Start Chrome again on a VM that the stop keeps. Under the profile's
+    save lock: a clear holds it while it deletes the profile."""
+    try:
+        with session_save_lock(tenant_cache, sandbox_id) as held:
+            if held:
+                daemon.browser_start(profile_session_id=str(sandbox_id))
+    except (HostAgentError, SandboxDaemonError):
+        logger.warning(
+            "sandbox_fc_browser_restart_failed sandbox=%s", sandbox_id, exc_info=True
+        )
+
+
 class SessionSaveCheckpointer(SandboxCheckpointer):
-    """Saves every session set up on the VM. Keeps the VM (False) when the
-    sandbox is busy before or after the saves, or when a save fails."""
+    """Saves every session set up on the VM, the browser profile session
+    after Chrome closed. Keeps the VM (False) when the sandbox is busy
+    before or after the saves, or when a save fails."""
 
     save_lease_seconds = SESSION_SAVE_MAX_SECONDS
 
@@ -485,6 +543,40 @@ class SessionSaveCheckpointer(SandboxCheckpointer):
         sessions = sessions_on_instance(
             tenant_cache, sandbox_id, (vm.attempt, vm.generation)
         )
+        browser_stopped = sandbox_id in sessions and not cancelled()
+        if browser_stopped:
+            _stop_browser(daemon, sandbox_id)
+        saved = False
+        try:
+            saved = self._save_sessions(
+                tenant_cache,
+                agent,
+                daemon,
+                instance,
+                tenant_id=tenant_id,
+                sandbox_id=sandbox_id,
+                sessions=sessions,
+                cancelled=cancelled,
+                renew_lease=renew_lease,
+            )
+        finally:
+            if browser_stopped and not saved:
+                _restart_browser(tenant_cache, daemon, sandbox_id)
+        return saved
+
+    def _save_sessions(
+        self,
+        tenant_cache: CacheBackend,
+        agent: HostAgentClient,
+        daemon: SandboxDaemonClient,
+        instance: VmInstance,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        sessions: list[UUID],
+        cancelled: Callable[[], bool],
+        renew_lease: Callable[[], None],
+    ) -> bool:
         with tenant_scope(tenant_id):
             for session_id in sessions:
                 # Raises when the stop lost the lock: no later commit.

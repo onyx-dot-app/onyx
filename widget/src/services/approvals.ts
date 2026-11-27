@@ -13,11 +13,16 @@ export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 /** `stop_reason` of a stream that stops while the response waits for the user. */
 export const AWAITING_USER_STOP_REASON = "awaiting_user";
 
-export type ApprovalDecision = "approve_once" | "approve_session" | "reject";
+export type ApprovalDecision =
+  | "approve_once"
+  | "approve_session"
+  | "approve_command"
+  | "reject";
 
 export type ApprovalOutcome =
   | "approved"
   | "approved_for_chat"
+  | "approved_for_command"
   | "rejected"
   | "disabled"
   | "cancelled";
@@ -51,6 +56,7 @@ export interface ApprovalEntry {
 const OUTCOMES: ReadonlySet<string> = new Set<ApprovalOutcome>([
   "approved",
   "approved_for_chat",
+  "approved_for_command",
   "rejected",
   "disabled",
   "cancelled",
@@ -79,6 +85,8 @@ export function approvalStatus(
         : "pending";
     case "approved_for_chat":
       return "approvedForSession";
+    case "approved_for_command":
+      return "approved";
     case "cancelled":
       return "closed";
     default:

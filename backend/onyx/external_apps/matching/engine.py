@@ -14,14 +14,13 @@ from onyx.db.enums import (
 )
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
+from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
 from onyx.external_apps.providers.actions import EndpointSpec, GraphQLOp
 from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.integrations.models import ApiShape
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# action_type for a domain-matched request that hit no catalog action.
-WHOLE_DOMAIN_ACTION_TYPE = "unspecified"
 
 
 class MatchedAction(BaseModel):
@@ -45,6 +44,9 @@ class GatedTarget(BaseModel):
     integration_id: int
     kind: IntegrationKind
     app_name: str
+    # The shape of an API integration; None for an MCP server. The chat tool
+    # hint of the gate reads it (``kinds/api.py:chat_tool_name``).
+    api_shape: ApiShape | None = None
 
 
 class AllMatchedActions(BaseModel):
@@ -133,7 +135,9 @@ def _has_unknown_graphql_field(
 ) -> bool:
     """Whether a GraphQL request also invokes a root field that no matched
     action covers. A document or batch can mix a known read with an unknown
-    mutation, and the unknown field must not take the read's policy."""
+    mutation, and the unknown field must not take the read's policy. A
+    document that names no root field (no ``query``, a persisted query, a
+    syntax error) could run any operation."""
     known = {
         (rule.operation_type, rule.field)
         for endpoint in matched_endpoints
@@ -142,6 +146,8 @@ def _has_unknown_graphql_field(
     }
     if not known:
         return False
+    if not all(context.graphql_documents):
+        return True
     return any(invocation not in known for invocation in context.graphql_invocations)
 
 
@@ -170,8 +176,8 @@ def recognize_actions(
     if not matched or _has_unknown_graphql_field(matched_endpoints, context):
         matched.append(
             MatchedAction(
-                action_type=WHOLE_DOMAIN_ACTION_TYPE,
-                display_name="Perform action",
+                action_type=OTHER_REQUEST_ACTION_KEY,
+                display_name="Any other request",
                 description=f"{request.method} {request.path}",
                 policy=ActionPolicy.ASK,
             )

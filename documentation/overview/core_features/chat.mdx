@@ -138,10 +138,18 @@ The **Activity** button in the chat header shows what the chat is doing. Select 
 - **Needs You**: tool approvals and questions that wait for your answer. Select one to go to it in the chat.
 - **Agents**: the background agents that the chat started. A running agent shows how long it has worked.
   Point to a running agent and select **Stop** to stop it and the agents that it started. The other agents keep working.
-  Finished agents are under **Previous agents**.
+  Finished agents are under **Previous agents**. Select an agent to open its conversation.
 - **Files**: select **View all files** to open the Files panel.
 
 The card opens when a chat starts background agents. It stays open until you select **Activity** again.
+
+An agent's conversation opens in place of the chat. It shows the instructions that the agent received and its work.
+While the agent works, its output appears as it is written.
+The bar in place of the message box shows the agent's model and its state,
+such as **Running 12s** or **Completed in 1m 53s**. While the agent works, select **Stop** in the bar to stop it.
+Select **Open parent**, or the **Subagent of** label at the top, to go back to the chat. In the chat,
+each agent shows as a card with its state and what it does now.
+Agents that one step starts together show under one header that counts them by state. Select a card to open that agent.
 
 ## Projects
 

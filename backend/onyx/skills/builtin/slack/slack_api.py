@@ -43,7 +43,7 @@ _BASE, _FILES_HOST = _load_cloud()
 _METHOD_RE = re.compile(r"^[a-z][a-zA-Z0-9._]*$")
 _PAGE_SIZE = 200
 _DEFAULT_LIMIT = 200
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 _MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # Slack's own upload limit
 
 

@@ -96,8 +96,9 @@ export default function CustomizeSkillPage({
     errorHandlingFetcher
   );
   useEffect(() => {
-    if (isPlugin) navigation.go(pluginHref(skillId), { replace: true });
-  }, [isPlugin, navigation, skillId]);
+    if (isPlugin)
+      navigation.go(pluginHref(skillId, undefined, from), { replace: true });
+  }, [from, isPlugin, navigation, skillId]);
   const [sharing, setSharing] = useState(false);
   const [contentsDirty, setContentsDirty] = useState(false);
   const removeModal = useCreateModal();
@@ -233,8 +234,10 @@ export default function CustomizeSkillPage({
           label: t("tabs.overview"),
           content: (
             <DetailOverview
-              descriptionLabel={t("overview.description")}
-              description={skill.description || t("overview.noDescription")}
+              description={{
+                label: t("overview.description"),
+                text: skill.description || t("overview.noDescription"),
+              }}
               facts={[
                 {
                   label: t("overview.createdBy"),

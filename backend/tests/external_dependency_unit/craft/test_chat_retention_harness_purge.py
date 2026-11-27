@@ -113,7 +113,8 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
         expired_chat = create_chat_session(db_session, None, user.id, None).id
         kept_chat = create_chat_session(db_session, None, user.id, None).id
         orphan = uuid4()
-        seeded += [old_build, fresh_build, expired_chat, kept_chat, orphan]
+        # The browser profile: the session named by the sandbox ID.
+        seeded += [old_build, fresh_build, expired_chat, kept_chat, orphan, sandbox_id]
         for session_id in seeded:
             add_id(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
 

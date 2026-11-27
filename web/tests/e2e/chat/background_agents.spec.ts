@@ -114,12 +114,12 @@ test("separate background results reach an idle chat and survive reload @code-mo
     await releaseMockLlmGate(secondReplyGateId);
     await chatPage.expectAnswerParagraph(finalAnswer);
     await expect(chatPage.stopAgentButtons).toHaveCount(0);
-    await expect(chatPage.agentResultsDividers).toHaveCount(2);
+    await expect(chatPage.agentResultsFollowUps).toHaveCount(2);
     await chatPage.reload();
     await chatPage.expectAnswerParagraph(initialAnswer);
     await chatPage.expectAnswerParagraph(firstAnswer);
     await chatPage.expectAnswerParagraph(finalAnswer);
-    await expect(chatPage.agentResultsDividers).toHaveCount(2);
+    await expect(chatPage.agentResultsFollowUps).toHaveCount(2);
     await expect(chatPage.stopAgentButtons).toHaveCount(0);
     await expect(chatPage.scrollContainer).not.toContainText(
       "Private child result:"
@@ -196,7 +196,7 @@ test("Stop on an agent in the activity card ends its work @code-mode", async ({
     await expect(chatPage.stopAgentButtons).toHaveCount(0);
     await chatPage.reload();
     await expect(chatPage.stopAgentButtons).toHaveCount(0);
-    await expect(chatPage.agentResultsDividers).toHaveCount(0);
+    await expect(chatPage.agentResultsFollowUps).toHaveCount(0);
     await expect(chatPage.scrollContainer).not.toContainText(
       "Private child result:"
     );
@@ -303,15 +303,15 @@ test("a root that waits for its agents answers their results once @code-mode", a
       .toBe(2);
     // The researcher has answered; the wait holds its result for verification.
     await expect(chatPage.stopAgentButtons.first()).toBeVisible();
-    await expect(chatPage.agentResultsDividers).toHaveCount(0);
+    await expect(chatPage.agentResultsFollowUps).toHaveCount(0);
     await releaseMockLlmGate(secondGateId);
     await chatPage.expectAnswerParagraph(finalAnswer);
     await expect(chatPage.stopAgentButtons).toHaveCount(0);
-    await expect(chatPage.agentResultsDividers).toHaveCount(1);
+    await expect(chatPage.agentResultsFollowUps).toHaveCount(1);
     await chatPage.reload();
     await chatPage.expectAnswerParagraph(status);
     await chatPage.expectAnswerParagraph(finalAnswer);
-    await expect(chatPage.agentResultsDividers).toHaveCount(1);
+    await expect(chatPage.agentResultsFollowUps).toHaveCount(1);
     expect((await getMockLlmConversationRequests(nonce)).length).toBe(3);
   } finally {
     await releaseMockLlmGate(gateId);

@@ -76,7 +76,23 @@ export default function CustomizeDetailLayout<T extends string>({
         title={title}
         description={description}
         back={back}
-        actions={actions}
+        // One full-width row on a phone starts at the content edge, not the end.
+        actions={
+          actions && actions.length > 0
+            ? [
+                <Section
+                  key="actions"
+                  flexDirection="row"
+                  justifyContent="start"
+                  alignItems="start"
+                  height="auto"
+                  gap={2}
+                >
+                  {actions}
+                </Section>,
+              ]
+            : undefined
+        }
         stackActionsOnMobile
       >
         {tags && (
@@ -129,41 +145,38 @@ export interface DetailFact {
   label: string | RichStr;
   value: string | RichStr;
   mono?: boolean;
+  oneLine?: boolean;
 }
 
 interface DetailOverviewProps {
-  descriptionLabel: string | RichStr;
-  description: string | RichStr;
+  /** Omit when the page header already shows the description. */
+  description?: { label: string | RichStr; text: string | RichStr };
   facts: DetailFact[];
   footer?: ReactNode;
 }
 
 export function DetailOverview({
-  descriptionLabel,
   description,
   facts,
   footer,
 }: DetailOverviewProps) {
   return (
     <Section flexDirection="row" alignItems="start" height="auto" gap={6} wrap>
-      <Section gap={1} alignItems="stretch" height="auto" grow={3} basis={20}>
-        <Text as="p" font="secondary-body" color="text-03">
-          {descriptionLabel}
-        </Text>
-        <Text as="p" font="main-content-body" color="text-04">
-          {description}
-        </Text>
-      </Section>
+      {description !== undefined && (
+        <Section gap={1} alignItems="stretch" height="auto" grow={3} basis={20}>
+          <Text as="p" font="secondary-body" color="text-03">
+            {description.label}
+          </Text>
+          <Text as="p" font="main-content-body" color="text-04">
+            {description.text}
+          </Text>
+        </Section>
+      )}
       <Section height="auto" alignItems="stretch" grow={1} basis={18}>
         <Card padding={4}>
           <Section gap={3} alignItems="stretch" height="auto">
             {facts.map((fact, index) => (
-              <KeyValue
-                key={index}
-                label={fact.label}
-                value={fact.value}
-                mono={fact.mono}
-              />
+              <KeyValue key={index} {...fact} />
             ))}
             {footer}
           </Section>

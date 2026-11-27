@@ -267,6 +267,16 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
+  PLUGINS: {
+    path: "/admin/plugins",
+    icon: SvgPlug,
+    title: "Plugins",
+    sidebarLabel: "Plugins",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Agents & Plugins",
+    requiredTier: null,
+    visibleWhen: null,
+  },
 
   // ── Documents & Knowledge ─────────────────────────────────────────
   CONNECTORS: {

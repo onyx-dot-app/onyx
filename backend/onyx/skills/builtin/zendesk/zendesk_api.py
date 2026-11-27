@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_HTTP_TIMEOUT_SECONDS = 180
+_HTTP_TIMEOUT_SECONDS = 200
 _DEFAULT_LIMIT = 100
 _PAGE_SIZE = 100
 _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")

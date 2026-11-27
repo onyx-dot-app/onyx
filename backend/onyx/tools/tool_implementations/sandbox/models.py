@@ -1,4 +1,5 @@
-"""Arguments and result details of the sandbox tools (sandbox_tools.py), and
+"""Arguments and result details of the sandbox tools (sandbox_tools.py), the
+browser tools' arguments (browser_tools.py), and
 the chat file copies (file_copies.py). The saved-details unions import it,
 so it imports only models and constants."""
 
@@ -6,22 +7,26 @@ import re
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import (
     AfterValidator,
+    AliasGenerator,
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     StringConstraints,
     TypeAdapter,
     computed_field,
     model_validator,
 )
+from pydantic.alias_generators import to_camel
 
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.prompts.browser_tools import TAB_ARGUMENT, TIMEOUT_ARGUMENT, URL_ARGUMENT
 from onyx.server.features.build.sandbox.harness_base import (
     ARTIFACT_FILES_DIR,
     CHAT_FILES_DIR,
@@ -135,6 +140,34 @@ class SandboxExecResult(ExecCommandOutput):
     truncated: bool = False
     # Set, with an empty `output`, when the output went to the sandbox VM.
     spilled: Annotated[SpilledOutput | None, OMITTED_WHEN_NONE] = None
+
+
+class CommandApprovalRequest(BaseModel):
+    """Progress of an exec_command or write_stdin call: an app request of
+    its command waits in the egress proxy for the user's decision
+    (command_approvals.py)."""
+
+    approval_id: str
+    app_name: str
+    action_type: str
+    display_name: str
+    # Method, path and body of the request.
+    arguments: dict[str, JsonValue]
+    can_approve_for_command: bool
+    # When the proxy stops waiting and the request expires.
+    expires_at: datetime
+
+
+CommandApprovalOutcome = Literal[
+    "approved", "approved_for_command", "rejected", "disabled", "cancelled"
+]
+
+
+class CommandApprovalResolved(BaseModel):
+    """Progress of the call: a request of its command stopped waiting."""
+
+    approval_id: str
+    outcome: CommandApprovalOutcome
 
 
 # The names of the file tools (sandbox_tools.py), which the patch card shows.
@@ -1214,3 +1247,170 @@ class ArtifactPublished(BaseModel):
                 if file.artifact_id is not None and file.version is not None
             ]
         )
+
+
+# Browser tool input limits, in characters (and list items).
+_BROWSER_MAX_URL_CHARS = 8192
+_BROWSER_MAX_TEXT_CHARS = 64_000
+_BROWSER_MAX_SELECTOR_CHARS = 2048
+_BROWSER_MAX_LIST_ITEMS = 100
+_BROWSER_MAX_UPLOAD_PATHS = 20
+# The service's default and largest wait of one call.
+BROWSER_DEFAULT_TIMEOUT_MS = 15_000
+BROWSER_MAX_TIMEOUT_MS = 60_000
+
+BrowserAction = Literal[
+    "click", "type", "hover", "select", "drag", "press", "scroll", "upload"
+]
+Modifier = Literal["Alt", "Control", "Meta", "Shift"]
+
+
+class BrowserArguments(BaseModel):
+    """The model names the arguments in snake_case, and the service takes
+    them in camelCase (the serialization alias)."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=AliasGenerator(serialization_alias=to_camel),
+    )
+
+
+class BrowserTabArguments(BrowserArguments):
+    tab: str | None = Field(
+        default=None, max_length=_BROWSER_MAX_SELECTOR_CHARS, description=TAB_ARGUMENT
+    )
+
+
+class BrowserTimeoutArguments(BrowserTabArguments):
+    timeout_ms: int | None = Field(
+        default=None, ge=1, le=BROWSER_MAX_TIMEOUT_MS, description=TIMEOUT_ARGUMENT
+    )
+
+
+class BrowserStatusArguments(BrowserArguments):
+    pass
+
+
+class BrowserOpenArguments(BrowserArguments):
+    url: str | None = Field(
+        default=None,
+        max_length=_BROWSER_MAX_URL_CHARS,
+        description=f"Page to open. {URL_ARGUMENT} Omit for a blank tab.",
+    )
+    new_tab: bool = Field(
+        default=False,
+        description="Open a new tab instead of reusing your current tab, for "
+        "example when a human controls it.",
+    )
+
+
+class BrowserNavigateArguments(BrowserTimeoutArguments):
+    url: str | None = Field(
+        default=None, max_length=_BROWSER_MAX_URL_CHARS, description=URL_ARGUMENT
+    )
+    history: Literal["back", "forward", "reload"] | None = Field(
+        default=None, description="Go back, forward, or reload."
+    )
+
+    @model_validator(mode="after")
+    def _one_target(self) -> Self:
+        if (self.url is None) == (self.history is None):
+            raise ValueError("pass exactly one of url and history")
+        return self
+
+
+class BrowserSnapshotArguments(BrowserTabArguments):
+    screenshot_path: str | None = Field(
+        default=None,
+        max_length=_BROWSER_MAX_SELECTOR_CHARS,
+        description="Also write a PNG screenshot to this path in the working "
+        "directory.",
+    )
+
+
+class BrowserActArguments(BrowserTimeoutArguments):
+    action: BrowserAction
+    ref: str | None = Field(
+        default=None,
+        max_length=_BROWSER_MAX_SELECTOR_CHARS,
+        description="Element ref from browser_snapshot.",
+    )
+    selector: str | None = Field(
+        default=None,
+        max_length=_BROWSER_MAX_SELECTOR_CHARS,
+        description="CSS selector.",
+    )
+    x: float | None = None
+    y: float | None = None
+    button: Literal["left", "right", "middle"] | None = Field(
+        default=None, description="Default left. Right opens the menu."
+    )
+    click_count: int | None = Field(
+        default=None, description="1 click, 2 double, 3 triple. Default 1."
+    )
+    text: str | None = Field(default=None, max_length=_BROWSER_MAX_TEXT_CHARS)
+    clear: bool | None = Field(
+        default=None, description="Clear the input first. Default false."
+    )
+    values: list[str] | None = Field(default=None, max_length=_BROWSER_MAX_LIST_ITEMS)
+    target_ref: str | None = Field(
+        default=None,
+        max_length=_BROWSER_MAX_SELECTOR_CHARS,
+        description="drag: the element ref to drop onto.",
+    )
+    key: str | None = Field(default=None, max_length=_BROWSER_MAX_SELECTOR_CHARS)
+    modifiers: list[Modifier] | None = None
+    delta_x: float | None = None
+    delta_y: float | None = None
+    paths: list[str] | None = Field(
+        default=None,
+        max_length=_BROWSER_MAX_UPLOAD_PATHS,
+        description="upload: files in the working directory.",
+    )
+
+    @model_validator(mode="after")
+    def _paired_coordinates(self) -> Self:
+        if (self.x is None) != (self.y is None):
+            raise ValueError("x and y go together")
+        return self
+
+
+class BrowserWaitForArguments(BrowserTimeoutArguments):
+    ref: str | None = Field(
+        default=None,
+        max_length=_BROWSER_MAX_SELECTOR_CHARS,
+        description="Element ref from browser_snapshot.",
+    )
+    selector: str | None = Field(
+        default=None,
+        max_length=_BROWSER_MAX_SELECTOR_CHARS,
+        description="CSS selector.",
+    )
+    text: str | None = Field(
+        default=None, max_length=_BROWSER_MAX_TEXT_CHARS, description="Case counts."
+    )
+    url_includes: str | None = Field(default=None, max_length=_BROWSER_MAX_URL_CHARS)
+
+    @model_validator(mode="after")
+    def _some_condition(self) -> Self:
+        if (
+            self.ref is None
+            and self.selector is None
+            and self.text is None
+            and self.url_includes is None
+        ):
+            raise ValueError("pass at least one wait condition")
+        return self
+
+
+class BrowserEvaluateArguments(BrowserTimeoutArguments):
+    expression: str = Field(
+        min_length=1,
+        max_length=_BROWSER_MAX_TEXT_CHARS,
+        description="JavaScript expression; a promise is awaited.",
+    )
+
+
+class BrowserDialogArguments(BrowserTabArguments):
+    accept: bool
+    prompt_text: str | None = Field(default=None, max_length=_BROWSER_MAX_TEXT_CHARS)

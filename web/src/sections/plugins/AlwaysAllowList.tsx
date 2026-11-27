@@ -2,8 +2,14 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputSwitch, MessageCard, Text } from "@opal/components";
-import { Content, ContentAction, Section, toast } from "@opal/layouts";
+import {
+  Badge,
+  Button,
+  InputSwitch,
+  MessageCard,
+  Text,
+} from "@opal/components";
+import { ContentAction, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useMemberActionPolicies } from "@/lib/integrations/hooks";
 import { saveAlwaysAllow } from "@/lib/integrations/svc";
@@ -20,7 +26,7 @@ interface AlwaysAllowListProps {
 }
 
 /** The actions of one integration with the admin's Allow, Ask or Blocked.
- * Each action that asks offers the user's "Always allow". */
+ * Each action that asks offers the user's "Don't ask me". */
 export default function AlwaysAllowList({
   integrationId,
 }: AlwaysAllowListProps) {
@@ -62,12 +68,10 @@ export default function AlwaysAllowList({
   }
 
   return (
-    <Section gap={1} alignItems="stretch" height="auto">
-      <Content
-        font="secondary-action"
-        title={canSave ? t("title") : t("readOnlyTitle")}
-        description={canSave ? t("description") : t("readOnlyDescription")}
-      />
+    <Section gap={3} alignItems="stretch" height="auto">
+      <Text as="p" font="secondary-body" color="text-03">
+        {canSave ? t("description") : t("readOnlyDescription")}
+      </Text>
       {data.actions.map((action) => {
         const asks = canSave && action.effective_admin_policy === "ask";
         return (
@@ -78,9 +82,12 @@ export default function AlwaysAllowList({
             description={
               action.always_asks
                 ? t("alwaysAsks")
-                : (action.description ?? undefined)
+                : action.description &&
+                    action.description !== action.display_name
+                  ? action.description
+                  : undefined
             }
-            padding={1}
+            padding={0}
             rightChildren={
               <Section
                 flexDirection="row"
@@ -88,22 +95,30 @@ export default function AlwaysAllowList({
                 alignItems="center"
                 width="auto"
                 height="auto"
-                gap={1}
+                gap={2}
               >
-                <Text font="secondary-body" color="text-03">
-                  {policyCopy(
+                <Badge
+                  size={5}
+                  title={policyCopy(
                     `${POLICY_LABEL_KEYS[action.effective_admin_policy]}.label`
                   )}
-                </Text>
+                />
                 {asks && (
-                  <InputSwitch
-                    aria-label={t("switch.label", {
-                      name: action.display_name,
-                    })}
-                    checked={action.user_policy === "allow"}
-                    disabled={savingKey !== null || action.always_asks}
-                    onCheckedChange={(checked) => void change(action, checked)}
-                  />
+                  <>
+                    <Text font="secondary-body" color="text-03">
+                      {t("switch.visibleLabel")}
+                    </Text>
+                    <InputSwitch
+                      aria-label={t("switch.label", {
+                        name: action.display_name,
+                      })}
+                      checked={action.user_policy === "allow"}
+                      disabled={savingKey !== null || action.always_asks}
+                      onCheckedChange={(checked) =>
+                        void change(action, checked)
+                      }
+                    />
+                  </>
                 )}
               </Section>
             }

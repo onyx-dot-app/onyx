@@ -85,7 +85,22 @@ resume-stream: get_processing_stream_id (must match stream_id) -> read_stream_ch
   before the response starts (404 when it finds no buffer or a gap)
   -> StreamCursor line, then blocks + StreamCursor line per batch
   -> poll until done or the owner lapses, with heartbeats
+
+background subagent run (chat/agent_stream.py:BackgroundRunStream, from ChatRunStore.register)
+  -> its own ResponsePresenter -> StreamBufferWriter(agent session ID, stream_id = ms at start)
+       flushed every 250 ms by its own ticker; a resumed run first replays its saved output
+  -> pointer chatagentstream_{response_id} = {stream_id, activity_tool}
+  -> its own AgentEnd: OverallStop + mark_done; ChatRunStore.release closes it and drops the pointer
+agents/{agent_id}/stream: the same tailing (_tail_stream_buffer) while the pointer names the stream
 ```
+
+A background run's events never reach its parent's stream (only foreground
+children forward to the parent, `EventDelivery.forwards_to_parent`), so each
+execution writes its own buffer in the shared cache, and any pod serves it.
+`GET /chat/chat-session/{id}/agents` returns each live agent's `stream_id`
+and `activity_tool` (the tool it last started) from the pointer, and
+`GET .../agents/{agent_id}/history` returns its saved conversation with the
+live `stream`, read before the messages.
 
 `chat/execution.py:start_chat_turn` publishes the ID lines and starts the turn
 on its own threads, then returns the reader. `_stream_chat_turn` closes the
@@ -154,14 +169,34 @@ requests that `ToolApprovals` opened (`PendingToolInput.approval`). A
 background agent's request shows at the card of the root response's call that
 started the agent, with `agent_name` set
 ([[mcp-and-custom-tools#chat-approval-records-replay]]).
+`app_name` is the action's integration name, live (`chat/tool_approvals.py`)
+and on replay (`db/chat_response.py`), so the card reads "{action} in {app}".
+A shared view clears it (`backend/onyx/server/query_and_chat/chat_backend.py:get_chat_session`): the viewer may
+not have access to the integration.
+`can_approve_for_chat` is false for an action that asks each time, the
+other-request action of an app (`integrations/policy.py:always_asks`): the
+card offers no approval for the chat, no saved grant skips its card, and the
+decision route saves such an approval as a single one. An exec_command or
+write_stdin call also sends both packets, from its progress, for an app
+request of its command that the egress proxy holds
+(`CommandApprovalRequest`, `CommandApprovalResolved`;
+[[craft-external-apps#chat-command-approvals]]): `can_approve_for_command`,
+`app_name` and `expires_at` (the proxy's wait deadline,
+`action_approval.wait_deadline`) are set. These packets go through the stream
+buffer, so a client that reconnects to a live stream gets them again from its
+cursor. Saved-session replay does not rebuild them, because they have no
+`approval_request` row.
 `tool_approval_resolved` carries an `outcome`
 (`chat/renderer.py:approval_outcome`): `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an
-earlier one), `rejected` (also a user Stop of a live turn), `disabled` (an
+earlier one), `approved_for_command` (a command grant; command requests
+only), `rejected` (also a user Stop of a live turn), `disabled` (an
 approval of a tool that the policy now disables, or a request deleted with its
 tool's server), or `cancelled` for a call that stopped waiting without a
-decision. Requests have no deadline. A turn whose run has nothing left but
-approval waits ends its stream with its requests, then
+decision. Tool requests have no deadline. A command request expires after
+`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` (180 s by default) and resolves as
+`cancelled` in the same stream; it never suspends the turn. A turn whose run has
+nothing left but tool approval waits ends its stream with its requests, then
 `stop(awaiting_user)` (`chat/presentation.py:overall_stop` maps
 `SUSPENDED`); after the decisions the response continues in a new stream,
 under a new stream ID, that clients follow from cursor 0: it replays the saved

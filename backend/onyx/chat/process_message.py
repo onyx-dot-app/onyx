@@ -152,6 +152,7 @@ from onyx.server.query_and_chat.token_limit import (
     check_model_spend_limits,
     check_token_rate_limits,
 )
+from onyx.server.settings.store import load_browser_enabled
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.skills.chat import accept_picked_skills, render_skills_catalog
 from onyx.tools.constants import (
@@ -556,6 +557,7 @@ def prepare_chat_turn(
                 and len(selected_models) == 1
                 and not new_msg_req.deep_research
             )
+            browser_tools = sandbox_tools and load_browser_enabled()
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn
             # that is not deep research. Its run parks while it waits. An
@@ -761,6 +763,7 @@ def prepare_chat_turn(
                 token_counter=token_counter,
                 tool_family=tool_family,
                 sandbox_tools=sandbox_tools,
+                browser_tools=browser_tools,
                 files=new_msg_req.file_descriptors,
                 user_memory_context=memory
                 if preferences.use_memories
@@ -955,6 +958,7 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             sandbox_tools=sandbox_tools,
+            browser_tools=browser_tools,
             vm_chat_files=[] if placed_chat_files is None else placed_chat_files.files,
             copy_vm_chat_files=placed_chat_files is not None,
             question_tool=question_tool,
@@ -1652,11 +1656,14 @@ def run_chat_turn(
     """Run one chat turn for in-process, non-streaming callers, to completion
     or until tool calls wait for the user.
 
-    These callers read one response, so the turn offers no agent tools.
+    These callers read one response, so the turn offers no agent tools, and
+    a VM command's app request that asks is refused, not held for a card.
     """
     response_future = Future[ChatResponseOutcome]()
     packets = handle_stream_message_objects(
-        new_msg_req=new_msg_req.model_copy(update={"accepts_follow_ups": False}),
+        new_msg_req=new_msg_req.model_copy(
+            update={"accepts_follow_ups": False, "stream": False}
+        ),
         user=user,
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,

@@ -248,8 +248,10 @@ export function countDiffLines(lines: DiffLine[]): DiffCounts {
 }
 
 export interface PatchFile {
-  /** The file's path, and its new path when it moved. */
+  /** The file's path: its new path when it moved. */
   path: string;
+  /** Where the file moved from, if it moved. */
+  movedFrom: string | null;
   change: "add" | "update" | "delete";
   /** The shown lines, which the patch's line limit can cut. */
   lines: DiffLine[];
@@ -327,6 +329,7 @@ export function parseApplyPatch(patch: string): ParsedPatch {
               : header?.[1] === "Delete"
                 ? "delete"
                 : "update",
+          movedFrom: null,
           lines: [],
           added: 0,
           removed: 0,
@@ -338,7 +341,10 @@ export function parseApplyPatch(patch: string): ParsedPatch {
       if (header) continue;
     }
     if (line.startsWith("*** Move to: ")) {
-      if (file) file.path = `${file.path} \u2192 ${line.slice(13)}`;
+      if (file) {
+        file.movedFrom = file.path;
+        file.path = line.slice(13);
+      }
       continue;
     }
     let next: DiffLine | null = null;

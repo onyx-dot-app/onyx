@@ -18,9 +18,10 @@ from collections.abc import Callable, Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 import grpc
+import grpc.aio
 from google.protobuf.message import Message
 from google.rpc import error_details_pb2, status_pb2
 from pydantic import SecretStr
@@ -173,8 +174,8 @@ def _vm_from_proto(vm: hostagent_pb2.VM) -> AgentVm:
 
 
 def error_info(err: grpc.RpcError) -> error_details_pb2.ErrorInfo | None:
-    """The first google.rpc.ErrorInfo detail of a failed call."""
-    if not isinstance(err, grpc.Call):
+    """The first google.rpc.ErrorInfo detail of a failed call (sync or aio)."""
+    if not isinstance(err, (grpc.Call, grpc.aio.AioRpcError)):
         return None
     for key, value in err.trailing_metadata() or ():
         if key != _STATUS_DETAILS_KEY or not isinstance(value, bytes):
@@ -191,8 +192,8 @@ def host_agent_error(
     err: grpc.RpcError, info: error_details_pb2.ErrorInfo | None
 ) -> HostAgentError:
     """The typed error of a failed agent call (or pass-through call)."""
-    # Every RpcError a channel raises is also a grpc.Call.
-    if not isinstance(err, grpc.Call):
+    # Every RpcError a sync channel raises is also a grpc.Call.
+    if not isinstance(err, (grpc.Call, grpc.aio.AioRpcError)):
         return HostAgentError(grpc.StatusCode.UNKNOWN, str(err), None)
     code = err.code()
     message = err.details() or ""
@@ -474,6 +475,31 @@ class HostAgentClient:
             raise _error_from_rpc(e) from e
         return response.closed
 
+    def dial(
+        self,
+        *,
+        sandbox_id: str,
+        generation: int,
+        guest_port: int,
+        data: bytes,
+        timeout: float,
+    ) -> "DialExchange":
+        """One request to a guest port: send `data`, end the send side, and
+        read the guest's bytes until it closes. `generation` 0 means any
+        running VM. The call ends by `timeout`."""
+        frames = iter(
+            [
+                hostagent_pb2.DialFrame(
+                    sandbox_id=sandbox_id,
+                    guest_port=guest_port,
+                    generation=generation,
+                    data=data,
+                )
+            ]
+        )
+        call: _DialResponses = self._stub.Dial(frames, timeout=timeout)
+        return DialExchange(call)
+
     # Session saves. Order: capture_session → presign_upload(size_bytes,
     # sha256) → upload_capture → finalize → commit → prune. Guest daemon
     # errors raise as SandboxDaemonError.
@@ -695,11 +721,92 @@ class HostAgentClient:
         return [refused.get(t.sandbox_id) or next(sent) for t in targets]
 
 
+class _DialResponses(Protocol):
+    """The guest's side of a sync Dial: frames until the guest closes."""
+
+    def __iter__(self) -> Iterator[hostagent_pb2.DialFrame]: ...
+
+    def cancel(self) -> bool: ...
+
+
+class DialExchange:
+    """The guest's bytes of one sync Dial. Iterate them once; `cancel` (safe
+    from another thread) ends the call. Errors raise as HostAgentError."""
+
+    def __init__(self, responses: _DialResponses) -> None:
+        self._responses = responses
+
+    def __iter__(self) -> Iterator[bytes]:
+        try:
+            for frame in self._responses:
+                yield frame.data
+        except grpc.RpcError as e:
+            raise _error_from_rpc(e) from e
+
+    def cancel(self) -> None:
+        self._responses.cancel()
+
+
+class AsyncDialStream:
+    """One Dial stream on an aio channel, open in both directions. Errors
+    raise as HostAgentError."""
+
+    def __init__(self, call: grpc.aio.StreamStreamCall) -> None:
+        self._call = call
+
+    async def write(self, data: bytes) -> None:
+        try:
+            await self._call.write(hostagent_pb2.DialFrame(data=data))
+        except grpc.aio.AioRpcError as e:
+            raise _error_from_rpc(e) from e
+
+    async def read(self) -> bytes | None:
+        """The guest's next bytes; None once the guest closed."""
+        try:
+            frame = await self._call.read()
+        except grpc.aio.AioRpcError as e:
+            raise _error_from_rpc(e) from e
+        if frame is grpc.aio.EOF:
+            return None
+        if not isinstance(frame, hostagent_pb2.DialFrame):
+            raise TypeError(f"unexpected Dial frame {type(frame).__name__}")
+        return frame.data
+
+    def cancel(self) -> None:
+        self._call.cancel()
+
+
+async def open_dial_stream(
+    channel: grpc.aio.Channel, *, sandbox_id: str, generation: int, guest_port: int
+) -> AsyncDialStream:
+    """Open a long-lived Dial to a guest port (no deadline; cancel it).
+    `generation` 0 means any running VM. A refused Dial raises on the first
+    read."""
+    stub = hostagent_pb2_grpc.HostAgentStub(channel)
+    call: grpc.aio.StreamStreamCall = stub.Dial()
+    stream = AsyncDialStream(call)
+    try:
+        await call.write(
+            hostagent_pb2.DialFrame(
+                sandbox_id=sandbox_id, guest_port=guest_port, generation=generation
+            )
+        )
+    except grpc.aio.AioRpcError as e:
+        raise _error_from_rpc(e) from e
+    return stream
+
+
 class HostAgentClientFactory(abc.ABC):
     """Clients for agent addresses (`host:port`)."""
 
     @abc.abstractmethod
     def client(self, address: str) -> HostAgentClient:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def aio_channel(self, address: str) -> grpc.aio.Channel:
+        """A new asyncio channel to the agent, bound to the running event
+        loop, with the settings of `client`. The caller closes it."""
         raise NotImplementedError
 
 
@@ -741,21 +848,34 @@ class MtlsHostAgentClientFactory(HostAgentClientFactory):
         except OSError as e:
             raise HostAgentConfigError(f"cannot read the agent mTLS files: {e}") from e
 
+    def _channel_settings(
+        self,
+    ) -> tuple[grpc.ChannelCredentials, list[tuple[str, str | int]]]:
+        """The credentials (read once) and options of every channel."""
+        with self._lock:
+            if self._credentials is None:
+                self._credentials = self._load_credentials()
+            credentials = self._credentials
+        options: list[tuple[str, str | int]] = [
+            ("grpc.max_receive_message_length", MAX_MESSAGE_BYTES),
+            ("grpc.max_send_message_length", MAX_MESSAGE_BYTES),
+        ]
+        if self._server_name:
+            options.append(("grpc.ssl_target_name_override", self._server_name))
+        return credentials, options
+
     def client(self, address: str) -> HostAgentClient:
+        credentials, options = self._channel_settings()
         with self._lock:
             channel = self._channels.get(address)
             if channel is None:
-                if self._credentials is None:
-                    self._credentials = self._load_credentials()
-                options: list[tuple[str, str | int]] = [
-                    ("grpc.max_receive_message_length", MAX_MESSAGE_BYTES),
-                    ("grpc.max_send_message_length", MAX_MESSAGE_BYTES),
-                ]
-                if self._server_name:
-                    options.append(("grpc.ssl_target_name_override", self._server_name))
-                channel = grpc.secure_channel(address, self._credentials, options)
+                channel = grpc.secure_channel(address, credentials, options)
                 self._channels[address] = channel
         return _SharedChannelClient(channel)
+
+    def aio_channel(self, address: str) -> grpc.aio.Channel:
+        credentials, options = self._channel_settings()
+        return grpc.aio.secure_channel(address, credentials, options)
 
 
 class _SharedChannelClient(HostAgentClient):
