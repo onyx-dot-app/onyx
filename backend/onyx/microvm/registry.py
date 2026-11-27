@@ -512,6 +512,16 @@ def record_node_info(
         return True
 
 
+def clear_node_info(
+    shared_cache: CacheBackend, node_id: str, *, registration: str | None
+) -> None:
+    """Drop the node's `NodeInfo` after a failed read, so an old success
+    does not keep the sandbox tools on. Keeps a newer registration's record."""
+    with _node_lock(shared_cache, node_id):
+        if registration == get_node_registration(shared_cache, node_id):
+            shared_cache.delete(_NODE_INFO_PREFIX + node_id)
+
+
 def get_node_info(shared_cache: CacheBackend, node_id: str) -> NodeInfo | None:
     """The `NodeInfo` of the node's last report pass that read it, if any."""
     raw = shared_cache.get(_NODE_INFO_PREFIX + node_id)

@@ -36,6 +36,7 @@ from onyx.microvm.models import NodeInfo, NodeStateReport, NodeStateReportResult
 from onyx.microvm.reconcile import reconcile_node
 from onyx.microvm.registry import (
     claim_node_report_token,
+    clear_node_info,
     get_node_registration,
     get_registered_node,
     node_report_lease,
@@ -164,13 +165,18 @@ def _read_node_info(
 ) -> NodeInfo | None:
     """The node's `NodeInfo` from its agent, recorded for the sandbox tools
     check while `registration` is still the node's. None when the read fails
-    or the node registered again; the record then stays as it is."""
+    (the record is dropped) or the node registered again (the record stays)."""
     try:
         info = client_factory.client(address).node_info()
     except HostAgentConfigError:
         raise
     except HostAgentError as e:
         logger.warning("sandbox_fc_node_info_read_failed node=%s error=%s", node_id, e)
+        try:
+            clear_node_info(shared_cache, node_id, registration=registration)
+        except CacheLockAcquisitionError:
+            # A registration holds the lock and replaces the record.
+            pass
         return None
     try:
         recorded = record_node_info(

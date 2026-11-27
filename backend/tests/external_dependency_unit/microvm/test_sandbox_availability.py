@@ -198,6 +198,44 @@ def test_a_read_from_a_replaced_registration_records_no_info(
     assert not sandbox_tools_available()
 
 
+class _UnreachableAgent(FakeHostAgent):
+    """An agent whose NodeInfo read fails once `unreachable` is set, while
+    its node still reports."""
+
+    def __init__(self) -> None:
+        super().__init__(template=NODE_TEMPLATE)
+        self.templates[0].compatible = True
+        self.unreachable = False
+
+    def NodeInfo(  # noqa: N802
+        self,
+        request: hostagent_pb2.NodeInfoRequest,
+        context: grpc.ServicerContext,
+    ) -> hostagent_pb2.NodeInfoResponse:
+        if self.unreachable:
+            context.abort(grpc.StatusCode.UNAVAILABLE, "unreachable in the test")
+        return super().NodeInfo(request, context)
+
+
+def test_a_failed_info_read_turns_the_tools_off(
+    set_runtime: SetRuntime,
+    shared_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+) -> None:
+    set_runtime(SandboxRuntime.AUTO)
+    node_id = f"avail-{uuid.uuid4().hex[:8]}"
+    agent = _UnreachableAgent()
+    add_node(node_id, agent)
+    report = NodeStateReport(node_id=node_id, vms=[])
+    reconcile_node_report(shared_cache, client_factory, report, now=int(time.time()))
+    assert sandbox_tools_available()
+    agent.unreachable = True
+    reconcile_node_report(shared_cache, client_factory, report, now=int(time.time()))
+    assert get_node_info(shared_cache, node_id) is None
+    assert not sandbox_tools_available()
+
+
 def test_auto_reuses_its_answer_within_the_cache_window(
     set_runtime: SetRuntime,
     report_node: ReportNode,
