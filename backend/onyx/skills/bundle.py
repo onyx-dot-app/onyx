@@ -28,6 +28,7 @@ from onyx.skills.metadata import (
     parse_skill_md_frontmatter,
     serialize_skill_md,
     split_skill_md,
+    with_skill_md_name,
 )
 from onyx.skills.models import (
     BundleLayout,
@@ -333,6 +334,32 @@ def rewrite_custom_bundle_skill_md(
             f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
         )
 
+    def new_skill_md_for(original_skill_md: bytes) -> bytes:
+        frontmatter, _ = parse_skill_md_frontmatter(original_skill_md)
+        frontmatter["name"] = canonical_name
+        frontmatter["description"] = description
+        return serialize_skill_md(frontmatter, instructions_markdown).encode("utf-8")
+
+    return _replace_bundle_skill_md(zip_bytes, new_skill_md_for)
+
+
+def rename_bundle_skill_md(zip_bytes: bytes, canonical_name: str) -> bytes:
+    """Return the bundle with only the root SKILL.md frontmatter ``name``
+    changed. The rest of SKILL.md is kept as uploaded."""
+    return _replace_bundle_skill_md(
+        zip_bytes,
+        lambda original: with_skill_md_name(
+            original.decode("utf-8"), canonical_name
+        ).encode("utf-8"),
+    )
+
+
+def _replace_bundle_skill_md(
+    zip_bytes: bytes,
+    new_skill_md_for: Callable[[bytes], bytes],
+) -> bytes:
+    """Return the bundle with root SKILL.md replaced by
+    ``new_skill_md_for(original)``. Other entries are copied unchanged."""
     try:
         source_zip = open_bundle_zip(zip_bytes)
     except zipfile.BadZipFile as exc:
@@ -368,13 +395,7 @@ def rewrite_custom_bundle_skill_md(
                         OnyxErrorCode.INTERNAL_ERROR,
                         "Failed to read stored skill bundle entry.",
                     ) from exc
-                frontmatter, _ = parse_skill_md_frontmatter(original_skill_md)
-                frontmatter["name"] = canonical_name
-                frontmatter["description"] = description
-                new_skill_md = serialize_skill_md(
-                    frontmatter,
-                    instructions_markdown,
-                ).encode("utf-8")
+                new_skill_md = new_skill_md_for(original_skill_md)
                 if len(new_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
                     raise _bundle_limit_error(
                         "file_bytes",

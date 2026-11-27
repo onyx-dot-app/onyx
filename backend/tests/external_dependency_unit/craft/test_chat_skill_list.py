@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -16,6 +17,7 @@ from onyx.db.enums import (
 )
 from onyx.db.models import Plugin, User
 from onyx.db.plugin import (
+    get_stored_version_content,
     get_visible_versions_skill_md,
     set_plugin_preferences__no_commit,
 )
@@ -32,6 +34,7 @@ from onyx.db.skill import (
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.models import CHAT_SKILLS_PATH
+from onyx.server.features.skill.api import replace_current_user_skill_bundle
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.skills.built_in import CHAT_BUILT_IN_SKILL_IDS
 from onyx.skills.content import read_chat_skills_md, read_versions_skill_md
@@ -321,6 +324,14 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     assert f"python {CHAT_SKILLS_PATH}/pptx/scripts/lint.py" in skill_md
 
 
+def _bundle_upload(files: dict[str, str]) -> UploadFile:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        for path, content in files.items():
+            bundle_zip.writestr(path, content)
+    return UploadFile(file=io.BytesIO(output.getvalue()), filename="bundle.zip")
+
+
 def _files(skill_files: ChatSkillFiles | None) -> dict[str, bytes]:
     assert skill_files is not None
     return skill_files.files
@@ -433,3 +444,21 @@ def test_a_renamed_skill_takes_its_plugin_name_everywhere(
         .startswith(f"---\nname: {renamed}\n")
     )
     assert sandbox_files[f"{name}/SKILL.md"].decode().startswith(f"---\nname: {name}\n")
+
+    # A replacement bundle may use the new name or the former one.
+    for bundle_name in (renamed, name):
+        replace_current_user_skill_bundle(
+            skill_id=moved.id,
+            bundle=_bundle_upload(
+                {"SKILL.md": f"---\nname: {bundle_name}\ndescription: Z\n---\n\nHi.\n"}
+            ),
+            base_version_id=None,
+            user=heir,
+            db_session=db_session,
+        )
+        db_session.refresh(moved)
+        stored = get_stored_version_content(moved.current_version_id, db_session)
+        assert stored.bundle_file_id is not None
+        bundle_ids.append(stored.bundle_file_id)
+        assert stored.name == name
+        assert skill_response_for_user(moved, heir, db_session).name == renamed
