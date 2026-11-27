@@ -34,8 +34,8 @@ class ApprovalChoice(StrEnum):
         """The decision that this choice saves on a chat request. An approval
         of an action that the current policies block is a rejection by the
         policy."""
-        if self is ApprovalChoice.REJECT:
-            return ApprovalDecision.REJECTED, ApprovalDecidedVia.USER
+        if self.decision is ApprovalDecision.REJECTED:
+            return self.decision, ApprovalDecidedVia.USER
         if blocked:
             return ApprovalDecision.REJECTED, ApprovalDecidedVia.POLICY
         if self is ApprovalChoice.APPROVE_SESSION:
@@ -72,8 +72,8 @@ class ApprovalChoice(StrEnum):
             return None
         expected = (
             ApprovalDecision.REJECTED
-            if self is ApprovalChoice.REJECT or decided_via == ApprovalDecidedVia.POLICY
-            else ApprovalDecision.APPROVED
+            if decided_via == ApprovalDecidedVia.POLICY
+            else self.decision
         )
         return (expected, decided_via) if decision == expected else None
 
