@@ -18403,7 +18403,8 @@
       "saveAndRun": "حفظ وتشغيل الآن",
       "errors": {
         "nameRequired": "أدخل اسمًا.",
-        "promptRequired": "أدخل موجّهًا."
+        "promptRequired": "أدخل موجّهًا.",
+        "tooLong": "استخدم {max, number} حرفًا أو أقل."
       },
       "toasts": {
         "created": "تم إنشاء المهمة المجدولة.",

@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, InputSwitch, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { useScreenSize } from "@opal/hooks";
 import {
   SvgClock,
   SvgEdit,
@@ -46,6 +47,7 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
   const t = useTranslations("scheduledTasks.detail");
   const tActions = useTranslations("scheduledTasks.actions");
   const navigation = useNavigation();
+  const { isMobile } = useScreenSize();
   const searchParams = useSearchParams();
   const timeFormat = useScheduledTaskFormat();
   const {
@@ -143,16 +145,20 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
                 disabled={actions.busy}
                 onClick={actions.runNow}
                 data-testid="run-scheduled-task-now"
+                aria-label={isMobile ? tActions("runNow") : undefined}
+                tooltip={isMobile ? tActions("runNow") : undefined}
               >
-                {tActions("runNow")}
+                {isMobile ? undefined : tActions("runNow")}
               </Button>,
               <Button
                 key="edit"
                 icon={SvgEdit}
                 prominence="secondary"
+                aria-label={isMobile ? tActions("edit") : undefined}
+                tooltip={isMobile ? tActions("edit") : undefined}
                 {...navigation.linkTo(editScheduledTaskHref(task.id))}
               >
-                {tActions("edit")}
+                {isMobile ? undefined : tActions("edit")}
               </Button>,
               <Dropdown key="menu" align="end">
                 <Dropdown.Trigger asChild>
@@ -186,9 +192,11 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
                 gap={1}
                 padding={1}
               >
-                <Text font="main-ui-body" color="text-03">
-                  {t("switch.title")}
-                </Text>
+                {!isMobile && (
+                  <Text font="main-ui-body" color="text-03">
+                    {t("switch.title")}
+                  </Text>
+                )}
                 <InputSwitch
                   aria-label={t("switch.label", { name: task.name })}
                   checked={task.status === "ACTIVE"}

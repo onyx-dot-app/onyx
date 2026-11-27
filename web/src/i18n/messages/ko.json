@@ -18403,7 +18403,8 @@
       "saveAndRun": "저장하고 지금 실행",
       "errors": {
         "nameRequired": "이름을 입력하세요.",
-        "promptRequired": "프롬프트를 입력하세요."
+        "promptRequired": "프롬프트를 입력하세요.",
+        "tooLong": "{max, number}자 이하로 입력하세요."
       },
       "toasts": {
         "created": "예약된 작업을 만들었습니다.",

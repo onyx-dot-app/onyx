@@ -18403,7 +18403,8 @@
       "saveAndRun": "保存して今すぐ実行",
       "errors": {
         "nameRequired": "名前を入力してください。",
-        "promptRequired": "プロンプトを入力してください。"
+        "promptRequired": "プロンプトを入力してください。",
+        "tooLong": "{max, number} 文字以内で入力してください。"
       },
       "toasts": {
         "created": "スケジュールされたタスクを作成しました。",

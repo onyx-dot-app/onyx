@@ -18403,7 +18403,8 @@
       "saveAndRun": "Save and run now",
       "errors": {
         "nameRequired": "Enter a name.",
-        "promptRequired": "Enter a prompt."
+        "promptRequired": "Enter a prompt.",
+        "tooLong": "Use {max, number} characters or fewer."
       },
       "toasts": {
         "created": "Scheduled task created.",

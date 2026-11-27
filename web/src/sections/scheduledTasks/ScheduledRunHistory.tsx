@@ -13,6 +13,7 @@ import {
 } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
 import { SvgLongWait } from "@opal/illustrations";
+import { useScreenSize } from "@opal/hooks";
 import UnseenMarker from "@/refresh-components/UnseenMarker";
 import { formatRunDuration, isRunUnviewed } from "@/app/craft/v1/tasks/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -73,6 +74,7 @@ export default function ScheduledRunHistory({
   taskId,
 }: ScheduledRunHistoryProps) {
   const t = useTranslations("scheduledTasks.runs");
+  const { isMobile } = useScreenSize();
   const tTasks = useTranslations("scheduledTasks");
   const appPosition = useAppPosition();
   const timeFormat = useScheduledTaskFormat();
@@ -191,6 +193,36 @@ export default function ScheduledRunHistory({
     return run.skip_reason ?? "";
   }
 
+  // Phone screens drop these, so the table fits the screen width.
+  const secondaryColumns: TableColumn<ScheduledRunSummary>[] = [
+    {
+      kind: "display",
+      id: "duration",
+      title: t("columns.duration"),
+      width: { weight: 12 },
+      cell: (row) => (
+        <ClosedCell run={row}>
+          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
+            {formatRunDuration(row.started_at, row.finished_at)}
+          </Text>
+        </ClosedCell>
+      ),
+    },
+    {
+      kind: "display",
+      id: "trigger",
+      title: t("columns.trigger"),
+      width: { weight: 14 },
+      cell: (row) => (
+        <ClosedCell run={row}>
+          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
+            {t("trigger", { source: row.trigger_source })}
+          </Text>
+        </ClosedCell>
+      ),
+    },
+  ];
+
   const columns: TableColumn<ScheduledRunSummary>[] = [
     {
       kind: "data",
@@ -233,32 +265,7 @@ export default function ScheduledRunHistory({
         </ClosedCell>
       ),
     },
-    {
-      kind: "display",
-      id: "duration",
-      title: t("columns.duration"),
-      width: { weight: 12 },
-      cell: (row) => (
-        <ClosedCell run={row}>
-          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
-            {formatRunDuration(row.started_at, row.finished_at)}
-          </Text>
-        </ClosedCell>
-      ),
-    },
-    {
-      kind: "display",
-      id: "trigger",
-      title: t("columns.trigger"),
-      width: { weight: 14 },
-      cell: (row) => (
-        <ClosedCell run={row}>
-          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
-            {t("trigger", { source: row.trigger_source })}
-          </Text>
-        </ClosedCell>
-      ),
-    },
+    ...(isMobile ? [] : secondaryColumns),
     {
       kind: "display",
       id: "detail",

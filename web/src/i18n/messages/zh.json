@@ -18403,7 +18403,8 @@
       "saveAndRun": "保存并立即运行",
       "errors": {
         "nameRequired": "请输入名称。",
-        "promptRequired": "请输入提示词。"
+        "promptRequired": "请输入提示词。",
+        "tooLong": "请使用不超过 {max, number} 个字符。"
       },
       "toasts": {
         "created": "计划任务已创建。",

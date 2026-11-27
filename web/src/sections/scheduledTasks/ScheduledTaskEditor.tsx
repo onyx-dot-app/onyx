@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
 import {
@@ -38,6 +38,12 @@ import {
 import type { ScheduledTaskDetail } from "@/lib/scheduledTasks/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { BackLink } from "@/sections/customize/CustomizeDetailLayout";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+
+// The limits of the scheduled-task API.
+const NAME_MAX_CHARS = 200;
+const PROMPT_MAX_CHARS = 20_000;
 
 interface ScheduledTaskEditorProps {
   /** Absent for a new task. */
@@ -96,6 +102,17 @@ function TaskForm({ task }: TaskFormProps) {
   const [integrations, setIntegrations] = useState<
     TaskIntegrationLink[] | null
   >(null);
+  // The integrations as first loaded, to tell whether the user changed them.
+  const [initialIntegrations, setInitialIntegrations] = useState<
+    TaskIntegrationLink[] | null
+  >(null);
+  // The last payload of each mode, so switching modes and back keeps it.
+  const payloadByMode = useRef<Partial<Record<EditorMode, EditorPayload>>>({
+    [initial.mode]: initial.payload,
+  });
+  // A mode switch restored a payload; the editor's default for the new mode
+  // that follows in the same event must not replace it.
+  const restoredPayload = useRef(false);
   const [touched, setTouched] = useState({ name: false, prompt: false });
   const [saving, setSaving] = useState(false);
   // State updates land on the next render; the ref stops a second click
@@ -103,8 +120,47 @@ function TaskForm({ task }: TaskFormProps) {
   const savingRef = useRef(false);
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload, referenceDate);
-  const nameError = name.trim() ? null : t("errors.nameRequired");
-  const promptError = prompt.trim() ? null : t("errors.promptRequired");
+  const nameError = !name.trim()
+    ? t("errors.nameRequired")
+    : name.trim().length > NAME_MAX_CHARS
+      ? t("errors.tooLong", { max: NAME_MAX_CHARS })
+      : null;
+  const promptError = !prompt.trim()
+    ? t("errors.promptRequired")
+    : prompt.trim().length > PROMPT_MAX_CHARS && prompt !== task?.prompt
+      ? t("errors.tooLong", { max: PROMPT_MAX_CHARS })
+      : null;
+  const dirty =
+    name !== (task?.name ?? "") ||
+    prompt !== (task?.prompt ?? "") ||
+    mode !== initial.mode ||
+    JSON.stringify(payload) !== JSON.stringify(initial.payload) ||
+    JSON.stringify(integrations) !== JSON.stringify(initialIntegrations);
+  const unsaved = useUnsavedChangesGuard({ isDirty: dirty && !saving });
+
+  useEffect(() => {
+    restoredPayload.current = false;
+  }, [mode]);
+
+  function changeMode(next: EditorMode) {
+    payloadByMode.current[mode] = payload;
+    setMode(next);
+    const remembered = payloadByMode.current[next];
+    if (remembered) {
+      setPayload(remembered);
+      restoredPayload.current = true;
+    }
+  }
+
+  function changePayload(next: EditorPayload) {
+    if (restoredPayload.current) return;
+    setPayload(next);
+  }
+
+  const changeIntegrations = useCallback((next: TaskIntegrationLink[]) => {
+    setIntegrations(next);
+    setInitialIntegrations((was) => was ?? next);
+  }, []);
   const canSave =
     !nameError &&
     !promptError &&
@@ -228,9 +284,9 @@ function TaskForm({ task }: TaskFormProps) {
         <InputVertical title={t("fields.schedule.label")}>
           <ScheduleEditor
             mode={mode}
-            onModeChange={setMode}
+            onModeChange={changeMode}
             payload={payload}
-            onPayloadChange={setPayload}
+            onPayloadChange={changePayload}
             error={
               compiled.ok ? null : tScheduleEditor(`errors.${compiled.error}`)
             }
@@ -242,7 +298,7 @@ function TaskForm({ task }: TaskFormProps) {
         <TaskActionPolicies
           taskId={task?.id ?? null}
           value={integrations}
-          onChange={setIntegrations}
+          onChange={changeIntegrations}
           url={
             task
               ? SWR_KEYS.chatScheduledTaskActionPolicies(task.id)
@@ -250,6 +306,11 @@ function TaskForm({ task }: TaskFormProps) {
           }
         />
       </SettingsLayouts.Body>
+      <UnsavedChangesModal
+        open={unsaved.confirmationOpen}
+        onCancel={unsaved.cancelLeave}
+        onDiscard={unsaved.discardAndLeave}
+      />
     </SettingsLayouts.Root>
   );
 }

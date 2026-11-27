@@ -18403,7 +18403,8 @@
       "saveAndRun": "Salvar e executar agora",
       "errors": {
         "nameRequired": "Insira um nome.",
-        "promptRequired": "Insira um prompt."
+        "promptRequired": "Insira um prompt.",
+        "tooLong": "Use no máximo {max, number} caracteres."
       },
       "toasts": {
         "created": "Tarefa agendada criada.",
