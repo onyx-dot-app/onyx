@@ -60,6 +60,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     RENDER_PREVIEW_BUDGET_SECONDS,
     RENDER_PREVIEW_MAX_INPUT_BYTES,
     RENDER_PREVIEW_SUFFIXES,
+    SandboxPathError,
     chat_file_name,
     safe_file_name,
     session_relative_path,
@@ -76,11 +77,7 @@ from onyx.tools.tool_implementations.sandbox.artifact_text import (
     find_lines,
     read_lines,
 )
-from onyx.tools.tool_implementations.sandbox.errors import (
-    artifact_errors,
-    sandbox_errors_as_tool_errors,
-    tool_error,
-)
+from onyx.tools.tool_implementations.sandbox.errors import artifact_errors, tool_error
 from onyx.tools.tool_implementations.sandbox.models import (
     ARTIFACT_CURSOR,
     ARTIFACT_RESULT_MAX_CHARS,
@@ -164,7 +161,10 @@ def _copy_directory(session_id: UUID, directory: str) -> str:
     a normalized path relative to it ("" is the working directory). A tool
     error unless it is in the working directory, outside CHAT_FILES_DIR or in
     ARTIFACT_FILES_DIR: the chat file copies own the rest of CHAT_FILES_DIR."""
-    relative = session_relative_path(session_id, directory)
+    try:
+        relative = session_relative_path(session_id, directory)
+    except SandboxPathError as error:
+        raise tool_error(str(error)) from error
     if f"{relative}/".startswith(
         f"{CHAT_FILES_DIR}/"
     ) and not f"{relative}/".startswith(f"{ARTIFACT_FILES_DIR}/"):
@@ -518,13 +518,10 @@ def materialize(
     stops responding to a listing or a write fails the remaining items."""
     session_id = turn.chat_session_id
     destination = arguments.destination or MaterializeDestination()
-    with sandbox_errors_as_tool_errors():
-        directory = _copy_directory(
-            session_id,
-            ARTIFACT_FILES_DIR
-            if destination.directory is None
-            else destination.directory,
-        )
+    directory = _copy_directory(
+        session_id,
+        ARTIFACT_FILES_DIR if destination.directory is None else destination.directory,
+    )
     results: list[MaterializedItem] = [
         MaterializedItem(
             library_file_id=item.library_file_id,
