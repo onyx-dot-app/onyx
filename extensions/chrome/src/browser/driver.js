@@ -26,15 +26,25 @@ export class OperationError extends Error {
 
 const invalid = (message) => new OperationError("invalid_argument", message);
 
+// Hooks the page and its frames that are already loaded and that it can
+// reach (same origin); new documents get it from
+// Page.addScriptToEvaluateOnNewDocument.
 const HUMAN_INPUT_SCRIPT = `(() => {
-  if (window.__onyxHumanHooked) return;
-  window.__onyxHumanHooked = true;
-  for (const type of ["pointerdown", "keydown"]) {
-    addEventListener(type, (event) => {
-      if (!event.isTrusted) return;
-      try { ${HUMAN_BINDING}(type); } catch {}
-    }, true);
-  }
+  const hook = (win) => {
+    try {
+      if (!win.__onyxHumanHooked) {
+        win.__onyxHumanHooked = true;
+        for (const type of ["pointerdown", "keydown"]) {
+          win.addEventListener(type, (event) => {
+            if (!event.isTrusted) return;
+            try { ${HUMAN_BINDING}(type); } catch {}
+          }, true);
+        }
+      }
+      for (let i = 0; i < win.frames.length; i += 1) hook(win.frames[i]);
+    } catch {}
+  };
+  hook(window);
 })()`;
 
 // Per tab: refs of the last snapshot, a pending dialog, and who acts.
