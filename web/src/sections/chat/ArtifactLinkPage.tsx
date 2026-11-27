@@ -52,8 +52,16 @@ export default function ArtifactLinkPage({
     errorHandlingFetcher
   );
   useEffect(() => {
-    // A cached response of an earlier visit can be stale
-    if (!file || isValidating || file.access === "file_only" || !onLink) return;
+    // A cached response of an earlier visit can be stale, and SWR keeps it
+    // when the refresh fails
+    if (
+      !file ||
+      error ||
+      isValidating ||
+      file.access === "file_only" ||
+      !onLink
+    )
+      return;
     const artifact = {
       [SEARCH_PARAM_NAMES.ARTIFACT_ID]: artifactId,
       [SEARCH_PARAM_NAMES.ARTIFACT_VERSION]: version ?? undefined,
@@ -67,7 +75,7 @@ export default function ArtifactLinkPage({
         : routeWithQuery(`/app/shared/${file.chat_id}`, artifact),
       { replace: true }
     );
-  }, [file, isValidating, artifactId, version, navigation, onLink]);
+  }, [file, error, isValidating, artifactId, version, navigation, onLink]);
   // A cached error of an earlier visit can be stale too
   if (error && !isValidating && onLink) return <ArtifactUnavailable />;
   if (file?.access !== "file_only") return <PageLoader />;

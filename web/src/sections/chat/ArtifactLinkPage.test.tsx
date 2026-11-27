@@ -94,6 +94,24 @@ describe("ArtifactLinkPage", () => {
     expect(mockGo).not.toHaveBeenCalled();
   });
 
+  test("a cached response whose refresh fails shows the unavailable page", async () => {
+    const cache = new Map([
+      [
+        SWR_KEYS.chatArtifact(ARTIFACT_ID, 1),
+        { data: { ...FILE, chat_id: "old" } },
+      ],
+    ]);
+    const { findByText } = render(
+      <SWRConfig value={{ provider: () => cache }}>
+        <ArtifactLinkPage artifactId={ARTIFACT_ID} version={1} />
+      </SWRConfig>
+    );
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await act(async () => fail());
+    expect(await findByText(UNAVAILABLE)).toBeInTheDocument();
+    expect(mockGo).not.toHaveBeenCalled();
+  });
+
   test("a link the user may not open shows the unavailable page", async () => {
     const { findByText } = renderPage();
     await act(async () => fail());
