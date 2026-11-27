@@ -52,6 +52,11 @@ jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
   default: () => ({ data: mockGroups }),
 }));
+let mockPickerGroups: { id: number; name: string }[] | undefined;
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual("@/lib/skills/hooks"),
+  useSkillShareableGroups: () => ({ data: mockPickerGroups ?? mockGroups }),
+}));
 jest.mock("@/lib/skills/api", () => ({
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
   transferSkillOwnership: jest.fn(),
@@ -67,6 +72,7 @@ async function pickCompanySetting(name: RegExp) {
 describe("ShareSkillModal", () => {
   beforeEach(() => {
     mockGroups = [];
+    mockPickerGroups = undefined;
     mockIsAdmin = true;
     mockPublishing = "OPEN";
     mockSharing = undefined;
@@ -242,6 +248,7 @@ describe("ShareSkillModal", () => {
 
   it("lets owners revoke public user and group editors", async () => {
     const user = setupUser();
+    mockPickerGroups = [{ id: 42, name: "Editors" }];
     mockLoadSkill.mockResolvedValue(
       customFixture({
         user_permission: "OWNER",
@@ -795,6 +802,48 @@ describe("ShareSkillModal", () => {
     );
     await screen.findByText("Ownership");
     expect(screen.queryByText("Group Access")).not.toBeInTheDocument();
+  });
+
+  it("keeps groups a member cannot share with read-only", async () => {
+    mockIsAdmin = false;
+    mockGroups = [
+      { id: 3, name: "Design" },
+      { id: 4, name: "Ops" },
+    ];
+    mockPickerGroups = [];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: null,
+        group_shares: [
+          { group_id: 3, group_name: "Design", permission: "VIEWER" },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByText(
+        "You can share only with groups that you manage. Ask a skill manager to share with other groups."
+      )
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Update access for Design" })
+    ).toBeDisabled();
+    fireEvent.change(
+      screen.getByPlaceholderText("Add users, groups, and accounts"),
+      { target: { value: "Ops" } }
+    );
+    expect(
+      screen.queryByRole("option", { name: /Ops/ })
+    ).not.toBeInTheDocument();
   });
 
   it("disables adding people for a member while Sharing is off", async () => {

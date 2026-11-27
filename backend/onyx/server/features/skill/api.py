@@ -25,6 +25,7 @@ from onyx.db.plugin import (
     get_user_uploads_id,
     get_versions_needs,
     list_plugin_versions,
+    list_shareable_groups,
     lock_plugin,
     next_version_number,
     set_marketplace_default__no_commit,
@@ -99,6 +100,7 @@ from onyx.server.features.skill.models import (
     SkillPublishRequest,
     SkillResponse,
     SkillReviewRequestResponse,
+    SkillShareableGroup,
     SkillShareRequest,
     SkillsList,
     SkillVersionPreviewResponse,
@@ -509,6 +511,27 @@ def list_users_over_skill_limit(
         max_files=SKILL_WRITE_MAX_FILES,
         users=users_past_write_limit(db_session),
     )
+
+
+@user_router.get("/shareable-groups")
+def list_skill_shareable_groups(
+    skill_id: UUID | None = None,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[SkillShareableGroup]:
+    """The groups the user may add to or remove from the group shares of the
+    skill, or of a new skill when ``skill_id`` is left out."""
+    skill: Plugin | None = None
+    if skill_id is not None:
+        skill = fetch_editable_skill(
+            skill_id, user=user, db_session=db_session, any_plugin=True
+        )
+        if skill is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return [
+        SkillShareableGroup(id=group.id, name=group.name)
+        for group in list_shareable_groups(user, skill, db_session)
+    ]
 
 
 @user_router.get("/{skill_id}")

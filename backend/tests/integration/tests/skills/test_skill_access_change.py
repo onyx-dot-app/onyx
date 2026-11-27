@@ -18,7 +18,7 @@ from onyx.db.models import (
     Plugin__User,
     Plugin__UserGroup,
 )
-from onyx.server.features.skill.models import SkillBulkResponse
+from onyx.server.features.skill.models import SkillBulkResponse, SkillShareableGroup
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import SkillManager
@@ -300,3 +300,57 @@ def test_admin_changes_the_company_install_setting(admin_user: DATestUser) -> No
     assert result.failed == []
     assert _company_setting(single.id) is None
     assert _company_setting(bulk.id) is None
+
+
+def _shareable_group_ids(user: DATestUser, skill_id: UUID | None) -> set[int]:
+    response = client.get(
+        f"{API_SERVER_URL}/skills/shareable-groups",
+        params={"skill_id": str(skill_id)} if skill_id else None,
+        headers=user.headers,
+    )
+    response.raise_for_status()
+    return {SkillShareableGroup.model_validate(group).id for group in response.json()}
+
+
+def test_shareable_groups_follow_the_group_share_rule(
+    admin_user: DATestUser,
+    manager_env: tuple[DATestUser, DATestUserGroup, DATestUserGroup],
+) -> None:
+    """The picker gets every group for an organization-wide manager, the
+    managed groups for a group manager in scope, and none for a plain owner."""
+    manager, managed, other = manager_env
+    owner = UserManager.create(name=unique_name("plain_owner"))
+    own_group = _group(admin_user, [owner.id])
+    owned = SkillManager.create_custom(owner, name=unique_name("owned"))
+    scoped = SkillManager.create_custom(
+        manager, name=unique_name("scoped"), group_ids=[managed.id]
+    )
+
+    every_group = {managed.id, other.id, own_group.id}
+    assert every_group <= _shareable_group_ids(admin_user, owned.id)
+    assert every_group <= _shareable_group_ids(admin_user, None)
+
+    assert _shareable_group_ids(owner, owned.id) == set()
+    assert _shareable_group_ids(owner, None) == set()
+    refused = share_skill(
+        owner,
+        owned.id,
+        {"group_shares": [{"group_id": own_group.id, "permission": "VIEWER"}]},
+    )
+    assert refused.status_code == 403
+
+    assert _shareable_group_ids(manager, scoped.id) == {managed.id}
+    assert _shareable_group_ids(manager, None) == {managed.id}
+
+    # A share outside their groups puts the skill out of the manager's scope.
+    share_skill(
+        admin_user,
+        scoped.id,
+        {
+            "group_shares": [
+                {"group_id": managed.id, "permission": "EDITOR"},
+                {"group_id": other.id, "permission": "VIEWER"},
+            ]
+        },
+    ).raise_for_status()
+    assert _shareable_group_ids(manager, scoped.id) == set()

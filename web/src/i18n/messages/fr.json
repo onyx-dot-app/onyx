@@ -17326,6 +17326,7 @@
           "title": "Le partage est désactivé",
           "description": "Un administrateur a désactivé le partage avec des personnes et des groupes. Demandez à un gestionnaire de skills de partager ce skill."
         },
+        "groupsOutOfReach": "Vous ne pouvez partager qu'avec les groupes que vous gérez. Demandez à un gestionnaire de compétences de partager avec d'autres groupes.",
         "groupAccess": {
           "title": "Accès des groupes",
           "description": "Par défaut, chaque groupe utilise le paramètre de l'organisation. Un paramètre de groupe le remplace pour les membres du groupe, même s'il est plus strict.",

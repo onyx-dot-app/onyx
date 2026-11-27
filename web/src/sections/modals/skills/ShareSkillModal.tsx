@@ -69,6 +69,7 @@ import {
   usePolicyOptions,
   usePublishAction,
   useSharingAllowed,
+  useSkillShareableGroups,
 } from "@/lib/skills/hooks";
 import {
   INHERIT,
@@ -128,6 +129,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     includeApiKeys: false,
   });
   const { data: shareableGroupsData } = useShareableGroups();
+  const { data: pickerGroupsData } = useSkillShareableGroups(skillId, open);
   const { isAdmin, user: currentUser } = useUser();
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -264,6 +266,17 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     if (skill?.owner?.id) ids.add(skill.owner.id);
     return ids;
   }, [draftState?.userShares, skill?.owner?.id]);
+  const pickerGroupIds = useMemo(
+    () => new Set(pickerGroupsData?.map((group) => group.id)),
+    [pickerGroupsData]
+  );
+  // The member's own groups and the current shares they cannot change.
+  const hasGroupsOutOfReach =
+    !!pickerGroupsData &&
+    [
+      ...(shareableGroupsData ?? []).map((group) => group.id),
+      ...(draftState?.groupShares ?? []).map((share) => share.group_id),
+    ].some((groupId) => !pickerGroupIds.has(groupId));
   const existingGroupIds = useMemo(
     () => new Set(draftState?.groupShares.map((share) => share.group_id)),
     [draftState?.groupShares]
@@ -612,12 +625,17 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               )}
             />
             {canEditShares && !sharingAllowed && <SharingOffNotice />}
+            {canEditShares && sharingAllowed && hasGroupsOutOfReach && (
+              <Text as="p" font="secondary-body" color="text-03">
+                {t("share.groupsOutOfReach")}
+              </Text>
+            )}
             {canEditShares ? (
               <AddPeoplePicker
                 disabled={!sharingAllowed}
                 existingGroupIds={existingGroupIds}
                 existingUserIds={existingUserIds}
-                groups={shareableGroupsData ?? []}
+                groups={pickerGroupsData ?? []}
                 onAddGroup={(group) => {
                   setStagedGroups((currentGroups) => [...currentGroups, group]);
                 }}
@@ -686,7 +704,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                         ariaLabel={t("share.permissionMenu.ariaLabel", {
                           name: share.group_name,
                         })}
-                        disabled={!canEditShares}
+                        disabled={
+                          !canEditShares || !pickerGroupIds.has(share.group_id)
+                        }
                         onChange={(permission) =>
                           updateGroupSharePermission(share.group_id, permission)
                         }

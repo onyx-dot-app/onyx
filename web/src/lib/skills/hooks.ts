@@ -27,6 +27,7 @@ import {
 } from "@/lib/skills/pickerSession";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useFormatBytes } from "@/hooks/useFormatBytes";
+import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import { useTranslations } from "next-intl";
 import {
   useCreateModal,
@@ -347,6 +348,18 @@ export function useEntryPicker({
 }
 /** Sharing with people and groups is allowed for the current user: the admin
  * Sharing setting is on, or the user is an organization-wide skill manager. */
+/** The groups the user may add to or remove from the group shares of the
+ * skill, or of a new skill when `skillId` is null. */
+export function useSkillShareableGroups(
+  skillId: string | null,
+  enabled: boolean
+) {
+  return useSWR<MinimalUserGroupSnapshot[]>(
+    enabled ? SWR_KEYS.skillShareableGroups(skillId) : null,
+    errorHandlingFetcher
+  );
+}
+
 export function useSharingAllowed(): boolean {
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
   const { plugin_sharing: sharing } = useSettings();

@@ -91,6 +91,11 @@
   settings; each row's share comes from the share draft
   (`web/src/lib/skills/sharing.ts:groupAccessRows`), and Save sends the
   changed settings. `PluginAccess.group_shares` is derived from `group_rows`.
+  The share dialog's people picker lists only the groups from
+  `GET /skills/shareable-groups` (`db/plugin.py:list_shareable_groups`, the read
+  side of the group share check in `check_access_change`): every group for
+  organization-wide `MANAGE_PLUGINS`, the managed groups for a group manager in
+  scope, else none. A shared group out of reach stays read-only, with a note.
   Only organization-wide
   `MANAGE_PLUGINS` deletes a skill that is required for anyone
   (`db/plugin_access.py:plugin_required_for_anyone`: a REQUIRED company setting,

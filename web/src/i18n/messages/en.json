@@ -17326,6 +17326,7 @@
           "title": "Sharing is turned off",
           "description": "An admin turned off sharing with people and groups. Ask a skill manager to share this skill."
         },
+        "groupsOutOfReach": "You can share only with groups that you manage. Ask a skill manager to share with other groups.",
         "groupAccess": {
           "title": "Group Access",
           "description": "By default, every group uses the organization setting. A group setting replaces it for the group's members, also when it is stricter.",

@@ -312,6 +312,10 @@ export const SWR_KEYS = {
   pluginSkill: (pluginId: string, path: string) =>
     `/api/skills/${pluginId}/plugin-skill?path=${encodeURIComponent(path)}`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
+  skillShareableGroups: (skillId: string | null) =>
+    skillId
+      ? `/api/skills/shareable-groups?skill_id=${skillId}`
+      : "/api/skills/shareable-groups",
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
   skillReviewRequests: "/api/skills/review-requests",
   skillLimitUsers: "/api/skills/users-over-limit",

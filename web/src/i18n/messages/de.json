@@ -17326,6 +17326,7 @@
           "title": "Teilen ist deaktiviert",
           "description": "Ein Admin hat das Teilen mit Personen und Gruppen deaktiviert. Bitte einen Skill-Manager, diesen Skill zu teilen."
         },
+        "groupsOutOfReach": "Sie können nur mit Gruppen teilen, die Sie verwalten. Bitten Sie einen Skill-Manager, mit anderen Gruppen zu teilen.",
         "groupAccess": {
           "title": "Gruppenzugriff",
           "description": "Standardmäßig verwendet jede Gruppe die Einstellung der Organisation. Eine Gruppeneinstellung ersetzt sie für die Mitglieder der Gruppe, auch wenn sie strenger ist.",
