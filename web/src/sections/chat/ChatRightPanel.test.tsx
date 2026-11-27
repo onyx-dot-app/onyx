@@ -68,7 +68,8 @@ jest.mock("@/sections/chat/ChatSidePanel", () => {
     },
   };
 });
-// The "+" menu offers the browser
+// The "+" menu offers the browser, and My Chrome while a test turns it on
+let mockChromeAvailable = false;
 jest.mock("@/lib/settings/hooks", () => {
   const actual = jest.requireActual<typeof import("@/lib/settings/hooks")>(
     "@/lib/settings/hooks"
@@ -78,6 +79,7 @@ jest.mock("@/lib/settings/hooks", () => {
     useSettings: (): AppSettings => ({
       ...actual.useSettings(),
       chat_browser_available: true,
+      chrome_browser_available: mockChromeAvailable,
     }),
   };
 });
@@ -1700,5 +1702,108 @@ describe("the chat's browser", () => {
     act(() => socket().open());
     receive({ type: "tabs", tabs: [PAGE], selected: "t1" });
     expect(screen.getByRole("tab", { name: "Example Domain" })).toHaveFocus();
+  });
+});
+
+/** A JSON response; the jsdom fetch polyfill has no `Response.json`. */
+function jsonResponse(body: object): Response {
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+describe("the user's Chrome", () => {
+  const originalWebSocket = globalThis.WebSocket;
+  // The chat's Chrome state that the panel fetches
+  let grant: { expires_at: number } | null = null;
+
+  beforeEach(() => {
+    mockChromeAvailable = true;
+    grant = null;
+    FakeSocket.instances = [];
+    Object.defineProperty(globalThis, "WebSocket", {
+      configurable: true,
+      writable: true,
+      value: FakeSocket,
+    });
+    jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+    jest.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        installations: [{ installation_id: "i1" }],
+        request: null,
+        grant:
+          grant === null
+            ? null
+            : {
+                tabs: [
+                  { id: "1", title: "Wiki", url: "https://wiki.example/" },
+                ],
+                origins: ["https://wiki.example"],
+                ...grant,
+              },
+      })
+    );
+  });
+  afterEach(() => {
+    mockChromeAvailable = false;
+    Object.defineProperty(globalThis, "WebSocket", {
+      configurable: true,
+      writable: true,
+      value: originalWebSocket,
+    });
+  });
+
+  const openChrome = async () => {
+    update({ type: "showTab", tabId: "files" });
+    fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "My Chrome" }));
+  };
+
+  test("while the chat shares tabs, the agent's browser opens My Chrome, and the + menu offers no sandbox browser", async () => {
+    grant = { expires_at: Date.now() / 1000 + 600 };
+    renderChat([[REPORT]]);
+    await openChrome();
+    expect(
+      await screen.findByText("This chat uses 1 tab in your Chrome")
+    ).toBeVisible();
+
+    act(() => openBrowserInChat("session"));
+    await waitFor(() => expect(panel().browserOpen).toBe(false));
+    expect(panel().activeId).toBe("chrome");
+    expect(FakeSocket.instances).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
+    expect(
+      (await screen.findAllByRole("menuitem")).map((item) => item.textContent)
+    ).toEqual(["Files", "My Chrome", "Sources"]);
+  });
+
+  test("a share that expired since the last fetch leaves the agent's browser in the sandbox", async () => {
+    grant = { expires_at: Date.now() / 1000 + 600 };
+    renderChat([[REPORT]]);
+    await openChrome();
+    await screen.findByText("This chat uses 1 tab in your Chrome");
+
+    // The share ends before the next fetch
+    const later = Date.now() + 601_000;
+    jest.spyOn(Date, "now").mockReturnValue(later);
+    act(() => openBrowserInChat("session"));
+    expect(screen.getByRole("tab", { name: "Browser" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(panel().browserOpen).toBe(true);
+  });
+
+  test("My Chrome closes when the workspace turns it off", async () => {
+    const view = renderChat([[REPORT]]);
+    await openChrome();
+    await screen.findByText("Share Chrome tabs with this chat");
+
+    mockChromeAvailable = false;
+    view.rerender(<Chat replies={[[REPORT]]} />);
+    await waitFor(() => expect(panel().chromeOpen).toBe(false));
+    expect(
+      screen.queryByRole("tab", { name: "My Chrome" })
+    ).not.toBeInTheDocument();
   });
 });

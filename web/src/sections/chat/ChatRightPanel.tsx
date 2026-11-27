@@ -164,12 +164,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     chromeAvailable ? sessionId : null,
     open && state.chromeOpen
   );
-  const chromeShared = !!chrome.data?.grant;
-  useEffect(() => {
-    if (!chromeShared || !state.browserOpen) return;
-    dispatch({ type: "closeTab", tabId: RIGHT_PANEL_BROWSER_TAB });
-    dispatch({ type: "openChrome" });
-  }, [chromeShared, state.browserOpen, dispatch]);
+  const grant = chrome.data?.grant;
+  const chromeShared = !!grant && grant.expires_at * 1000 > Date.now();
   const browser = useChatBrowserTabs({
     sessionId,
     open,
@@ -179,7 +175,19 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       insideChangeRef.current = true;
     },
   });
-  const chromeShown = state.activeId === RIGHT_PANEL_CHROME_TAB;
+  const closeBrowser = browser.closeTab;
+  useEffect(() => {
+    if (!chromeShared || !state.browserOpen) return;
+    // The browser's close also drops pages queued for the sandbox
+    closeBrowser(RIGHT_PANEL_BROWSER_TAB);
+    dispatch({ type: "openChrome" });
+  }, [chromeShared, state.browserOpen, closeBrowser, dispatch]);
+  useEffect(() => {
+    if (!chromeAvailable && state.chromeOpen)
+      dispatch({ type: "closeTab", tabId: RIGHT_PANEL_CHROME_TAB });
+  }, [chromeAvailable, state.chromeOpen, dispatch]);
+  const chromeShown =
+    chromeAvailable && state.activeId === RIGHT_PANEL_CHROME_TAB;
   const shown =
     state.activeId === RIGHT_PANEL_SOURCES_TAB ||
     fileByTab.has(state.activeId) ||
@@ -214,7 +222,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           },
         ]
       : []),
-    ...(state.chromeOpen
+    ...(state.chromeOpen && chromeAvailable
       ? [
           {
             id: RIGHT_PANEL_CHROME_TAB,
@@ -560,7 +568,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                     icon: SvgFiles,
                     onSelect: showFilesList,
                   },
-                  ...(browserAvailable && sessionId !== null
+                  ...(browserAvailable && !chromeShared && sessionId !== null
                     ? [
                         {
                           kind: "action" as const,
