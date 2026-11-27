@@ -113,32 +113,30 @@ func TestUpdateSendsCredentialsForANewVersionOrAChangedConnectionWithoutAWorking
 			OrganizationStatus: &client.IntegrationStatus{State: state},
 		}
 	}
-	newServerURL := "https://mcp2.example.com/mcp"
-	failedEarlierApply := status("needs_reconnect")
-	failedEarlierApply.Config.ServerURL = &newServerURL
-
 	connected := status("connected")
 	cases := []struct {
-		name   string
-		plan   integrationResourceModel
-		before *client.Integration
-		after  *client.Integration
-		want   bool
+		name    string
+		plan    integrationResourceModel
+		before  *client.Integration
+		after   *client.Integration
+		pending bool
+		want    bool
 	}{
-		{"a new credentials version", newVersion, status("needs_reconnect"), status("needs_reconnect"), true},
-		{"a new server URL that needs reconnect", newURL, connected, status("needs_reconnect"), true},
-		{"a new server URL with no connection yet", newURL, &client.Integration{}, status("not_set_up"), true},
-		{"a new OpenAPI document that needs reconnect", newDocument, connected, status("needs_reconnect"), true},
-		{"a new OpenAPI document that keeps the connection", newDocument, connected, connected, false},
-		{"a new header field that needs reconnect", newHeaders, connected, status("needs_reconnect"), true},
-		{"a header edit of a key rejected before", newHeaders, status("needs_reconnect"), status("needs_reconnect"), false},
-		{"a retry of a server URL change that an earlier apply left unsigned", newURL, failedEarlierApply, status("needs_reconnect"), true},
-		{"a new shared sign-in with no connection yet", newSignIn, status("not_set_up"), status("not_set_up"), true},
-		{"an unrelated update of a rejected key", base, status("needs_reconnect"), status("needs_reconnect"), false},
-		{"a new server URL with no shared sign-in", newURL, &client.Integration{}, &client.Integration{}, false},
+		{"a new credentials version", newVersion, status("needs_reconnect"), status("needs_reconnect"), false, true},
+		{"a new server URL that needs reconnect", newURL, connected, status("needs_reconnect"), false, true},
+		{"a new server URL with no connection yet", newURL, &client.Integration{}, status("not_set_up"), false, true},
+		{"a new OpenAPI document that needs reconnect", newDocument, connected, status("needs_reconnect"), false, true},
+		{"a new OpenAPI document that keeps the connection", newDocument, connected, connected, false, false},
+		{"a new header field that needs reconnect", newHeaders, connected, status("needs_reconnect"), false, true},
+		{"a header edit of a key rejected before", newHeaders, status("needs_reconnect"), status("needs_reconnect"), false, false},
+		{"a retry of credentials that an earlier apply could not save", base, status("needs_reconnect"), status("needs_reconnect"), true, true},
+		{"an OpenAPI edit after an admin changed the document and the key", newDocument, status("needs_reconnect"), status("needs_reconnect"), false, false},
+		{"a new shared sign-in with no connection yet", newSignIn, status("not_set_up"), status("not_set_up"), false, true},
+		{"an unrelated update of a rejected key", base, status("needs_reconnect"), status("needs_reconnect"), false, false},
+		{"a new server URL with no shared sign-in", newURL, &client.Integration{}, &client.Integration{}, false, false},
 	}
 	for _, c := range cases {
-		if got := sendsOrganizationCredentials(context.Background(), c.plan, base, c.before, c.after); got != c.want {
+		if got := sendsOrganizationCredentials(c.plan, base, c.before, c.after, c.pending); got != c.want {
 			t.Errorf("%s: sends = %v, want %v", c.name, got, c.want)
 		}
 	}

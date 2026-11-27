@@ -22,7 +22,14 @@ var (
 	_ resource.Resource                = (*integrationResource)(nil)
 	_ resource.ResourceWithConfigure   = (*integrationResource)(nil)
 	_ resource.ResourceWithImportState = (*integrationResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*integrationResource)(nil)
 )
+
+// integrationCredentialsPendingKey marks, in private state, shared
+// credentials that an apply could not save after Onyx took the new
+// connection settings. A refresh reads those settings into the state and
+// clears the difference, so this mark is what makes the next apply send them.
+const integrationCredentialsPendingKey = "organization_credentials_pending"
 
 // NewIntegrationResource returns the onyx_integration resource.
 func NewIntegrationResource() resource.Resource {
@@ -453,15 +460,18 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 		resp.Diagnostics.AddError("Failed to update Onyx integration", err.Error())
 		return
 	}
+	pending := writeOnlySourceMarked(ctx, req.Private, integrationCredentialsPendingKey, &resp.Diagnostics)
 	var credentialValues map[string]string
-	if sendsOrganizationCredentials(ctx, plan, state, current, updated) {
+	if len(configuredCredentials) > 0 && sendsOrganizationCredentials(plan, state, current, updated, pending) {
 		credentialValues = configuredCredentials
+		resp.Diagnostics.Append(markWriteOnlySource(ctx, resp.Private, integrationCredentialsPendingKey, true)...)
 	}
 	serverChanged := !plan.ServerURL.Equal(state.ServerURL) || !plan.Transport.Equal(state.Transport)
 	remote := r.applyFollowUps(ctx, id, plan, updated, credentialValues, serverChanged, &resp.Diagnostics)
 	if remote == nil {
 		return
 	}
+	resp.Diagnostics.Append(markWriteOnlySource(ctx, resp.Private, integrationCredentialsPendingKey, false)...)
 	applyRemoteIntegration(ctx, &plan, remote, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
@@ -485,15 +495,25 @@ func (r *integrationResource) ImportState(ctx context.Context, req resource.Impo
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+// ModifyPlan plans an update for credentials that an earlier apply could not
+// save, so the next apply sends them.
+func (r *integrationResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	if writeOnlySourceMarked(ctx, req.Private, integrationCredentialsPendingKey, &resp.Diagnostics) {
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("kind"), types.StringUnknown())...)
+	}
+}
+
 // sendsOrganizationCredentials reports whether Update sends the configured
-// shared credentials: for a new credentials version, or when a new sign-in,
-// header template, server URL or OpenAPI document left the organization
-// without a working connection. Without a new version, it does not replace a
-// key that Onyx rejected while the connection settings matched the state:
-// that key may be newer than the configured one. A rejection that a failed
-// earlier apply caused still gets the configured key.
-func sendsOrganizationCredentials(ctx context.Context, plan, state integrationResourceModel, before, after *client.Integration) bool {
-	if writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) {
+// shared credentials: for a new credentials version, for credentials that an
+// earlier apply could not save, or when a new sign-in, header template,
+// server URL or OpenAPI document left the organization without a working
+// connection. Without a new version, it does not replace a key that Onyx
+// rejected before the update: that key may be newer than the configured one.
+func sendsOrganizationCredentials(plan, state integrationResourceModel, before, after *client.Integration, pending bool) bool {
+	if pending || writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) {
 		return true
 	}
 	connectionChanged := !plan.ServerURL.Equal(state.ServerURL) ||
@@ -504,8 +524,7 @@ func sendsOrganizationCredentials(ctx context.Context, plan, state integrationRe
 	if !connectionChanged || after.OrganizationStatus == nil {
 		return false
 	}
-	if before.OrganizationStatus != nil && before.OrganizationStatus.State == "needs_reconnect" &&
-		connectionMatchesState(ctx, state, before) {
+	if before.OrganizationStatus != nil && before.OrganizationStatus.State == "needs_reconnect" {
 		return false
 	}
 	switch after.OrganizationStatus.State {
@@ -513,19 +532,4 @@ func sendsOrganizationCredentials(ctx context.Context, plan, state integrationRe
 		return true
 	}
 	return false
-}
-
-// connectionMatchesState reports whether the remote sign-in, header template,
-// server URL and OpenAPI document are the ones in the state.
-func connectionMatchesState(ctx context.Context, state integrationResourceModel, remote *client.Integration) bool {
-	var diags diag.Diagnostics
-	read := state
-	read.OpenAPIDocument = types.StringNull()
-	applyRemoteIntegration(ctx, &read, remote, &diags)
-	return !diags.HasError() &&
-		read.ServerURL.Equal(state.ServerURL) &&
-		read.OpenAPIDocument.Equal(state.OpenAPIDocument) &&
-		read.HeaderTemplate.Equal(state.HeaderTemplate) &&
-		read.AuthMode.Equal(state.AuthMode) &&
-		read.AuthMethod.Equal(state.AuthMethod)
 }
