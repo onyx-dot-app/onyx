@@ -381,7 +381,7 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	headers := stringMapFromModel(ctx, plan.HeaderTemplate, &resp.Diagnostics)
 	var credentialValues map[string]string
-	if writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) {
+	if sendsOrganizationCredentials(plan, state) {
 		var credentials types.Map
 		resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("organization_credentials_wo"), &credentials)...)
 		credentialValues = stringMapFromModel(ctx, credentials, &resp.Diagnostics)
@@ -432,4 +432,13 @@ func (r *integrationResource) Delete(ctx context.Context, req resource.DeleteReq
 
 func (r *integrationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// sendsOrganizationCredentials reports whether Update sends the configured
+// shared credentials. A new server URL or OpenAPI document can move where the
+// credentials go, and Onyx then marks the connection Needs reconnect.
+func sendsOrganizationCredentials(plan, state integrationResourceModel) bool {
+	return writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) ||
+		!plan.ServerURL.Equal(state.ServerURL) ||
+		!plan.OpenAPIDocument.Equal(state.OpenAPIDocument)
 }

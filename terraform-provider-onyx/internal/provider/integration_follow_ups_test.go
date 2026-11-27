@@ -82,3 +82,28 @@ func TestApplyFollowUpsSkipsRefreshWithoutCredentialsOrServerChange(t *testing.T
 		t.Fatalf("calls = %v, want no action refresh", calls)
 	}
 }
+
+func TestUpdateSendsCredentialsWhenTheirDestinationChanges(t *testing.T) {
+	base := integrationResourceModel{
+		ServerURL:                        types.StringValue("https://mcp.example.com/mcp"),
+		OpenAPIDocument:                  types.StringNull(),
+		OrganizationCredentialsWOVersion: types.Int64Value(1),
+	}
+	newURL := base
+	newURL.ServerURL = types.StringValue("https://mcp2.example.com/mcp")
+	newDocument := base
+	newDocument.OpenAPIDocument = types.StringValue(`{"openapi":"3.0.0"}`)
+	newVersion := base
+	newVersion.OrganizationCredentialsWOVersion = types.Int64Value(2)
+
+	for name, plan := range map[string]integrationResourceModel{
+		"server URL": newURL, "OpenAPI document": newDocument, "credentials version": newVersion,
+	} {
+		if !sendsOrganizationCredentials(plan, base) {
+			t.Errorf("a new %s does not send the credentials", name)
+		}
+	}
+	if sendsOrganizationCredentials(base, base) {
+		t.Error("an unchanged plan sends the credentials")
+	}
+}
