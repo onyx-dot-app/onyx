@@ -273,6 +273,8 @@ export const SWR_KEYS = {
   adminUserGroupsWithDefault:
     "/api/manage/admin/user-group?include_default=true",
   shareableGroups: "/api/manage/user-groups/minimal",
+  shareableUsers: (includeApiKeys: boolean) =>
+    `/api/users?include_api_keys=${includeApiKeys}`,
   userGroupPermissions: (groupId: number) =>
     `/api/manage/admin/user-group/${groupId}/permissions`,
   permissionRegistry: "/api/manage/admin/permissions/registry",

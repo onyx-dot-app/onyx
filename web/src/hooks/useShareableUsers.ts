@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { MinimalUserSnapshot } from "@/lib/types";
 
 export interface UseShareableUsersParams {
@@ -15,7 +16,7 @@ export default function useShareableUsers({
   enabled = true,
 }: UseShareableUsersParams) {
   const { data, error, mutate, isLoading } = useSWR<MinimalUserSnapshot[]>(
-    enabled ? `/api/users?include_api_keys=${includeApiKeys}` : null,
+    enabled ? SWR_KEYS.shareableUsers(includeApiKeys) : null,
     errorHandlingFetcher
   );
 
