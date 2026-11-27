@@ -2423,18 +2423,19 @@ def test_a_preset_that_needs_a_sign_in_cannot_be_added_with_none(
     db_session.rollback()
 
 
-def test_a_scheme_relative_server_url_with_a_blocked_host_is_refused_on_import() -> (
-    None
-):
+def test_a_scheme_relative_server_url_with_a_blocked_host_is_refused_on_fetch() -> None:
     from onyx.integrations.service import import_openapi_document
     from onyx.server.features.integrations.models import OpenApiEndpointsRequest
 
     blocked = json.dumps(
         {**OPENAPI_SPEC, "servers": [{"url": "//169.254.169.254/api"}]}
     )
-    with pytest.raises(OnyxError) as error:
-        import_openapi_document(OpenApiEndpointsRequest(openapi_document=blocked))
-    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+    # The admin's base URL replaces a URL with no scheme in an uploaded spec.
+    with_query = json.dumps(
+        {**OPENAPI_SPEC, "servers": [{"url": "//pets.example.com/api?v=1"}]}
+    )
+    for document in (blocked, with_query):
+        import_openapi_document(OpenApiEndpointsRequest(openapi_document=document))
 
     response = MagicMock(status_code=200, headers={})
     response.raw.read1.side_effect = [blocked.encode(), b""]

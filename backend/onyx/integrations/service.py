@@ -630,14 +630,13 @@ def _checked_import(view: OpenApiConfigView, *, fetched: bool) -> OpenApiConfigV
     # The client hides the base URL field for the single server URL of a
     # spec, so the admin cannot correct it after the import. The client
     # resolves a relative URL against the spec URL of a fetched spec. For an
-    # uploaded spec, the admin's base URL replaces a relative URL.
+    # uploaded spec, the admin's base URL replaces a URL with no scheme.
     base_url = view.base_url.strip()
     try:
-        parsed = urlparse(base_url)
-        relative = not parsed.scheme and not parsed.netloc
+        absolute = bool(urlparse(base_url).scheme)
     except ValueError:
-        relative = False
-    if fetched or not relative:
+        absolute = True
+    if fetched or absolute:
         _check_server_url(base_url, allow_relative=True)
     return view
 
