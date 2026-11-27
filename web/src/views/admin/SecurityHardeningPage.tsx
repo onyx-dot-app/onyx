@@ -38,6 +38,7 @@ import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { Tier } from "@/lib/tiers/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import RetentionField from "@/views/admin/RetentionField";
+import AuditLogsSection from "@/views/admin/AuditLogsSection";
 import type { RichStr } from "@opal/types";
 import type {
   IncognitoAvailability,
@@ -1014,6 +1015,16 @@ export default function SecurityHardeningPage() {
             </Section>
           </Card>
         </div>
+
+        {/* Audit logs reach a SIEM through the deployment's own log shipper,
+            so the section is self-hosted only, by build flag and at runtime. */}
+        {!isMultiTenant && isSingleTenantRuntime && (
+          <AuditLogsSection
+            categories={draft.audit_event_categories}
+            includeQueryText={draft.audit_include_query_text}
+            onSave={(updates) => void saveSettings(updates)}
+          />
+        )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

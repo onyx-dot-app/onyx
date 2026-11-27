@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "Logs de auditoria e SIEM",
+          "description": "O Onyx grava eventos de auditoria como linhas JSON em seus logs. Seu coletor de logs os envia ao seu SIEM. [Configurar o encaminhamento para o SIEM]({url})."
+        },
+        "status": {
+          "title": "Status do fluxo de auditoria",
+          "description": "Os eventos que o Onyx gravou. O Onyx não vê seu coletor de logs nem seu SIEM, então confirme que os eventos chegam lá.",
+          "loadFailed": {
+            "title": "Não foi possível carregar o status do fluxo de auditoria",
+            "description": "Recarregue a página para tentar novamente."
+          },
+          "notEnabled": {
+            "title": "O Onyx não grava eventos de auditoria",
+            "description": "O fluxo de auditoria requer uma licença Enterprise."
+          },
+          "logFormat": {
+            "title": "Use logs em JSON",
+            "description": "O formato de log é {logFormat}. Defina LOG_FORMAT=json para que seu coletor de logs consiga analisar cada registro."
+          },
+          "noEvents": "Nenhum evento ainda",
+          "eventSummary": "{count, plural, one {# evento} other {# eventos}} nas últimas 24 horas. Último evento {lastEvent}.",
+          "eventCount": "{count, plural, one {# evento} other {# eventos}} nas últimas 24 horas.",
+          "classes": {
+            "authentication": "Autenticação",
+            "account_change": "Alterações de conta",
+            "user_access_management": "Gerenciamento de acesso de usuários",
+            "group_management": "Gerenciamento de grupos",
+            "api_activity": "Atividade da API",
+            "credential_access": "Acesso a credenciais"
+          }
+        },
+        "auditEvents": {
+          "title": "Eventos de auditoria",
+          "description": "Alterações de segurança e administração. Estão ativados por padrão."
+        },
+        "userActivity": {
+          "title": "Atividade dos usuários",
+          "description": "O que cada usuário fez, para investigar incidentes. Estão desativados por padrão e podem gerar muitos eventos."
+        },
+        "categories": {
+          "authentication": {
+            "title": "Autenticação",
+            "description": "Logins, falhas de login, logouts e redefinições de senha."
+          },
+          "user_and_group_management": {
+            "title": "Gerenciamento de usuários e grupos",
+            "description": "Alterações de usuários, funções e grupos, e aprovações de clientes MCP."
+          },
+          "configuration": {
+            "title": "Alterações de configuração",
+            "description": "Alterações em configurações, conectores, credenciais, agentes, conjuntos de documentos, chaves de API e tokens de acesso."
+          },
+          "credential_access": {
+            "title": "Acesso a credenciais",
+            "description": "Descriptografias de credenciais armazenadas. O Onyx pode omitir uma repetição para a mesma credencial e o mesmo usuário em até 10 minutos."
+          },
+          "data_export": {
+            "title": "Exportações de dados",
+            "description": "Downloads do histórico de consultas, relatórios de uso e exportações de logs."
+          },
+          "chat": {
+            "title": "Mensagens de chat",
+            "description": "Cada resposta do chat, com o agente, o modelo, as ferramentas e os documentos que o usuário viu."
+          },
+          "search": {
+            "title": "Pesquisas",
+            "description": "Cada pesquisa na página de pesquisa, na API ou em um cliente MCP, com os documentos encontrados."
+          },
+          "llm_gateway": {
+            "title": "Solicitações ao gateway de LLM",
+            "description": "Cada chamada pelo gateway de LLM, com o modelo e a contagem de tokens."
+          },
+          "file_download": {
+            "title": "Downloads de arquivos",
+            "description": "Cada arquivo do chat que um usuário baixa."
+          }
+        },
+        "queryText": {
+          "title": "Incluir o texto da consulta",
+          "description": "Adiciona o que o usuário digitou aos eventos de chat e pesquisa. O Onyx o adiciona somente quando o histórico de consultas é normal."
+        }
       }
     },
     "serviceAccounts": {

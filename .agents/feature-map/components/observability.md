@@ -180,6 +180,8 @@ Each written event also counts in `backend/ee/onyx/utils/audit_stats.py`: a boun
 writer thread per process keep the cache write off the caller (hourly buckets, last event time at
 most once a minute per process; a full queue drops counts), which
 `GET /admin/security/audit-status` (`backend/ee/onyx/server/security/api.py`) reports.
+`web/src/views/admin/AuditLogsSection.tsx` on the Security & Hardening page shows that status,
+the category switches and the docs link (Enterprise, self-hosted only).
 
 **Log export.** `ee/onyx/server/log_export/api.py:start_log_export` sends a
 collect task to the queue of each worker type, collects its own logs inline,
