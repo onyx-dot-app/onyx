@@ -156,7 +156,7 @@ Onyx replaces them with the values of the current request at call time.
 
 | Tab | Contents |
 | --- | --- |
-| **Overview** | Name, description, owner, **Install Setting**, **Enabled**, and **Delete**. |
+| **Overview** | Name, description, owner, and **Install Setting**. The page header holds the on/off switch and, under **More actions**, **Edit details** and **Delete**. |
 | **Configuration** | **Import a Spec**, the base URL and the endpoints (or the endpoint URL and schema of a GraphQL API), the sign-in, and **Users Can Save Always Allow**. |
 | **Actions** | The operations that Onyx found in the schema, each with **Allow**, **Ask**, or **Blocked**. |
 
@@ -170,7 +170,7 @@ upload or import the changed schema in **Import a Spec**. Onyx fills in the base
 Onyx syncs the actions again when you save. A schema can be at most 5 MB.
 
 Changing the install setting of the integration does not remove it from custom agents.
-To remove the integration from all agents, delete it on the **Overview** tab.
+To remove the integration from all agents, delete it from **More actions** in the page header.
 
 <Note>
   In Terraform, `onyx_custom_tool.enabled` sets default Chat availability. It does not change custom-agent attachments.

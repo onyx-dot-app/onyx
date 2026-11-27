@@ -347,7 +347,7 @@ only the configuration of a chat that does not exist yet.
    never writes `Persona__Tool` or agent settings. A new action follows the
    admin default row and the agent's `default` setting.
 7. `no-workspace-enable-from-url` **A URL never turns an integration on.**
-   Only the admin's Enabled switch on the Overview tab (`PATCH
+   Only the admin's Enabled switch in the detail page header (`PATCH
    /admin/integrations/{id}` with `enabled`) changes it. A query flag alone must
    never enable tools for the whole workspace.
 8. `connection-status-is-credential-state` **`connection_status` is credential

@@ -327,17 +327,17 @@ the sandbox proxy injects the rendered headers on the way out.
 <Warning>
   A URL-pattern App has no action catalog. Every request that matches its URL patterns requires approval.
   On the **Actions** tab, you cannot set its requests to **Allow**, and users cannot save **Always allow** for them.
-  Set them to **Blocked**, or turn off **Enabled** on the **Overview** tab, to stop all use of a URL-pattern App.
+  Set them to **Blocked**, or turn off the switch in the App page header, to stop all use of a URL-pattern App.
 </Warning>
 
 ## Manage Apps
 
 | Action | Effect |
 | --- | --- |
-| **Turn off Enabled** | On the **Overview** tab. Hides the App from users and stops credential injection. Onyx keeps the configuration and user connections. |
-| **Delete** | On the **Overview** tab, click **Delete**. Onyx removes the App, its policies, and user credentials. |
+| **Turn off** | Turn off the switch in the page header. Hides the App from users and stops credential injection. Onyx keeps the configuration and user connections. |
+| **Delete** | In the page header, open **More actions** and click **Delete**. Onyx removes the App, its policies, and user credentials. |
 
-Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
+Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off the header switch instead.
 
 ## Troubleshooting
 
@@ -349,8 +349,9 @@ Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
   </Accordion>
 
   <Accordion title="An enabled app does not appear to users">
-    Confirm that **Enabled** is on, that the user has access to the App (check its install setting and shares),
-    that the user turned the App on, and that the user has Craft access.
+    Confirm that the switch in the App page header is on,
+    that the user has access to the App (check its install setting and shares), that the user turned the App on,
+    and that the user has Craft access.
   </Accordion>
 
   <Accordion title="A user connected successfully but an action is blocked">
