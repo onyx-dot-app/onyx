@@ -113,6 +113,7 @@ def ingest_skill_bundle(
         )
         with open_bundle_zip(bundle_content) as bundle_zip:
             raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
+        check_skill_md_size(raw_skill_md)
         document = parse_skill_document(raw_skill_md)
         name = expected_name
     if name in BUILT_IN_SKILLS:

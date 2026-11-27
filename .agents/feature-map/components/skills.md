@@ -540,8 +540,9 @@ the app from the same rule
    `uq_plugin_marketplace_name`: a new plugin with a used name takes the next
    free name (`db/plugin.py:free_plugin_name`); a concurrent create that takes
    it first fails and the user tries again. Publish and transfer
-   refuse a clash with `CONFLICT`. Skill names repeat across plugins; never
-   compare one with `plugin.name`. Two skills with one name can both be
+   refuse a clash with `CONFLICT`. The inner skill names of a multi-skill
+   plugin repeat across plugins; never compare one with `plugin.name`. A
+   single-skill plugin's skill name is `plugin.name`. Two skills with one name can both be
    Default or Required; the run-time name order picks one. A toggle conflicts only with skills the user can see. Every write that
    enables a preference first takes `db/skill_limit.py:lock_user_skill_preferences`,
    a `FOR NO KEY UPDATE` lock on the user row. The lock orders concurrent
@@ -770,7 +771,7 @@ the app from the same rule
     Public and author-less skills go to the Organization library, published.
     Other skills go to the author's "My uploads". A duplicate name in one
     marketplace gets the first free `-N` suffix on `plugin.name` only
-    (`db/plugin.py:free_plugin_name` in app code). The skill name lives only
+    (`db/plugin.py:free_plugin_name` in app code). The stored SKILL.md name lives
     in `plugin_skill.frontmatter` (NOT NULL, a check requires a string
     `name`); the backfill seeds it with the name and description of the
     old skill row. No column stores the kind (skill or plugin):

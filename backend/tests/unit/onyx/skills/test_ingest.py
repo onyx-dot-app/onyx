@@ -8,6 +8,7 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
+from onyx.skills.bundle import SKILL_MD_MAX_BYTES
 from onyx.skills.ingest import (
     IngestedBundle,
     ingest_skill_bundle,
@@ -109,6 +110,24 @@ def test_ingest_replacement_rejects_changed_name() -> None:
             file_store,
             expected_name="existing-skill",
         )
+
+
+def test_ingest_replacement_with_public_name_checks_the_rewritten_size() -> None:
+    """The stored SKILL.md takes the former name, which can make it too large."""
+    expected_name = "e" * 60
+    header = b"---\nname: a\ndescription: Desc\n---\n\n"
+    body = b"x" * (SKILL_MD_MAX_BYTES - len(header) - 10)
+    file_store = MagicMock(spec=FileStore)
+
+    with pytest.raises(OnyxError, match="SKILL.md exceeds"):
+        ingest_skill_bundle(
+            header + body,
+            "SKILL.md",
+            file_store,
+            expected_name=expected_name,
+            public_name="a",
+        )
+    file_store.save_file.assert_not_called()
 
 
 def test_ingest_zip_uses_frontmatter_name_instead_of_filename() -> None:
