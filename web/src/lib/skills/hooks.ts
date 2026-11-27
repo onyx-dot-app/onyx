@@ -735,8 +735,9 @@ export function useSkillBulkSelection({
         toast.error(
           nounCopy("partialFailure", { count: result.failed.length })
         );
-      setSharingOpen(false);
-      deleteModal.toggle(false);
+      // Another action's dialog may have opened while this one ran.
+      if (action === "share") setSharingOpen(false);
+      if (action === "delete") deleteModal.toggle(false);
       if (!(await refreshSkillListsChecked(mutate, cache)))
         toast.error(listCopy("page.toasts.listRefreshFailed"));
     } catch (error) {

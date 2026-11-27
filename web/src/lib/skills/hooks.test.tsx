@@ -36,6 +36,11 @@ function Harness({ items }: { items: CustomSkill[] }) {
         delete target
       </button>
       <button onClick={() => void bulk.run("delete")}>run delete</button>
+      <button onClick={() => bulk.select(new Set([target.id]))}>
+        select target
+      </button>
+      <button onClick={() => void bulk.run("enable")}>run enable</button>
+      <p data-testid="delete-open">{String(bulk.deleteModal.isOpen)}</p>
       <p data-testid="selection">{[...bulk.selectedIds].join(",")}</p>
       <p data-testid="busy">{String(bulk.busy)}</p>
     </>
@@ -64,6 +69,27 @@ test("a pending toggle of a selected plugin does not block deleting another", as
       skill_ids: [target.id],
     })
   );
+});
+
+test("a finished enable keeps a delete confirmation open", async () => {
+  let finish: (value: unknown) => void = () => undefined;
+  mockBulkUpdateSkills.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    })
+  );
+  const user = setupUser();
+  render(<Harness items={[toggling, target]} />);
+
+  await user.click(screen.getByRole("button", { name: "select target" }));
+  await user.click(screen.getByRole("button", { name: "run enable" }));
+  await user.click(screen.getByRole("button", { name: "delete target" }));
+  finish({ succeeded: [target.id], failed: [] });
+
+  await waitFor(() =>
+    expect(screen.getByTestId("busy")).toHaveTextContent("false")
+  );
+  expect(screen.getByTestId("delete-open")).toHaveTextContent("true");
 });
 
 test("a row delete keeps the selection of other plugins", async () => {
