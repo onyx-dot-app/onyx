@@ -732,15 +732,11 @@ def inspect_plugin_upload(
         target = target.model_copy(
             update={"version_number": current_version.version_number}
         )
-    name_conflicts = (
-        []
-        if target.plugin_id is not None
-        else skill_name_conflicts(
-            [skill.content.name for skill in plugin_bundle.skills],
-            None,
-            user,
-            db_session,
-        )
+    name_conflicts = skill_name_conflicts(
+        [skill.content.name for skill in plugin_bundle.skills],
+        target.plugin_id,
+        user,
+        db_session,
     )
     return PluginUploadPreview(
         manifest=plugin_bundle.manifest,
@@ -792,6 +788,12 @@ def save_plugin_upload(
                 update={"version_number": version.version_number}
             )
             enabled = skill_enabled_for_user(plugin.id, user, db_session)
+            name_conflicts = skill_name_conflicts(
+                [skill.content.name for skill in plugin_bundle.skills],
+                plugin.id,
+                user,
+                db_session,
+            )
         else:
             plugin, enabled = create_uploaded_plugin__no_commit(
                 content, auto_enable, user, db_session

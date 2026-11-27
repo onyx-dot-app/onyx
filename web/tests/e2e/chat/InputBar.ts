@@ -212,6 +212,15 @@ export class InputBar {
     await this.page.keyboard.press("Enter");
   }
 
+  /** Sends, and waits for the server's reply to the send. */
+  async sendAndWaitForReply(): Promise<void> {
+    const reply = this.page.waitForResponse((response) =>
+      response.url().includes("/api/chat/send-chat-message")
+    );
+    await this.send();
+    await reply;
+  }
+
   async queue(): Promise<void> {
     await this.textbox.press("ControlOrMeta+Enter");
   }

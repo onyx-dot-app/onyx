@@ -17349,7 +17349,9 @@
           "publishOff": {
             "description": "Un administrador desactivó la publicación en la organización. Pide a un administrador que publique este plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx no pudo cargar tus grupos, así que no se pueden cambiar los accesos de grupo. Cierra y abre este diálogo para intentarlo de nuevo.",
+        "groupSharesLocked": "Esta habilidad está compartida con un grupo que no administras, así que no puedes cambiar sus accesos de grupo. Pide ayuda a un administrador de habilidades de toda la organización."
       },
       "tabs": {
         "details": "Detalles",
@@ -17458,7 +17460,8 @@
         "disableFailed": "No se pudo desactivar {name}",
         "enableFailed": "No se pudo activar {name}",
         "refreshFailed": "{name} se actualizó, pero no se pudo actualizar la lista de habilidades.",
-        "listRefreshFailed": "No se pudo actualizar la lista de habilidades. Vuelve a cargar la página para ver el cambio."
+        "listRefreshFailed": "No se pudo actualizar la lista de habilidades. Vuelve a cargar la página para ver el cambio.",
+        "requiredHolder": "No se puede activar {name}. Una habilidad obligatoria ya tiene este nombre."
       }
     },
     "sections": {
@@ -17501,7 +17504,8 @@
       "upload": {
         "error": {
           "readFailed": "No se pudo leer el archivo subido.",
-          "folderRoot": "{upload, select, plugin {La carpeta seleccionada debe contener SKILL.md o un manifiesto plugin.json en su nivel superior.} other {La carpeta seleccionada debe contener SKILL.md en su nivel superior.}}"
+          "folderRoot": "{upload, select, plugin {La carpeta seleccionada debe contener SKILL.md o un manifiesto plugin.json en su nivel superior.} other {La carpeta seleccionada debe contener SKILL.md en su nivel superior.}}",
+          "unsupportedFile": "{name} no es un archivo ZIP ni SKILL.md. Sube un ZIP, un archivo SKILL.md o una carpeta de skill."
         }
       }
     },
@@ -17534,7 +17538,8 @@
       "publishWarning": {
         "title": "La publicación no se puede deshacer",
         "description": "Después de aplicar, todos en la organización pueden usar las habilidades seleccionadas. Las habilidades publicadas no se pueden volver a hacer privadas. Solo un administrador puede eliminarlas."
-      }
+      },
+      "skipped": "{count, plural, one {# habilidad no se puede activar ni desactivar y se omitió} other {# habilidades no se pueden activar ni desactivar y se omitieron}}"
     },
     "reviewRequests": {
       "title": "Solicitudes de publicación",
@@ -17838,6 +17843,7 @@
         "unchanged": "Sin cambios. {name} ya está en la versión {version} de Onyx."
       },
       "willBeOff": "El plugin se guarda desactivado. {names} ya tiene una habilidad con el mismo nombre.",
+      "willClash": "{names} ya tiene una habilidad con el mismo nombre. Solo una de ellas puede estar activada.",
       "saveAsNew": {
         "label": "Guardar como Plugin Nuevo",
         "description": "Mantén sin cambios el plugin que tiene este nombre."
@@ -17869,7 +17875,8 @@
         "newPlugin": "Se añadió {name}.",
         "newVersion": "{name} actualizado a la versión {version} de Onyx.",
         "unchanged": "Sin cambios. {name} ya está en la versión {version} de Onyx.",
-        "off": "Se añadió {name}. Está desactivado porque {names} ya tiene una habilidad con el mismo nombre."
+        "off": "Se añadió {name}. Está desactivado porque {names} ya tiene una habilidad con el mismo nombre.",
+        "clash": "Se actualizó {name} a la versión {version} de Onyx. {names} ya tiene una habilidad con el mismo nombre, así que solo una de ellas está activada."
       }
     },
     "turnOn": {
@@ -18050,7 +18057,8 @@
       "apply": "{count, plural, one {Aplicar a # plugin} other {Aplicar a # plugins}}",
       "publishWarning": {
         "description": "Después de aplicar, todos en la organización pueden usar los plugins seleccionados. Los plugins publicados no se pueden volver a hacer privados. Solo un administrador puede eliminarlos."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin no se puede activar ni desactivar y se omitió} other {# plugins no se pueden activar ni desactivar y se omitieron}}"
     }
   },
   "integrations": {
@@ -18376,7 +18384,7 @@
       },
       "confirmDelete": {
         "title": "¿Eliminar «{name}»?",
-        "description": "La tarea deja de ejecutarse y se elimina su historial de ejecuciones.",
+        "description": "La tarea deja de ejecutarse. Se conservan los chats de sus ejecuciones anteriores.",
         "submit": "Eliminar"
       }
     },
@@ -18389,7 +18397,8 @@
       "markAllViewed": "Marcar todo como visto",
       "markAllViewedFailed": "No se pudieron marcar las ejecuciones como vistas. Inténtalo de nuevo.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Ejecutar una vez} other {Programación}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: la siguiente ejecución empezó antes de que alguien respondiera la aprobación.} approval_timeout {Cancelada: nadie respondió la aprobación en 24 horas.} user_cancelled {Detenida por ti.} agent_permission_required {Una acción necesitaba aprobación.} agent_exception {Error: la ejecución encontró un error.} stuck {Error: la ejecución no empezó a tiempo.} timeout {Error: la ejecución alcanzó el límite de una hora.} other {Fallida: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: la siguiente ejecución empezó antes de que alguien respondiera la aprobación.} approval_timeout {Cancelada: nadie respondió la aprobación en 24 horas.} user_cancelled {Detenida por ti.} agent_permission_required {Una acción necesitaba aprobación.} agent_exception {Error: la ejecución encontró un error.} stuck {Error: la ejecución no empezó a tiempo.} timeout {Error: la ejecución alcanzó el límite de una hora.} chat_deleted {Cancelada: se eliminó el chat de esta ejecución.} owner_cannot_chat {Fallida: ya no puedes chatear, así que la tarea está en pausa.} rate_limited {Fallida: se alcanzó el límite de uso.} other {Fallida: {errorClass}}}",
+      "errorDetail": "Fallida: {detail}",
       "columns": {
         "started": "Inicio",
         "status": "Estado",
@@ -18427,7 +18436,8 @@
         "title": "Ejecutar según la programación",
         "label": "Ejecutar {name} según la programación"
       },
-      "menu": "Más acciones"
+      "menu": "Más acciones",
+      "notFound": "Esta tarea programada se eliminó o pertenece a otro usuario."
     },
     "editor": {
       "newTitle": "Nueva tarea programada",
@@ -18439,7 +18449,8 @@
       "saveAndRun": "Guardar y ejecutar ahora",
       "errors": {
         "nameRequired": "Introduce un nombre.",
-        "promptRequired": "Introduce un prompt."
+        "promptRequired": "Introduce un prompt.",
+        "tooLong": "Usa {max, number} caracteres o menos."
       },
       "toasts": {
         "created": "Tarea programada creada.",
