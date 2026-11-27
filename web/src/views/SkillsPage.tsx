@@ -43,10 +43,9 @@ import SkillPublishingCard from "@/sections/skills/SkillPublishingCard";
 import type { CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
-import { deleteUserSkill } from "@/lib/skills/api";
 import { canManageSkill } from "@/lib/skills/sharing";
 import { useSettings } from "@/lib/settings/hooks";
-import { useSkillEnablement } from "@/lib/skills/hooks";
+import { useSkillDelete, useSkillEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import { adminSkillHref, newSkillHref } from "@/lib/customize/paths";
 
@@ -67,7 +66,20 @@ export default function AdminSkillsPage() {
   }
   const [deleteTarget, setDeleteTarget] = useState<CustomSkill | null>(null);
   const deleteModal = useCreateModal();
-  const [deleting, setDeleting] = useState(false);
+  // Drop the skill now, so a failed refresh does not show it.
+  const deletion = useSkillDelete({
+    noun: "skill",
+    onDeleted: async (deleted) => {
+      await refresh(
+        (current) =>
+          current && {
+            ...current,
+            customs: current.customs.filter((skill) => skill.id !== deleted.id),
+          },
+        { revalidate: false }
+      );
+    },
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -80,30 +92,8 @@ export default function AdminSkillsPage() {
   });
 
   async function deleteSkill() {
-    if (!deleteTarget || deleting || !canManageSkill(deleteTarget)) return;
-    setDeleting(true);
-    try {
-      await deleteUserSkill(deleteTarget.id);
-      await refresh(
-        (current) =>
-          current && {
-            ...current,
-            customs: current.customs.filter(
-              (skill) => skill.id !== deleteTarget.id
-            ),
-          },
-        { revalidate: false }
-      );
-      void revalidateSkills();
-      deleteModal.toggle(false);
-      toast.success(t("editor.toasts.deleted", { name: deleteTarget.name }));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("editor.toasts.deleteFailed")
-      );
-    } finally {
-      setDeleting(false);
-    }
+    if (!deleteTarget || !canManageSkill(deleteTarget)) return;
+    if (await deletion.remove(deleteTarget)) deleteModal.toggle(false);
   }
 
   const items = useMemo<CustomSkill[]>(
@@ -348,12 +338,12 @@ export default function AdminSkillsPage() {
             entityName={deleteTarget.name}
             additionalDetails={t("editor.delete.description")}
             actionButtonText={t(
-              deleting
+              deletion.deleting
                 ? "editor.deleteModal.pendingLabel"
                 : "editor.deleteModal.label"
             )}
             onClose={() => {
-              if (!deleting) deleteModal.toggle(false);
+              if (!deletion.deleting) deleteModal.toggle(false);
             }}
             onSubmit={() => void deleteSkill()}
           />

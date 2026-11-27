@@ -36,6 +36,7 @@ import {
 import { toast } from "@opal/layouts";
 import {
   bulkUpdateSkills,
+  deleteUserSkill,
   isSkillNameConflict,
   setSkillEnabled,
   skillNameConflictNames,
@@ -615,6 +616,59 @@ export function useRefreshSkillLists(): () => void {
 
 /** What the selected rows are: the copy names them. */
 export type BulkSkillNoun = "skill" | "plugin";
+
+interface SkillDeleteOptions {
+  noun: BulkSkillNoun;
+  /** Runs after the delete and before the list refresh. */
+  onDeleted?: (skill: Pick<Skill, "id" | "name">) => Promise<void>;
+}
+
+export interface SkillDelete {
+  deleting: boolean;
+  /** Tells whether the skill was deleted. */
+  remove: (skill: Pick<Skill, "id" | "name">) => Promise<boolean>;
+}
+
+/** Deletes one skill or plugin, refreshes the skill lists and toasts the
+ * result. */
+export function useSkillDelete({
+  noun,
+  onDeleted,
+}: SkillDeleteOptions): SkillDelete {
+  const skillCopy = useTranslations("skills.editor.toasts");
+  const pluginCopy = useTranslations("plugins.member.detail.remove");
+  const refreshLists = useRefreshSkillLists();
+  const [deleting, setDeleting] = useState(false);
+
+  async function remove(skill: Pick<Skill, "id" | "name">): Promise<boolean> {
+    if (deleting) return false;
+    setDeleting(true);
+    try {
+      await deleteUserSkill(skill.id);
+      await onDeleted?.(skill);
+      refreshLists();
+      toast.success(
+        noun === "plugin"
+          ? pluginCopy("done", { name: skill.name })
+          : skillCopy("deleted", { name: skill.name })
+      );
+      return true;
+    } catch (failure) {
+      toast.error(
+        failure instanceof Error && failure.message
+          ? failure.message
+          : noun === "plugin"
+            ? pluginCopy("failed")
+            : skillCopy("deleteFailed")
+      );
+      return false;
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return { deleting, remove };
+}
 
 export type BulkSkillAction = "share" | "enable" | "disable" | "delete";
 

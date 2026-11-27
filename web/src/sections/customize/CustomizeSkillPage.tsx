@@ -26,9 +26,8 @@ import {
 } from "@/lib/customize/paths";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { deleteUserSkill } from "@/lib/skills/api";
 import { refreshSkillLists } from "@/lib/skills/cache";
-import { useRefreshSkillLists, useSkillEnablement } from "@/lib/skills/hooks";
+import { useSkillDelete, useSkillEnablement } from "@/lib/skills/hooks";
 import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 import type { SkillEditableDetail, SkillPreview } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -78,7 +77,7 @@ export default function CustomizeSkillPage({
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
   const list = useUserSkills();
   const enablement = useSkillEnablement(list.data?.customs ?? [], list.refresh);
-  const refreshLists = useRefreshSkillLists();
+  const deletion = useSkillDelete({ noun: "skill" });
   const listed = list.data?.customs.find((item) => item.id === skillId);
   const isPlugin = listed?.kind === "plugin";
   const canEdit =
@@ -102,7 +101,6 @@ export default function CustomizeSkillPage({
   const [sharing, setSharing] = useState(false);
   const [contentsDirty, setContentsDirty] = useState(false);
   const removeModal = useCreateModal();
-  const [removing, setRemoving] = useState(false);
 
   const skill = detail.data ?? (canEdit ? undefined : listed);
   const instructions =
@@ -160,22 +158,8 @@ export default function CustomizeSkillPage({
   }
 
   async function remove(): Promise<void> {
-    if (!skill || removing) return;
-    setRemoving(true);
-    try {
-      await deleteUserSkill(skill.id);
-      refreshLists();
-      toast.success(skillCopy("editor.toasts.deleted", { name: skill.name }));
+    if (skill && (await deletion.remove(skill)))
       navigation.go(listHref, { replace: true });
-    } catch (failure) {
-      toast.error(
-        failure instanceof Error
-          ? failure.message
-          : skillCopy("editor.toasts.deleteFailed")
-      );
-    } finally {
-      setRemoving(false);
-    }
   }
 
   const updated = skill?.updated_at ? new Date(skill.updated_at) : null;
@@ -451,12 +435,12 @@ export default function CustomizeSkillPage({
             entityName={skill.name}
             additionalDetails={skillCopy("editor.delete.description")}
             actionButtonText={skillCopy(
-              removing
+              deletion.deleting
                 ? "editor.deleteModal.pendingLabel"
                 : "editor.deleteModal.label"
             )}
             onClose={() => {
-              if (!removing) removeModal.toggle(false);
+              if (!deletion.deleting) removeModal.toggle(false);
             }}
             onSubmit={() => void remove()}
           />

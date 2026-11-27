@@ -46,9 +46,9 @@ import { usePluginDetail } from "@/lib/plugins/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
 import type { PluginDetail, PluginSkillSummary } from "@/lib/plugins/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { deleteUserSkill } from "@/lib/skills/api";
 import {
   useRefreshSkillLists,
+  useSkillDelete,
   useSkillEnablement,
   type SkillEnablement,
 } from "@/lib/skills/hooks";
@@ -347,7 +347,7 @@ export default function MemberPluginDetailPage({
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
   const [sharing, setSharing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [removing, setRemoving] = useState(false);
+  const deletion = useSkillDelete({ noun: "plugin" });
   const removeModal = useCreateModal();
   const removeCopy = useTranslations("plugins.member.detail.remove");
   const enablement = useSkillEnablement(
@@ -446,22 +446,8 @@ export default function MemberPluginDetailPage({
       ]
     : null;
   async function remove(): Promise<void> {
-    if (!skill || removing) return;
-    setRemoving(true);
-    try {
-      await deleteUserSkill(skill.id);
-      refreshLists();
-      toast.success(removeCopy("done", { name: skill.name }));
+    if (skill && (await deletion.remove(skill)))
       navigation.go(listHref, { replace: true });
-    } catch (failure) {
-      toast.error(
-        failure instanceof Error && failure.message
-          ? failure.message
-          : removeCopy("failed")
-      );
-    } finally {
-      setRemoving(false);
-    }
   }
 
   const menu: DropdownMenuItem[] = [
@@ -583,9 +569,11 @@ export default function MemberPluginDetailPage({
             entityType={removeCopy("entityType")}
             entityName={skill.name}
             additionalDetails={removeCopy("description")}
-            actionButtonText={removeCopy(removing ? "pending" : "submit")}
+            actionButtonText={removeCopy(
+              deletion.deleting ? "pending" : "submit"
+            )}
             onClose={() => {
-              if (!removing) removeModal.toggle(false);
+              if (!deletion.deleting) removeModal.toggle(false);
             }}
             onSubmit={() => void remove()}
           />
