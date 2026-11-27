@@ -126,6 +126,34 @@ in the enterprise settings router, but it is an identity rule: `_caller_owns_sub
 binds the subject in the request body to the caller and to the current tenant
 before `oauth_callback` runs.
 
+**Magic link.** `MAGIC_LINK_ENABLED` mounts two public routes
+(`onyx/server/auth/magic_link_api.py`) and `GET /auth/type` reports
+`magic_link_enabled` when an email sender is configured too and SSO is not the
+only way in. With "Disable Password Login & Signup" on, both routes refuse with
+`MAGIC_LINK_USE_SSO` (`onyx/auth/magic_link.py:is_sso_only`), since a link would
+get around the identity provider. The routes read the setting strictly and
+answer 503 when the read fails, because the fallback defaults allow passwords.
+The request route refuses an address on its domain alone: disposable or
+disallowed domains, and free-mail on the playground. For every other address the
+answer does not show whether it has an account, so nothing leaks before the
+inbox is proven. It sends one email per address a minute, whoever asks, and
+answers 429 in between. Redemption reads the security settings strictly too, so
+a failed read cannot fall back to an allowlist that lets every domain in. The
+link carries a random token. The cache keeps the token's hash and what the click
+should do: the address, the `start_new_team` choice and the next URL
+(`onyx/auth/magic_link.py`). A token works once and expires after 15 minutes
+(`MAGIC_LINK_TTL_SECONDS`, a constant). The email never goes to the archive
+copies (`EMAIL_ARCHIVE_BCC_ADDRESSES`), because the link is a credential. The
+link opens a web page that POSTs the token, so a mail scanner that fetches the
+link cannot use it up. Nothing is created until the token is redeemed
+(`onyx/auth/users.py:UserManager.magic_link_login`). Redeeming resolves the
+tenant, runs the same gates as a password sign-up (invite-only, allowed domains,
+the seat limit), then creates the user, verified, with a random password, or
+signs the existing user in, and sets the session cookie. An account whose SSO
+session has expired (`oidc_expiry`) is sent to SSO with `MAGIC_LINK_USE_SSO`. A
+used or expired token is `MAGIC_LINK_INVALID`. The playground adds its sign-up
+rules through EE hooks; see [[multi-tenancy]].
+
 **OAuth provider.** The routes mount only when `WEB_DOMAIN` is HTTPS, or HTTP on
 a loopback host (`oauth_provider/config.py:OAUTH_PROVIDER_SETTINGS`). The
 consent routes (`server/oauth_provider/api.py`) bind a pending request to one
