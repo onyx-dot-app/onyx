@@ -3,6 +3,7 @@ import {
   ACTIONS,
   BROWSER_MESSAGES,
   SIDE_PANEL_PATH,
+  SIDE_PANEL_PORT,
 } from "./src/utils/constants.js";
 import {
   getOnyxDomain,
@@ -179,7 +180,7 @@ async function sendActiveTabUrlToPanel() {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (Object.values(BROWSER_MESSAGES).includes(request.action)) {
     // A web page may only wake the socket, and only an Onyx page. The
-    // extension's own pages (popup, consent window) may send all of them.
+    // extension's own pages (the popup) may send all of them.
     if (!(sender.url ?? "").startsWith(chrome.runtime.getURL(""))) {
       if (request.action !== BROWSER_MESSAGES.WAKE) return false;
       getOnyxDomain().then((domain) => {
@@ -343,6 +344,21 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   void browserRelay.onTabUpdated(tabId, changeInfo);
+});
+// A side panel holds a port with its window ID. When its last port closes,
+// the panel is gone and its chat loses access.
+const sidePanelPorts = new Map();
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== SIDE_PANEL_PORT) return;
+  port.onMessage.addListener((message) => {
+    if (typeof message?.window_id === "number") sidePanelPorts.set(port, message.window_id);
+  });
+  port.onDisconnect.addListener(() => {
+    const windowId = sidePanelPorts.get(port);
+    sidePanelPorts.delete(port);
+    if (windowId !== undefined && ![...sidePanelPorts.values()].includes(windowId))
+      void browserRelay.onSidePanelClosed(windowId);
+  });
 });
 chrome.alarms.create(browserRelay.CONNECT_ALARM, { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {

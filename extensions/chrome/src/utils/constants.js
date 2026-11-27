@@ -43,15 +43,17 @@ export const CHROME_MESSAGE = {
   TAB_READING_ENABLED: "TAB_READING_ENABLED",
   TAB_READING_DISABLED: "TAB_READING_DISABLED",
   TAB_URL_UPDATED: "TAB_URL_UPDATED",
+  BROWSER_CONTEXT: "BROWSER_CONTEXT",
 };
 
 export const WEB_MESSAGE = {
   PAGE_CHANGE: "PAGE_CHANGE",
 };
 
+// Port that the side panel holds open; closing the panel ends its grant.
+export const SIDE_PANEL_PORT = "onyx-side-panel";
+
 export const BROWSER_MESSAGES = {
-  APPROVE: "onyxBrowserApprove",
-  DENY: "onyxBrowserDeny",
   STOP: "onyxBrowserStop",
   STATE: "onyxBrowserState",
   // From an Onyx page or the popup: try to connect now, not at the next retry

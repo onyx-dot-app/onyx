@@ -86,7 +86,7 @@ export function grantEnded(grantId) {
 }
 
 const grantEndedError = () =>
-  new OperationError("no_grant", "The user's share of Chrome with this chat ended.");
+  new OperationError("no_grant", "The user's access to Chrome for this chat ended.");
 
 export function forgetTab(tabId) {
   clearTimeout(tabStates.get(tabId)?.humanTimer);
@@ -223,6 +223,9 @@ export function originOf(url) {
   }
 }
 
+const noTab = () =>
+  new OperationError("tab_not_found", "This chat has no tab yet. Open one with browser_open.");
+
 const UNSHARED_TAB_MESSAGE =
   "The tab is on a site that the user did not share with this chat. Ask the user to share it, or go back to a shared site.";
 
@@ -252,7 +255,7 @@ async function tabJson(grant, tabId) {
   };
 }
 
-function isShared(grant, url) {
+export function isShared(grant, url) {
   // Blank and srcdoc documents take the origin of the shared page around them.
   if (url === "about:blank" || url === "about:srcdoc" || url === "") return true;
   const origin = originOf(url);
@@ -261,8 +264,10 @@ function isShared(grant, url) {
 
 function resolveTab(grant, params) {
   const raw = params.tab;
-  // A grant always has a current tab.
-  if (raw === undefined || raw === null) return grant.current;
+  if (raw === undefined || raw === null) {
+    if (grant.current == null) throw noTab();
+    return grant.current;
+  }
   const tabId = Number(raw);
   if (!grant.tabs.includes(tabId))
     throw new OperationError(
@@ -790,8 +795,9 @@ const targetOf = (params) => ({ ref: optString(params, "ref"), selector: optStri
 const hasTarget = (target) => target.ref !== undefined || target.selector !== undefined;
 
 /**
- * Run one tool call. `grant` is the chat's grant; `hooks.addTab` adds a tab
- * that the agent opened to it, and `hooks.setCurrent` sets the current tab.
+ * Run one tool call. `grant` is the chat's grant. `hooks.addTab` adds a tab
+ * that the agent opened to it, `hooks.setCurrent` sets the current tab, and
+ * `hooks.newTabOptions` gives the window and focus for a new tab.
  */
 export async function call(grant, method, params, hooks, commandDeadline = Infinity) {
   const timeoutMs = Math.min(optNumber(params, "timeoutMs") ?? DEFAULT_TIMEOUT_MS, 60_000);
@@ -803,7 +809,7 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
       for (const tabId of grant.tabs) tabs.push(await tabJson(grant, tabId).catch(() => null));
       return {
         tabs: tabs.filter(Boolean),
-        current: String(grant.current),
+        current: grant.current == null ? null : String(grant.current),
       };
     }
     case "open": {
@@ -811,7 +817,7 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
       const url = raw === undefined ? undefined : normalizeUrl(raw);
       if (url !== undefined && !isShared(grant, url))
         throw new OperationError("failed", outsideMessage(url));
-      const newTab = params.newTab === true;
+      const newTab = params.newTab === true || grant.current == null;
       if (!newTab) {
         const tabId = grant.current;
         await sharedTab(grant, tabId);
@@ -821,17 +827,17 @@ export async function call(grant, method, params, hooks, commandDeadline = Infin
       }
       if (grant.tabs.length >= MAX_TABS)
         throw new OperationError("tab_limit", `This chat has ${MAX_TABS} tabs. Close one first.`);
-      const opener = await chrome.tabs.get(grant.current).catch(() => null);
+      const { windowId, active } = await hooks.newTabOptions();
       if (Date.now() > deadline)
         throw new OperationError("timeout", "The call ran out of time before Chrome could act.");
       if (endedGrants.has(grant.id)) throw grantEndedError();
       const tab = await chrome.tabs.create({
         url: url ?? "about:blank",
-        active: true,
-        ...(opener ? { windowId: opener.windowId, openerTabId: opener.id } : {}),
+        active,
+        ...(windowId === undefined ? {} : { windowId }),
       });
       // Under control first: a tab that cannot be attached never joins the
-      // grant. addTab lets the tab go when the share ended meanwhile.
+      // grant. addTab lets the tab go when the grant ended meanwhile.
       await attach(tab.id);
       await hooks.addTab(tab.id);
       await waitForReady(tab.id, "domcontentloaded", deadline);

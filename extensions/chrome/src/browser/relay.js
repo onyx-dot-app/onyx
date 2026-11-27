@@ -1,16 +1,14 @@
 // The extension's link to Onyx for chat browser control. It keeps one
 // websocket to the Onyx deployment, answers the commands of the chat that
-// the user shared tabs with, and keeps that grant. The backend half is
+// Onyx bound to this Chrome, and keeps that grant. The backend half is
 // backend/onyx/browser_extension/relay.py.
 
 import { BROWSER_MESSAGES, CHROME_SPECIFIC_STORAGE_KEYS } from "../utils/constants.js";
-import { getOnyxDomain, getManagedSettings } from "../utils/storage.js";
+import { getOnyxDomain, getManagedSettings, getInstallationId } from "../utils/storage.js";
 import * as driver from "./driver.js";
 
 const GRANT_KEY = "onyxBrowserGrant";
-const REQUESTS_KEY = "onyxBrowserRequests";
 const STATUS_KEY = "onyxBrowserStatus";
-const INSTALLATION_KEY = "onyxBrowserInstallationId";
 // Stops that Onyx has not heard yet: sent on the next welcome.
 const PENDING_ENDS_KEY = "onyxBrowserPendingEnds";
 export const CONNECT_ALARM = "onyxBrowserConnect";
@@ -47,14 +45,6 @@ const setGrant = (grant) => chrome.storage.session.set({ [GRANT_KEY]: grant });
 
 async function setStatus(status) {
   await chrome.storage.session.set({ [STATUS_KEY]: status });
-}
-
-async function installationId() {
-  const stored = await chrome.storage.local.get(INSTALLATION_KEY);
-  if (stored[INSTALLATION_KEY]) return stored[INSTALLATION_KEY];
-  const id = crypto.randomUUID();
-  await chrome.storage.local.set({ [INSTALLATION_KEY]: id });
-  return id;
 }
 
 async function controlDisabled() {
@@ -122,7 +112,7 @@ export async function connect() {
       ws.send(
         JSON.stringify({
           type: "hello",
-          installation_id: await installationId(),
+          installation_id: await getInstallationId(),
           label: `Chrome on ${navigator.userAgentData?.platform || navigator.platform}`,
           version: chrome.runtime.getManifest().version,
         })
@@ -191,15 +181,9 @@ async function handleMessage(message) {
     case "command":
       commands = commands.then(() => runCommand(message));
       break;
-    case "grant_request":
-      await showConsent(message);
-      break;
-    case "grant_saved":
-      await serial(async () => {
-        const grant = await getGrant();
-        if (grant && grant.chat_session_id === message.chat_session_id && grant.request_id)
-          await setGrant({ ...grant, request_id: null });
-      });
+    case "bind":
+      await serial(() => bind(message));
+      await reportGrant();
       break;
     case "end_grant": {
       const grant = await getGrant();
@@ -218,15 +202,22 @@ async function runCommand(message) {
   try {
     if (message.deadline * 1000 <= Date.now())
       throw new driver.OperationError("timeout", "The call expired before Chrome could start it.");
-    const grant = await getGrant();
-    if (!grant || grant.chat_session_id !== message.chat_session_id)
+    // Every command carries the sites that the chat may use now.
+    const grant = await serial(async () => {
+      const stored = await getGrant();
+      if (!stored || stored.chat_session_id !== message.chat_session_id) return null;
+      const updated = { ...stored, origins: message.origins ?? [] };
+      await setGrant(updated);
+      return updated;
+    });
+    if (!grant)
       throw new driver.OperationError(
         "no_grant",
-        "The user's Chrome is no longer shared with this chat. Ask the user to share a tab again."
+        "The user's Chrome is no longer connected to this chat."
       );
     if (grant.expires_at * 1000 <= Date.now()) {
       await endGrant(true);
-      throw new driver.OperationError("no_grant", "The user's share of Chrome with this chat ended.");
+      throw new driver.OperationError("no_grant", "The user's access to Chrome for this chat ended.");
     }
     // The server stops waiting at the deadline; a call never holds the queue past it.
     let timer;
@@ -236,6 +227,12 @@ async function runCommand(message) {
         Math.max(0, message.deadline * 1000 - Date.now())
       );
     });
+    // Tabs attach on demand; the driver attaches the rest that it touches.
+    const target = Number(message.params?.tab ?? grant.current);
+    if (grant.tabs.includes(target)) {
+      const tab = await chrome.tabs.get(target).catch(() => null);
+      if (tab && driver.isShared(grant, tab.url ?? "")) await driver.attach(target);
+    }
     // The hooks act only on the grant that the command started with.
     const work = driver.call(
       grant,
@@ -243,6 +240,7 @@ async function runCommand(message) {
       message.params ?? {},
       {
         addTab: (tabId) => addTab(tabId, grant.id),
+        newTabOptions: () => newTabOptions(grant),
         setCurrent: (tabId) => setCurrent(tabId, grant.id),
       },
       message.deadline * 1000
@@ -268,8 +266,8 @@ async function runCommand(message) {
 const MAX_TITLE_CHARS = 500;
 const MAX_URL_CHARS = 2048;
 
-/** The shared tabs as Onyx shows them. A tab on a site that the user did not
- * share goes without its title and URL. */
+/** The chat's tabs as Onyx shows them. A tab on a site that the chat may not
+ * use goes without its title and URL. */
 async function tabsFor(grant) {
   const tabs = [];
   for (const id of grant.tabs) {
@@ -279,6 +277,7 @@ async function tabsFor(grant) {
     const shared = origin !== null && grant.origins.includes(origin);
     tabs.push({
       id: String(tab.id),
+      origin: origin ?? "",
       title: shared ? (tab.title ?? "").slice(0, MAX_TITLE_CHARS) : "",
       url: shared ? (tab.url ?? "").slice(0, MAX_URL_CHARS) : "",
       controller: driver.isHumanControlled(tab.id) ? "human" : "agent",
@@ -300,59 +299,13 @@ async function sendGrant() {
     type: "grant",
     grant: {
       chat_session_id: grant.chat_session_id,
-      request_id: grant.request_id,
       tabs: await tabsFor(grant),
-      origins: grant.origins,
-      expires_at: grant.expires_at,
+      current: grant.current == null ? null : String(grant.current),
     },
   });
 }
 
-// Changes of the request table run one at a time, so two requests that
-// arrive together both stay.
-let requestChanges = Promise.resolve();
-
-function changeRequests(change) {
-  const run = requestChanges.then(async () => {
-    const requests = await readSession(REQUESTS_KEY, {});
-    const result = await change(requests);
-    await chrome.storage.session.set({ [REQUESTS_KEY]: requests });
-    return result;
-  });
-  requestChanges = run.catch(() => {});
-  return run;
-}
-
-async function showConsent(message) {
-  const domain = await getOnyxDomain();
-  await changeRequests((requests) => {
-    requests[message.request_id] = {
-    request_id: message.request_id,
-    chat_session_id: message.chat_session_id,
-    chat_title: message.chat_title,
-    account: message.account,
-    deadline: message.deadline,
-    domain,
-    };
-  });
-  await chrome.windows.create({
-    url: chrome.runtime.getURL(`src/pages/browser-consent.html?request=${message.request_id}`),
-    type: "popup",
-    width: 480,
-    height: 680,
-    focused: true,
-  });
-}
-
-function takeRequest(requestId) {
-  return changeRequests((requests) => {
-    const request = requests[requestId];
-    delete requests[requestId];
-    return request ?? null;
-  });
-}
-
-/** Put the tabs that are in no group into the share's Onyx group. Tabs in
+/** Put the tabs that are in no group into the chat's Onyx group. Tabs in
  * the user's own groups stay there. Returns the Onyx group's ID. */
 async function groupTabs(tabIds, groupId) {
   try {
@@ -381,78 +334,44 @@ async function groupTabs(tabIds, groupId) {
   }
 }
 
-// The relay's limit on the tabs of one grant.
-const MAX_GRANT_TABS = 50;
-
-async function approve(requestId, tabIds, minutes, shownOrigins) {
-  // `shownOrigins` maps each tab ID to the site that the window showed for it.
-  const request = (await readSession(REQUESTS_KEY, {}))[requestId];
-  if (!request || request.deadline * 1000 <= Date.now()) {
-    await takeRequest(requestId);
-    throw new Error("This request expired. Ask again from the Onyx chat.");
+/** Bind a chat to this Chrome. Another chat's grant ends first. The agent
+ * attaches to a tab only when it first needs it. */
+async function bind(message) {
+  let grant = await getGrant();
+  if (grant && grant.chat_session_id !== message.chat_session_id) {
+    await endGrantNow(false);
+    grant = null;
   }
-  // The request belongs to the deployment and policy that the window showed.
-  if (request.domain !== (await getOnyxDomain()) || (await controlDisabled())) {
-    await takeRequest(requestId);
-    throw new Error("Onyx settings changed. Ask again from the Onyx chat.");
+  grant = {
+    id: crypto.randomUUID(),
+    tabs: [],
+    current: null,
+    origins: [],
+    group_id: null,
+    ...grant,
+    chat_session_id: message.chat_session_id,
+    chat_title: message.chat_title,
+    expires_at: message.expires_at,
+    window_id: message.window_id ?? null,
+    side_panel: message.side_panel === true,
+  };
+  const tabId = message.tab_id;
+  if (tabId != null && (await chrome.tabs.get(tabId).catch(() => null))) {
+    grant.tabs = [...new Set([...grant.tabs, tabId])];
+    grant.current = tabId;
+    await setGrant(grant);
+    grant.group_id = await groupTabs([tabId], grant.group_id);
   }
-  const tabs = [];
-  for (const id of tabIds) {
-    const tab = await chrome.tabs.get(id).catch(() => null);
-    if (tab && driver.originOf(tab.url ?? "")) tabs.push(tab);
-  }
-  if (tabs.length === 0) throw new Error("Pick at least one web page tab.");
-  if (tabs.length > MAX_GRANT_TABS) throw new Error(`Pick ${MAX_GRANT_TABS} tabs or fewer.`);
-  const origins = [...new Set(tabs.map((tab) => driver.originOf(tab.url)))];
-  // Each tab must still be on the site that the window showed for it.
-  if (tabs.some((tab) => shownOrigins[String(tab.id)] !== driver.originOf(tab.url)))
-    throw new Error("A tab moved to another site. Check the sites and allow again.");
-  await serial(async () => {
-    // The deployment or policy may have changed during the lookups above.
-    if (request.domain !== (await getOnyxDomain()) || (await controlDisabled())) {
-      await takeRequest(requestId);
-      throw new Error("Onyx settings changed. Ask again from the Onyx chat.");
-    }
-    await endGrantNow(true);
-    // The grant is saved only once every tab is under control; on a failure
-    // the request stays, so Allow can try again.
-    const attached = [];
-    try {
-      for (const tab of tabs) {
-        await driver.attach(tab.id);
-        attached.push(tab.id);
-      }
-    } catch (error) {
-      for (const tabId of attached) await driver.detach(tabId);
-      throw error;
-    }
-    await takeRequest(requestId);
-    const grant = {
-      id: crypto.randomUUID(),
-      chat_session_id: request.chat_session_id,
-      chat_title: request.chat_title,
-      request_id: request.request_id,
-      tabs: tabs.map((tab) => tab.id),
-      origins,
-      expires_at: Date.now() / 1000 + Math.min(Math.max(minutes, 5), 480) * 60,
-      current: tabs[0].id,
-      group_id: null,
-    };
-    await setGrant({ ...grant, group_id: await groupTabs(grant.tabs, null) });
-  });
-  await reportGrant();
+  await setGrant(grant);
 }
 
-async function deny(requestId) {
-  // Onyx waits for the answer; without a connection, keep the request.
-  if (socket?.readyState !== WebSocket.OPEN)
-    throw new Error("Chrome is not connected to Onyx. Try again in a moment.");
-  const request = await takeRequest(requestId);
-  if (request) sendMessage({
-      type: "grant_denied",
-      chat_session_id: request.chat_session_id,
-      request_id: requestId,
-    });
+/** Where the agent's new tabs open: the bound window, else the user's
+ * focused one. A side panel chat shows the tab; a web chat opens it behind. */
+async function newTabOptions(grant) {
+  const windowId =
+    grant.window_id ??
+    (await chrome.windows.getLastFocused({ windowTypes: ["normal"] }).catch(() => null))?.id;
+  return { active: grant.side_panel === true, ...(windowId == null ? {} : { windowId }) };
 }
 
 export function endGrant(notify) {
@@ -467,7 +386,7 @@ async function endGrantNow(notify) {
   await chrome.storage.session.remove(GRANT_KEY);
   for (const tabId of grant.tabs) {
     await driver.detach(tabId);
-    // Only tabs still in the share's own group leave it.
+    // Only tabs still in the chat's own group leave it.
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     if (tab && grant.group_id != null && tab.groupId === grant.group_id)
       await chrome.tabs.ungroup(tabId).catch(() => {});
@@ -475,7 +394,7 @@ async function endGrantNow(notify) {
   if (notify) await notifyEnd(grant.chat_session_id);
 }
 
-/** Tell Onyx that a share ended; while offline, keep the stop for the next
+/** Tell Onyx that an access ended; while offline, keep the stop for the next
  * connection. */
 async function notifyEnd(chatSessionId) {
   const message = { type: "grant_ended", chat_session_id: chatSessionId };
@@ -491,7 +410,7 @@ async function sendPendingEnds() {
   await chrome.storage.session.remove(PENDING_ENDS_KEY);
   const current = await getGrant();
   for (const chatSessionId of pending) {
-    // A chat shared again since then keeps its new share.
+    // A chat bound again since then keeps its new grant.
     if (current?.chat_session_id !== chatSessionId)
       sendMessage({ type: "grant_ended", chat_session_id: chatSessionId });
   }
@@ -513,7 +432,7 @@ async function addTab(tabId, grantId) {
     return true;
   });
   if (!added)
-    throw new driver.OperationError("no_grant", "The user's share of Chrome with this chat ended.");
+    throw new driver.OperationError("no_grant", "The user's access to Chrome for this chat ended.");
   await reportGrant();
 }
 
@@ -541,7 +460,7 @@ export async function onTabRemoved(tabId) {
   if (changed) await reportGrant();
 }
 
-// The web panel shows who uses each shared tab.
+// The web panel shows who uses each tab.
 driver.onControlChange(async (tabId) => {
   const grant = await getGrant();
   if (grant?.tabs.includes(tabId)) await reportGrant();
@@ -553,6 +472,14 @@ export async function onTabUpdated(tabId, changeInfo) {
   if (grant?.tabs.includes(tabId)) await reportGrant();
 }
 
+/** The side panel of a window closed: its chat loses access. */
+export function onSidePanelClosed(windowId) {
+  return serial(async () => {
+    const grant = await getGrant();
+    if (grant?.side_panel && grant.window_id === windowId) await endGrantNow(true);
+  });
+}
+
 /** The user closed Chrome's "is debugging this browser" bar: stop. */
 export async function onDebuggerDetach(source, reason) {
   driver.forgetTab(source.tabId);
@@ -562,14 +489,14 @@ export async function onDebuggerDetach(source, reason) {
 }
 
 export function checkExpiry() {
-  // Read and end in one turn, so a share approved meanwhile stays.
+  // Read and end in one turn, so a grant bound meanwhile stays.
   return serial(async () => {
     const grant = await getGrant();
     if (grant && grant.expires_at * 1000 <= Date.now()) await endGrantNow(true);
   });
 }
 
-/** Messages from the consent window and the popup. */
+/** Messages from the popup and Onyx pages. */
 export function handleRuntimeMessage(request, sendResponse) {
   const respond = (promise) => {
     promise.then(
@@ -579,12 +506,6 @@ export function handleRuntimeMessage(request, sendResponse) {
     return true;
   };
   switch (request.action) {
-    case BROWSER_MESSAGES.APPROVE:
-      return respond(
-        approve(request.request_id, request.tab_ids, request.minutes, request.tab_origins ?? {})
-      );
-    case BROWSER_MESSAGES.DENY:
-      return respond(deny(request.request_id));
     case BROWSER_MESSAGES.STOP:
       return respond(endGrant(true));
     case BROWSER_MESSAGES.WAKE:
@@ -596,7 +517,6 @@ export function handleRuntimeMessage(request, sendResponse) {
         (async () => ({
           status: await readSession(STATUS_KEY, { state: "offline" }),
           grant: await getGrant(),
-          request: (await readSession(REQUESTS_KEY, {}))[request.request_id] ?? null,
         }))()
       );
     default:
