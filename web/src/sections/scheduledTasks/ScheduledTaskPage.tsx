@@ -13,7 +13,7 @@ import {
 } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import TaskActionPoliciesSummary from "@/app/craft/v1/tasks/components/TaskActionPoliciesSummary";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import {
   TASK_REFRESH_INTERVAL_MS,
   useScheduledTaskFormat,
@@ -117,7 +117,14 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
       title={task?.name ?? t("title")}
       description={schedule}
       loading={isLoading}
-      error={error && !task ? t("loadFailed") : false}
+      error={
+        error && !task
+          ? error instanceof FetchError &&
+            (error.status === 404 || error.status === 422)
+            ? t("notFound")
+            : t("loadFailed")
+          : false
+      }
       tabs={tabs}
       tab={parseTab(searchParams.get("tab"))}
       onTabChange={(next) =>

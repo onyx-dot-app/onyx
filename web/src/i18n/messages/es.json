@@ -18338,7 +18338,7 @@
       },
       "confirmDelete": {
         "title": "¿Eliminar «{name}»?",
-        "description": "La tarea deja de ejecutarse y se elimina su historial de ejecuciones.",
+        "description": "La tarea deja de ejecutarse. Se conservan los chats de sus ejecuciones anteriores.",
         "submit": "Eliminar"
       }
     },
@@ -18351,7 +18351,8 @@
       "markAllViewed": "Marcar todo como visto",
       "markAllViewedFailed": "No se pudieron marcar las ejecuciones como vistas. Inténtalo de nuevo.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Ejecutar una vez} other {Programación}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: la siguiente ejecución empezó antes de que alguien respondiera la aprobación.} approval_timeout {Cancelada: nadie respondió la aprobación en 24 horas.} user_cancelled {Detenida por ti.} agent_permission_required {Una acción necesitaba aprobación.} agent_exception {Error: la ejecución encontró un error.} stuck {Error: la ejecución no empezó a tiempo.} timeout {Error: la ejecución alcanzó el límite de una hora.} other {Fallida: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: la siguiente ejecución empezó antes de que alguien respondiera la aprobación.} approval_timeout {Cancelada: nadie respondió la aprobación en 24 horas.} user_cancelled {Detenida por ti.} agent_permission_required {Una acción necesitaba aprobación.} agent_exception {Error: la ejecución encontró un error.} stuck {Error: la ejecución no empezó a tiempo.} timeout {Error: la ejecución alcanzó el límite de una hora.} chat_deleted {Cancelada: se eliminó el chat de esta ejecución.} owner_cannot_chat {Fallida: ya no puedes chatear, así que la tarea está en pausa.} rate_limited {Fallida: se alcanzó el límite de uso.} other {Fallida: {errorClass}}}",
+      "errorDetail": "Fallida: {detail}",
       "columns": {
         "started": "Inicio",
         "status": "Estado",
@@ -18389,7 +18390,8 @@
         "title": "Ejecutar según la programación",
         "label": "Ejecutar {name} según la programación"
       },
-      "menu": "Más acciones"
+      "menu": "Más acciones",
+      "notFound": "Esta tarea programada se eliminó o pertenece a otro usuario."
     },
     "editor": {
       "newTitle": "Nueva tarea programada",

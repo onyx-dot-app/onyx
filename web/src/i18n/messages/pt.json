@@ -18338,7 +18338,7 @@
       },
       "confirmDelete": {
         "title": "Excluir \"{name}\"?",
-        "description": "A tarefa deixa de ser executada e o histórico de execuções é removido.",
+        "description": "A tarefa deixa de ser executada. Os chats das execuções anteriores são mantidos.",
         "submit": "Excluir"
       }
     },
@@ -18351,7 +18351,8 @@
       "markAllViewed": "Marcar tudo como visto",
       "markAllViewedFailed": "Não foi possível marcar as execuções como vistas. Tente novamente.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Executar uma vez} other {Agendamento}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: a próxima execução começou antes que alguém respondesse à aprovação.} approval_timeout {Cancelada: ninguém respondeu à aprovação em 24 horas.} user_cancelled {Interrompida por você.} agent_permission_required {Uma ação precisava de aprovação.} agent_exception {Falhou: a execução encontrou um erro.} stuck {Falhou: a execução não começou a tempo.} timeout {Falhou: a execução atingiu o limite de uma hora.} other {Falhou: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: a próxima execução começou antes que alguém respondesse à aprovação.} approval_timeout {Cancelada: ninguém respondeu à aprovação em 24 horas.} user_cancelled {Interrompida por você.} agent_permission_required {Uma ação precisava de aprovação.} agent_exception {Falhou: a execução encontrou um erro.} stuck {Falhou: a execução não começou a tempo.} timeout {Falhou: a execução atingiu o limite de uma hora.} chat_deleted {Cancelada: o chat desta execução foi excluído.} owner_cannot_chat {Falhou: você não pode mais conversar, então a tarefa foi pausada.} rate_limited {Falhou: o limite de uso foi atingido.} other {Falhou: {errorClass}}}",
+      "errorDetail": "Falhou: {detail}",
       "columns": {
         "started": "Início",
         "status": "Status",
@@ -18389,7 +18390,8 @@
         "title": "Executar conforme o agendamento",
         "label": "Executar {name} conforme o agendamento"
       },
-      "menu": "Mais ações"
+      "menu": "Mais ações",
+      "notFound": "Esta tarefa agendada foi excluída ou pertence a outro usuário."
     },
     "editor": {
       "newTitle": "Nova tarefa agendada",

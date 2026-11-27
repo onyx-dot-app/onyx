@@ -18338,7 +18338,7 @@
       },
       "confirmDelete": {
         "title": "Supprimer « {name} » ?",
-        "description": "La tâche cesse de s'exécuter et son historique d'exécution est supprimé.",
+        "description": "La tâche ne s’exécute plus. Les chats de ses exécutions passées sont conservés.",
         "submit": "Supprimer"
       }
     },
@@ -18351,7 +18351,8 @@
       "markAllViewed": "Tout marquer comme vu",
       "markAllViewedFailed": "Impossible de marquer les exécutions comme vues. Réessayez.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Exécuter une fois} other {Planification}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Annulée : l'exécution suivante a démarré avant que quiconque réponde à l'approbation.} approval_timeout {Annulée : personne n'a répondu à l'approbation dans les 24 heures.} user_cancelled {Arrêtée par vous.} agent_permission_required {Une action nécessitait une approbation.} agent_exception {Échec : l’exécution a rencontré une erreur.} stuck {Échec : l’exécution n’a pas démarré à temps.} timeout {Échec : l’exécution a atteint la limite d’une heure.} other {Échouée : {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Annulée : l'exécution suivante a démarré avant que quiconque réponde à l'approbation.} approval_timeout {Annulée : personne n'a répondu à l'approbation dans les 24 heures.} user_cancelled {Arrêtée par vous.} agent_permission_required {Une action nécessitait une approbation.} agent_exception {Échec : l’exécution a rencontré une erreur.} stuck {Échec : l’exécution n’a pas démarré à temps.} timeout {Échec : l’exécution a atteint la limite d’une heure.} chat_deleted {Annulée : le chat de cette exécution a été supprimé.} owner_cannot_chat {Échec : vous ne pouvez plus discuter, la tâche est donc en pause.} rate_limited {Échec : la limite d’utilisation a été atteinte.} other {Échouée : {errorClass}}}",
+      "errorDetail": "Échec : {detail}",
       "columns": {
         "started": "Début",
         "status": "Statut",
@@ -18389,7 +18390,8 @@
         "title": "Exécuter selon la planification",
         "label": "Exécuter {name} selon la planification"
       },
-      "menu": "Plus d’actions"
+      "menu": "Plus d’actions",
+      "notFound": "Cette tâche planifiée a été supprimée ou appartient à un autre utilisateur."
     },
     "editor": {
       "newTitle": "Nouvelle tâche planifiée",

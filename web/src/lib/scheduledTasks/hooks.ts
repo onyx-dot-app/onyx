@@ -12,7 +12,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 const UNVIEWED_COUNT_REFRESH_INTERVAL_MS = 30000;
-const RUN_IN_FLIGHT_REFRESH_INTERVAL_MS = 5000;
+export const RUN_IN_FLIGHT_REFRESH_INTERVAL_MS = 5000;
 
 function useUnviewedCount(key: string | null): number {
   const { data } = useSWR<UnviewedTaskCountResponse>(

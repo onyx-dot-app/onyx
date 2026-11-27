@@ -18338,7 +18338,7 @@
       },
       "confirmDelete": {
         "title": "Delete \"{name}\"?",
-        "description": "The task stops running and its run history goes away.",
+        "description": "The task stops running. Chats of its past runs are kept.",
         "submit": "Delete"
       }
     },
@@ -18351,7 +18351,8 @@
       "markAllViewed": "Mark all viewed",
       "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} agent_exception {Failed: the run hit an error.} stuck {Failed: the run did not start in time.} timeout {Failed: the run reached the one-hour limit.} other {Failed: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} agent_exception {Failed: the run hit an error.} stuck {Failed: the run did not start in time.} timeout {Failed: the run reached the one-hour limit.} chat_deleted {Cancelled: the chat of this run was deleted.} owner_cannot_chat {Failed: you can no longer chat, so the task is paused.} rate_limited {Failed: the usage limit was reached.} other {Failed: {errorClass}}}",
+      "errorDetail": "Failed: {detail}",
       "columns": {
         "started": "Started",
         "status": "Status",
@@ -18389,7 +18390,8 @@
         "title": "Run on schedule",
         "label": "Run {name} on schedule"
       },
-      "menu": "More actions"
+      "menu": "More actions",
+      "notFound": "This scheduled task was deleted, or it belongs to another user."
     },
     "editor": {
       "newTitle": "New Scheduled Task",

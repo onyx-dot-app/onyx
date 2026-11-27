@@ -69,6 +69,7 @@ function run(
     summary: null,
     skip_reason: null,
     error_class: null,
+    error_detail: null,
     revision: 1,
     viewed_revision: 1,
     ...overrides,
@@ -181,5 +182,29 @@ it("keeps updating a run that a new run pushes off the first page", async () => 
     expect(
       screen.getAllByText(/run( done)?$/).map((cell) => cell.textContent)
     ).toEqual(["newest run", "second run", "first run done", "oldest run"])
+  );
+});
+
+it("marks a run without a chat viewed when it is clicked", async () => {
+  const user = setupUser();
+  const failed = run("failed", {
+    status: "FAILED",
+    chat_session_id: null,
+    error_class: "agent_exception",
+    error_detail: "Budget used up",
+    revision: 1,
+    viewed_revision: null,
+  });
+  serverRuns = [failed];
+  jest
+    .mocked(markScheduledRunsViewed)
+    .mockResolvedValue({ items: [], next_cursor: null });
+  render(<ScheduledRunHistory taskId="task" />);
+
+  expect(await screen.findByText("Failed: Budget used up")).toBeInTheDocument();
+  await user.click(screen.getAllByRole("row")[1]!);
+
+  await waitFor(() =>
+    expect(markScheduledRunsViewed).toHaveBeenCalledWith("task", [failed])
   );
 });

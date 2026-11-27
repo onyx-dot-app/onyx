@@ -20,6 +20,7 @@ import { useNavigation } from "@opal/navigation";
 import UnseenMarker from "@/refresh-components/UnseenMarker";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
+  RUN_IN_FLIGHT_REFRESH_INTERVAL_MS,
   TASK_REFRESH_INTERVAL_MS,
   useScheduledTaskFormat,
 } from "@/lib/scheduledTasks/hooks";
@@ -68,8 +69,18 @@ export default function ScheduledTasksPage() {
   const { data, error, isLoading } = useSWR<ScheduledTaskListResponse>(
     SWR_KEYS.chatScheduledTasks,
     errorHandlingFetcher,
-    // Runs end and next runs move in the background.
-    { refreshInterval: TASK_REFRESH_INTERVAL_MS }
+    // Runs end and next runs move in the background; a run in flight
+    // changes within seconds.
+    {
+      refreshInterval: (latest) =>
+        latest?.items.some(
+          (task) =>
+            task.last_run?.status === "QUEUED" ||
+            task.last_run?.status === "RUNNING"
+        )
+          ? RUN_IN_FLIGHT_REFRESH_INTERVAL_MS
+          : TASK_REFRESH_INTERVAL_MS,
+    }
   );
   const tasks = data?.items ?? [];
   const search = query.trim().toLocaleLowerCase(locale);

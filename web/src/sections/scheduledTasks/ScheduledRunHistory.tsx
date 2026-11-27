@@ -172,6 +172,25 @@ export default function ScheduledRunHistory({
     }
   }
 
+  async function markRunViewed(run: ScheduledRunSummary) {
+    try {
+      await markScheduledRunsViewed(taskId, [run]);
+      await revalidateScheduledRunViews(taskId);
+    } catch {
+      toast.error(t("markAllViewedFailed"));
+    }
+  }
+
+  function runDetail(run: ScheduledRunSummary): string {
+    if (run.summary) return run.summary;
+    // A generic failure says more with the reason the server saved.
+    if (run.error_class === "agent_exception" && run.error_detail)
+      return t("errorDetail", { detail: run.error_detail });
+    if (run.error_class)
+      return t("errorClass", { errorClass: run.error_class });
+    return run.skip_reason ?? "";
+  }
+
   const columns: TableColumn<ScheduledRunSummary>[] = [
     {
       kind: "data",
@@ -254,10 +273,7 @@ export default function ScheduledRunHistory({
             maxLines={1}
             overflowTooltip
           >
-            {row.summary ??
-              (row.error_class
-                ? t("errorClass", { errorClass: row.error_class })
-                : (row.skip_reason ?? ""))}
+            {runDetail(row)}
           </Text>
         </ClosedCell>
       ),
@@ -305,6 +321,8 @@ export default function ScheduledRunHistory({
         pageSize={false}
         onRowClick={(row) => {
           if (row.chat_session_id) appPosition.openChat(row.chat_session_id);
+          // A run with no chat clears its unread marker when clicked.
+          else if (isRunUnviewed(row)) void markRunViewed(row);
         }}
         getRowLabel={(row) =>
           t("open", { time: timeFormat.absolute(row.started_at) })

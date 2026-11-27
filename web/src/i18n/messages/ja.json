@@ -18338,7 +18338,7 @@
       },
       "confirmDelete": {
         "title": "「{name}」を削除しますか？",
-        "description": "タスクの実行が停止し、実行履歴も削除されます。",
+        "description": "タスクの実行は停止します。過去の実行のチャットは保持されます。",
         "submit": "削除"
       }
     },
@@ -18351,7 +18351,8 @@
       "markAllViewed": "すべて既読にする",
       "markAllViewedFailed": "実行を既読にできませんでした。もう一度お試しください。",
       "trigger": "{source, select, MANUAL_RUN_NOW {1回実行} other {スケジュール}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} agent_exception {失敗: 実行中にエラーが発生しました。} stuck {失敗: 実行が時間内に開始されませんでした。} timeout {失敗: 実行が 1 時間の上限に達しました。} other {失敗: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} agent_exception {失敗: 実行中にエラーが発生しました。} stuck {失敗: 実行が時間内に開始されませんでした。} timeout {失敗: 実行が 1 時間の上限に達しました。} chat_deleted {キャンセル: この実行のチャットは削除されました。} owner_cannot_chat {失敗: チャットできなくなったため、タスクは一時停止されました。} rate_limited {失敗: 利用上限に達しました。} other {失敗: {errorClass}}}",
+      "errorDetail": "失敗: {detail}",
       "columns": {
         "started": "開始",
         "status": "ステータス",
@@ -18389,7 +18390,8 @@
         "title": "スケジュールどおりに実行",
         "label": "{name} をスケジュールどおりに実行"
       },
-      "menu": "その他の操作"
+      "menu": "その他の操作",
+      "notFound": "このスケジュールタスクは削除されたか、別のユーザーのタスクです。"
     },
     "editor": {
       "newTitle": "新しいスケジュールされたタスク",

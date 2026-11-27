@@ -18338,7 +18338,7 @@
       },
       "confirmDelete": {
         "title": "删除“{name}”？",
-        "description": "任务将停止运行，其运行历史也会被删除。",
+        "description": "任务将停止运行。其过往运行的聊天会被保留。",
         "submit": "删除"
       }
     },
@@ -18351,7 +18351,8 @@
       "markAllViewed": "全部标记为已查看",
       "markAllViewedFailed": "无法将运行标记为已查看。请重试。",
       "trigger": "{source, select, MANUAL_RUN_NOW {运行一次} other {计划}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} other {失败：{errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} chat_deleted {已取消：此运行的聊天已被删除。} owner_cannot_chat {失败：你已无法聊天，因此任务已暂停。} rate_limited {失败：已达到使用上限。} other {失败：{errorClass}}}",
+      "errorDetail": "失败：{detail}",
       "columns": {
         "started": "开始时间",
         "status": "状态",
@@ -18389,7 +18390,8 @@
         "title": "按计划运行",
         "label": "按计划运行 {name}"
       },
-      "menu": "更多操作"
+      "menu": "更多操作",
+      "notFound": "此计划任务已被删除，或属于其他用户。"
     },
     "editor": {
       "newTitle": "新建计划任务",
