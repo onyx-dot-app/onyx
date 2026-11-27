@@ -818,6 +818,20 @@ def test_an_upload_for_a_plugin_adds_a_version_to_that_plugin(
     with pytest.raises(OnyxError, match="holds the plugin other-kit"):
         _save(admin, _plugin_zip("other-kit", ["one"]), db_session, plugin_id=plugin_id)
 
+    _save(author, _plugin_zip("copy-kit", ["one"]), db_session)
+    copy = _save(author, _plugin_zip("copy-kit", ["one"]), db_session, save_as_new=True)
+    assert copy.plugin.name != "copy-kit"
+    saved_copy = _save(
+        author,
+        _plugin_zip("copy-kit", ["one", "two"]),
+        db_session,
+        plugin_id=copy.plugin.id,
+    )
+    assert (saved_copy.plugin.id, saved_copy.target.version_number) == (
+        copy.plugin.id,
+        2,
+    )
+
 
 def test_an_unchanged_upload_adds_no_version(
     db_session: Session,

@@ -23,6 +23,7 @@ from onyx.db.plugin import (
     get_plugin_version,
     get_stored_version_content,
     get_user_uploads_id,
+    get_version_manifest,
     get_versions_needs,
     list_plugin_versions,
     lock_plugin,
@@ -648,7 +649,13 @@ def _bound_upload_target(
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
     refuse_if_synced(plugin)
-    if plugin.name != name:
+    # Save as new and ownership transfer rename the plugin, not its plugin.json.
+    manifest = (
+        get_version_manifest(plugin.current_version_id, db_session)
+        if plugin.current_version_id is not None
+        else None
+    )
+    if name not in {plugin.name, manifest.name if manifest is not None else None}:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"This file holds the plugin {name}, not {plugin.name}. "
