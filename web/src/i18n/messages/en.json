@@ -12792,6 +12792,62 @@
             "failed": {
               "status": "Publish failed"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {Opening {target}} failed {Could not open {target}} canceled {Canceled} other {Opened {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Opening a new tab} failed {Could not open a new tab} canceled {Canceled} other {Opened a new tab}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Going to {target}} failed {Could not go to {target}} canceled {Canceled} other {Went to {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Reading the page} failed {Could not read the page} canceled {Canceled} other {Read the page}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Using the page} failed {Could not use the page} canceled {Canceled} other {Used the page}}",
+              "click": {
+                "status": "{phase, select, running {Clicking an element} failed {Could not click the element} canceled {Canceled} other {Clicked an element}}"
+              },
+              "type": {
+                "status": "{phase, select, running {Typing “{text}”} failed {Could not type “{text}”} canceled {Canceled} other {Typed “{text}”}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {Hovering over an element} failed {Could not hover over the element} canceled {Canceled} other {Hovered over an element}}"
+              },
+              "select": {
+                "status": "{phase, select, running {Selecting an option} failed {Could not select the option} canceled {Canceled} other {Selected an option}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {Dragging an element} failed {Could not drag the element} canceled {Canceled} other {Dragged an element}}"
+              },
+              "press": {
+                "status": "{phase, select, running {Pressing {key}} failed {Could not press {key}} canceled {Canceled} other {Pressed {key}}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {Scrolling the page} failed {Could not scroll the page} canceled {Canceled} other {Scrolled the page}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {Uploading files} failed {Could not upload the files} canceled {Canceled} other {Uploaded files}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Waiting for the page} failed {The page did not get ready} canceled {Canceled} other {Waited for the page}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Running a page script} failed {The page script failed} canceled {Canceled} other {Ran a page script}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Answering a page dialog} failed {Could not answer the page dialog} canceled {Canceled} other {Answered a page dialog}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Checking the browser} failed {Could not check the browser} canceled {Canceled} other {Checked the browser}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Going back} forward {Going forward} other {Reloading the page}}} failed {Could not change the page} canceled {Canceled} other {{history, select, back {Went back} forward {Went forward} other {Reloaded the page}}}}"
+            }
           }
         },
         "skill": {

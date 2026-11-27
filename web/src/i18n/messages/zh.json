@@ -12792,6 +12792,62 @@
             "failed": {
               "status": "发布失败"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {正在打开 {target}} failed {无法打开 {target}} canceled {已取消} other {已打开 {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {正在打开新标签页} failed {无法打开新标签页} canceled {已取消} other {已打开新标签页}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {正在前往 {target}} failed {无法前往 {target}} canceled {已取消} other {已前往 {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {正在读取页面} failed {无法读取页面} canceled {已取消} other {已读取页面}}"
+            },
+            "act": {
+              "status": "{phase, select, running {正在操作页面} failed {无法操作页面} canceled {已取消} other {已操作页面}}",
+              "click": {
+                "status": "{phase, select, running {正在点击元素} failed {无法点击元素} canceled {已取消} other {已点击元素}}"
+              },
+              "type": {
+                "status": "{phase, select, running {正在输入“{text}”} failed {无法输入“{text}”} canceled {已取消} other {已输入“{text}”}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {正在悬停在元素上} failed {无法悬停在元素上} canceled {已取消} other {已悬停在元素上}}"
+              },
+              "select": {
+                "status": "{phase, select, running {正在选择选项} failed {无法选择选项} canceled {已取消} other {已选择选项}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {正在拖动元素} failed {无法拖动元素} canceled {已取消} other {已拖动元素}}"
+              },
+              "press": {
+                "status": "{phase, select, running {正在按 {key}} failed {无法按 {key}} canceled {已取消} other {已按 {key}}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {正在滚动页面} failed {无法滚动页面} canceled {已取消} other {已滚动页面}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {正在上传文件} failed {无法上传文件} canceled {已取消} other {已上传文件}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {正在等待页面} failed {页面未就绪} canceled {已取消} other {已等待页面}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {正在运行页面脚本} failed {页面脚本运行失败} canceled {已取消} other {已运行页面脚本}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {正在响应页面对话框} failed {无法响应页面对话框} canceled {已取消} other {已响应页面对话框}}"
+            },
+            "check": {
+              "status": "{phase, select, running {正在检查浏览器} failed {无法检查浏览器} canceled {已取消} other {已检查浏览器}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {正在后退} forward {正在前进} other {正在重新加载页面}}} failed {无法切换页面} canceled {已取消} other {{history, select, back {已后退} forward {已前进} other {已重新加载页面}}}}"
+            }
           }
         },
         "skill": {

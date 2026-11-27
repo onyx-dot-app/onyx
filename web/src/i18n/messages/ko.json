@@ -12792,6 +12792,62 @@
             "failed": {
               "status": "게시 실패"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {{target} 여는 중} failed {{target}을(를) 열 수 없음} canceled {취소됨} other {{target} 열림}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {새 탭 여는 중} failed {새 탭을 열 수 없음} canceled {취소됨} other {새 탭 열림}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {{target}(으)로 이동 중} failed {{target}(으)로 이동할 수 없음} canceled {취소됨} other {{target}(으)로 이동함}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {페이지 읽는 중} failed {페이지를 읽을 수 없음} canceled {취소됨} other {페이지를 읽음}}"
+            },
+            "act": {
+              "status": "{phase, select, running {페이지 사용 중} failed {페이지를 사용할 수 없음} canceled {취소됨} other {페이지를 사용함}}",
+              "click": {
+                "status": "{phase, select, running {요소 클릭 중} failed {요소를 클릭할 수 없음} canceled {취소됨} other {요소를 클릭함}}"
+              },
+              "type": {
+                "status": "{phase, select, running {“{text}” 입력 중} failed {“{text}”을(를) 입력할 수 없음} canceled {취소됨} other {“{text}”을(를) 입력함}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {요소 위로 커서 이동 중} failed {요소 위로 커서를 이동할 수 없음} canceled {취소됨} other {요소 위로 커서를 이동함}}"
+              },
+              "select": {
+                "status": "{phase, select, running {옵션 선택 중} failed {옵션을 선택할 수 없음} canceled {취소됨} other {옵션을 선택함}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {요소 드래그 중} failed {요소를 드래그할 수 없음} canceled {취소됨} other {요소를 드래그함}}"
+              },
+              "press": {
+                "status": "{phase, select, running {{key} 누르는 중} failed {{key}을(를) 누를 수 없음} canceled {취소됨} other {{key}을(를) 누름}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {페이지 스크롤 중} failed {페이지를 스크롤할 수 없음} canceled {취소됨} other {페이지를 스크롤함}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {파일 업로드 중} failed {파일을 업로드할 수 없음} canceled {취소됨} other {파일을 업로드함}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {페이지 기다리는 중} failed {페이지가 준비되지 않음} canceled {취소됨} other {페이지를 기다림}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {페이지 스크립트 실행 중} failed {페이지 스크립트 실패} canceled {취소됨} other {페이지 스크립트를 실행함}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {페이지 대화 상자에 응답 중} failed {페이지 대화 상자에 응답할 수 없음} canceled {취소됨} other {페이지 대화 상자에 응답함}}"
+            },
+            "check": {
+              "status": "{phase, select, running {브라우저 확인 중} failed {브라우저를 확인할 수 없음} canceled {취소됨} other {브라우저를 확인함}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {뒤로 가는 중} forward {앞으로 가는 중} other {페이지 새로 고치는 중}}} failed {페이지를 바꿀 수 없음} canceled {취소됨} other {{history, select, back {뒤로 감} forward {앞으로 감} other {페이지를 새로 고침}}}}"
+            }
           }
         },
         "skill": {

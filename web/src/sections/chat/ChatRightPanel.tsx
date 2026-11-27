@@ -161,29 +161,28 @@ export const ChatRightPanel = memo(function ChatRightPanel({
         : RIGHT_PANEL_FILES_TAB;
   const shownFile = fileByTab.get(shown);
   const shownPinned = fileTabs.some((tab) => tab.id === shown && tab.pinned);
-  // Files and Sources lead the strip when they have content or are shown,
-  // then a tab per page of the open browser, as T3 Code lists its browser
+  // Files and Sources lead the strip while open, then a tab per page of the open browser, as T3 Code lists its browser
   // tabs among its other tabs: a globe, the page's title or host, a close
   // button
   const fixedTabs: PanelTabItem[] = [
-    ...(files.length > 0 || shown === RIGHT_PANEL_FILES_TAB
+    ...(state.filesOpen
       ? [
           {
             id: RIGHT_PANEL_FILES_TAB,
             label: t("filesTab.label"),
             icon: SvgFiles,
-            closable: false,
+            closable: true,
             movable: false,
           },
         ]
       : []),
-    ...(hasSources || shown === RIGHT_PANEL_SOURCES_TAB
+    ...(state.sourcesOpen
       ? [
           {
             id: RIGHT_PANEL_SOURCES_TAB,
             label: t("sourcesTab.label"),
             icon: SvgSearchMenu,
-            closable: false,
+            closable: true,
             movable: false,
           },
         ]

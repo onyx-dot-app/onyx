@@ -72,7 +72,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   // Handle click to toggle sidebar
   const handleSourceClick = useCallback(() => {
     if (selectedMessageForDocDisplay === nodeId && sourcesPanelVisible) {
-      updateCurrentRightPanel({ type: "closePanel" });
+      updateCurrentRightPanel({ type: "hideSources" });
       updateCurrentSelectedNodeForDocDisplay(null);
     } else {
       updateCurrentSelectedNodeForDocDisplay(nodeId);

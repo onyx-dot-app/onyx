@@ -12792,6 +12792,62 @@
             "failed": {
               "status": "Échec de la publication"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {Ouverture de {target}} failed {Impossible d’ouvrir {target}} canceled {Annulé} other {{target} ouvert}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Ouverture d’un nouvel onglet} failed {Impossible d’ouvrir un nouvel onglet} canceled {Annulé} other {Nouvel onglet ouvert}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Accès à {target}} failed {Impossible d’accéder à {target}} canceled {Annulé} other {Accès à {target} effectué}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Lecture de la page} failed {Impossible de lire la page} canceled {Annulé} other {Page lue}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Utilisation de la page} failed {Impossible d’utiliser la page} canceled {Annulé} other {Page utilisée}}",
+              "click": {
+                "status": "{phase, select, running {Clic sur un élément} failed {Impossible de cliquer sur l’élément} canceled {Annulé} other {Clic effectué sur un élément}}"
+              },
+              "type": {
+                "status": "{phase, select, running {Saisie de « {text} »} failed {Impossible de saisir « {text} »} canceled {Annulé} other {« {text} » saisi}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {Survol d’un élément} failed {Impossible de survoler l’élément} canceled {Annulé} other {Élément survolé}}"
+              },
+              "select": {
+                "status": "{phase, select, running {Sélection d’une option} failed {Impossible de sélectionner l’option} canceled {Annulé} other {Option sélectionnée}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {Glissement d’un élément} failed {Impossible de faire glisser l’élément} canceled {Annulé} other {Élément glissé}}"
+              },
+              "press": {
+                "status": "{phase, select, running {Appui sur {key}} failed {Impossible d’appuyer sur {key}} canceled {Annulé} other {Appui sur {key} effectué}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {Défilement de la page} failed {Impossible de faire défiler la page} canceled {Annulé} other {Page défilée}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {Envoi de fichiers} failed {Impossible d’envoyer les fichiers} canceled {Annulé} other {Fichiers envoyés}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Attente de la page} failed {La page n’a pas été prête} canceled {Annulé} other {Page attendue}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Exécution d’un script de page} failed {Le script de page a échoué} canceled {Annulé} other {Script de page exécuté}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Réponse à une boîte de dialogue} failed {Impossible de répondre à la boîte de dialogue} canceled {Annulé} other {Boîte de dialogue répondue}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Vérification du navigateur} failed {Impossible de vérifier le navigateur} canceled {Annulé} other {Navigateur vérifié}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Retour en arrière} forward {Avance} other {Rechargement de la page}}} failed {Impossible de changer de page} canceled {Annulé} other {{history, select, back {Retour effectué} forward {Avance effectuée} other {Page rechargée}}}}"
+            }
           }
         },
         "skill": {

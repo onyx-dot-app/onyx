@@ -12792,6 +12792,62 @@
             "failed": {
               "status": "Error al publicar"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {Abriendo {target}} failed {No se pudo abrir {target}} canceled {Cancelado} other {Se abrió {target}}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Abriendo una pestaña nueva} failed {No se pudo abrir una pestaña nueva} canceled {Cancelado} other {Se abrió una pestaña nueva}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Yendo a {target}} failed {No se pudo ir a {target}} canceled {Cancelado} other {Se fue a {target}}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Leyendo la página} failed {No se pudo leer la página} canceled {Cancelado} other {Se leyó la página}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Usando la página} failed {No se pudo usar la página} canceled {Cancelado} other {Se usó la página}}",
+              "click": {
+                "status": "{phase, select, running {Haciendo clic en un elemento} failed {No se pudo hacer clic en el elemento} canceled {Cancelado} other {Se hizo clic en un elemento}}"
+              },
+              "type": {
+                "status": "{phase, select, running {Escribiendo “{text}”} failed {No se pudo escribir “{text}”} canceled {Cancelado} other {Se escribió “{text}”}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {Pasando el cursor sobre un elemento} failed {No se pudo pasar el cursor sobre el elemento} canceled {Cancelado} other {Se pasó el cursor sobre un elemento}}"
+              },
+              "select": {
+                "status": "{phase, select, running {Seleccionando una opción} failed {No se pudo seleccionar la opción} canceled {Cancelado} other {Se seleccionó una opción}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {Arrastrando un elemento} failed {No se pudo arrastrar el elemento} canceled {Cancelado} other {Se arrastró un elemento}}"
+              },
+              "press": {
+                "status": "{phase, select, running {Pulsando {key}} failed {No se pudo pulsar {key}} canceled {Cancelado} other {Se pulsó {key}}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {Desplazando la página} failed {No se pudo desplazar la página} canceled {Cancelado} other {Se desplazó la página}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {Subiendo archivos} failed {No se pudieron subir los archivos} canceled {Cancelado} other {Se subieron archivos}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Esperando a la página} failed {La página no estuvo lista} canceled {Cancelado} other {Se esperó a la página}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Ejecutando un script de la página} failed {Falló el script de la página} canceled {Cancelado} other {Se ejecutó un script de la página}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Respondiendo un diálogo de la página} failed {No se pudo responder el diálogo de la página} canceled {Cancelado} other {Se respondió un diálogo de la página}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Comprobando el navegador} failed {No se pudo comprobar el navegador} canceled {Cancelado} other {Se comprobó el navegador}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Volviendo atrás} forward {Avanzando} other {Recargando la página}}} failed {No se pudo cambiar la página} canceled {Cancelado} other {{history, select, back {Se volvió atrás} forward {Se avanzó} other {Se recargó la página}}}}"
+            }
           }
         },
         "skill": {

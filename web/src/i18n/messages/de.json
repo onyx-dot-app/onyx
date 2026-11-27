@@ -12792,6 +12792,62 @@
             "failed": {
               "status": "Veröffentlichung fehlgeschlagen"
             }
+          },
+          "browser": {
+            "open": {
+              "status": "{phase, select, running {{target} wird geöffnet} failed {{target} konnte nicht geöffnet werden} canceled {Abgebrochen} other {{target} geöffnet}}"
+            },
+            "openBlank": {
+              "status": "{phase, select, running {Neuer Tab wird geöffnet} failed {Neuer Tab konnte nicht geöffnet werden} canceled {Abgebrochen} other {Neuer Tab geöffnet}}"
+            },
+            "navigate": {
+              "status": "{phase, select, running {Wechsel zu {target}} failed {Wechsel zu {target} fehlgeschlagen} canceled {Abgebrochen} other {Zu {target} gewechselt}}"
+            },
+            "snapshot": {
+              "status": "{phase, select, running {Seite wird gelesen} failed {Seite konnte nicht gelesen werden} canceled {Abgebrochen} other {Seite gelesen}}"
+            },
+            "act": {
+              "status": "{phase, select, running {Seite wird bedient} failed {Seite konnte nicht bedient werden} canceled {Abgebrochen} other {Seite bedient}}",
+              "click": {
+                "status": "{phase, select, running {Element wird angeklickt} failed {Element konnte nicht angeklickt werden} canceled {Abgebrochen} other {Element angeklickt}}"
+              },
+              "type": {
+                "status": "{phase, select, running {„{text}“ wird eingegeben} failed {„{text}“ konnte nicht eingegeben werden} canceled {Abgebrochen} other {„{text}“ eingegeben}}"
+              },
+              "hover": {
+                "status": "{phase, select, running {Zeiger über Element} failed {Zeiger konnte nicht über das Element bewegt werden} canceled {Abgebrochen} other {Zeiger über Element bewegt}}"
+              },
+              "select": {
+                "status": "{phase, select, running {Option wird ausgewählt} failed {Option konnte nicht ausgewählt werden} canceled {Abgebrochen} other {Option ausgewählt}}"
+              },
+              "drag": {
+                "status": "{phase, select, running {Element wird gezogen} failed {Element konnte nicht gezogen werden} canceled {Abgebrochen} other {Element gezogen}}"
+              },
+              "press": {
+                "status": "{phase, select, running {{key} wird gedrückt} failed {{key} konnte nicht gedrückt werden} canceled {Abgebrochen} other {{key} gedrückt}}"
+              },
+              "scroll": {
+                "status": "{phase, select, running {Seite wird gescrollt} failed {Seite konnte nicht gescrollt werden} canceled {Abgebrochen} other {Seite gescrollt}}"
+              },
+              "upload": {
+                "status": "{phase, select, running {Dateien werden hochgeladen} failed {Dateien konnten nicht hochgeladen werden} canceled {Abgebrochen} other {Dateien hochgeladen}}"
+              }
+            },
+            "waitFor": {
+              "status": "{phase, select, running {Warten auf die Seite} failed {Die Seite wurde nicht bereit} canceled {Abgebrochen} other {Auf die Seite gewartet}}"
+            },
+            "evaluate": {
+              "status": "{phase, select, running {Seitenskript wird ausgeführt} failed {Das Seitenskript ist fehlgeschlagen} canceled {Abgebrochen} other {Seitenskript ausgeführt}}"
+            },
+            "dialog": {
+              "status": "{phase, select, running {Seitendialog wird beantwortet} failed {Seitendialog konnte nicht beantwortet werden} canceled {Abgebrochen} other {Seitendialog beantwortet}}"
+            },
+            "check": {
+              "status": "{phase, select, running {Browser wird geprüft} failed {Browser konnte nicht geprüft werden} canceled {Abgebrochen} other {Browser geprüft}}"
+            },
+            "history": {
+              "status": "{phase, select, running {{history, select, back {Zurück} forward {Vorwärts} other {Seite wird neu geladen}}} failed {Seite konnte nicht geändert werden} canceled {Abgebrochen} other {{history, select, back {Zurückgegangen} forward {Vorwärtsgegangen} other {Seite neu geladen}}}}"
+            }
           }
         },
         "skill": {
