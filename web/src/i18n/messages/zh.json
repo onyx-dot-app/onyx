@@ -14712,9 +14712,6 @@
       "unsupported": {
         "description": "下载文件以查看其内容。"
       },
-      "retry": {
-        "label": "重试"
-      },
       "download": {
         "label": "下载文件"
       },

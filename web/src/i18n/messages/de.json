@@ -14712,9 +14712,6 @@
       "unsupported": {
         "description": "Laden Sie die Datei herunter, um ihren Inhalt anzuzeigen."
       },
-      "retry": {
-        "label": "Erneut versuchen"
-      },
       "download": {
         "label": "Datei herunterladen"
       },

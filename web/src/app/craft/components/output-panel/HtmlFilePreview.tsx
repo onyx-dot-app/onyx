@@ -10,8 +10,8 @@ import {
   createStaticPreview,
   downloadArtifactFile,
 } from "@/app/craft/services/apiServices";
-import { FilePreviewLoading } from "@/app/craft/components/output-panel/FilePreviewLoading";
-import { PreviewUnavailable } from "@/app/craft/components/output-panel/PreviewUnavailable";
+import { FilePreviewLoading } from "@/sections/file-preview/FilePreviewLoading";
+import { PreviewUnavailable } from "@/sections/file-preview/PreviewUnavailable";
 import type { FilePreviewContentProps } from "@/app/craft/components/output-panel/FilePreviewContent";
 
 export default function HtmlFilePreview({

@@ -49,7 +49,7 @@ it("offers a download when the browser cannot decode media", async () => {
   fireEvent.error(await screen.findByLabelText("clip.mov"));
   expect(await screen.findByText("Playback not supported")).toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "Download file" })
+    screen.getByRole("button", { name: "Download File" })
   ).toBeInTheDocument();
 });
 

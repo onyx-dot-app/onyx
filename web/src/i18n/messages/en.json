@@ -14712,9 +14712,6 @@
       "unsupported": {
         "description": "Download the file to view its contents."
       },
-      "retry": {
-        "label": "Try again"
-      },
       "download": {
         "label": "Download file"
       },
