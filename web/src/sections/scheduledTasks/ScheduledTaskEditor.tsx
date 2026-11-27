@@ -120,6 +120,10 @@ function TaskForm({ task }: TaskFormProps) {
   const restoredPayload = useRef(false);
   const [touched, setTouched] = useState({ name: false, prompt: false });
   const [saving, setSaving] = useState(false);
+  // A task this editor created while the user kept editing; later saves
+  // update it instead of creating another.
+  const [created, setCreated] = useState<ScheduledTaskDetail | null>(null);
+  const target = task ?? created;
   // State updates land on the next render; the ref stops a second click
   // in the same frame from sending a second save.
   const savingRef = useRef(false);
@@ -203,8 +207,8 @@ function TaskForm({ task }: TaskFormProps) {
       integrations,
     };
     try {
-      const saved = task
-        ? await updateScheduledTask(task.id, fields)
+      const saved = target
+        ? await updateScheduledTask(target.id, fields)
         : await createScheduledTask({ ...fields, run_immediately: runNow });
       await Promise.all([
         mutate(SWR_KEYS.chatScheduledTask(saved.id), saved, {
@@ -214,7 +218,7 @@ function TaskForm({ task }: TaskFormProps) {
         revalidateScheduledRunViews(saved.id),
       ]);
       toast.success(
-        task
+        target
           ? t("toasts.updated")
           : t(runNow ? "toasts.createdAndRun" : "toasts.created")
       );
@@ -223,6 +227,7 @@ function TaskForm({ task }: TaskFormProps) {
         leave();
         return;
       }
+      setCreated(saved);
       savingRef.current = false;
       setSaving(false);
       unsaved.requestLeave(leave);

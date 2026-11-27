@@ -1,6 +1,9 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import ScheduledTaskEditor from "@/sections/scheduledTasks/ScheduledTaskEditor";
-import { createScheduledTask } from "@/lib/scheduledTasks/svc";
+import {
+  createScheduledTask,
+  updateScheduledTask,
+} from "@/lib/scheduledTasks/svc";
 import type { ScheduledTaskDetail } from "@/lib/scheduledTasks/types";
 
 jest.mock("next/navigation", () => ({
@@ -187,4 +190,15 @@ it("asks before it leaves edits made while the save was pending", async () => {
     await screen.findByText("Discard unsaved changes?")
   ).toBeInTheDocument();
   expect(window.location.pathname).toBe("/app/scheduled-tasks/new");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  jest.mocked(updateScheduledTask).mockResolvedValue(savedTask);
+  await user.click(screen.getByTestId("save-scheduled-task"));
+
+  await waitFor(() =>
+    expect(updateScheduledTask).toHaveBeenCalledWith(
+      "task",
+      expect.objectContaining({ prompt: "Summarize the news" })
+    )
+  );
+  expect(createScheduledTask).toHaveBeenCalledTimes(1);
 });
