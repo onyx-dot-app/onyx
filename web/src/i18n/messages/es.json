@@ -1485,6 +1485,10 @@
       "browser": {
         "title": "Navegador",
         "description": "Permite que el agente use un navegador web en su sandbox. Los usuarios pueden verlo y tomar el control en el panel del chat."
+      },
+      "chromeBrowser": {
+        "title": "Usar el Chrome del usuario",
+        "description": "Permite que los chats usen pestañas que los usuarios comparten desde su propio Chrome con la extensión de Onyx. El texto de la página va a Onyx y al proveedor del modelo."
       }
     },
     "codeInterpreter": {
@@ -13697,6 +13701,9 @@
       },
       "browserTab": {
         "label": "Navegador"
+      },
+      "chromeTab": {
+        "label": "Mi Chrome"
       }
     },
     "export": {
@@ -13877,6 +13884,37 @@
         "error": "No se pudieron subir los archivos. Inténtalo de nuevo."
       },
       "answerError": "No se pudo responder a la página. Inténtalo de nuevo."
+    },
+    "chromeBrowser": {
+      "error": "Algo salió mal. Inténtalo de nuevo.",
+      "retry": "Comprobar de nuevo",
+      "unavailable": {
+        "title": "Chrome no está disponible",
+        "description": "Tu espacio de trabajo no permite que los chats usen tu Chrome, u Onyx no pudo cargar su estado."
+      },
+      "connect": {
+        "title": "Conecta tu Chrome",
+        "description": "Instala la extensión de Onyx en Chrome e inicia sesión en Onyx allí. Luego este chat podrá usar las pestañas que compartas."
+      },
+      "share": {
+        "title": "Compartir pestañas de Chrome con este chat",
+        "description": "Onyx puede leer las pestañas que elijas y hacer clic y escribir en ellas como tú. El texto de la página va a Onyx y a su proveedor de modelos de IA. Chrome te pregunta qué pestañas compartir.",
+        "action": "Compartir pestañas"
+      },
+      "pending": {
+        "title": "Aprueba en Chrome",
+        "description": "Chrome muestra una ventana para elegir las pestañas y los sitios. Apruébala allí.",
+        "again": "Volver a pedir"
+      },
+      "denied": {
+        "title": "No compartiste pestañas"
+      },
+      "shared": {
+        "title": "{count, plural, one {Este chat usa # pestaña de tu Chrome} other {Este chat usa # pestañas de tu Chrome}}",
+        "description": "Observa las acciones en tu propia pestaña. El acceso termina a las {until}.",
+        "sites": "Sitios: {sites}",
+        "stop": "Detener"
+      }
     }
   },
   "common": {

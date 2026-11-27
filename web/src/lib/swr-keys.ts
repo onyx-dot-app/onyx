@@ -114,6 +114,8 @@ export const SWR_KEYS = {
     `/api/chat/artifacts/${artifactId}${
       version === null ? "" : `?version=${version}`
     }`,
+  chatChromeBrowser: (sessionId: string) =>
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}/browser/chrome`,
   chatSessionStatus: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/status`,
   chatSessionAgents: (sessionId: string) =>

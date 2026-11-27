@@ -1485,6 +1485,10 @@
       "browser": {
         "title": "Navegador",
         "description": "Permite que o agente use um navegador web na sandbox. Os usuários podem acompanhar e assumir o controle no painel do chat."
+      },
+      "chromeBrowser": {
+        "title": "Usar o Chrome do usuário",
+        "description": "Permite que os chats usem abas que os usuários compartilham do próprio Chrome com a extensão do Onyx. O texto da página vai para o Onyx e para o provedor do modelo."
       }
     },
     "codeInterpreter": {
@@ -13697,6 +13701,9 @@
       },
       "browserTab": {
         "label": "Navegador"
+      },
+      "chromeTab": {
+        "label": "Meu Chrome"
       }
     },
     "export": {
@@ -13877,6 +13884,37 @@
         "error": "Não foi possível enviar os arquivos. Tente novamente."
       },
       "answerError": "Não foi possível responder à página. Tente novamente."
+    },
+    "chromeBrowser": {
+      "error": "Algo deu errado. Tente novamente.",
+      "retry": "Verificar novamente",
+      "unavailable": {
+        "title": "O Chrome não está disponível",
+        "description": "Seu espaço de trabalho não permite que chats usem seu Chrome, ou o Onyx não conseguiu carregar o estado."
+      },
+      "connect": {
+        "title": "Conecte seu Chrome",
+        "description": "Instale a extensão do Onyx no Chrome e entre no Onyx por lá. Depois, este chat poderá usar as abas que você compartilhar."
+      },
+      "share": {
+        "title": "Compartilhar abas do Chrome com este chat",
+        "description": "O Onyx pode ler as abas que você escolher e clicar e digitar nelas como você. O texto da página vai para o Onyx e para o provedor de modelos de IA. O Chrome pergunta quais abas compartilhar.",
+        "action": "Compartilhar abas"
+      },
+      "pending": {
+        "title": "Aprove no Chrome",
+        "description": "O Chrome mostra uma janela para escolher as abas e os sites. Aprove por lá.",
+        "again": "Pedir novamente"
+      },
+      "denied": {
+        "title": "Você não compartilhou abas"
+      },
+      "shared": {
+        "title": "{count, plural, one {Este chat usa # aba do seu Chrome} other {Este chat usa # abas do seu Chrome}}",
+        "description": "Acompanhe as ações na sua própria aba. O compartilhamento termina às {until}.",
+        "sites": "Sites: {sites}",
+        "stop": "Parar"
+      }
     }
   },
   "common": {

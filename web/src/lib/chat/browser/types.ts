@@ -127,3 +127,17 @@ export type BrowserConnectionState =
   | "disabled"
   | "unreachable"
   | "error";
+
+/** The user's Chrome, as one chat sees it (the Onyx extension). */
+export interface ChromeBrowserState {
+  // The user's Chrome installations that are connected now
+  installations: { installation_id: string }[];
+  // A share request that waits in Chrome, or that the user denied
+  request: "pending" | "denied" | null;
+  grant: {
+    tabs: { id: string; title: string; url: string }[];
+    origins: string[];
+    // Seconds since the epoch
+    expires_at: number;
+  } | null;
+}

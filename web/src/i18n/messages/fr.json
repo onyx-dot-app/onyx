@@ -1485,6 +1485,10 @@
       "browser": {
         "title": "Navigateur",
         "description": "Autorisez l'agent à utiliser un navigateur web dans son bac à sable. Les utilisateurs peuvent le regarder et en prendre le contrôle dans le panneau du chat."
+      },
+      "chromeBrowser": {
+        "title": "Utiliser le Chrome de l'utilisateur",
+        "description": "Permet aux chats d'utiliser les onglets que les utilisateurs partagent depuis leur propre Chrome avec l'extension Onyx. Le texte des pages est envoyé à Onyx et au fournisseur du modèle."
       }
     },
     "codeInterpreter": {
@@ -13697,6 +13701,9 @@
       },
       "browserTab": {
         "label": "Navigateur"
+      },
+      "chromeTab": {
+        "label": "Mon Chrome"
       }
     },
     "export": {
@@ -13877,6 +13884,37 @@
         "error": "Impossible de téléverser les fichiers. Réessayez."
       },
       "answerError": "Impossible de répondre à la page. Réessayez."
+    },
+    "chromeBrowser": {
+      "error": "Une erreur s'est produite. Réessayez.",
+      "retry": "Vérifier à nouveau",
+      "unavailable": {
+        "title": "Chrome n'est pas disponible",
+        "description": "Votre espace de travail ne permet pas aux chats d'utiliser votre Chrome, ou Onyx n'a pas pu charger son état."
+      },
+      "connect": {
+        "title": "Connecter votre Chrome",
+        "description": "Installez l'extension Onyx dans Chrome et connectez-vous à Onyx. Ce chat pourra ensuite utiliser les onglets que vous partagez."
+      },
+      "share": {
+        "title": "Partager des onglets Chrome avec ce chat",
+        "description": "Onyx peut lire les onglets choisis, et y cliquer et saisir du texte en votre nom. Le texte des pages est envoyé à Onyx et à son fournisseur de modèles d'IA. Chrome vous demande quels onglets partager.",
+        "action": "Partager des onglets"
+      },
+      "pending": {
+        "title": "Approuvez dans Chrome",
+        "description": "Chrome affiche une fenêtre pour choisir les onglets et les sites. Approuvez-la.",
+        "again": "Redemander"
+      },
+      "denied": {
+        "title": "Vous n'avez pas partagé d'onglets"
+      },
+      "shared": {
+        "title": "{count, plural, one {Ce chat utilise # onglet de votre Chrome} other {Ce chat utilise # onglets de votre Chrome}}",
+        "description": "Suivez les actions dans votre propre onglet. Le partage se termine à {until}.",
+        "sites": "Sites : {sites}",
+        "stop": "Arrêter"
+      }
     }
   },
   "common": {

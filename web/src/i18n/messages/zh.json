@@ -1485,6 +1485,10 @@
       "browser": {
         "title": "浏览器",
         "description": "允许智能体在其沙盒中使用网页浏览器。用户可以在聊天面板中观看并接管控制。"
+      },
+      "chromeBrowser": {
+        "title": "使用用户的 Chrome",
+        "description": "允许聊天使用用户通过 Onyx 扩展从自己的 Chrome 共享的标签页。页面文本会发送给 Onyx 和模型提供商。"
       }
     },
     "codeInterpreter": {
@@ -13697,6 +13701,9 @@
       },
       "browserTab": {
         "label": "浏览器"
+      },
+      "chromeTab": {
+        "label": "我的 Chrome"
       }
     },
     "export": {
@@ -13877,6 +13884,37 @@
         "error": "无法上传文件。请重试。"
       },
       "answerError": "无法响应该页面。请重试。"
+    },
+    "chromeBrowser": {
+      "error": "出现问题。请重试。",
+      "retry": "重新检查",
+      "unavailable": {
+        "title": "Chrome 不可用",
+        "description": "你的工作区不允许聊天使用你的 Chrome，或 Onyx 无法加载其状态。"
+      },
+      "connect": {
+        "title": "连接你的 Chrome",
+        "description": "在 Chrome 中安装 Onyx 扩展并在其中登录 Onyx。之后此聊天即可使用你共享的标签页。"
+      },
+      "share": {
+        "title": "与此聊天共享 Chrome 标签页",
+        "description": "Onyx 可以读取你选择的标签页，并以你的身份点击和输入。页面文本会发送给 Onyx 及其 AI 模型提供商。Chrome 会询问要共享哪些标签页。",
+        "action": "共享标签页"
+      },
+      "pending": {
+        "title": "在 Chrome 中批准",
+        "description": "Chrome 会显示一个窗口，用于选择标签页和网站。请在那里批准。",
+        "again": "再次请求"
+      },
+      "denied": {
+        "title": "你没有共享标签页"
+      },
+      "shared": {
+        "title": "{count, plural, other {此聊天正在使用你 Chrome 中的 # 个标签页}}",
+        "description": "在你自己的标签页中查看操作。共享将于 {until} 结束。",
+        "sites": "网站：{sites}",
+        "stop": "停止"
+      }
     }
   },
   "common": {

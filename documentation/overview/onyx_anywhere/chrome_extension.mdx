@@ -56,6 +56,44 @@ the extension opens a welcome page. Enter your Onyx URL if your administrator ha
 
 You can change these shortcuts at `chrome://extensions/shortcuts`.
 
+## Let a Chat Use Your Tabs
+
+A chat can read and use tabs in your own Chrome, with your sign-ins. Use this for sites that only your browser can open,
+for example sites behind SSO or a company network.
+
+<Steps>
+  <Step title="Open My Chrome">
+    In a chat, open the right panel. Click **+**, then **My Chrome**.
+  </Step>
+
+  <Step title="Share tabs">
+    Click **Share Tabs**. Chrome opens an Onyx window.
+  </Step>
+
+  <Step title="Allow">
+    Select the tabs to share and the time limit, then click **Allow**.
+  </Step>
+</Steps>
+
+The chat can use only the sites of the tabs that you select. It cannot type into password fields, run page scripts,
+upload files, or take screenshots. Onyx puts the shared tabs in a tab group named **Onyx**,
+and Chrome shows a "started debugging this browser" bar while the chat has access.
+
+If you click or type in a shared tab, the chat waits until you stop. To end access, do one of these:
+
+- Click **Stop** in the chat's **My Chrome** tab.
+- Click the Onyx icon in the Chrome toolbar, then **Stop**.
+- Click **Cancel** on the "debugging this browser" bar.
+
+Access also ends when the time limit ends or when you close all shared tabs. One Chrome serves one chat at a time.
+
+<Warning>
+  The text of shared pages goes to Onyx and to your organization's AI model provider.
+  Share only the tabs that the task needs.
+</Warning>
+
+Your administrator can turn this off in **Admin Panel → Chat Preferences** or with a browser policy.
+
 ## Settings and Options
 
 Click the Onyx icon in the Chrome toolbar and select **Extension Settings** (or right-click the icon and select

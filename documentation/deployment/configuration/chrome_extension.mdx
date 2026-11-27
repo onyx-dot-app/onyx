@@ -88,6 +88,7 @@ If you self-host the extension, replace it with your own ID from `chrome://exten
 | ---------------------------- | ------- | ----------------------------------------------------- |
 | `onyxExtensionDomain`        | string  | Root URL of your Onyx instance (trailing `/` removed) |
 | `onyxExtensionDefaultNewTab` | boolean | Force the "Use Onyx as new tab page" toggle on or off |
+| `onyxBrowserControlDisabled` | boolean | `true` stops chats from using tabs in this browser (version 1.3 and later) |
 
 <Tabs>
   <Tab title="Google Admin Console">
@@ -159,6 +160,20 @@ For private distribution without the Chrome Web Store:
     Use Admin console or Group Policy to point to your hosted files
   </Step>
 </Steps>
+
+### Chat Browser Control
+
+Extension version 1.3 and later lets users share Chrome tabs with an Onyx chat.
+See [Let a Chat Use Your Tabs](/overview/onyx_anywhere/chrome_extension#let-a-chat-use-your-tabs).
+
+- Version 1.3 adds the `debugger`, `tabGroups` and `alarms` permissions. When Chrome updates the extension,
+  it turns the extension off until each user accepts the new permissions.
+  A force-installed extension gets the permissions without a prompt.
+- The extension keeps a websocket open to `/api/chat/browser/extension/ws` on your Onyx server.
+  A proxy in front of Onyx must pass websocket upgrades on that path. The bundled NGINX configuration does this.
+- To turn the feature off for your organization, turn off **Use the User's Chrome** in
+  **Admin Panel → Chat Preferences**. To turn it off for some browsers only,
+  set the `onyxBrowserControlDisabled` policy.
 
 ## Extension Management
 

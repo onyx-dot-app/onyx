@@ -310,6 +310,15 @@
   downloads it from `/api/chat/sessions/{id}/browser/downloads/{name}`. The
   admin switch is "Browser" on the chat preferences page
   (`browser_enabled`).
+- **"My Chrome" is a right-panel tab for the user's own Chrome**
+  (`RIGHT_PANEL_CHROME_TAB`, the "+" menu when
+  `settings.chrome_browser_available`). `ChatRightPanel` reads
+  `/api/chat/sessions/{id}/browser/chrome` (`useChromeBrowserState`, polled
+  while the Chrome tab is open) and passes it to `ChromeBrowserPanel`: connect the extension, share tabs (Chrome shows the consent
+  window), or the shared tabs with Stop. The user's tab is the live view, so
+  there is no stream. While the chat has a share, `ChatRightPanel` keeps the
+  sandbox browser closed and turns its opening (for example on
+  `browser_open`) into the Chrome tab.
 - **A chat has a right panel, with a toggle at the far end of its header**
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the

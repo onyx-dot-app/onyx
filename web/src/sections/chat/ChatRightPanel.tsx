@@ -15,7 +15,13 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { SvgFiles, SvgGlobe, SvgSearchMenu, SvgSidebar } from "@opal/icons";
+import {
+  SvgFiles,
+  SvgGlobe,
+  SvgMonitor,
+  SvgSearchMenu,
+  SvgSidebar,
+} from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
@@ -33,6 +39,7 @@ import {
 } from "@/lib/chat/publishedFiles";
 import {
   RIGHT_PANEL_BROWSER_TAB,
+  RIGHT_PANEL_CHROME_TAB,
   RIGHT_PANEL_FILES_TAB,
   RIGHT_PANEL_SOURCES_TAB,
   openCardFileAction,
@@ -70,7 +77,11 @@ import {
 } from "@/sections/chat/PublishedFileViews";
 import type { PublishedFilesPanel } from "@/sections/chat/PublishedFileCards";
 import { BrowserPanel } from "@/sections/chat/browser/BrowserPanel";
-import { useChatBrowserTabs } from "@/lib/chat/browser/hooks";
+import {
+  useChatBrowserTabs,
+  useChromeBrowserState,
+} from "@/lib/chat/browser/hooks";
+import { ChromeBrowserPanel } from "@/sections/chat/browser/ChromeBrowserPanel";
 
 interface ChatRightPanelProps {
   // The chat whose panel this is
@@ -87,6 +98,8 @@ interface ChatRightPanelProps {
   reloadFiles: () => Promise<void>;
   // The "+" menu offers the chat's browser
   browserAvailable?: boolean;
+  // The "+" menu offers the user's own Chrome
+  chromeAvailable?: boolean;
 }
 
 /**
@@ -111,6 +124,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   hasSources,
   reloadFiles,
   browserAvailable = false,
+  chromeAvailable = false,
 }: ChatRightPanelProps) {
   const t = useTranslations("chat.rightPanel");
   // Each tab's shown file, with the name that the list gives its artifact,
@@ -144,17 +158,32 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   );
   // A tab change that the panel makes itself leaves focus where it is
   const insideChangeRef = useRef(false);
+  // While the user shares Chrome with the chat, its browser tools drive
+  // Chrome, so the panel shows Chrome in place of the sandbox's browser
+  const chrome = useChromeBrowserState(
+    chromeAvailable ? sessionId : null,
+    open && state.chromeOpen
+  );
+  const chromeShared = !!chrome.data?.grant;
+  useEffect(() => {
+    if (!chromeShared || !state.browserOpen) return;
+    dispatch({ type: "closeTab", tabId: RIGHT_PANEL_BROWSER_TAB });
+    dispatch({ type: "openChrome" });
+  }, [chromeShared, state.browserOpen, dispatch]);
   const browser = useChatBrowserTabs({
     sessionId,
     open,
-    state,
+    state: chromeShared ? { ...state, browserOpen: false } : state,
     dispatch,
     onInsideChange: () => {
       insideChangeRef.current = true;
     },
   });
+  const chromeShown = state.activeId === RIGHT_PANEL_CHROME_TAB;
   const shown =
-    state.activeId === RIGHT_PANEL_SOURCES_TAB || fileByTab.has(state.activeId)
+    state.activeId === RIGHT_PANEL_SOURCES_TAB ||
+    fileByTab.has(state.activeId) ||
+    chromeShown
       ? state.activeId
       : browser.shown
         ? browser.tabId
@@ -181,6 +210,17 @@ export const ChatRightPanel = memo(function ChatRightPanel({
             id: RIGHT_PANEL_SOURCES_TAB,
             label: t("sourcesTab.label"),
             icon: SvgSearchMenu,
+            movable: false,
+          },
+        ]
+      : []),
+    ...(state.chromeOpen
+      ? [
+          {
+            id: RIGHT_PANEL_CHROME_TAB,
+            label: t("chromeTab.label"),
+            icon: SvgMonitor,
+            closable: true,
             movable: false,
           },
         ]
@@ -534,6 +574,20 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                         },
                       ]
                     : []),
+                  ...(chromeAvailable && sessionId !== null
+                    ? [
+                        {
+                          kind: "action" as const,
+                          id: RIGHT_PANEL_CHROME_TAB,
+                          title: t("chromeTab.label"),
+                          icon: SvgMonitor,
+                          onSelect: () => {
+                            insideChangeRef.current = true;
+                            dispatch({ type: "openChrome" });
+                          },
+                        },
+                      ]
+                    : []),
                   ...(hasSources
                     ? [
                         {
@@ -556,7 +610,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
               // As Craft's: reload before the search or the file's path. The
               // Browser has its own URL bar.
               shown !== RIGHT_PANEL_SOURCES_TAB &&
-              !browser.shown && (
+              !browser.shown &&
+              !chromeShown && (
                 <PanelUrlBar
                   displayUrl={
                     shownFile ? publishedFilePath(shownFile) : undefined
@@ -607,6 +662,20 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                   className="absolute inset-0 overflow-y-auto"
                 >
                   {sources}
+                </div>
+              )}
+              {chromeShown && sessionId !== null && (
+                <div
+                  id={panelContentDomId(RIGHT_PANEL_CHROME_TAB)}
+                  role="tabpanel"
+                  aria-labelledby={panelTabDomId(RIGHT_PANEL_CHROME_TAB)}
+                  className="absolute inset-0 overflow-y-auto"
+                >
+                  <ChromeBrowserPanel
+                    key={sessionId}
+                    sessionId={sessionId}
+                    chrome={chrome}
+                  />
                 </div>
               )}
               {browser.sessionId !== null && (
@@ -725,8 +794,11 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
   const files = usePublishedFiles("current");
   const { incognitoEnabled } = useIncognito();
+  const settings = useSettings();
   const browserAvailable =
-    (useSettings().chat_browser_available ?? false) && !incognitoEnabled;
+    (settings.chat_browser_available ?? false) && !incognitoEnabled;
+  const chromeAvailable =
+    (settings.chrome_browser_available ?? false) && !incognitoEnabled;
   const reloadFiles = useCallback(async () => {
     if (sessionId !== null) await reloadChatPublishedFiles(sessionId);
   }, [sessionId]);
@@ -739,6 +811,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
       files={files}
       reloadFiles={reloadFiles}
       browserAvailable={browserAvailable}
+      chromeAvailable={chromeAvailable}
     />
   );
 }

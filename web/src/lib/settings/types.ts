@@ -89,8 +89,11 @@ export interface Settings {
   // Admin switch for the chat browser: the agent's browser tools and the
   // live view in the chat panel.
   browser_enabled?: boolean;
+  chrome_browser_enabled?: boolean;
   // The chat browser is on and chat sandboxes exist on this deployment.
   chat_browser_available?: boolean;
+  // The user's chats can use the user's own Chrome (the Onyx extension)
+  chrome_browser_available?: boolean;
 
   // Workspace UI language for users without a stored language of their own.
   default_language: Locale;

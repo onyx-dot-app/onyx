@@ -24,6 +24,8 @@ import { artifactKey, newestVersion } from "@/lib/chat/publishedFiles";
 export const RIGHT_PANEL_FILES_TAB = "files";
 export const RIGHT_PANEL_SOURCES_TAB = "sources";
 export const RIGHT_PANEL_BROWSER_TAB = "browser";
+// The user's own Chrome, shared through the Onyx extension
+export const RIGHT_PANEL_CHROME_TAB = "chrome";
 const FILE_TAB_PREFIX = "file:";
 // Session storage of each chat's panel width, as Craft keeps its panel's
 export const CHAT_PANEL_STORAGE_PREFIX = "onyx:chat:output-panel:v1:";
@@ -37,7 +39,11 @@ export function rightPanelFileTab(
 
 /** The Files list or a file's tab, as opposed to Sources or the browser. */
 function isFilesTab(tabId: string): boolean {
-  return tabId !== RIGHT_PANEL_SOURCES_TAB && tabId !== RIGHT_PANEL_BROWSER_TAB;
+  return (
+    tabId !== RIGHT_PANEL_SOURCES_TAB &&
+    tabId !== RIGHT_PANEL_BROWSER_TAB &&
+    tabId !== RIGHT_PANEL_CHROME_TAB
+  );
 }
 
 /**
@@ -70,6 +76,8 @@ export interface ChatRightPanelState {
   // Whether the chat's browser is open in the panel: its pages show as tabs
   // and its view stays mounted. The browser selects the page that it shows.
   browserOpen: boolean;
+  // Whether the user's Chrome tab is open in the panel
+  chromeOpen: boolean;
   // The Files list and the open file tabs by most recent use. It picks the
   // tab after a closed one, and the tab that the panel toggle shows again.
   history: string[];
@@ -90,6 +98,7 @@ export const INITIAL_RIGHT_PANEL: ChatRightPanelState = {
   filesOpen: false,
   sourcesOpen: false,
   browserOpen: false,
+  chromeOpen: false,
   history: [],
   proportion: DEFAULT_PANEL_PROPORTION,
   search: "",
@@ -103,13 +112,16 @@ export type ChatRightPanelAction =
   | { type: "showTab"; tabId: string }
   // Opens the browser and shows it
   | { type: "openBrowser" }
+  // Opens the user's Chrome tab and shows it
+  | { type: "openChrome" }
   // Shows the panel on its last shown Files tab: the list or an open file
   | { type: "showFiles" }
   // Opens a file in its artifact's tab, pinned to its version or following
   // the newest
   | ({ type: "openFile" } & ChatFileTab)
   // Closes a tab. A closed active tab gives way to the last shown Files tab,
-  // else Sources, else the browser; without one, the panel closes.
+  // else Sources, else the browser, else Chrome; without one, the panel
+  // closes.
   | { type: "closeTab"; tabId: string }
   // Moves a file tab to another file tab's place, as a drop on that tab does
   | { type: "reorderTab"; tabId: string; overTabId: string }
@@ -136,7 +148,11 @@ function activate(
   target: FilesPanelTab
 ): ChatRightPanelState {
   const mode = state.mode === "closed" ? "medium" : state.mode;
-  if (target === RIGHT_PANEL_SOURCES_TAB || target === RIGHT_PANEL_BROWSER_TAB)
+  if (
+    target === RIGHT_PANEL_SOURCES_TAB ||
+    target === RIGHT_PANEL_BROWSER_TAB ||
+    target === RIGHT_PANEL_CHROME_TAB
+  )
     return state.mode === mode &&
       state.activeId === target &&
       (target !== RIGHT_PANEL_SOURCES_TAB || state.sourcesOpen)
@@ -170,7 +186,8 @@ function activate(
 
 /**
  * The panel after its active tab closes: on the last shown Files tab, else
- * the first open one, else Sources, else the browser, else closed.
+ * the first open one, else Sources, else the browser, else the user's
+ * Chrome, else closed.
  */
 function leaveClosedTab(state: ChatRightPanelState): ChatRightPanelState {
   const filesTab = filesPanelTabs(state)[0];
@@ -182,7 +199,9 @@ function leaveClosedTab(state: ChatRightPanelState): ChatRightPanelState {
         ? RIGHT_PANEL_SOURCES_TAB
         : state.browserOpen
           ? RIGHT_PANEL_BROWSER_TAB
-          : null);
+          : state.chromeOpen
+            ? RIGHT_PANEL_CHROME_TAB
+            : null);
   return next === null
     ? { ...state, mode: "closed" }
     : { ...state, activeId: next };
@@ -214,6 +233,7 @@ export function rightPanelReducer(
       return action.tabId === RIGHT_PANEL_FILES_TAB ||
         action.tabId === RIGHT_PANEL_SOURCES_TAB ||
         (action.tabId === RIGHT_PANEL_BROWSER_TAB && state.browserOpen) ||
+        (action.tabId === RIGHT_PANEL_CHROME_TAB && state.chromeOpen) ||
         isOpenFileTab(state, action.tabId)
         ? activate(state, action.tabId)
         : state;
@@ -221,6 +241,11 @@ export function rightPanelReducer(
       return activate(
         state.browserOpen ? state : { ...state, browserOpen: true },
         RIGHT_PANEL_BROWSER_TAB
+      );
+    case "openChrome":
+      return activate(
+        state.chromeOpen ? state : { ...state, chromeOpen: true },
+        RIGHT_PANEL_CHROME_TAB
       );
     case "showFiles":
       // The history leads with the active tab when it is a Files tab
@@ -239,15 +264,17 @@ export function rightPanelReducer(
       );
     case "closeTab": {
       const active = open && state.activeId === action.tabId;
-      if (
-        action.tabId === RIGHT_PANEL_BROWSER_TAB ||
-        action.tabId === RIGHT_PANEL_SOURCES_TAB
-      ) {
-        const browser = action.tabId === RIGHT_PANEL_BROWSER_TAB;
-        if (!(browser ? state.browserOpen : state.sourcesOpen)) return state;
-        const closed = browser
-          ? { ...state, browserOpen: false }
-          : { ...state, sourcesOpen: false };
+      const flag =
+        action.tabId === RIGHT_PANEL_BROWSER_TAB
+          ? "browserOpen"
+          : action.tabId === RIGHT_PANEL_CHROME_TAB
+            ? "chromeOpen"
+            : action.tabId === RIGHT_PANEL_SOURCES_TAB
+              ? "sourcesOpen"
+              : null;
+      if (flag !== null) {
+        if (!state[flag]) return state;
+        const closed = { ...state, [flag]: false };
         return active ? leaveClosedTab(closed) : closed;
       }
       if (

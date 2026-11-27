@@ -1485,6 +1485,10 @@
       "browser": {
         "title": "Browser",
         "description": "Erlauben Sie dem Agenten, in seiner Sandbox einen Webbrowser zu verwenden. Benutzer können ihn im Chatbereich beobachten und die Steuerung übernehmen."
+      },
+      "chromeBrowser": {
+        "title": "Chrome des Benutzers verwenden",
+        "description": "Chats dürfen Tabs verwenden, die Benutzer mit der Onyx-Erweiterung aus ihrem eigenen Chrome freigeben. Seitentext geht an Onyx und den Modellanbieter."
       }
     },
     "codeInterpreter": {
@@ -13697,6 +13701,9 @@
       },
       "browserTab": {
         "label": "Browser"
+      },
+      "chromeTab": {
+        "label": "Mein Chrome"
       }
     },
     "export": {
@@ -13877,6 +13884,37 @@
         "error": "Die Dateien konnten nicht hochgeladen werden. Versuchen Sie es erneut."
       },
       "answerError": "Die Antwort an die Seite ist fehlgeschlagen. Versuchen Sie es erneut."
+    },
+    "chromeBrowser": {
+      "error": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
+      "retry": "Erneut prüfen",
+      "unavailable": {
+        "title": "Chrome ist nicht verfügbar",
+        "description": "Ihr Arbeitsbereich erlaubt Chats nicht, Ihr Chrome zu verwenden, oder Onyx konnte den Status nicht laden."
+      },
+      "connect": {
+        "title": "Chrome verbinden",
+        "description": "Installieren Sie die Onyx-Erweiterung in Chrome und melden Sie sich dort bei Onyx an. Dann kann dieser Chat die Tabs verwenden, die Sie freigeben."
+      },
+      "share": {
+        "title": "Chrome-Tabs mit diesem Chat teilen",
+        "description": "Onyx kann die gewählten Tabs lesen und darin als Sie klicken und tippen. Seitentext geht an Onyx und seinen KI-Modellanbieter. Chrome fragt, welche Tabs Sie teilen.",
+        "action": "Tabs teilen"
+      },
+      "pending": {
+        "title": "In Chrome bestätigen",
+        "description": "Chrome zeigt ein Fenster, in dem Sie Tabs und Websites wählen. Bestätigen Sie dort.",
+        "again": "Erneut anfragen"
+      },
+      "denied": {
+        "title": "Sie haben keine Tabs geteilt"
+      },
+      "shared": {
+        "title": "{count, plural, one {Dieser Chat verwendet # Tab in Ihrem Chrome} other {Dieser Chat verwendet # Tabs in Ihrem Chrome}}",
+        "description": "Verfolgen Sie die Aktionen in Ihrem eigenen Tab. Die Freigabe endet um {until}.",
+        "sites": "Websites: {sites}",
+        "stop": "Stoppen"
+      }
     }
   },
   "common": {

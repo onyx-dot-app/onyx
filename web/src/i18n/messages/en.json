@@ -1485,6 +1485,10 @@
       "browser": {
         "title": "Browser",
         "description": "Let the agent use a web browser in its sandbox. Users can watch it and take control in the chat panel."
+      },
+      "chromeBrowser": {
+        "title": "Use the User's Chrome",
+        "description": "Let chats use tabs that users share from their own Chrome with the Onyx extension. Page text goes to Onyx and the model provider."
       }
     },
     "codeInterpreter": {
@@ -13697,6 +13701,9 @@
       },
       "browserTab": {
         "label": "Browser"
+      },
+      "chromeTab": {
+        "label": "My Chrome"
       }
     },
     "export": {
@@ -13877,6 +13884,37 @@
         "error": "Could not upload the files. Try again."
       },
       "answerError": "Could not answer the page. Try again."
+    },
+    "chromeBrowser": {
+      "error": "Something went wrong. Try again.",
+      "retry": "Check Again",
+      "unavailable": {
+        "title": "Chrome is not available",
+        "description": "Your workspace does not let chats use your Chrome, or Onyx could not load its state."
+      },
+      "connect": {
+        "title": "Connect your Chrome",
+        "description": "Install the Onyx extension in Chrome and sign in to Onyx there. Then this chat can use the tabs that you share."
+      },
+      "share": {
+        "title": "Share Chrome tabs with this chat",
+        "description": "Onyx can read the tabs you pick and click and type in them, as you. Page text goes to Onyx and its AI model provider. Chrome asks you which tabs to share.",
+        "action": "Share Tabs"
+      },
+      "pending": {
+        "title": "Approve in Chrome",
+        "description": "Chrome shows a window to pick the tabs and sites. Approve it there.",
+        "again": "Ask Again"
+      },
+      "denied": {
+        "title": "You did not share tabs"
+      },
+      "shared": {
+        "title": "{count, plural, one {This chat uses # tab in your Chrome} other {This chat uses # tabs in your Chrome}}",
+        "description": "Watch the actions in your own tab. The share ends at {until}.",
+        "sites": "Sites: {sites}",
+        "stop": "Stop"
+      }
     }
   },
   "common": {

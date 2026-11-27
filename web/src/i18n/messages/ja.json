@@ -1485,6 +1485,10 @@
       "browser": {
         "title": "ブラウザー",
         "description": "エージェントがサンドボックス内でウェブブラウザーを使えるようにします。ユーザーはチャットパネルでその様子を見たり、操作を引き継いだりできます。"
+      },
+      "chromeBrowser": {
+        "title": "ユーザーの Chrome を使用",
+        "description": "Onyx 拡張機能でユーザーが自分の Chrome から共有したタブをチャットで使えるようにします。ページのテキストは Onyx とモデルプロバイダーに送信されます。"
       }
     },
     "codeInterpreter": {
@@ -13697,6 +13701,9 @@
       },
       "browserTab": {
         "label": "ブラウザー"
+      },
+      "chromeTab": {
+        "label": "自分の Chrome"
       }
     },
     "export": {
@@ -13877,6 +13884,37 @@
         "error": "ファイルをアップロードできませんでした。もう一度お試しください。"
       },
       "answerError": "ページに応答できませんでした。もう一度お試しください。"
+    },
+    "chromeBrowser": {
+      "error": "問題が発生しました。もう一度お試しください。",
+      "retry": "再確認",
+      "unavailable": {
+        "title": "Chrome を使用できません",
+        "description": "ワークスペースでチャットによる Chrome の使用が許可されていないか、Onyx が状態を読み込めませんでした。"
+      },
+      "connect": {
+        "title": "Chrome を接続",
+        "description": "Chrome に Onyx 拡張機能をインストールし、そこで Onyx にサインインしてください。その後、このチャットは共有したタブを使用できます。"
+      },
+      "share": {
+        "title": "このチャットと Chrome のタブを共有",
+        "description": "Onyx は選択したタブを読み取り、あなたとしてクリックや入力ができます。ページのテキストは Onyx と AI モデルプロバイダーに送信されます。共有するタブは Chrome で選択します。",
+        "action": "タブを共有"
+      },
+      "pending": {
+        "title": "Chrome で承認してください",
+        "description": "Chrome にタブとサイトを選ぶウィンドウが表示されます。そこで承認してください。",
+        "again": "再度リクエスト"
+      },
+      "denied": {
+        "title": "タブは共有されませんでした"
+      },
+      "shared": {
+        "title": "{count, plural, other {このチャットは Chrome のタブを # 個使用しています}}",
+        "description": "操作は自分のタブで確認できます。共有は {until} に終了します。",
+        "sites": "サイト: {sites}",
+        "stop": "停止"
+      }
     }
   },
   "common": {
