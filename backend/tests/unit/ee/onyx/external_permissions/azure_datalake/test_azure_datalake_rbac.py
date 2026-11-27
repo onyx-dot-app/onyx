@@ -5,16 +5,16 @@ users or groups are left out."""
 import pytest
 
 from ee.onyx.external_permissions.azure_datalake.directory import GraphDirectory
-from ee.onyx.external_permissions.azure_datalake.principals import (
-    everyone_term,
-    group_term,
-    user_term,
-)
 from ee.onyx.external_permissions.azure_datalake.rbac import (
     RbacReaders,
     find_storage_account,
     rbac_readers,
     role_reads_blobs,
+)
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
+    everyone_term,
+    group_term,
+    user_term,
 )
 from onyx.connectors.azure_datalake.models import (
     AzureDenyAssignment,

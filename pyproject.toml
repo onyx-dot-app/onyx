@@ -86,6 +86,7 @@ backend = [
     # libpass is the maintained drop-in fork of passlib (same `passlib.*`
     # import namespace). passlib 1.7.4 is unmaintained and imports the stdlib
     # `crypt` module, which was removed in Python 3.13.
+    "ldap3==2.9.1",
     "libpass==1.9.3",
     "playwright==1.64.1",
     "psutil==7.1.3",

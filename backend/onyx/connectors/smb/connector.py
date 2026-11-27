@@ -30,8 +30,17 @@ from onyx.connectors.models import (
     HierarchyNode,
     SlimDocument,
 )
-from onyx.connectors.smb.config import DEFAULT_SMB_PORT, normalize_path
-from onyx.connectors.smb.models import SmbCheckpoint, SmbEntry, SmbPendingFolder
+from onyx.connectors.smb.config import (
+    DEFAULT_SMB_PORT,
+    SmbConnectorConfig,
+    normalize_path,
+)
+from onyx.connectors.smb.models import (
+    EmailAttribute,
+    SmbCheckpoint,
+    SmbEntry,
+    SmbPendingFolder,
+)
 from onyx.connectors.smb.source_operations import (
     CONFIG_HOST,
     CONFIG_PORT,
@@ -142,6 +151,7 @@ class SmbConnector(
         require_encryption: bool = True,
         index_offline_files: bool = False,
         port: int = DEFAULT_SMB_PORT,
+        email_attribute: EmailAttribute = EmailAttribute.MAIL,
     ) -> None:
         self.host = host
         self.share = share
@@ -152,6 +162,7 @@ class SmbConnector(
         self.require_encryption = require_encryption
         self.index_offline_files = index_offline_files
         self.port = port
+        self.email_attribute = EmailAttribute(email_attribute)
         self.size_threshold: int = BLOB_STORAGE_SIZE_THRESHOLD
         self._allow_images = False
         self._ops: SmbSourceOperations | None = None
@@ -176,6 +187,19 @@ class SmbConnector(
                 CONFIG_PORT: self.port,
                 CONFIG_REQUIRE_ENCRYPTION: self.require_encryption,
             },
+        )
+
+    def config(self) -> SmbConnectorConfig:
+        """The connector's settings as the checks read them."""
+        return SmbConnectorConfig(
+            host=self.host,
+            share=self.share,
+            path_prefix=self.path_prefix,
+            excluded_paths=self.excluded_paths or None,
+            require_encryption=self.require_encryption,
+            index_offline_files=self.index_offline_files,
+            port=self.port,
+            email_attribute=self.email_attribute,
         )
 
     def set_allow_images(self, value: bool) -> None:

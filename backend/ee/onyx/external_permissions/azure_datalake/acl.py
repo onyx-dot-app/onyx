@@ -11,7 +11,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 
-from ee.onyx.external_permissions.azure_datalake.principals import (
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
     PrincipalSet,
     PrincipalTerm,
     everyone_term,

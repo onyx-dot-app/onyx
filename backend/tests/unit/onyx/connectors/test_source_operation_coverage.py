@@ -85,6 +85,11 @@ from onyx.connectors.slack.source_operations import (
 )
 from onyx.connectors.smb.models import (
     FILE_ATTRIBUTE_DIRECTORY,
+    DirectoryGroup,
+    DirectoryGroupPage,
+    DirectoryInfo,
+    DirectoryUser,
+    DirectoryUserPage,
     SmbEntry,
     SmbSessionInfo,
 )
@@ -462,6 +467,24 @@ def _configure_smb_spy(spy: MagicMock) -> None:
         change_time=changed,
         size=0,
     )
+    domain_sid = "S-1-5-21-1-2-3"
+    domain_users = DirectoryGroup(
+        sid=f"{domain_sid}-513",
+        distinguished_name="CN=Domain Users,CN=Users,DC=example,DC=com",
+        name="Domain Users",
+    )
+    spy.get_directory_info.return_value = DirectoryInfo(
+        base_dn="DC=example,DC=com", domain_sid=domain_sid
+    )
+    spy.list_directory_users.return_value = DirectoryUserPage(
+        users=[DirectoryUser(sid=f"{domain_sid}-1104", mail="a@example.com")],
+        cookie=None,
+    )
+    spy.list_directory_groups.return_value = DirectoryGroupPage(
+        groups=[domain_users], cookie=None
+    )
+    spy.find_directory_group.return_value = domain_users
+    spy.list_group_member_sids.return_value = [f"{domain_sid}-1104"]
     spy.list_folder.return_value = [
         SmbEntry(
             name="readme.txt",
