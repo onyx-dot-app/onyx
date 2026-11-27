@@ -267,11 +267,15 @@ export default function ScheduledRunHistory({
     },
     ...(isMobile ? [] : secondaryColumns),
     {
-      kind: "display",
+      kind: "data",
       id: "detail",
+      value: runDetail,
       title: t("columns.detail"),
-      width: { weight: 30 },
-      cell: (row) => (
+      weight: 30,
+      sortable: false,
+      // Long failure text must not widen the table on a phone.
+      truncate: true,
+      cell: (_detail, row) => (
         <ClosedCell run={row}>
           <Text
             as="p"
