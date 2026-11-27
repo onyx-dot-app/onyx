@@ -532,16 +532,14 @@ def test_import_tells_a_document_that_is_no_spec_apart(document: str) -> None:
     assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
-def test_import_keeps_an_unpaired_surrogate_as_an_escape() -> None:
+def test_import_refuses_an_unpaired_surrogate() -> None:
     spec = _callable_spec()
     spec["info"] = {**spec.get("info", {}), "description": "\ud800"}
-    # An uncallable operation makes the import write the document again.
-    spec["paths"]["/pets/{petId}"]["get"] = None
 
-    view = _import(json.dumps(spec))
+    with pytest.raises(OnyxError, match="unpaired Unicode surrogate") as error:
+        _import(json.dumps(spec))
 
-    view.openapi_document.encode()
-    assert json.loads(view.openapi_document)["info"]["description"] == "\ud800"
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
 
 
 def test_a_pasted_spec_has_the_size_limit_of_a_spec_url() -> None:

@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ApiAppType, IntegrationAuthMethod, IntegrationAuthMode
 from onyx.db.integration import get_openapi_tool_for_integration
 from onyx.db.models import ApiApp, Integration, Tool, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.integrations import admin_api
 from onyx.server.features.integrations.models import (
     IntegrationCreate,
@@ -220,3 +222,23 @@ def test_the_tool_row_copy_reads_with_the_previous_release(
     assert isinstance(properties, dict) and "city" in properties
     # The previous release reads servers[].url only, without variables.
     assert tool.openapi_schema["servers"][0]["url"] == "https://weather.example.com/v2"
+
+
+def test_create_refuses_an_unpaired_surrogate(db_session: Session, admin: User) -> None:
+    spec = _spec("https://weather.example.com", "get_forecast")
+    spec["info"]["description"] = "\ud800"
+
+    with pytest.raises(OnyxError, match="unpaired Unicode surrogate") as error:
+        admin_api.create_integration(
+            IntegrationCreate(
+                name=f"weather-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.SHARED,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"X-Api-Key": "{api_key}"},
+                config=OpenApiConfigInput(openapi_document=json.dumps(spec)),
+            ),
+            admin,
+            db_session,
+        )
+
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR

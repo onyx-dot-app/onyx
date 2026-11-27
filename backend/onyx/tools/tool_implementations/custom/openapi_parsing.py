@@ -469,6 +469,13 @@ def validate_openapi_schema(
     """Raise ``ValueError`` if ``schema`` is not an OpenAPI 3 schema that the
     custom tools can call. Without ``check_server_url``, the schema needs no
     server URL."""
+    try:
+        # JSON can escape an unpaired surrogate; PostgreSQL JSONB cannot store it.
+        json.dumps(schema, ensure_ascii=False).encode()
+    except UnicodeEncodeError as e:
+        raise ValueError(
+            "The OpenAPI document has an unpaired Unicode surrogate."
+        ) from e
 
     # check basic structure
     if "info" not in schema:
