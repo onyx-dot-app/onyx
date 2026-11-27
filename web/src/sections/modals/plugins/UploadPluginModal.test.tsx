@@ -190,6 +190,40 @@ test("a zip with a skill and no plugin.json continues as a skill", async () => {
   ).toBe(false);
 });
 
+test("a bound upload sends a skill zip to the plugin check, not the skill flow", async () => {
+  const fetchMock = mockFetch({
+    "POST /api/skills/plugins/inspect": new Response(
+      JSON.stringify({
+        error_code: "INVALID_INPUT",
+        detail: "The plugin has no plugin.json.",
+      }),
+      { status: 400 }
+    ),
+  });
+  const pluginId = "11111111-1111-4111-8111-111111111111";
+  render(
+    <UploadPluginModal
+      open
+      pluginId={pluginId}
+      onClose={jest.fn()}
+      onSaved={jest.fn()}
+      onContinueSkill={jest.fn()}
+    />
+  );
+  await choose(zip("skill-notes.zip"));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The plugin has no plugin.json."
+  );
+  expect(screen.queryByText("This upload is a skill")).not.toBeInTheDocument();
+  const inspect = fetchMock.mock.calls.filter(
+    ([url]) => String(url) === "/api/skills/plugins/inspect"
+  );
+  expect(inspect.map(([, init]) => formValue(init, "plugin_id"))).toEqual([
+    pluginId,
+  ]);
+});
+
 test("a file that finishes preparing after the modal closes is not read", async () => {
   let finishPrepare: (bundle: PreparedSkillBundle) => void = () => undefined;
   mockPendingPrepare = new Promise((resolve) => {
