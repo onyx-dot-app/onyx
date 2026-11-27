@@ -61,6 +61,7 @@ from onyx.connectors.youtrack.config import YouTrackConnectorConfig
 from onyx.connectors.zendesk.config import ZendeskConnectorConfig
 from onyx.connectors.zoom.config import ZoomConnectorConfig
 from onyx.connectors.zulip.config import ZulipConnectorConfig
+from onyx.connectors.jira_service_management.config import JiraServiceManagementConnectorConfig
 
 
 class ConnectorMapping(BaseModel):
@@ -130,6 +131,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.jira.connector",
         class_name="JiraConnector",
         config_class=JiraConnectorConfig,
+    ),
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: ConnectorMapping(
+        module_path="onyx.connectors.jira_service_management.jira_service_management_connector",
+        class_name="JiraServiceManagementConnector",
+        config_class=JiraServiceManagementConnectorConfig,
     ),
     DocumentSource.PRODUCTBOARD: ConnectorMapping(
         module_path="onyx.connectors.productboard.connector",
