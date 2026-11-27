@@ -58,6 +58,24 @@ _OpenApiYamlLoader.add_implicit_resolver(
 )
 
 
+_MAX_NESTING_DEPTH = 200
+
+
+def check_nesting_depth(value: Any) -> None:
+    """Raise ``ValueError`` for a document nested deeper than the recursive
+    walkers of this module can go. Only input checks call it: a stored
+    document still loads."""
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > _MAX_NESTING_DEPTH:
+            raise ValueError("The OpenAPI document is nested too deeply.")
+        if isinstance(node, dict):
+            stack.extend((child, depth + 1) for child in node.values())
+        elif isinstance(node, list):
+            stack.extend((child, depth + 1) for child in node)
+
+
 def parse_openapi_document(document: str) -> dict[str, Any]:
     """An OpenAPI document stored as JSON or YAML text."""
     try:
@@ -469,6 +487,7 @@ def validate_openapi_schema(
     """Raise ``ValueError`` if ``schema`` is not an OpenAPI 3 schema that the
     REST tools can call. Without ``check_server_url``, the schema needs no
     server URL."""
+    check_nesting_depth(schema)
     try:
         # JSON can escape an unpaired surrogate; PostgreSQL JSONB cannot store it.
         json.dumps(schema, ensure_ascii=False).encode()
@@ -494,6 +513,10 @@ def validate_openapi_schema(
             "`openapi` field which specifies OpenAPI schema version is required"
         )
     openapi_version = schema["openapi"]
+    if not isinstance(openapi_version, str):
+        raise ValueError(
+            f'`openapi` must be a version string such as "3.0.3", not {openapi_version!r}'
+        )
     if not openapi_version.startswith("3."):
         raise ValueError(f"OpenAPI version '{openapi_version}' is not supported")
 

@@ -75,6 +75,7 @@ class ToolSnapshot(BaseModel):
         permissions: dict[str, bool] | None = None,
         default_action_policy: ActionPolicy | None = None,
         integration_id: int | None = None,
+        with_headers: bool = True,
     ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
@@ -87,7 +88,9 @@ class ToolSnapshot(BaseModel):
             definition=tool.openapi_schema,
             display_name=tool.display_name or tool.name,
             in_code_tool_id=tool.in_code_tool_id,
-            custom_headers=mask_custom_headers(tool.custom_headers),
+            custom_headers=(
+                mask_custom_headers(tool.custom_headers) if with_headers else None
+            ),
             passthrough_auth=tool.passthrough_auth,
             mcp_server_id=tool.mcp_server_id,
             user_id=str(tool.user_id) if tool.user_id else None,
