@@ -228,8 +228,14 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 			ToolName:    jsonString(obj["tool_name"]),
 			DisplayName: jsonString(obj["display_name"]),
 			AgentName:   jsonString(obj["agent_name"]),
+			AppName:     jsonString(obj["app_name"]),
+			ExpiresAt:   jsonString(obj["expires_at"]),
 		}
 		event.Arguments, _ = obj["arguments"].(map[string]any)
+		event.CanApproveForCommand, _ = obj["can_approve_for_command"].(bool)
+		if forChat, ok := obj["can_approve_for_chat"].(bool); ok {
+			event.CanApproveForChat = &forChat
+		}
 		return event
 
 	case "tool_approval_resolved":
