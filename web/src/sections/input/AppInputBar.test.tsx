@@ -958,7 +958,7 @@ describe("`@` skill mentions", () => {
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
   });
 
-  test("fetches the chat skills again when the input gains focus, not on a window focus", async () => {
+  test("fetches the chat skills again on a focus at most once a minute", async () => {
     mockChatSkills = null;
     let skills: ChatSkill[] = [];
     const fetchSpy = jest
@@ -1055,8 +1055,8 @@ describe("`@` skill mentions", () => {
         ),
       });
       await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-      // Past SWR's focus throttle.
-      const later = Date.now() + 10_000;
+      // Past the one-minute focus throttle.
+      const later = Date.now() + 61_000;
       jest.spyOn(Date, "now").mockReturnValue(later);
       await act(async () => {
         window.dispatchEvent(new Event("focus"));

@@ -89,7 +89,8 @@ export interface ChatSkillEntries {
 
 /** The skills that the user's chat agents get (`GET /api/skills/chat`).
  * Skill changes made in this app fetch them again (`lib/skills/cache.ts`).
- * Changes from elsewhere show after the chat input or the window gains focus. */
+ * Changes from elsewhere show after the chat input or the window gains focus,
+ * at most once a minute. */
 export function useChatSkills({
   builtIns,
 }: {
@@ -103,13 +104,18 @@ export function useChatSkills({
     (url: string) => {
       lastFetchRef.current = Date.now();
       return errorHandlingFetcher<ChatSkill[]>(url);
-    }
+    },
+    { revalidateOnFocus: false }
   );
   const onInputFocus = useCallback(() => {
     if (Date.now() - lastFetchRef.current < CHAT_SKILLS_FOCUS_THROTTLE_MS)
       return;
     void mutate();
   }, [mutate]);
+  useEffect(() => {
+    window.addEventListener("focus", onInputFocus);
+    return () => window.removeEventListener("focus", onInputFocus);
+  }, [onInputFocus]);
   const entries = useMemo(
     (): PickerSections => ({
       skills: (data ?? [])
