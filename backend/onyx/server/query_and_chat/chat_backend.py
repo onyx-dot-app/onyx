@@ -860,9 +860,15 @@ def delete_chat_session_by_id(
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id
+    # Use the provided hard_delete parameter if specified, otherwise use the default config
+    actual_hard_delete = hard_delete if hard_delete is not None else HARD_DELETE_CHATS
     try:
+        # A hard delete also removes a chat that a failed one left deleted.
         session = get_chat_session_by_id(
-            chat_session_id=session_id, user_id=user_id, db_session=db_session
+            chat_session_id=session_id,
+            user_id=user_id,
+            db_session=db_session,
+            include_deleted=actual_hard_delete,
         )
         is_incognito = session.incognito_record_mode is not None
         if is_incognito and not delete_incognito_generated_files(
@@ -872,12 +878,12 @@ def delete_chat_session_by_id(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
                 "Some generated files could not be deleted yet. Try again shortly.",
             )
-        # Use the provided hard_delete parameter if specified, otherwise use the default config
-        actual_hard_delete = (
-            hard_delete if hard_delete is not None else HARD_DELETE_CHATS
-        )
         artifact_ids = delete_chat_session(
-            user_id, session_id, db_session, hard_delete=actual_hard_delete
+            user_id,
+            session_id,
+            db_session,
+            include_deleted=actual_hard_delete,
+            hard_delete=actual_hard_delete,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))

@@ -358,11 +358,12 @@ def test_a_deleted_chat_removes_the_document_without_marking_it_indexed(
     )
 
 
-def test_a_failed_bulk_delete_leaves_the_later_chats_artifacts_indexed(
+def test_a_failed_bulk_delete_takes_the_later_chats_artifacts_out_of_search(
     monkeypatch: pytest.MonkeyPatch, db_session: Session, owner: User
 ) -> None:
-    """The second chat's cleanup fails after the first one committed; the
-    chat that the delete did not reach keeps its artifact searchable."""
+    """The second chat's cleanup fails after the delete marked every chat
+    deleted; the chat that the cleanup did not reach is deleted, so its
+    artifact leaves search too."""
     artifact_by_chat = {
         chat.id: _artifact_id(_publish(chat, b"Gulls\n"))
         for chat in (_chat(db_session, owner) for _ in range(3))
@@ -383,7 +384,7 @@ def test_a_failed_bulk_delete_leaves_the_later_chats_artifacts_indexed(
 
     [unreached] = set(artifact_by_chat) - set(cleaned)
     assert _artifact(db_session, artifact_by_chat[unreached]).index_status == (
-        ChatArtifactIndexStatus.PENDING
+        ChatArtifactIndexStatus.REMOVED
     )
 
 

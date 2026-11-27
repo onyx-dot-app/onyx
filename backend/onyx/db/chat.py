@@ -815,7 +815,6 @@ def _mark_chats_deleted__no_commit(
             update(ChatSession)
             .where(ChatSession.id.in_(chat_session_ids))
             .values(deleted=True)
-            .execution_options(synchronize_session=False)
         )
 
 

@@ -1146,6 +1146,34 @@ def test_a_hard_delete_of_all_chats_cleans_up_the_chats_a_failed_one_left(
     assert {chat.id for chat in chats} <= set(deleted_ids)
 
 
+def test_a_hard_delete_of_a_chat_that_a_failed_one_left_removes_it(
+    db_session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chat = _chat(db_session, owner)
+    with monkeypatch.context() as failing:
+        failing.setattr(
+            db_chat,
+            "delete_messages_and_files_from_chat_session",
+            MagicMock(side_effect=RuntimeError("file store down")),
+        )
+        with pytest.raises(RuntimeError):
+            delete_chat_session_by_id(
+                chat.id, hard_delete=True, user=owner, db_session=db_session
+            )
+    db_session.rollback()
+    assert db_session.scalar(
+        select(ChatSession.deleted).where(ChatSession.id == chat.id)
+    )
+
+    delete_chat_session_by_id(
+        chat.id, hard_delete=True, user=owner, db_session=db_session
+    )
+    assert (
+        db_session.scalar(select(ChatSession.id).where(ChatSession.id == chat.id))
+        is None
+    )
+
+
 def test_a_chat_delete_stops_the_running_turn(db_session: Session, owner: User) -> None:
     chat = _chat(db_session, owner)
     cache = get_cache_backend()
