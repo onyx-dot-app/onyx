@@ -463,6 +463,40 @@ describe("useChatSessionStatus", () => {
     });
   });
 
+  it("keeps polling while its host renders more often than it polls", async () => {
+    startChat("busy-session", "input", []);
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_startable_input: false,
+            has_active_subagents: true,
+            latest_response_id: null,
+            approvals_version: "",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+
+    const { rerender } = renderHook(
+      () => useChatSessionStatus("busy-session"),
+      {
+        wrapper: fresh,
+      }
+    );
+    await waitFor(() => expect(statusReads(fetchMock)).toBe(1));
+    const renders = setInterval(() => rerender(), 500);
+    try {
+      await waitFor(() => expect(statusReads(fetchMock)).toBeGreaterThan(1), {
+        timeout: 5000,
+      });
+    } finally {
+      clearInterval(renders);
+    }
+  });
+
   it("polls for the agents list while a shown request waits, as for the queue", async () => {
     startChat("agents-session", "input", [request("a", 1)]);
     const fetchMock = serveIdleStatus();

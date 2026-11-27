@@ -535,59 +535,56 @@ export function useAnswerWithMessage(): (
 }
 
 /**
- * How often a chat's status reloads while no reply streams and no shown
- * request waits. Pending input and background work can start a turn this
- * client did not send; a decided agent request counts as background work
- * until its agent settles.
+ * How often a chat's status reloads. It polls while a reply streams, which
+ * can start agents, and while a shown request waits: another tab or client
+ * can decide it and continue the response there. Pending input and
+ * background work can start a turn this client did not send; a decided agent
+ * request counts as background work until its agent settles.
  */
-function statusPollInterval(current: ChatSessionStatus | undefined): number {
-  return current?.has_startable_input || current?.has_active_subagents
+function statusPollInterval(
+  current: ChatSessionStatus | undefined,
+  streaming: boolean,
+  requestWaits: boolean
+): number {
+  return streaming ||
+    requestWaits ||
+    current?.has_startable_input ||
+    current?.has_active_subagents
     ? SERVER_WORK_POLL_MS
     : 0;
 }
 
 /**
  * A chat's status, which every reader of it loads through this hook so that
- * all poll by one rule. It polls while a reply streams, which can start
- * agents, and while a shown request waits: another tab or client can decide
- * it and continue the response there. Otherwise `statusPollInterval` decides.
- * Pass a null `sessionId` to load nothing.
+ * all poll by one rule, `statusPollInterval`. Pass a null `sessionId` to load
+ * nothing.
  */
 export function useChatSessionStatus(
   sessionId: string | null
 ): SWRResponse<ChatSessionStatus, Error> {
-  const { streaming, tree } = useChatSessionStore(
+  // Primitives only: the message tree changes on every streamed frame.
+  const { streaming, requestWaits } = useChatSessionStore(
     useShallow((state) => {
       const session = sessionId ? state.sessions.get(sessionId) : undefined;
+      const streaming = session !== undefined && session.chatState !== "input";
       return {
-        streaming: session !== undefined && session.chatState !== "input",
-        tree: session?.messageTree,
+        streaming,
+        requestWaits:
+          !streaming && session !== undefined
+            ? readWaitingToolRequests(session.messageTree).length > 0
+            : false,
       };
     })
   );
-  const requestWaits = useMemo(
-    () =>
-      !streaming && tree !== undefined
-        ? readWaitingToolRequests(tree).length > 0
-        : false,
-    [streaming, tree]
-  );
-  return useSWR<ChatSessionStatus, Error>(
-    sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null,
-    errorHandlingFetcher,
-    {
-      // A number while the rule needs no status: each streamed packet renders
-      // the caller again, and a new function would restart SWR's timer. A new
-      // arrow otherwise, as SWR reschedules its poll only when
-      // `refreshInterval` changes; a stable function reads only the data from
-      // before the first load.
-      refreshInterval:
-        streaming || requestWaits
-          ? SERVER_WORK_POLL_MS
-          : (current) => statusPollInterval(current),
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+  const key = sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null;
+  // Reads the cached status without a request. SWR restarts its poll timer
+  // each time `refreshInterval` changes, so the interval is a number that
+  // changes only when the rule's answer does, not a new function per render.
+  const { data: cached } = useSWR<ChatSessionStatus, Error>(key, null);
+  return useSWR<ChatSessionStatus, Error>(key, errorHandlingFetcher, {
+    refreshInterval: statusPollInterval(cached, streaming, requestWaits),
+    onErrorRetry: skipRetryOnAuthError,
+  });
 }
 
 /**
