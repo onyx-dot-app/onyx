@@ -48,9 +48,10 @@ jest.mock("@/hooks/useShareableUsers", () => ({
   default: () => ({ data: [] }),
 }));
 let mockGroups: { id: number; name: string }[] = [];
+let mockGroupsError: Error | undefined;
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: mockGroups }),
+  default: () => ({ data: mockGroups, error: mockGroupsError }),
 }));
 jest.mock("@/lib/skills/api", () => ({
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
@@ -67,6 +68,7 @@ async function pickCompanySetting(name: RegExp) {
 describe("ShareSkillModal", () => {
   beforeEach(() => {
     mockGroups = [];
+    mockGroupsError = undefined;
     mockIsAdmin = true;
     mockPublishing = "OPEN";
     mockSharing = undefined;
@@ -306,6 +308,35 @@ describe("ShareSkillModal", () => {
     expect(
       screen.getByRole("button", { name: "Update access for Editors" })
     ).toBeDisabled();
+  });
+
+  it("says when the groups did not load", async () => {
+    const user = setupUser();
+    mockGroupsError = new Error("failed");
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: "VIEWER",
+        group_shares: [
+          { group_id: 42, group_name: "Editors", permission: "EDITOR" },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Manage individual access" })
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Onyx could not load your groups"
+    );
   });
 
   it("lets a non-admin editor with organization-wide manage:plugins publish", async () => {

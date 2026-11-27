@@ -17349,7 +17349,8 @@
           "publishOff": {
             "description": "Un administrador desactivó la publicación en la organización. Pide a un administrador que publique este plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx no pudo cargar tus grupos, así que no se pueden cambiar los accesos de grupo. Cierra y abre este diálogo para intentarlo de nuevo."
       },
       "tabs": {
         "details": "Detalles",

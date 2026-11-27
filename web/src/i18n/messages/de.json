@@ -17349,7 +17349,8 @@
           "publishOff": {
             "description": "Ein Admin hat das Veröffentlichen in der Organisation deaktiviert. Bitten Sie einen Admin, dieses Plugin zu veröffentlichen."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx konnte Ihre Gruppen nicht laden, daher können Gruppenfreigaben nicht geändert werden. Schließen und öffnen Sie diesen Dialog erneut."
       },
       "tabs": {
         "details": "Details",

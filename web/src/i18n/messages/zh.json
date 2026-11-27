@@ -17349,7 +17349,8 @@
           "publishOff": {
             "description": "管理员已关闭向组织发布。请让管理员发布此插件。"
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx 无法加载您的群组，因此无法更改群组共享。请关闭并重新打开此对话框后重试。"
       },
       "tabs": {
         "details": "详情",

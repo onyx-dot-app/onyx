@@ -17349,7 +17349,8 @@
           "publishOff": {
             "description": "An admin turned off publishing to the organization. Ask an admin to publish this plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx could not load your groups, so group shares cannot change. Close and open this dialog to try again."
       },
       "tabs": {
         "details": "Details",

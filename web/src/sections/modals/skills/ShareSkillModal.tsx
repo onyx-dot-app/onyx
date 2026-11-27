@@ -136,7 +136,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     includeApiKeys: false,
   });
   // A group share change needs the skill-manager permission for the group.
-  const { data: shareableGroupsData } = useShareableGroups(
+  const { data: shareableGroupsData, error: groupsError } = useShareableGroups(
     true,
     Permission.MANAGE_PLUGINS
   );
@@ -700,6 +700,16 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   );
                 })}
 
+                {groupsError && effectiveState.groupShares.length > 0 ? (
+                  <Text
+                    as="p"
+                    font="secondary-body"
+                    color="text-03"
+                    role="alert"
+                  >
+                    {t("share.groupsLoadFailed")}
+                  </Text>
+                ) : null}
                 {effectiveState.groupShares.map((share) => (
                   <ShareAccessRow
                     avatarIcon={SvgUsers}
