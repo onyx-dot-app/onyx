@@ -105,9 +105,17 @@ func TestUpdateSendsCredentialsForANewVersionOrAChangedConnectionWithoutAWorking
 	})
 	newSignIn := base
 	newSignIn.AuthMode = types.StringValue("shared")
+	serverURL := "https://mcp.example.com/mcp"
 	status := func(state string) *client.Integration {
-		return &client.Integration{OrganizationStatus: &client.IntegrationStatus{State: state}}
+		return &client.Integration{
+			AuthMode:           "none",
+			Config:             client.IntegrationConfig{Shape: client.IntegrationShapeMCPServer, ServerURL: &serverURL},
+			OrganizationStatus: &client.IntegrationStatus{State: state},
+		}
 	}
+	newServerURL := "https://mcp2.example.com/mcp"
+	failedEarlierApply := status("needs_reconnect")
+	failedEarlierApply.Config.ServerURL = &newServerURL
 
 	connected := status("connected")
 	cases := []struct {
@@ -124,12 +132,13 @@ func TestUpdateSendsCredentialsForANewVersionOrAChangedConnectionWithoutAWorking
 		{"a new OpenAPI document that keeps the connection", newDocument, connected, connected, false},
 		{"a new header field that needs reconnect", newHeaders, connected, status("needs_reconnect"), true},
 		{"a header edit of a key rejected before", newHeaders, status("needs_reconnect"), status("needs_reconnect"), false},
+		{"a retry of a server URL change that an earlier apply left unsigned", newURL, failedEarlierApply, status("needs_reconnect"), true},
 		{"a new shared sign-in with no connection yet", newSignIn, status("not_set_up"), status("not_set_up"), true},
 		{"an unrelated update of a rejected key", base, status("needs_reconnect"), status("needs_reconnect"), false},
 		{"a new server URL with no shared sign-in", newURL, &client.Integration{}, &client.Integration{}, false},
 	}
 	for _, c := range cases {
-		if got := sendsOrganizationCredentials(c.plan, base, c.before, c.after); got != c.want {
+		if got := sendsOrganizationCredentials(context.Background(), c.plan, base, c.before, c.after); got != c.want {
 			t.Errorf("%s: sends = %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -166,6 +175,25 @@ func TestRestrictAccessTurnsOffAndHidesBeforeTheUpdate(t *testing.T) {
 		}
 		if !slices.Equal(calls, c.want) {
 			t.Errorf("%s: calls = %v, want %v", c.name, calls, c.want)
+		}
+	}
+}
+
+func TestCreateKeepsAnIntegrationMeantToBeOffPrivate(t *testing.T) {
+	cases := []struct {
+		enabled types.Bool
+		policy  string
+		want    bool
+	}{
+		{types.BoolValue(false), "AVAILABLE", false},
+		{types.BoolValue(true), "AVAILABLE", true},
+		{types.BoolNull(), "REQUIRED", true},
+		{types.BoolValue(true), "NOT_AVAILABLE", false},
+	}
+	for _, c := range cases {
+		plan := integrationResourceModel{Enabled: c.enabled, InstallationPolicy: types.StringValue(c.policy)}
+		if got := createsForOrganization(plan); got != c.want {
+			t.Errorf("enabled %v, %s: for organization = %v, want %v", c.enabled, c.policy, got, c.want)
 		}
 	}
 }

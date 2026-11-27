@@ -338,6 +338,15 @@ func (r *integrationResource) setIntegrationSwitch(ctx context.Context, id int64
 	return remote
 }
 
+// createsForOrganization reports whether Create makes the integration
+// available to the organization at once. An integration meant to be off
+// starts private; the follow-ups turn it off before they set the install
+// setting.
+func createsForOrganization(plan integrationResourceModel) bool {
+	return plan.InstallationPolicy.ValueString() != "NOT_AVAILABLE" &&
+		(plan.Enabled.IsNull() || plan.Enabled.IsUnknown() || plan.Enabled.ValueBool())
+}
+
 func (r *integrationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan integrationResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -350,7 +359,7 @@ func (r *integrationResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	created, err := r.client.CreateIntegration(ctx, client.IntegrationCreate{
-		ForOrganization: plan.InstallationPolicy.ValueString() != "NOT_AVAILABLE",
+		ForOrganization: createsForOrganization(plan),
 		Name:            plan.Name.ValueString(),
 		Description:     stringPointer(plan.Description),
 		AuthMode:        plan.AuthMode.ValueString(),
@@ -436,7 +445,7 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 	var credentialValues map[string]string
-	if sendsOrganizationCredentials(plan, state, current, updated) {
+	if sendsOrganizationCredentials(ctx, plan, state, current, updated) {
 		credentialValues = configuredCredentials
 	}
 	serverChanged := !plan.ServerURL.Equal(state.ServerURL) || !plan.Transport.Equal(state.Transport)
@@ -470,10 +479,11 @@ func (r *integrationResource) ImportState(ctx context.Context, req resource.Impo
 // sendsOrganizationCredentials reports whether Update sends the configured
 // shared credentials: for a new credentials version, or when a new sign-in,
 // header template, server URL or OpenAPI document left the organization
-// without a working connection. It does not replace a key that Onyx rejected
-// before the update without a new version: that key may be newer than the
-// configured one.
-func sendsOrganizationCredentials(plan, state integrationResourceModel, before, after *client.Integration) bool {
+// without a working connection. Without a new version, it does not replace a
+// key that Onyx rejected while the connection settings matched the state:
+// that key may be newer than the configured one. A rejection that a failed
+// earlier apply caused still gets the configured key.
+func sendsOrganizationCredentials(ctx context.Context, plan, state integrationResourceModel, before, after *client.Integration) bool {
 	if writeOnlyVersionChanged(plan.OrganizationCredentialsWOVersion, state.OrganizationCredentialsWOVersion) {
 		return true
 	}
@@ -485,7 +495,8 @@ func sendsOrganizationCredentials(plan, state integrationResourceModel, before, 
 	if !connectionChanged || after.OrganizationStatus == nil {
 		return false
 	}
-	if before.OrganizationStatus != nil && before.OrganizationStatus.State == "needs_reconnect" {
+	if before.OrganizationStatus != nil && before.OrganizationStatus.State == "needs_reconnect" &&
+		connectionMatchesState(ctx, state, before) {
 		return false
 	}
 	switch after.OrganizationStatus.State {
@@ -493,4 +504,19 @@ func sendsOrganizationCredentials(plan, state integrationResourceModel, before, 
 		return true
 	}
 	return false
+}
+
+// connectionMatchesState reports whether the remote sign-in, header template,
+// server URL and OpenAPI document are the ones in the state.
+func connectionMatchesState(ctx context.Context, state integrationResourceModel, remote *client.Integration) bool {
+	var diags diag.Diagnostics
+	read := state
+	read.OpenAPIDocument = types.StringNull()
+	applyRemoteIntegration(ctx, &read, remote, &diags)
+	return !diags.HasError() &&
+		read.ServerURL.Equal(state.ServerURL) &&
+		read.OpenAPIDocument.Equal(state.OpenAPIDocument) &&
+		read.HeaderTemplate.Equal(state.HeaderTemplate) &&
+		read.AuthMode.Equal(state.AuthMode) &&
+		read.AuthMethod.Equal(state.AuthMethod)
 }
