@@ -20,6 +20,7 @@ from onyx.auth.magic_link import (
     MAGIC_LINK_USE_SSO_CODE,
     MagicLinkRecord,
     consume_magic_link,
+    peek_magic_link,
     release_send,
     reserve_send,
     store_magic_link,
@@ -59,6 +60,15 @@ class TestTokenStore:
 
         assert await consume_magic_link(token) == RECORD
         assert await consume_magic_link(token) is None
+
+    @pytest.mark.asyncio
+    async def test_a_peek_leaves_the_token_usable(self) -> None:
+        token = await store_magic_link(RECORD)
+
+        assert await peek_magic_link(token) == RECORD
+        assert await peek_magic_link(token) == RECORD
+        assert await consume_magic_link(token) == RECORD
+        assert await peek_magic_link(token) is None
 
     @pytest.mark.asyncio
     async def test_an_unknown_token_is_a_miss(self) -> None:

@@ -81,16 +81,18 @@ export default function MagicLinkSignIn({
   return (
     <Section flexDirection="column" gap={4}>
       {/* Mounted before the request, so screen readers announce what is
-          put into it when the link goes out. */}
-      <div role="status" aria-live="polite">
-        {sentTo !== null && (
-          <MessageCard
-            variant="success"
-            title={t("magicLink.sent.title")}
-            description={t("magicLink.sent.description", { email: sentTo })}
-          />
-        )}
+          put into it when the link goes out. Visually hidden and out of the
+          layout, so it adds no gap while empty. */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {sentTo !== null && t("magicLink.sent.description", { email: sentTo })}
       </div>
+      {sentTo !== null && (
+        <MessageCard
+          variant="success"
+          title={t("magicLink.sent.title")}
+          description={t("magicLink.sent.description", { email: sentTo })}
+        />
+      )}
       {sentTo !== null ? (
         <Button
           prominence="secondary"

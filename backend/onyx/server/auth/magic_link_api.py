@@ -23,10 +23,15 @@ from pydantic import BaseModel, EmailStr
 
 from onyx.auth.email_utils import send_magic_link_email
 from onyx.auth.magic_link import (
+    MAGIC_LINK_BROWSER_COOKIE,
     MAGIC_LINK_USE_SSO_CODE,
+    MAGIC_LINK_WRONG_EMAIL_CODE,
     MagicLinkRecord,
     consume_magic_link,
     is_sso_only,
+    new_browser_secret,
+    opened_where_requested,
+    peek_magic_link,
     release_send,
     reserve_send,
     store_magic_link,
@@ -37,7 +42,11 @@ from onyx.auth.users import (
     get_user_manager,
     verify_email_domain,
 )
-from onyx.configs.app_configs import EMAIL_CONFIGURED, WEB_DOMAIN
+from onyx.configs.app_configs import (
+    EMAIL_CONFIGURED,
+    MAGIC_LINK_TTL_SECONDS,
+    WEB_DOMAIN,
+)
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -88,6 +97,9 @@ class MagicLinkRequested(BaseModel):
 
 class MagicLinkRedeemRequest(BaseModel):
     token: str
+    # The address the link went to, typed when it was opened in another
+    # browser than the one that asked for it.
+    email: str | None = None
 
 
 class MagicLinkRedeemed(BaseModel):
@@ -95,14 +107,16 @@ class MagicLinkRedeemed(BaseModel):
     # "team_choice": playground only. A team from the domain has a running
     # trial. Ask join or new. "Start a new team" redeems team_choice_token;
     # "join" leaves it to expire.
-    state: Literal["signed_in", "team_choice"]
+    # "confirm_email": opened in another browser than the one that asked for
+    # it. Redeem again with the address the link went to; the token is unused.
+    state: Literal["signed_in", "team_choice", "confirm_email"]
     next_url: str | None = None
     team_choice_token: str | None = None
 
 
 @router.post("/request", status_code=202)
 async def request_magic_link(
-    payload: MagicLinkRequest, request: Request
+    payload: MagicLinkRequest, request: Request, response: Response
 ) -> MagicLinkRequested:
     if not EMAIL_CONFIGURED:
         raise OnyxError(
@@ -133,11 +147,13 @@ async def request_magic_link(
             "Check your inbox, or wait a minute and ask again.",
         )
 
+    browser_secret, browser_hash = new_browser_secret()
     record = MagicLinkRecord(
         email=email,
         start_new_team=payload.start_new_team,
         next_url=sanitize_next_url(payload.next_url),
         referral_source=request.cookies.get("referral_source"),
+        browser_hash=browser_hash,
     )
     token = await store_magic_link(record)
     link = add_url_params(f"{WEB_DOMAIN}{MAGIC_LINK_WEB_PATH}", {"token": token})
@@ -150,6 +166,16 @@ async def request_magic_link(
         raise OnyxError(
             OnyxErrorCode.SERVICE_UNAVAILABLE, "Failed to send the sign-in email."
         ) from e
+    # The newest request wins: an older link opened here asks for the address.
+    response.set_cookie(
+        MAGIC_LINK_BROWSER_COOKIE,
+        browser_secret,
+        max_age=MAGIC_LINK_TTL_SECONDS,
+        path="/",
+        secure=WEB_DOMAIN.startswith("https"),
+        httponly=True,
+        samesite="lax",
+    )
     return MagicLinkRequested(email=email)
 
 
@@ -164,11 +190,28 @@ async def redeem_magic_link(
     # Before the token is used up, so it still works if SSO-only is lifted.
     _refuse_when_sso_only()
 
-    record = await consume_magic_link(payload.token)
+    record = await peek_magic_link(payload.token)
     if record is None:
         # Unknown, expired and already used look the same. The page offers a
         # new link.
         raise OnyxError(OnyxErrorCode.INVALID_TOKEN, MAGIC_LINK_INVALID_CODE)
+
+    # A link signs in only where it was asked for, or for the person who knows
+    # where it went. Otherwise a forwarded link would sign its reader in to the
+    # sender's account.
+    needs_address = not opened_where_requested(
+        record, request.cookies.get(MAGIC_LINK_BROWSER_COOKIE)
+    )
+    if needs_address and payload.email is None:
+        return MagicLinkRedeemed(state="confirm_email")
+
+    # Use the token up before comparing the address, so each link gets one
+    # guess, even with many requests at once.
+    record = await consume_magic_link(payload.token)
+    if record is None:
+        raise OnyxError(OnyxErrorCode.INVALID_TOKEN, MAGIC_LINK_INVALID_CODE)
+    if needs_address and (payload.email or "").strip().lower() != record.email:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, MAGIC_LINK_WRONG_EMAIL_CODE)
 
     try:
         user = await user_manager.magic_link_login(
@@ -185,9 +228,9 @@ async def redeem_magic_link(
         if record.start_new_team or not is_team_choice(error):
             raise
         # The inbox is proven, so the answer rides a fresh token rather than
-        # a second email. Only the choice changes.
+        # a second email. It goes back to this page only, so it is proven.
         token = await store_magic_link(
-            record.model_copy(update={"start_new_team": True})
+            record.model_copy(update={"start_new_team": True, "proven": True})
         )
         return MagicLinkRedeemed(state="team_choice", team_choice_token=token)
 
@@ -202,6 +245,7 @@ async def redeem_magic_link(
     for header_name, header_value in login_response.headers.items():
         if header_name.lower() == "set-cookie":
             response.headers.append(header_name, header_value)
+    response.delete_cookie(MAGIC_LINK_BROWSER_COOKIE, path="/")
 
     return MagicLinkRedeemed(
         state="signed_in", next_url=sanitize_next_url(record.next_url)

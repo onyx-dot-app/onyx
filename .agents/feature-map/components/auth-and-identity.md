@@ -144,8 +144,20 @@ should do: the address, the `start_new_team` choice and the next URL
 (`onyx/auth/magic_link.py`). A token works once and expires after 15 minutes
 (`MAGIC_LINK_TTL_SECONDS`, a constant). The email never goes to the archive
 copies (`EMAIL_ARCHIVE_BCC_ADDRESSES`), because the link is a credential. The
-link opens a web page that POSTs the token, so a mail scanner that fetches the
-link cannot use it up. Nothing is created until the token is redeemed
+sign-in and sign-up pages ask for the link
+(`web/src/app/auth/login/MagicLinkSignIn.tsx`); on multi-tenant it takes the
+password form's place. The link opens a web page
+(`web/src/app/auth/magic-link/MagicLinkRedeem.tsx`) that POSTs the token once,
+so a mail scanner that fetches the link cannot use it up; it shows the
+playground's join-or-new question itself. The request sets an HttpOnly cookie in
+the asking browser and the record keeps its hash
+(`onyx/auth/magic_link.py:opened_where_requested`). Redeeming in that browser
+signs in at once; anywhere else the route answers `confirm_email` without using
+the token, and needs the address the link went to. A wrong address uses the link
+up (`MAGIC_LINK_WRONG_EMAIL`). Without this, a link forwarded to someone would
+sign them in to the sender's account. The playground's join-or-new token is
+marked `proven`, since only the page that passed the check receives it. Nothing
+is created until the token is redeemed
 (`onyx/auth/users.py:UserManager.magic_link_login`). Redeeming resolves the
 tenant, runs the same gates as a password sign-up (invite-only, allowed domains,
 the seat limit), then creates the user, verified, with a random password, or

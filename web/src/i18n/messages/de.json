@@ -11426,6 +11426,8 @@
         "invalidScope": "Die angeforderten Berechtigungen sind nicht verfügbar.",
         "loginBadCredentials": "Dieses Konto kann sich nicht anmelden. Es ist möglicherweise deaktiviert. Wenden Sie sich an den Administrator Ihres Arbeitsbereichs.",
         "loginRequired": "Sie müssen sich zuerst bei Ihrem Identitätsanbieter anmelden.",
+        "magicLinkInvalid": "Dieser Anmeldelink ist abgelaufen oder wurde bereits verwendet. Fordern Sie einen neuen an.",
+        "magicLinkWrongEmail": "Dieser Link wurde an eine andere E-Mail-Adresse gesendet. Fordern Sie einen neuen Link an.",
         "oauthUserAlreadyExists": "Ein Konto mit dieser E-Mail-Adresse existiert bereits mit einer anderen Anmeldemethode. Melden Sie sich wie beim ersten Mal an, oder bitten Sie Ihren Administrator, diesen Anbieter zu verknüpfen.",
         "playgroundActiveTenant": "Ein Team aus Ihrem Unternehmen testet Onyx bereits. Ihrem Team beitreten oder ein neues Team starten?",
         "playgroundAskAdmin": "Bitten Sie Ihren Admin, Sie einzuladen.",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "Ihrem Team beitreten"
+      },
+      "newLinkButton": {
+        "label": "Neuen Link anfordern"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11604,8 +11609,15 @@
       }
     },
     "magicLink": {
+      "confirmEmail": {
+        "description": "Dieser Link wurde in einem anderen Browser geöffnet als dem, in dem er angefordert wurde. Geben Sie die E-Mail-Adresse ein, an die er gesendet wurde.",
+        "title": "E-Mail-Adresse bestätigen"
+      },
       "differentEmailButton": {
         "label": "Andere E-Mail-Adresse verwenden"
+      },
+      "redeeming": {
+        "text": "Sie werden angemeldet…"
       },
       "requestButton": {
         "label": "Link per E-Mail erhalten"

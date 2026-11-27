@@ -34,6 +34,14 @@ logger = setup_logger()
 
 # The web sends the person to their SSO provider for this error detail.
 MAGIC_LINK_USE_SSO_CODE = "MAGIC_LINK_USE_SSO"
+# The address typed to confirm a link opened elsewhere was not the one it went
+# to. The link is used up, so the web offers a new one.
+MAGIC_LINK_WRONG_EMAIL_CODE = "MAGIC_LINK_WRONG_EMAIL"
+
+# Holds a secret that ties a link to the browser that asked for it. Without
+# it, a link forwarded to someone else would sign them in to the sender's
+# account. Opened elsewhere, the link asks for the address it was sent to.
+MAGIC_LINK_BROWSER_COOKIE = "onyx_magic_link_browser"
 
 # One email per address in this window, whoever asks.
 MAGIC_LINK_RESEND_SECONDS = 60
@@ -50,6 +58,30 @@ class MagicLinkRecord(BaseModel):
     start_new_team: bool = False
     next_url: str | None = None
     referral_source: str | None = None
+    # SHA-256 of the secret in the requesting browser's cookie.
+    browser_hash: str | None = None
+    # The holder already proved the link: a token the redeem route returned to
+    # that same page, never mailed. A record with neither needs the address.
+    proven: bool = False
+
+
+def new_browser_secret() -> tuple[str, str]:
+    """A secret for the requesting browser's cookie, and its hash for the record."""
+    secret = secrets.token_urlsafe(32)
+    return secret, _browser_hash(secret)
+
+
+def _browser_hash(secret: str) -> str:
+    return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def opened_where_requested(record: MagicLinkRecord, cookie: str | None) -> bool:
+    """True when this browser asked for the link, or already proved it."""
+    if record.proven:
+        return True
+    if not record.browser_hash or not cookie:
+        return False
+    return secrets.compare_digest(record.browser_hash, _browser_hash(cookie))
 
 
 def _cache_key(token: str) -> str:
@@ -115,6 +147,13 @@ async def store_magic_link(record: MagicLinkRecord) -> str:
     return token
 
 
+async def peek_magic_link(token: str) -> MagicLinkRecord | None:
+    """Read ``token``'s record without using the token up, so the redeem route
+    can ask for the address first. ``None`` as for ``consume_magic_link``."""
+    raw = await asyncio.to_thread(get_shared_cache_backend().get, _cache_key(token))
+    return _parse_record(raw)
+
+
 async def consume_magic_link(token: str) -> MagicLinkRecord | None:
     """Atomically redeem ``token`` and return its record.
 
@@ -123,6 +162,10 @@ async def consume_magic_link(token: str) -> MagicLinkRecord | None:
     page and nothing about the address leaks.
     """
     raw = await asyncio.to_thread(get_shared_cache_backend().getdel, _cache_key(token))
+    return _parse_record(raw)
+
+
+def _parse_record(raw: bytes | None) -> MagicLinkRecord | None:
     if not raw:
         return None
     try:

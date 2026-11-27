@@ -11426,6 +11426,8 @@
         "invalidScope": "As permissões solicitadas não estão disponíveis.",
         "loginBadCredentials": "Esta conta não pode entrar. Ela pode estar desativada. Contate o administrador do seu espaço de trabalho.",
         "loginRequired": "Você precisa primeiro entrar com seu provedor de identidade.",
+        "magicLinkInvalid": "Este link de acesso expirou ou já foi usado. Peça um novo.",
+        "magicLinkWrongEmail": "Este link foi enviado para outro endereço de e-mail. Peça um novo link.",
         "oauthUserAlreadyExists": "Já existe uma conta com este e-mail usando outro método de login. Entre da forma que usou pela primeira vez, ou peça ao seu administrador para vincular este provedor.",
         "playgroundActiveTenant": "Uma equipe da sua empresa já está testando o Onyx. Entrar na sua equipe ou criar uma nova equipe?",
         "playgroundAskAdmin": "Peça ao seu administrador para convidá-lo.",
@@ -11449,6 +11451,9 @@
       },
       "joinTeamButton": {
         "label": "Entrar na minha equipe"
+      },
+      "newLinkButton": {
+        "label": "Receber um novo link"
       },
       "playgroundHeading": {
         "title": "Onyx Playground"
@@ -11604,8 +11609,15 @@
       }
     },
     "magicLink": {
+      "confirmEmail": {
+        "description": "Este link foi aberto em um navegador diferente daquele que o pediu. Digite o endereço de e-mail para o qual ele foi enviado.",
+        "title": "Confirme seu e-mail"
+      },
       "differentEmailButton": {
         "label": "Usar outro e-mail"
+      },
+      "redeeming": {
+        "text": "Entrando…"
       },
       "requestButton": {
         "label": "Receber um link por e-mail"

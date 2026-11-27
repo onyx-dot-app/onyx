@@ -1,5 +1,9 @@
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
+import {
+  AuthTypeMetadata,
+  type MagicLinkRedeemed,
+  type SSOProviderType,
+} from "@/lib/auth/types";
 import {
   type ErrorResponseBody,
   FetchError,
@@ -211,4 +215,26 @@ export async function requestMagicLink(
     const detail = await parseErrorDetail(response, "Request failed");
     throw new FetchError(detail, response.status, { detail });
   }
+}
+
+/**
+ * Redeem the token from an emailed link. The token works once. Pass `email`
+ * when the backend asked for it (`confirm_email`). Throws a
+ * `FetchError` whose message is the backend's `detail`: an error code such as
+ * `MAGIC_LINK_INVALID` or a `PLAYGROUND_*` refusal, or a sentence.
+ */
+export async function redeemMagicLink(
+  token: string,
+  email?: string
+): Promise<MagicLinkRedeemed> {
+  const response = await fetch("/api/auth/magic-link/redeem", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(email === undefined ? { token } : { token, email }),
+  });
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, "Request failed");
+    throw new FetchError(detail, response.status, { detail });
+  }
+  return response.json();
 }
