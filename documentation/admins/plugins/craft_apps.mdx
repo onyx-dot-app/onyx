@@ -263,7 +263,9 @@ The new API does not get the connections, shares or approval settings of the old
    See [Access and install setting](/admins/plugins/overview#access-and-install-setting).
 4. Add it to the same agents and scheduled tasks.
 5. Review its action policies. See [Approvals](/admins/plugins/overview#approvals).
-6. As an affected user, send a request that uses the API, and make sure that it works.
+6. Remove the custom App from the agent that you test with. When both match a request, the App with the lower ID
+   handles it, so a test can pass on the old App. Then, as an affected user,
+   send a request through that agent that uses the API, and make sure that it works.
 7. Delete the custom App.
 
 You can change the sign-in settings of a custom App on its **Configuration** tab.
