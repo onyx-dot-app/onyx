@@ -161,13 +161,3 @@ test("a delete drops the deleted plugin from the cached list", async () => {
     expect(screen.getByTestId("cached")).toHaveTextContent(/^toggling$/)
   );
 });
-
-test("a selected plugin that leaves the list is not selected", async () => {
-  const user = setupUser();
-  const { rerender } = render(<Harness items={[toggling, target]} />);
-
-  await user.click(screen.getByRole("button", { name: "select target" }));
-  rerender(<Harness items={[toggling]} />);
-
-  expect(screen.getByTestId("selection")).toBeEmptyDOMElement();
-});

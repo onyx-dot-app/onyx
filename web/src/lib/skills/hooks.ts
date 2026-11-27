@@ -660,14 +660,6 @@ export function useSkillBulkSelection({
   const selectedItems = items
     .filter((item) => selectedIds.has(item.id))
     .map((item) => ({ ...item, enabled: enablement.enabledOf(item) }));
-  // A selected row can leave the list, for example when another tab deletes it.
-  const presentSelectedIds = useMemo(
-    () =>
-      new Set(
-        items.filter((item) => selectedIds.has(item.id)).map((item) => item.id)
-      ),
-    [items, selectedIds]
-  );
   // Snapshotted on open: the selection clears when the delete lands, while
   // the card still fades out.
   const [deleteTargets, setDeleteTargets] = useState<CustomSkill[]>([]);
@@ -761,7 +753,7 @@ export function useSkillBulkSelection({
   }
 
   return {
-    selectedIds: presentSelectedIds,
+    selectedIds,
     select: setSelectedIds,
     selectedItems,
     deleteTargets,
