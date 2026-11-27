@@ -731,8 +731,9 @@ def save_generated_chat_session_name(
 def delete_all_chat_sessions_for_user(
     user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
 ) -> tuple[list[UUID], list[UUID]]:
-    """Returns the ids of the chat sessions that were not deleted before, and
-    the ids of the artifacts of every deleted chat, which the caller deletes
+    """Returns the ids of the chat sessions that were not deleted before (of
+    every chat for a hard delete, which removes the chats that a failed one
+    left), and the ids of the artifacts of every deleted chat, which the caller deletes
     from the search index after this commits."""
     user_id = user.id
 
@@ -752,27 +753,21 @@ def delete_all_chat_sessions_for_user(
     ]
 
     # Only the sessions read above: one that a concurrent request creates now
-    # stays, instead of going without its cleanup. Marked deleted first, as
-    # in delete_chat_session.
+    # stays, instead of going without its cleanup. Committed before the hard
+    # cleanup, as in delete_chat_session.
     _mark_chats_deleted__no_commit(db_session, chat_session_ids)
+    artifact_ids = stop_indexing_chat_artifacts__no_commit(db_session, chat_session_ids)
+    db_session.commit()
     if hard_delete:
-        artifact_ids: list[UUID] = []
         for chat_session_id in chat_session_ids:
-            # Each cleanup commits, so a chat's artifacts stop indexing with
-            # its own cleanup: a failed cleanup leaves the later chats indexed.
-            artifact_ids += stop_indexing_chat_artifacts__no_commit(
-                db_session, [chat_session_id]
-            )
             delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(
             delete(ChatSession).where(ChatSession.id.in_(chat_session_ids))
         )
-    else:
-        artifact_ids = stop_indexing_chat_artifacts__no_commit(
-            db_session, chat_session_ids
-        )
-
-    db_session.commit()
+        db_session.commit()
+        # A hard delete that failed leaves its chats marked deleted, and they
+        # still need the stop and purge.
+        newly_deleted_ids = chat_session_ids
     return newly_deleted_ids, artifact_ids
 
 
@@ -796,16 +791,18 @@ def delete_chat_session(
         raise ValueError("Cannot delete an already deleted chat session")
 
     # First, so a concurrent publish into the chat either commits before the
-    # artifacts are read below or saves nothing (_lock_live_chat).
+    # artifacts are read below or saves nothing (_lock_live_chat). Committed
+    # before the hard cleanup: a send that adds a message holds its parent,
+    # which the cleanup deletes, and then updates the chat's row.
     _mark_chats_deleted__no_commit(db_session, [chat_session_id])
     artifact_ids = stop_indexing_chat_artifacts__no_commit(
         db_session, [chat_session_id]
     )
+    db_session.commit()
     if hard_delete:
         delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session_id))
-
-    db_session.commit()
+        db_session.commit()
     return artifact_ids
 
 

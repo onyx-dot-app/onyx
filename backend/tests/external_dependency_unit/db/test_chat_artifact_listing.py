@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from itertools import count, product
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import func, select, text, update
@@ -20,12 +20,15 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.stop_signal_checker import is_stop_requested
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.db import chat as db_chat
 from onyx.db.chat import (
+    delete_chat_session,
     get_or_create_root_message,
     get_user_artifact_search_candidates,
     get_user_published_file,
     get_user_published_files,
     save_chat_artifact,
+    update_chat_session_updated_at_timestamp,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ChatSessionSharedStatus
@@ -1063,6 +1066,84 @@ def test_a_publish_into_a_chat_that_a_delete_holds_waits_and_saves_nothing(
         ).all()
         == []
     )
+
+
+def test_a_hard_delete_does_not_deadlock_with_a_send_that_adds_a_message(
+    db_session: Session, owner: User
+) -> None:
+    """A send holds a message of the chat (a response reservation updates the
+    parent of its response) and then updates the chat's row. The hard delete
+    of the chat waits for the send, and the send does not wait for the
+    delete."""
+    chat = _chat(db_session, owner)
+    root_id = get_or_create_root_message(chat.id, db_session).id
+    db_session.commit()
+    outcome: list[BaseException | None] = []
+
+    def hard_delete() -> None:
+        try:
+            with get_session_with_current_tenant() as deleting:
+                delete_chat_session(owner.id, chat.id, deleting, hard_delete=True)
+            outcome.append(None)
+        except BaseException as error:
+            outcome.append(error)
+
+    with get_session_with_current_tenant() as sending:
+        sending.execute(
+            update(ChatMessage)
+            .where(ChatMessage.id == root_id)
+            .values(latest_child_message_id=None)
+        )
+        deleter = threading.Thread(
+            target=contextvars.copy_context().run, args=(hard_delete,)
+        )
+        deleter.start()
+        deadline = time.monotonic() + 10
+        while deleter.is_alive() and not sending.scalar(
+            text(
+                "SELECT count(*) FROM pg_stat_activity"
+                " WHERE pg_backend_pid() = ANY(pg_blocking_pids(pid))"
+            )
+        ):
+            assert time.monotonic() < deadline, "the delete did not wait"
+            deleter.join(timeout=0.05)
+        sending.execute(text("SET LOCAL lock_timeout = '5s'"))
+        update_chat_session_updated_at_timestamp(chat.id, sending)
+        sending.commit()
+        deleter.join(timeout=10)
+
+    assert outcome == [None]
+    assert (
+        db_session.scalar(select(ChatSession.id).where(ChatSession.id == chat.id))
+        is None
+    )
+
+
+def test_a_hard_delete_of_all_chats_cleans_up_the_chats_a_failed_one_left(
+    db_session: Session, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chats = [_chat(db_session, owner), _chat(db_session, owner)]
+    delete_messages = db_chat.delete_messages_and_files_from_chat_session
+    cleaned: list[UUID] = []
+
+    def clean_up_one_chat(chat_session_id: UUID, session: Session) -> None:
+        if cleaned:
+            raise RuntimeError("file store down")
+        delete_messages(chat_session_id, session)
+        cleaned.append(chat_session_id)
+
+    monkeypatch.setattr(
+        db_chat, "delete_messages_and_files_from_chat_session", clean_up_one_chat
+    )
+    with pytest.raises(RuntimeError):
+        db_chat.delete_all_chat_sessions_for_user(owner, db_session, hard_delete=True)
+    db_session.rollback()
+    monkeypatch.undo()
+
+    deleted_ids, _ = db_chat.delete_all_chat_sessions_for_user(
+        owner, db_session, hard_delete=True
+    )
+    assert {chat.id for chat in chats} <= set(deleted_ids)
 
 
 def test_a_chat_delete_stops_the_running_turn(db_session: Session, owner: User) -> None:

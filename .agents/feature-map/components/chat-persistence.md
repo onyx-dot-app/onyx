@@ -416,7 +416,8 @@ pending set (`retry_incognito_teardowns`).
 parked responses, which nothing can decide anymore
 (`server/query_and_chat/chat_backend.py:_end_parked_responses`): their
 requests, checkpoints and program dumps go. A delete marks the chats deleted
-before it reads their artifacts, which locks the chat rows. A publish
+before it reads their artifacts, which locks the chat rows, and commits that
+before a hard delete's cleanup. A publish
 share-locks its chat's row and finds it not deleted (`db/chat.py:_lock_live_chat`),
 so it either commits before the delete reads the artifacts, or waits and
 saves nothing. After the commit, both delete routes stop each chat's running
