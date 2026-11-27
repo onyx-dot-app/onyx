@@ -718,7 +718,7 @@ def notify_run_owner__no_commit(
     )
     try:
         with db_session.begin_nested():
-            create_notification(
+            notification = create_notification(
                 user_id=task.user_id,
                 notif_type=notif_type,
                 db_session=db_session,
@@ -738,6 +738,11 @@ def notify_run_owner__no_commit(
                 },
                 autocommit=False,
             )
+            # The notification of an earlier approval wait of the same run
+            # was dismissed when that wait ended; show it again.
+            if notification.dismissed:
+                notification.dismissed = False
+                notification.last_shown = func.now()
     except Exception:
         logger.exception(
             "Failed to create scheduled-task notification (task=%s run=%s)",
