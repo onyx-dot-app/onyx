@@ -19,8 +19,8 @@ Blocked or Inherit per action, within the limits the admin set. "Run once"
 fires the task at once, even when it is paused. The "Run on schedule" switch
 on the task page (Pause or Resume in the list row menu) stops and starts the
 fires; Resume schedules the next fire from the time of resume, so missed fires
-do not run. Delete hides the task but keeps its runs, and a run already queued
-still runs. The task list has a name search and a filter: all, Active, Paused,
+do not run. Delete hides the task but keeps its runs. A run that is still
+queued is cancelled when the worker picks it up. The task list has a name search and a filter: all, Active, Paused,
 or tasks with new results.
 
 Each fire adds a row to the task's run history. A run opens at
