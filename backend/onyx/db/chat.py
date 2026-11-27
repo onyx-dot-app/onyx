@@ -1675,34 +1675,35 @@ def rename_chat_artifact(db_session: Session, artifact_id: UUID, name: str) -> N
 
     A version title that is the artifact's old effective name only repeats
     the file name, so the rename clears it and the label shows the new
-    name."""
+    name. It locks the artifact before its versions, as a delete does."""
+    old = db_session.execute(
+        select(ChatArtifact.name)
+        .where(ChatArtifact.id == artifact_id, _ARTIFACT_CHAT_NOT_DELETED)
+        .with_for_update()
+    ).one_or_none()
+    if old is None:
+        raise ArtifactNotFound(artifact_id)
     db_session.execute(
         update(ChatArtifactVersion)
         .where(
             ChatArtifactVersion.artifact_id == artifact_id,
             ChatArtifactVersion.title
-            == func.coalesce(
-                select(ChatArtifact.name)
-                .where(ChatArtifact.id == artifact_id)
-                .scalar_subquery(),
-                select(FileRecord.display_name)
+            == (
+                old.name
+                if old.name is not None
+                else select(FileRecord.display_name)
                 .where(FileRecord.file_id == ChatArtifactVersion.file_id)
-                .scalar_subquery(),
+                .scalar_subquery()
             ),
         )
         .values(title=None)
         .execution_options(synchronize_session=False)
     )
-    if (
-        db_session.execute(
-            update(ChatArtifact)
-            .where(ChatArtifact.id == artifact_id, _ARTIFACT_CHAT_NOT_DELETED)
-            .values(name=name, updated_at=_ARTIFACT_CHANGED_AT, **_INDEX_PENDING)
-            .returning(ChatArtifact.id)
-        ).one_or_none()
-        is None
-    ):
-        raise ArtifactNotFound(artifact_id)
+    db_session.execute(
+        update(ChatArtifact)
+        .where(ChatArtifact.id == artifact_id)
+        .values(name=name, updated_at=_ARTIFACT_CHANGED_AT, **_INDEX_PENDING)
+    )
 
 
 def _newest_available_version(
