@@ -2,7 +2,6 @@ import type {
   ScheduledTaskCreateBody,
   ScheduledTaskPatchBody,
 } from "@/app/craft/v1/tasks/types";
-import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import type {
   ScheduledRunListResponse,
@@ -35,8 +34,6 @@ async function request(
   return res;
 }
 
-/** One client for both mounts of the scheduled-tasks router: `/api` for the
- * app and `/api/build` for Craft. */
 function scheduledTasksClient(apiBase: string) {
   const tasksUrl = `${apiBase}/scheduled-tasks`;
   const taskUrl = (taskId: string) => `${tasksUrl}/${taskId}`;
@@ -109,5 +106,3 @@ export const {
   markScheduledRunsViewed,
   markScheduledRunViewed,
 } = scheduledTasksClient("/api");
-
-export const craftScheduledTasksClient = scheduledTasksClient(BUILD_API_BASE);
