@@ -210,11 +210,24 @@ async function runCommand(message) {
 
 // ---- grants ----
 
+// The relay's limits on a tab's title and URL.
+const MAX_TITLE_CHARS = 500;
+const MAX_URL_CHARS = 2048;
+
+/** The shared tabs as Onyx shows them. A tab on a site that the user did not
+ * share goes without its title and URL. */
 async function tabsFor(grant) {
   const tabs = [];
   for (const id of grant.tabs) {
     const tab = await chrome.tabs.get(id).catch(() => null);
-    if (tab) tabs.push({ id: String(tab.id), title: tab.title ?? "", url: tab.url ?? "" });
+    if (!tab) continue;
+    const origin = driver.originOf(tab.url ?? "");
+    const shared = origin !== null && grant.origins.includes(origin);
+    tabs.push({
+      id: String(tab.id),
+      title: shared ? (tab.title ?? "").slice(0, MAX_TITLE_CHARS) : "",
+      url: shared ? (tab.url ?? "").slice(0, MAX_URL_CHARS) : "",
+    });
   }
   return tabs;
 }
@@ -241,6 +254,7 @@ async function showConsent(message) {
     chat_session_id: message.chat_session_id,
     chat_title: message.chat_title,
     account: message.account,
+    deadline: message.deadline,
     domain: await getOnyxDomain(),
   };
   await chrome.storage.session.set({ [REQUESTS_KEY]: requests });
@@ -261,26 +275,47 @@ async function takeRequest(requestId) {
   return request ?? null;
 }
 
-async function groupTabs(tabIds) {
+/** Put the tabs that are in no group into the share's Onyx group. Tabs in
+ * the user's own groups stay there. Returns the Onyx group's ID. */
+async function groupTabs(tabIds, groupId) {
   try {
-    const groupId = await chrome.tabs.group({ tabIds });
-    await chrome.tabGroups.update(groupId, { title: GROUP_TITLE, color: "purple" });
+    const loose = [];
+    for (const id of tabIds) {
+      const tab = await chrome.tabs.get(id).catch(() => null);
+      if (tab && tab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) loose.push(id);
+    }
+    if (loose.length === 0) return groupId;
+    if (groupId != null) {
+      const group = await chrome.tabGroups.get(groupId).catch(() => null);
+      if (group) return await chrome.tabs.group({ tabIds: loose, groupId });
+    }
+    const created = await chrome.tabs.group({ tabIds: loose });
+    await chrome.tabGroups.update(created, { title: GROUP_TITLE, color: "purple" });
+    return created;
   } catch (error) {
     console.warn("[Onyx browser] Could not group tabs", error);
+    return groupId;
   }
 }
 
-async function approve(requestId, tabIds, minutes) {
-  const request = await takeRequest(requestId);
-  if (!request) throw new Error("This request expired. Ask again from the Onyx chat.");
+async function approve(requestId, tabIds, minutes, shownOrigins) {
+  const request = (await readSession(REQUESTS_KEY, {}))[requestId];
+  if (!request || request.deadline * 1000 <= Date.now()) {
+    await takeRequest(requestId);
+    throw new Error("This request expired. Ask again from the Onyx chat.");
+  }
   const tabs = [];
   for (const id of tabIds) {
     const tab = await chrome.tabs.get(id).catch(() => null);
     if (tab && driver.originOf(tab.url ?? "")) tabs.push(tab);
   }
   if (tabs.length === 0) throw new Error("Pick at least one web page tab.");
-  await endGrant(true);
   const origins = [...new Set(tabs.map((tab) => driver.originOf(tab.url)))];
+  // The user allows only the sites that the window showed.
+  if (origins.some((origin) => !shownOrigins.includes(origin)))
+    throw new Error("A tab moved to another site. Check the sites and allow again.");
+  await takeRequest(requestId);
+  await endGrant(true);
   const grant = {
     chat_session_id: request.chat_session_id,
     chat_title: request.chat_title,
@@ -289,10 +324,11 @@ async function approve(requestId, tabIds, minutes) {
     origins,
     expires_at: Date.now() / 1000 + Math.min(Math.max(minutes, 5), 480) * 60,
     current: tabs[0].id,
+    group_id: null,
   };
   await setGrant(grant);
   for (const tab of tabs) await driver.attach(tab.id);
-  await groupTabs(grant.tabs);
+  await setGrant({ ...grant, group_id: await groupTabs(grant.tabs, null) });
   await reportGrant();
 }
 
@@ -311,7 +347,10 @@ export async function endGrant(notify) {
   await chrome.storage.session.remove(GRANT_KEY);
   for (const tabId of grant.tabs) {
     await driver.detach(tabId);
-    await chrome.tabs.ungroup(tabId).catch(() => {});
+    // Only tabs still in the share's own group leave it.
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (tab && grant.group_id != null && tab.groupId === grant.group_id)
+      await chrome.tabs.ungroup(tabId).catch(() => {});
   }
   if (notify) sendMessage({ type: "grant_ended", chat_session_id: grant.chat_session_id });
 }
@@ -322,7 +361,7 @@ async function addTab(tabId) {
   grant.tabs = [...new Set([...grant.tabs, tabId])];
   grant.current = tabId;
   await setGrant(grant);
-  await groupTabs([tabId]);
+  await setGrant({ ...grant, group_id: await groupTabs([tabId], grant.group_id) });
   await reportGrant();
 }
 
@@ -375,7 +414,9 @@ export function handleRuntimeMessage(request, sendResponse) {
   };
   switch (request.action) {
     case BROWSER_MESSAGES.APPROVE:
-      return respond(approve(request.request_id, request.tab_ids, request.minutes));
+      return respond(
+        approve(request.request_id, request.tab_ids, request.minutes, request.origins ?? [])
+      );
     case BROWSER_MESSAGES.DENY:
       return respond(deny(request.request_id));
     case BROWSER_MESSAGES.STOP:

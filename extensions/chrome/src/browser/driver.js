@@ -194,7 +194,8 @@ async function tabJson(grant, tabId) {
     title: shared ? (tab.title ?? "") : "",
     loading: tab.status === "loading",
     controller: isHumanControlled(tabId) ? "human" : "agent",
-    dialog: state.dialog,
+    // A dialog of a site that the user did not share stays hidden.
+    dialog: shared && state.dialog && isShared(grant, state.dialog.origin) ? state.dialog : null,
   };
 }
 
@@ -290,6 +291,63 @@ async function frameUrls(tabId) {
   walk((await send(tabId, "Page.getFrameTree")).frameTree);
   return urls;
 }
+
+const outsideFrame = () =>
+  new OperationError(
+    "failed",
+    "That part of the page is a frame from a site that the user did not share. Ask the user to share it."
+  );
+
+/** Refuse input at a point whose frame is not shared: the frame of the
+ * element there, and the frame that an iframe element there holds. */
+async function checkPoint(grant, tabId, { x, y }) {
+  const answer = await send(tabId, "DOM.getNodeForLocation", {
+    x: Math.round(x),
+    y: Math.round(y),
+    ignorePointerEventsNone: true,
+  }).catch(() => null);
+  if (!answer) return;
+  const frames = await frameUrls(tabId);
+  const frameIds = [answer.frameId];
+  const inner = await iframeFrameId(tabId, answer.backendNodeId);
+  if (inner) frameIds.push(inner);
+  for (const frameId of frameIds) {
+    if (frameId && !isShared(grant, frames.get(frameId) ?? "-")) throw outsideFrame();
+  }
+}
+
+/** Refuse keys when focus is in a password field or in a frame that is not
+ * shared. Focus in a frame of another origin stops at its iframe element. */
+async function checkFocus(grant, tabId) {
+  const { result } = await send(tabId, "Runtime.evaluate", {
+    expression: `(() => {
+      let element = document.activeElement;
+      for (;;) {
+        if (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
+        else if (element?.contentDocument?.activeElement) element = element.contentDocument.activeElement;
+        else break;
+      }
+      return element;
+    })()`,
+  });
+  if (!result.objectId) return;
+  const kind = await callOn(tabId, result.objectId, function () {
+    if (this.tagName === "IFRAME" || this.tagName === "FRAME") return "frame";
+    return this.tagName === "INPUT" && (this.getAttribute("type") || "").toLowerCase() === "password"
+      ? "password"
+      : "other";
+  });
+  if (kind === "password") throw passwordRefused();
+  if (kind === "frame") {
+    const { node } = await send(tabId, "DOM.describeNode", { objectId: result.objectId, depth: 1 });
+    const frameId = node.contentDocument?.frameId ?? node.frameId;
+    const frames = await frameUrls(tabId);
+    if (!isShared(grant, frames.get(frameId) ?? "-")) throw outsideFrame();
+  }
+}
+
+const passwordRefused = () =>
+  new OperationError("failed", "Onyx does not type into password fields. Ask the user to type it.");
 
 async function snapshotText(grant, tab, state) {
   const tabId = tab.id;
@@ -461,7 +519,13 @@ async function actionPoint(tabId, objectId, deadline) {
         function (px, py) {
           const view = this.ownerDocument.defaultView;
           if (view !== view.top) return true;
-          const found = this.ownerDocument.elementFromPoint(px, py);
+          // Look through open shadow roots to the element that takes the point.
+          let found = this.ownerDocument.elementFromPoint(px, py);
+          while (found?.shadowRoot) {
+            const inner = found.shadowRoot.elementFromPoint(px, py);
+            if (!inner || inner === found) break;
+            found = inner;
+          }
           return !!found && (found === this || this.contains(found));
         },
         [x, y]
@@ -674,7 +738,7 @@ export async function call(grant, method, params, hooks) {
       await sharedTab(grant, tabId);
       checkWritable(tabId);
       await hooks.setCurrent(tabId);
-      const message = await act(tabId, params, deadline);
+      const message = await act(grant, tabId, params, deadline);
       return { tab: await tabJson(grant, tabId), ...(message === undefined ? {} : { message }) };
     }
     case "waitFor": {
@@ -686,6 +750,8 @@ export async function call(grant, method, params, hooks) {
       if (!hasTarget(target) && text === undefined && urlIncludes === undefined)
         throw invalid("Pass ref, selector, text or urlIncludes.");
       for (;;) {
+        // A tab that left the shared sites ends the wait.
+        await sharedTab(grant, tabId);
         if (stateOf(tabId).dialog) throw dialogPending();
         if (await conditionsMet(grant, tabId, target, text, urlIncludes))
           return { tab: await tabJson(grant, tabId) };
@@ -741,7 +807,7 @@ async function conditionsMet(grant, tabId, target, text, urlIncludes) {
   return true;
 }
 
-async function act(tabId, params, deadline) {
+async function act(grant, tabId, params, deadline) {
   const action = optString(params, "action");
   const target = targetOf(params);
   switch (action) {
@@ -758,6 +824,7 @@ async function act(tabId, params, deadline) {
       } else {
         throw invalid(`${action} needs ref, selector, or x and y.`);
       }
+      await checkPoint(grant, tabId, point);
       if (action === "hover") {
         await input(tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
         return undefined;
@@ -782,13 +849,35 @@ async function act(tabId, params, deadline) {
         if (tag !== "INPUT") return "no";
         const type = (this.getAttribute("type") || "text").toLowerCase();
         if (type === "password") return "password";
-        const textual = ["text", "search", "email", "url", "tel", "number", "date", "time", "datetime-local", "month", "week"];
-        return textual.includes(type) && !this.disabled && !this.readOnly ? "ok" : "no";
+        if (this.disabled || this.readOnly) return "no";
+        if (["date", "time", "datetime-local", "month", "week"].includes(type)) return "picker";
+        const textual = ["text", "search", "email", "url", "tel", "number"];
+        return textual.includes(type) ? "ok" : "no";
       });
-      if (kind === "password")
-        throw new OperationError("failed", "Onyx does not type into password fields. Ask the user to type it.");
+      if (kind === "password") throw passwordRefused();
+      if (kind === "picker") {
+        // Picker fields take a whole value, not typed text.
+        const taken = await callOn(
+          tabId,
+          objectId,
+          function (value) {
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+            setter.call(this, value);
+            this.dispatchEvent(new Event("input", { bubbles: true }));
+            this.dispatchEvent(new Event("change", { bubbles: true }));
+            return this.value === value;
+          },
+          [text]
+        );
+        if (!taken)
+          throw invalid(
+            "The field did not take the value. Use its value format, such as 2026-12-01, 13:30, 2026-12-01T13:30, 2026-12 or 2026-W49."
+          );
+        return undefined;
+      }
       if (kind !== "ok") throw new OperationError("not_editable", "The element is not an editable field.");
       await send(tabId, "DOM.focus", { objectId });
+      await checkFocus(grant, tabId);
       if (params.clear === true) {
         await callOn(tabId, objectId, function () {
           if (typeof this.select === "function") this.select();
@@ -831,6 +920,8 @@ async function act(tabId, params, deadline) {
         throw invalid("drag needs ref or selector, and targetRef.");
       const from = await actionPoint(tabId, await resolveTarget(tabId, target, deadline), deadline);
       const to = await actionPoint(tabId, await resolveTarget(tabId, { ref: targetRef }, deadline), deadline);
+      await checkPoint(grant, tabId, from);
+      await checkPoint(grant, tabId, to);
       await input(tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", ...from });
       await input(tabId, "Input.dispatchMouseEvent", { type: "mousePressed", ...from, button: "left", clickCount: 1 });
       for (let step = 1; step <= 5; step += 1) {
@@ -849,6 +940,7 @@ async function act(tabId, params, deadline) {
       const key = optString(params, "key");
       if (!key) throw invalid("press needs key.");
       const modifiers = Array.isArray(params.modifiers) ? params.modifiers.map(String) : [];
+      await checkFocus(grant, tabId);
       await pressKey(tabId, key, modifiers);
       return undefined;
     }
@@ -856,6 +948,7 @@ async function act(tabId, params, deadline) {
       const point = hasTarget(target)
         ? await actionPoint(tabId, await resolveTarget(tabId, target, deadline), deadline)
         : await viewportCenter(tabId);
+      await checkPoint(grant, tabId, point);
       const deltaX = optNumber(params, "deltaX") ?? 0;
       const deltaY = optNumber(params, "deltaY") ?? (optNumber(params, "deltaX") === undefined ? 400 : 0);
       await input(tabId, "Input.dispatchMouseEvent", { type: "mouseWheel", ...point, deltaX, deltaY });

@@ -14,9 +14,13 @@ function checkedTabIds() {
   return [...tabsBox.querySelectorAll("input:checked")].map((box) => Number(box.value));
 }
 
+// The sites that the window shows; Allow shares only these.
+let shownOrigins = [];
+
 function renderOrigins(tabs) {
   const chosen = new Set(checkedTabIds());
   const origins = [...new Set(tabs.filter((tab) => chosen.has(tab.id)).map((tab) => originOf(tab.url)))];
+  shownOrigins = origins;
   originsList.replaceChildren(
     ...origins.map((origin) => {
       const item = document.createElement("li");
@@ -72,11 +76,13 @@ allowButton.addEventListener("click", async () => {
     request_id: requestId,
     tab_ids: checkedTabIds(),
     minutes: Number(document.getElementById("duration").value),
+    origins: shownOrigins,
   });
   if (answer?.ok) window.close();
   else {
+    // Show the tabs as they are now, so the user sees what Allow shares.
+    await load();
     errorText.textContent = answer?.error ?? "Could not share the tabs.";
-    allowButton.disabled = false;
   }
 });
 
