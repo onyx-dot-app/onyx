@@ -149,9 +149,7 @@ test.describe("Plugin upload", () => {
     await plugins.expectPreviewText(
       `${name} is already in use. Pick a different name.`
     );
-    await expect(
-      plugins.uploadDialog.getByRole("button", { name: "Save", exact: true })
-    ).toBeDisabled();
+    await plugins.expectSaveDisabled();
     await plugins.setSaveAsNew(false);
     await plugins.expectSaveLine(`Updates ${name} to Onyx version 2`);
     expect(await plugins.saveUpload()).toBe(firstId);
