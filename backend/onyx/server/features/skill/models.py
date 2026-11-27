@@ -39,11 +39,6 @@ class SkillGroupShare(BaseModel):
     permission: SkillSharePermission
 
 
-class SkillShareableGroup(BaseModel):
-    id: int
-    name: str
-
-
 class SkillGroupSummary(BaseModel):
     """One group row of a skill: a share, a group install setting, or both."""
 

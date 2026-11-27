@@ -16,7 +16,7 @@ from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, case, desc, func, literal, select, update
+from sqlalchemy import and_, case, desc, exists, func, literal, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from onyx.agents.models import RunFailureKind, RunStatus
@@ -29,13 +29,17 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
 )
 from onyx.db.models import (
+    ApprovalRequest,
     ChatMessage,
     ChatSession,
     ScheduledTask,
     ScheduledTaskRun,
     User,
 )
-from onyx.db.notification import create_notification
+from onyx.db.notification import (
+    create_notification,
+    dismiss_notifications_by_data_value,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.craft import replace_task_integrations__no_commit
@@ -216,7 +220,8 @@ def soft_delete_scheduled_task(
     task_id: UUID,
     user_id: UUID,
 ) -> None:
-    """Mark a task as deleted. Idempotent.
+    """Mark a task as deleted. Idempotent for the owner; raises
+    ``OnyxError(NOT_FOUND)`` when no task of ``user_id`` has this id.
 
     The row + its runs are retained so users can still open past runs from
     the task's run history; the dispatcher excludes deleted tasks from its
@@ -229,13 +234,22 @@ def soft_delete_scheduled_task(
         )
     ).scalar_one_or_none()
     if task is None:
-        # Idempotent — no-op if the row was never visible to this user.
-        return
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task not found")
     if task.deleted:
         return
     task.deleted = True
     task.next_run_at = None
     db_session.flush()
+
+
+def pause_scheduled_task__no_commit(db_session: Session, task_id: UUID) -> None:
+    """Pause a task that cannot run, so it stops firing."""
+    db_session.execute(
+        update(ScheduledTask)
+        .where(ScheduledTask.id == task_id)
+        .values(status=ScheduledTaskStatus.PAUSED, next_run_at=None)
+        .execution_options(synchronize_session="fetch")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +286,7 @@ def claim_due_scheduled_tasks(
         batch_size: Maximum number of tasks to claim in one tick.
 
     Returns:
-        The claimed task rows, newest-due first.
+        The claimed task rows, oldest-due first.
     """
     if batch_size <= 0:
         return []
@@ -324,8 +338,7 @@ def has_in_flight_run_for_task(
     """Return True if ``task_id`` has a run currently QUEUED or RUNNING.
 
     The dispatcher writes a ``skipped`` run row for a fire while a prior run
-    is RUNNING. A QUEUED prior run takes the fire instead
-    (``requeue_queued_run__no_commit``).
+    is in flight, and run-now refuses to start a second run.
     """
     stmt = (
         select(literal(1))
@@ -341,28 +354,6 @@ def has_in_flight_run_for_task(
         .limit(1)
     )
     return db_session.execute(stmt).first() is not None
-
-
-def requeue_queued_run__no_commit(
-    db_session: Session, task_id: UUID, now: datetime
-) -> UUID | None:
-    """Give a new fire to the task's QUEUED run, if it has one: its queue age
-    starts again at ``now``. Returns the run id to send again."""
-    run = db_session.scalars(
-        select(ScheduledTaskRun)
-        .where(
-            ScheduledTaskRun.task_id == task_id,
-            ScheduledTaskRun.status == ScheduledTaskRunStatus.QUEUED,
-        )
-        .order_by(desc(ScheduledTaskRun.started_at))
-        .limit(1)
-        .with_for_update()
-    ).first()
-    if run is None:
-        return None
-    run.started_at = now
-    db_session.flush()
-    return run.id
 
 
 def insert_run(
@@ -401,6 +392,7 @@ def mark_run_status(
     error_detail: str | None = None,
     summary: str | None = None,
     started_at: datetime | None = None,
+    clear_chat_session: bool = False,
 ) -> ScheduledTaskRun:
     """Update a run row's status + optional fields.
 
@@ -420,8 +412,20 @@ def mark_run_status(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
     if status.has_results() and run.status != status:
         run.version += 1
+    if (
+        run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
+        and status != ScheduledTaskRunStatus.AWAITING_APPROVAL
+    ):
+        dismiss_notifications_by_data_value(
+            NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL,
+            "run_id",
+            str(run.id),
+            db_session,
+        )
     run.status = status
-    if chat_session_id is not None:
+    if clear_chat_session:
+        run.chat_session_id = None
+    elif chat_session_id is not None:
         run.chat_session_id = chat_session_id
     if skip_reason is not None:
         run.skip_reason = skip_reason
@@ -437,6 +441,27 @@ def mark_run_status(
         run.finished_at = datetime.now(tz=timezone.utc)
     db_session.flush()
     return run
+
+
+def fail_queued_run__no_commit(
+    *, db_session: Session, run_id: UUID, error_detail: str
+) -> ScheduledTaskRun | None:
+    """Fail a run that is still QUEUED, under its row lock. None: the run
+    already left the queue, so an executor owns it."""
+    status = db_session.execute(
+        select(ScheduledTaskRun.status)
+        .where(ScheduledTaskRun.id == run_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if status != ScheduledTaskRunStatus.QUEUED:
+        return None
+    return mark_run_status(
+        db_session=db_session,
+        run_id=run_id,
+        status=ScheduledTaskRunStatus.FAILED,
+        error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
+        error_detail=error_detail,
+    )
 
 
 def get_run(
@@ -466,16 +491,14 @@ def list_runs_for_task(
     db_session: Session,
     task_id: UUID,
     user_id: UUID,
-    cursor: datetime | None = None,
+    cursor: tuple[datetime, UUID] | None = None,
     limit: int = 50,
     unviewed_only: bool = False,
 ) -> list[ScheduledTaskRun]:
-    """List runs for a task, newest first, optionally paginated by ``started_at``.
+    """List runs for a task, newest first, keyset-paginated.
 
-    ``cursor`` is the ``started_at`` of the last seen row in the previous
-    page; only runs with ``started_at < cursor`` are returned. This matches
-    the ``ix_scheduled_task_run_task_started`` index, which is
-    ``(task_id, started_at DESC)``.
+    ``cursor`` is the ``(started_at, id)`` of the last row of the previous
+    page. The ``id`` breaks ties between runs with the same ``started_at``.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
@@ -487,7 +510,16 @@ def list_runs_for_task(
 
     conditions = [ScheduledTaskRun.task_id == task_id]
     if cursor is not None:
-        conditions.append(ScheduledTaskRun.started_at < cursor)
+        cursor_started_at, cursor_id = cursor
+        conditions.append(
+            or_(
+                ScheduledTaskRun.started_at < cursor_started_at,
+                and_(
+                    ScheduledTaskRun.started_at == cursor_started_at,
+                    ScheduledTaskRun.id < cursor_id,
+                ),
+            )
+        )
     if unviewed_only:
         conditions.append(
             func.coalesce(ScheduledTaskRun.viewed_revision, 0)
@@ -497,10 +529,29 @@ def list_runs_for_task(
     stmt = (
         select(ScheduledTaskRun)
         .where(and_(*conditions))
-        .order_by(desc(ScheduledTaskRun.started_at))
+        .order_by(desc(ScheduledTaskRun.started_at), desc(ScheduledTaskRun.id))
         .limit(limit)
     )
     return list(db_session.execute(stmt).scalars())
+
+
+def latest_runs_for_tasks(
+    db_session: Session, task_ids: list[UUID]
+) -> dict[UUID, ScheduledTaskRun]:
+    """The newest run of each task, in one query. Callers check ownership."""
+    if not task_ids:
+        return {}
+    stmt = (
+        select(ScheduledTaskRun)
+        .where(ScheduledTaskRun.task_id.in_(task_ids))
+        .distinct(ScheduledTaskRun.task_id)
+        .order_by(
+            ScheduledTaskRun.task_id,
+            desc(ScheduledTaskRun.started_at),
+            desc(ScheduledTaskRun.id),
+        )
+    )
+    return {run.task_id: run for run in db_session.execute(stmt).scalars()}
 
 
 def unread_run_counts_for_user(
@@ -594,9 +645,10 @@ def list_chat_runs_in_flight(
     db_session: Session,
     task_id: UUID | None = None,
     status: ScheduledTaskRunStatus | None = None,
-    started_before: datetime | None = None,
+    parked_before: datetime | None = None,
 ) -> list[ScheduledTaskRun]:
-    """Runs whose chat response has not ended."""
+    """Runs whose chat response has not ended. With ``parked_before``, only
+    runs that started and made their latest approval request before it."""
     stmt = select(ScheduledTaskRun).where(
         ScheduledTaskRun.chat_session_id.is_not(None),
         ScheduledTaskRun.status.in_(_CHAT_IN_FLIGHT),
@@ -605,8 +657,14 @@ def list_chat_runs_in_flight(
         stmt = stmt.where(ScheduledTaskRun.task_id == task_id)
     if status is not None:
         stmt = stmt.where(ScheduledTaskRun.status == status)
-    if started_before is not None:
-        stmt = stmt.where(ScheduledTaskRun.started_at < started_before)
+    if parked_before is not None:
+        stmt = stmt.where(
+            ScheduledTaskRun.started_at < parked_before,
+            ~exists().where(
+                ApprovalRequest.chat_session_id == ScheduledTaskRun.chat_session_id,
+                ApprovalRequest.created_at >= parked_before,
+            ),
+        )
     return list(db_session.scalars(stmt))
 
 
@@ -685,7 +743,7 @@ def notify_run_owner__no_commit(
     )
     try:
         with db_session.begin_nested():
-            create_notification(
+            notification = create_notification(
                 user_id=task.user_id,
                 notif_type=notif_type,
                 db_session=db_session,
@@ -705,6 +763,11 @@ def notify_run_owner__no_commit(
                 },
                 autocommit=False,
             )
+            # The notification of an earlier approval wait of the same run
+            # was dismissed when that wait ended; show it again.
+            if notification.dismissed:
+                notification.dismissed = False
+                notification.last_shown = func.now()
     except Exception:
         logger.exception(
             "Failed to create scheduled-task notification (task=%s run=%s)",

@@ -16,7 +16,7 @@ Functions here flush and never commit.
 """
 
 import hashlib
-from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping
 from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
@@ -27,16 +27,11 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission, has_permission
-from onyx.auth.scoped_permissions import (
-    assert_within_scope,
-    get_scoped_groups,
-    within_scope,
-)
+from onyx.auth.permissions import has_global_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.enums import (
     MarketplaceKind,
     Permission,
-    PermissionAuthority,
     PluginInstallationPolicy,
     PluginPublishingPolicy,
     SkillSharePermission,
@@ -49,7 +44,6 @@ from onyx.db.models import (
     PluginSkill,
     PluginVersion,
     User,
-    UserGroup,
     UserPluginPreference,
 )
 from onyx.db.plugin_access import (
@@ -1262,61 +1256,6 @@ def check_sharing_allowed(subject: str = "skill") -> None:
             "Sharing with people and groups is turned off. Ask an admin to "
             f"share this {subject}.",
         )
-
-
-def list_shareable_groups(
-    actor: User,
-    plugin: Plugin | None,
-    db_session: Session,
-    manage_permission: Permission = Permission.MANAGE_PLUGINS,
-) -> Sequence[UserGroup]:
-    """The groups ``actor`` may add to or remove from the group shares of
-    ``plugin``, or of a new plugin when None. The read side of the group share
-    check in ``check_access_change``: every group for an organization-wide
-    manager, the managed groups for a group manager in scope, else none."""
-    current_group_ids: list[int] = []
-    published = False
-    if plugin is not None:
-        current_group_ids = list(
-            db_session.scalars(
-                select(Plugin__UserGroup.user_group_id).where(
-                    Plugin__UserGroup.plugin_id == plugin.id,
-                    Plugin__UserGroup.permission.is_not(None),
-                )
-            )
-        )
-        published = (
-            db_session.scalar(
-                select(Plugin.id)
-                .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-                .where(Plugin.id == plugin.id, seen_by_organization(Marketplace))
-            )
-            is not None
-        )
-    authority = has_permission(actor, manage_permission)
-    managed = (
-        get_scoped_groups(actor, db_session, manage_permission)
-        if authority is PermissionAuthority.SCOPED
-        else set()
-    )
-    if not within_scope(
-        actor,
-        db_session,
-        permission=manage_permission,
-        current_group_ids=current_group_ids,
-        requested_group_ids=managed,
-        is_non_public=not published,
-        managed_group_ids=managed,
-    ):
-        return []
-    stmt = (
-        select(UserGroup)
-        .where(UserGroup.is_default.is_(False))
-        .order_by(UserGroup.name, UserGroup.id)
-    )
-    if authority is not PermissionAuthority.GLOBAL:
-        stmt = stmt.where(UserGroup.id.in_(managed))
-    return db_session.scalars(stmt).all()
 
 
 def _write_user_grants__no_commit(locked: _LockedPlugin, db_session: Session) -> None:

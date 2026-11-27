@@ -8,7 +8,7 @@ import { useNavigation } from "@opal/navigation";
 import { isRunUnviewed } from "@/app/craft/v1/tasks/utils";
 import { CHAT_COLUMN_ROW, CHAT_GUTTER } from "@/lib/chat/layout";
 import {
-  revalidateChatScheduledRunViews,
+  revalidateScheduledRunViews,
   useScheduledRunOfChat,
   useScheduledTaskFormat,
 } from "@/lib/scheduledTasks/hooks";
@@ -38,7 +38,7 @@ export default function ScheduledRunBanner({
     markedRevision.current = key;
     void markScheduledRunViewed(run.task_id, run.run_id, run.revision)
       .then(() =>
-        Promise.all([mutate(), revalidateChatScheduledRunViews(run.task_id)])
+        Promise.all([mutate(), revalidateScheduledRunViews(run.task_id)])
       )
       .catch(() => {
         markedRevision.current = null;
