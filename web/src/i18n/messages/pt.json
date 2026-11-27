@@ -12264,6 +12264,9 @@
         },
         "timedOut": {
           "text": "A resposta parou porque atingiu o limite de tempo."
+        },
+        "approvalExpired": {
+          "text": "A execução agendada parou porque ninguém respondeu à solicitação de aprovação a tempo."
         }
       },
       "callout": {

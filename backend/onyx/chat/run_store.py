@@ -1635,8 +1635,6 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             details=details,
             arguments=tool_arguments_for_display(call),
             scope=scope,
-            # Only the chat's signed-in owner can decide.
-            signed_out=self._user.is_anonymous,
         )
         if isinstance(pending, PendingToolInput):
             self._approval_opened = True

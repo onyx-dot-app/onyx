@@ -2830,7 +2830,11 @@ def translate_db_message_to_chat_message_detail(
         chat_message.response_status == RunStatus.CANCELLED
         and chat_message.response_failure is not None
         and chat_message.response_failure.kind
-        in (RunFailureKind.DEADLINE, RunFailureKind.STOPPED_BY_USER)
+        in (
+            RunFailureKind.DEADLINE,
+            RunFailureKind.STOPPED_BY_USER,
+            RunFailureKind.APPROVAL_EXPIRED,
+        )
     )
     error_info = (
         None

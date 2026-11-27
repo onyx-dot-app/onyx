@@ -12264,6 +12264,9 @@
         },
         "timedOut": {
           "text": "La respuesta se detuvo porque alcanzó su límite de tiempo."
+        },
+        "approvalExpired": {
+          "text": "La ejecución programada se detuvo porque nadie respondió a tiempo a su solicitud de aprobación."
         }
       },
       "callout": {

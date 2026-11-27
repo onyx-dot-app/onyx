@@ -160,9 +160,12 @@ banner queue adds it to its list.
 
 ## Known issues
 
-- **Two scheduled-task types have no producer.**
-  `SCHEDULED_TASK_AWAITING_APPROVAL` and `SCHEDULED_TASK_PRE_APPROVED_ACTION`
-  are defined in `configs/constants.py:NotificationType` but never created.
+- **`SCHEDULED_TASK_PRE_APPROVED_ACTION` has no producer.** It is defined in
+  `configs/constants.py:NotificationType` but never created.
+  `SCHEDULED_TASK_AWAITING_APPROVAL` comes from
+  `db/scheduled_task.py:sync_chat_run__no_commit`, and
+  `db/scheduled_task.py:mark_run_status` dismisses it when the run leaves
+  AWAITING_APPROVAL.
 - **`TRIAL_ENDS_TWO_DAYS` and `REINDEX` have no producer in this
   repository.** `backend/onyx/server/settings/api.py:get_settings_notifications` reads the
   global trial row and an admin's `REINDEX` rows, but no backend code creates

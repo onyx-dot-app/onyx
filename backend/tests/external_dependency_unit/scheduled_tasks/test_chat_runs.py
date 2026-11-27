@@ -21,6 +21,7 @@ from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     dispatch_due_scheduled_tasks,
 )
 from onyx.cache.factory import get_cache_backend
+from onyx.chat.presentation import overall_stop
 from onyx.chat.run_store import _owner_key
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
@@ -73,6 +74,7 @@ from onyx.integrations.policy import (
 from onyx.scheduled_tasks.enqueue import send_scheduled_run
 from onyx.scheduled_tasks.executor import _fail, _start_run, run_scheduled_task_logic
 from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
+from onyx.server.query_and_chat.streaming_models import APPROVAL_EXPIRED
 from onyx.tools.models import IntegrationLinkConfiguration
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -221,6 +223,25 @@ def _notification_links(
     ]
 
 
+def _approval_notification_dismissed(
+    db_session: Session, owner: User, run: ScheduledTaskRun
+) -> bool:
+    """Whether the owner's approval notification of the run is dismissed."""
+    [notification] = [
+        notification
+        for notification in db_session.scalars(
+            select(Notification).where(
+                Notification.user_id == owner.id,
+                Notification.notif_type
+                == NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL,
+            )
+        )
+        if (notification.additional_data or {})["run_id"] == str(run.id)
+    ]
+    db_session.refresh(notification)
+    return notification.dismissed
+
+
 @pytest.mark.parametrize(
     ("response_status", "run_status", "version", "notification"),
     [
@@ -275,6 +296,12 @@ def test_a_run_takes_the_status_of_its_chat_response(
         assert run.error_detail == "model down"
 
 
+def _system_stop_reason(response: ChatMessage) -> str | None:
+    if response.response_status is None:
+        raise RuntimeError("The response has no status")
+    return overall_stop(response.response_status, response.response_failure).stop_reason
+
+
 def _dispatch_with_fake_broker() -> list[dict[str, Any]]:
     sent: list[dict[str, Any]] = []
 
@@ -313,6 +340,8 @@ def test_the_next_fire_cancels_a_run_that_waits_for_approval(
 ) -> None:
     task = _task(db_session, owner, due=True)
     parked, response = _run_with_response(db_session, task, RunStatus.SUSPENDED)
+    sync_chat_run__no_commit(db_session, parked)
+    db_session.commit()
 
     sent = _dispatch_with_fake_broker()
 
@@ -330,6 +359,8 @@ def test_the_next_fire_cancels_a_run_that_waits_for_approval(
     assert [UUID(message["kwargs"]["run_id"]) for message in sent] == [new_run.id]
     db_session.refresh(response)
     assert response.response_status == RunStatus.CANCELLED
+    assert _system_stop_reason(response) == APPROVAL_EXPIRED
+    assert _approval_notification_dismissed(db_session, owner, parked)
     assert response.response_failure is not None
     assert (
         response.response_failure.message == "The next scheduled run replaced this one."
@@ -387,12 +418,39 @@ def test_a_run_that_waits_a_day_for_approval_is_cancelled(
     assert stale.status == ScheduledTaskRunStatus.CANCELLED
     assert stale.error_class == "approval_timeout"
     assert response.response_status == RunStatus.CANCELLED
-    # The chat says the wait timed out, not that the user stopped it.
+    # The chat says the approval wait expired, not that the user stopped it.
     assert response.response_failure is not None
-    assert response.response_failure.kind == RunFailureKind.DEADLINE
+    assert response.response_failure.kind == RunFailureKind.APPROVAL_EXPIRED
+    assert _system_stop_reason(response) == APPROVAL_EXPIRED
     assert sorted(_open_notifications(db_session, owner)) == sorted(
         [str(fresh.id), str(resumed.id)]
     )
+
+
+@pytest.mark.parametrize(
+    "resumed_status",
+    # An approval or a rejection resumes the response; it runs, then ends.
+    [RunStatus.RUNNING, RunStatus.COMPLETE],
+)
+def test_a_decided_approval_dismisses_its_notification(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+    resumed_status: RunStatus,
+) -> None:
+    run, response = _run_with_response(
+        db_session, _task(db_session, owner), RunStatus.SUSPENDED
+    )
+    sync_chat_run__no_commit(db_session, run)
+    db_session.commit()
+    assert not _approval_notification_dismissed(db_session, owner, run)
+
+    response.response_status = resumed_status
+    db_session.commit()
+    sync_chat_run__no_commit(db_session, run)
+    db_session.commit()
+
+    assert _approval_notification_dismissed(db_session, owner, run)
 
 
 def test_an_approval_dismisses_its_notification(

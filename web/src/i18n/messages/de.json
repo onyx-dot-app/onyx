@@ -12264,6 +12264,9 @@
         },
         "timedOut": {
           "text": "Die Antwort wurde gestoppt, weil sie ihr Zeitlimit erreicht hat."
+        },
+        "approvalExpired": {
+          "text": "Der geplante Lauf wurde beendet, weil niemand die Genehmigungsanfrage rechtzeitig beantwortet hat."
         }
       },
       "callout": {

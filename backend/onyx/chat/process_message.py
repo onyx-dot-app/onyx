@@ -347,6 +347,14 @@ def prepare_chat_turn(
     try:
         with get_session_with_current_tenant() as db_session:
             chat_session = _load_session(new_msg_req, user, db_session)
+            # A run that cannot wait for a decision is not offered an Ask
+            # action: an anonymous user cannot decide, and a usage-only
+            # incognito turn has no run store to wait in.
+            if approval_mode is ApprovalMode.INTERACTIVE and (
+                user.is_anonymous
+                or not record_mode_persists_content(chat_session.incognito_record_mode)
+            ):
+                approval_mode = ApprovalMode.NO_APPROVER
             # Reserve the session before model setup or changes to its message tree.
             if handed_admission is None:
                 admission.claim(chat_session.id)
@@ -566,8 +574,6 @@ def prepare_chat_turn(
             question_tool = (
                 approval_mode == ApprovalMode.INTERACTIVE
                 and not agent_host
-                and not user.is_anonymous
-                and record_mode_persists_content(chat_session.incognito_record_mode)
                 and len(selected_models) == 1
                 and not new_msg_req.deep_research
             )

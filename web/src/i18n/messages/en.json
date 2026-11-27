@@ -12264,6 +12264,9 @@
         },
         "timedOut": {
           "text": "The response stopped because it reached its time limit."
+        },
+        "approvalExpired": {
+          "text": "The scheduled run stopped because nobody answered its approval request in time."
         }
       },
       "callout": {
