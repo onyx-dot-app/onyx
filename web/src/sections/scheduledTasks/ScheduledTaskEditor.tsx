@@ -246,49 +246,47 @@ function TaskForm({ task }: TaskFormProps) {
           </Button>,
         ]}
       />
-      <SettingsLayouts.Body>
-        {/* Edits made while a save is pending would not be saved. */}
-        <div inert={saving} data-testid="scheduled-task-form">
-          <Section height="auto" alignItems="stretch">
-            <InputVertical withLabel title={t("fields.name.label")}>
-              <InputTypeIn
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                onBlur={() => setTouched((was) => ({ ...was, name: true }))}
-                placeholder={t("fields.name.placeholder")}
-                variant={touched.name && nameError ? "error" : undefined}
-                data-testid="scheduled-task-name"
-              />
-              {touched.name && nameError && (
-                <Text as="p" font="secondary-body" color="status-error-05">
-                  {nameError}
-                </Text>
-              )}
-            </InputVertical>
-            <InputVertical
-              withLabel
-              title={t("fields.prompt.label")}
-              description={t("fields.prompt.description")}
-            >
-              <InputTextArea
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                onBlur={() => setTouched((was) => ({ ...was, prompt: true }))}
-                placeholder={t("fields.prompt.placeholder")}
-                rows={6}
-                autoResize
-                maxRows={12}
-                variant={touched.prompt && promptError ? "error" : undefined}
-                data-testid="scheduled-task-prompt"
-              />
-              {touched.prompt && promptError && (
-                <Text as="p" font="secondary-body" color="status-error-05">
-                  {promptError}
-                </Text>
-              )}
-            </InputVertical>
-          </Section>
-        </div>
+      {/* Edits made while a save is pending would not be saved. */}
+      <SettingsLayouts.Body inert={saving} data-testid="scheduled-task-form">
+        <Section height="auto" alignItems="stretch">
+          <InputVertical withLabel title={t("fields.name.label")}>
+            <InputTypeIn
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              onBlur={() => setTouched((was) => ({ ...was, name: true }))}
+              placeholder={t("fields.name.placeholder")}
+              variant={touched.name && nameError ? "error" : undefined}
+              data-testid="scheduled-task-name"
+            />
+            {touched.name && nameError && (
+              <Text as="p" font="secondary-body" color="status-error-05">
+                {nameError}
+              </Text>
+            )}
+          </InputVertical>
+          <InputVertical
+            withLabel
+            title={t("fields.prompt.label")}
+            description={t("fields.prompt.description")}
+          >
+            <InputTextArea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              onBlur={() => setTouched((was) => ({ ...was, prompt: true }))}
+              placeholder={t("fields.prompt.placeholder")}
+              rows={6}
+              autoResize
+              maxRows={12}
+              variant={touched.prompt && promptError ? "error" : undefined}
+              data-testid="scheduled-task-prompt"
+            />
+            {touched.prompt && promptError && (
+              <Text as="p" font="secondary-body" color="status-error-05">
+                {promptError}
+              </Text>
+            )}
+          </InputVertical>
+        </Section>
         <Divider paddingParallel={0} paddingPerpendicular={0} />
         <InputVertical title={t("fields.schedule.label")}>
           <ScheduleEditor

@@ -177,4 +177,7 @@ it("locks the form while a save is pending", async () => {
   await user.click(screen.getByTestId("save-scheduled-task"));
 
   expect(screen.getByTestId("scheduled-task-form")).toHaveAttribute("inert");
+  expect(
+    screen.getByTestId("schedule-payload").closest("[inert]")
+  ).not.toBeNull();
 });
