@@ -193,7 +193,7 @@ function SkillRow({
       rightChildren={
         <CustomizeRowActions
           turnOn={
-            !enabled && skill.can_toggle
+            (!enabled || busy) && skill.can_toggle
               ? {
                   label: t("menu.turnOn"),
                   disabled: busy,

@@ -178,7 +178,7 @@ function PluginRow({
       rightChildren={
         <CustomizeRowActions
           turnOn={
-            !enabled && canToggle
+            (!enabled || busy) && canToggle
               ? {
                   label: t("skills.menu.turnOn"),
                   disabled: busy,

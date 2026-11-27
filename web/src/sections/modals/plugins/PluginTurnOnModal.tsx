@@ -21,7 +21,15 @@ export default function PluginTurnOnModal({
   const t = useTranslations("plugins.turnOn");
   const refreshLists = useRefreshSkillLists();
   const detail = usePluginDetail(plugin.id, plugin);
-  const needs = detail.data?.plugin?.needs ?? [];
+  // The needs that were not on at turn-on stay listed while the member turns them on.
+  const notOn = new Set(
+    (plugin.plugin?.needs ?? [])
+      .filter((need) => need.state !== "on")
+      .map((need) => need.name)
+  );
+  const needs = (detail.data?.plugin?.needs ?? []).filter((need) =>
+    notOn.has(need.name)
+  );
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onClose()}>
