@@ -16,7 +16,7 @@ from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, case, desc, func, literal, select, update
+from sqlalchemy import and_, case, desc, func, literal, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from onyx.agents.models import RunFailureKind, RunStatus
@@ -466,16 +466,14 @@ def list_runs_for_task(
     db_session: Session,
     task_id: UUID,
     user_id: UUID,
-    cursor: datetime | None = None,
+    cursor: tuple[datetime, UUID] | None = None,
     limit: int = 50,
     unviewed_only: bool = False,
 ) -> list[ScheduledTaskRun]:
-    """List runs for a task, newest first, optionally paginated by ``started_at``.
+    """List runs for a task, newest first, keyset-paginated.
 
-    ``cursor`` is the ``started_at`` of the last seen row in the previous
-    page; only runs with ``started_at < cursor`` are returned. This matches
-    the ``ix_scheduled_task_run_task_started`` index, which is
-    ``(task_id, started_at DESC)``.
+    ``cursor`` is the ``(started_at, id)`` of the last row of the previous
+    page. The ``id`` breaks ties between runs with the same ``started_at``.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
@@ -487,7 +485,16 @@ def list_runs_for_task(
 
     conditions = [ScheduledTaskRun.task_id == task_id]
     if cursor is not None:
-        conditions.append(ScheduledTaskRun.started_at < cursor)
+        cursor_started_at, cursor_id = cursor
+        conditions.append(
+            or_(
+                ScheduledTaskRun.started_at < cursor_started_at,
+                and_(
+                    ScheduledTaskRun.started_at == cursor_started_at,
+                    ScheduledTaskRun.id < cursor_id,
+                ),
+            )
+        )
     if unviewed_only:
         conditions.append(
             func.coalesce(ScheduledTaskRun.viewed_revision, 0)
@@ -497,7 +504,7 @@ def list_runs_for_task(
     stmt = (
         select(ScheduledTaskRun)
         .where(and_(*conditions))
-        .order_by(desc(ScheduledTaskRun.started_at))
+        .order_by(desc(ScheduledTaskRun.started_at), desc(ScheduledTaskRun.id))
         .limit(limit)
     )
     return list(db_session.execute(stmt).scalars())

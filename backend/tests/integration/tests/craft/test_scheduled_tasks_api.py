@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Generator
 from datetime import timedelta
 from typing import Any
@@ -338,30 +337,75 @@ def test_delete_task_is_idempotent_soft_delete(admin_user: DATestUser) -> None:
     assert row.deleted is True
 
 
-def test_list_runs_paginates_by_started_at_cursor(admin_user: DATestUser) -> None:
+def test_list_runs_pages_through_runs_with_the_same_started_at(
+    admin_user: DATestUser,
+) -> None:
+    response = _create_task(admin_user)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+    with get_session_with_current_tenant() as db_session:
+        runs = [
+            insert_run(
+                db_session=db_session,
+                task_id=task_id,
+                trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+            )
+            for _ in range(5)
+        ]
+        tied_at = runs[0].started_at
+        for run in runs:
+            run.started_at = tied_at
+        db_session.commit()
+        expected_ids = {str(run.id) for run in runs}
+
+    seen: list[str] = []
+    cursor: str | None = None
+    while True:
+        page = _list_runs(admin_user, task_id, cursor=cursor, limit=2)
+        page.raise_for_status()
+        body = page.json()
+        seen.extend(item["id"] for item in body["items"])
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+
+    assert sorted(seen) == sorted(expected_ids)
+
+
+def test_list_runs_rejects_a_malformed_cursor(admin_user: DATestUser) -> None:
     response = _create_task(admin_user)
     response.raise_for_status()
     task_id = UUID(response.json()["id"])
 
-    # Small sleep gives the two runs distinct started_at values for the cursor.
-    run_one = _run_now(admin_user, task_id)
-    run_one.raise_for_status()
-    time.sleep(0.05)
-    run_two = _run_now(admin_user, task_id)
-    run_two.raise_for_status()
+    assert _list_runs(admin_user, task_id, cursor="not-a-cursor").status_code == 400
 
-    page_one = _list_runs(admin_user, task_id, limit=1)
-    page_one.raise_for_status()
-    page_one_body = page_one.json()
-    assert len(page_one_body["items"]) == 1
-    cursor = page_one_body["next_cursor"]
-    assert isinstance(cursor, str) and cursor
 
-    page_two = _list_runs(admin_user, task_id, cursor=cursor, limit=1)
-    page_two.raise_for_status()
-    page_two_body = page_two.json()
-    assert len(page_two_body["items"]) >= 1
-    assert page_one_body["items"][0]["id"] != page_two_body["items"][0]["id"]
+def test_blank_name_or_prompt_is_rejected_and_values_are_trimmed(
+    admin_user: DATestUser,
+) -> None:
+    assert _create_task(admin_user, name="   ").status_code == 422
+    assert _create_task(admin_user, prompt=" \n ").status_code == 422
+
+    response = _create_task(admin_user, name="  Digest  ", prompt="  Summarize  ")
+    response.raise_for_status()
+    body = response.json()
+    assert body["name"] == "Digest"
+    assert body["prompt"] == "Summarize"
+    assert _patch_task(admin_user, UUID(body["id"]), {"name": " "}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "editor_payload",
+    [
+        {"unit": "minutes", "every": 90},
+        {"unit": "hours", "every": 48},
+        {"unit": "days", "every": 40, "time_of_day": "09:00"},
+    ],
+)
+def test_an_interval_that_cron_cannot_express_is_rejected(
+    admin_user: DATestUser, editor_payload: dict[str, Any]
+) -> None:
+    assert _create_task(admin_user, editor_payload=editor_payload).status_code == 422
 
 
 def _insert_run_with_status(task_id: UUID, *statuses: ScheduledTaskRunStatus) -> UUID:

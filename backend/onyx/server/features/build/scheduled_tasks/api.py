@@ -13,12 +13,20 @@ Craft gate for the Craft pages.
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    StringConstraints,
+    model_validator,
+)
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -97,6 +105,12 @@ class _Forbid(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+TaskName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
+TaskPrompt = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
 def _dispatch_editor_payload(data: Any) -> Any:
     """``model_validator(mode="before")`` helper.
 
@@ -126,8 +140,8 @@ def _dispatch_editor_payload(data: Any) -> Any:
 class ScheduledTaskCreate(_Forbid):
     """Request body for ``POST /scheduled-tasks``."""
 
-    name: str = Field(..., min_length=1, max_length=200)
-    prompt: str = Field(..., min_length=1)
+    name: TaskName
+    prompt: TaskPrompt
     editor_mode: EditorMode
     editor_payload: EditorPayload
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
@@ -144,8 +158,8 @@ class ScheduledTaskPatch(_Forbid):
     supplied together (enforced below).
     """
 
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    prompt: str | None = Field(default=None, min_length=1)
+    name: TaskName | None = None
+    prompt: TaskPrompt | None = None
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
@@ -264,7 +278,7 @@ class UnviewedTaskCountResponse(BaseModel):
     count: int
 
 
-class RunsViewedRequest(BaseModel):
+class RunsViewedRequest(_Forbid):
     revisions: dict[UUID, PositiveInt] = Field(max_length=RUNS_VIEWED_MAX_ENTRIES)
 
 
@@ -338,21 +352,22 @@ def _enqueue_executor(run_id: UUID) -> None:
     )
 
 
-def _parse_cursor(cursor: str | None) -> datetime | None:
-    """Parse the ``cursor`` query param (ISO-8601) into a UTC datetime.
+def _encode_cursor(run: ScheduledTaskRun) -> str:
+    raw = f"{run.started_at.isoformat()}|{run.id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
 
-    ``None`` and the empty string both mean "first page".
-    """
-    if cursor is None or cursor == "":
+
+def _decode_cursor(cursor: str | None) -> tuple[datetime, UUID] | None:
+    """``None`` and the empty string both mean "first page"."""
+    if not cursor:
         return None
     try:
-        parsed = datetime.fromisoformat(cursor)
+        started_at, run_id = (
+            base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
+        )
+        return datetime_to_utc(datetime.fromisoformat(started_at)), UUID(run_id)
     except ValueError as e:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Invalid cursor (expected ISO-8601 datetime): {cursor!r}",
-        ) from e
-    return datetime_to_utc(parsed)
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid cursor") from e
 
 
 # ---------------------------------------------------------------------------
@@ -552,31 +567,25 @@ def list_task_runs(
 ) -> RunListResponse:
     """Paginated run history for a task, newest first.
 
-    ``cursor`` is the ``started_at`` (ISO-8601) of the last row returned by
-    the previous page. ``next_cursor`` is ``None`` when the last page is
+    ``cursor`` is the opaque ``next_cursor`` of the previous page. ``next_cursor`` is ``None`` when the last page is
     reached. ``unviewed`` keeps only runs with results the owner has not
     opened.
 
     Raises ``OnyxError(NOT_FOUND)`` when the task is missing, soft-deleted,
     or owned by another user (ownership check happens inside the DB op).
     """
-    cursor_dt = _parse_cursor(cursor)
     runs = list_runs_for_task(
         db_session=db_session,
         task_id=task_id,
         user_id=user.id,
-        cursor=cursor_dt,
+        cursor=_decode_cursor(cursor),
         limit=limit,
         unviewed_only=unviewed,
     )
-    next_cursor: str | None = None
-    if len(runs) == limit:
-        # Use the last row's started_at as the cursor for the next page.
-        # If the next page turns out empty, the client just stops paging.
-        next_cursor = runs[-1].started_at.isoformat()
+    # A full page may be the last one; the client stops at an empty page.
     return RunListResponse(
         items=[RunSummary.from_model(run) for run in runs],
-        next_cursor=next_cursor,
+        next_cursor=_encode_cursor(runs[-1]) if len(runs) == limit else None,
     )
 
 

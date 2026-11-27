@@ -246,7 +246,7 @@ export default function ScheduleTaskForm({
         icon={SvgClock}
         title={title}
         description={description}
-        cancel={() => navigation.go(TASKS_PATH)}
+        cancel={onBack}
         divider
         actions={[
           ...(!isEdit
@@ -357,6 +357,7 @@ export default function ScheduleTaskForm({
               payload={payload}
               onPayloadChange={setPayload}
               error={scheduleError}
+              allowAdvanced
             />
           </InputVertical>
         </Section>

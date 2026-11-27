@@ -74,6 +74,16 @@ def _start_run(run_id: UUID) -> tuple[User, UUID, str] | None:
         if run.status != ScheduledTaskRunStatus.QUEUED:
             return None
         task = run.task
+        if task.deleted:
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.CANCELLED,
+                error_class=ScheduledTaskErrorClass.USER_CANCELLED,
+                error_detail="The task was deleted before the run started",
+            )
+            db_session.commit()
+            return None
         user = task.user
         # The checks of a chat send: an owner who can no longer chat, or who
         # is over budget, fails the run before its chat exists.

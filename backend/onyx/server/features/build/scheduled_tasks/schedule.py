@@ -48,6 +48,13 @@ class _PayloadBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+_INTERVAL_MAX_EVERY: dict[IntervalUnit, int] = {
+    "minutes": 59,
+    "hours": 23,
+    "days": 31,
+}
+
+
 class IntervalPayload(_PayloadBase):
     """Validated payload for ``editor_mode == "interval"``."""
 
@@ -70,6 +77,15 @@ class IntervalPayload(_PayloadBase):
     def _days_requires_time_of_day(self) -> IntervalPayload:
         if self.unit == "days" and self.time_of_day is None:
             raise ValueError("time_of_day is required when unit == 'days'")
+        return self
+
+    @model_validator(mode="after")
+    def _every_fits_cron_step(self) -> IntervalPayload:
+        # A cron step cannot express a longer interval; reject it rather than
+        # compile a different cadence.
+        max_every = _INTERVAL_MAX_EVERY[self.unit]
+        if self.every > max_every:
+            raise ValueError(f"every must be at most {max_every} for {self.unit}")
         return self
 
 
@@ -170,13 +186,8 @@ def compile_to_cron(payload: EditorPayload) -> str:
     if isinstance(payload, IntervalPayload):
         every = payload.every
         if payload.unit == "minutes":
-            # ``*/60 * * * *`` is illegal — collapse to "every hour at :00".
-            if every > 59:
-                return "0 * * * *"
             return f"*/{every} * * * *"
         if payload.unit == "hours":
-            if every > 23:
-                return "0 0 * * *"
             return f"0 */{every} * * *"
         # unit == "days" — model validator guaranteed time_of_day is set.
         if payload.time_of_day is None:

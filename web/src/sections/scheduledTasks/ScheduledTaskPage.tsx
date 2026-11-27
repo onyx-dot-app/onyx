@@ -117,7 +117,7 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
       title={task?.name ?? t("title")}
       description={schedule}
       loading={isLoading}
-      error={error ? t("loadFailed") : false}
+      error={error && !task ? t("loadFailed") : false}
       tabs={tabs}
       tab={parseTab(searchParams.get("tab"))}
       onTabChange={(next) =>

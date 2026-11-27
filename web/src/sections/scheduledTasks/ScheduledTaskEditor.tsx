@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
 import {
@@ -98,6 +98,9 @@ function TaskForm({ task }: TaskFormProps) {
   >(null);
   const [touched, setTouched] = useState({ name: false, prompt: false });
   const [saving, setSaving] = useState(false);
+  // State updates land on the next render; the ref stops a second click
+  // in the same frame from sending a second save.
+  const savingRef = useRef(false);
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload, referenceDate);
   const nameError = name.trim() ? null : t("errors.nameRequired");
@@ -110,7 +113,8 @@ function TaskForm({ task }: TaskFormProps) {
     !saving;
 
   async function save(runNow: boolean) {
-    if (!canSave || integrations === null) return;
+    if (!canSave || integrations === null || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     const fields = {
       name: name.trim(),
@@ -138,6 +142,7 @@ function TaskForm({ task }: TaskFormProps) {
       navigation.go(scheduledTaskHref(saved.id));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("toasts.saveFailed"));
+      savingRef.current = false;
       setSaving(false);
     }
   }

@@ -193,59 +193,64 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         to_enqueue: list[UUID] = []
 
         for task in claimed_tasks:
+            task_run_ids: list[UUID] = []
             try:
-                # A fire replaces a run that still waits for approval.
-                parked = list_chat_runs_in_flight(
-                    db_session=db_session,
-                    task_id=task.id,
-                    status=ScheduledTaskRunStatus.AWAITING_APPROVAL,
-                )
-                _cancel_parked_runs(
-                    db_session,
-                    tenant_id,
-                    parked,
-                    ScheduledTaskErrorClass.SUPERSEDED_BY_NEXT_FIRE,
-                )
-                # A QUEUED prior run takes this fire: it restarts its queue
-                # age and is sent again. Duplicate sends are safe, because
-                # _start_run only starts a QUEUED run, under its row lock.
-                requeued_run_id = requeue_queued_run__no_commit(
-                    db_session, task.id, now
-                )
-                if requeued_run_id is not None:
-                    to_enqueue.append(requeued_run_id)
-                    requeued_count += 1
-                # A parked run that did not cancel (its response is still
-                # parking) stays in flight; the next fire tries again.
-                elif has_in_flight_run_for_task(
-                    db_session=db_session, task_id=task.id
-                ) or any(
-                    run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
-                    for run in parked
-                ):
-                    # A prior run is still running. Write a skipped row so the
-                    # user can see the miss, then advance next_run_at.
-                    insert_run(
+                # A savepoint per task: a failure leaves no run behind to
+                # be committed and sent with the rest of the batch.
+                with db_session.begin_nested():
+                    # A fire replaces a run that still waits for approval.
+                    parked = list_chat_runs_in_flight(
                         db_session=db_session,
                         task_id=task.id,
-                        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
-                        status=ScheduledTaskRunStatus.SKIPPED,
-                        skip_reason=ScheduledTaskSkipReason.PRIOR_IN_FLIGHT,
+                        status=ScheduledTaskRunStatus.AWAITING_APPROVAL,
                     )
-                    skipped_count += 1
-                else:
-                    run = insert_run(
-                        db_session=db_session,
-                        task_id=task.id,
-                        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
-                        status=ScheduledTaskRunStatus.QUEUED,
+                    _cancel_parked_runs(
+                        db_session,
+                        tenant_id,
+                        parked,
+                        ScheduledTaskErrorClass.SUPERSEDED_BY_NEXT_FIRE,
                     )
-                    to_enqueue.append(run.id)
-                    dispatched_count += 1
+                    # A QUEUED prior run takes this fire: it restarts its queue
+                    # age and is sent again. Duplicate sends are safe, because
+                    # _start_run only starts a QUEUED run, under its row lock.
+                    requeued_run_id = requeue_queued_run__no_commit(
+                        db_session, task.id, now
+                    )
+                    if requeued_run_id is not None:
+                        task_run_ids.append(requeued_run_id)
+                        requeued_count += 1
+                    # A parked run that did not cancel (its response is still
+                    # parking) stays in flight; the next fire tries again.
+                    elif has_in_flight_run_for_task(
+                        db_session=db_session, task_id=task.id
+                    ) or any(
+                        run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
+                        for run in parked
+                    ):
+                        # A prior run is still running. Write a skipped row so the
+                        # user can see the miss, then advance next_run_at.
+                        insert_run(
+                            db_session=db_session,
+                            task_id=task.id,
+                            trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+                            status=ScheduledTaskRunStatus.SKIPPED,
+                            skip_reason=ScheduledTaskSkipReason.PRIOR_IN_FLIGHT,
+                        )
+                        skipped_count += 1
+                    else:
+                        run = insert_run(
+                            db_session=db_session,
+                            task_id=task.id,
+                            trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+                            status=ScheduledTaskRunStatus.QUEUED,
+                        )
+                        task_run_ids.append(run.id)
+                        dispatched_count += 1
 
-                # Always advance next_run_at; otherwise the next tick
-                # would re-claim the same row.
-                advance_next_run_at(db_session=db_session, task=task, now=now)
+                    # Always advance next_run_at; otherwise the next tick
+                    # would re-claim the same row.
+                    advance_next_run_at(db_session=db_session, task=task, now=now)
+                to_enqueue.extend(task_run_ids)
             except Exception:
                 task_logger.exception(
                     "Error dispatching scheduled task %s (skipping)", task.id

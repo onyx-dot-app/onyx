@@ -184,7 +184,7 @@ export default function ScheduledTasksPage() {
     <SettingsLayouts.Root
       width="lg"
       loading={isLoading}
-      error={error ? t("loadFailed") : false}
+      error={error && !data ? t("loadFailed") : false}
     >
       <SettingsLayouts.Header title={t("title")} description={t("description")}>
         <Section

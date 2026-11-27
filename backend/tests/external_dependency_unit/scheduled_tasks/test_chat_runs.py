@@ -287,6 +287,23 @@ def test_the_next_fire_cancels_a_run_that_waits_for_approval(
     assert response.response_status == RunStatus.CANCELLED
 
 
+def test_a_fire_that_fails_to_dispatch_leaves_no_run(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner, due=True)
+    # Valid syntax with no future fire, so advancing next_run_at raises.
+    task.cron_expression = "0 0 30 2 *"
+    db_session.commit()
+
+    sent = _dispatch_with_fake_broker()
+
+    db_session.expire_all()
+    assert sent == []
+    assert _task_runs(db_session, task) == []
+
+
 def test_a_run_that_waits_a_day_for_approval_is_cancelled(
     db_session: Session,
     owner: User,
@@ -746,6 +763,27 @@ def test_the_stuck_sweep_skips_a_run_that_a_fire_is_requeuing(
     stuck = find_stuck_runs(db_session=db_session, queued_older_than=stuck_after)
     assert run.id not in {candidate.id for candidate in stuck}
     db_session.rollback()
+
+
+def test_a_queued_run_of_a_deleted_task_is_cancelled_before_its_chat(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+    )
+    task.deleted = True
+    db_session.commit()
+
+    run_scheduled_task_logic(run.id)
+
+    db_session.expire_all()
+    assert run.status == ScheduledTaskRunStatus.CANCELLED
+    assert run.chat_session_id is None
 
 
 def test_a_run_counts_its_time_from_its_start_not_its_queue_time(
