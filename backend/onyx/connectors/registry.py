@@ -52,6 +52,7 @@ from onyx.connectors.salesforce.config import SalesforceConnectorConfig
 from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.slab.config import SlabConnectorConfig
 from onyx.connectors.slack.config import SlackConnectorConfig
+from onyx.connectors.smb.config import SmbConnectorConfig
 from onyx.connectors.teams.config import TeamsConnectorConfig
 from onyx.connectors.testrail.config import TestRailConnectorConfig
 from onyx.connectors.web.config import WebConnectorConfig
@@ -365,6 +366,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.azure_datalake.connector",
         class_name="AzureDataLakeConnector",
         config_class=AzureDataLakeConnectorConfig,
+    ),
+    DocumentSource.SMB: ConnectorMapping(
+        module_path="onyx.connectors.smb.connector",
+        class_name="SmbConnector",
+        config_class=SmbConnectorConfig,
     ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
