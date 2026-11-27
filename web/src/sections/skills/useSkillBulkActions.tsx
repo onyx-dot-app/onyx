@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -77,6 +77,12 @@ export function useSkillBulkActions({
     run,
     reset,
   } = useSkillBulkSelection({ items, enablement, noun });
+
+  // A sync can remove every selected plugin; Share has nothing left to save.
+  const nothingSelected = selectedItems.length === 0;
+  useEffect(() => {
+    if (nothingSelected) setSharingOpen(false);
+  }, [nothingSelected, setSharingOpen]);
 
   const toggleActions: DropdownMenuRow[] = [];
   if (selectedItems.some((item) => !item.enabled)) {
