@@ -166,6 +166,18 @@ def _has_status_response(error: BaseException, statuses: frozenset[int]) -> bool
     )
 
 
+def http_status(error: BaseException) -> int | None:
+    """The status of the first HTTP response in the error's chain, if any."""
+    return next(
+        (
+            current.response.status_code
+            for current in _chained_errors(error)
+            if isinstance(current, HTTPStatusError)
+        ),
+        None,
+    )
+
+
 def is_unreachable_error(error: BaseException) -> bool:
     """Whether the server did not answer: no connection, or no answer in time."""
     return any(

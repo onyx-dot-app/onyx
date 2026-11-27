@@ -27,10 +27,12 @@ from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 
 
-def _http_error(status: int) -> httpx.HTTPStatusError:
+def _http_error(
+    status: int, url: str = "https://mcp.example/mcp"
+) -> httpx.HTTPStatusError:
     return httpx.HTTPStatusError(
-        "upstream rejected request",
-        request=httpx.Request("POST", "https://mcp.example/mcp"),
+        f"upstream rejected request to {url}",
+        request=httpx.Request("POST", url),
         response=httpx.Response(status),
     )
 
@@ -219,6 +221,13 @@ def test_a_call_whose_credential_no_longer_resolves_does_not_run() -> None:
         (_http_error(401), True, False, 401),
         (_wrapped_unauthorized(), True, False, 401),
         (_http_error(403), True, False, 403),
+        (_http_error(503), False, False, 503),
+        (
+            _http_error(503, "https://mcp.example/authentication/mcp"),
+            False,
+            False,
+            503,
+        ),
         (httpx.ConnectError("connection refused"), False, True, None),
         (httpx.ReadTimeout("timeout"), False, True, None),
     ],
