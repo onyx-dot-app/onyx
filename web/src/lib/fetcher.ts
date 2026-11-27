@@ -115,23 +115,24 @@ export const skipRetryOnAuthError: NonNullable<
 
 async function parseFetcherResponse<T>(res: Response): Promise<T> {
   if (res.status === 403) {
-    const redirect = new RedirectError(
-      DEFAULT_AUTH_ERROR_MSG,
-      res.status,
-      await res.json()
+    const error = await fetchErrorFrom(res, DEFAULT_AUTH_ERROR_MSG);
+    throw new RedirectError(
+      fetchErrorDetail(error) ?? error.message,
+      error.status,
+      error.info
     );
-    throw redirect;
   }
 
   if (!res.ok) {
-    const error = new FetchError(
-      DEFAULT_ERROR_MSG,
-      res.status,
-      await res.json()
-    );
+    const error = await fetchErrorFrom(res, DEFAULT_ERROR_MSG);
+    error.message = fetchErrorDetail(error) ?? error.message;
     throw error;
   }
 
+  if (res.status === 204) {
+    // SAFETY: a 204 has no body; callers of a no-content endpoint type T as null.
+    return null as T;
+  }
   return res.json();
 }
 
