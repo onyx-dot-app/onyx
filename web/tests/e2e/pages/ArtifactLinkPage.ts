@@ -31,9 +31,12 @@ export class ArtifactLinkPage {
     return this.page.getByRole("region", { name: `Preview of ${title}` });
   }
 
-  /** The page left the link: the route gave no artifact to open. */
+  /** The link shows that its file is not available, and no preview. */
   async expectNotFound(link: string, title: string): Promise<void> {
-    await expect(this.page).not.toHaveURL((url) => url.pathname === link);
+    await expect(this.page).toHaveURL((url) => url.pathname === link);
+    await expect(
+      this.page.getByText("This file is not available")
+    ).toBeVisible();
     await expect(this.filePreview(title)).toHaveCount(0);
   }
 }
