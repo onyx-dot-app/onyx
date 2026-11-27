@@ -276,3 +276,39 @@ def test_an_approval_sent_again_keeps_the_grant() -> None:
     # Another installation cannot use the spent request.
     other = _connect(user_id)
     assert relay.save_grant(_TENANT, user_id, other.installation_id, report) is None
+
+
+def test_a_stop_from_another_installation_leaves_the_grant() -> None:
+    """Chat X moved from installation A to B; A's late stop of X leaves B's
+    grant alone."""
+    user_id, chat_x = uuid4(), uuid4()
+    work, home = _connect(user_id), _connect(user_id)
+    _share(user_id, chat_x, work)
+    _share(user_id, chat_x, home)
+    relay.end_grant(
+        _TENANT, user_id, chat_x, notify=False, installation_id=work.installation_id
+    )
+    assert relay.load_grant(_TENANT, chat_x, user_id) is not None
+    relay.end_grant(
+        _TENANT, user_id, chat_x, notify=False, installation_id=home.installation_id
+    )
+    assert relay.load_grant(_TENANT, chat_x, user_id) is None
+
+
+def test_a_stop_ends_the_open_request() -> None:
+    """Stop while consent is open: a later Allow creates no grant."""
+    user_id, chat_id = uuid4(), uuid4()
+    presence = _connect(user_id)
+    request = relay.request_grant(
+        _TENANT, user_id, chat_id, presence, chat_title="Chat", account="a@example.com"
+    )
+    relay.end_grant(_TENANT, user_id, chat_id, notify=True)
+    report = GrantReport(
+        chat_session_id=chat_id,
+        request_id=request.request_id,
+        tabs=[GrantTab(id="1", title="Wiki", url="https://wiki.example/")],
+        origins=["https://wiki.example"],
+        expires_at=time.time() + 600,
+    )
+    assert relay.save_grant(_TENANT, user_id, presence.installation_id, report) is None
+    assert relay.load_grant(_TENANT, chat_id, user_id) is None

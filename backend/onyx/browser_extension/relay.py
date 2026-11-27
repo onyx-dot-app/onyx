@@ -402,21 +402,46 @@ def save_grant(
 
 
 def end_grant(
-    tenant_id: str, user_id: UUID, chat_session_id: UUID, *, notify: bool
+    tenant_id: str,
+    user_id: UUID,
+    chat_session_id: UUID,
+    *,
+    notify: bool,
+    installation_id: UUID | None = None,
 ) -> None:
-    """End the chat's grant. `notify` also tells the extension, for a stop
-    from Onyx; a stop in the extension already ended it there. An extension
-    that is not connected learns it when it reports its grant on reconnect."""
+    """End the chat's grant and its open share request. `notify` also tells
+    the extension, for a stop from Onyx; a stop in the extension already
+    ended it there, and passes its `installation_id`, so it ends only a grant
+    that it holds. An extension that is not connected learns of the end when
+    it reports its grant on reconnect."""
     cache = _cache(tenant_id)
     with cache.lock(_grant_lock_key(chat_session_id), timeout=_GRANT_LOCK_SECONDS):
-        _end_grant(cache, user_id, chat_session_id, notify=notify)
+        if installation_id is None:
+            # A stop from Onyx also ends a request still waiting for consent.
+            request = _load(cache, _request_key(chat_session_id), GrantRequest)
+            if request is not None and request.user_id == user_id:
+                cache.delete(_request_key(chat_session_id))
+        _end_grant(
+            cache,
+            user_id,
+            chat_session_id,
+            notify=notify,
+            installation_id=installation_id,
+        )
 
 
 def _end_grant(
-    cache: CacheBackend, user_id: UUID, chat_session_id: UUID, *, notify: bool
+    cache: CacheBackend,
+    user_id: UUID,
+    chat_session_id: UUID,
+    *,
+    notify: bool,
+    installation_id: UUID | None = None,
 ) -> None:
     grant = _load(cache, _grant_key(chat_session_id), ChromeGrant)
     if grant is None or grant.user_id != user_id:
+        return
+    if installation_id is not None and grant.installation_id != installation_id:
         return
     cache.delete(_grant_key(chat_session_id))
     cache.delete_if_value(

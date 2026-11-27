@@ -268,6 +268,7 @@ async def _read(
                         user.id,
                         ended.chat_session_id,
                         notify=False,
+                        installation_id=presence.installation_id,
                     )
                 case _:
                     logger.warning("Unknown Chrome extension message %r", kind)
