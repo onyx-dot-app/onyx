@@ -559,6 +559,20 @@ def test_create_refuses_a_spec_nested_too_deeply() -> None:
         validate_openapi_schema(_deeply_nested_spec())
 
 
+def test_endpoint_lines_on_a_spec_nested_too_deeply_are_refused() -> None:
+    with pytest.raises(OnyxError, match="nested too deeply"):
+        _openapi_document(
+            OpenApiConfigInput(
+                openapi_document=json.dumps(_deeply_nested_spec()),
+                base_url="https://api.example.com",
+                endpoints=["GET /pets list_pets"],
+            ),
+            None,
+            title="Deep",
+            description=None,
+        )
+
+
 def test_a_stored_spec_nested_too_deeply_still_loads() -> None:
     spec = _deeply_nested_spec()
 
