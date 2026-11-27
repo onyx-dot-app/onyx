@@ -37,6 +37,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.llm.cancellation import AgentCancelled
 from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.build.sandbox.harness_base import CommandHold
 from onyx.tools.tool_implementations.sandbox.models import (
     CommandApprovalOutcome,
     CommandApprovalRequest,
@@ -99,7 +100,7 @@ def _rows(db: Session, approval_ids: set[UUID]) -> list[ActionApproval]:
     ]
 
 
-class CommandApprovals:
+class CommandApprovals(CommandHold):
     """The proxy approvals of the command that one call waits on. Implements
     `harness_base.CommandHold`; the call calls `end` once it returns."""
 
