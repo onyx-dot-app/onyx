@@ -76,10 +76,13 @@ link here from **Known issues** and do not restate the entry.
 
 ## The old `tenant_usage` table is kept for one release
 
-- **What:** `tenant_usage` and its model `TenantUsage` stay, but nothing reads
-  or writes them. `tenant_usage_counter` replaced them.
-- **Why:** Migration `db8e1bfe4729` copies the usage into the new table. If the
-  release is rolled back, the old code still finds its usage in the old table.
+- **What:** `tenant_usage` and its model `TenantUsage` stay, but the current
+  code does not read or write them. `tenant_usage_counter` replaced them.
+- **Why:** Migration `db8e1bfe4729` copies the usage into the new table. During
+  the rolling deploy, old pods still read and write `tenant_usage`. If it is
+  gone, they fail every request that checks a usage limit, such as chat on
+  Onyx's keys, API key calls and indexing batches. Rolling back is not
+  supported.
 - **Where:** `backend/onyx/db/models.py:TenantUsage`.
 - **Ends when:** The release after the one that adds `tenant_usage_counter`
   drops the table and the model.

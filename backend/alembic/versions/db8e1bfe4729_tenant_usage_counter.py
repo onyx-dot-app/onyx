@@ -1,8 +1,8 @@
 """tenant usage counter
 
 Adds tenant_usage_counter, one row per usage type per period, and copies the
-usage in tenant_usage into it. tenant_usage stays for one release so that a
-rollback still finds its data.
+usage in tenant_usage into it. tenant_usage stays for one release because old
+pods still use it during the rolling deploy.
 
 Revision ID: db8e1bfe4729
 Revises: 00a73eb4dccf

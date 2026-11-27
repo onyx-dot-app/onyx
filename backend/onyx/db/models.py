@@ -8160,9 +8160,9 @@ class License(Base):
 
 class TenantUsage(Base):
     """
-    The old per-week usage table. Nothing reads or writes it now:
-    ``TenantUsageCounter`` replaced it. It is kept for one release so that a
-    rollback still finds its data. See TECH-DEBT.md.
+    The old per-week usage table. This release does not read or write it:
+    ``TenantUsageCounter`` replaced it. It is kept for one release because
+    old pods still use it during the rolling deploy. See TECH-DEBT.md.
     """
 
     __tablename__ = "tenant_usage"
