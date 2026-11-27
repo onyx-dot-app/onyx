@@ -74,7 +74,10 @@
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
-  flow. A dropped folder is zipped in the browser when it has SKILL.md or a
+  flow. Upload New Version on a plugin page
+  (`sections/plugins/MemberPluginDetailPage.tsx`) opens the same modal with
+  `pluginId`: it takes only a plugin zip, so a SKILL.md or a zip with no
+  plugin.json gets the plugin upload error, not the skill flow. A dropped folder is zipped in the browser when it has SKILL.md or a
   plugin.json at its top level (`lib/skills/bundleUpload.ts:prepareSkillBundleUpload`
   with `allowPlugin`).
 - **Admins** set the installation policy of a custom skill: available (the user
@@ -658,6 +661,9 @@ the app from the same rule
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
     Without it, an owner could push a skill into any group manager's scope.
+    The check includes every current group share, so the share dialog
+    (`web/src/sections/modals/skills/ShareSkillModal.tsx`) makes all group shares read-only for a scoped
+    manager while one is outside their scope.
     It compares against the stored plugin group shares (rows with a
     permission), and the privacy check uses the stored visibility and the
     request, so a public-to-private change in the same request cannot get past
@@ -920,8 +926,13 @@ the app from the same rule
     plugin with the same name that the user authored and that is not a skill:
     the user's uploads first, then the Organization library
     (`db/plugin.py:find_upload_target`). A new version of another user's
-    plugin needs Upload New Version (`plugin_id`);
-    `save_as_new` makes a new plugin with the next free name. The save stores
+    plugin needs Upload New Version; `save_as_new` makes a new plugin with the
+    next free name. A `plugin_id` form field (Upload New Version) binds the
+    upload to that plugin (`_bound_upload_target`): the user must edit it
+    (`fetch_editable_skill(..., any_plugin=True)`), a synced plugin is refused
+    (`refuse_if_synced`), and the manifest name must be the plugin name or the
+    plugin.json name of its current version (Save as New and ownership
+    transfer rename only the plugin); another name is `INVALID_INPUT`. The save stores
     the bundle, then takes the user row lock and finds the target under it, so
     two uploads of one new name make one plugin with two versions. A new version
     keeps shares, publishing and user choices. An upload with the files of
@@ -929,7 +940,8 @@ the app from the same rule
     with a skill name that another plugin the user runs holds is saved off;
     the preview and the save name those plugins (`name_conflicts`). A plugin
     the user turned on that loses a skill name gets `name_held_by`, the
-    plugins that hold it (`db/skill.py:skill_user_states`); a 409
+    plugins ahead of it on a shared name, also one that loses another name
+    (`db/skill.py:skill_user_states`); a 409
     `SKILL_NAME_CONFLICT` on a turn-on has `conflict_names`.
     `GET /skills/{id}/plugin-skill?path=` returns one skill's SKILL.md
     instructions in the version the user runs. `GET /skills` marks each custom
@@ -947,8 +959,8 @@ the app from the same rule
     the user's Craft sessions when one changed.
     The on/off switch and the name order stay per plugin: a plugin that
     loses any skill name does not load.
-26. `write-skill-limit` **A user's own write never moves that user past 500
-    MB or 5,000 files of skills.** Limits are `skills/limits.py` constants. A
+26. `write-skill-limit` **A user's own write, other than a turn-off, never
+    moves that user past 500 MB or 5,000 files of skills.** Limits are `skills/limits.py` constants. A
     user's total is the recorded size (`plugin_version.unpacked_size_bytes`,
     `file_count`) of the version the user runs, for each plugin on for the user
     that can run (`db/plugin_access.py:skill_usage_by_user`), plus the built-ins
@@ -964,7 +976,10 @@ the app from the same rule
     (settings, shares, Default access, publish, approve, transfer), app connect
     and group membership are never checked: the run-time rule and the admin
     banner handle a user they put past the limit. A user already over is not
-    refused.
+    refused. A turn-off is never refused, even when it lets a larger
+    same-name plugin win the name and moves the user past the limit
+    (`db/skill.py:set_skill_enabled_for_user`). Usage counts only plugins
+    that win their skill names, so `check_skill_limit` compares whole totals.
 27. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
     and 10,000 files.** `skills/push.py:build_user_skills_payload` applies it,
     so session start (`build_managed_content_payload`) and the push both do.

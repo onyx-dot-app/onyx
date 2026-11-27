@@ -126,7 +126,10 @@ function PluginPreview({
           variant="warning"
           outerPadding={1}
           innerPadding={1}
-          title={t("willBeOff", { names: preview.name_conflicts.join(", ") })}
+          title={t(
+            preview.target.kind === "new_version" ? "willClash" : "willBeOff",
+            { names: preview.name_conflicts.join(", ") }
+          )}
         />
       )}
       {preview.skills.length > 0 && (

@@ -17349,7 +17349,9 @@
           "publishOff": {
             "description": "Un administrateur a désactivé la publication dans l’organisation. Demandez à un administrateur de publier ce plugin."
           }
-        }
+        },
+        "groupsLoadFailed": "Onyx n'a pas pu charger vos groupes, les partages de groupe ne peuvent donc pas changer. Fermez et rouvrez cette boîte de dialogue pour réessayer.",
+        "groupSharesLocked": "Cette compétence est partagée avec un groupe que vous ne gérez pas, vous ne pouvez donc pas modifier ses partages de groupe. Demandez à un gestionnaire de compétences de l'organisation."
       },
       "tabs": {
         "details": "Détails",
@@ -17458,7 +17460,8 @@
         "disableFailed": "Échec de la désactivation de {name}",
         "enableFailed": "Échec de l'activation de {name}",
         "refreshFailed": "{name} a été mise à jour, mais la liste des compétences n'a pas pu être actualisée.",
-        "listRefreshFailed": "La liste des compétences n'a pas pu être actualisée. Rechargez la page pour voir la modification."
+        "listRefreshFailed": "La liste des compétences n'a pas pu être actualisée. Rechargez la page pour voir la modification.",
+        "requiredHolder": "Impossible d'activer {name}. Une compétence obligatoire porte déjà ce nom."
       }
     },
     "sections": {
@@ -17501,7 +17504,8 @@
       "upload": {
         "error": {
           "readFailed": "Impossible de lire le fichier téléversé.",
-          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}"
+          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}",
+          "unsupportedFile": "{name} n'est pas un fichier ZIP ou SKILL.md. Importez un ZIP, un fichier SKILL.md ou un dossier de skill."
         }
       }
     },
@@ -17534,7 +17538,8 @@
       "publishWarning": {
         "title": "La publication est irréversible",
         "description": "Après l'application, tout le monde dans l'organisation peut utiliser les compétences sélectionnées. Les compétences publiées ne peuvent plus redevenir privées. Seul un administrateur peut les supprimer."
-      }
+      },
+      "skipped": "{count, plural, one {# compétence ne peut pas être activée ou désactivée par vous et a été ignorée} other {# compétences ne peuvent pas être activées ou désactivées par vous et ont été ignorées}}"
     },
     "reviewRequests": {
       "title": "Demandes de publication",
@@ -17836,6 +17841,7 @@
         "newPlugin": "Nouveau plugin : {name}"
       },
       "willBeOff": "Le plugin est enregistré désactivé. {names} a déjà une compétence du même nom.",
+      "willClash": "{names} a déjà une compétence du même nom. Une seule d'entre elles peut être activée.",
       "saveAsNew": {
         "label": "Enregistrer comme Nouveau Plugin",
         "description": "Le plugin qui porte ce nom reste inchangé."
@@ -17867,7 +17873,8 @@
         "newPlugin": "{name} ajouté.",
         "newVersion": "{name} mis à jour vers la version Onyx {version}.",
         "unchanged": "Aucun changement. {name} est déjà à la version Onyx {version}.",
-        "off": "{name} ajouté. Il est désactivé car {names} a déjà une compétence du même nom."
+        "off": "{name} ajouté. Il est désactivé car {names} a déjà une compétence du même nom.",
+        "clash": "{name} a été mis à jour vers la version Onyx {version}. {names} a déjà une compétence du même nom, une seule d'entre elles est donc activée."
       }
     },
     "turnOn": {
@@ -18048,7 +18055,8 @@
       "apply": "{count, plural, one {Appliquer à # plugin} other {Appliquer à # plugins}}",
       "publishWarning": {
         "description": "Après l'application, tout le monde dans l'organisation peut utiliser les plugins sélectionnés. Les plugins publiés ne peuvent plus redevenir privés. Seul un administrateur peut les supprimer."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin ne peut pas être activé ou désactivé par vous et a été ignoré} other {# plugins ne peuvent pas être activés ou désactivés par vous et ont été ignorés}}"
     }
   },
   "integrations": {
@@ -18374,7 +18382,7 @@
       },
       "confirmDelete": {
         "title": "Supprimer « {name} » ?",
-        "description": "La tâche cesse de s'exécuter et son historique d'exécution est supprimé.",
+        "description": "La tâche ne s’exécute plus. Les chats de ses exécutions passées sont conservés.",
         "submit": "Supprimer"
       }
     },
@@ -18387,7 +18395,8 @@
       "markAllViewed": "Tout marquer comme vu",
       "markAllViewedFailed": "Impossible de marquer les exécutions comme vues. Réessayez.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Exécuter une fois} other {Planification}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Annulée : l'exécution suivante a démarré avant que quiconque réponde à l'approbation.} approval_timeout {Annulée : personne n'a répondu à l'approbation dans les 24 heures.} user_cancelled {Arrêtée par vous.} agent_permission_required {Une action nécessitait une approbation.} agent_exception {Échec : l’exécution a rencontré une erreur.} stuck {Échec : l’exécution n’a pas démarré à temps.} timeout {Échec : l’exécution a atteint la limite d’une heure.} other {Échouée : {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Annulée : l'exécution suivante a démarré avant que quiconque réponde à l'approbation.} approval_timeout {Annulée : personne n'a répondu à l'approbation dans les 24 heures.} user_cancelled {Arrêtée par vous.} agent_permission_required {Une action nécessitait une approbation.} agent_exception {Échec : l’exécution a rencontré une erreur.} stuck {Échec : l’exécution n’a pas démarré à temps.} timeout {Échec : l’exécution a atteint la limite d’une heure.} chat_deleted {Annulée : le chat de cette exécution a été supprimé.} owner_cannot_chat {Échec : vous ne pouvez plus discuter, la tâche est donc en pause.} rate_limited {Échec : la limite d’utilisation a été atteinte.} other {Échouée : {errorClass}}}",
+      "errorDetail": "Échec : {detail}",
       "columns": {
         "started": "Début",
         "status": "Statut",
@@ -18425,7 +18434,8 @@
         "title": "Exécuter selon la planification",
         "label": "Exécuter {name} selon la planification"
       },
-      "menu": "Plus d’actions"
+      "menu": "Plus d’actions",
+      "notFound": "Cette tâche planifiée a été supprimée ou appartient à un autre utilisateur."
     },
     "editor": {
       "newTitle": "Nouvelle tâche planifiée",
@@ -18437,7 +18447,8 @@
       "saveAndRun": "Enregistrer et exécuter maintenant",
       "errors": {
         "nameRequired": "Saisissez un nom.",
-        "promptRequired": "Saisissez un prompt."
+        "promptRequired": "Saisissez un prompt.",
+        "tooLong": "Utilisez {max, number} caractères au maximum."
       },
       "toasts": {
         "created": "Tâche planifiée créée.",

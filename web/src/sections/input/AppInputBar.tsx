@@ -655,6 +655,23 @@ const AppInputBar = React.memo(
         setMessage(unsent.message, unsent.mentions);
         setCurrentMessageFiles(unsent.files);
         setCursorToEnd();
+        // A send that created the chat moved to its URL, so the composer
+        // switches to that chat's draft next and clears the input. The
+        // message goes into that draft too.
+        const sessionId = useChatSessionStore.getState().currentSessionId;
+        if (
+          composerScope &&
+          draftOwner &&
+          sessionId &&
+          sessionId !== draftConversation
+        ) {
+          writeDraft(
+            draftKey("chat", `${draftOwner}:${sessionId}`),
+            toStoredChatDraft(unsent, unsent.files),
+            isChatDraftEmpty,
+            "local"
+          );
+        }
       },
       focus: () => {
         inputRef.current?.focus();

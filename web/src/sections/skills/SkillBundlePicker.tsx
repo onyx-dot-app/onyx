@@ -9,6 +9,7 @@ import { cn } from "@opal/utils";
 import { useDropzone } from "react-dropzone";
 import {
   prepareSkillBundleUpload,
+  SkillUnsupportedFileError,
   SkillFolderRootError,
   type PreparedSkillBundle,
   type SkillUploadFile,
@@ -65,9 +66,11 @@ export default function SkillBundlePicker({
         onError(
           error instanceof SkillFolderRootError
             ? t("upload.error.folderRoot", { upload: error.upload })
-            : error instanceof Error
-              ? error.message
-              : t("upload.error.readFailed")
+            : error instanceof SkillUnsupportedFileError
+              ? t("upload.error.unsupportedFile", { name: error.fileName })
+              : error instanceof Error
+                ? error.message
+                : t("upload.error.readFailed")
         );
       } finally {
         setPreparing(false);

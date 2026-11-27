@@ -19,6 +19,7 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 import {
+  isDisableTarget,
   useSkillBulkSelection,
   type BulkSkillNoun,
   type SkillEnablement,
@@ -86,23 +87,23 @@ export function useSkillBulkActions({
   }, [nothingSelected, setSharingOpen]);
 
   const toggleActions: DropdownMenuRow[] = [];
-  if (selectedItems.some((item) => !item.enabled)) {
+  if (toggleableItems.some((item) => !item.enabled)) {
     toggleActions.push({
       kind: "action",
       id: "enable",
       icon: SvgCheckCircle,
       title: bulkCopy("enable"),
-      disabled: locked || toggleableItems.length === 0,
+      disabled: locked,
       onSelect: () => void run("enable"),
     });
   }
-  if (selectedItems.some((item) => item.enabled)) {
+  if (toggleableItems.some(isDisableTarget)) {
     toggleActions.push({
       kind: "action",
       id: "disable",
       icon: SvgXCircle,
       title: bulkCopy("disable"),
-      disabled: locked || toggleableItems.length === 0,
+      disabled: locked,
       onSelect: () => void run("disable"),
     });
   }

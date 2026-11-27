@@ -13,7 +13,7 @@ jest.mock("@/lib/scheduledTasks/svc", () => ({
   updateScheduledTask: jest.fn(),
 }));
 jest.mock("@/lib/scheduledTasks/hooks", () => ({
-  revalidateChatScheduledRunViews: jest.fn().mockResolvedValue(undefined),
+  revalidateScheduledRunViews: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
@@ -21,9 +21,46 @@ jest.mock("swr", () => ({
   default: () => ({ data: undefined, error: undefined, isLoading: false }),
   mutate: jest.fn().mockResolvedValue(undefined),
 }));
+// Switches modes as the real editor does: the mode first, then a default
+// payload for the new mode.
 jest.mock("@/app/craft/v1/tasks/components/ScheduleEditor", () => ({
   __esModule: true,
-  default: () => null,
+  default: function MockScheduleEditor({
+    payload,
+    onModeChange,
+    onPayloadChange,
+  }: {
+    payload: unknown;
+    onModeChange: (mode: string) => void;
+    onPayloadChange: (payload: unknown) => void;
+  }) {
+    return (
+      <>
+        <output data-testid="schedule-payload">
+          {JSON.stringify(payload)}
+        </output>
+        <button onClick={() => onPayloadChange({ unit: "minutes", every: 15 })}>
+          every 15 minutes
+        </button>
+        <button
+          onClick={() => {
+            onModeChange("daily_weekly");
+            onPayloadChange({ weekdays: [1], time: "09:00" });
+          }}
+        >
+          daily
+        </button>
+        <button
+          onClick={() => {
+            onModeChange("interval");
+            onPayloadChange({ unit: "hours", every: 1 });
+          }}
+        >
+          interval
+        </button>
+      </>
+    );
+  },
 }));
 const mockPolicyUrls: string[] = [];
 jest.mock("@/app/craft/v1/tasks/components/TaskActionPolicies", () => ({
@@ -58,8 +95,10 @@ it("creates a task with every integration off and runs it", async () => {
     next_run_at: null,
     next_runs: [],
     last_run: null,
-    unviewed_run_count: 0,
     integrations: [],
+    human_readable_schedule: "Every hour",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
   });
   render(<ScheduledTaskEditor />);
 
@@ -81,4 +120,64 @@ it("creates a task with every integration off and runs it", async () => {
   await waitFor(() =>
     expect(window.location.pathname).toBe("/app/scheduled-tasks/task")
   );
+});
+
+it("keeps a mode's schedule when the user switches modes and back", async () => {
+  const user = setupUser();
+  render(<ScheduledTaskEditor />);
+
+  await user.click(screen.getByRole("button", { name: "every 15 minutes" }));
+  await user.click(screen.getByRole("button", { name: "daily" }));
+  expect(screen.getByTestId("schedule-payload")).toHaveTextContent(
+    JSON.stringify({ weekdays: [1], time: "09:00" })
+  );
+  await user.click(screen.getByRole("button", { name: "interval" }));
+
+  expect(screen.getByTestId("schedule-payload")).toHaveTextContent(
+    JSON.stringify({ unit: "minutes", every: 15 })
+  );
+});
+
+it("says when a name is too long and does not save", async () => {
+  const user = setupUser();
+  render(<ScheduledTaskEditor />);
+
+  const name = screen.getByTestId("scheduled-task-name");
+  await user.click(name);
+  await user.paste("x".repeat(201));
+  await user.type(screen.getByTestId("scheduled-task-prompt"), "Summarize");
+
+  expect(screen.getByText("Use 200 characters or fewer.")).toBeInTheDocument();
+  expect(screen.getByTestId("save-scheduled-task")).toBeDisabled();
+});
+
+it("counts an emoji in a name as one character, as the server does", async () => {
+  const user = setupUser();
+  render(<ScheduledTaskEditor />);
+
+  await user.click(screen.getByTestId("scheduled-task-name"));
+  await user.paste("😀".repeat(200));
+  await user.type(screen.getByTestId("scheduled-task-prompt"), "Summarize");
+
+  expect(
+    screen.queryByText("Use 200 characters or fewer.")
+  ).not.toBeInTheDocument();
+});
+
+it("locks the form while a save is pending", async () => {
+  const user = setupUser();
+  jest.mocked(createScheduledTask).mockReturnValue(new Promise(() => {}));
+  render(<ScheduledTaskEditor />);
+
+  expect(screen.getByTestId("scheduled-task-form")).not.toHaveAttribute(
+    "inert"
+  );
+  await user.type(screen.getByTestId("scheduled-task-name"), "Digest");
+  await user.type(screen.getByTestId("scheduled-task-prompt"), "Summarize");
+  await user.click(screen.getByTestId("save-scheduled-task"));
+
+  expect(screen.getByTestId("scheduled-task-form")).toHaveAttribute("inert");
+  expect(
+    screen.getByTestId("schedule-payload").closest("[inert]")
+  ).not.toBeNull();
 });

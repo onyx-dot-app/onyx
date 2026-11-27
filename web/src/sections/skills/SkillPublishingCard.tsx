@@ -117,6 +117,7 @@ export default function SkillPublishingCard() {
           title={t("title")}
           description={descriptions[policy]}
           withLabel
+          responsive
         >
           <InputSingleSelect
             value={policy}
@@ -140,6 +141,7 @@ export default function SkillPublishingCard() {
           title={t("defaultAccess.title")}
           description={t("defaultAccess.description")}
           withLabel
+          responsive
         >
           {defaultAccessError ? (
             // A failed read shows no level rather than a wrong one.
