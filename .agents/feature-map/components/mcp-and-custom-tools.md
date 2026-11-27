@@ -439,7 +439,9 @@ cannot save Always allow on an action whose admin value is not Ask.
   update that changes the server URL or the transport write MCP actions
   (`backend/onyx/integrations/service.py:_reload_mcp_actions`). If the changed server does not answer
   with the acting user's credential, the update saves no actions until a
-  refresh, so the old server's actions do not stay. No code reads MCP `tool`
+  refresh, so the old server's actions do not stay. Their admin policies stay
+  and apply again when a refresh finds the actions. A refresh that the server
+  answers with no actions deletes those policies. No code reads MCP `tool`
   rows.
 - Agents: `PersonaUpsertRequest.integrations` replaces the
   `persona__integration` links (null keeps them). An editor adds only an

@@ -438,7 +438,7 @@ def _allowed_methods(
     return list(_TOKEN_METHODS)
 
 
-def _check_server_url(server_url: str) -> None:
+def _check_server_url(server_url: str, *, allow_relative: bool = False) -> None:
     try:
         parsed = urlparse(server_url)
     except ValueError as e:
@@ -452,6 +452,8 @@ def _check_server_url(server_url: str) -> None:
             OnyxErrorCode.VALIDATION_ERROR,
             f"Server URL '{server_url}' cannot have a query or a fragment.",
         )
+    if allow_relative and not parsed.scheme:
+        return
     try:
         # No DNS at save time; each call resolves and checks again.
         validate_api_app_url(server_url, resolve_dns=False)
@@ -623,8 +625,7 @@ def _checked_import(view: OpenApiConfigView) -> OpenApiConfigView:
     # The client hides the base URL field for the single server URL of a
     # spec, so the admin cannot correct it after the import. The client
     # resolves a relative URL against the spec URL, which Onyx fetched.
-    if urlparse(view.base_url.strip()).scheme:
-        _check_server_url(view.base_url)
+    _check_server_url(view.base_url.strip(), allow_relative=True)
     return view
 
 
@@ -1334,7 +1335,7 @@ def _reload_mcp_actions(
 ) -> None:
     """The actions of a changed MCP server. A server that does not answer
     with the current credential leaves no actions until a refresh, so the
-    old server's actions do not stay."""
+    old server's actions do not stay. Their policies stay for the refresh."""
     try:
         with _reaching(integration.name):
             actions = fetch_mcp_actions(integration, user, db_session)
@@ -1344,7 +1345,14 @@ def _reload_mcp_actions(
             integration.id,
             error.detail,
         )
-        actions = []
+        replace_integration_actions__no_commit(
+            integration.id,
+            IntegrationActionSource.MCP,
+            [],
+            db_session,
+            keep_policies=True,
+        )
+        return
     replace_integration_actions__no_commit(
         integration.id, IntegrationActionSource.MCP, actions, db_session
     )

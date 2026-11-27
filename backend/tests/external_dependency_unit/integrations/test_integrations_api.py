@@ -2245,6 +2245,56 @@ def test_the_policy_of_a_removed_action_does_not_come_back(
     )
 
 
+def test_a_server_that_does_not_answer_after_an_edit_keeps_the_policies(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    from onyx.db.enums import MCPTransport
+    from onyx.integrations.models import EffectivePolicy
+
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("tool",),
+    )
+    created.add(integration.id)
+    admin_api.set_integration_actions(
+        integration.id,
+        IntegrationActionsUpdate(actions={"tool": EffectivePolicy.BLOCKED}),
+        admin,
+        db_session,
+    )
+
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        side_effect=ConnectError("down"),
+    ):
+        admin_api.update_integration(
+            integration.id,
+            IntegrationUpdate(
+                config=McpServerConfigInput(
+                    server_url="https://mcp.example.com/mcp",
+                    transport=MCPTransport.SSE,
+                )
+            ),
+            admin,
+            db_session,
+        )
+    assert list_integration_actions(integration.id, db_session) == []
+
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        return_value=[_mcp_spec("tool")],
+    ):
+        actions = admin_api.refresh_integration_actions(
+            integration.id, admin, db_session
+        )
+
+    assert [(a.key, a.admin_policy) for a in actions.actions] == [
+        ("tool", EffectivePolicy.BLOCKED)
+    ]
+
+
 def test_a_switch_from_oauth_to_no_sign_in_drops_the_token_template(
     db_session: Session, admin: User, created: Created
 ) -> None:
@@ -2303,6 +2353,14 @@ def test_a_spec_with_a_blocked_server_url_is_refused_on_import() -> None:
         OpenApiEndpointsRequest(openapi_document=json.dumps(relative))
     )
     assert view.base_url == "/api/v3"
+
+    for url in ("/api?version=1", "https://[broken"):
+        bad = {**OPENAPI_SPEC, "servers": [{"url": url}]}
+        with pytest.raises(OnyxError) as error:
+            import_openapi_document(
+                OpenApiEndpointsRequest(openapi_document=json.dumps(bad))
+            )
+        assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR, url
 
 
 def test_a_key_is_trimmed_and_a_key_that_a_header_cannot_carry_is_refused(
