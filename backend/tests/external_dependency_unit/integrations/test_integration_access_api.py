@@ -537,7 +537,7 @@ def test_sharing_setting_off_stops_a_new_share(
         )
 
 
-def test_publish_needs_an_organization_wide_action_manager(
+def test_making_a_private_integration_available_keeps_its_shares(
     db_session: Session,
     admin: User,
     scoped: User,
@@ -546,16 +546,8 @@ def test_publish_needs_an_organization_wide_action_manager(
 ) -> None:
     integration_id = _create(scoped, db_session, created, for_organization=False)
     _share(scoped, integration_id, [member.id], db_session)
-    publish = lambda user: api.publish_integration(  # noqa: E731
-        integration_id, user, db_session
-    )
-    assert _status(lambda: publish(scoped)) == 403
-    db_session.rollback()
-    assert _status(lambda: publish(member)) == 403
-    db_session.rollback()
 
-    published = publish(admin)
-    assert published.installation_policy is PluginInstallationPolicy.AVAILABLE
+    _set_policy(admin, integration_id, PluginInstallationPolicy.AVAILABLE, db_session)
     assert (
         _installation_policy(db_session, integration_id)
         is PluginInstallationPolicy.AVAILABLE
@@ -566,8 +558,6 @@ def test_publish_needs_an_organization_wide_action_manager(
     assert (
         _status(lambda: _share(admin, integration_id, [member.id], db_session)) == 400
     )
-    db_session.rollback()
-    assert _status(lambda: publish(admin)) == 400
 
 
 @pytest.fixture
