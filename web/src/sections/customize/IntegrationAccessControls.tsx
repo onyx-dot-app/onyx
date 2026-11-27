@@ -18,12 +18,15 @@ import {
   publishIntegration,
   setIntegrationEnabled,
 } from "@/lib/integrations/svc";
+import { connectAction } from "@/lib/integrations/connect";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Permission } from "@/lib/types";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
-import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
+import IntegrationConnectButton, {
+  useIntegrationConnect,
+} from "@/sections/plugins/IntegrationConnectButton";
 import ShareIntegrationModal from "@/sections/plugins/ShareIntegrationModal";
 
 /** Why the user cannot use an integration, or null when the user can. */
@@ -46,14 +49,30 @@ export function useIntegrationStateCopy() {
 
 interface IntegrationSwitchProps {
   integration: MemberIntegration;
+  /** Where the OAuth callback returns when no waiting tab closes it. */
+  returnPath: string;
 }
 
-/** The user's on/off switch of an integration. On means on everywhere. */
-export function IntegrationSwitch({ integration }: IntegrationSwitchProps) {
+/** The user's on/off switch of an integration. On means on everywhere.
+ * Turning on an integration that needs a sign-in starts the sign-in first,
+ * and the switch stays off when the user cancels it. */
+export function IntegrationSwitch({
+  integration,
+  returnPath,
+}: IntegrationSwitchProps) {
   const t = useTranslations("integrations.memberState");
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const required = integration.access.installation_policy === "REQUIRED";
+
+  const signIn = useIntegrationConnect(integration, {
+    returnPath,
+    onConnected: () => void change(true),
+    // The sign-in leaves this page, so turn the integration on first.
+    onRedirect: async () => {
+      await setIntegrationEnabled(integration.id, true);
+    },
+  });
 
   async function change(enabled: boolean) {
     setBusy(true);
@@ -67,6 +86,11 @@ export function IntegrationSwitch({ integration }: IntegrationSwitchProps) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function toggle(enabled: boolean) {
+    if (enabled && connectAction(integration) !== null) void signIn.connect();
+    else void change(enabled);
   }
 
   return (
@@ -83,11 +107,12 @@ export function IntegrationSwitch({ integration }: IntegrationSwitchProps) {
           <InputSwitch
             aria-label={t("switch.label", { name: integration.name })}
             checked={integration.access.user_enabled}
-            disabled={busy || required}
-            onCheckedChange={(checked) => void change(checked)}
+            disabled={busy || signIn.busy || required}
+            onCheckedChange={toggle}
           />
         </Section>
       </Tooltip>
+      {signIn.modal}
     </Section>
   );
 }
@@ -134,7 +159,7 @@ export function IntegrationStateControl({
           returnPath={returnPath}
         />
       )}
-      <IntegrationSwitch integration={integration} />
+      <IntegrationSwitch integration={integration} returnPath={returnPath} />
     </Section>
   );
 }

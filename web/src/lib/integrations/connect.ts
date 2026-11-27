@@ -48,7 +48,7 @@ export function needsAdmin(integration: MemberIntegration): boolean {
 export async function connectWithOAuth(
   start: (returnPath: string) => Promise<string>,
   returnPath: string,
-  beforeRedirect?: () => void
+  beforeRedirect?: () => void | Promise<void>
 ): Promise<"connected" | "redirected"> {
   try {
     await launchOAuth(() => start(returnPath));
@@ -60,7 +60,7 @@ export async function connectWithOAuth(
     )
       throw error;
     const url = await start(returnPath);
-    beforeRedirect?.();
+    await beforeRedirect?.();
     loadPage(url);
     return "redirected";
   }

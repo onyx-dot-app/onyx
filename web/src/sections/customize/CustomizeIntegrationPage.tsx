@@ -107,7 +107,10 @@ export default function CustomizeIntegrationPage({
                       }
                       padding={0}
                       rightChildren={
-                        <IntegrationSwitch integration={integration} />
+                        <IntegrationSwitch
+                          integration={integration}
+                          returnPath={returnPath}
+                        />
                       }
                     />
                   )}

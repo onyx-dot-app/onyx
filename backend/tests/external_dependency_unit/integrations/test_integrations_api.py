@@ -371,6 +371,8 @@ def test_create_preset_keeps_client_and_host_on_the_oauth_client(
     assert app.organization_credentials.get_value(apply_mask=False) == {}
     assert any("acme" in pattern for pattern in app.upstream_url_patterns)
     assert len(list_integration_actions(detail.id, db_session)) > 0
+    presets = admin_api.list_integration_presets(admin, db_session)
+    assert "ZENDESK" not in {preset.id for preset in presets}
 
 
 _CUSTOM_HEADERS = {"Authorization": "Bearer {token}"}
@@ -1779,19 +1781,22 @@ def _linear_create() -> IntegrationCreate:
 def test_cloud_protects_onyx_managed_presets(
     db_session: Session, admin: User, created: Created
 ) -> None:
+    linear = _linear_create().config
+    assert isinstance(linear, PresetConfigInput)
+    assert linear.preset_id in {
+        preset.id for preset in admin_api.list_integration_presets(admin, db_session)
+    }
+    with patch("onyx.integrations.service.MULTI_TENANT", True):
+        assert linear.preset_id not in {
+            preset.id
+            for preset in admin_api.list_integration_presets(admin, db_session)
+        }
+
     detail = admin_api.create_integration(_linear_create(), admin, db_session)
     created.add(detail.id)
     assert detail.can_delete is True
 
-    linear = _linear_create().config
-    assert isinstance(linear, PresetConfigInput)
-    assert linear.preset_id in {
-        preset.id for preset in admin_api.list_integration_presets(admin)
-    }
     with patch("onyx.integrations.service.MULTI_TENANT", True):
-        assert linear.preset_id not in {
-            preset.id for preset in admin_api.list_integration_presets(admin)
-        }
         with pytest.raises(OnyxError) as error:
             admin_api.create_integration(_linear_create(), admin, db_session)
         assert error.value.error_code is OnyxErrorCode.INVALID_INPUT

@@ -140,6 +140,100 @@ test("the member turns an integration on", async () => {
   );
 });
 
+test("turning on an integration with no sign-in opens the sign-in; Cancel keeps it off", async () => {
+  const fetchMock = open(
+    makeMemberIntegration({
+      auth_method: "api_key",
+      credential_fields: [{ key: "token", label: "API Token", secret: true }],
+      access: makeAccess({
+        state: "turn_on",
+        user_choice: null,
+        user_enabled: false,
+      }),
+    }),
+    { "PUT /api/integrations/1/enabled": makeMemberIntegration() }
+  );
+  const u = user();
+  await u.click(await screen.findByRole("switch", { name: "Use Linear" }));
+  const dialog = await screen.findByRole("dialog");
+  await u.click(
+    within(dialog).getByRole("button", {
+      name: messages.plugins.member.credentials.cancel.label,
+    })
+  );
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  );
+  expect(() =>
+    requestBody(fetchMock, "PUT", "/api/integrations/1/enabled")
+  ).toThrow();
+  expect(screen.getByRole("switch", { name: "Use Linear" })).toHaveAttribute(
+    "aria-checked",
+    "false"
+  );
+});
+
+test("turning on an integration with no sign-in turns it on after the API key connects", async () => {
+  const fetchMock = open(
+    makeMemberIntegration({
+      auth_method: "api_key",
+      credential_fields: [{ key: "token", label: "API Token", secret: true }],
+      access: makeAccess({
+        state: "turn_on",
+        user_choice: null,
+        user_enabled: false,
+      }),
+    }),
+    {
+      "PUT /api/integrations/1/connection": {
+        state: "connected",
+        reason: null,
+      },
+      "PUT /api/integrations/1/enabled": makeMemberIntegration(),
+    }
+  );
+  const u = user();
+  await u.click(await screen.findByRole("switch", { name: "Use Linear" }));
+  const dialog = await screen.findByRole("dialog");
+  await u.type(within(dialog).getByLabelText("API Token"), "secret-1");
+  await u.click(
+    within(dialog).getByRole("button", {
+      name: messages.plugins.member.credentials.submit.label,
+    })
+  );
+  await waitFor(() =>
+    expect(
+      requestBody(fetchMock, "PUT", "/api/integrations/1/enabled")
+    ).toEqual({ enabled: true })
+  );
+});
+
+test("turning on an OAuth integration turns it on before a blocked tab moves the sign-in here", async () => {
+  jest.spyOn(window, "open").mockReturnValue(null);
+  const fetchMock = open(
+    makeMemberIntegration({
+      access: makeAccess({
+        state: "turn_on",
+        user_choice: null,
+        user_enabled: false,
+      }),
+    }),
+    {
+      "POST /api/integrations/1/oauth/start": {
+        authorization_url: AUTHORIZATION_URL,
+      },
+      "PUT /api/integrations/1/enabled": makeMemberIntegration(),
+    }
+  );
+  await user().click(await screen.findByRole("switch", { name: "Use Linear" }));
+  await waitFor(() =>
+    expect(mockLoadPage).toHaveBeenCalledWith(AUTHORIZATION_URL)
+  );
+  expect(requestBody(fetchMock, "PUT", "/api/integrations/1/enabled")).toEqual({
+    enabled: true,
+  });
+});
+
 test("a Required integration cannot be turned off", async () => {
   open(
     makeMemberIntegration({
