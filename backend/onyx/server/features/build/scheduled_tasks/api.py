@@ -38,6 +38,7 @@ from onyx.db.scheduled_task import (
     get_run_of_chat_session,
     get_scheduled_task,
     insert_run,
+    latest_runs_for_tasks,
     list_runs_for_task,
     list_scheduled_tasks_for_user,
     mark_runs_viewed,
@@ -221,9 +222,7 @@ class ScheduledRunContextResponse(BaseModel):
         )
 
 
-class ScheduledTaskListItem(BaseModel):
-    """Row in ``GET /scheduled-tasks``."""
-
+class _ScheduledTaskBase(BaseModel):
     id: str
     name: str
     human_readable_schedule: str
@@ -232,29 +231,24 @@ class ScheduledTaskListItem(BaseModel):
     status: ScheduledTaskStatus
     next_run_at: datetime | None
     last_run: RunSummary | None
-    unviewed_run_count: int
     created_at: datetime
     updated_at: datetime
 
 
-class ScheduledTaskDetail(BaseModel):
+class ScheduledTaskListItem(_ScheduledTaskBase):
+    """Row in ``GET /scheduled-tasks``."""
+
+    unviewed_run_count: int
+
+
+class ScheduledTaskDetail(_ScheduledTaskBase):
     """Response for ``GET /scheduled-tasks/{id}`` and the mutating endpoints
     that return the full task.
     """
 
-    id: str
-    name: str
     prompt: str
-    human_readable_schedule: str
-    cron_expression: str
-    editor_mode: str
-    status: ScheduledTaskStatus
-    next_run_at: datetime | None
     next_runs: list[datetime]
-    last_run: RunSummary | None
     integrations: list[IntegrationLinkConfiguration]
-    created_at: datetime
-    updated_at: datetime
 
 
 class ScheduledTaskListResponse(BaseModel):
@@ -274,10 +268,6 @@ class RunsViewedRequest(BaseModel):
     revisions: dict[UUID, PositiveInt] = Field(max_length=RUNS_VIEWED_MAX_ENTRIES)
 
 
-class RunViewedRequest(BaseModel):
-    revision: int = Field(gt=0)
-
-
 class RunNowResponse(BaseModel):
     run_id: str
     status: ScheduledTaskRunStatus
@@ -288,54 +278,24 @@ class RunNowResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _latest_run(
-    db_session: Session,
-    task: ScheduledTask,
-    user_id: UUID,
-) -> ScheduledTaskRun | None:
-    """Fetch the most recent run for the task, or ``None`` if none exist.
-
-    Trades a per-task query (N+1 in the list endpoint) for code simplicity;
-    V1 per-user task counts are small and the index covers the lookup.
-    """
-    runs = list_runs_for_task(
-        db_session=db_session,
-        task_id=task.id,
-        user_id=user_id,
-        cursor=None,
-        limit=1,
-    )
-    return runs[0] if runs else None
+def _base_fields(
+    task: ScheduledTask, last_run: ScheduledTaskRun | None
+) -> dict[str, Any]:
+    return {
+        "id": str(task.id),
+        "name": task.name,
+        "human_readable_schedule": human_readable(task.cron_expression),
+        "cron_expression": task.cron_expression,
+        "editor_mode": task.editor_mode,
+        "status": task.status,
+        "next_run_at": task.next_run_at,
+        "last_run": RunSummary.from_model(last_run) if last_run is not None else None,
+        "created_at": task.created_at,
+        "updated_at": task.updated_at,
+    }
 
 
-def _list_item(
-    db_session: Session,
-    task: ScheduledTask,
-    user_id: UUID,
-    unviewed_run_count: int,
-) -> ScheduledTaskListItem:
-    last_run = _latest_run(db_session, task, user_id)
-    return ScheduledTaskListItem(
-        id=str(task.id),
-        name=task.name,
-        human_readable_schedule=human_readable(task.cron_expression),
-        cron_expression=task.cron_expression,
-        editor_mode=task.editor_mode,
-        status=task.status,
-        next_run_at=task.next_run_at,
-        last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        unviewed_run_count=unviewed_run_count,
-        created_at=task.created_at,
-        updated_at=task.updated_at,
-    )
-
-
-def _detail(
-    db_session: Session,
-    task: ScheduledTask,
-    user_id: UUID,
-) -> ScheduledTaskDetail:
-    last_run = _latest_run(db_session, task, user_id)
+def _detail(db_session: Session, task: ScheduledTask) -> ScheduledTaskDetail:
     next_runs: list[datetime] = []
     if task.status == ScheduledTaskStatus.ACTIVE:
         next_runs = next_n_fires(
@@ -344,16 +304,9 @@ def _detail(
             NEXT_RUNS_PREVIEW_COUNT,
         )
     return ScheduledTaskDetail(
-        id=str(task.id),
-        name=task.name,
+        **_base_fields(task, latest_runs_for_tasks(db_session, [task.id]).get(task.id)),
         prompt=task.prompt,
-        human_readable_schedule=human_readable(task.cron_expression),
-        cron_expression=task.cron_expression,
-        editor_mode=task.editor_mode,
-        status=task.status,
-        next_run_at=task.next_run_at,
         next_runs=next_runs,
-        last_run=RunSummary.from_model(last_run) if last_run is not None else None,
         integrations=[
             IntegrationLinkConfiguration(
                 integration_id=link.integration_id,
@@ -361,8 +314,6 @@ def _detail(
             )
             for link in list_task_integration_links(db_session, task.id)
         ],
-        created_at=task.created_at,
-        updated_at=task.updated_at,
     )
 
 
@@ -417,8 +368,12 @@ def list_scheduled_tasks(
     """List the caller's scheduled tasks, newest first."""
     tasks = list_scheduled_tasks_for_user(db_session=db_session, user_id=user.id)
     unviewed = unread_run_counts_for_user(db_session=db_session, user_id=user.id)
+    last_runs = latest_runs_for_tasks(db_session, [task.id for task in tasks])
     items = [
-        _list_item(db_session, task, user.id, unviewed.get(task.id, 0))
+        ScheduledTaskListItem(
+            **_base_fields(task, last_runs.get(task.id)),
+            unviewed_run_count=unviewed.get(task.id, 0),
+        )
         for task in tasks
     ]
     return ScheduledTaskListResponse(items=items)
@@ -499,7 +454,7 @@ def create_task(
         db_session.commit()
 
     db_session.refresh(task)
-    return _detail(db_session, task, user.id)
+    return _detail(db_session, task)
 
 
 @router.get("/{task_id}")
@@ -510,7 +465,7 @@ def get_task(
 ) -> ScheduledTaskDetail:
     """Fetch one task + the next 3 fire times for the UI preview."""
     task = get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
-    return _detail(db_session, task, user.id)
+    return _detail(db_session, task)
 
 
 @router.patch("/{task_id}")
@@ -546,7 +501,7 @@ def patch_task(
     )
     db_session.commit()
     db_session.refresh(task)
-    return _detail(db_session, task, user.id)
+    return _detail(db_session, task)
 
 
 @router.delete("/{task_id}")
@@ -644,30 +599,6 @@ def view_task_runs(
     response = RunListResponse(
         items=[RunSummary.from_model(run) for run in runs], next_cursor=None
     )
-    db_session.commit()
-    return response
-
-
-@router.patch("/{task_id}/runs/{run_id}/viewed")
-def view_task_run(
-    task_id: UUID,
-    run_id: UUID,
-    body: RunViewedRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> RunSummary:
-    try:
-        runs = mark_runs_viewed(
-            db_session=db_session,
-            task_id=task_id,
-            user_id=user.id,
-            revisions={run_id: body.revision},
-        )
-    except ValueError as error:
-        raise OnyxError(OnyxErrorCode.CONFLICT, str(error)) from error
-    if not runs:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
-    response = RunSummary.from_model(runs[0])
     db_session.commit()
     return response
 

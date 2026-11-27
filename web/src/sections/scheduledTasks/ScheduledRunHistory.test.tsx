@@ -22,7 +22,7 @@ jest.mock("@/lib/scheduledTasks/svc", () => ({
 }));
 jest.mock("@/lib/scheduledTasks/hooks", () => ({
   ...jest.requireActual("@/lib/scheduledTasks/hooks"),
-  revalidateChatScheduledRunViews: jest.fn().mockResolvedValue(undefined),
+  revalidateScheduledRunViews: jest.fn().mockResolvedValue(undefined),
 }));
 
 // The runs the fake server holds, newest first. A page ends with a cursor

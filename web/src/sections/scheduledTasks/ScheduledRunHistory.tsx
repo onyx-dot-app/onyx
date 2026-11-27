@@ -18,7 +18,7 @@ import { formatRunDuration, isRunUnviewed } from "@/app/craft/v1/tasks/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import {
-  revalidateChatScheduledRunViews,
+  revalidateScheduledRunViews,
   useScheduledTaskFormat,
 } from "@/lib/scheduledTasks/hooks";
 import {
@@ -163,7 +163,7 @@ export default function ScheduledRunHistory({
       toast.error(t("markAllViewedFailed"));
     } finally {
       if (marked) {
-        await revalidateChatScheduledRunViews(taskId).catch(() => undefined);
+        await revalidateScheduledRunViews(taskId).catch(() => undefined);
       }
       // Also when nothing was left to mark: another tab may have viewed a
       // loaded row.

@@ -108,12 +108,9 @@ class AdvancedPayload(_PayloadBase):
     @classmethod
     def _validate_cron(cls, v: str) -> str:
         v = v.strip()
-        if not v:
-            raise ValueError("cron expression is empty")
-        if len(v.split()) != 5:
-            raise ValueError("cron expression must have exactly 5 fields")
-        if not croniter.is_valid(v):
-            raise ValueError(f"invalid cron expression: {v!r}")
+        problem = _cron_problem(v)
+        if problem is not None:
+            raise ValueError(problem)
         return v
 
 
@@ -129,24 +126,23 @@ EDITOR_PAYLOAD_MODELS: dict[EditorMode, type[_PayloadBase]] = {
 }
 
 
-def _validate_cron(cron: str) -> None:
-    """Raise ``OnyxError(INVALID_INPUT)`` if ``cron`` is not a valid 5-field expression.
-
-    Used by the read-side helpers (``compute_next_run_at``, ``next_n_fires``,
-    ``human_readable``) which accept a cron string loaded from the DB.
-    """
+def _cron_problem(cron: str) -> str | None:
+    """Why ``cron`` is not a valid 5-field expression, or ``None``."""
     cron = cron.strip()
     if not cron:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Cron expression is empty")
+        return "Cron expression is empty"
     if len(cron.split()) != 5:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Cron expression must have exactly 5 fields",
-        )
+        return "Cron expression must have exactly 5 fields"
     if not croniter.is_valid(cron):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, f"Invalid cron expression: {cron!r}"
-        )
+        return f"Invalid cron expression: {cron!r}"
+    return None
+
+
+def _validate_cron(cron: str) -> None:
+    """Raise ``OnyxError(INVALID_INPUT)`` for a cron string loaded from the DB."""
+    problem = _cron_problem(cron)
+    if problem is not None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, problem)
 
 
 def _split_hh_mm(value: str) -> tuple[int, int]:
@@ -209,20 +205,7 @@ def compute_next_run_at(cron: str, after: datetime) -> datetime:
         OnyxError(INVALID_INPUT): if ``cron`` is invalid, or if no future fire
             exists (e.g. an impossible expression).
     """
-    _validate_cron(cron)
-
-    after = datetime_to_utc(after)
-
-    try:
-        itr = croniter(cron, after)
-        next_fire = itr.get_next(datetime)
-    except (ValueError, KeyError) as e:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Cron expression has no future fire: {cron!r}",
-        ) from e
-
-    return datetime_to_utc(next_fire)
+    return next_n_fires(cron, after, 1)[0]
 
 
 def offset_seconds(task_id: UUID) -> int:

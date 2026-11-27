@@ -13,7 +13,7 @@ jest.mock("@/lib/scheduledTasks/svc", () => ({
   updateScheduledTask: jest.fn(),
 }));
 jest.mock("@/lib/scheduledTasks/hooks", () => ({
-  revalidateChatScheduledRunViews: jest.fn().mockResolvedValue(undefined),
+  revalidateScheduledRunViews: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
@@ -58,8 +58,10 @@ it("creates a task with every integration off and runs it", async () => {
     next_run_at: null,
     next_runs: [],
     last_run: null,
-    unviewed_run_count: 0,
     integrations: [],
+    human_readable_schedule: "Every hour",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
   });
   render(<ScheduledTaskEditor />);
 

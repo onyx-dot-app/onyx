@@ -503,6 +503,21 @@ def list_runs_for_task(
     return list(db_session.execute(stmt).scalars())
 
 
+def latest_runs_for_tasks(
+    db_session: Session, task_ids: list[UUID]
+) -> dict[UUID, ScheduledTaskRun]:
+    """The newest run of each task, in one query. Callers check ownership."""
+    if not task_ids:
+        return {}
+    stmt = (
+        select(ScheduledTaskRun)
+        .where(ScheduledTaskRun.task_id.in_(task_ids))
+        .distinct(ScheduledTaskRun.task_id)
+        .order_by(ScheduledTaskRun.task_id, desc(ScheduledTaskRun.started_at))
+    )
+    return {run.task_id: run for run in db_session.execute(stmt).scalars()}
+
+
 def unread_run_counts_for_user(
     *,
     db_session: Session,

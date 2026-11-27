@@ -38,30 +38,31 @@ export function useUnviewedChatScheduledTaskCount(): number {
   return useUnviewedCount(SWR_KEYS.chatScheduledTasksUnviewedCount);
 }
 
-/** Refresh every cache that shows viewed state for the runs of `taskId`. */
+/** Refresh every cache that shows viewed state for the runs of `taskId`, on
+ * both the app and the Craft mount of the API. */
 export async function revalidateScheduledRunViews(taskId: string) {
-  const runsKey = SWR_KEYS.scheduledTaskRuns(taskId);
+  const runsKeys = [
+    SWR_KEYS.chatScheduledTaskRuns(taskId),
+    SWR_KEYS.scheduledTaskRuns(taskId),
+  ];
   await Promise.all([
+    mutate(SWR_KEYS.chatScheduledTasksUnviewedCount),
+    mutate(SWR_KEYS.chatScheduledTasks),
+    mutate(SWR_KEYS.chatScheduledTask(taskId)),
     mutate(SWR_KEYS.scheduledTasksUnviewedCount),
     mutate(SWR_KEYS.scheduledTasks),
-    mutate((key) => typeof key === "string" && key.startsWith(runsKey)),
+    mutate(SWR_KEYS.scheduledTask(taskId)),
+    mutate(
+      (key) =>
+        typeof key === "string" &&
+        runsKeys.some((runsKey) => key.startsWith(runsKey))
+    ),
   ]);
 }
 
 /** How often task pages refetch a task, whose runs and next run move in
  * the background. */
 export const TASK_REFRESH_INTERVAL_MS = 30_000;
-
-/** As `revalidateScheduledRunViews`, for the tasks that run in chat. */
-export async function revalidateChatScheduledRunViews(taskId: string) {
-  const runsKey = SWR_KEYS.chatScheduledTaskRuns(taskId);
-  await Promise.all([
-    mutate(SWR_KEYS.chatScheduledTasksUnviewedCount),
-    mutate(SWR_KEYS.chatScheduledTasks),
-    mutate(SWR_KEYS.chatScheduledTask(taskId)),
-    mutate((key) => typeof key === "string" && key.startsWith(runsKey)),
-  ]);
-}
 
 /** The scheduled run a chat belongs to; null for a chat that no task
  * created. */

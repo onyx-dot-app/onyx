@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Generator
+from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -386,8 +387,8 @@ def _view_run(
     user: DATestUser, task_id: UUID, run_id: UUID, revision: int
 ) -> httpx.Response:
     return client.patch(
-        _url(str(task_id), "runs", str(run_id), "viewed"),
-        json={"revision": revision},
+        _url(str(task_id), "runs", "viewed"),
+        json={"revisions": {str(run_id): revision}},
         headers=user.headers,
         cookies=user.cookies,
     )
@@ -437,7 +438,7 @@ def test_run_results_stay_unviewed_until_opened(
 
     viewed = _view_run(admin_user, task_id, run_id, 1)
     viewed.raise_for_status()
-    assert viewed.json()["viewed_revision"] == 1
+    assert viewed.json()["items"][0]["viewed_revision"] == 1
     assert _unviewed_run_count(admin_user, task_id) == 0
     assert _list_runs(admin_user, task_id, unviewed=True).json()["items"] == []
 
@@ -474,3 +475,32 @@ def test_bulk_view_keeps_newer_run_results_unviewed(admin_user: DATestUser) -> N
     )
     stale.raise_for_status()
     assert _unviewed_run_count(admin_user, task_id) == 1
+
+
+def test_list_shows_latest_run_of_each_task(admin_user: DATestUser) -> None:
+    task_ids = []
+    for _ in range(2):
+        response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+        response.raise_for_status()
+        task_ids.append(UUID(response.json()["id"]))
+    first, second = task_ids
+    _insert_run_with_status(first, ScheduledTaskRunStatus.RUNNING)
+    latest_id = _insert_run_with_status(first, ScheduledTaskRunStatus.RUNNING)
+    with get_session_with_current_tenant() as db_session:
+        latest = db_session.get_one(ScheduledTaskRun, latest_id)
+        latest.started_at += timedelta(minutes=1)
+        db_session.commit()
+
+    response = client.get(
+        _url(), headers=admin_user.headers, cookies=admin_user.cookies
+    )
+    response.raise_for_status()
+    items = {item["id"]: item for item in response.json()["items"]}
+    assert items[str(first)]["last_run"]["id"] == str(latest_id)
+    assert items[str(second)]["last_run"] is None
+
+    detail = client.get(
+        _url(str(first)), headers=admin_user.headers, cookies=admin_user.cookies
+    )
+    detail.raise_for_status()
+    assert detail.json()["last_run"]["id"] == str(latest_id)

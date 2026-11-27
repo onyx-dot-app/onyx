@@ -26,7 +26,7 @@ import type {
   TaskIntegrationLink,
 } from "@/app/craft/v1/tasks/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { revalidateChatScheduledRunViews } from "@/lib/scheduledTasks/hooks";
+import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import {
   SCHEDULED_TASKS_PATH,
   scheduledTaskHref,
@@ -128,7 +128,7 @@ function TaskForm({ task }: TaskFormProps) {
           revalidate: false,
         }),
         mutate(SWR_KEYS.chatScheduledTaskActionPolicies(saved.id)),
-        revalidateChatScheduledRunViews(saved.id),
+        revalidateScheduledRunViews(saved.id),
       ]);
       toast.success(
         task
