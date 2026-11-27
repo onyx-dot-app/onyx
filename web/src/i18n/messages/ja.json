@@ -17458,7 +17458,8 @@
         "disableFailed": "{name}を無効にできませんでした",
         "enableFailed": "{name}を有効にできませんでした",
         "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。",
-        "listRefreshFailed": "スキル一覧を更新できませんでした。ページを再読み込みして変更を確認してください。"
+        "listRefreshFailed": "スキル一覧を更新できませんでした。ページを再読み込みして変更を確認してください。",
+        "requiredHolder": "{name} をオンにできません。必須スキルがすでにこの名前を使用しています。"
       }
     },
     "sections": {
@@ -17532,7 +17533,8 @@
       "publishWarning": {
         "title": "公開は取り消せません",
         "description": "適用すると、組織内の全員が選択したスキルを使用できます。公開したスキルを非公開に戻すことはできません。削除できるのは管理者のみです。"
-      }
+      },
+      "skipped": "{count, plural, other {オン/オフを切り替えられない # 件のスキルをスキップしました}}"
     },
     "reviewRequests": {
       "title": "公開リクエスト",
@@ -17834,6 +17836,7 @@
         "newPlugin": "新しいプラグイン: {name}"
       },
       "willBeOff": "プラグインはオフで保存されます。{names} に同じ名前のスキルがあります。",
+      "willClash": "{names} には同じ名前のスキルがすでにあります。オンにできるのはどちらか一方だけです。",
       "saveAsNew": {
         "label": "新しいプラグインとして保存",
         "description": "この名前のプラグインは変更しません。"
@@ -17865,7 +17868,8 @@
         "newPlugin": "{name} を追加しました。",
         "newVersion": "{name} を Onyx バージョン {version} に更新しました。",
         "unchanged": "変更はありません。{name} はすでに Onyx バージョン {version} です。",
-        "off": "{name} を追加しました。{names} に同じ名前のスキルがあるため、オフになっています。"
+        "off": "{name} を追加しました。{names} に同じ名前のスキルがあるため、オフになっています。",
+        "clash": "{name} を Onyx バージョン {version} に更新しました。{names} には同じ名前のスキルがすでにあるため、オンになるのは一方だけです。"
       }
     },
     "turnOn": {
@@ -18044,7 +18048,8 @@
       "apply": "{count, plural, one {# 件のプラグインに適用} other {# 件のプラグインに適用}}",
       "publishWarning": {
         "description": "適用すると、組織内の全員が選択したプラグインを使用できます。公開したプラグインを非公開に戻すことはできません。削除できるのは管理者のみです。"
-      }
+      },
+      "skipped": "{count, plural, other {オン/オフを切り替えられない # 件のプラグインをスキップしました}}"
     }
   },
   "integrations": {

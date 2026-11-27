@@ -979,6 +979,7 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "v1",
           built_in_skill_id: null,
+          plugin_id: null,
         },
       ];
       await act(async () => {
@@ -1050,6 +1051,7 @@ describe("`@` skill mentions", () => {
         short_description: "Review code",
         version_id: "v1",
         built_in_skill_id: null,
+        plugin_id: null,
       },
       {
         name: "commit-message",
@@ -1057,6 +1059,7 @@ describe("`@` skill mentions", () => {
         short_description: null,
         version_id: "v2",
         built_in_skill_id: null,
+        plugin_id: null,
       },
     ];
     const fetchSpy = jest
@@ -1095,6 +1098,7 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "b1",
           built_in_skill_id: "pptx",
+          plugin_id: null,
         },
         {
           name: "plan",
@@ -1102,6 +1106,7 @@ describe("`@` skill mentions", () => {
           short_description: null,
           version_id: "v1",
           built_in_skill_id: null,
+          plugin_id: null,
         },
       ];
       const fetchSpy = jest

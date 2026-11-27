@@ -17458,7 +17458,8 @@
         "disableFailed": "停用 {name} 失败",
         "enableFailed": "启用 {name} 失败",
         "refreshFailed": "{name} 已更新，但技能列表无法刷新。",
-        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。"
+        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。",
+        "requiredHolder": "无法开启 {name}。已有一个必需技能使用此名称。"
       }
     },
     "sections": {
@@ -17532,7 +17533,8 @@
       "publishWarning": {
         "title": "发布后无法撤销",
         "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有管理员可以删除它们。"
-      }
+      },
+      "skipped": "{count, plural, other {已跳过 # 个你无法开启或关闭的技能}}"
     },
     "reviewRequests": {
       "title": "发布请求",
@@ -17834,6 +17836,7 @@
         "newPlugin": "新插件：{name}"
       },
       "willBeOff": "插件将以关闭状态保存。{names} 已有同名技能。",
+      "willClash": "{names} 已有同名技能。只能开启其中一个。",
       "saveAsNew": {
         "label": "另存为新插件",
         "description": "保持同名插件不变。"
@@ -17865,7 +17868,8 @@
         "newPlugin": "已添加 {name}。",
         "newVersion": "已将 {name} 更新为 Onyx 版本 {version}。",
         "unchanged": "没有更改。{name} 已是 Onyx 版本 {version}。",
-        "off": "已添加 {name}。由于 {names} 已有同名技能，它处于关闭状态。"
+        "off": "已添加 {name}。由于 {names} 已有同名技能，它处于关闭状态。",
+        "clash": "已将 {name} 更新到 Onyx 版本 {version}。{names} 已有同名技能，因此只有其中一个处于开启状态。"
       }
     },
     "turnOn": {
@@ -18044,7 +18048,8 @@
       "apply": "{count, plural, one {应用于 # 个插件} other {应用于 # 个插件}}",
       "publishWarning": {
         "description": "应用后，组织中的所有人都可以使用所选插件。已发布的插件无法再设为私有。只有管理员可以删除它们。"
-      }
+      },
+      "skipped": "{count, plural, other {已跳过 # 个你无法开启或关闭的插件}}"
     }
   },
   "integrations": {

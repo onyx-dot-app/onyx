@@ -127,7 +127,15 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { data: transferableUsersData } = useShareableUsers({
     includeApiKeys: false,
   });
-  const { data: shareableGroupsData } = useShareableGroups();
+  // A group share change needs the skill-manager permission for the group.
+  const { data: shareableGroupsData } = useShareableGroups(
+    true,
+    Permission.MANAGE_PLUGINS
+  );
+  const manageableGroupIds = useMemo(
+    () => new Set((shareableGroupsData ?? []).map((group) => group.id)),
+    [shareableGroupsData]
+  );
   const { isAdmin, user: currentUser } = useUser();
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -405,7 +413,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(nextDraft, isOrganizationManager);
+      const payload = serializeSkillSharing(
+        nextDraft,
+        isOrganizationManager,
+        skill
+      );
       if (canSetGroupSettings && groupChanges.length > 0) {
         payload.group_settings = groupChanges;
       }
@@ -686,7 +698,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                         ariaLabel={t("share.permissionMenu.ariaLabel", {
                           name: share.group_name,
                         })}
-                        disabled={!canEditShares}
+                        disabled={
+                          !canEditShares ||
+                          !manageableGroupIds.has(share.group_id)
+                        }
                         onChange={(permission) =>
                           updateGroupSharePermission(share.group_id, permission)
                         }

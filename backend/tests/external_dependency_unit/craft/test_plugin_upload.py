@@ -914,6 +914,28 @@ def test_a_skill_name_clash_is_shown_before_and_after_the_save(
     assert (saved.enabled, saved.name_conflicts) == (False, ["first-kit"])
 
 
+def test_a_new_version_that_adds_a_clashing_name_reports_the_clash(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    _save(author, _plugin_zip("first-kit", ["clash"]), db_session)
+    _save(author, _plugin_zip("second-kit", ["other"]), db_session)
+
+    preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("second-kit", ["clash", "other"]),
+        save_as_new=False,
+        user=author,
+        db_session=db_session,
+    )
+    saved = _save(author, _plugin_zip("second-kit", ["clash", "other"]), db_session)
+
+    assert preview.target.kind == "new_version"
+    assert preview.name_conflicts == ["first-kit"]
+    assert saved.name_conflicts == ["first-kit"]
+
+
 def test_a_plugin_that_loses_its_skill_name_says_which_plugin_holds_it(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001

@@ -17458,7 +17458,8 @@
         "disableFailed": "{name}을(를) 비활성화하지 못했습니다",
         "enableFailed": "{name}을(를) 활성화하지 못했습니다",
         "refreshFailed": "{name}이(가) 업데이트되었지만 스킬 목록을 새로고침할 수 없습니다.",
-        "listRefreshFailed": "스킬 목록을 새로고침할 수 없습니다. 페이지를 다시 불러와 변경 사항을 확인하세요."
+        "listRefreshFailed": "스킬 목록을 새로고침할 수 없습니다. 페이지를 다시 불러와 변경 사항을 확인하세요.",
+        "requiredHolder": "{name}을(를) 켤 수 없습니다. 필수 스킬이 이미 이 이름을 사용하고 있습니다."
       }
     },
     "sections": {
@@ -17532,7 +17533,8 @@
       "publishWarning": {
         "title": "게시는 취소할 수 없습니다",
         "description": "적용하면 조직의 모든 사용자가 선택한 스킬을 사용할 수 있습니다. 게시된 스킬은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
-      }
+      },
+      "skipped": "{count, plural, other {켜거나 끌 수 없는 스킬 #개를 건너뛰었습니다}}"
     },
     "reviewRequests": {
       "title": "게시 요청",
@@ -17834,6 +17836,7 @@
         "newPlugin": "새 플러그인: {name}"
       },
       "willBeOff": "플러그인이 꺼진 상태로 저장됩니다. {names}에 같은 이름의 스킬이 이미 있습니다.",
+      "willClash": "{names}에 같은 이름의 스킬이 이미 있습니다. 둘 중 하나만 켤 수 있습니다.",
       "saveAsNew": {
         "label": "새 플러그인으로 저장",
         "description": "이 이름의 플러그인은 그대로 둡니다."
@@ -17865,7 +17868,8 @@
         "newPlugin": "{name}을(를) 추가했습니다.",
         "newVersion": "{name}을(를) Onyx 버전 {version}(으)로 업데이트했습니다.",
         "unchanged": "변경 사항이 없습니다. {name}은(는) 이미 Onyx 버전 {version}입니다.",
-        "off": "{name}을(를) 추가했습니다. {names}에 같은 이름의 스킬이 있어 꺼져 있습니다."
+        "off": "{name}을(를) 추가했습니다. {names}에 같은 이름의 스킬이 있어 꺼져 있습니다.",
+        "clash": "{name}을(를) Onyx 버전 {version}(으)로 업데이트했습니다. {names}에 같은 이름의 스킬이 이미 있어 둘 중 하나만 켜집니다."
       }
     },
     "turnOn": {
@@ -18044,7 +18048,8 @@
       "apply": "{count, plural, one {플러그인 #개에 적용} other {플러그인 #개에 적용}}",
       "publishWarning": {
         "description": "적용하면 조직의 모든 사용자가 선택한 플러그인을 사용할 수 있습니다. 게시된 플러그인은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
-      }
+      },
+      "skipped": "{count, plural, other {켜거나 끌 수 없는 플러그인 #개를 건너뛰었습니다}}"
     }
   },
   "integrations": {

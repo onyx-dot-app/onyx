@@ -10,6 +10,8 @@ export interface PickerSkill {
   slug: string;
   name: string;
   description: string;
+  /** The plugin of a custom skill. */
+  pluginId?: string | null;
 }
 
 export interface PickerApp {
@@ -52,6 +54,9 @@ export interface PickerSkillSources {
   /** The custom skills the sandbox gets, one per skill of a plugin, from
    * `useChatSkills`. */
   customs?: readonly PickerSkill[];
+  /** Plugins that the run-time limit left out of the sandbox
+   * (`SkillLimitNotice`). Their skills are not offered. */
+  omittedPluginIds?: ReadonlySet<string>;
 }
 
 export function toPickerSections(
@@ -82,7 +87,10 @@ export function toPickerSections(
 
   const builtinSlugs = new Set(skills.map((skill) => skill.slug));
   for (const custom of skillSources?.customs ?? []) {
-    if (!builtinSlugs.has(custom.slug)) skills.push(custom);
+    if (builtinSlugs.has(custom.slug)) continue;
+    if (custom.pluginId && skillSources?.omittedPluginIds?.has(custom.pluginId))
+      continue;
+    skills.push(custom);
   }
 
   for (const app of externalApps ?? []) {

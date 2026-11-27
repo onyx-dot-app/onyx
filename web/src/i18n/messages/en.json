@@ -17458,7 +17458,8 @@
         "disableFailed": "Failed to disable {name}",
         "enableFailed": "Failed to enable {name}",
         "refreshFailed": "{name} was updated, but the skill list could not be refreshed.",
-        "listRefreshFailed": "The skill list could not be refreshed. Reload the page to see the change."
+        "listRefreshFailed": "The skill list could not be refreshed. Reload the page to see the change.",
+        "requiredHolder": "{name} cannot be turned on. A required skill already has this name."
       }
     },
     "sections": {
@@ -17532,7 +17533,8 @@
       "publishWarning": {
         "title": "Publishing cannot be undone",
         "description": "After you apply, everyone in the organization can use the selected skills. Published skills cannot be made private again. Only an admin can delete them."
-      }
+      },
+      "skipped": "{count, plural, one {# skill cannot be turned on or off by you and was skipped} other {# skills cannot be turned on or off by you and were skipped}}"
     },
     "reviewRequests": {
       "title": "Publish Requests",
@@ -17834,6 +17836,7 @@
         "newPlugin": "New plugin: {name}"
       },
       "willBeOff": "The plugin is saved off. {names} already has a skill with the same name.",
+      "willClash": "{names} already has a skill with the same name. Only one of them can be on.",
       "saveAsNew": {
         "label": "Save as a New Plugin",
         "description": "Keep the plugin that has this name as it is."
@@ -17865,7 +17868,8 @@
         "newPlugin": "Added {name}.",
         "newVersion": "Updated {name} to Onyx version {version}.",
         "unchanged": "No changes. {name} is already at Onyx version {version}.",
-        "off": "Added {name}. It is off because {names} already has a skill with the same name."
+        "off": "Added {name}. It is off because {names} already has a skill with the same name.",
+        "clash": "Updated {name} to Onyx version {version}. {names} already has a skill with the same name, so only one of them is on."
       }
     },
     "turnOn": {
@@ -18044,7 +18048,8 @@
       "apply": "{count, plural, one {Apply to # plugin} other {Apply to # plugins}}",
       "publishWarning": {
         "description": "After you apply, everyone in the organization can use the selected plugins. Published plugins cannot be made private again. Only an admin can delete them."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin cannot be turned on or off by you and was skipped} other {# plugins cannot be turned on or off by you and were skipped}}"
     }
   },
   "integrations": {

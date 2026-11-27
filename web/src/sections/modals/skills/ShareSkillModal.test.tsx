@@ -122,10 +122,7 @@ describe("ShareSkillModal", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
-        installation_policy: undefined,
-        public_permission: undefined,
         user_shares: [],
-        group_shares: [],
       })
     );
   });
@@ -152,14 +149,11 @@ describe("ShareSkillModal", () => {
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
         installation_policy: "DEFAULT",
-        public_permission: "VIEWER",
-        user_shares: [],
-        group_shares: [],
       })
     );
   });
 
-  it("loads full sharing details from the overview before saving", async () => {
+  it("loads full sharing details and leaves unchanged shares out of the save", async () => {
     const user = setupUser();
     mockLoadSkill.mockResolvedValue(
       customFixture({
@@ -187,12 +181,9 @@ describe("ShareSkillModal", () => {
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
-        "custom-1",
-        expect.objectContaining({
-          user_shares: [{ user_id: "invited-user", permission: "VIEWER" }],
-        })
-      )
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
+        installation_policy: "REQUIRED",
+      })
     );
   });
 
@@ -232,16 +223,14 @@ describe("ShareSkillModal", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
-        installation_policy: undefined,
-        public_permission: undefined,
         user_shares: [],
-        group_shares: [],
       })
     );
   });
 
   it("lets owners revoke public user and group editors", async () => {
     const user = setupUser();
+    mockGroups = [{ id: 42, name: "Editors" }];
     mockLoadSkill.mockResolvedValue(
       customFixture({
         user_permission: "OWNER",
@@ -283,12 +272,40 @@ describe("ShareSkillModal", () => {
       expect(mockUpdateSkillShares).toHaveBeenCalledWith(
         "custom-1",
         expect.objectContaining({
-          public_permission: "VIEWER",
           user_shares: [],
           group_shares: [],
         })
       )
     );
+  });
+
+  it("shows a group share the user cannot manage but does not let them change it", async () => {
+    const user = setupUser();
+    mockGroups = [];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: "VIEWER",
+        group_shares: [
+          { group_id: 42, group_name: "Editors", permission: "EDITOR" },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Manage individual access" })
+    );
+    expect(
+      screen.getByRole("button", { name: "Update access for Editors" })
+    ).toBeDisabled();
   });
 
   it("lets a non-admin editor with organization-wide manage:plugins publish", async () => {
@@ -542,9 +559,6 @@ describe("ShareSkillModal", () => {
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
         installation_policy: "REQUIRED",
-        public_permission: null,
-        user_shares: [],
-        group_shares: [],
       })
     );
   });
@@ -601,7 +615,7 @@ describe("ShareSkillModal", () => {
     );
   });
 
-  it("saves changed group settings and sends the unchanged company setting", async () => {
+  it("saves changed group settings and leaves the unchanged company setting out", async () => {
     const user = setupUser();
     mockGroups = [
       { id: 3, name: "Design" },
@@ -670,7 +684,7 @@ describe("ShareSkillModal", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mockUpdateSkillShares).toHaveBeenCalled());
     const payload = mockUpdateSkillShares.mock.calls[0][1];
-    expect(payload.installation_policy).toBeNull();
+    expect(payload.installation_policy).toBeUndefined();
     expect(payload.group_settings).toEqual([
       { group_id: 3, installation_policy: "AVAILABLE" },
       { group_id: 5, installation_policy: "DEFAULT" },

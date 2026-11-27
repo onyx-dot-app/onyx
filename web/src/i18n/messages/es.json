@@ -17458,7 +17458,8 @@
         "disableFailed": "No se pudo desactivar {name}",
         "enableFailed": "No se pudo activar {name}",
         "refreshFailed": "{name} se actualizó, pero no se pudo actualizar la lista de habilidades.",
-        "listRefreshFailed": "No se pudo actualizar la lista de habilidades. Vuelve a cargar la página para ver el cambio."
+        "listRefreshFailed": "No se pudo actualizar la lista de habilidades. Vuelve a cargar la página para ver el cambio.",
+        "requiredHolder": "No se puede activar {name}. Una habilidad obligatoria ya tiene este nombre."
       }
     },
     "sections": {
@@ -17532,7 +17533,8 @@
       "publishWarning": {
         "title": "La publicación no se puede deshacer",
         "description": "Después de aplicar, todos en la organización pueden usar las habilidades seleccionadas. Las habilidades publicadas no se pueden volver a hacer privadas. Solo un administrador puede eliminarlas."
-      }
+      },
+      "skipped": "{count, plural, one {# habilidad no se puede activar ni desactivar y se omitió} other {# habilidades no se pueden activar ni desactivar y se omitieron}}"
     },
     "reviewRequests": {
       "title": "Solicitudes de publicación",
@@ -17834,6 +17836,7 @@
         "newPlugin": "Nuevo plugin: {name}"
       },
       "willBeOff": "El plugin se guarda desactivado. {names} ya tiene una habilidad con el mismo nombre.",
+      "willClash": "{names} ya tiene una habilidad con el mismo nombre. Solo una de ellas puede estar activada.",
       "saveAsNew": {
         "label": "Guardar como Plugin Nuevo",
         "description": "Mantén sin cambios el plugin que tiene este nombre."
@@ -17865,7 +17868,8 @@
         "newPlugin": "Se añadió {name}.",
         "newVersion": "{name} actualizado a la versión {version} de Onyx.",
         "unchanged": "Sin cambios. {name} ya está en la versión {version} de Onyx.",
-        "off": "Se añadió {name}. Está desactivado porque {names} ya tiene una habilidad con el mismo nombre."
+        "off": "Se añadió {name}. Está desactivado porque {names} ya tiene una habilidad con el mismo nombre.",
+        "clash": "Se actualizó {name} a la versión {version} de Onyx. {names} ya tiene una habilidad con el mismo nombre, así que solo una de ellas está activada."
       }
     },
     "turnOn": {
@@ -18044,7 +18048,8 @@
       "apply": "{count, plural, one {Aplicar a # plugin} other {Aplicar a # plugins}}",
       "publishWarning": {
         "description": "Después de aplicar, todos en la organización pueden usar los plugins seleccionados. Los plugins publicados no se pueden volver a hacer privados. Solo un administrador puede eliminarlos."
-      }
+      },
+      "skipped": "{count, plural, one {# plugin no se puede activar ni desactivar y se omitió} other {# plugins no se pueden activar ni desactivar y se omitieron}}"
     }
   },
   "integrations": {

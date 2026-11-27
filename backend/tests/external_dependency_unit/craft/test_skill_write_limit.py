@@ -74,6 +74,19 @@ def test_backfilled_version_counts_as_zero(db_session: Session) -> None:
     assert _usage(db_session, user, skill.id) == 3 * _MB
 
 
+def test_a_plugin_that_loses_its_name_does_not_count(db_session: Session) -> None:
+    user = make_user(db_session, standard_account=True)
+    winner = make_skill(db_session, name="same-name", author_user_id=user.id)
+    loser = make_skill(db_session, name="same-name", author_user_id=user.id)
+    set_plugin_preferences__no_commit(user.id, [winner.id, loser.id], True, db_session)
+    _set_size(db_session, winner.id, 3 * _MB, 7)
+    _set_size(db_session, loser.id, 5 * _MB, 11)
+
+    usage = skill_usage_by_user(load_user_plugin_states([user.id], db_session))
+
+    assert usage[user.id] == SkillUsage(bytes=3 * _MB, files=7)
+
+
 def _wait_for_lock_waiter(blocker_pid: int, timeout: float = 10.0) -> bool:
     """Wait until a connection waits on a lock that ``blocker_pid`` holds."""
     deadline = time.monotonic() + timeout

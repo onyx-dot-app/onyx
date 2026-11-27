@@ -476,9 +476,11 @@ def list_chat_skills(
             for built_in in list_chat_built_in_skills(db_session)
             for plugin_skill in BUILT_IN_SKILLS[built_in.built_in_skill_id or ""].skills
         ]
-    version_ids = [
-        state.version_id for state in _user_skill_selection(user, db_session).loaded()
-    ]
+    plugin_by_version = {
+        state.version_id: state.plugin_id
+        for state in _user_skill_selection(user, db_session).loaded()
+    }
+    version_ids = list(plugin_by_version)
     if version_ids:
         skills += [
             ChatSkill(
@@ -487,6 +489,7 @@ def list_chat_skills(
                 short_description=short_description,
                 version_id=version_id,
                 path=path,
+                plugin_id=plugin_by_version[version_id],
             )
             for version_id, path, name, description, short_description in (
                 db_session.execute(
