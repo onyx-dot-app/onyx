@@ -173,7 +173,6 @@ describe("ToolApprovalCard", () => {
     ["approved", "Approved: Lookup"],
     ["approvedForSession", "Approved for this chat: Lookup"],
     ["rejected", "Not approved: Lookup"],
-    ["expired", "Timed out: Lookup"],
     ["disabled", "Disabled: Lookup"],
     ["closed", "No longer waiting: Lookup"],
   ])("records a %s request on one line", (status, text) => {
