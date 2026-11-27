@@ -1,5 +1,6 @@
 "use client";
 
+import { canManageSkill } from "@/lib/skills/sharing";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
@@ -377,14 +378,9 @@ export default function MemberPluginDetailPage({
       );
   }, [panel, navigation, skillOnlyId]);
   const skill = entry?.skill;
-  const showVersions =
-    skill !== undefined &&
-    (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
+  const canEdit = skill !== undefined && canManageSkill(skill);
   const skillCount = plugin ? plugin.skills.length : entry ? 1 : 0;
   const needCount = plugin?.needs.length ?? 0;
-  const canEdit =
-    skill !== undefined &&
-    (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
   async function refresh(): Promise<void> {
     await Promise.all([skills.refresh(), isPlugin ? detail.refresh() : null]);
   }
@@ -422,7 +418,7 @@ export default function MemberPluginDetailPage({
               },
             ]
           : []),
-        ...(skill && showVersions
+        ...(skill && canEdit
           ? [
               {
                 value: "versions" as const,

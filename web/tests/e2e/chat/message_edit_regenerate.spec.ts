@@ -72,13 +72,8 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
     await expect(switcherSpan).toBeVisible();
     await expect(switcherSpan).toContainText("3/3");
 
-    // Navigate to previous version - click the first svg icon's parent (left chevron)
-    await switcherSpan
-      .locator("..")
-      .locator("svg")
-      .first()
-      .locator("..")
-      .click();
+    // Navigate to previous version
+    await chat.selectPreviousVersion();
 
     // Check we're now at "2 / 3"
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();
@@ -87,12 +82,7 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
     await expect(chat.aiMessage()).toContainText("Six.");
 
     // Navigate to first version - re-find the button each time
-    await switcherSpan
-      .locator("..")
-      .locator("svg")
-      .first()
-      .locator("..")
-      .click();
+    await chat.selectPreviousVersion();
 
     // Check we're now at "1 / 3"
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();
@@ -100,13 +90,8 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
     await expect(switcherSpan).toContainText("1/3");
     await expect(chat.aiMessage()).toContainText("Four.");
 
-    // Navigate forward using next button - click the last svg icon's parent (right chevron)
-    await switcherSpan
-      .locator("..")
-      .locator("svg")
-      .last()
-      .locator("..")
-      .click();
+    // Navigate forward using next button
+    await chat.selectNextVersion();
 
     // Check we're back at "2 / 3"
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();
@@ -158,6 +143,7 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
   });
 
   test("Message regeneration with model selection", async ({ page }) => {
+    const chat = new ChatPage(page);
     // make sure we're using something other than the default mock model, otherwise
     // the below will fail since we need to switch to a different model for the test
     await switchModel(page, MOCK_LLM_MODELS[1].displayName);
@@ -211,12 +197,7 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
     await expect(messageContent).toHaveText(regeneratedAnswer);
 
     // Navigate to previous version
-    await messageSwitcher
-      .locator("..")
-      .locator("svg")
-      .first()
-      .locator("..")
-      .click();
+    await chat.selectPreviousVersion();
 
     // Verify we're at "1 / 2"
     let switcherSpan = page.getByTestId("MessageSwitcher/container").first();
@@ -227,12 +208,7 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
     await expect(messageContent).toHaveText(originalAnswer);
 
     // Navigate back to regenerated version
-    await switcherSpan
-      .locator("..")
-      .locator("svg")
-      .last()
-      .locator("..")
-      .click();
+    await chat.selectNextVersion();
 
     // Verify we're back at "2 / 2"
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();

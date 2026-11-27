@@ -113,17 +113,13 @@ export class ToolQuestionCard {
 
   /**
    * The record of the questions: a timeline step titled with the answer
-   * count, or else with how the questions ended (`title` defaults to `outcome`). Its
-   * live region announces the outcome. Nothing waits after it.
+   * count, or else with how the questions ended. Its live region announces
+   * the same title. Nothing waits after it.
    */
-  async expectRecord(
-    outcome: string,
-    title = outcome,
-    timeout = 30_000
-  ): Promise<void> {
+  async expectRecord(outcome: string, timeout = 30_000): Promise<void> {
     const record = this.records.filter({
       has: this.page.getByRole("button", {
-        name: `Expand ${title}`,
+        name: `Expand ${outcome}`,
         exact: true,
       }),
     });

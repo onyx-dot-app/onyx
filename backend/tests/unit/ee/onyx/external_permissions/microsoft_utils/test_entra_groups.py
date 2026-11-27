@@ -8,7 +8,7 @@ from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
     expand_entra_group,
     list_nested_entra_groups,
     normalize_email,
-    resolve_entra_group_name,
+    resolve_entra_group_id,
 )
 from onyx.connectors.microsoft_utils.entra import EntraDirectoryObject, EntraGroup
 from onyx.connectors.microsoft_utils.models import (
@@ -34,20 +34,21 @@ def test_normalize_email_noop_for_normal_domain() -> None:
 
 
 @patch(f"{PRINCIPALS}.find_group_id_by_name", return_value=None)
-def test_unresolved_group_keeps_the_none_suffix(_mock_find: MagicMock) -> None:
-    """Persisted ACLs were written with this name, so it must not change."""
-    name = resolve_entra_group_name(MagicMock(), "Engineering", "Engineering")
-
-    assert name == "Engineering_None"
+def test_unresolved_group_has_no_id(_mock_find: MagicMock) -> None:
+    assert resolve_entra_group_id(MagicMock(), "Engineering") is None
 
 
 def test_failed_name_lookup_resolves_to_none() -> None:
     reader = MagicMock()
     reader.find_entra_group_id.side_effect = RuntimeError("Graph is down")
 
-    assert resolve_entra_group_name(reader, "Engineering", "Engineering") == (
-        "Engineering_None"
-    )
+    assert resolve_entra_group_id(reader, "Engineering") is None
+
+
+def test_group_is_named_by_its_id() -> None:
+    reader = FakeSharepointReader(entra_group_ids={"Engineering": GROUP_ID})
+
+    assert resolve_entra_group_id(reader, "Engineering") == GROUP_ID
 
 
 def _directory_object(object_id: str, **fields: str) -> EntraDirectoryObject:
@@ -69,9 +70,9 @@ def test_enumerate_yields_groups_with_normalized_members() -> None:
     results = list(enumerate_entra_groups(reader, already_resolved=set()))
 
     assert len(results) == 2
-    eng = next(r for r in results if r.id == "Engineering_g1")
+    eng = next(r for r in results if r.id == "g1")
     assert eng.user_emails == ["alice@contoso.com"]
-    mkt = next(r for r in results if r.id == "Marketing_g2")
+    mkt = next(r for r in results if r.id == "g2")
     assert mkt.user_emails == ["bob@contoso.com"]
 
 
@@ -80,7 +81,7 @@ def test_enumerate_skips_already_resolved() -> None:
         entra_groups=[EntraGroup(id="g1", displayName="Engineering")]
     )
 
-    results = list(enumerate_entra_groups(reader, already_resolved={"Engineering_g1"}))
+    results = list(enumerate_entra_groups(reader, already_resolved={"g1"}))
 
     assert results == []
 
@@ -92,7 +93,7 @@ def test_enumerate_stops_at_threshold() -> None:
 
     results = list(enumerate_entra_groups(reader, already_resolved=set(), threshold=3))
 
-    assert [r.id for r in results] == ["Group0_g0", "Group1_g1", "Group2_g2"]
+    assert [r.id for r in results] == ["g0", "g1", "g2"]
 
 
 def test_expand_collects_member_emails() -> None:
@@ -116,7 +117,7 @@ def test_expand_collects_member_emails() -> None:
     assert user_emails == {"member@contoso.com", "bob@contoso.com"}
 
 
-def test_expand_names_nested_groups_for_onyx() -> None:
+def test_expand_names_nested_groups_by_id() -> None:
     reader = FakeSharepointReader(
         entra_members={
             GROUP_ID: [
@@ -133,10 +134,8 @@ def test_expand_names_nested_groups_for_onyx() -> None:
     groups, user_emails = expand_entra_group(reader, GROUP_ID)
 
     assert groups == {
-        ResolvedEntraGroup(
-            id=NESTED_GROUP_ID,
-            name=f"Nested_{NESTED_GROUP_ID}",
-        )
+        ResolvedEntraGroup(id=NESTED_GROUP_ID),
+        ResolvedEntraGroup(id="nameless"),
     }
     assert user_emails == set()
 
@@ -149,7 +148,7 @@ def test_expand_by_display_name_looks_the_group_up() -> None:
     assert reader.operations() == ["find_entra_group_id", "list_entra_group_members"]
 
 
-def test_nested_groups_are_named_for_onyx() -> None:
+def test_nested_groups_are_named_by_id() -> None:
     reader = FakeSharepointReader(
         nested_entra_groups={
             GROUP_ID: [EntraGroup(id=NESTED_GROUP_ID, displayName="Platform")]
@@ -158,7 +157,5 @@ def test_nested_groups_are_named_for_onyx() -> None:
 
     groups = list_nested_entra_groups(reader, GROUP_ID)
 
-    assert groups == {
-        ResolvedEntraGroup(id=NESTED_GROUP_ID, name=f"Platform_{NESTED_GROUP_ID}")
-    }
+    assert groups == {ResolvedEntraGroup(id=NESTED_GROUP_ID)}
     assert "list_entra_group_members" not in reader.operations()
