@@ -1911,6 +1911,22 @@ def test_get_docs_to_update_added_bare_group_id_is_a_change() -> None:
     assert docs == [doc]
 
 
+def test_get_docs_to_update_skips_access_owned_elsewhere() -> None:
+    """A SharePoint document whose access OneDrive owns keeps OneDrive's stored
+    access, so SharePoint's different access is no change."""
+    doc, db_doc = _unchanged_box_doc_with_groups(
+        {"sharepoint-group"}, ["onedrive_onedrive-group"]
+    )
+
+    docs, _ = get_docs_to_update(
+        [doc], db_docs=[db_doc], access_owned_elsewhere=frozenset({doc.id})
+    )
+    assert docs == []
+
+    docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+    assert docs == [doc]
+
+
 def test_get_docs_to_update_new_source_info_bypasses_both_gates_once() -> None:
     """A type or size the source newly reports is otherwise skipped forever by an
     unchanged timestamp and hash. Matching or no longer reported values skip."""

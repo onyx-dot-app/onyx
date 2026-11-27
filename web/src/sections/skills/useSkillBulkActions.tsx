@@ -70,6 +70,7 @@ export function useSkillBulkActions({
     locked,
     deleteLocked,
     failures,
+    failuresTitle,
     sharingOpen,
     setSharingOpen,
     deleteModal,
@@ -156,7 +157,7 @@ export function useSkillBulkActions({
   const failureReport = failures.length > 0 && (
     <MessageCard
       variant="error"
-      title={nounCopy("partialFailure", { count: failures.length })}
+      title={failuresTitle}
       description={failures
         .map((failure) => `${failure.name}: ${failure.detail}`)
         .join("\n")}

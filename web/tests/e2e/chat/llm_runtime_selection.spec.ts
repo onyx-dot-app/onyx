@@ -311,26 +311,17 @@ test.describe("LLM Runtime Selection", () => {
       timeout: 20000,
     });
 
+    const chatPage = new ChatPage(page);
     const messageSwitcher = page
       .getByTestId("MessageSwitcher/container")
       .first();
     await expect(messageSwitcher).toBeVisible({ timeout: 10000 });
     await expect(messageSwitcher).toContainText("2/2");
 
-    await messageSwitcher
-      .locator("..")
-      .locator("svg")
-      .first()
-      .locator("..")
-      .click();
+    await chatPage.selectPreviousVersion();
     await expect(messageSwitcher).toContainText("1/2");
 
-    await messageSwitcher
-      .locator("..")
-      .locator("svg")
-      .last()
-      .locator("..")
-      .click();
+    await chatPage.selectNextVersion();
     await expect(messageSwitcher).toContainText("2/2");
 
     expect(regeneratePayload.llm_override?.model_version).toBeTruthy();
