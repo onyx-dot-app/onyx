@@ -159,8 +159,8 @@ export default function SkillBundlePicker({
           <Text
             font="main-ui-body"
             color="text-03"
-            maxLines={1}
-            overflowTooltip
+            maxLines={compact ? 1 : undefined}
+            overflowTooltip={compact}
           >
             {value
               ? `${value.displayName}${value.source === "folder" ? "/" : ""}`
