@@ -10643,7 +10643,7 @@
           "owner": "Owner",
           "urlPatternApp": {
             "title": "This app uses URL patterns",
-            "description": "Onyx no longer adds URL-pattern apps. Add this service again as a custom REST app, add the new app to the same agents and scheduled tasks, then delete this one."
+            "description": "Onyx no longer adds URL-pattern apps. To replace this app, add the service again as a custom REST app. Do the setup steps in the docs before you delete this app."
           }
         },
         "configuration": {

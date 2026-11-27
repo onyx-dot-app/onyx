@@ -10643,7 +10643,7 @@
           "owner": "Proprietário",
           "urlPatternApp": {
             "title": "Este app usa padrões de URL",
-            "description": "O Onyx não adiciona mais apps com padrões de URL. Adicione este serviço novamente como app REST personalizado, adicione o novo app aos mesmos agentes e tarefas agendadas e depois exclua este."
+            "description": "O Onyx não adiciona mais apps com padrões de URL. Para substituir este app, adicione o serviço novamente como app REST personalizado. Siga as etapas de configuração da documentação antes de excluir este app."
           }
         },
         "configuration": {

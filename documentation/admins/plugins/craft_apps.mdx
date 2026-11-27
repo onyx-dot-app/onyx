@@ -249,9 +249,20 @@ API with the base URL `https://host/path`. The App keeps its agents, sign-ins an
 but starts with no endpoints. Add endpoints on the **Configuration** tab before Chat or Scheduled Tasks can use the App.
 Craft scripts still reach the App through the sandbox proxy. A custom App with other URL patterns stays as it is.
 
-You cannot change the URL patterns of an existing custom App. To change them, add the API again as a custom REST API,
-add it to the same agents and scheduled tasks, then delete the custom App.
-You can change its sign-in settings on its **Configuration** tab.
+You cannot change the URL patterns of an existing custom App. To change them, replace the App with a custom REST API.
+The new API does not get the connections, shares or approval settings of the old App. To replace the App:
+
+1. Add the API again as a custom REST API. See [OpenAPI](/admins/plugins/openapi).
+2. Set up its sign-in. See [Sign-in](/admins/plugins/openapi#sign-in).
+   If the sign-in mode is **Each user signs in**, tell each user to connect again.
+3. Share it with the same users and groups, and set the same install setting.
+   See [Access and install setting](/admins/plugins/overview#access-and-install-setting).
+4. Add it to the same agents and scheduled tasks.
+5. Review its action policies. See [Approvals](/admins/plugins/overview#approvals).
+6. As an affected user, send a request that uses the API, and make sure that it works.
+7. Delete the custom App.
+
+You can change the sign-in settings of a custom App on its **Configuration** tab.
 
 For example:
 
