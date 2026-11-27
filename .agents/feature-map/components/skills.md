@@ -925,11 +925,12 @@ the app from the same rule
     (`server/features/skill/api.py:save_plugin_upload`) adds a version to a
     plugin with the same name that the user authored and that is not a skill:
     the user's uploads first, then the Organization library
-    (`db/plugin.py:find_upload_target`). A new version of another user's
-    plugin needs Upload New Version; `save_as_new` makes a new plugin with the
-    next free name. A `plugin_id` form field (Upload New Version) binds the
-    upload to that plugin (`_bound_upload_target`): the user must edit it
-    (`fetch_editable_skill(..., any_plugin=True)`), a synced plugin is refused
+    (`db/plugin.py:find_upload_target`);
+    `save_as_new` makes a new plugin with the next free name. A `plugin_id`
+    form field (Upload New Version) binds the upload to that plugin
+    (`_bound_upload_target`): the user must edit it
+    (`fetch_editable_skill(..., any_plugin=True)`), so a new version of another
+    user's plugin needs it. A synced plugin is refused
     (`refuse_if_synced`), and the manifest name must be the plugin name or the
     plugin.json name of its current version (Save as New and ownership
     transfer rename only the plugin); another name is `INVALID_INPUT`. The save stores
