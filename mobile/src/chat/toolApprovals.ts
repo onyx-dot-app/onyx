@@ -15,9 +15,12 @@ import type { ToolCardSpec } from "@/chat/toolCards";
 // The send-message error code while a request waits for a decision.
 export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 
-export type ApprovalDecision = "approve_once" | "approve_session" | "reject";
+export type ApprovalDecision =
+  "approve_once" | "approve_session" | "approve_command" | "reject";
 
-// "approvedForSession": approved by a grant for the chat's later requests of the same tool.
+// "approvedForSession": approved by a grant for the chat's later requests of the same tool, or
+// for the command's later requests of the same action.
+// "expired": the request timed out.
 // "disabled": an approval found the tool disabled, so the call did not run.
 // "closed": the request no longer waits for a decision ("cancelled", or a decision answered 404 or
 // 409).
@@ -26,6 +29,7 @@ export type ApprovalStatus =
   | "approved"
   | "approvedForSession"
   | "rejected"
+  | "expired"
   | "disabled"
   | "closed";
 
@@ -85,9 +89,8 @@ export function toolApprovalStatus(
     case null:
       return localStatus ?? "pending";
     case "approved_for_chat":
-      return "approvedForSession";
     case "approved_for_command":
-      return "approved";
+      return "approvedForSession";
     case "cancelled":
       return "closed";
     default:
@@ -101,7 +104,8 @@ export function decidedStatus(
 ): ApprovalStatus {
   if (response.decided_via === "POLICY") return "disabled";
   if (response.decision === "REJECTED") return "rejected";
-  return response.decided_via === "SESSION_GRANT"
+  return response.decided_via === "SESSION_GRANT" ||
+    response.decided_via === "COMMAND_GRANT"
     ? "approvedForSession"
     : "approved";
 }

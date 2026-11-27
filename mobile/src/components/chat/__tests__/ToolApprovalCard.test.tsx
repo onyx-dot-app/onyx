@@ -110,10 +110,70 @@ describe("ToolApprovalCard", () => {
     expect(view.queryByText("Approve for this chat")).toBeNull();
   });
 
+  it("offers approval for the command when the server allows it", async () => {
+    postMock.mockResolvedValue({
+      decision: "APPROVED",
+      decided_via: "COMMAND_GRANT",
+      continuation: null,
+    });
+    const view = render(
+      <ToolApprovalCard
+        approval={{
+          turnIndex: 0,
+          request: {
+            ...request,
+            can_approve_for_chat: false,
+            can_approve_for_command: true,
+          },
+          status: "pending",
+        }}
+      />,
+    );
+
+    expect(view.queryByText("Approve for this chat")).toBeNull();
+    fireEvent.press(view.getByText("Approve for this command"));
+
+    await waitFor(() =>
+      expect(useToolApprovalUi.getState().localStatuses.get("a1")).toBe(
+        "approvedForSession",
+      ),
+    );
+    expect(postMock).toHaveBeenCalledWith("a1", "approve_command");
+  });
+
+  it("shows a string argument in full up to 300 characters, as web does", () => {
+    const text = "x".repeat(300);
+    const view = render(
+      <ToolApprovalCard
+        approval={{
+          turnIndex: 0,
+          request: { ...request, arguments: { body: text } },
+          status: "pending",
+        }}
+      />,
+    );
+    expect(view.getByText(text)).toBeTruthy();
+    expect(view.queryByText("Show more")).toBeNull();
+  });
+
+  it("records a command grant as approved for this command", () => {
+    const view = render(
+      <ToolApprovalCard
+        approval={{
+          turnIndex: 0,
+          request: { ...request, can_approve_for_command: true },
+          status: "approvedForSession",
+        }}
+      />,
+    );
+    expect(view.getByText("Approved for this command: Lookup")).toBeTruthy();
+  });
+
   it.each<[ApprovalStatus, string]>([
     ["approved", "Approved: Lookup"],
     ["approvedForSession", "Approved for this chat: Lookup"],
     ["rejected", "Not approved: Lookup"],
+    ["expired", "Timed out: Lookup"],
     ["disabled", "Disabled: Lookup"],
     ["closed", "No longer waiting: Lookup"],
   ])("records a %s request on one line", (status, text) => {

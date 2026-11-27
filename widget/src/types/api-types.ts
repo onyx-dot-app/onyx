@@ -252,6 +252,7 @@ export interface ChatStream {
 export interface ApprovalDecisionResponse {
   decision: "APPROVED" | "REJECTED";
   // "POLICY": the action policy disabled the tool, so the approval rejected it.
+  // "COMMAND_GRANT": approved for the rest of a VM command.
   decided_via: string;
   // The stream that continues the response; null while other requests still
   // wait, or for a background agent's request, which continues without one

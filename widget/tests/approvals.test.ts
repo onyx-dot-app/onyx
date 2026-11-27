@@ -189,7 +189,7 @@ describe("approval status", () => {
     );
     expect(
       approvalStatus(entry("a", "approved_for_command"), undefined)
-    ).toBe("approved");
+    ).toBe("approvedForSession");
     expect(approvalStatus(entry("a"), "rejected")).toBe("rejected");
     expect(approvalStatus(entry("a"), "submitting")).toBe("pending");
     expect(approvalStatus(entry("a"), undefined)).toBe("pending");
@@ -249,6 +249,7 @@ describe("approval status", () => {
   it.each([
     ["APPROVED", "USER", "approved"],
     ["APPROVED", "SESSION_GRANT", "approvedForSession"],
+    ["APPROVED", "COMMAND_GRANT", "approvedForSession"],
     ["REJECTED", "USER", "rejected"],
     ["REJECTED", "POLICY", "disabled"],
   ] as const)(
@@ -263,6 +264,12 @@ describe("approval status", () => {
   it("writes one-line records", () => {
     expect(approvalRecord("approvedForSession", "Send email")).toBe(
       "Approved for this chat: Send email"
+    );
+    expect(approvalRecord("approvedForSession", "GET /x", "command")).toBe(
+      "Approved for this command: GET /x"
+    );
+    expect(approvalRecord("expired", "Send email")).toBe(
+      "Timed out: Send email"
     );
     expect(approvalRecord("closed", "Send email")).toBe(
       "No longer waiting: Send email"
@@ -397,6 +404,22 @@ describe("approval arguments from the model", () => {
     expect(shown).toContain("Approval requested: Send email in Gmail");
     expect(shown).toContain("Approve for this command");
     expect(shown).not.toContain("Approve for this chat");
+  });
+
+  it("record a command grant as approved for this command", () => {
+    const command: ApprovalEntry = {
+      request: { ...request("a"), can_approve_for_command: true },
+      outcome: "approved_for_command",
+    };
+    const shown = shownText(
+      renderApprovalCard(
+        command,
+        approvalStatus(command, undefined),
+        view(new Set())
+      )
+    );
+    expect(shown).toContain("Approved for this command");
+    expect(shown).not.toContain("Approved for this chat");
   });
 
   it("name the subagent that asks", () => {
