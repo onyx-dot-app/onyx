@@ -13613,6 +13613,10 @@
       },
       "viewAllButton": {
         "label": "파일 {count}개 모두 보기"
+      },
+      "unavailable": {
+        "title": "이 파일을 사용할 수 없습니다",
+        "description": "삭제되었거나 액세스 권한이 없습니다."
       }
     },
     "rightPanel": {

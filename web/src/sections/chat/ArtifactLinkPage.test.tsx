@@ -8,13 +8,12 @@ const ARTIFACT_ID = "5b1d2c3e-0000-4000-8000-000000000000";
 const LINK = `/app/artifacts/${ARTIFACT_ID}/v1`;
 
 const mockGo = jest.fn();
-const mockNotFound = jest.fn();
 const mockNavigation = { go: mockGo };
+const UNAVAILABLE = "This file is not available";
 let mockPathname = LINK;
 
 jest.mock("@opal/navigation", () => ({
   ...jest.requireActual<typeof import("@opal/navigation")>("@opal/navigation"),
-  notFound: () => mockNotFound(),
   useNavigation: () => mockNavigation,
   usePathname: () => mockPathname,
 }));
@@ -40,7 +39,6 @@ describe("ArtifactLinkPage", () => {
 
   beforeEach(() => {
     mockGo.mockClear();
-    mockNotFound.mockClear();
     mockPathname = LINK;
     jest.spyOn(global, "fetch").mockReturnValue(
       new Promise((resolve) => {
@@ -96,10 +94,10 @@ describe("ArtifactLinkPage", () => {
     expect(mockGo).not.toHaveBeenCalled();
   });
 
-  test("a link the user may not open shows not-found", async () => {
-    renderPage();
+  test("a link the user may not open shows the unavailable page", async () => {
+    const { findByText } = renderPage();
     await act(async () => fail());
-    expect(mockNotFound).toHaveBeenCalled();
+    expect(await findByText(UNAVAILABLE)).toBeInTheDocument();
   });
 
   test("a cached error waits for the fresh response", async () => {
@@ -109,7 +107,7 @@ describe("ArtifactLinkPage", () => {
         { error: new Error("not found") },
       ],
     ]);
-    const { findByTestId } = render(
+    const { findByTestId, queryByText } = render(
       <SWRConfig value={{ provider: () => cache }}>
         <ArtifactLinkPage artifactId={ARTIFACT_ID} version={1} />
       </SWRConfig>
@@ -119,14 +117,14 @@ describe("ArtifactLinkPage", () => {
     expect(await findByTestId("artifact-link-header")).toHaveTextContent(
       "report.md"
     );
-    expect(mockNotFound).not.toHaveBeenCalled();
+    expect(queryByText(UNAVAILABLE)).toBeNull();
   });
 
-  test("an error after the user left the link shows no not-found", async () => {
-    const { rerender } = renderPage();
+  test("an error after the user left the link shows no unavailable page", async () => {
+    const { rerender, queryByText } = renderPage();
     mockPathname = "/app/agents";
     rerender(<ArtifactLinkPage artifactId={ARTIFACT_ID} version={1} />);
     await act(async () => fail());
-    expect(mockNotFound).not.toHaveBeenCalled();
+    expect(queryByText(UNAVAILABLE)).toBeNull();
   });
 });

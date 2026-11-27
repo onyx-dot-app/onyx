@@ -1671,7 +1671,28 @@ def rename_chat_artifact(db_session: Session, artifact_id: UUID, name: str) -> N
     publish does, which makes it PENDING for the search index. Its file
     records keep their names. An artifact that is gone, or whose chat is
     deleted, raises ArtifactNotFound. The caller checks the user's access
-    and the name, commits, and sends its indexing task."""
+    and the name, commits, and sends its indexing task.
+
+    A version title that is the artifact's old effective name only repeats
+    the file name, so the rename clears it and the label shows the new
+    name."""
+    db_session.execute(
+        update(ChatArtifactVersion)
+        .where(
+            ChatArtifactVersion.artifact_id == artifact_id,
+            ChatArtifactVersion.title
+            == func.coalesce(
+                select(ChatArtifact.name)
+                .where(ChatArtifact.id == artifact_id)
+                .scalar_subquery(),
+                select(FileRecord.display_name)
+                .where(FileRecord.file_id == ChatArtifactVersion.file_id)
+                .scalar_subquery(),
+            ),
+        )
+        .values(title=None)
+        .execution_options(synchronize_session=False)
+    )
     if (
         db_session.execute(
             update(ChatArtifact)

@@ -13613,6 +13613,10 @@
       },
       "viewAllButton": {
         "label": "{count}件のファイルをすべて表示"
+      },
+      "unavailable": {
+        "title": "このファイルは利用できません",
+        "description": "削除されたか、アクセス権がありません。"
       }
     },
     "rightPanel": {

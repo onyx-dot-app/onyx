@@ -22,7 +22,7 @@ import {
   getDisplayNameForSource,
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
-import { ensureHrefProtocol } from "@/lib/utils";
+import { ensureHrefProtocol, isBareRelativeHref } from "@/lib/utils";
 import { extractTextFromReactNode } from "@/lib/timeline/chat/message/codeUtils";
 import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
@@ -203,6 +203,8 @@ export const MemoizedLink = memo(
     }, [document, updatePresentingDocument, question, openQuestion]);
 
     const url: string | undefined = ensureHrefProtocol(href);
+    // A VM path the model linked opens nothing in the browser.
+    const isVmPath: boolean = !!url && isBareRelativeHref(url);
     const isChatFile: boolean = !!url?.includes("/api/chat/file/");
     const plainLabel: string | null = getPlainLabel(value);
 
@@ -233,6 +235,10 @@ export const MemoizedLink = memo(
           />
         </span>
       );
+    }
+
+    if (isVmPath) {
+      return <span>{rest.children}</span>;
     }
 
     if (isChatFile && updatePresentingDocument) {

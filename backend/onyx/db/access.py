@@ -2,8 +2,8 @@
 
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
 from sqlalchemy import cast as sa_cast
+from sqlalchemy import or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
@@ -69,21 +69,20 @@ def user_can_access_persona_attached_file(
 def user_can_access_chat_message_file(
     db_session: Session, file_id: str, user_id: UUID
 ) -> bool:
-    """Return True if `file_id` is in `ChatMessage.files` of a session the
-    user owns or that is shared as `ChatSessionSharedStatus.PUBLIC`.
+    """Return True if `file_id` is in `ChatMessage.files` of a session that
+    is not deleted and that the user owns or that is shared as
+    `ChatSessionSharedStatus.PUBLIC`.
     """
     chat_file_stmt = (
         select(ChatMessage.id)
         .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
         .where(ChatSession.spawned_by_message_id.is_(None))
         .where(ChatMessage.files.op("@>")([{"id": file_id}]))
+        .where(ChatSession.deleted.is_(False))
         .where(
             or_(
                 ChatSession.user_id == user_id,
-                and_(
-                    ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
-                    ChatSession.deleted.is_(False),
-                ),
+                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
             )
         )
         .limit(1)
@@ -128,19 +127,17 @@ def get_chat_output_file_row(
 def user_can_read_chat_session(
     db_session: Session, chat_session_id: UUID, user_id: UUID
 ) -> bool:
-    """Return True if the user owns the session or it is shared as
-    `ChatSessionSharedStatus.PUBLIC`.
+    """Return True if the session is not deleted and the user owns it or it
+    is shared as `ChatSessionSharedStatus.PUBLIC`.
     """
     stmt = (
         select(ChatSession.id)
         .where(ChatSession.id == chat_session_id)
+        .where(ChatSession.deleted.is_(False))
         .where(
             or_(
                 ChatSession.user_id == user_id,
-                and_(
-                    ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
-                    ChatSession.deleted.is_(False),
-                ),
+                ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
             )
         )
         .limit(1)

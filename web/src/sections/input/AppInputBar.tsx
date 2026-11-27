@@ -1392,7 +1392,9 @@ const AppInputBar = React.memo(
             }
             aria-label={
               !hasPendingInput
-                ? undefined
+                ? canStopGeneration && !message.trim()
+                  ? t("baseInputBar.stopButton.ariaLabel")
+                  : undefined
                 : sendDelivery === "interrupt"
                   ? t("appInputBar.pendingMessages.interruptLabel")
                   : t("baseInputBar.sendButton.sendLabel")

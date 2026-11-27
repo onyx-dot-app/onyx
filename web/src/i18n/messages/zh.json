@@ -13613,6 +13613,10 @@
       },
       "viewAllButton": {
         "label": "查看全部 {count} 个文件"
+      },
+      "unavailable": {
+        "title": "此文件不可用",
+        "description": "它已被删除，或者您没有访问权限。"
       }
     },
     "rightPanel": {

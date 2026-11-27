@@ -13613,6 +13613,10 @@
       },
       "viewAllButton": {
         "label": "Alle {count} Dateien anzeigen"
+      },
+      "unavailable": {
+        "title": "Diese Datei ist nicht verfügbar",
+        "description": "Sie wurde gelöscht, oder Sie haben keinen Zugriff darauf."
       }
     },
     "rightPanel": {

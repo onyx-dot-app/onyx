@@ -13613,6 +13613,10 @@
       },
       "viewAllButton": {
         "label": "Voir les {count} fichiers"
+      },
+      "unavailable": {
+        "title": "Ce fichier n'est pas disponible",
+        "description": "Il a été supprimé, ou vous n'y avez pas accès."
       }
     },
     "rightPanel": {
