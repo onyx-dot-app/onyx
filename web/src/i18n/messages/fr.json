@@ -17627,7 +17627,7 @@
     },
     "takenName": {
       "title": "Nom",
-      "description": "Ce nom est déjà utilisé. Choisissez un autre nom.",
+      "description": "Saisissez un nom qui n’est pas encore utilisé.",
       "taken": "{name} est déjà utilisé. Choisissez un autre nom.",
       "invalid": "Utilisez des lettres minuscules, des chiffres et des tirets simples, {max} caractères au maximum."
     }

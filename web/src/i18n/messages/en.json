@@ -17627,7 +17627,7 @@
     },
     "takenName": {
       "title": "Name",
-      "description": "This name is already in use. Pick a different name.",
+      "description": "Enter a name that is not in use yet.",
       "taken": "{name} is already in use. Pick a different name.",
       "invalid": "Use lowercase letters, numbers and single hyphens, at most {max} characters."
     }

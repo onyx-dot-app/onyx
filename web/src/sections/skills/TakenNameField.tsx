@@ -47,7 +47,7 @@ export default function TakenNameField({
       <InputTypeIn
         aria-label={t("title")}
         value={value}
-        variant={error ? "error" : "primary"}
+        variant={disabled ? "disabled" : error ? "error" : "primary"}
         onChange={(event) => onChange(event.target.value)}
       />
     </InputVertical>

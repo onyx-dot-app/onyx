@@ -17627,7 +17627,7 @@
     },
     "takenName": {
       "title": "名称",
-      "description": "此名称已被使用。请选择其他名称。",
+      "description": "请输入尚未使用的名称。",
       "taken": "{name} 已被使用。请选择其他名称。",
       "invalid": "请使用小写字母、数字和单个连字符，最多 {max} 个字符。"
     }
