@@ -36,7 +36,7 @@ export default function UploadPluginFlow({
         navigation.go(newSkillHref(stageSkillCreationDraft(draft)));
       }}
       onSaved={(
-        { target, plugin, unchanged, name_conflicts },
+        { target, plugin, enabled, unchanged, name_conflicts },
         needsAttention
       ) => {
         onClose();
@@ -51,7 +51,11 @@ export default function UploadPluginFlow({
         };
         if (unchanged) {
           toast.info(uploadCopy("saved.unchanged", values));
-        } else if (name_conflicts.length > 0) {
+        } else if (
+          name_conflicts.length > 0 &&
+          // A new version that is off clashes with nothing.
+          (target.kind === "new_plugin" || enabled)
+        ) {
           toast.warning(
             uploadCopy(
               target.kind === "new_version" ? "saved.clash" : "saved.off",

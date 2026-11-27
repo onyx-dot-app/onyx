@@ -26,14 +26,14 @@ export default function useShareableGroups(
     !settings.isLoading && settings.enterprise !== null;
 
   const key = manageableFor
-    ? `${SWR_KEYS.shareableGroups}?manageable_for=${encodeURIComponent(manageableFor)}`
+    ? SWR_KEYS.shareableGroupsManageableFor(manageableFor)
     : SWR_KEYS.shareableGroups;
   const { data, error, isLoading } = useSWR<MinimalUserGroupSnapshot[]>(
     isPaidEnterpriseFeaturesEnabled && enabled ? key : null,
     errorHandlingFetcher
   );
 
-  const refreshShareableGroups = () => mutate(SWR_KEYS.shareableGroups);
+  const refreshShareableGroups = () => mutate(key);
 
   if (settings.isLoading) {
     return {

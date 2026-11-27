@@ -313,6 +313,59 @@ test("turning on a skill whose name a required skill holds does not offer a swit
   error.mockRestore();
 });
 
+test("a plugin with another plugin's label turns on without a switch prompt", async () => {
+  mockSetSkillEnabled.mockResolvedValue(
+    customFixture({ id: "candidate", kind: "plugin", enabled: true })
+  );
+  const holder = customFixture({
+    id: "holder",
+    kind: "plugin",
+    name: "shared",
+    enabled: true,
+  });
+  const candidate = customFixture({
+    id: "candidate",
+    kind: "plugin",
+    name: "shared",
+    enabled: false,
+  });
+  const user = setupUser();
+  render(<EnablementHarness items={[holder, candidate]} />);
+
+  await user.click(screen.getByRole("button", { name: "turn on second" }));
+
+  await waitFor(() => expect(mockSetSkillEnabled).toHaveBeenCalled());
+  expect(screen.getByTestId("switch-open")).toHaveTextContent("false");
+});
+
+test("a required plugin with a skill's name does not block the skill", async () => {
+  mockSetSkillEnabled.mockResolvedValue(
+    customFixture({ id: "candidate", name: "shared", enabled: true })
+  );
+  const error = jest.spyOn(toast, "error");
+  const required = customFixture({
+    id: "required",
+    kind: "plugin",
+    name: "shared",
+    enabled: true,
+    can_toggle: false,
+    required_for_user: true,
+  });
+  const candidate = customFixture({
+    id: "candidate",
+    name: "shared",
+    enabled: false,
+  });
+  const user = setupUser();
+  render(<EnablementHarness items={[required, candidate]} />);
+
+  await user.click(screen.getByRole("button", { name: "turn on second" }));
+
+  await waitFor(() => expect(mockSetSkillEnabled).toHaveBeenCalled());
+  expect(error).not.toHaveBeenCalled();
+  error.mockRestore();
+});
+
 test("a required plugin with the same label does not block turning on another", async () => {
   mockSetSkillEnabled.mockResolvedValue(
     customFixture({ id: "candidate", kind: "plugin", enabled: true })

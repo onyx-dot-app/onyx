@@ -519,17 +519,18 @@ export function useSkillEnablement(
     enabled: boolean,
     replaceConflict = false
   ): Promise<void> {
-    const holders = items.filter(
-      (candidate) =>
-        candidate.id !== item.id &&
-        candidate.name === item.name &&
-        candidate.enabled
-    );
-    if (
-      enabled &&
-      item.kind !== "plugin" &&
-      holders.some((holder) => holder.can_toggle === false)
-    ) {
+    // A plugin's label is not a skill name, so the server finds its clashes.
+    const holders =
+      item.kind === "plugin"
+        ? []
+        : items.filter(
+            (candidate) =>
+              candidate.id !== item.id &&
+              candidate.kind !== "plugin" &&
+              candidate.name === item.name &&
+              candidate.enabled
+          );
+    if (enabled && holders.some((holder) => holder.can_toggle === false)) {
       switchModal.toggle(false);
       toast.error(t("page.toasts.requiredHolder", { name: item.name }));
       return;
@@ -620,6 +621,12 @@ export function useSkillEnablement(
     switchConflicts,
     switchModal,
   };
+}
+
+/** A row a bulk disable turns off. A row the user turned on that a same-name
+ * skill holds shows off, but would run once the holder turns off. */
+export function isDisableTarget(item: CustomSkill): boolean {
+  return item.enabled || item.name_held_by.length > 0;
 }
 
 /** Refreshes the skill lists after a change, and reports a failed refresh. */
@@ -736,11 +743,7 @@ export function useSkillBulkSelection({
           ? selectedItems
           : action === "enable"
             ? toggleableItems.filter((item) => !item.enabled)
-            : // A row the user turned on that a same-name skill holds shows
-              // off, but would run once the holder turns off.
-              toggleableItems.filter(
-                (item) => item.enabled || item.name_held_by.length > 0
-              );
+            : toggleableItems.filter(isDisableTarget);
     const skipped =
       action === "enable" || action === "disable"
         ? selectedItems.filter(

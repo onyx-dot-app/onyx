@@ -184,6 +184,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const [showIndividualAccess, setShowIndividualAccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  // The skill as the dialog was filled, so a save sends only the fields the
+  // user changed even after a background refresh.
+  const [baseline, setBaseline] = useState<SkillSharingDraft | null>(null);
 
   // Hydrate once per open session: a background SWR refresh of `skill` must
   // not wipe in-progress staged edits.
@@ -219,6 +222,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     setInitialGroupSettings(nextGroupSettings);
     setDraftState(nextState);
     setInitialState(nextState);
+    setBaseline(skill);
     setStagedUsers([]);
     setStagedGroups([]);
     setStagedPermission("VIEWER");
@@ -424,7 +428,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       const payload = serializeSkillSharing(
         nextDraft,
         isOrganizationManager,
-        skill
+        baseline ?? undefined
       );
       if (canSetGroupSettings && groupChanges.length > 0) {
         payload.group_settings = groupChanges;

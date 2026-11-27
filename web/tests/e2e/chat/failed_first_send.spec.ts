@@ -10,7 +10,7 @@ test.describe("A failed first send in a new chat", () => {
     await mockChatEndpoint(chatPage.page, REJECTED_STREAM);
 
     await chatPage.inputBar.fill("restore me");
-    await chatPage.inputBar.send();
+    await chatPage.inputBar.sendAndWaitForReply();
 
     await chatPage.inputBar.expectText("restore me");
   });

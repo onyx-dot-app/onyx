@@ -19,6 +19,7 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 import {
+  isDisableTarget,
   useSkillBulkSelection,
   type BulkSkillNoun,
   type SkillEnablement,
@@ -96,7 +97,7 @@ export function useSkillBulkActions({
       onSelect: () => void run("enable"),
     });
   }
-  if (toggleableItems.some((item) => item.enabled)) {
+  if (toggleableItems.some(isDisableTarget)) {
     toggleActions.push({
       kind: "action",
       id: "disable",

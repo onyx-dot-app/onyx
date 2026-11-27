@@ -810,6 +810,11 @@ def affected_user_ids_for_plugins(
     return set(db_session.scalars(select(pairs.c.user_id).distinct()))
 
 
+def name_order_key(state: UserPluginState) -> tuple[SkillNameRank, datetime, UUID]:
+    """The order in which plugins win a skill name: lowest first."""
+    return (state.name_rank, state.created_at, state.plugin_id)
+
+
 def order_skill_names(
     states: Iterable[UserPluginState],
     reserved_names: Collection[str] = (),
@@ -827,10 +832,7 @@ def order_skill_names(
 
     hidden: set[UUID] = set()
     for name, named in contenders.items():
-        ordered = sorted(
-            named,
-            key=lambda state: (state.name_rank, state.created_at, state.plugin_id),
-        )
+        ordered = sorted(named, key=name_order_key)
         if name not in reserved_names:
             ordered = ordered[1:]
         hidden.update(state.plugin_id for state in ordered)

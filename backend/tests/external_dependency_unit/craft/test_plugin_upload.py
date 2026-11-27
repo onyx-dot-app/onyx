@@ -5,6 +5,7 @@ import threading
 import zipfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from unittest.mock import patch
 from uuid import UUID
 
@@ -28,6 +29,7 @@ from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
+    set_plugin_preferences__no_commit,
 )
 from onyx.db.skill import list_chat_skills, list_runtime_skills_for_user
 from onyx.db.users import delete_user_from_db__no_commit
@@ -963,6 +965,44 @@ def test_a_plugin_that_loses_its_skill_name_says_which_plugin_holds_it(
     assert own.enabled is True
     assert listed[own.plugin.id] == (False, ["company-kit"])
     assert listed[company.plugin.id] == (True, [])
+
+
+def test_a_holder_that_loses_another_name_still_holds_its_name(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    """first-kit takes "x" from second-kit, which still takes "y" from
+    third-kit, so third-kit names second-kit as its holder."""
+    member, _, _ = users
+    saved = [
+        _save(member, _plugin_zip(name, skills), db_session).plugin.id
+        for name, skills in (
+            ("first-kit", ["x"]),
+            ("second-kit", ["x", "y"]),
+            ("third-kit", ["y"]),
+        )
+    ]
+    plugins = {
+        plugin.id: plugin
+        for plugin in db_session.scalars(select(Plugin).where(Plugin.id.in_(saved)))
+    }
+    for offset, plugin_id in enumerate(saved):
+        plugins[plugin_id].created_at = plugins[saved[0]].created_at + timedelta(
+            seconds=offset
+        )
+    set_plugin_preferences__no_commit(member.id, saved, True, db_session)
+    db_session.commit()
+
+    listed = {
+        skill.id: (skill.enabled, skill.name_held_by)
+        for skill in api.list_skills_for_current_user(member, db_session).customs
+    }
+
+    first, second, third = saved
+    assert listed[first] == (True, [])
+    assert listed[second] == (False, ["first-kit"])
+    assert listed[third] == (False, ["second-kit"])
 
 
 def test_a_new_version_of_an_enabled_plugin_turns_on_its_new_integrations(

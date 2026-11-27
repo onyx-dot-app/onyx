@@ -94,6 +94,7 @@ from onyx.db.plugin_access import (
     frontmatter_in_version,
     holds_one_root_skill,
     load_user_plugin_states,
+    name_order_key,
     order_skill_names,
     plugin_editable_by_user,
     plugin_in_managed_scope,
@@ -845,7 +846,8 @@ def skill_user_states(
                         for other in selection.other_skills_named(
                             state.skill_names, skill_id
                         )
-                        if other.plugin_id not in selection.hidden
+                        # A holder that loses another name still wins this one.
+                        if name_order_key(other) < name_order_key(state)
                     }
                     | (built_in_names & set(state.skill_names))
                 )
