@@ -53,7 +53,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
-from onyx.integrations.models import ApiShape
+from onyx.integrations.models import ApiShape, EffectivePolicy
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -971,6 +971,44 @@ def test_a_saved_approval_repeated_after_the_policies_block_returns_it(
     db_session.expire_all()
     row = db_session.get(ActionApproval, approval_id)
     assert row is not None and row.decision == ApprovalDecision.APPROVED
+
+
+def test_a_request_that_expires_during_the_policy_lookup_is_a_conflict(
+    db_session: Session, chat: _Chat, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The waiting cutoff is taken after the policy lookup, so a request that
+    expires during the lookup is not approved."""
+    approval_id = _gate()._persist_approval_row(
+        _ctx(chat, uuid4()), _matched(chat.integration_id), {}
+    )
+    row = db_session.get(ActionApproval, approval_id)
+    assert row is not None
+    created_at = row.created_at
+    looked_up: list[bool] = []
+    lookup = command_approvals.current_chat_action_policies
+
+    def recording_lookup(
+        *args: Any, **kwargs: Any
+    ) -> dict[str, EffectivePolicy] | None:
+        looked_up.append(True)
+        return lookup(*args, **kwargs)
+
+    def cutoff() -> datetime:
+        return created_at + timedelta(seconds=1 if looked_up else -1)
+
+    monkeypatch.setattr(
+        command_approvals, "current_chat_action_policies", recording_lookup
+    )
+    monkeypatch.setattr(command_approvals.action_approval, "waiting_cutoff", cutoff)
+
+    with pytest.raises(OnyxError) as conflict:
+        _decide(db_session, chat, approval_id, ApprovalChoice.APPROVE_ONCE)
+    assert conflict.value.error_code is OnyxErrorCode.CONFLICT
+    assert looked_up
+    db_session.rollback()
+    db_session.expire_all()
+    row = db_session.get(ActionApproval, approval_id)
+    assert row is not None and row.decision is None
 
 
 def test_the_card_of_a_request_that_the_policies_now_block_ends_disabled(

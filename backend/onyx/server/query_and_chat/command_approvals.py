@@ -206,23 +206,25 @@ def _record_command_decision(
     row: ActionApproval,
     choice: ApprovalChoice,
     user_id: UUID,
-    cutoff: datetime,
 ) -> tuple[
     Literal[ApprovalDecision.APPROVED, ApprovalDecision.REJECTED],
     ApprovalDecidedVia,
     list[str] | None,
+    datetime,
 ]:
-    """Save the decision on a waiting `row`. Returns the decision and the
-    actions that it grants for the command, or None for them when the row
-    no longer waits and nothing was saved."""
+    """Save the decision on a waiting `row`. Returns the decision, the
+    actions that it grants for the command (None when the row no longer
+    waits and nothing was saved) and the waiting cutoff, taken after the
+    policy lookup."""
     command_choice, blocked = (
         _command_choice(db_session, row, choice, user_id)
         if row.decision is None
         else (choice, False)
     )
     decision, decided_via = command_choice.outcome(blocked=blocked)
+    cutoff = action_approval.waiting_cutoff()
     if row.decision is not None:
-        return decision, decided_via, None
+        return decision, decided_via, None, cutoff
     granted = (
         approval_cache.command_grant_actions(row.actions)
         if decided_via == ApprovalDecidedVia.COMMAND_GRANT
@@ -240,7 +242,7 @@ def _record_command_decision(
         decided_via=decided_via,
         created_after=cutoff,
     )
-    return decision, decided_via, None if recorded is None else granted
+    return decision, decided_via, None if recorded is None else granted, cutoff
 
 
 def decide_command_approval(
@@ -261,10 +263,8 @@ def decide_command_approval(
     if chat_session_id is None or command_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
     cache = get_cache_backend(tenant_id=get_current_tenant_id())
-    cutoff = action_approval.waiting_cutoff()
-
-    decision, decided_via, granted = _record_command_decision(
-        db_session, row, choice, user_id, cutoff
+    decision, decided_via, granted, cutoff = _record_command_decision(
+        db_session, row, choice, user_id
     )
     if granted is None:
         # A retry repeats the wakes and the scan that the first call may have
