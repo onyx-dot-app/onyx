@@ -364,6 +364,8 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
+  // False when the action asks each time: the card offers no "Approve for this chat".
+  can_approve_for_chat?: boolean;
   // The subagent that asks; null or absent for the root agent's own request.
   agent_name?: string | null;
 }

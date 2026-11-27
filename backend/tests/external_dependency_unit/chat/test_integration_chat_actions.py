@@ -2,9 +2,9 @@
 integration tables, with code mode on and off. An Ask action waits for the
 user's approval, keyed by its integration."""
 
-import io
 import json
 from collections.abc import Generator
+from io import BytesIO
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
@@ -142,7 +142,7 @@ def _orders_response(
         response.status_code = 200
         response.headers["Content-Type"] = "application/json"
         response.raw = urllib3.HTTPResponse(
-            body=io.BytesIO(json.dumps({"orders": ["A-1"]}).encode()),
+            body=BytesIO(json.dumps({"orders": ["A-1"]}).encode()),
             preload_content=False,
         )
         return response

@@ -167,11 +167,13 @@ class StubResolver(SandboxIdentityResolver):
         sandbox_exc: Exception | None = None,
         session_by_id: UUID | None = None,
         session_by_id_exc: Exception | None = None,
+        chat_session: UUID | None = None,
     ) -> None:
         self._sandbox = sandbox
         self._sandbox_exc = sandbox_exc
         self._session_by_id = session_by_id
         self._session_by_id_exc = session_by_id_exc
+        self._chat_session = chat_session
         self.resolve_sandbox_calls = 0
         self.resolve_session_by_id_calls: list[tuple[UUID, UUID, str]] = []
 
@@ -194,6 +196,14 @@ class StubResolver(SandboxIdentityResolver):
         if self._session_by_id_exc is not None:
             raise self._session_by_id_exc
         return self._session_by_id
+
+    def resolve_chat_session(
+        self,
+        session_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> UUID | None:
+        return self._chat_session
 
 
 class RecordingCredentialResolver(CredentialResolver):
@@ -279,6 +289,7 @@ class NoMatchedRequest(RequestEvaluator):
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        session_tag: UUID | None = None,  # noqa: ARG002
     ) -> AllMatchedActions | None:
         return None
 

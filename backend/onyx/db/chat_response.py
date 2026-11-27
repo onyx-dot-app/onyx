@@ -74,6 +74,7 @@ from onyx.db.models import (
     ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
+    Integration,
     QuestionRequest,
     StoredToolResult,
     ToolCall,
@@ -1570,9 +1571,15 @@ def load_chat_approvals(
         select(started.c.response_id, started.c.root_id, started.c.anchor_call_id)
     ).all()
     rows = db_session.execute(
-        select(ApprovalRequest, ChatMessage.chat_session_id, ChatSession.agent_name)
+        select(
+            ApprovalRequest,
+            ChatMessage.chat_session_id,
+            ChatSession.agent_name,
+            Integration.kind,
+        )
         .join(ChatMessage, ChatMessage.id == ApprovalRequest.chat_message_id)
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(Integration, Integration.id == ApprovalRequest.integration_id)
         .where(
             ApprovalRequest.chat_session_id == chat_session_id,
             ApprovalRequest.chat_message_id.in_(
@@ -1581,9 +1588,11 @@ def load_chat_approvals(
         )
         .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
     ).all()
-    for request, session_id, agent_name in rows:
+    for request, session_id, agent_name, integration_kind in rows:
         approvals.requests.setdefault(request.chat_message_id, []).append(
-            SavedToolApproval.model_validate(request)
+            SavedToolApproval.model_validate(request).model_copy(
+                update={"integration_kind": integration_kind}
+            )
         )
         if session_id != chat_session_id:
             approvals.agent_names[request.chat_message_id] = agent_name or ""

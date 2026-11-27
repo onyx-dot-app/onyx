@@ -65,6 +65,7 @@ from onyx.chat.tool_results import (
 )
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
+from onyx.integrations.policy import always_asks
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -655,6 +656,10 @@ def replay_response(
                             tool_name=approval.tool_name,
                             display_name=approval.display_name,
                             arguments=approval.arguments,
+                            can_approve_for_chat=approval.integration_kind is None
+                            or not always_asks(
+                                approval.integration_kind, approval.action_id
+                            ),
                             agent_name=agent_name,
                         ),
                     )

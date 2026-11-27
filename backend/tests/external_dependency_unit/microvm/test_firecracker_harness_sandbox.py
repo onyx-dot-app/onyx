@@ -335,7 +335,15 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     # The daemon makes the session directory and uses it as the default cwd.
     assert command.session_id == str(ref.session_id)
     assert command.cwd == ""
-    assert command.env == {}
+    # The proxy URL of the command carries the chat session, so the egress
+    # proxy applies the app policies of that chat.
+    proxy_url = f"http://{ref.session_id}:x@127.0.0.1:3128"
+    assert command.env == {
+        "HTTP_PROXY": proxy_url,
+        "HTTPS_PROXY": proxy_url,
+        "http_proxy": proxy_url,
+        "https_proxy": proxy_url,
+    }
 
 
 def test_exec_command_reports_a_failed_command_and_relative_workdir(

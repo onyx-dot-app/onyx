@@ -790,6 +790,7 @@ class ToolRenderer:
                 arguments=event.request.display_arguments
                 if event.request.display_arguments is not None
                 else tool_arguments_for_display(call),
+                can_approve_for_chat=event.request.can_approve_for_chat,
             )
         else:
             obj = self.approval_resolved(
@@ -1091,6 +1092,7 @@ class ToolRenderer:
                 packets.CustomToolDelta(
                     tool_name=details.tool_name,
                     tool_id=self.tool_id,
+                    integration_id=details.integration_id,
                     response_type=details.response_type,
                     data=data,
                     file_ids=files.file_ids if files else None,

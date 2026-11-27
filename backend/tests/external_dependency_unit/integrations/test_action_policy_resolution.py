@@ -18,6 +18,7 @@ from onyx.db.enums import (
     ApprovalDecision,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
+    PersonaSharePermission,
     PluginInstallationPolicy,
 )
 from onyx.db.integration import list_integration_actions
@@ -33,6 +34,7 @@ from onyx.db.models import (
     IntegrationAction,
     Persona,
     Persona__Integration,
+    Persona__User,
     User,
     UserIntegrationPreference,
 )
@@ -45,9 +47,11 @@ from onyx.integrations.policy import (
     resolve_action_policies,
     resolve_chat_action_policies,
 )
+from onyx.tools.models import IntegrationEntry, ToolOptions
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
     create_test_persona,
+    share_persona_with_user,
 )
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
@@ -262,10 +266,19 @@ def test_an_unknown_action_key_asks_and_no_link_blocks(
 
 
 def _recheck(
-    db_session: Session, integration: Integration, user: User, persona_id: int
+    db_session: Session,
+    integration: Integration,
+    user: User,
+    persona_id: int,
+    tool_options: ToolOptions | None = None,
+    action_key: str = "update",
 ) -> EffectivePolicy:
     chat_session = ChatSession(
-        id=uuid4(), user_id=user.id, persona_id=persona_id, description="recheck"
+        id=uuid4(),
+        user_id=user.id,
+        persona_id=persona_id,
+        description="recheck",
+        tool_options=tool_options,
     )
     db_session.add(chat_session)
     db_session.commit()
@@ -273,10 +286,10 @@ def _recheck(
         return resolve_chat_action_policies(
             db_session,
             integration=integration,
-            action_keys=["update"],
+            action_keys=[action_key],
             user_id=user.id,
             chat_session_id=chat_session.id,
-        )["update"]
+        )[action_key]
     finally:
         db_session.delete(chat_session)
         db_session.commit()
@@ -333,6 +346,48 @@ def test_the_approval_recheck_reads_the_integrations_the_user_can_use(
         db_session.commit()
 
 
+def test_a_chat_on_an_agent_the_user_lost_gets_no_integrations(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    integrations: list[int],
+    make_test_user: MakeTestUser,
+) -> None:
+    """The sandbox proxy reads these policies for the commands of a chat, so
+    after the user loses access to the custom agent of the chat, its Allow
+    links stop, and the default agent's integrations do not take over."""
+    owner = make_test_user("policy_lost_owner")
+    user = make_test_user("policy_lost_member")
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.test/mcp",
+        name=f"lost-{uuid4().hex[:8]}",
+        tools=("update",),
+    )
+    integrations.append(integration.id)
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    set_policy(db_session, integration.id, "update", ALLOW)
+    persona = create_test_persona(db_session, owner)
+    try:
+        link_persona(db_session, persona.id, integration.id)
+        share_persona_with_user(
+            db_session, persona, user, PersonaSharePermission.VIEWER
+        )
+        assert _recheck(db_session, integration, user, persona.id) is E_ALLOW
+        assert _recheck(db_session, integration, user, DEFAULT_PERSONA_ID) is E_ALLOW
+
+        db_session.query(Persona__User).filter(
+            Persona__User.persona_id == persona.id
+        ).delete()
+        db_session.commit()
+        assert _recheck(db_session, integration, user, persona.id) is E_BLOCKED
+    finally:
+        db_session.rollback()
+        db_session.query(Persona).filter(Persona.id == persona.id).delete()
+        db_session.commit()
+
+
 def test_the_approval_recheck_blocks_when_the_agent_has_no_link(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -365,6 +420,55 @@ def test_the_approval_recheck_blocks_when_the_agent_has_no_link(
         assert _recheck(db_session, integration, user, persona.id) is (
             EffectivePolicy.BLOCKED
         )
+    finally:
+        db_session.rollback()
+        db_session.query(Persona).filter(Persona.id == persona.id).delete()
+        db_session.commit()
+
+
+def test_the_chat_tool_options_narrow_the_policies_of_the_chat(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    integrations: list[int],
+    make_test_user: MakeTestUser,
+) -> None:
+    """The sandbox proxy reads these policies for the commands of a chat, so
+    an integration or action that the chat's tool options turn off is
+    Blocked, as its tool is not offered. A Required integration stays."""
+    user = make_test_user("policy_tool_options")
+
+    def integration_with(policy: PluginInstallationPolicy) -> Integration:
+        integration, _ = make_mcp_integration(
+            db_session,
+            server_url="https://mcp.example.test/mcp",
+            name=f"options-{uuid4().hex[:8]}",
+            tools=("update", "search"),
+        )
+        integrations.append(integration.id)
+        give_access(db_session, [integration], installation_policy=policy)
+        return integration
+
+    narrowed = integration_with(PluginInstallationPolicy.DEFAULT)
+    dropped = integration_with(PluginInstallationPolicy.DEFAULT)
+    required = integration_with(PluginInstallationPolicy.REQUIRED)
+    persona = create_test_persona(db_session, user)
+    options = ToolOptions(
+        allowed=[IntegrationEntry(integration_id=narrowed.id, actions=["search"])]
+    )
+    try:
+        for integration in (narrowed, dropped, required):
+            link_persona(db_session, persona.id, integration.id)
+
+        def policy(integration: Integration, action_key: str) -> EffectivePolicy:
+            return _recheck(
+                db_session, integration, user, persona.id, options, action_key
+            )
+
+        assert policy(narrowed, "search") is not E_BLOCKED
+        assert policy(narrowed, "update") is E_BLOCKED
+        assert policy(dropped, "update") is E_BLOCKED
+        assert policy(required, "update") is E_ASK
+        assert _recheck(db_session, dropped, user, persona.id) is E_ASK
     finally:
         db_session.rollback()
         db_session.query(Persona).filter(Persona.id == persona.id).delete()

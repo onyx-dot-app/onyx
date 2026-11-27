@@ -640,8 +640,8 @@ default agent, is Blocked.
    user who can use the agent and has access to the integration, when the
    agent links it (`integrations/chat_tools.py`). The user's on/off choice
    applies only on the default agent. The agent link, a plugin, and old
-   server grants give no access in chat. While a scheduled run is in flight in
-   the chat, the task's links replace the agent's
+   server grants give no access in chat. In the chat of a scheduled run, the
+   task's current links replace the agent's, also after the run ends
    (`integrations/policy.py:chat_integrations`,
    [[craft-scheduled-tasks#task-choices-default-ask]]).
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
@@ -909,7 +909,10 @@ default agent, is Blocked.
     spawn tool (`spawn_agent` or `agent`) and `send_message` calls started, directly or through
     their agents, at any status; those show in that call's card, with the
     agent's name (`ToolApprovalRequest.agent_name`). Every request shows the
-    arguments saved on its row, so a replayed card equals the live one. An
+    arguments saved on its row, and the kind of its integration
+    (`SavedToolApproval.integration_kind`, read by `load_chat_approvals`)
+    decides Approve for this chat by `always_asks`, so a replayed card equals
+    the live one. An
     agent's request never shows in a live stream: the client sees
     `approvals_version` change in the session status
     (`db/approval_request.py:approvals_version`, also on the session load) and

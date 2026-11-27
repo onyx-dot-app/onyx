@@ -223,6 +223,7 @@ The packet has these fields:
 | `display_name` | The tool name to show to the user. |
 | `arguments` | The arguments of the call. Show them to the user before they decide. |
 | `agent_name` | The name of the background agent that made the request, or `null` for the answer's own calls. |
+| `can_approve_for_chat` | `false` when the action asks each time, such as a request to an app that matches no action. Then hide the option to approve for the chat session: `approve_session` approves only this call. |
 
 A request waits until the user decides. Other calls of the answer can continue while it waits.
 Onyx saves approval requests only when no other part of the answer runs.
@@ -300,6 +301,7 @@ Call `POST /chat/approvals/{approval_id}/decision` with one of these bodies:
 
 - `{"decision": "approve_once"}` approves this call.
 - `{"decision": "approve_session"}` approves this call and later calls of the same tool in the chat session.
+  When the request's `can_approve_for_chat` is `false`, it approves only this call.
 - `{"decision": "reject"}` rejects this call.
 
 Each body can also have `mcp_headers`,

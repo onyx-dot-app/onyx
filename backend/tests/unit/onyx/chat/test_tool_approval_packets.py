@@ -102,6 +102,7 @@ def _saved(
         id=approval_id,
         chat_message_id=1,
         tool_call_id=CALL.id,
+        action_id="send_email",
         tool_name=CALL.name,
         display_name="Send email",
         arguments={"to": "team"},

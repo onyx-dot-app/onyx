@@ -246,3 +246,17 @@ def test_rendered_files_withhold_secret_credential_fields(
         "test-client-secret-do-not-render" not in content
         for content in rendered.values()
     )
+
+
+def test_each_app_skill_tells_the_model_when_to_use_the_app_tools() -> None:
+    """A command cannot ask for approval, so the skill sends each such
+    request to the tool of the action."""
+    for skill_id in ("github", "linear", "slack"):
+        template = (BUILTIN_SKILLS_PATH / skill_id / "SKILL.md.template").read_text()
+        app_type = ExternalAppType(skill_id.upper())
+        with_tools = render_external_app_skill(template, app_type, set(), {}, 12)
+        without = render_external_app_skill(template, app_type, set(), {})
+
+        assert "`app__12__`" in with_tools
+        assert "approval_needs_tool" in with_tools
+        assert "app__" not in without

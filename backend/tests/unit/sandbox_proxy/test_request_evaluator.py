@@ -156,9 +156,10 @@ def test_a_failed_integration_match_blocks_the_request() -> None:
 
 def _match(
     integration_id: int, kind: IntegrationKind, prefix_length: int
-) -> tuple[Integration, RequestMatch]:
+) -> tuple[Integration, IntegrationMatchTarget, RequestMatch]:
     return (
         Integration(id=integration_id, kind=kind),
+        IntegrationMatchTarget(integration_id=integration_id, kind=kind),
         RequestMatch(actions=[], path_prefix_length=prefix_length),
     )
 

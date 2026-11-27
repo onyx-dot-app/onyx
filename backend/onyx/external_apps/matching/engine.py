@@ -45,6 +45,8 @@ class GatedTarget(BaseModel):
     app_name: str
     # An OpenAPI or GraphQL app: its chat tools are named by ``custom_tool_name``.
     api_app: bool = False
+    # False for an app with no chat tools: a CUSTOM external app.
+    chat_tools: bool = True
 
 
 class AllMatchedActions(BaseModel):
