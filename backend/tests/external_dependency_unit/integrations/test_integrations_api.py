@@ -2517,15 +2517,16 @@ def test_a_key_is_trimmed_and_a_key_that_a_header_cannot_carry_is_refused(
         )
     created.add(integration.id)
 
-    with pytest.raises(OnyxError) as error:
-        api.save_member_connection(
-            integration.id,
-            ConnectionFieldsRequest(fields={"api_key": "key\u2713"}),
-            member,
-            db_session,
-        )
-    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
-    db_session.rollback()
+    for unsendable in ("key\u2713", "caf\u00e9"):
+        with pytest.raises(OnyxError) as error:
+            api.save_member_connection(
+                integration.id,
+                ConnectionFieldsRequest(fields={"api_key": unsendable}),
+                member,
+                db_session,
+            )
+        assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+        db_session.rollback()
 
     with patch(
         "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]

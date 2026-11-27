@@ -1122,13 +1122,9 @@ def check_connection_mode(integration: Integration, for_organization: bool) -> N
 
 
 def _is_header_safe(value: str) -> bool:
-    """Whether an HTTP header can carry ``value``: latin-1 with no control
-    characters."""
-    try:
-        value.encode("latin-1")
-    except UnicodeEncodeError:
-        return False
-    return not any(ord(char) < 0x20 or ord(char) == 0x7F for char in value)
+    """Whether every HTTP client of Onyx can send ``value`` in a header:
+    printable ASCII. httpx, the MCP client, encodes header text as ASCII."""
+    return value.isascii() and value.isprintable()
 
 
 def checked_credential_fields(
