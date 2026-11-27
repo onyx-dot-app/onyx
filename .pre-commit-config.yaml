@@ -448,7 +448,6 @@ repos:
             |deployment/docker_compose/env\.(template|prod\.template)
             |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
           )$
-      # Reuse Bun's package cache across worktrees. Keep workspace links local.
       - id: bun-install
         name: bun install
         description: "Install locked dependencies after a checkout, pull or rebase"
