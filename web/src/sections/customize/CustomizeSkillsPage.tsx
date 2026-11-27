@@ -46,6 +46,7 @@ import {
   CustomizeEmpty,
   CustomizeGroup,
   CustomizeRowActions,
+  openOnSingleClick,
   StatusFilter,
 } from "@/sections/customize/CustomizeList";
 import { skillIcon } from "@/sections/customize/skillIcon";
@@ -189,7 +190,7 @@ function SkillRow({
                   : undefined
       }
       aria-label={t("open", { name: skill.name })}
-      onClick={() => onOpen(skill)}
+      onClick={openOnSingleClick(() => onOpen(skill))}
       rightChildren={
         <CustomizeRowActions
           turnOn={

@@ -63,7 +63,8 @@ Group or user restriction needs EE.
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
-  row menu (Turn on/off, Share). Its Add menu has Upload plugin and Add
+  row menu (Turn on/off, Share). A row opens on a single click only, as on
+  Skills (`openOnSingleClick`). Its Add menu has Upload plugin and Add
   marketplace, with no Create a skill. The list leaves out skill-kind entries (one
   SKILL.md at the bundle root; they are on Skills), and an admin's list
   leaves out the plugins that are not `member_visible`. The plugin page
