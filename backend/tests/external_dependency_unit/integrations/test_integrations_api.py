@@ -2423,6 +2423,33 @@ def test_a_preset_that_needs_a_sign_in_cannot_be_added_with_none(
     db_session.rollback()
 
 
+def test_a_scheme_relative_server_url_with_a_blocked_host_is_refused_on_import() -> (
+    None
+):
+    from onyx.integrations.service import import_openapi_document
+    from onyx.server.features.integrations.models import OpenApiEndpointsRequest
+
+    blocked = json.dumps(
+        {**OPENAPI_SPEC, "servers": [{"url": "//169.254.169.254/api"}]}
+    )
+    with pytest.raises(OnyxError) as error:
+        import_openapi_document(OpenApiEndpointsRequest(openapi_document=blocked))
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+
+    response = MagicMock(status_code=200, headers={})
+    response.raw.read1.side_effect = [blocked.encode(), b""]
+    get = MagicMock()
+    get.return_value.__enter__.return_value = response
+    with (
+        patch("onyx.integrations.service.ssrf_safe_get", get),
+        pytest.raises(OnyxError) as error,
+    ):
+        import_openapi_document(
+            OpenApiEndpointsRequest(spec_url="https://specs.example.com/openapi.json")
+        )
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+
+
 def test_a_spec_with_a_blocked_server_url_is_refused_on_import() -> None:
     from onyx.integrations.service import import_openapi_document
     from onyx.server.features.integrations.models import OpenApiEndpointsRequest

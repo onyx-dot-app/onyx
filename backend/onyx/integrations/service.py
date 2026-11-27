@@ -453,7 +453,10 @@ def _check_server_url(server_url: str, *, allow_relative: bool = False) -> None:
             f"Server URL '{server_url}' cannot have a query or a fragment.",
         )
     if allow_relative and not parsed.scheme:
-        return
+        if not parsed.netloc:
+            return
+        # The client gives a scheme-relative URL the scheme of the spec URL.
+        server_url = f"https:{server_url}"
     try:
         # No DNS at save time; each call resolves and checks again.
         validate_api_app_url(server_url, resolve_dns=False)
@@ -630,7 +633,8 @@ def _checked_import(view: OpenApiConfigView, *, fetched: bool) -> OpenApiConfigV
     # uploaded spec, the admin's base URL replaces a relative URL.
     base_url = view.base_url.strip()
     try:
-        relative = not urlparse(base_url).scheme
+        parsed = urlparse(base_url)
+        relative = not parsed.scheme and not parsed.netloc
     except ValueError:
         relative = False
     if fetched or not relative:
