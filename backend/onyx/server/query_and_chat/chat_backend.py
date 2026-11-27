@@ -42,7 +42,7 @@ from onyx.chat.chat_utils import (
 from onyx.chat.errors import unhandled_stream_error
 from onyx.chat.file_preview import (
     convert_chat_file_preview_pdf,
-    resolve_chat_file_preview,
+    read_stored_chat_file_preview,
 )
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
@@ -1428,16 +1428,14 @@ def fetch_chat_file(
         return Response(status_code=304, headers=cache_headers)
 
     if preview is not None:
-        preview_row, _, _ = resolve_chat_file_preview(db_session, file_record)
-        if preview_row.preview_file_id is None:
+        stored = read_stored_chat_file_preview(db_session, file_record)
+        if stored is None:
             raise OnyxError(
                 OnyxErrorCode.PREVIEW_NOT_READY, "The PDF preview is not made yet"
             )
         # The link is written once, so the ETag names one PDF.
         return StreamingResponse(
-            file_store.read_file(
-                preview_row.preview_file_id, mode="b", use_tempfile=True
-            ),
+            stored,
             media_type=media_type,
             headers=cache_headers,
         )
