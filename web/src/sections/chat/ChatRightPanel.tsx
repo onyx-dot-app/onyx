@@ -174,14 +174,25 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // A turn picks its browser when it starts. A sandbox browser that was open
   // before the share began belongs to a turn that still uses the sandbox,
   // so it stays until the next message starts a turn, which uses Chrome.
-  // The count of user messages when the sandbox browser was last open
-  // unshared; null: none open.
-  const [sandboxTurn, setSandboxTurn] = useState<number | null>(null);
+  // The chat and its count of user messages when the sandbox browser was
+  // last open unshared; null: none open.
+  const [sandboxTurn, setSandboxTurn] = useState<{
+    sessionId: string | null;
+    count: number;
+  } | null>(null);
   if (!state.browserOpen && sandboxTurn !== null) setSandboxTurn(null);
-  if (state.browserOpen && !chromeShared && sandboxTurn !== userMessageCount)
-    setSandboxTurn(userMessageCount);
+  if (
+    state.browserOpen &&
+    !chromeShared &&
+    (sandboxTurn?.sessionId !== sessionId ||
+      sandboxTurn.count !== userMessageCount)
+  )
+    setSandboxTurn({ sessionId, count: userMessageCount });
   const redirectBrowser =
-    chromeShared && (sandboxTurn === null || userMessageCount > sandboxTurn);
+    chromeShared &&
+    (sandboxTurn === null ||
+      sandboxTurn.sessionId !== sessionId ||
+      userMessageCount > sandboxTurn.count);
   const browser = useChatBrowserTabs({
     sessionId,
     open,
