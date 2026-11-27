@@ -2759,9 +2759,9 @@ def test_a_command_card_shows_a_gmail_send_decoded() -> None:
     }
 
 
-@pytest.mark.parametrize("text", ["a\x00b", "a\ud800b"])
+@pytest.mark.parametrize("text", ["a\x00b", "a\ud800b", float("inf")])
 def test_a_command_card_shows_the_size_of_a_body_jsonb_cannot_store(
-    text: str,
+    text: object,
 ) -> None:
     """Postgres refuses a NUL or an unpaired surrogate in JSONB, so the card
     shows the size and the request still waits for the user."""
@@ -2830,6 +2830,25 @@ def test_a_chat_recheck_matches_the_agents_integrations(
 
     assert addon._recheck_approval(flow, ctx, _MATCH, uuid4()) is None
     assert recording.tags == [UUID(_TAG_UUID)]
+
+
+def test_a_chat_recheck_refuses_a_chat_the_owner_lost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A held request does not go out once its owner is deactivated or has
+    no Chat access."""
+    addon, _cache = _command_gate(monkeypatch)
+    recording = _RecordingMatcher()
+    addon._request_evaluator = recording
+    monkeypatch.setattr(addon._identity, "resolve_chat_session", lambda *_args: None)
+    ctx = _ctx(session_id=UUID(_TAG_UUID)).model_copy(
+        update={"chat_command_id": _COMMAND}
+    )
+    flow = make_flow(proxy_auth=_basic_auth(_COMMAND_TAG))
+
+    assert addon._recheck_approval(flow, ctx, _MATCH, uuid4()) is None
+    assert flow.response is not None and flow.response.status_code == 403
+    assert recording.tags == []
 
 
 def test_a_chat_command_first_match_uses_the_chats_session() -> None:

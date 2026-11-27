@@ -560,6 +560,16 @@ class GateAddon:
     ) -> AllMatchedActions | None:
         """Recheck the original execution and persisted decision before forwarding."""
         from_chat = ctx.chat_command_id is not None
+        # The owner may lose the chat (deactivation, no Chat access) while
+        # the request waits.
+        if from_chat and (
+            self._identity.resolve_chat_session(
+                ctx.session_id, ctx.user_id, ctx.tenant_id
+            )
+            is None
+        ):
+            flow.response = http_403(SandboxProxyError.NOT_AUTHORIZED)
+            return None
         recognized = self._request_evaluator.evaluate(
             flow.request,
             ctx.tenant_id,
@@ -1609,9 +1619,13 @@ def _approval_payload(
 
 
 def _storable_preview(body: dict[str, Any]) -> bool:
-    """The body fits the card and Postgres JSONB takes it: no NUL and no
-    unpaired surrogate."""
-    text = json.dumps(body, ensure_ascii=False)
+    """The body fits the card and Postgres JSONB takes it: no NaN or
+    Infinity, no NUL and no unpaired surrogate."""
+    try:
+        # Postgres JSONB has no NaN or Infinity.
+        text = json.dumps(body, ensure_ascii=False, allow_nan=False)
+    except ValueError:
+        return False
     if len(text.encode("utf-8", "surrogatepass")) > _CARD_BODY_MAX_BYTES:
         return False
     # JSON escapes a NUL as \u0000, which JSONB refuses.
