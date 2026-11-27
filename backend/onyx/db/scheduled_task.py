@@ -700,7 +700,7 @@ def notify_run_owner__no_commit(
     )
     try:
         with db_session.begin_nested():
-            create_notification(
+            notification = create_notification(
                 user_id=task.user_id,
                 notif_type=notif_type,
                 db_session=db_session,
@@ -720,6 +720,11 @@ def notify_run_owner__no_commit(
                 },
                 autocommit=False,
             )
+            # A run that parks again reuses the row that its resume dismissed.
+            if notification.dismissed:
+                notification.dismissed = False
+                notification.last_shown = datetime.now(tz=timezone.utc)
+                db_session.flush()
     except Exception:
         logger.exception(
             "Failed to create scheduled-task notification (task=%s run=%s)",

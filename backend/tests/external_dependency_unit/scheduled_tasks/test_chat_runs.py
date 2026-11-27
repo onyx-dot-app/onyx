@@ -371,6 +371,24 @@ def test_a_decided_approval_dismisses_its_notification(
     assert _approval_notification_dismissed(db_session, owner, run)
 
 
+def test_a_run_that_asks_again_shows_its_notification_again(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    run, response = _run_with_response(
+        db_session, _task(db_session, owner), RunStatus.SUSPENDED
+    )
+    for status in (RunStatus.SUSPENDED, RunStatus.RUNNING, RunStatus.SUSPENDED):
+        response.response_status = status
+        db_session.commit()
+        sync_chat_run__no_commit(db_session, run)
+        db_session.commit()
+
+    assert run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
+    assert not _approval_notification_dismissed(db_session, owner, run)
+
+
 def test_a_run_chat_keeps_the_task_integrations_after_the_run_ends(
     db_session: Session,
     owner: User,
