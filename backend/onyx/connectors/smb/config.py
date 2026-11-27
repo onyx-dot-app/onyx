@@ -80,6 +80,12 @@ class SmbConnectorConfig(SmbCredentialBinding, ConnectorConfig):
     email_attribute: Annotated[EmailAttribute, FieldPolicy(FieldClass.COSMETIC)] = (
         EmailAttribute.MAIL
     )
+    # An admin's statement that the share permissions let in every user the
+    # NTFS permissions let in. Permission sync reads the NTFS permissions
+    # only, so without it Onyx could show a file to a user the share refuses.
+    share_permissions_confirmed: Annotated[bool, FieldPolicy(FieldClass.COSMETIC)] = (
+        False
+    )
 
     @field_validator("share", mode="before")
     @classmethod

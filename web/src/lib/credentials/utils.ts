@@ -523,8 +523,8 @@ export interface CredentialDetails {
 
 /**
  * The parts of a saved credential that can be shown: the method it uses and
- * the text fields it stores. Files, toggles and an OAuth credential's tokens
- * are left out. Values are as the server returns them, which may be masked.
+ * the text fields it stores. Files, text of many lines, toggles and an OAuth
+ * credential's tokens are left out. Values are as the server returns them, which may be masked.
  */
 export function getCredentialDetails(
   // A saved credential or a draft: both carry their values and source.
@@ -558,6 +558,7 @@ export function getCredentialDetails(
       if (
         field.kind === "file" ||
         field.kind === "jsonFile" ||
+        field.kind === "textArea" ||
         field.kind === "toggle" ||
         field.kind === "checkbox" ||
         typeof value !== "string" ||

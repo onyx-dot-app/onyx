@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.storage_file_document import (
@@ -21,6 +22,7 @@ from onyx.connectors.interfaces import (
     Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -30,6 +32,7 @@ from onyx.connectors.models import (
     HierarchyNode,
     SlimDocument,
 )
+from onyx.connectors.smb.access import SmbAccessWalker, build_access_walker
 from onyx.connectors.smb.config import (
     DEFAULT_SMB_PORT,
     SmbConnectorConfig,
@@ -139,6 +142,7 @@ def moved_since(
 class SmbConnector(
     CheckpointedConnector[SmbCheckpoint],
     SlimConnector,
+    SlimConnectorWithPermSync,
     Resolver,
     CredentialsConnector,
 ):
@@ -152,6 +156,7 @@ class SmbConnector(
         index_offline_files: bool = False,
         port: int = DEFAULT_SMB_PORT,
         email_attribute: EmailAttribute = EmailAttribute.MAIL,
+        share_permissions_confirmed: bool = False,
     ) -> None:
         self.host = host
         self.share = share
@@ -163,6 +168,7 @@ class SmbConnector(
         self.index_offline_files = index_offline_files
         self.port = port
         self.email_attribute = EmailAttribute(email_attribute)
+        self.share_permissions_confirmed = share_permissions_confirmed
         self.size_threshold: int = BLOB_STORAGE_SIZE_THRESHOLD
         self._allow_images = False
         self._ops: SmbSourceOperations | None = None
@@ -200,6 +206,7 @@ class SmbConnector(
             index_offline_files=self.index_offline_files,
             port=self.port,
             email_attribute=self.email_attribute,
+            share_permissions_confirmed=self.share_permissions_confirmed,
         )
 
     def set_allow_images(self, value: bool) -> None:
@@ -408,17 +415,39 @@ class SmbConnector(
     def validate_checkpoint_json(self, checkpoint_json: str) -> SmbCheckpoint:
         return SmbCheckpoint.model_validate_json(checkpoint_json)
 
+    def _with_access(
+        self,
+        walker: SmbAccessWalker | None,
+        items: list[tuple[str, SlimDocument | HierarchyNode]],
+    ) -> list[SlimDocument | HierarchyNode]:
+        """The items, each with who may read its path when there is a walker.
+        Every item gets access then: one without it would keep its old
+        access."""
+        if walker is None:
+            return [item for _, item in items]
+        access: dict[str, ExternalAccess] = walker.paths_access(
+            [path for path, _ in items]
+        )
+        for path, item in items:
+            item.external_access = access[path]
+        return [item for _, item in items]
+
     def _slim_walk(
         self,
+        walker: SmbAccessWalker | None,
         progress_label: str,
         callback: IndexingHeartbeatInterface | None,
     ) -> GenerateSlimDocumentOutput:
-        """Every folder and indexable file in scope, parents first."""
+        """Every folder and indexable file in scope, parents first. With a
+        walker, each with who may read the file or list the folder."""
         # Pruning keeps only the hierarchy nodes a full listing yields.
-        batch: list[SlimDocument | HierarchyNode] = [
-            self._folder_node(folder_path)
-            for folder_path in self._folders_to(self.path_prefix)
-        ]
+        yield self._with_access(
+            walker,
+            [
+                (folder_path, self._folder_node(folder_path))
+                for folder_path in self._folders_to(self.path_prefix)
+            ],
+        )
         pending: list[str] = [self.path_prefix]
         while pending:
             # A partial walk would read as deleted files, so stopping raises.
@@ -430,31 +459,30 @@ class SmbConnector(
             entries: list[SmbEntry] | None = self._list_sorted(
                 folder, quiet_missing=False
             )
-            listed: int = 0
+            items: list[tuple[str, SlimDocument | HierarchyNode]] = []
             for entry in entries or []:
                 path: str = join_path(folder, entry.name)
                 if self._is_skipped(entry, path):
                     continue
                 if entry.is_directory:
-                    batch.append(self._folder_node(path))
+                    items.append((path, self._folder_node(path)))
                     pending.append(path)
                 elif self._is_indexable(entry):
-                    batch.append(
-                        SlimDocument(
-                            id=self.document_id(path),
-                            parent_hierarchy_raw_node_id=self.document_id(folder),
+                    items.append(
+                        (
+                            path,
+                            SlimDocument(
+                                id=self.document_id(path),
+                                parent_hierarchy_raw_node_id=self.document_id(folder),
+                            ),
                         )
                     )
-                else:
-                    continue
-                listed += 1
-                if len(batch) >= SLIM_BATCH_SIZE:
-                    yield batch
-                    batch = []
+            for start in range(0, len(items), SLIM_BATCH_SIZE):
+                if callback is not None and callback.should_stop():
+                    raise RuntimeError(f"{progress_label}: stop signal detected")
+                yield self._with_access(walker, items[start : start + SLIM_BATCH_SIZE])
             if callback is not None:
-                callback.progress(progress_label, listed)
-        if batch:
-            yield batch
+                callback.progress(progress_label, len(items))
 
     def retrieve_all_slim_docs(
         self,
@@ -462,7 +490,25 @@ class SmbConnector(
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        yield from self._slim_walk("smb_slim_docs", callback)
+        yield from self._slim_walk(None, "smb_slim_docs", callback)
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Every file in scope with who may read it, and every folder with who
+        may list it. The doc sync makes any indexed file this does not list
+        private, so the window is ignored."""
+        walker: SmbAccessWalker | None = build_access_walker(
+            self.ops, self.email_attribute
+        )
+        if walker is None:
+            raise RuntimeError(
+                "Windows file share permission sync needs Enterprise Edition."
+            )
+        yield from self._slim_walk(walker, "smb_perm_sync", callback)
 
     def _path_in_scope(self, document_id: str) -> str | None:
         """The path of a document of this share and path prefix."""

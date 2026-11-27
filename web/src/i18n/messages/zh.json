@@ -3732,6 +3732,10 @@
               "label": "路径前缀",
               "description": "共享中的文件夹，例如 Projects/2026。留空则为整个共享编制索引。"
             },
+            "share_permissions_confirmed": {
+              "label": "已确认共享权限",
+              "description": "Onyx 只读取 NTFS 权限。请确认共享权限允许 NTFS 权限所允许的每个用户访问。当共享向 Everyone 或 Authenticated Users 授予访问权限时即是如此。未经此确认，权限同步不会运行。"
+            },
             "excluded_paths": {
               "label": "排除的文件夹",
               "description": "要跳过的文件夹，以从共享根目录开始的路径填写，例如 Archive/2019。Onyx 不会为这些文件夹及其下级文件夹编制索引。"
@@ -3747,6 +3751,14 @@
             "port": {
               "label": "端口",
               "description": "文件服务器的 SMB 端口。默认值为 445。"
+            },
+            "email_attribute": {
+              "label": "电子邮件属性",
+              "description": "保存用户登录 Onyx 所用电子邮件的 Active Directory 属性。权限同步用它将域用户与 Onyx 用户匹配。",
+              "options": {
+                "mail": "mail，其次 userPrincipalName",
+                "userPrincipalName": "仅 userPrincipalName"
+              }
             }
           }
         },
@@ -4387,6 +4399,10 @@
         "subdomain": "{source} 子域名",
         "domain": "{source} 域名",
         "accountDomain": "帐户域",
+        "ldapHost": "LDAP 主机",
+        "ldapTls": "LDAP 加密",
+        "ldapPort": "LDAP 端口",
+        "ldapCaCert": "LDAP CA 证书",
         "enterpriseId": "{source} 企业 ID",
         "teamId": "{source} 团队 ID",
         "applicationId": "{source} 应用 ID",
@@ -4421,11 +4437,19 @@
         "youtrackToken": "可读取所有待索引项目的 YouTrack 用户的永久令牌。请在 YouTrack 个人资料的“账户安全”中创建。",
         "azureDatalakeAccountKey": "在 Azure 门户中打开存储帐户,然后打开“安全性 + 网络”,再打开“访问密钥”。",
         "smbDomain": "可选。Active Directory 域的 NetBIOS 名称或 DNS 名称。如果是文件服务器的本地帐户，请留空。",
+        "smbLdapHost": "仅用于权限同步。域控制器的 DNS 名称，例如 dc01.corp.example.com。它必须与域控制器 TLS 证书中的名称一致。",
+        "smbLdapTls": "仅用于权限同步。Onyx 加密与域控制器之间连接的方式。默认值为 LDAPS。",
+        "smbLdapPort": "可选。LDAPS 的默认值为 636，StartTLS 的默认值为 389。",
+        "smbLdapCaCert": "可选。为域控制器证书签名的内部证书颁发机构的 PEM 证书。留空则使用系统信任存储。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
         "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。",
         "confluencePersonalAccessToken": "粘贴您的 Confluence 管理员账户的[个人访问令牌](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)。"
+      },
+      "options": {
+        "ldaps": "LDAPS",
+        "startTls": "StartTLS"
       },
       "methods": {
         "labels": {

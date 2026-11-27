@@ -277,7 +277,7 @@ const buildInitialValuesForFields = (
         buildInitialValuesForFields(field.tabs.flatMap((tab) => tab.fields))
       );
     } else if (field.type === "select") {
-      acc[field.name] = null;
+      acc[field.name] = field.default ?? null;
     } else if (field.type === "list") {
       acc[field.name] = field.default || [];
     } else if (field.type === "multiselect") {

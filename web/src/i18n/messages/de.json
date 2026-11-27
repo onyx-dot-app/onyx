@@ -3732,6 +3732,10 @@
               "label": "Pfadpräfix",
               "description": "Ein Ordner in der Freigabe, z. B. Projects/2026. Leer lassen, um die ganze Freigabe zu indizieren."
             },
+            "share_permissions_confirmed": {
+              "label": "Freigabeberechtigungen bestätigt",
+              "description": "Onyx liest nur die NTFS-Berechtigungen. Bestätigen Sie, dass die Freigabeberechtigungen jeden Benutzer zulassen, den die NTFS-Berechtigungen zulassen. Das ist der Fall, wenn die Freigabe „Jeder“ oder „Authentifizierte Benutzer“ Zugriff gewährt. Ohne diese Bestätigung läuft die Berechtigungssynchronisierung nicht."
+            },
             "excluded_paths": {
               "label": "Ausgeschlossene Ordner",
               "description": "Ordner, die übersprungen werden, als Pfade ab dem Stamm der Freigabe, z. B. Archive/2019. Onyx indiziert weder diese Ordner noch ihre Unterordner."
@@ -3747,6 +3751,14 @@
             "port": {
               "label": "Port",
               "description": "Der SMB-Port des Dateiservers. Der Standardwert ist 445."
+            },
+            "email_attribute": {
+              "label": "E-Mail-Attribut",
+              "description": "Das Active Directory-Attribut mit der E-Mail-Adresse, mit der sich ein Benutzer bei Onyx anmeldet. Die Berechtigungssynchronisierung ordnet damit Domänenbenutzer den Onyx-Benutzern zu.",
+              "options": {
+                "mail": "mail, dann userPrincipalName",
+                "userPrincipalName": "nur userPrincipalName"
+              }
             }
           }
         },
@@ -4387,6 +4399,10 @@
         "subdomain": "{source}-Subdomain",
         "domain": "{source}-Domain",
         "accountDomain": "Kontodomäne",
+        "ldapHost": "LDAP-Host",
+        "ldapTls": "LDAP-Verschlüsselung",
+        "ldapPort": "LDAP-Port",
+        "ldapCaCert": "LDAP-CA-Zertifikat",
         "enterpriseId": "{source}-Enterprise-ID",
         "teamId": "{source}-Team-ID",
         "applicationId": "{source}-Anwendungs-ID",
@@ -4421,11 +4437,19 @@
         "youtrackToken": "Ein permanentes Token eines YouTrack-Benutzers, der alle zu indexierenden Projekte lesen kann. Erstellen Sie es in Ihrem YouTrack-Profil unter Kontosicherheit.",
         "azureDatalakeAccountKey": "Öffnen Sie im Azure-Portal das Speicherkonto, dann Sicherheit + Netzwerkbetrieb, dann Zugriffsschlüssel.",
         "smbDomain": "Optional. Der NetBIOS- oder DNS-Name der Active Directory-Domäne. Leer lassen für ein lokales Konto des Dateiservers.",
+        "smbLdapHost": "Nur für die Berechtigungssynchronisierung. Der DNS-Name eines Domänencontrollers, z. B. dc01.corp.example.com. Er muss mit dem Namen im TLS-Zertifikat des Domänencontrollers übereinstimmen.",
+        "smbLdapTls": "Nur für die Berechtigungssynchronisierung. So verschlüsselt Onyx die Verbindung zum Domänencontroller. Der Standardwert ist LDAPS.",
+        "smbLdapPort": "Optional. Der Standardwert ist 636 für LDAPS und 389 für StartTLS.",
+        "smbLdapCaCert": "Optional. Das PEM-Zertifikat der internen Zertifizierungsstelle, die das Zertifikat des Domänencontrollers signiert hat. Leer lassen, um den Vertrauensspeicher des Systems zu verwenden.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder Ihre selbst gehostete URL.",
         "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Laden Sie den `.json`-Schlüssel eines Google-Dienstkontos mit domainweiter Delegierung hoch oder fügen Sie ihn ein.",
         "confluencePersonalAccessToken": "Fügen Sie das [persönliche Zugriffstoken](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) Ihres Confluence-Administratorkontos ein."
+      },
+      "options": {
+        "ldaps": "LDAPS",
+        "startTls": "StartTLS"
       },
       "methods": {
         "labels": {

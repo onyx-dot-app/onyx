@@ -7,6 +7,7 @@ import type {
   CredentialJsonOf,
   CredentialMethodDescription,
   CredentialMethodLabel,
+  CredentialSelectOption,
   CredentialSpec,
   CredentialSpecFields,
   CredentialTextKind,
@@ -72,6 +73,24 @@ function jsonFile<const TOptions extends CredentialFieldOptions = {}>(
   options?: TOptions
 ) {
   return textField("jsonFile", displayName, options);
+}
+
+function textArea<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("textArea", displayName, options);
+}
+
+function select<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  choices: readonly CredentialSelectOption[],
+  options?: TOptions
+) {
+  return Object.assign(
+    { kind: "select" as const, displayName, options: choices },
+    options
+  );
 }
 
 function toggle(displayName: CredentialDisplayName) {
@@ -482,6 +501,27 @@ export const CREDENTIAL_SPECS = {
       }),
       smb_username: text("username"),
       smb_password: secret("password"),
+      // The directory fields serve permission sync only, so each is optional.
+      ldap_host: text("ldapHost", {
+        optional: true,
+        hint: { key: "smbLdapHost" },
+      }),
+      ldap_tls: select(
+        "ldapTls",
+        [
+          { value: "ldaps", label: "ldaps" },
+          { value: "starttls", label: "startTls" },
+        ],
+        { optional: true, hint: { key: "smbLdapTls" }, defaultValue: "ldaps" }
+      ),
+      ldap_port: text("ldapPort", {
+        optional: true,
+        hint: { key: "smbLdapPort" },
+      }),
+      ldap_ca_cert: textArea("ldapCaCert", {
+        optional: true,
+        hint: { key: "smbLdapCaCert" },
+      }),
     },
   }),
   zendesk: defineCredentialSpec({

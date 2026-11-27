@@ -3732,6 +3732,10 @@
               "label": "Prefijo de Ruta",
               "description": "Una carpeta del recurso compartido, p. ej. Projects/2026. Déjelo vacío para indexar todo el recurso compartido."
             },
+            "share_permissions_confirmed": {
+              "label": "Permisos del recurso compartido confirmados",
+              "description": "Onyx lee solo los permisos NTFS. Confirme que los permisos del recurso compartido admiten a todos los usuarios que admiten los permisos NTFS. Es así cuando el recurso compartido da acceso a «Todos» o a «Usuarios autenticados». La sincronización de permisos no se ejecuta sin esta confirmación."
+            },
             "excluded_paths": {
               "label": "Carpetas Excluidas",
               "description": "Carpetas que se omiten, como rutas desde la raíz del recurso compartido, p. ej. Archive/2019. Onyx no indexa estas carpetas ni las carpetas que contienen."
@@ -3747,6 +3751,14 @@
             "port": {
               "label": "Puerto",
               "description": "El puerto SMB del servidor de archivos. El valor predeterminado es 445."
+            },
+            "email_attribute": {
+              "label": "Atributo de correo electrónico",
+              "description": "El atributo de Active Directory que contiene el correo electrónico con el que un usuario inicia sesión en Onyx. La sincronización de permisos lo usa para asociar los usuarios del dominio con los usuarios de Onyx.",
+              "options": {
+                "mail": "mail, luego userPrincipalName",
+                "userPrincipalName": "solo userPrincipalName"
+              }
             }
           }
         },
@@ -4387,6 +4399,10 @@
         "subdomain": "Subdominio de {source}",
         "domain": "Dominio de {source}",
         "accountDomain": "Dominio de la Cuenta",
+        "ldapHost": "Host LDAP",
+        "ldapTls": "Cifrado LDAP",
+        "ldapPort": "Puerto LDAP",
+        "ldapCaCert": "Certificado de CA de LDAP",
         "enterpriseId": "ID de empresa de {source}",
         "teamId": "ID de equipo de {source}",
         "applicationId": "ID de aplicación de {source}",
@@ -4421,11 +4437,19 @@
         "youtrackToken": "Un token permanente de un usuario de YouTrack que puede leer todos los proyectos que se indexarán. Créelo en su perfil de YouTrack, en Seguridad de la cuenta.",
         "azureDatalakeAccountKey": "En Azure Portal, abra la cuenta de almacenamiento, luego Seguridad y redes, luego Claves de acceso.",
         "smbDomain": "Opcional. El nombre NetBIOS o DNS del dominio de Active Directory. Déjelo vacío para una cuenta local del servidor de archivos.",
+        "smbLdapHost": "Solo para la sincronización de permisos. El nombre DNS de un controlador de dominio, p. ej., dc01.corp.example.com. Debe coincidir con el nombre del certificado TLS del controlador de dominio.",
+        "smbLdapTls": "Solo para la sincronización de permisos. Cómo cifra Onyx la conexión con el controlador de dominio. El valor predeterminado es LDAPS.",
+        "smbLdapPort": "Opcional. El valor predeterminado es 636 para LDAPS y 389 para StartTLS.",
+        "smbLdapCaCert": "Opcional. El certificado PEM de la autoridad de certificación interna que firmó el certificado del controlador de dominio. Déjelo vacío para usar el almacén de confianza del sistema.",
         "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
         "pfxFile": "Sube el archivo `.pfx` que contiene la clave privada del registro de la aplicación. Debe ocupar menos de 10 KB.",
         "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Sube o pega la clave `.json` de una cuenta de servicio de Google con delegación de todo el dominio.",
         "confluencePersonalAccessToken": "Pega el [token de acceso personal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) de tu cuenta de administrador de Confluence."
+      },
+      "options": {
+        "ldaps": "LDAPS",
+        "startTls": "StartTLS"
       },
       "methods": {
         "labels": {

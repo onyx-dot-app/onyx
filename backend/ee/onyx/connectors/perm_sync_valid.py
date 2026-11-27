@@ -14,6 +14,7 @@ from ee.onyx.external_permissions.linear.capability_checks import (
     build_linear_group_sync_checks,
 )
 from ee.onyx.external_permissions.smb.capability_checks import (
+    build_smb_doc_permission_sync_checks,
     build_smb_group_sync_checks,
 )
 from ee.onyx.external_permissions.youtrack.capability_checks import (
@@ -286,11 +287,14 @@ def smb_check_context(connector: SmbConnector) -> CapabilityCheckContext:
 
 def validate_smb_perm_sync(connector: SmbConnector) -> None:
     """Scheduled syncs validate through here, so a service account that lost
-    its directory access fails the sync instead of emptying every group."""
+    its directory access fails the sync instead of emptying every group, and
+    no sync runs before an admin confirms the share permissions."""
     context: CapabilityCheckContext = smb_check_context(connector)
     # Checks mirrored across both capabilities share an id and run once.
     checks: dict[str, CapabilityCheck] = {
-        check.check_id: check for check in build_smb_group_sync_checks()
+        check.check_id: check
+        for check in build_smb_doc_permission_sync_checks()
+        + build_smb_group_sync_checks()
     }
     for check in checks.values():
         try:

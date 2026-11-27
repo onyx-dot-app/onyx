@@ -117,6 +117,8 @@ export default function EditCredential({
                   placeholder={value == null ? undefined : String(value)}
                   label={fieldCopy(key).title}
                   type={isSecretField(key) ? "password" : "text"}
+                  // A one-line input drops the line breaks of a certificate.
+                  isTextArea={spec?.fields[key]?.kind === "textArea"}
                   disabled={key === "authentication_method"}
                 />
               )

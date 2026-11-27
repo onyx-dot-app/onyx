@@ -93,6 +93,11 @@ from onyx.connectors.smb.models import (
     SmbEntry,
     SmbSessionInfo,
 )
+from onyx.connectors.smb.security_descriptor import (
+    Ace,
+    AceKind,
+    SecurityDescriptor,
+)
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -485,6 +490,10 @@ def _configure_smb_spy(spy: MagicMock) -> None:
     )
     spy.find_directory_group.return_value = domain_users
     spy.list_group_member_sids.return_value = [f"{domain_sid}-1104"]
+    spy.read_security_descriptor.return_value = SecurityDescriptor(
+        dacl_present=True,
+        aces=[Ace(kind=AceKind.ALLOW, sid=domain_users.sid, mask=0x1)],
+    )
     spy.list_folder.return_value = [
         SmbEntry(
             name="readme.txt",
@@ -546,7 +555,12 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     ],
     DocumentSource.EGNYTE: [{"folder_path": "/Shared/Docs"}],
     DocumentSource.SMB: [
-        {"host": "files.example.com", "share": "Plans", "path_prefix": "docs"}
+        {
+            "host": "files.example.com",
+            "share": "Plans",
+            "path_prefix": "docs",
+            "share_permissions_confirmed": True,
+        }
     ],
 }
 

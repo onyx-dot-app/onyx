@@ -37,6 +37,7 @@ from ldap3.core.exceptions import (
 )
 from ldap3.utils.conv import escape_filter_chars
 from pydantic import ValidationError
+from smbclient._io import SMBFileTransaction, SMBRawIO
 from smbprotocol.connection import Connection
 from smbprotocol.exceptions import (
     SMBAuthenticationError,
@@ -44,6 +45,13 @@ from smbprotocol.exceptions import (
     SMBException,
     SMBOSError,
     SMBResponseException,
+)
+from smbprotocol.file_info import InfoType
+from smbprotocol.open import (
+    CreateOptions,
+    FilePipePrinterAccessMask,
+    SMB2QueryInfoRequest,
+    SMB2QueryInfoResponse,
 )
 from smbprotocol.session import Session
 
@@ -72,6 +80,10 @@ from onyx.connectors.smb.models import (
     SmbEntry,
     SmbFile,
     SmbSessionInfo,
+)
+from onyx.connectors.smb.security_descriptor import (
+    SecurityDescriptor,
+    parse_security_descriptor,
 )
 from onyx.connectors.smb.sid import MalformedSidError, rid_of, sid_from_bytes
 from onyx.connectors.source_operations import (
@@ -150,6 +162,13 @@ _NO_SHARE_STATUSES = frozenset(
         0xC00000CC,  # STATUS_BAD_NETWORK_NAME
     }
 )
+
+# The DACL alone: Onyx does not read the owner, the group or the audit list.
+_DACL_SECURITY_INFORMATION = 0x4
+# An access list holds at most 64 KiB.
+_SECURITY_DESCRIPTOR_MAX_BYTES = 65535
+# In a compound request, the handle the request before it opened.
+_RELATED_FILE_ID = b"\xff" * 16
 
 _LDAP_RECEIVE_TIMEOUT_SECONDS = 120
 LDAP_PAGE_SIZE = 1000
@@ -639,6 +658,54 @@ class SmbSourceOperations(SourceOperations):
 
         return self._call(download, f"the file '{unc}'")
 
+    @source_operation(
+        capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
+        consumes=OperationConsumes.BOTH,
+    )
+    def read_security_descriptor(self, *, path: str) -> SecurityDescriptor:
+        """The access list (DACL) of a file or folder. An empty ``path`` is
+        the share root. One round trip: open with READ_CONTROL, query, close.
+
+        smbclient has no public call for this, so it uses smbclient's file
+        transaction, which also follows a DFS referral. The smbprotocol
+        version is pinned for it."""
+        unc: str = self._unc(path)
+
+        def read() -> SecurityDescriptor:
+            raw = SMBRawIO(
+                unc,
+                mode="r",
+                share_access=_SHARE_ALL,
+                desired_access=FilePipePrinterAccessMask.READ_CONTROL,
+                file_attributes=0,
+                # Reads a link's own access list. The walk never follows one.
+                create_options=CreateOptions.FILE_OPEN_REPARSE_POINT,
+                **self._session_kwargs(),
+            )
+            query = SMB2QueryInfoRequest()
+            query["info_type"] = InfoType.SMB2_0_INFO_SECURITY
+            query["output_buffer_length"] = _SECURITY_DESCRIPTOR_MAX_BYTES
+            query["additional_information"] = _DACL_SECURITY_INFORMATION
+            query["file_id"] = _RELATED_FILE_ID
+
+            def receive(request: Any) -> bytes:
+                response = raw.fd.connection.receive(request)
+                query_response = SMB2QueryInfoResponse()
+                query_response.unpack(response["data"].get_value())
+                return bytes(query_response["buffer"].get_value())
+
+            transaction = SMBFileTransaction(raw)
+            transaction += (query, receive)
+            transaction.commit()
+            if not transaction.results:
+                raise SmbRequestError(
+                    f"The file server returned no access list for '{unc}'.",
+                    status_code=None,
+                )
+            return parse_security_descriptor(transaction.results[0])
+
+        return self._call(read, f"the access list of '{unc}'")
+
     def _directory_host(self, credentials: SmbCredentials) -> str:
         if not credentials.ldap_host:
             raise ConnectorValidationError(
@@ -790,7 +857,10 @@ class SmbSourceOperations(SourceOperations):
         raise RuntimeError("Bug: the retry loop always returns or raises.")
 
     @source_operation(
-        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_directory_info(self) -> DirectoryInfo:
@@ -825,7 +895,10 @@ class SmbSourceOperations(SourceOperations):
         return DirectoryInfo(base_dn=base_dn, domain_sid=domain_sid)
 
     @source_operation(
-        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_directory_users(
@@ -886,7 +959,10 @@ class SmbSourceOperations(SourceOperations):
         )
 
     @source_operation(
-        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.CREDENTIAL,
     )
     def find_directory_group(self, *, base_dn: str, sid: str) -> DirectoryGroup | None:
@@ -903,7 +979,10 @@ class SmbSourceOperations(SourceOperations):
         return _directory_group(entries[0]) if entries else None
 
     @source_operation(
-        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_group_member_sids(
