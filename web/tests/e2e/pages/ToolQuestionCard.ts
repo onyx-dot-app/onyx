@@ -112,8 +112,8 @@ export class ToolQuestionCard {
   }
 
   /**
-   * The record of the questions: a timeline step titled with the answers, or
-   * else with how the questions ended (`title` defaults to `outcome`). Its
+   * The record of the questions: a timeline step titled with the answer
+   * count, or else with how the questions ended (`title` defaults to `outcome`). Its
    * live region announces the outcome. Nothing waits after it.
    */
   async expectRecord(

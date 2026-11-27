@@ -12970,11 +12970,10 @@
         },
         "submitError": "回答を送信できませんでした。もう一度お試しください。",
         "record": {
-          "answered": "回答済み",
+          "answeredCount": "{count, plural, other {# 件の質問に回答済み}}",
           "answeredInChat": "チャットで回答済み",
           "cancelled": "未回答",
           "closed": "待機は終了しました",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option}（{note}）"
         }
       },

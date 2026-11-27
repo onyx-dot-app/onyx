@@ -12970,11 +12970,10 @@
         },
         "submitError": "无法发送你的答案。请重试。",
         "record": {
-          "answered": "已回答",
+          "answeredCount": "{count, plural, other {已回答 # 个问题}}",
           "answeredInChat": "已在聊天中回答",
           "cancelled": "未回答",
           "closed": "不再等待",
-          "answer": "{header}：{answer}",
           "optionAndNote": "{option}（{note}）"
         }
       },

@@ -12970,11 +12970,10 @@
         },
         "submitError": "Ihre Antworten konnten nicht gesendet werden. Versuchen Sie es erneut.",
         "record": {
-          "answered": "Beantwortet",
+          "answeredCount": "{count, plural, one {# Frage beantwortet} other {# Fragen beantwortet}}",
           "answeredInChat": "Im Chat beantwortet",
           "cancelled": "Nicht beantwortet",
           "closed": "Wartet nicht mehr",
-          "answer": "{header}: {answer}",
           "optionAndNote": "{option} ({note})"
         }
       },
