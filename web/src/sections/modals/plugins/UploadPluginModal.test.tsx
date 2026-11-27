@@ -265,3 +265,24 @@ test("a zip with the files of the current version says it changes nothing", asyn
   ).toBeInTheDocument();
   expect(screen.queryByText(/Updates review-kit/)).not.toBeInTheDocument();
 });
+
+test("a skill zip for a new version of a plugin says it needs a plugin zip", async () => {
+  const fetchMock = mockFetch({});
+  render(
+    <UploadPluginModal
+      open
+      pluginId="11111111-1111-4111-8111-111111111111"
+      onClose={jest.fn()}
+      onSaved={jest.fn()}
+      onContinueSkill={jest.fn()}
+    />
+  );
+  await choose(zip("skill-notes.zip"));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "This file is a skill and has no plugin.json. Upload a plugin .zip to add a new version."
+  );
+  expect(screen.queryByText("This upload is a skill")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  expect(fetchMock).not.toHaveBeenCalled();
+});

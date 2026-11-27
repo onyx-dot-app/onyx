@@ -817,6 +817,21 @@ def test_an_upload_for_a_plugin_adds_a_version_to_that_plugin(
     )
     with pytest.raises(OnyxError, match="holds the plugin other-kit"):
         _save(admin, _plugin_zip("other-kit", ["one"]), db_session, plugin_id=plugin_id)
+    skill_zip = io.BytesIO()
+    with zipfile.ZipFile(skill_zip, "w") as bundle_zip:
+        bundle_zip.writestr("one/SKILL.md", _skill_md("one"))
+    for skill_upload in (
+        UploadFile(file=io.BytesIO(skill_zip.getvalue()), filename="one.zip"),
+        UploadFile(file=io.BytesIO(_skill_md("one").encode()), filename="SKILL.md"),
+    ):
+        with pytest.raises(OnyxError, match=r"plugin\.json|as a \.zip"):
+            _save(admin, skill_upload, db_session, plugin_id=plugin_id)
+    assert (
+        db_session.scalar(
+            select(func.count()).where(PluginVersion.plugin_id == plugin_id)
+        )
+        == 2
+    )
 
     _save(author, _plugin_zip("copy-kit", ["one"]), db_session)
     copy = _save(author, _plugin_zip("copy-kit", ["one"]), db_session, save_as_new=True)

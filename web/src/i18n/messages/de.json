@@ -17828,7 +17828,8 @@
       "skillOnly": {
         "title": "Dieser Upload ist ein Skill",
         "description": "Er hat keine plugin.json. Fahren Sie fort, um ihn als Skill hinzuzufügen.",
-        "continue": "Weiter"
+        "continue": "Weiter",
+        "notAVersion": "Diese Datei ist ein Skill und hat keine plugin.json. Laden Sie eine Plugin-.zip hoch, um eine neue Version hinzuzufügen."
       },
       "version": "plugin.json {version}",
       "target": {

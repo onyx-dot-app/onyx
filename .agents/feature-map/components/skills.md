@@ -76,7 +76,9 @@
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
-  flow. A dropped folder is zipped in the browser when it has SKILL.md or a
+  flow. Upload New Version on a plugin page binds the upload to that plugin
+  (`plugin_id`) and takes plugin zips only: the modal refuses a skill zip, and
+  the server refuses a SKILL.md or a zip with no plugin.json. A dropped folder is zipped in the browser when it has SKILL.md or a
   plugin.json at its top level (`lib/skills/bundleUpload.ts:prepareSkillBundleUpload`
   with `allowPlugin`).
 - **Admins** set the installation policy of a custom skill: available (the user

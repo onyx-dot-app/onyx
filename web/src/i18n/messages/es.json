@@ -17828,7 +17828,8 @@
       "skillOnly": {
         "title": "Esta subida es un skill",
         "description": "No tiene plugin.json. Continúa para añadirlo como skill.",
-        "continue": "Continuar"
+        "continue": "Continuar",
+        "notAVersion": "Este archivo es una habilidad y no tiene plugin.json. Sube un .zip de plugin para añadir una nueva versión."
       },
       "version": "plugin.json {version}",
       "target": {

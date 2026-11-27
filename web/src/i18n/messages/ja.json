@@ -17828,7 +17828,8 @@
       "skillOnly": {
         "title": "このアップロードはスキルです",
         "description": "plugin.json がありません。続行してスキルとして追加します。",
-        "continue": "続行"
+        "continue": "続行",
+        "notAVersion": "このファイルはスキルで、plugin.json がありません。新しいバージョンを追加するには、プラグインの .zip をアップロードしてください。"
       },
       "version": "plugin.json {version}",
       "target": {

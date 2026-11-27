@@ -235,7 +235,12 @@ function UploadPluginModalContent({
     setBusy("read");
     setError(null);
     try {
-      if (!pluginId && (await pluginUploadKind(bundle)) === "skill") {
+      if ((await pluginUploadKind(bundle)) === "skill") {
+        if (pluginId) {
+          setState({ step: "pick", bundle });
+          setError(t("skillOnly.notAVersion"));
+          return;
+        }
         setState({ step: "skill", bundle });
         return;
       }

@@ -17828,7 +17828,8 @@
       "skillOnly": {
         "title": "هذا الملف المرفوع مهارة",
         "description": "لا يحتوي على plugin.json. تابع لإضافته كمهارة.",
-        "continue": "متابعة"
+        "continue": "متابعة",
+        "notAVersion": "هذا الملف مهارة ولا يحتوي على plugin.json. ارفع ملف .zip لإضافة إصدار جديد من الإضافة."
       },
       "version": "plugin.json {version}",
       "target": {

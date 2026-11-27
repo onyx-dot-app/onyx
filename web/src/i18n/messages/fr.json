@@ -17828,7 +17828,8 @@
       "skillOnly": {
         "title": "Cet import est un skill",
         "description": "Il n'a pas de plugin.json. Continuez pour l'ajouter comme skill.",
-        "continue": "Continuer"
+        "continue": "Continuer",
+        "notAVersion": "Ce fichier est une compétence et n'a pas de plugin.json. Importez un .zip de plugin pour ajouter une nouvelle version."
       },
       "version": "plugin.json {version}",
       "target": {

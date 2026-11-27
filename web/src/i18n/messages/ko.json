@@ -17828,7 +17828,8 @@
       "skillOnly": {
         "title": "이 업로드는 스킬입니다",
         "description": "plugin.json이 없습니다. 계속하여 스킬로 추가하세요.",
-        "continue": "계속"
+        "continue": "계속",
+        "notAVersion": "이 파일은 스킬이며 plugin.json이 없습니다. 새 버전을 추가하려면 플러그인 .zip을 업로드하세요."
       },
       "version": "plugin.json {version}",
       "target": {

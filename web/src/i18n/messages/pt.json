@@ -17828,7 +17828,8 @@
       "skillOnly": {
         "title": "Este envio é um skill",
         "description": "Ele não tem plugin.json. Continue para adicioná-lo como skill.",
-        "continue": "Continuar"
+        "continue": "Continuar",
+        "notAVersion": "Este arquivo é uma habilidade e não tem plugin.json. Envie um .zip de plugin para adicionar uma nova versão."
       },
       "version": "plugin.json {version}",
       "target": {

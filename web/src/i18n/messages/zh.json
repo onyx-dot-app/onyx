@@ -17828,7 +17828,8 @@
       "skillOnly": {
         "title": "此上传是一个技能",
         "description": "它没有 plugin.json。继续以将其添加为技能。",
-        "continue": "继续"
+        "continue": "继续",
+        "notAVersion": "此文件是一个技能，没有 plugin.json。请上传插件 .zip 以添加新版本。"
       },
       "version": "plugin.json {version}",
       "target": {
