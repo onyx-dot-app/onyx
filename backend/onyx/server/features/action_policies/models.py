@@ -1,6 +1,9 @@
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+from onyx.db.enums import ApprovalDecision
 
 
 class ApprovalChoice(StrEnum):
@@ -11,6 +14,16 @@ class ApprovalChoice(StrEnum):
     # command's later requests of the action, until the command exits.
     APPROVE_COMMAND = "approve_command"
     REJECT = "reject"
+
+    @property
+    def decision(
+        self,
+    ) -> Literal[ApprovalDecision.APPROVED, ApprovalDecision.REJECTED]:
+        return (
+            ApprovalDecision.REJECTED
+            if self is ApprovalChoice.REJECT
+            else ApprovalDecision.APPROVED
+        )
 
 
 class DecisionBody(BaseModel):

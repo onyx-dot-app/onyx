@@ -6,7 +6,7 @@ wakes the parked proxy via the `approval:wake:{id}` channel; a missed
 wake just falls back to the proxy's wait timeout.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -37,7 +37,6 @@ from onyx.external_apps.presentation.decode import decode_payload
 from onyx.integrations.policy import always_asks
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.action_policies.models import ApprovalChoice, DecisionBody
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -140,8 +139,7 @@ def list_session_approvals(
             for row in action_approval.list_session_action_approvals(
                 db_session,
                 session_id,
-                created_after=datetime.now(timezone.utc)
-                - timedelta(seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS),
+                created_after=action_approval.waiting_cutoff(),
             )
         ]
     )
@@ -155,9 +153,7 @@ def list_session_approval_status(
 ) -> list[ApprovalStatusView]:
     if get_build_session(session_id, user.id, db_session) is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "session not found")
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    )
+    cutoff = action_approval.waiting_cutoff()
     return [
         ApprovalStatusView(
             approval_id=row.approval_id,
@@ -183,9 +179,7 @@ def list_live_approvals(
     if get_build_session(session_id, user.id, db_session) is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "session not found")
 
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    )
+    cutoff = action_approval.waiting_cutoff()
     pending_rows = action_approval.list_session_pending_action_approvals(
         db_session, session_id, created_after=cutoff
     )
@@ -205,11 +199,7 @@ def submit_decision(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "a Craft request has no command scope"
         )
-    decision = (
-        ApprovalDecision.REJECTED
-        if body.decision == ApprovalChoice.REJECT
-        else ApprovalDecision.APPROVED
-    )
+    decision = body.decision.decision
     for_session = body.decision == ApprovalChoice.APPROVE_SESSION
     current = action_approval.get_action_approval_for_user(
         db_session, approval_id, user.id, lock_session=for_session
@@ -221,9 +211,7 @@ def submit_decision(
     if current.decision is not None:
         return _existing_decision_response(current, decision, for_session=for_session)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-    )
+    cutoff = action_approval.waiting_cutoff()
     if current.created_at < cutoff:
         raise OnyxError(OnyxErrorCode.CONFLICT, "approval request is no longer live")
 

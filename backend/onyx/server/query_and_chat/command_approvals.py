@@ -127,11 +127,7 @@ def decide_command_approval(
             OnyxErrorCode.INVALID_INPUT,
             "This request cannot be approved for the rest of the command",
         )
-    decision = (
-        ApprovalDecision.REJECTED
-        if choice == ApprovalChoice.REJECT
-        else ApprovalDecision.APPROVED
-    )
+    decision = choice.decision
     cutoff = action_approval.waiting_cutoff()
     decided_via = (
         ApprovalDecidedVia.POLICY
