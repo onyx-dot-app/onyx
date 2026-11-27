@@ -9,6 +9,7 @@ import io
 import threading
 import time
 import zipfile
+from datetime import timedelta
 from uuid import UUID
 
 import pytest
@@ -75,10 +76,18 @@ def test_backfilled_version_counts_as_zero(db_session: Session) -> None:
     assert _usage(db_session, user, skill.id) == 3 * _MB
 
 
-def test_a_plugin_that_loses_its_name_does_not_count(db_session: Session) -> None:
-    user = make_user(db_session, standard_account=True)
+def _same_name_pair(db_session: Session, user: User) -> tuple[Plugin, Plugin]:
+    """Two plugins with one skill name. The older one wins the name."""
     winner = make_skill(db_session, name="same-name", author_user_id=user.id)
     loser = make_skill(db_session, name="same-name", author_user_id=user.id)
+    loser.created_at = winner.created_at + timedelta(seconds=1)
+    db_session.flush()
+    return winner, loser
+
+
+def test_a_plugin_that_loses_its_name_does_not_count(db_session: Session) -> None:
+    user = make_user(db_session, standard_account=True)
+    winner, loser = _same_name_pair(db_session, user)
     set_plugin_preferences__no_commit(user.id, [winner.id, loser.id], True, db_session)
     _set_size(db_session, winner.id, 3 * _MB, 7)
     _set_size(db_session, loser.id, 5 * _MB, 11)
@@ -94,8 +103,7 @@ def test_a_write_that_lets_a_same_name_loser_run_is_checked(
     """Turning off the winner adds the loser's usage, though the write does
     not touch the loser."""
     user = make_user(db_session, standard_account=True)
-    winner = make_skill(db_session, name="same-name", author_user_id=user.id)
-    loser = make_skill(db_session, name="same-name", author_user_id=user.id)
+    winner, loser = _same_name_pair(db_session, user)
     set_plugin_preferences__no_commit(user.id, [winner.id, loser.id], True, db_session)
     _set_size(db_session, winner.id, _MB, 1)
     _set_size(db_session, loser.id, SKILL_WRITE_MAX_BYTES + _MB, 1)
@@ -376,3 +384,18 @@ def test_a_file_edit_and_a_toggle_take_locks_in_one_order(
         assert errors == []
     finally:
         delete_bundle_blob(get_default_file_store(), bundle_file_id)
+
+
+def test_turning_off_a_winner_is_not_refused_for_its_loser(
+    db_session: Session,
+) -> None:
+    """A turn-off that lets an over-limit same-name loser run still saves."""
+    user = make_user(db_session, standard_account=True)
+    winner, loser = _same_name_pair(db_session, user)
+    set_plugin_preferences__no_commit(user.id, [winner.id, loser.id], True, db_session)
+    _set_size(db_session, winner.id, _MB, 1)
+    _set_size(db_session, loser.id, SKILL_WRITE_MAX_BYTES + _MB, 1)
+
+    set_skill_enabled_for_user(
+        skill_id=winner.id, enabled=False, user=user, db_session=db_session
+    )

@@ -27,6 +27,7 @@ roll back atomically.
 """
 
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -929,7 +930,13 @@ def set_skill_enabled_for_user(
         raise OnyxError(
             OnyxErrorCode.CONFLICT, "This skill changed. Reload and try again."
         )
-    with check_skill_limit(db_session, user.id):
+    if enabled:
+        limit: AbstractContextManager[None] = check_skill_limit(db_session, user.id)
+    else:
+        # A turn-off can let a same-name skill run, but is never refused.
+        lock_user_skill_preferences(user.id, db_session)
+        limit = nullcontext()
+    with limit:
         set_plugin_preferences__no_commit(
             user.id,
             [plugin_id for plugin_id in locked_plugin_ids if plugin_id != skill.id],
