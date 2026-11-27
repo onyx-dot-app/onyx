@@ -2295,6 +2295,41 @@ def test_a_server_that_does_not_answer_after_an_edit_keeps_the_policies(
     ]
 
 
+def test_a_spec_sync_keeps_the_policy_of_the_other_request_action(
+    db_session: Session, created: Created
+) -> None:
+    from onyx.db.enums import IntegrationActionPolicyValue, IntegrationActionSource
+    from onyx.db.integration import replace_integration_actions__no_commit
+    from onyx.db.models import IntegrationActionPolicy
+    from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
+
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=(),
+    )
+    created.add(integration.id)
+    db_session.add(
+        IntegrationActionPolicy(
+            integration_id=integration.id,
+            action=OTHER_REQUEST_ACTION_KEY,
+            policy=IntegrationActionPolicyValue.BLOCKED,
+        )
+    )
+    db_session.flush()
+
+    replace_integration_actions__no_commit(
+        integration.id, IntegrationActionSource.OPENAPI, [], db_session
+    )
+
+    assert db_session.scalars(
+        select(IntegrationActionPolicy.action).where(
+            IntegrationActionPolicy.integration_id == integration.id
+        )
+    ).all() == [OTHER_REQUEST_ACTION_KEY]
+
+
 def test_a_refresh_without_an_action_drops_the_policy_that_a_failed_edit_kept(
     db_session: Session, admin: User, created: Created
 ) -> None:
