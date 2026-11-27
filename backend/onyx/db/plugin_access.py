@@ -296,6 +296,21 @@ def get_version_user_runs(
     )
 
 
+def get_versions_user_runs(
+    plugin_ids: Iterable[UUID], user_id: UUID, db_session: Session
+) -> list[UUID]:
+    ids = sorted(set(plugin_ids))
+    if not ids:
+        return []
+    return [
+        version_id
+        for version_id in db_session.scalars(
+            select(version_user_runs(Plugin, user_id)).where(Plugin.id.in_(ids))
+        )
+        if version_id is not None
+    ]
+
+
 def frontmatter_in_version(
     key: str | tuple[str, ...], version_id: ColumnElement[UUID]
 ) -> ColumnElement[str]:

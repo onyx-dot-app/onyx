@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Annotated, NamedTuple
 from uuid import UUID
 
@@ -30,7 +30,11 @@ from onyx.db.plugin import (
     set_marketplace_default__no_commit,
     version_is_skill,
 )
-from onyx.db.plugin_access import affected_user_ids_for_plugins, get_version_user_runs
+from onyx.db.plugin_access import (
+    affected_user_ids_for_plugins,
+    get_version_user_runs,
+    get_versions_user_runs,
+)
 from onyx.db.skill import (
     SkillSharingChange,
     add_uploaded_plugin_version__no_commit,
@@ -404,17 +408,15 @@ def bulk_update_skills(
                     item_affected, item_file_ids = bulk_update_skill__no_commit(
                         skill_id, request.action, user, db_session
                     )
-                    turned_on = (
-                        request.action == "enable"
-                        and _turn_on_needs__no_commit(skill_id, user, db_session)
-                    )
             except OnyxError as exc:
                 failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
                 continue
             succeeded.append(skill_id)
             affected |= item_affected
             deleted_file_ids.extend(item_file_ids)
-            integrations_changed |= turned_on
+        integrations_changed = request.action == "enable" and _turn_on_needs__no_commit(
+            succeeded, user, db_session
+        )
     db_session.commit()
     push_skills_and_commit(affected, db_session)
     if integrations_changed:
@@ -438,7 +440,7 @@ def set_skill_enabled_for_current_user(
         db_session=db_session,
     )
     integrations_changed = request.enabled and _turn_on_needs__no_commit(
-        skill.id, user, db_session
+        [skill.id], user, db_session
     )
     db_session.commit()
     push_skills_and_commit({user.id}, db_session)
@@ -449,13 +451,19 @@ def set_skill_enabled_for_current_user(
     )
 
 
-def _turn_on_needs__no_commit(skill_id: UUID, user: User, db_session: Session) -> bool:
-    version_id = get_version_user_runs(skill_id, user.id, db_session)
-    if version_id is None:
-        return False
+def _turn_on_needs__no_commit(
+    skill_ids: Iterable[UUID], user: User, db_session: Session
+) -> bool:
+    """Turn on the connected integrations that the plugin versions the user
+    runs need."""
+    version_ids = get_versions_user_runs(skill_ids, user.id, db_session)
     return turn_on_needed_integrations__no_commit(
         user,
-        get_versions_needs([version_id], db_session).get(version_id, []),
+        [
+            need
+            for needs in get_versions_needs(version_ids, db_session).values()
+            for need in needs
+        ],
         db_session,
     )
 
@@ -745,9 +753,7 @@ def save_plugin_upload(
         integrations_changed = (
             added
             and enabled
-            and turn_on_needed_integrations__no_commit(
-                user, content.needs or [], db_session
-            )
+            and _turn_on_needs__no_commit([plugin.id], user, db_session)
         )
         db_session.commit()
     if not added:

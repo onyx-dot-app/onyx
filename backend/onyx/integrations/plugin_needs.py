@@ -115,14 +115,14 @@ def turn_on_needed_integrations__no_commit(
         for integration in integrations
         if integration.status.state is ConnectionState.CONNECTED
     }
-    turned_on = False
-    for view in need_views(needs, integrations):
-        if view.state is PluginNeedState.TURN_ON and view.integration_id in connected:
-            set_integration_enabled__no_commit(
-                user, view.integration_id, True, db_session
-            )
-            turned_on = True
-    return turned_on
+    to_turn_on = {
+        view.integration_id
+        for view in need_views(needs, integrations)
+        if view.state is PluginNeedState.TURN_ON and view.integration_id in connected
+    }
+    for integration_id in sorted(to_turn_on):
+        set_integration_enabled__no_commit(user, integration_id, True, db_session)
+    return bool(to_turn_on)
 
 
 def unavailable_need_names(
