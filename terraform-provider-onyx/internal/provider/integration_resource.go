@@ -297,12 +297,12 @@ func (r *integrationResource) Create(ctx context.Context, req resource.CreateReq
 		resp.Diagnostics.AddError("Failed to create Onyx integration", err.Error())
 		return
 	}
+	planned := plan
 	// Save the id first so a failed follow-up leaves a resource to fix or destroy.
-	plan.ID = types.StringValue(strconv.FormatInt(created.ID, 10))
 	applyRemoteIntegration(ctx, &plan, created, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 
-	remote := r.applyFollowUps(ctx, created.ID, plan, created, credentialValues, &resp.Diagnostics)
+	remote := r.applyFollowUps(ctx, created.ID, planned, created, credentialValues, &resp.Diagnostics)
 	if remote == nil {
 		return
 	}
