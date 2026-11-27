@@ -11,6 +11,7 @@ import {
   errorHandlingFetcher,
   FetchError,
   fetchErrorDetail,
+  isNotFoundError,
 } from "@/lib/fetcher";
 import { getTextAroundCursor, type CaretText } from "@/lib/contentEditable";
 import {
@@ -41,7 +42,10 @@ import {
   skillNameConflictNames,
   type SkillShareUpdatePayload,
 } from "@/lib/skills/api";
-import { refreshSkillListsChecked } from "@/lib/skills/cache";
+import {
+  refreshSkillLists,
+  refreshSkillListsChecked,
+} from "@/lib/skills/cache";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -548,6 +552,8 @@ export function useSkillEnablement(
         askToSwitch(item, skillNameConflictNames(error));
         return;
       }
+      // Deleted elsewhere: the refreshed list drops it.
+      if (isNotFoundError(error)) void refreshSkillLists(mutate);
       toast.error(
         describeError(
           error,
@@ -623,6 +629,7 @@ export interface SkillBulkSelection {
   /** A bulk action or a row toggle of the delete targets is in flight. */
   deleteLocked: boolean;
   failures: SkillBulkFailure[];
+  failuresTitle: string;
   sharingOpen: boolean;
   setSharingOpen: (open: boolean) => void;
   deleteModal: ModalCreationInterface;
@@ -656,10 +663,19 @@ export function useSkillBulkSelection({
   const [sharingOpen, setSharingOpen] = useState(false);
   const deleteModal = useCreateModal();
   const [failures, setFailures] = useState<SkillBulkFailure[]>([]);
+  const [failedAction, setFailedAction] = useState<BulkSkillAction>("share");
 
   const selectedItems = items
     .filter((item) => selectedIds.has(item.id))
     .map((item) => ({ ...item, enabled: enablement.enabledOf(item) }));
+  // A skill deleted elsewhere leaves the list but may stay in the selection.
+  const listedSelectedIds = useMemo(
+    () =>
+      new Set(
+        items.filter((item) => selectedIds.has(item.id)).map((item) => item.id)
+      ),
+    [items, selectedIds]
+  );
   // Snapshotted on open: the selection clears when the delete lands, while
   // the card still fades out.
   const [deleteTargets, setDeleteTargets] = useState<CustomSkill[]>([]);
@@ -720,6 +736,7 @@ export function useSkillBulkSelection({
       }
       // Names come from the request targets: a skill deleted elsewhere in the
       // meantime is gone from the refreshed list but must still be reported.
+      setFailedAction(action);
       setFailures(
         result.failed.map((failure) => ({
           name:
@@ -729,11 +746,17 @@ export function useSkillBulkSelection({
         }))
       );
       if (result.succeeded.length)
-        toast.success(nounCopy("updated", { count: result.succeeded.length }));
+        toast.success(
+          nounCopy(action === "delete" ? "deleted" : "updated", {
+            count: result.succeeded.length,
+          })
+        );
       // The report sits at the top of the list, out of view of a row menu.
       if (result.failed.length)
         toast.error(
-          nounCopy("partialFailure", { count: result.failed.length })
+          nounCopy(action === "delete" ? "deleteFailure" : "partialFailure", {
+            count: result.failed.length,
+          })
         );
       // Another action's dialog may have opened while this one ran.
       if (action === "share") setSharingOpen(false);
@@ -753,7 +776,7 @@ export function useSkillBulkSelection({
   }
 
   return {
-    selectedIds,
+    selectedIds: listedSelectedIds,
     select: setSelectedIds,
     selectedItems,
     deleteTargets,
@@ -763,6 +786,10 @@ export function useSkillBulkSelection({
     locked,
     deleteLocked,
     failures,
+    failuresTitle: nounCopy(
+      failedAction === "delete" ? "deleteFailure" : "partialFailure",
+      { count: failures.length }
+    ),
     sharingOpen,
     setSharingOpen,
     deleteModal,

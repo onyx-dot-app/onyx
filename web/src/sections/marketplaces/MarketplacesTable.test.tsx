@@ -225,6 +225,12 @@ test("a member sees a company marketplace with no actions", async () => {
   ).not.toBeInTheDocument();
 });
 
+/** The full reason wraps: a clamp would cut it with no way to read the rest. */
+function expectUnclamped(element: HTMLElement) {
+  expect(element).not.toHaveClass("truncate");
+  expect(element).not.toHaveClass("overflow-hidden");
+}
+
 test("a failed marketplace the user cannot manage shows its reason in the table", async () => {
   const error = "The GitHub connection of admin@example.com is gone.";
   mockFetch({
@@ -241,7 +247,7 @@ test("a failed marketplace the user cannot manage shows its reason in the table"
   render(<Table />);
 
   const table = await screen.findByRole("table", { name: "Marketplaces" });
-  expect(within(table).getByText(error)).toBeInTheDocument();
+  expectUnclamped(within(table).getByText(error));
   expect(
     screen.queryByText("The last sync of acme/plugins failed")
   ).not.toBeInTheDocument();
@@ -288,5 +294,5 @@ test("a failed marketplace the user cannot manage shows its reason at phone widt
   render(<Table />);
 
   const table = await screen.findByRole("table", { name: "Marketplaces" });
-  expect(within(table).getByText(error)).toBeInTheDocument();
+  expectUnclamped(within(table).getByText(error));
 });

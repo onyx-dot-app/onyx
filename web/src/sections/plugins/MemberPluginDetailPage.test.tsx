@@ -533,3 +533,62 @@ test("the overview says which plugin holds the skill name of an off plugin", asy
     await screen.findByText("Off: company-kit uses the same skill name")
   ).toBeVisible();
 });
+
+describe("a plugin deleted in another tab", () => {
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    enabled: true,
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+
+  function mockDeletedAfterLoad(route: string) {
+    let deleted = false;
+    mockFetch({
+      "/api/skills": () => ({
+        builtins: [],
+        customs: deleted ? [] : [{ ...plugin, plugin: null }],
+      }),
+      [`/api/skills/${PLUGIN_ID}`]: plugin,
+      [route]: () => {
+        deleted = true;
+        return new Response(
+          JSON.stringify({ detail: "Skill is not visible." }),
+          { status: 404 }
+        );
+      },
+    });
+  }
+
+  beforeEach(() =>
+    window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`)
+  );
+
+  test("a switch that gets a 404 shows the not-found state", async () => {
+    mockDeletedAfterLoad(`PUT /api/skills/${PLUGIN_ID}/enabled`);
+    const user = setupUser();
+    render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+    await user.click(
+      await screen.findByRole("switch", { name: "Use review-kit" })
+    );
+
+    expect(
+      await screen.findByText("This plugin is not available to you.")
+    ).toBeInTheDocument();
+  });
+
+  test("Share that gets a 404 shows the not-found state", async () => {
+    mockDeletedAfterLoad(`/api/skills/custom/${PLUGIN_ID}/share`);
+    const user = setupUser();
+    render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+    await user.click(await screen.findByRole("button", { name: "Share" }));
+
+    expect(
+      await screen.findByText("This plugin is not available to you.")
+    ).toBeInTheDocument();
+  });
+});

@@ -63,8 +63,7 @@ export default function MarketplaceSyncStatus({
           <Text
             font="secondary-body"
             color="status-error-05"
-            maxLines={2}
-            overflowTooltip
+            wordWrap="wrap-break-word"
           >
             {error}
           </Text>

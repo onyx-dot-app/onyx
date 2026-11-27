@@ -122,9 +122,27 @@ test("a failed delete shows an error toast", async () => {
   await deleteTarget(user);
 
   await waitFor(() =>
-    expect(error).toHaveBeenCalledWith("1 plugin could not be updated")
+    expect(error).toHaveBeenCalledWith("1 plugin could not be deleted")
   );
   error.mockRestore();
+});
+
+test("a failed delete of a plugin gone from the list leaves no selection", async () => {
+  mockBulkUpdateSkills.mockResolvedValue({
+    succeeded: [],
+    failed: [{ skill_id: target.id, detail: "Skill not found" }],
+  });
+  const user = setupUser();
+  const { rerender } = render(<Harness items={[toggling, target]} />);
+
+  await user.click(screen.getByRole("button", { name: "select target" }));
+  await deleteTarget(user);
+  await waitFor(() =>
+    expect(screen.getByTestId("busy")).toHaveTextContent("false")
+  );
+  rerender(<Harness items={[toggling]} />);
+
+  expect(screen.getByTestId("selection")).toBeEmptyDOMElement();
 });
 
 function CachedNames() {
