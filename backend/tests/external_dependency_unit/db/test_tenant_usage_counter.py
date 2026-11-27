@@ -95,6 +95,31 @@ def test_a_period_that_never_ends_keeps_one_row(
     assert _rows(db_session, start) == 1
 
 
+def test_a_period_that_never_ends_differs_from_every_real_end(
+    db_session: Session,
+) -> None:
+    """A never-ending period and a period that ends at the epoch, both from the
+    same start, keep their own rows."""
+    start = datetime(1969, 12, 31, tzinfo=timezone.utc)
+    never_ends = UsagePeriod(anchor=WindowAnchor.CALENDAR, start=start)
+    ends_at_epoch = UsagePeriod(
+        anchor=WindowAnchor.CALENDAR, start=start, end=start + timedelta(days=1)
+    )
+    try:
+        increment_usage(db_session, UsageType.CHUNKS_INDEXED, 1, never_ends)
+        increment_usage(db_session, UsageType.CHUNKS_INDEXED, 2, ends_at_epoch)
+        db_session.commit()
+
+        assert get_usage(db_session, UsageType.CHUNKS_INDEXED, never_ends) == 1
+        assert get_usage(db_session, UsageType.CHUNKS_INDEXED, ends_at_epoch) == 2
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(TenantUsageCounter).where(TenantUsageCounter.window_start == start)
+        )
+        db_session.commit()
+
+
 def test_the_same_instant_in_another_timezone_is_the_same_period(
     db_session: Session, start: datetime
 ) -> None:

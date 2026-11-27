@@ -8200,10 +8200,10 @@ class TenantUsage(Base):
 
 
 # A period that never ends has no window_end. Postgres treats two NULLs as
-# different, so the unique index keys it as the epoch. Upserts must name this
-# exact expression as the conflict target.
+# different, so the unique index keys it as infinity, which no real end can
+# equal. Upserts must name this exact expression as the conflict target.
 TENANT_USAGE_COUNTER_PERIOD_END_KEY = text(
-    "COALESCE(window_end, '1970-01-01 00:00:00+00'::timestamp with time zone)"
+    "COALESCE(window_end, 'infinity'::timestamp with time zone)"
 )
 
 

@@ -76,9 +76,7 @@ def upgrade() -> None:
             "window_anchor",
             "window_start",
             # Same as TENANT_USAGE_COUNTER_PERIOD_END_KEY in onyx.db.models.
-            sa.text(
-                "COALESCE(window_end, '1970-01-01 00:00:00+00'::timestamp with time zone)"
-            ),
+            sa.text("COALESCE(window_end, 'infinity'::timestamp with time zone)"),
         ],
         unique=True,
     )
