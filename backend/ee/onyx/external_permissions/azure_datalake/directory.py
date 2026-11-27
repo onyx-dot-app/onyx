@@ -1,8 +1,10 @@
 """The tenant's users and group members from Microsoft Graph, each read once
 per sync."""
 
-from ee.onyx.external_permissions.microsoft_utils.principal_sets import PrincipalDirectory
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import normalize_email
+from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
+    PrincipalDirectory,
+)
 from onyx.connectors.azure_datalake.models import AzureDataLakeCredentials
 from onyx.connectors.azure_datalake.source_operations import (
     AzureDataLakeNotFoundError,

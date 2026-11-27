@@ -25,6 +25,13 @@ from ee.onyx.external_permissions.azure_datalake.directory import (
 from ee.onyx.external_permissions.azure_datalake.exclusion_groups import (
     exclusion_group_id,
 )
+from ee.onyx.external_permissions.azure_datalake.rbac import (
+    RbacReaders,
+    apply_denies,
+    container_scope,
+    find_storage_account,
+    rbac_readers,
+)
 from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
     ExpansionLimitError,
     PrincipalSet,
@@ -32,13 +39,6 @@ from ee.onyx.external_permissions.microsoft_utils.principal_sets import (
     intersect,
     resolve,
     union,
-)
-from ee.onyx.external_permissions.azure_datalake.rbac import (
-    RbacReaders,
-    apply_denies,
-    container_scope,
-    find_storage_account,
-    rbac_readers,
 )
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import AZURE_DATALAKE_ACL_READ_CONCURRENCY
