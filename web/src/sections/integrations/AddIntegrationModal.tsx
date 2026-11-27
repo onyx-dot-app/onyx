@@ -541,8 +541,10 @@ export default function AddIntegrationModal({
     const addedPresetIds = new Set(
       (integrations.data ?? []).map((integration) => integration.preset_id)
     );
+    // Without the integrations list, the modal cannot tell which presets are added.
+    const presetsLoadFailed = presets.error || integrations.error;
     const tiles = [
-      ...(presets.data ?? [])
+      ...(presetsLoadFailed ? [] : (presets.data ?? []))
         .filter(
           (preset) =>
             !hasSuggestedMcpServer(preset.id) && !addedPresetIds.has(preset.id)
@@ -566,7 +568,7 @@ export default function AddIntegrationModal({
     );
     return (
       <Section gap={4} alignItems="stretch" height="auto">
-        {presets.error && (
+        {presetsLoadFailed && (
           <MessageCard variant="error" title={t("preset.loadFailed")} />
         )}
         <CardGrid columns="one-to-four">
