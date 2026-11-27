@@ -442,12 +442,12 @@ test("an organization-wide action manager publishes after the confirmation", asy
   );
   await waitFor(() =>
     expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          String(input) === "/api/admin/integrations/1/installation-policy" &&
-          init?.method === "PUT"
+      requestBody(
+        fetchMock,
+        "PUT",
+        "/api/admin/integrations/1/installation-policy"
       )
-    ).toBe(true)
+    ).toEqual({ installation_policy: "AVAILABLE" })
   );
   await waitFor(() =>
     expect(success).toHaveBeenCalledWith(
