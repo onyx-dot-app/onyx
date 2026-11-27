@@ -375,7 +375,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     mark names the tagged chat, writes an `action_approval` row with
     `chat_session_id` and `command_id` (method, origin, path and body as its payload,
     the body decoded by `external_apps/presentation/decode.py:decode_payload`;
-    `body_bytes` in place of a body that is not JSON or is over 64 KB),
+    `body_bytes` in place of a body that is not JSON, is over 64 KB, or holds
+    a value JSONB refuses),
     announces it under the command ID, and sends no notification. It checks
     the mark again after the write and expires its own row when the call
     ended, so no row waits that no card shows. The call's watcher shows the row
