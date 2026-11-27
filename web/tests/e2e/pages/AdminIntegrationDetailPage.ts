@@ -57,6 +57,12 @@ export class AdminIntegrationDetailPage {
       .getByRole("button", { name: policy, exact: true });
   }
 
+  async expectActionAbsent(action: string): Promise<void> {
+    await expect(
+      this.page.getByRole("group", { name: action, exact: true })
+    ).toHaveCount(0);
+  }
+
   async setActionPolicy(action: string, policy: PolicyLabel): Promise<void> {
     await this.policyButton(action, policy).click();
     await expect(this.policyButton(action, policy)).toHaveAttribute(
@@ -140,13 +146,33 @@ export class AdminIntegrationDetailPage {
     expect((await response).ok()).toBeTruthy();
   }
 
-  /** Replaces the OpenAPI schema on the Configuration tab and saves it. */
+  /** Imports a JSON OpenAPI spec on the Configuration tab and saves it. */
   async replaceSchema(schema: string): Promise<void> {
     await this.openTab("Configuration");
-    await this.activePanel
-      .getByRole("textbox", { name: "OpenAPI Schema", exact: true })
-      .fill(schema);
+    await this.activePanel.locator('input[type="file"]').setInputFiles({
+      name: "openapi.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(schema),
+    });
+    await expect(
+      this.page.getByText(/^Imported \d+ endpoints?\.$/)
+    ).toBeVisible();
     await this.saveConfiguration();
+  }
+
+  /** Replaces the endpoint lines on the Configuration tab and saves them. */
+  async replaceEndpoints(endpoints: string[]): Promise<void> {
+    await this.openTab("Configuration");
+    await this.activePanel
+      .getByRole("textbox", { name: "Endpoints", exact: true })
+      .fill(endpoints.join("\n"));
+    await this.saveConfiguration();
+  }
+
+  async expectEndpoints(endpoints: string[]): Promise<void> {
+    await expect(
+      this.activePanel.getByRole("textbox", { name: "Endpoints", exact: true })
+    ).toHaveValue(endpoints.join("\n"));
   }
 
   async configureOAuth(settings: OAuthSettings): Promise<void> {

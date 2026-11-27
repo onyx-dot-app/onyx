@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Text } from "@opal/components";
+import { MessageCard, Text } from "@opal/components";
 import { ContentAction, Section } from "@opal/layouts";
 import type { AdminIntegrationDetail } from "@/lib/integrations/types";
 import { DetailOverview } from "@/sections/customize/CustomizeDetailLayout";
@@ -25,6 +25,22 @@ export default function IntegrationOverviewTab({
 
   return (
     <Section gap={4} alignItems="stretch" height="auto">
+      {integration.config.shape === "custom" && (
+        <MessageCard
+          variant="warning"
+          title={t("urlPatternApp.title")}
+          description={t("urlPatternApp.description")}
+          bottomChildren={
+            <div className="px-2">
+              {integration.config.upstream_url_patterns.map((pattern) => (
+                <Text key={pattern} as="p" font="secondary-mono">
+                  {pattern}
+                </Text>
+              ))}
+            </div>
+          }
+        />
+      )}
       {!integration.can_manage && (
         <Text as="p" font="secondary-body" color="text-03">
           {t("readOnly")}

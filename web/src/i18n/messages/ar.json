@@ -141,44 +141,6 @@
         "tooltip": "{description}\nفضّل هذه الأداة لهذه المحادثة. قد يجيب الوكيل دون استخدامها."
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "إلغاء"
-      },
-      "copyButton": {
-        "tooltip": "نسخ التعريف"
-      },
-      "definition": {
-        "invalidJson": "تنسيق JSON غير صالح",
-        "placeholder": "أدخل مخطط OpenAPI هنا",
-        "required": "تعريف مخطط OpenAPI مطلوب",
-        "subDescription": "حدد مخطط OpenAPI يعرّف واجهات API التي تريد إتاحتها ضمن هذه الإضافة. يمكنك استخدام العناصر النائبة `CHAT_SESSION_ID` و`MESSAGE_ID` و`USER_ID` و`USER_EMAIL` في أي مكان في المخطط (مثل عنوان الخادم أو المسارات أو القيم الافتراضية للمعاملات) وستُستبدل بقيم الطلب الحالي وقت الاستدعاء. اعرف المزيد عن [إضافات OpenAPI]({docsUrl}).",
-        "title": "تعريف مخطط OpenAPI"
-      },
-      "empty": {
-        "description": "قدّم مخطط OpenAPI لمعاينة الإجراءات هنا.",
-        "title": "لم يتم العثور على إجراءات"
-      },
-      "formatButton": {
-        "tooltip": "تنسيق التعريف"
-      },
-      "method": {
-        "noSummary": "لا يوجد ملخص"
-      },
-      "toasts": {
-        "actionCreated": "تم إنشاء إضافة OpenAPI بنجاح",
-        "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI"
-      },
-      "humanDescription": {
-        "title": "وصف للبشر",
-        "hint": "يظهر في بطاقة الإضافة وتفاصيلها."
-      },
-      "agentDescription": {
-        "title": "وصف للوكلاء",
-        "hint": "يحرر info.description في مخطط OpenAPI.",
-        "disabled": "أدخل مخططًا صالحًا لتحرير هذا الحقل."
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(غير متصل)"
@@ -360,10 +322,8 @@
       "detectedTransport": "النقل: {transport}",
       "authenticationUndetected": "اختر طريقة المصادقة في الصفحة التالية.",
       "details": "التفاصيل",
-      "checking": "جارٍ التحقق من الخادم…",
       "serverDetails": "تفاصيل الخادم",
       "authentication": "المصادقة",
-      "continue": "متابعة",
       "back": "رجوع"
     },
     "policyEditor": {
@@ -10402,45 +10362,16 @@
       "loadFailed": "تعذّر تحميل التكاملات.",
       "add": {
         "label": "إضافة",
-        "title": "إضافة تكامل",
-        "description": "اربط خدمة ليتمكن الأشخاص من استخدامها في المحادثة وCraft.",
         "created": "تمت إضافة {name}.",
         "createFailed": "تعذّرت إضافة التكامل.",
-        "openapi": {
-          "title": "إضافة تطبيق OpenAPI",
-          "schema": {
-            "title": "المخطط",
-            "description": "أضف مخطط OpenAPI الذي يحدد الإجراءات.",
-            "added": "{count, plural, zero {لا يحتوي المخطط على مسارات.} one {يحتوي المخطط على مسار واحد.} two {يحتوي المخطط على مسارين.} few {يحتوي المخطط على # مسارات.} many {يحتوي المخطط على # مسارًا.} other {يحتوي المخطط على # مسار.}}",
-            "required": "أضف مخططًا.",
-            "add": "إضافة مخطط",
-            "edit": "تعديل المخطط"
-          }
-        },
         "preset": {
-          "title": "البدء من",
           "loadFailed": "تعذّر تحميل القوالب الجاهزة.",
-          "instructions": "تعليمات الإعداد",
-          "credentialRequired": "أدخل هذه القيمة.",
-          "description": "يملأ الإعداد المسبق اسم تطبيق مدمج وطريقة تسجيل الدخول إليه. اختر تطبيق مخصص لإعداد أي خدمة HTTP.",
-          "custom": "تطبيق مخصص"
+          "credentialRequired": "أدخل هذه القيمة."
         },
         "name": {
           "title": "الاسم",
           "placeholder": "أدخل اسمًا",
           "required": "أدخل اسمًا."
-        },
-        "descriptionField": {
-          "title": "الوصف",
-          "placeholder": "أدخل وصفًا"
-        },
-        "custom": {
-          "patterns": {
-            "title": "أنماط URL",
-            "description": "ضع نمط URL واحدًا في كل سطر، مثل https://api.example.com/*.",
-            "placeholder": "https://api.example.com/*",
-            "required": "أضف نمط URL واحدًا على الأقل."
-          }
         },
         "mcp": {
           "url": {
@@ -10449,7 +10380,6 @@
             "error": "أدخل عنوان URL صالحًا للخادم."
           },
           "probe": {
-            "checking": "جارٍ فحص الخادم…",
             "public": "{count, plural, zero {لم يُعثر على أي أداة} one {تم العثور على أداة واحدة} two {تم العثور على أداتين} few {تم العثور على # أدوات} many {تم العثور على # أداة} other {تم العثور على # أداة}}. لا يتطلب الخادم تسجيل الدخول.",
             "oauth": "يستخدم الخادم تسجيل الدخول عبر OAuth.",
             "authUnknown": "يتطلب الخادم تسجيل الدخول. أضف ترويسة مفتاح API أو OAuth.",
@@ -10460,8 +10390,7 @@
             "title": "النقل",
             "streamableHttp": "HTTP قابل للبث",
             "sse": "أحداث مُرسلة من الخادم (SSE)"
-          },
-          "suggested": "خوادم مقترحة"
+          }
         },
         "owner": {
           "title": "المالك",
@@ -10473,27 +10402,112 @@
         "submit": "إضافة",
         "adding": "جارٍ الإضافة…",
         "cancel": "إلغاء",
-        "type": {
-          "title": "النوع",
-          "description": "اختر طريقة اتصال Onyx بالخدمة.",
-          "mcp_server": {
-            "title": "خادم MCP",
-            "description": "اربط خادم MCP بعيدًا عبر عنوان URL الخاص به."
+        "rest": {
+          "import": {
+            "title": "استيراد مواصفات",
+            "description": "ارفع مواصفات OpenAPI بتنسيق JSON أو YAML أو الصقها، أو استوردها من عنوان URL. يملأ Onyx عنوان URL الأساسي ونقطة نهاية لكل عملية.",
+            "upload": "ارفع المواصفات أو الصقها",
+            "url": "عنوان URL للمواصفات",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "استيراد",
+            "done": "{count, plural, zero {لم يتم استيراد أي نقطة نهاية.} one {تم استيراد نقطة نهاية واحدة.} two {تم استيراد نقطتي نهاية.} few {تم استيراد # نقاط نهاية.} many {تم استيراد # نقطة نهاية.} other {تم استيراد # نقطة نهاية.}}",
+            "failed": "تعذر استيراد المواصفات.",
+            "noActions": "تخطّى Onyx كل العمليات في المواصفة، لذا تبقى نقاط النهاية الحالية. استخدم مواصفة أخرى."
           },
-          "openapi": {
-            "title": "تطبيق OpenAPI",
-            "description": "أنشئ إجراءات من مخطط OpenAPI."
+          "baseUrl": {
+            "title": "عنوان URL الأساسي",
+            "placeholder": "https://api.example.com",
+            "required": "أضف عنوان URL أساسيًا."
           },
-          "app": {
-            "title": "تطبيق",
-            "description": "ابدأ من إعداد مسبق، مثل GitHub، أو من تطبيق مخصص."
+          "endpoints": {
+            "title": "نقاط النهاية",
+            "description": "ضع نقطة نهاية واحدة في كل سطر: الطريقة والمسار ومعلمات الاستعلام الاختيارية والاسم. تصبح كل نقطة نهاية إجراءً.",
+            "placeholder": "GET /tickets?status&limit عرض التذاكر",
+            "required": "أضف نقطة نهاية واحدة على الأقل.",
+            "lineError": "السطر {line} ({text}): {message}"
           }
         },
-        "details": {
-          "title": "التفاصيل"
+        "graphql": {
+          "endpointUrl": {
+            "title": "عنوان URL لنقطة النهاية",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "أضف عنوان URL لنقطة النهاية."
+          },
+          "schema": {
+            "title": "المخطط",
+            "description": "الصق المخطط بصيغة GraphQL SDL، أو ارفع ملف .graphql، أو حمّله من نقطة النهاية. يصبح كل استعلام وتعديل إجراءً.",
+            "upload": "رفع ملف .graphql",
+            "required": "أضف مخططًا."
+          },
+          "introspect": {
+            "submit": "التحميل من نقطة النهاية",
+            "done": "تم تحميل المخطط.",
+            "failed": "تعذر تحميل المخطط."
+          }
         },
-        "signIn": {
-          "title": "تسجيل الدخول"
+        "menu": {
+          "mcpServer": "خادم MCP",
+          "customApi": "واجهة API مخصصة"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "إضافة خادم MCP",
+            "description": "اربط خادم MCP بعيدًا عبر عنوان URL الخاص به."
+          },
+          "api": {
+            "title": "إضافة واجهة API مخصصة",
+            "description": "اربط واجهة REST أو GraphQL. يجد Onyx نقاط النهاية من عنوان URL أو من مواصفة."
+          },
+          "catalog": {
+            "title": "إضافة من الكتالوج",
+            "description": "اختر تطبيقًا أو خادم MCP لإعداده."
+          },
+          "namedTitle": "إضافة {name}"
+        },
+        "catalog": {
+          "title": "تصفح الكتالوج",
+          "description": "تطبيقات وخوادم MCP مستضافة يعرف Onyx كيف يتصل بها.",
+          "browse": "تصفح"
+        },
+        "api": {
+          "url": {
+            "title": "عنوان URL",
+            "description": "عنوان URL لمواصفة OpenAPI أو نقطة نهاية GraphQL أو عنوان URL أساسي",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "أدخل عنوان URL صالحًا أو ارفع مواصفة.",
+            "needed": "أضف عنوان URL لواجهة API. المواصفة لا تحدده."
+          },
+          "upload": {
+            "label": "رفع openapi.json أو openapi.yaml أو schema.graphql",
+            "chosen": "المواصفة: {file}",
+            "remove": "إزالة المواصفة"
+          },
+          "failed": "تعذّرت قراءة المواصفة.",
+          "specError": "تعذّرت إضافة المواصفة: {detail}",
+          "tooLarge": "حجم الملف أكبر من 5 ميغابايت.",
+          "checkFailed": "تعذّر على Onyx التحقق من عنوان URL. حاول مرة أخرى.",
+          "noActions": "تخطّى Onyx كل العمليات في المواصفة، لذلك لا تعطي أي إجراءات. استخدم مواصفة أخرى، أو أزل المواصفة وأدخل عنوان URL الأساسي للواجهة لإضافة نقاط النهاية يدويًا."
+        },
+        "detected": {
+          "openapi": "واجهة REST، {count, plural, one {# نقطة نهاية} other {# نقاط نهاية}}",
+          "openapiSkipped": "واجهة REST، {count, plural, one {# نقطة نهاية} other {# نقاط نهاية}}. تم تخطي {skipped}.",
+          "skippedTitle": "نقاط النهاية التي تم تخطيها",
+          "rest": "واجهة REST بدون مواصفة. أضف نقاط النهاية أدناه.",
+          "restUnreachable": "لا يمكن لـ Onyx الوصول إلى عنوان URL: {detail} لا يزال بإمكانك إضافته كواجهة REST بدون مواصفة. أضف نقاط النهاية أدناه.",
+          "restTooLarge": "لا يمكن لـ Onyx التحقق من وجود مواصفة في عنوان URL: {detail} لا يزال بإمكانك إضافته كواجهة REST بدون مواصفة، أو رفع ملف مواصفة أصغر. أضف نقاط النهاية أدناه.",
+          "graphql": "واجهة GraphQL، {queries, plural, one {# استعلام} other {# استعلامات}} و{mutations, plural, one {# تعديل} other {# تعديلات}}",
+          "preset": "تطبيق مدمج. يستدعي Onyx واجهة API الخاصة به."
+        },
+        "continue": "متابعة",
+        "back": "رجوع",
+        "detecting": "جارٍ فحص عنوان URL…",
+        "advanced": "متقدم",
+        "setup": {
+          "title": "إعداد {name}",
+          "callbackUrl": "عنوان URL لرد الاتصال",
+          "copyCallbackUrl": "نسخ عنوان URL لرد الاتصال",
+          "scopes": "النطاقات",
+          "open": "فتح {name}"
         }
       },
       "filters": {
@@ -10517,9 +10531,10 @@
       },
       "shape": {
         "mcp_server": "خادم MCP",
-        "openapi": "تطبيق OpenAPI",
+        "openapi": "تطبيق REST",
         "preset": "تطبيق",
-        "custom": "تطبيق مخصص"
+        "custom": "تطبيق مخصص",
+        "graphql": "تطبيق GraphQL"
       },
       "signInSummary": "{mode, select, none {بدون تسجيل دخول} shared {{method, select, oauth2 {حساب المؤسسة (OAuth)} api_key {مفتاح API للمؤسسة} onyx_login {تسجيل الدخول إلى Onyx} managed {يديره Onyx} other {حساب المؤسسة}}} individual {{method, select, oauth2 {كل مستخدم (OAuth)} api_key {كل مستخدم (مفتاح API)} onyx_login {تسجيل الدخول إلى Onyx} managed {يديره Onyx} other {كل مستخدم}}} other {غير معروف}}",
       "status": {
@@ -10627,19 +10642,18 @@
           },
           "description": "الوصف",
           "menu": "إجراءات أخرى",
-          "owner": "المالك"
+          "owner": "المالك",
+          "urlPatternApp": {
+            "title": "يستخدم هذا التطبيق أنماط URL",
+            "description": "لم يعد Onyx يضيف تطبيقات أنماط URL. لاستبدال هذا التطبيق، أضف تطبيق REST مخصصًا لكل مضيف تصل إليه أنماط URL الخاصة به. نفّذ خطوات الإعداد الواردة في الوثائق قبل حذف هذا التطبيق."
+          }
         },
         "configuration": {
           "readOnly": "يمكنك رؤية هذا التكامل، لكن لا يمكنك تغييره.",
           "connection": {
             "title": "الاتصال",
             "serverUrl": "عنوان URL للخادم",
-            "serverUrlError": "أدخل عنوان URL صالحًا للخادم.",
-            "urlPatterns": "أنماط URL",
-            "urlPatternsDescription": "ضع نمط URL واحدًا في كل سطر.",
-            "schema": "مخطط OpenAPI",
-            "schemaDescription": "يزامن Onyx الإجراءات مرة أخرى عند حفظ مخطط معدّل.",
-            "schemaError": "أدخل المخطط ككائن JSON."
+            "serverUrlError": "أدخل عنوان URL صالحًا للخادم."
           },
           "signIn": {
             "title": "تسجيل الدخول",
@@ -10707,7 +10721,7 @@
         "saved": "أصبح {name} الآن {policy}.",
         "saveFailed": "تعذّر حفظ إعداد التثبيت.",
         "title": "إعداد التثبيت",
-        "description": "من يحصل على هذا التكامل. غير متاح يبقيه خاصًا: لا يستخدمه إلا مالكه والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص. أزل إعدادات المجموعات هذه لقصره على المالك والمشاركات.",
+        "description": "من يحصل على هذا التكامل في المؤسسة.",
         "notAvailable": "خاص. لا يستخدمه إلا المالك والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص.",
         "required": "يجب على الأعضاء الذين يسجّلون الدخول بحساباتهم الخاصة ربطه قبل استخدام الدردشة وCraft."
       },
@@ -16789,6 +16803,9 @@
         "integrations": {
           "label": "التكاملات"
         },
+        "plugins": {
+          "label": "الإضافات"
+        },
         "slackBot": {
           "label": "بوت Slack"
         },
@@ -17673,19 +17690,20 @@
         }
       },
       "alwaysAllow": {
-        "title": "السماح دائمًا",
-        "description": "تشغيل إجراء يطلب الموافقة دون مطالبة.",
+        "title": "الإجراءات",
+        "description": "يحدد المسؤول طريقة تشغيل كل إجراء. فعّل «لا تسألني» لتشغيل إجراء يطلب الموافقة دون مطالبة.",
         "loadFailed": "تعذر تحميل الإجراءات.",
         "saveFailed": "تعذر الحفظ. حاول مرة أخرى.",
-        "alwaysAsks": "يطلب Craft الموافقة على كل طلب من هذه الطلبات.",
+        "alwaysAsks": "يطلب Onyx الموافقة على كل طلب من هذه الطلبات.",
         "switch": {
-          "label": "السماح دائمًا بـ {name}"
+          "label": "السماح دائمًا بـ {name}",
+          "visibleLabel": "لا تسألني"
         },
         "retry": {
           "label": "حاول مرة أخرى"
         },
-        "readOnlyTitle": "الإجراءات",
-        "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء."
+        "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء.",
+        "readOnlyTitle": "الإجراءات"
       },
       "oauthCallback": {
         "processing": "جارٍ ربط حسابك…",
@@ -17928,10 +17946,6 @@
       "open": "فتح {name}",
       "menu": "إجراءات {name}",
       "loadFailed": "تعذر تحميل الأسواق.",
-      "empty": {
-        "title": "لا توجد أسواق بعد",
-        "description": "أضف مستودع GitHub للحصول على إضافاته."
-      },
       "page": {
         "title": "الأسواق",
         "description": "مستودعات GitHub التي تحصل منها على الإضافات، مع مصدرها. زامن سوقًا للحصول على التغييرات من GitHub."
@@ -17990,6 +18004,10 @@
       "errors": {
         "rateLimited": "تم بلوغ حد واجهة GitHub البرمجية. حاول مرة أخرى بعد بضع دقائق. اربط GitHub لرفع الحد.",
         "rateLimitedUntil": "تم بلوغ حد واجهة GitHub البرمجية. تتم إعادة التعيين في {time}. اربط GitHub لرفع الحد."
+      },
+      "empty": {
+        "title": "لا توجد أسواق بعد",
+        "description": "أضف مستودع GitHub للحصول على إضافاته."
       }
     }
   },
@@ -18080,11 +18098,6 @@
         "on": "مفعّلة",
         "off": "معطّلة"
       },
-      "sort": {
-        "label": "ترتيب",
-        "updated": "المحدّثة مؤخرًا",
-        "name": "الاسم"
-      },
       "add": {
         "label": "إضافة",
         "upload": "رفع مهارة",
@@ -18133,6 +18146,11 @@
         "title": "لا توجد مهارات مطابقة",
         "description": "جرّب بحثًا أو عامل تصفية آخر.",
         "clear": "عرض كل المهارات"
+      },
+      "sort": {
+        "label": "ترتيب",
+        "updated": "المحدّثة مؤخرًا",
+        "name": "الاسم"
       }
     },
     "integrations": {
@@ -18146,11 +18164,6 @@
       },
       "status": {
         "connected": "متصل"
-      },
-      "add": {
-        "label": "إضافة",
-        "integration": "إضافة تكامل",
-        "manage": "إدارة عمليات التكامل"
       },
       "open": "فتح {name}",
       "empty": {
@@ -18176,7 +18189,7 @@
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
       },
-      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تظهر الإضافة التي تحتوي فقط على ملف SKILL.md في جذرها في علامة تبويب المهارات.",
+      "intro": "الإضافة مجموعة من المهارات، وهي تذكر التكاملات التي تحتاجها هذه المهارات. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تظهر الإضافة التي تحتوي فقط على ملف SKILL.md في جذرها في علامة تبويب المهارات.",
       "integrations": "{available} من {needed} من التكاملات متاحة",
       "nameHeld": "متوقف: يستخدم {names} اسم المهارة نفسه"
     },

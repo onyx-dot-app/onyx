@@ -122,7 +122,7 @@ test.describe("Default Agent MCP Integration", () => {
     const detail = new AdminIntegrationDetailPage(page);
     const uiName = `${serverName} (UI)`;
     await integrations.goto();
-    await integrations.openAdd("MCP server");
+    await integrations.openAdd("MCP Server");
     await integrations.fillMcpServer({ name: uiName, url: serverUrl });
     await integrations.selectSignIn(
       "One account for the organization",

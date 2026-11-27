@@ -18,32 +18,38 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
 ## Add an MCP server
 
 <Steps>
-  <Step title="Open the add page">
-    Go to **Admin Panel → Integrations** and click **Add**. **MCP Server** is the default type.
+  <Step title="Open the add dialog">
+    Go to **Admin Panel → Integrations**, click **Add**, then select **MCP Server**. For Linear, Notion, Sentry,
+    or Atlassian, click **Browse** under **Browse the Catalog** at the bottom of the page,
+    and select the server instead. The catalog fills in the name and the URL and goes to the next step.
 
-    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_type.webp" alt="The Add an Integration page with the MCP Server, OpenAPI App, and App types"/>
+    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_type.webp" alt="The Add menu with MCP Server and Custom API"/>
   </Step>
 
   <Step title="Enter the server details">
-    Enter a **Name** and the **Server URL**. Select a server under **Suggested Servers** to fill in the URL for Linear,
-    Notion, Sentry, or Atlassian. Onyx checks the server and tells you what it found:
-    the number of tools of a public server, OAuth sign-in, or a server that needs a sign-in.
-
-    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_mcp.webp" alt="The MCP server fields after Onyx found 3 tools on a server with no sign-in"/>
+    Enter a **Name** and the **Server URL**, then click **Continue**.
+    Onyx checks the server and tells you what it found: the number of tools of a public server, OAuth sign-in,
+    or a server that needs a sign-in.
 
     The Onyx API server must be able to reach the URL.
     Setup checks follow the [SSRF Protection](/admins/advanced_configs/security_hardening#ssrf-protection) level:
     by default Onyx blocks private, loopback, and link-local addresses.
-    Cloud metadata addresses stay blocked at every level. **Transport** is **Streamable HTTP** by default.
-    Select **Server-sent events (SSE)** only if the server supports SSE alone.
+    Cloud metadata addresses stay blocked at every level.
   </Step>
 
   <Step title="Set the sign-in">
-    Select a **Sign-in Mode** and a **Sign-in Method**. See [Sign-in](#sign-in).
+    Onyx selects a **Sign-in Mode** from what it found. Change it if necessary.
+    Open **Advanced** to change the **Sign-in Method** and its fields. See [Sign-in](#sign-in).
+
+    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_mcp.webp" alt="The second step after Onyx found OAuth sign-in on the server"/>
+
+    **Advanced** also has the **Transport**. It is **Streamable HTTP** by default,
+    or the transport that the check found. Select **Server-sent events (SSE)** only if the server supports SSE alone.
   </Step>
 
   <Step title="Select the owner">
-    If you can manage actions for the whole organization, select **For the organization** or **For me** under **Owner**.
+    If you can manage actions for the whole organization,
+    select **For the organization** or **For me** under **Advanced → Owner**.
     **For the organization** makes the server available to the organization.
     **For me** makes a private server that only you can use until you share it. Other admins always add **For me**.
   </Step>

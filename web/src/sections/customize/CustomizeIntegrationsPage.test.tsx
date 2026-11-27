@@ -1,4 +1,4 @@
-import { render, screen } from "@tests/setup/test-utils";
+import { render, screen, setupUser } from "@tests/setup/test-utils";
 import { mockFetch } from "@tests/setup/integrationTestUtils";
 import {
   makeAccess,
@@ -109,4 +109,27 @@ test("no access rows go below every integration the user can use", async () => {
     .map((row) => names.find((name) => row.textContent?.includes(name)))
     .filter((name) => name !== undefined);
   expect(order).toEqual(["Zendesk", "Asana", "Box"]);
+});
+
+test("the filter button shows MCP servers or apps only", async () => {
+  window.history.replaceState(null, "", "/app/customize/integrations");
+  mockFetch({
+    "/api/integrations": [
+      makeMemberIntegration({ id: 1, name: "Linear", kind: "mcp" }),
+      makeMemberIntegration({ id: 2, name: "GitHub", kind: "api" }),
+    ],
+  });
+  const user = setupUser();
+  render(<CustomizeIntegrationsPage />);
+  await screen.findByText("Linear");
+
+  await user.click(screen.getByRole("button", { name: "Integration type" }));
+  await user.click(screen.getByRole("option", { name: "Apps" }));
+  expect(screen.queryByText("Linear")).not.toBeInTheDocument();
+  expect(screen.getByText("GitHub")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Integration type" }));
+  await user.click(screen.getByRole("option", { name: "MCP servers" }));
+  expect(screen.getByText("Linear")).toBeInTheDocument();
+  expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
 });

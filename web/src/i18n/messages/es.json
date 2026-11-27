@@ -141,44 +141,6 @@
         "tooltip": "{description}\nPreferir esta herramienta para este chat. El agente puede responder sin usarla."
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "Cancelar"
-      },
-      "copyButton": {
-        "tooltip": "Copiar la definición"
-      },
-      "definition": {
-        "invalidJson": "El formato JSON no es válido",
-        "placeholder": "Introduce aquí tu esquema de OpenAPI",
-        "required": "La definición del esquema de OpenAPI es obligatoria",
-        "subDescription": "Especifica un esquema de OpenAPI que defina las API que quieres poner a disposición como parte de este plugin. Puedes usar los marcadores de posición `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` y `USER_EMAIL` en cualquier parte del esquema (p. ej., la URL del servidor, las rutas o los valores predeterminados de los parámetros) y se sustituirán por los valores de la solicitud actual en el momento de la llamada. Más información sobre los [plugins OpenAPI]({docsUrl}).",
-        "title": "Definición del esquema de OpenAPI"
-      },
-      "empty": {
-        "description": "Proporciona un esquema de OpenAPI para ver aquí una vista previa de las acciones.",
-        "title": "No se encontraron acciones"
-      },
-      "formatButton": {
-        "tooltip": "Formatear la definición"
-      },
-      "method": {
-        "noSummary": "No se proporcionó ningún resumen"
-      },
-      "toasts": {
-        "actionCreated": "Plugin OpenAPI creado correctamente",
-        "invalidJson": "El formato JSON de la definición del esquema de OpenAPI no es válido"
-      },
-      "humanDescription": {
-        "title": "Descripción para personas",
-        "hint": "Se muestra en la tarjeta del plugin y en sus detalles."
-      },
-      "agentDescription": {
-        "title": "Descripción para agentes",
-        "hint": "Edita info.description en el esquema OpenAPI.",
-        "disabled": "Introduce un esquema válido para editar este campo."
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(Desconectado)"
@@ -360,10 +322,8 @@
       "detectedTransport": "Transporte: {transport}",
       "authenticationUndetected": "Elige el método de autenticación en la siguiente página.",
       "details": "Detalles",
-      "checking": "Comprobando servidor…",
       "serverDetails": "Detalles del servidor",
       "authentication": "Autenticación",
-      "continue": "Continuar",
       "back": "Atrás"
     },
     "policyEditor": {
@@ -10402,45 +10362,16 @@
       "loadFailed": "No se pudieron cargar las integraciones.",
       "add": {
         "label": "Agregar",
-        "title": "Agregar una integración",
-        "description": "Conecta un servicio para que las personas puedan usarlo en el chat y en Craft.",
         "created": "Se agregó {name}.",
         "createFailed": "No se pudo agregar la integración.",
-        "openapi": {
-          "title": "Agregar una app OpenAPI",
-          "schema": {
-            "title": "Esquema",
-            "description": "Agrega el esquema OpenAPI que define las acciones.",
-            "added": "{count, plural, one {El esquema tiene # ruta.} other {El esquema tiene # rutas.}}",
-            "required": "Agrega un esquema.",
-            "add": "Agregar esquema",
-            "edit": "Editar esquema"
-          }
-        },
         "preset": {
-          "title": "Empezar desde",
           "loadFailed": "No se pudieron cargar las plantillas.",
-          "instructions": "Instrucciones de configuración",
-          "credentialRequired": "Agrega este valor.",
-          "description": "Una plantilla rellena el nombre y el inicio de sesión de una aplicación integrada. Elige Aplicación personalizada para configurar cualquier servicio HTTP.",
-          "custom": "Aplicación personalizada"
+          "credentialRequired": "Agrega este valor."
         },
         "name": {
           "title": "Nombre",
           "placeholder": "Agrega un nombre",
           "required": "Agrega un nombre."
-        },
-        "descriptionField": {
-          "title": "Descripción",
-          "placeholder": "Agrega una descripción"
-        },
-        "custom": {
-          "patterns": {
-            "title": "Patrones de URL",
-            "description": "Escribe un patrón de URL por línea, por ejemplo https://api.example.com/*.",
-            "placeholder": "https://api.example.com/*",
-            "required": "Agrega al menos un patrón de URL."
-          }
         },
         "mcp": {
           "url": {
@@ -10449,7 +10380,6 @@
             "error": "Introduce una URL de servidor válida."
           },
           "probe": {
-            "checking": "Comprobando el servidor…",
             "public": "Se {count, plural, one {encontró # herramienta} other {encontraron # herramientas}}. El servidor no requiere inicio de sesión.",
             "oauth": "El servidor usa inicio de sesión con OAuth.",
             "authUnknown": "El servidor requiere inicio de sesión. Agrega un encabezado de clave de API u OAuth.",
@@ -10460,8 +10390,7 @@
             "title": "Transporte",
             "streamableHttp": "HTTP transmisible",
             "sse": "Eventos enviados por el servidor (SSE)"
-          },
-          "suggested": "Servidores sugeridos"
+          }
         },
         "owner": {
           "title": "Propietario",
@@ -10473,27 +10402,112 @@
         "submit": "Agregar",
         "adding": "Agregando…",
         "cancel": "Cancelar",
-        "type": {
-          "title": "Tipo",
-          "description": "Elige cómo se conecta Onyx al servicio.",
-          "mcp_server": {
-            "title": "Servidor MCP",
-            "description": "Conecta un servidor MCP remoto por su URL."
+        "rest": {
+          "import": {
+            "title": "Importar una Especificación",
+            "description": "Sube o pega una especificación OpenAPI en JSON o YAML, o impórtala desde una URL. Onyx completa la URL base y un endpoint por operación.",
+            "upload": "Sube o pega una especificación",
+            "url": "URL de la especificación",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "Importar",
+            "done": "{count, plural, one {Se importó # endpoint.} other {Se importaron # endpoints.}}",
+            "failed": "No se pudo importar la especificación.",
+            "noActions": "Onyx omitió todas las operaciones de la especificación, así que se mantienen los endpoints actuales. Use otra especificación."
           },
-          "openapi": {
-            "title": "Aplicación OpenAPI",
-            "description": "Crea acciones a partir de un esquema OpenAPI."
+          "baseUrl": {
+            "title": "URL Base",
+            "placeholder": "https://api.example.com",
+            "required": "Añade una URL base."
           },
-          "app": {
-            "title": "Aplicación",
-            "description": "Empieza desde una plantilla, como GitHub, o una aplicación personalizada."
+          "endpoints": {
+            "title": "Endpoints",
+            "description": "Pon un endpoint por línea: el método, la ruta, parámetros de consulta opcionales y un nombre. Cada endpoint se convierte en una acción.",
+            "placeholder": "GET /tickets?status&limit Listar tickets",
+            "required": "Añade al menos un endpoint.",
+            "lineError": "Línea {line} ({text}): {message}"
           }
         },
-        "details": {
-          "title": "Detalles"
+        "graphql": {
+          "endpointUrl": {
+            "title": "URL del endpoint",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "Añade una URL de endpoint."
+          },
+          "schema": {
+            "title": "Esquema",
+            "description": "Pega el esquema en GraphQL SDL, sube un archivo .graphql o cárgalo desde el endpoint. Cada query y mutation se convierte en una acción.",
+            "upload": "Subir un archivo .graphql",
+            "required": "Añade un esquema."
+          },
+          "introspect": {
+            "submit": "Cargar desde el endpoint",
+            "done": "Se cargó el esquema.",
+            "failed": "No se pudo cargar el esquema."
+          }
         },
-        "signIn": {
-          "title": "Inicio de sesión"
+        "menu": {
+          "mcpServer": "Servidor MCP",
+          "customApi": "API personalizada"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "Agregar servidor MCP",
+            "description": "Conecta un servidor MCP remoto mediante su URL."
+          },
+          "api": {
+            "title": "Agregar API personalizada",
+            "description": "Conecta una API REST o GraphQL. Onyx encuentra los endpoints a partir de la URL o de una especificación."
+          },
+          "catalog": {
+            "title": "Agregar desde el catálogo",
+            "description": "Elige una app o un servidor MCP para configurar."
+          },
+          "namedTitle": "Agregar {name}"
+        },
+        "catalog": {
+          "title": "Explorar el catálogo",
+          "description": "Apps y servidores MCP alojados a los que Onyx ya sabe conectarse.",
+          "browse": "Explorar"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "Una URL de especificación OpenAPI, un endpoint GraphQL o una URL base",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "Introduce una URL válida o sube una especificación.",
+            "needed": "Agrega la URL de la API. La especificación no la indica."
+          },
+          "upload": {
+            "label": "Subir openapi.json, openapi.yaml o schema.graphql",
+            "chosen": "Especificación: {file}",
+            "remove": "Quitar la especificación"
+          },
+          "failed": "No se pudo leer la especificación.",
+          "specError": "No se puede agregar la especificación: {detail}",
+          "tooLarge": "El archivo supera los 5 MB.",
+          "checkFailed": "Onyx no pudo comprobar la URL. Inténtelo de nuevo.",
+          "noActions": "Onyx omitió todas las operaciones de la especificación, así que no da acciones. Use otra especificación, o quite la especificación e introduzca la URL base de la API para añadir los endpoints a mano."
+        },
+        "detected": {
+          "openapi": "API REST, {count, plural, one {# endpoint} other {# endpoints}}",
+          "openapiSkipped": "API REST, {count, plural, one {# endpoint} other {# endpoints}}. Omitidos: {skipped}.",
+          "skippedTitle": "Endpoints omitidos",
+          "rest": "API REST sin especificación. Agrega los endpoints abajo.",
+          "restUnreachable": "Onyx no puede acceder a la URL: {detail} Aún puedes agregarla como una API REST sin especificación. Agrega los endpoints abajo.",
+          "restTooLarge": "Onyx no puede comprobar si la URL tiene una especificación: {detail} Aún puedes agregarla como una API REST sin especificación o subir un archivo de especificación más pequeño. Agrega los endpoints abajo.",
+          "graphql": "API GraphQL, {queries, plural, one {# consulta} other {# consultas}} y {mutations, plural, one {# mutación} other {# mutaciones}}",
+          "preset": "App integrada. Onyx llama a su API."
+        },
+        "continue": "Continuar",
+        "back": "Atrás",
+        "detecting": "Comprobando la URL…",
+        "advanced": "Avanzado",
+        "setup": {
+          "title": "Configurar {name}",
+          "callbackUrl": "URL de devolución de llamada",
+          "copyCallbackUrl": "Copiar la URL de devolución de llamada",
+          "scopes": "Ámbitos",
+          "open": "Abrir {name}"
         }
       },
       "filters": {
@@ -10517,9 +10531,10 @@
       },
       "shape": {
         "mcp_server": "Servidor MCP",
-        "openapi": "App OpenAPI",
+        "openapi": "App REST",
         "preset": "App",
-        "custom": "App personalizada"
+        "custom": "App personalizada",
+        "graphql": "App GraphQL"
       },
       "signInSummary": "{mode, select, none {Sin inicio de sesión} shared {{method, select, oauth2 {Cuenta de la organización (OAuth)} api_key {Clave de API de la organización} onyx_login {Inicio de sesión de Onyx} managed {Administrado por Onyx} other {Cuenta de la organización}}} individual {{method, select, oauth2 {Cada usuario (OAuth)} api_key {Cada usuario (clave de API)} onyx_login {Inicio de sesión de Onyx} managed {Administrado por Onyx} other {Cada usuario}}} other {Desconocido}}",
       "status": {
@@ -10627,19 +10642,18 @@
           },
           "description": "Descripción",
           "menu": "Más acciones",
-          "owner": "Propietario"
+          "owner": "Propietario",
+          "urlPatternApp": {
+            "title": "Esta app usa patrones de URL",
+            "description": "Onyx ya no añade apps con patrones de URL. Para reemplazar esta app, añade una app REST personalizada para cada host al que llegan sus patrones de URL. Sigue los pasos de configuración de la documentación antes de eliminar esta app."
+          }
         },
         "configuration": {
           "readOnly": "Puedes ver esta integración, pero no puedes cambiarla.",
           "connection": {
             "title": "Conexión",
             "serverUrl": "URL del servidor",
-            "serverUrlError": "Introduce una URL de servidor válida.",
-            "urlPatterns": "Patrones de URL",
-            "urlPatternsDescription": "Escribe un patrón de URL por línea.",
-            "schema": "Esquema de OpenAPI",
-            "schemaDescription": "Onyx vuelve a sincronizar las acciones cuando guardas un esquema modificado.",
-            "schemaError": "Introduce el esquema como un objeto JSON."
+            "serverUrlError": "Introduce una URL de servidor válida."
           },
           "signIn": {
             "title": "Inicio de sesión",
@@ -10707,7 +10721,7 @@
         "saved": "{name} ahora es {policy}.",
         "saveFailed": "No se pudo guardar la configuración de instalación.",
         "title": "Configuración de Instalación",
-        "description": "Quién recibe esta integración. No disponible la mantiene privada: solo la usan su propietario, las personas con quienes se comparte y los grupos con su propia configuración. Quita esas configuraciones de grupo para limitarla al propietario y a las personas con acceso compartido.",
+        "description": "Quién recibe esta integración en la organización.",
         "notAvailable": "Privada. Solo la usan el propietario, las personas con quienes se comparte y los grupos con su propia configuración.",
         "required": "Los miembros que inician sesión con su propia cuenta deben conectarla antes de usar el chat y Craft."
       },
@@ -16789,6 +16803,9 @@
         "integrations": {
           "label": "Integraciones"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "slackBot": {
           "label": "Bot de Slack"
         },
@@ -17673,19 +17690,20 @@
         }
       },
       "alwaysAllow": {
-        "title": "Permitir Siempre",
-        "description": "Ejecutar sin aviso una acción que pide aprobación.",
+        "title": "Acciones",
+        "description": "Tu administrador define cómo se ejecuta cada acción. Activa «No preguntarme» para ejecutar sin aviso una acción que pide aprobación.",
         "loadFailed": "No se pudieron cargar las acciones.",
         "saveFailed": "No se pudo guardar. Inténtelo de nuevo.",
-        "alwaysAsks": "Craft pide aprobación para cada una de estas solicitudes.",
+        "alwaysAsks": "Onyx pide aprobación para cada una de estas solicitudes.",
         "switch": {
-          "label": "Permitir siempre {name}"
+          "label": "Permitir siempre {name}",
+          "visibleLabel": "No preguntarme"
         },
         "retry": {
           "label": "Intentar de nuevo"
         },
-        "readOnlyTitle": "Acciones",
-        "readOnlyDescription": "Tu administrador define cómo se ejecuta cada acción."
+        "readOnlyDescription": "Tu administrador define cómo se ejecuta cada acción.",
+        "readOnlyTitle": "Acciones"
       },
       "oauthCallback": {
         "processing": "Conectando su cuenta…",
@@ -17928,10 +17946,6 @@
       "open": "Abrir {name}",
       "menu": "Acciones para {name}",
       "loadFailed": "No se pudieron cargar los marketplaces.",
-      "empty": {
-        "title": "Aún no hay marketplaces",
-        "description": "Añada un repositorio de GitHub para obtener sus plugins."
-      },
       "page": {
         "title": "Marketplaces",
         "description": "Los repositorios de GitHub de los que obtiene plugins, con su fuente. Sincronice un marketplace para obtener los cambios de GitHub."
@@ -17990,6 +18004,10 @@
       "errors": {
         "rateLimited": "Se alcanzó el límite de la API de GitHub. Inténtalo de nuevo en unos minutos. Conecta GitHub para aumentar el límite.",
         "rateLimitedUntil": "Se alcanzó el límite de la API de GitHub. Se restablece a las {time}. Conecta GitHub para aumentar el límite."
+      },
+      "empty": {
+        "title": "Aún no hay marketplaces",
+        "description": "Añada un repositorio de GitHub para obtener sus plugins."
       }
     }
   },
@@ -18080,11 +18098,6 @@
         "on": "Activadas",
         "off": "Desactivadas"
       },
-      "sort": {
-        "label": "Ordenar",
-        "updated": "Actualizadas recientemente",
-        "name": "Nombre"
-      },
       "add": {
         "label": "Añadir",
         "upload": "Subir habilidad",
@@ -18133,6 +18146,11 @@
         "title": "No hay habilidades que coincidan",
         "description": "Prueba con otra búsqueda o filtro.",
         "clear": "Mostrar todas las habilidades"
+      },
+      "sort": {
+        "label": "Ordenar",
+        "updated": "Actualizadas recientemente",
+        "name": "Nombre"
       }
     },
     "integrations": {
@@ -18146,11 +18164,6 @@
       },
       "status": {
         "connected": "Conectada"
-      },
-      "add": {
-        "label": "Añadir",
-        "integration": "Añadir integración",
-        "manage": "Gestionar integraciones"
       },
       "open": "Abrir {name}",
       "empty": {
@@ -18176,7 +18189,7 @@
         "title": "No hay plugins que coincidan",
         "clear": "Mostrar todos los plugins"
       },
-      "intro": "Un plugin agrupa habilidades y las integraciones que necesitan. Suba un plugin de Claude Code o Codex, agregue un marketplace de GitHub o agregue una habilidad. Un plugin que solo contiene un SKILL.md en su raíz está en la pestaña Habilidades.",
+      "intro": "Un plugin es un conjunto de skills e indica las integraciones que esas skills necesitan. Suba un plugin de Claude Code o Codex, agregue un marketplace de GitHub o agregue una habilidad. Un plugin que solo contiene un SKILL.md en su raíz está en la pestaña Habilidades.",
       "integrations": "{available} de {needed} integraciones disponibles",
       "nameHeld": "Desactivado: {names} usa el mismo nombre de habilidad"
     },

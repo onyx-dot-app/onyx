@@ -26,8 +26,8 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 | Type | What it connects | Where agents can use it | Use it when |
 | --- | --- | --- | --- |
 | [MCP](/admins/plugins/mcp) | A server that uses the [Model Context Protocol](https://modelcontextprotocol.io/) | Chat, custom agents, and Craft | The vendor publishes an MCP server, or you run your own. |
-| [OpenAPI](/admins/plugins/openapi) | A REST API that you describe with an OpenAPI schema | Chat and custom agents | You have an internal or third-party REST API and no MCP server. |
-| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Chat, custom agents, and Craft | An agent must act as each user in a supported application, with action-level approvals. Requires Craft, which is available on the **Business** and **Enterprise** plans. |
+| [OpenAPI](/admins/plugins/openapi) | A REST API that you describe with an OpenAPI schema | Chat, custom agents, and Craft | You have an internal or third-party REST API and no MCP server. |
+| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Chat, custom agents, and Craft | An agent must act as each user in a supported application, with action-level approvals. |
 
 <Tip>
   You can add the same service more than once. For example, add the Slack Craft App and the Slack MCP server.
@@ -46,30 +46,28 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 ## Add an integration
 
 <Steps>
-  <Step title="Open the add page">
-    Go to **Admin Panel → Integrations** and click **Add**.
+  <Step title="Select what to add">
+    Go to **Admin Panel → Integrations** and click **Add**. Select one of these:
+
+    - **MCP Server**: a remote MCP server.
+    - **Custom API**: any REST or GraphQL API. See [OpenAPI](/admins/plugins/openapi).
+
+    For a built-in App, such as GitHub, or a suggested MCP server, such as Linear,
+    go to **Browse the Catalog** at the bottom of the Integrations page and click **Browse**. Then select the item.
   </Step>
 
-  <Step title="Select the type">
-    Under **Type**, select **MCP Server**, **OpenAPI App**, or **App**.
-    **App** shows only when Craft is available on your plan.
+  <Step title="Enter a name and a URL">
+    Enter a **Name** and the URL, then click **Continue**. Onyx checks the URL and finds the type of server or API.
+    For an MCP server, it also finds how users sign in. A catalog item skips this step.
   </Step>
 
-  <Step title="Fill in the details">
-    Fill in the details of that type. For an MCP server, pick a suggested server or enter its URL.
-    Onyx checks the server URL and suggests the sign-in settings. For an App,
-    select a preset under **Start From** to fill in the name and sign-in,
-    or keep **Custom app** to set up any HTTP service.
-  </Step>
-
-  <Step title="Set the sign-in">
-    Select the sign-in mode: **No sign-in**, **One account for the organization**, or **Each user signs in**.
-    Then select the method, such as **OAuth** or **API key**.
-  </Step>
-
-  <Step title="Select the owner and add">
+  <Step title="Set the sign-in and add">
+    Onyx shows what it found. Select a **Sign-in Mode**: **No sign-in**, **One account for the organization**,
+    or **Each user signs in**. A custom API starts at **No sign-in**. Change it if your API requires sign-in.
+    Open **Advanced** to change the sign-in method, such as **OAuth** or **API key**, and to select the owner.
     **For me** makes a private integration. Only you can use it until you share it.
     **For the organization** makes an integration with the install setting **Available**. Click **Add**.
+    Onyx opens the integration. Add a description and set the actions there.
   </Step>
 </Steps>
 
@@ -160,7 +158,7 @@ Click an integration to open its detail page.
 | Tab | Settings |
 | --- | --- |
 | **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Group Access**, **Enabled**, and **Delete** |
-| **Configuration** | Server URL, OpenAPI schema, or URL patterns, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
+| **Configuration** | Server URL, **Import a Spec** with the base URL and endpoints, or GraphQL endpoint and schema, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
 | **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
 
 If you change the sign-in method, the OAuth client, the URLs, or the scopes, each user must connect again.

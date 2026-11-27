@@ -37,6 +37,7 @@ A dropped file must match `accept`, and is refused above `maxSizeKb`, as a picke
 | `mode`                                | both | `"text" \| "file"`              | Default `"text"`                                                                               |
 | `value`                               | text | `string`                        | The value, when the caller owns it. Set from outside, it shows "File attached"                 |
 | `setValue`                            | text | `(value: string) => void`       | Receives the file's text or the pasted text; `""` once cleared                                 |
+| `onReadingChange`                     | text | `(reading: boolean) => void`    | `true` from a file's pick or drop until its text is read or the read fails                     |
 | `value`                               | file | `File \| null`                  | The file, when the caller owns it                                                              |
 | `onFileChange`                        | file | `(file: File \| null) => void`  | Receives the file, or `null` once cleared                                                      |
 | `variant`                             | both | `InputVariants`                 | `"primary"` (default), `"error"`, `"disabled"` (no picking, dropping or pasting), `"readOnly"` |

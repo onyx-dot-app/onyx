@@ -534,7 +534,6 @@
         "src/sections/actions/MCPServerToolsEditor.tsx",
         "src/sections/actions/PolicyEditor.tsx",
         "src/sections/actions/PolicyToggle.tsx",
-        "src/sections/actions/modals/AddOpenAPIActionModal.tsx",
         "src/sections/actions/modals/MCPApiTokenFields.tsx",
         "src/sections/actions/modals/MCPFormActions.tsx",
         "src/sections/actions/modals/MCPOAuthFields.tsx",

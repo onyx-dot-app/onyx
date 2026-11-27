@@ -266,6 +266,8 @@ export interface CustomToolDelta extends BaseObj {
   type: "custom_tool_delta";
   tool_name: string;
   tool_id?: number | null;
+  /** Set for a tool with no tool row: the integration of the action. */
+  integration_id?: number | null;
   response_type: string;
   data?: any;
   file_ids?: string[] | null;
@@ -765,6 +767,8 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
+  /** False when the card must not offer "approve for this chat". */
+  can_approve_for_chat?: boolean;
   /** The background subagent that made the request; null for the reply's own
    * calls. Such a request waits on its own: no stop of the reply closes it. */
   agent_name: string | null;

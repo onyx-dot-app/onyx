@@ -27,17 +27,30 @@ const tool: ToolSnapshot = {
 
 test("links the sign-in to the integration that the tool list gives", () => {
   mockTools.current = [tool];
-  render(<CustomToolAuthCard toolName="Example" toolId={1} />);
+  render(
+    <CustomToolAuthCard toolName="Example" toolId={1} integrationId={null} />
+  );
   expect(screen.getByRole("link", { name: /connect/i })).toHaveAttribute(
     "href",
     "/app/customize/integrations/4?tab=configuration"
   );
 });
 
+test("links the sign-in to the integration that an app tool names", () => {
+  mockTools.current = [];
+  render(
+    <CustomToolAuthCard toolName="GitHub" toolId={null} integrationId={9} />
+  );
+  expect(screen.getByRole("link", { name: /connect/i })).toHaveAttribute(
+    "href",
+    "/app/customize/integrations/9?tab=configuration"
+  );
+});
+
 test("shows nothing for a tool with no integration", () => {
   mockTools.current = [{ ...tool, integration_id: null }];
   const { container } = render(
-    <CustomToolAuthCard toolName="Example" toolId={1} />
+    <CustomToolAuthCard toolName="Example" toolId={1} integrationId={null} />
   );
   expect(container).toBeEmptyDOMElement();
 });
@@ -61,7 +74,7 @@ test("reads the integration statuses again", async () => {
   rerender(
     <>
       <Statuses />
-      <CustomToolAuthCard toolName="Example" toolId={1} />
+      <CustomToolAuthCard toolName="Example" toolId={1} integrationId={null} />
     </>
   );
   await waitFor(() => expect(reads()).toBe(2));

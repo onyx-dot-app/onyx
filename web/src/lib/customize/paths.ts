@@ -56,7 +56,7 @@ export function integrationHref(
     : `/app/customize/integrations/${integrationId}`;
 }
 
-export const NEW_INTEGRATION_PATH = "/app/customize/integrations/new";
+const NEW_INTEGRATION_PATH = "/app/customize/integrations/new";
 
 export type PluginPagePath = `/app/customize/plugins/${string}`;
 

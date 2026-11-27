@@ -141,44 +141,6 @@
         "tooltip": "{description}\nDieses Tool für diesen Chat bevorzugen. Der Agent kann antworten, ohne es zu verwenden."
       }
     },
-    "addOpenApiModal": {
-      "cancelButton": {
-        "label": "Abbrechen"
-      },
-      "copyButton": {
-        "tooltip": "Definition kopieren"
-      },
-      "definition": {
-        "invalidJson": "Ungültiges JSON-Format",
-        "placeholder": "Geben Sie hier Ihr OpenAPI-Schema ein",
-        "required": "Die Definition des OpenAPI-Schemas ist erforderlich",
-        "subDescription": "Geben Sie ein OpenAPI-Schema an, das die APIs definiert, die Sie im Rahmen dieses Plugins bereitstellen möchten. Sie können die Platzhalter `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` und `USER_EMAIL` an beliebiger Stelle im Schema verwenden (z. B. Server-URL, Pfade, Standardwerte von Parametern). Sie werden beim Aufruf durch die Werte der aktuellen Anfrage ersetzt. Mehr über [OpenAPI-Plugins]({docsUrl}) erfahren.",
-        "title": "Definition des OpenAPI-Schemas"
-      },
-      "empty": {
-        "description": "Geben Sie ein OpenAPI-Schema an, um hier eine Vorschau der Aktionen zu sehen.",
-        "title": "Keine Aktionen gefunden"
-      },
-      "formatButton": {
-        "tooltip": "Definition formatieren"
-      },
-      "method": {
-        "noSummary": "Keine Zusammenfassung angegeben"
-      },
-      "toasts": {
-        "actionCreated": "OpenAPI-Plugin erfolgreich erstellt",
-        "invalidJson": "Ungültiges JSON-Format in der Definition des OpenAPI-Schemas"
-      },
-      "humanDescription": {
-        "title": "Beschreibung für Menschen",
-        "hint": "Wird auf der Plugin-Karte und in den Plugin-Details angezeigt."
-      },
-      "agentDescription": {
-        "title": "Beschreibung für Agenten",
-        "hint": "Bearbeitet info.description im OpenAPI-Schema.",
-        "disabled": "Geben Sie ein gültiges Schema ein, um dieses Feld zu bearbeiten."
-      }
-    },
     "cardHeader": {
       "disconnected": {
         "label": "(Getrennt)"
@@ -360,10 +322,8 @@
       "detectedTransport": "Transport: {transport}",
       "authenticationUndetected": "Wählen Sie die Authentifizierungsmethode auf der nächsten Seite.",
       "details": "Details",
-      "checking": "Server wird geprüft…",
       "serverDetails": "Serverdetails",
       "authentication": "Authentifizierung",
-      "continue": "Weiter",
       "back": "Zurück"
     },
     "policyEditor": {
@@ -10402,45 +10362,16 @@
       "loadFailed": "Die Integrationen konnten nicht geladen werden.",
       "add": {
         "label": "Hinzufügen",
-        "title": "Integration hinzufügen",
-        "description": "Verbinden Sie einen Dienst, damit Personen ihn im Chat und in Craft verwenden können.",
         "created": "{name} wurde hinzugefügt.",
         "createFailed": "Die Integration konnte nicht hinzugefügt werden.",
-        "openapi": {
-          "title": "OpenAPI-App hinzufügen",
-          "schema": {
-            "title": "Schema",
-            "description": "Fügen Sie das OpenAPI-Schema hinzu, das die Aktionen definiert.",
-            "added": "{count, plural, one {Das Schema hat # Pfad.} other {Das Schema hat # Pfade.}}",
-            "required": "Fügen Sie ein Schema hinzu.",
-            "add": "Schema hinzufügen",
-            "edit": "Schema bearbeiten"
-          }
-        },
         "preset": {
-          "title": "Ausgangspunkt",
           "loadFailed": "Die Vorlagen konnten nicht geladen werden.",
-          "instructions": "Einrichtungsanleitung",
-          "credentialRequired": "Geben Sie diesen Wert ein.",
-          "description": "Eine Vorlage füllt den Namen und die Anmeldung einer integrierten App aus. Wählen Sie „Benutzerdefinierte App“, um einen beliebigen HTTP-Dienst einzurichten.",
-          "custom": "Benutzerdefinierte App"
+          "credentialRequired": "Geben Sie diesen Wert ein."
         },
         "name": {
           "title": "Name",
           "placeholder": "Namen eingeben",
           "required": "Geben Sie einen Namen ein."
-        },
-        "descriptionField": {
-          "title": "Beschreibung",
-          "placeholder": "Beschreibung eingeben"
-        },
-        "custom": {
-          "patterns": {
-            "title": "URL-Muster",
-            "description": "Ein URL-Muster pro Zeile, z. B. https://api.example.com/*.",
-            "placeholder": "https://api.example.com/*",
-            "required": "Geben Sie mindestens ein URL-Muster ein."
-          }
         },
         "mcp": {
           "url": {
@@ -10449,7 +10380,6 @@
             "error": "Geben Sie eine gültige Server-URL ein."
           },
           "probe": {
-            "checking": "Server wird geprüft …",
             "public": "{count, plural, one {# Tool gefunden} other {# Tools gefunden}}. Der Server benötigt keine Anmeldung.",
             "oauth": "Der Server verwendet die OAuth-Anmeldung.",
             "authUnknown": "Der Server benötigt eine Anmeldung. Fügen Sie einen API-Schlüssel-Header oder OAuth hinzu.",
@@ -10460,8 +10390,7 @@
             "title": "Transport",
             "streamableHttp": "Streamable HTTP",
             "sse": "Server-sent Events (SSE)"
-          },
-          "suggested": "Vorgeschlagene Server"
+          }
         },
         "owner": {
           "title": "Eigentümer",
@@ -10473,27 +10402,112 @@
         "submit": "Hinzufügen",
         "adding": "Wird hinzugefügt …",
         "cancel": "Abbrechen",
-        "type": {
-          "title": "Typ",
-          "description": "Wählen Sie, wie Onyx sich mit dem Dienst verbindet.",
-          "mcp_server": {
-            "title": "MCP-Server",
-            "description": "Verbinden Sie einen entfernten MCP-Server über seine URL."
+        "rest": {
+          "import": {
+            "title": "Spezifikation Importieren",
+            "description": "Laden Sie eine OpenAPI-Spezifikation in JSON oder YAML hoch, fügen Sie sie ein oder importieren Sie sie über eine URL. Onyx füllt die Basis-URL und einen Endpunkt pro Operation aus.",
+            "upload": "Spezifikation hochladen oder einfügen",
+            "url": "Spezifikations-URL",
+            "urlPlaceholder": "https://api.example.com/openapi.json",
+            "submit": "Importieren",
+            "done": "{count, plural, one {# Endpunkt importiert.} other {# Endpunkte importiert.}}",
+            "failed": "Die Spezifikation konnte nicht importiert werden.",
+            "noActions": "Onyx hat jede Operation der Spezifikation übersprungen, daher bleiben die aktuellen Endpunkte. Verwenden Sie eine andere Spezifikation."
           },
-          "openapi": {
-            "title": "OpenAPI-App",
-            "description": "Erstellen Sie Aktionen aus einem OpenAPI-Schema."
+          "baseUrl": {
+            "title": "Basis-URL",
+            "placeholder": "https://api.example.com",
+            "required": "Fügen Sie eine Basis-URL hinzu."
           },
-          "app": {
-            "title": "App",
-            "description": "Beginnen Sie mit einer Vorlage wie GitHub oder einer eigenen App."
+          "endpoints": {
+            "title": "Endpunkte",
+            "description": "Ein Endpunkt pro Zeile: Methode, Pfad, optionale Query-Parameter und ein Name. Jeder Endpunkt wird zu einer Aktion.",
+            "placeholder": "GET /tickets?status&limit Tickets auflisten",
+            "required": "Fügen Sie mindestens einen Endpunkt hinzu.",
+            "lineError": "Zeile {line} ({text}): {message}"
           }
         },
-        "details": {
-          "title": "Details"
+        "graphql": {
+          "endpointUrl": {
+            "title": "Endpunkt-URL",
+            "placeholder": "https://api.example.com/graphql",
+            "required": "Fügen Sie eine Endpunkt-URL hinzu."
+          },
+          "schema": {
+            "title": "Schema",
+            "description": "Fügen Sie das Schema als GraphQL-SDL ein, laden Sie eine .graphql-Datei hoch oder laden Sie es vom Endpunkt. Jede Query und Mutation wird zu einer Aktion.",
+            "upload": "Eine .graphql-Datei hochladen",
+            "required": "Fügen Sie ein Schema hinzu."
+          },
+          "introspect": {
+            "submit": "Vom Endpunkt laden",
+            "done": "Das Schema wurde geladen.",
+            "failed": "Das Schema konnte nicht geladen werden."
+          }
         },
-        "signIn": {
-          "title": "Anmeldung"
+        "menu": {
+          "mcpServer": "MCP-Server",
+          "customApi": "Eigene API"
+        },
+        "modal": {
+          "mcp_server": {
+            "title": "MCP-Server hinzufügen",
+            "description": "Verbinden Sie einen entfernten MCP-Server über seine URL."
+          },
+          "api": {
+            "title": "Eigene API hinzufügen",
+            "description": "Verbinden Sie eine REST- oder GraphQL-API. Onyx findet die Endpunkte über die URL oder eine Spezifikation."
+          },
+          "catalog": {
+            "title": "Aus dem Katalog hinzufügen",
+            "description": "Wählen Sie eine App oder einen MCP-Server zum Einrichten."
+          },
+          "namedTitle": "{name} hinzufügen"
+        },
+        "catalog": {
+          "title": "Katalog durchsuchen",
+          "description": "Apps und gehostete MCP-Server, mit denen sich Onyx bereits verbinden kann.",
+          "browse": "Durchsuchen"
+        },
+        "api": {
+          "url": {
+            "title": "URL",
+            "description": "Eine OpenAPI-Spezifikations-URL, ein GraphQL-Endpunkt oder eine Basis-URL",
+            "placeholder": "https://api.example.com/openapi.json",
+            "error": "Geben Sie eine gültige URL ein oder laden Sie eine Spezifikation hoch.",
+            "needed": "Fügen Sie die URL der API hinzu. Die Spezifikation nennt keine."
+          },
+          "upload": {
+            "label": "openapi.json, openapi.yaml oder schema.graphql hochladen",
+            "chosen": "Spezifikation: {file}",
+            "remove": "Spezifikation entfernen"
+          },
+          "failed": "Die Spezifikation konnte nicht gelesen werden.",
+          "specError": "Die Spezifikation kann nicht hinzugefügt werden: {detail}",
+          "tooLarge": "Die Datei ist größer als 5 MB.",
+          "checkFailed": "Onyx konnte die URL nicht prüfen. Versuchen Sie es erneut.",
+          "noActions": "Onyx hat jede Operation der Spezifikation übersprungen, daher liefert sie keine Aktionen. Verwenden Sie eine andere Spezifikation, oder entfernen Sie sie und geben Sie die Basis-URL der API ein, um die Endpunkte manuell hinzuzufügen."
+        },
+        "detected": {
+          "openapi": "REST-API, {count, plural, one {# Endpunkt} other {# Endpunkte}}",
+          "openapiSkipped": "REST-API, {count, plural, one {# Endpunkt} other {# Endpunkte}}. {skipped} übersprungen.",
+          "skippedTitle": "Übersprungene Endpunkte",
+          "rest": "REST-API ohne Spezifikation. Fügen Sie unten die Endpunkte hinzu.",
+          "restUnreachable": "Onyx kann die URL nicht erreichen: {detail} Sie können sie trotzdem als REST-API ohne Spezifikation hinzufügen. Fügen Sie unten die Endpunkte hinzu.",
+          "restTooLarge": "Onyx kann die URL nicht auf eine Spezifikation prüfen: {detail} Sie können sie trotzdem als REST-API ohne Spezifikation hinzufügen oder eine kleinere Spezifikationsdatei hochladen. Fügen Sie unten die Endpunkte hinzu.",
+          "graphql": "GraphQL-API, {queries, plural, one {# Query} other {# Queries}} und {mutations, plural, one {# Mutation} other {# Mutationen}}",
+          "preset": "Integrierte App. Onyx ruft ihre API auf."
+        },
+        "continue": "Weiter",
+        "back": "Zurück",
+        "detecting": "URL wird geprüft…",
+        "advanced": "Erweitert",
+        "setup": {
+          "title": "{name} einrichten",
+          "callbackUrl": "Callback-URL",
+          "copyCallbackUrl": "Callback-URL kopieren",
+          "scopes": "Scopes",
+          "open": "{name} öffnen"
         }
       },
       "filters": {
@@ -10517,9 +10531,10 @@
       },
       "shape": {
         "mcp_server": "MCP-Server",
-        "openapi": "OpenAPI-App",
+        "openapi": "REST-App",
         "preset": "App",
-        "custom": "Eigene App"
+        "custom": "Eigene App",
+        "graphql": "GraphQL-App"
       },
       "signInSummary": "{mode, select, none {Keine Anmeldung} shared {{method, select, oauth2 {Organisationskonto (OAuth)} api_key {API-Schlüssel der Organisation} onyx_login {Onyx-Anmeldung} managed {Von Onyx verwaltet} other {Organisationskonto}}} individual {{method, select, oauth2 {Jeder Nutzer (OAuth)} api_key {Jeder Nutzer (API-Schlüssel)} onyx_login {Onyx-Anmeldung} managed {Von Onyx verwaltet} other {Jeder Nutzer}}} other {Unbekannt}}",
       "status": {
@@ -10627,19 +10642,18 @@
           },
           "description": "Beschreibung",
           "menu": "Weitere Aktionen",
-          "owner": "Eigentümer"
+          "owner": "Eigentümer",
+          "urlPatternApp": {
+            "title": "Diese App verwendet URL-Muster",
+            "description": "Onyx fügt keine Apps mit URL-Mustern mehr hinzu. Um diese App zu ersetzen, fügen Sie für jeden Host, den ihre URL-Muster erreichen, eine eigene REST-App hinzu. Führen Sie die Einrichtungsschritte aus der Dokumentation aus, bevor Sie diese App löschen."
+          }
         },
         "configuration": {
           "readOnly": "Sie können diese Integration sehen, aber nicht ändern.",
           "connection": {
             "title": "Verbindung",
             "serverUrl": "Server-URL",
-            "serverUrlError": "Geben Sie eine gültige Server-URL ein.",
-            "urlPatterns": "URL-Muster",
-            "urlPatternsDescription": "Ein URL-Muster pro Zeile.",
-            "schema": "OpenAPI-Schema",
-            "schemaDescription": "Onyx synchronisiert die Aktionen erneut, wenn Sie ein geändertes Schema speichern.",
-            "schemaError": "Geben Sie das Schema als JSON-Objekt ein."
+            "serverUrlError": "Geben Sie eine gültige Server-URL ein."
           },
           "signIn": {
             "title": "Anmeldung",
@@ -10707,7 +10721,7 @@
         "saved": "{name} ist jetzt {policy}.",
         "saveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
         "title": "Installationseinstellung",
-        "description": "Wer diese Integration erhält. Nicht verfügbar hält sie privat: Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie. Entferne diese Gruppeneinstellungen, um sie auf den Eigentümer und die Freigaben zu beschränken.",
+        "description": "Wer in der Organisation diese Integration erhält.",
         "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie.",
         "required": "Mitglieder, die sich mit ihrem eigenen Konto anmelden, müssen sie verbinden, bevor sie Chat und Craft nutzen können."
       },
@@ -16789,6 +16803,9 @@
         "integrations": {
           "label": "Integrationen"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "slackBot": {
           "label": "Slack-Bot"
         },
@@ -17673,19 +17690,20 @@
         }
       },
       "alwaysAllow": {
-        "title": "Immer Erlauben",
-        "description": "Eine Aktion, die eine Freigabe verlangt, ohne Nachfrage ausführen.",
+        "title": "Aktionen",
+        "description": "Dein Admin legt fest, wie jede Aktion ausgeführt wird. Aktiviere „Nicht fragen“, um eine Aktion, die nachfragt, ohne Rückfrage auszuführen.",
         "loadFailed": "Die Aktionen konnten nicht geladen werden.",
         "saveFailed": "Speichern fehlgeschlagen. Versuchen Sie es erneut.",
-        "alwaysAsks": "Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
+        "alwaysAsks": "Onyx fragt bei jeder dieser Anfragen nach einer Freigabe.",
         "switch": {
-          "label": "{name} immer erlauben"
+          "label": "{name} immer erlauben",
+          "visibleLabel": "Nicht fragen"
         },
         "retry": {
           "label": "Erneut versuchen"
         },
-        "readOnlyTitle": "Aktionen",
-        "readOnlyDescription": "Ihr Administrator legt fest, wie jede Aktion ausgeführt wird."
+        "readOnlyDescription": "Ihr Administrator legt fest, wie jede Aktion ausgeführt wird.",
+        "readOnlyTitle": "Aktionen"
       },
       "oauthCallback": {
         "processing": "Ihr Konto wird verbunden…",
@@ -17928,10 +17946,6 @@
       "open": "{name} öffnen",
       "menu": "Aktionen für {name}",
       "loadFailed": "Die Marketplaces konnten nicht geladen werden.",
-      "empty": {
-        "title": "Noch keine Marketplaces",
-        "description": "Fügen Sie ein GitHub-Repository hinzu, um dessen Plugins zu erhalten."
-      },
       "page": {
         "title": "Marketplaces",
         "description": "Die GitHub-Repositorys, aus denen Sie Plugins erhalten, mit ihrer Quelle. Synchronisieren Sie ein Marketplace, um die Änderungen aus GitHub zu übernehmen."
@@ -17990,6 +18004,10 @@
       "errors": {
         "rateLimited": "Das API-Limit von GitHub ist erreicht. Versuchen Sie es in einigen Minuten erneut. Verbinden Sie GitHub, um das Limit zu erhöhen.",
         "rateLimitedUntil": "Das API-Limit von GitHub ist erreicht. Es wird um {time} zurückgesetzt. Verbinden Sie GitHub, um das Limit zu erhöhen."
+      },
+      "empty": {
+        "title": "Noch keine Marketplaces",
+        "description": "Fügen Sie ein GitHub-Repository hinzu, um dessen Plugins zu erhalten."
       }
     }
   },
@@ -18080,11 +18098,6 @@
         "on": "Aktiviert",
         "off": "Deaktiviert"
       },
-      "sort": {
-        "label": "Sortieren",
-        "updated": "Zuletzt aktualisiert",
-        "name": "Name"
-      },
       "add": {
         "label": "Hinzufügen",
         "upload": "Skill hochladen",
@@ -18133,6 +18146,11 @@
         "title": "Keine passenden Skills",
         "description": "Versuchen Sie eine andere Suche oder einen anderen Filter.",
         "clear": "Alle Skills anzeigen"
+      },
+      "sort": {
+        "label": "Sortieren",
+        "updated": "Zuletzt aktualisiert",
+        "name": "Name"
       }
     },
     "integrations": {
@@ -18146,11 +18164,6 @@
       },
       "status": {
         "connected": "Verbunden"
-      },
-      "add": {
-        "label": "Hinzufügen",
-        "integration": "Integration hinzufügen",
-        "manage": "Integrationen verwalten"
       },
       "open": "{name} öffnen",
       "empty": {
@@ -18176,7 +18189,7 @@
         "title": "Keine passenden Plugins",
         "clear": "Alle Plugins anzeigen"
       },
-      "intro": "Ein Plugin bündelt Skills und die Integrationen, die sie benötigen. Laden Sie ein Claude-Code- oder Codex-Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder fügen Sie einen Skill hinzu. Ein Plugin, das nur eine SKILL.md im Stammverzeichnis enthält, finden Sie im Tab „Skills“.",
+      "intro": "Ein Plugin ist eine Gruppe von Skills und nennt die Integrationen, die diese Skills brauchen. Laden Sie ein Claude-Code- oder Codex-Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder fügen Sie einen Skill hinzu. Ein Plugin, das nur eine SKILL.md im Stammverzeichnis enthält, finden Sie im Tab „Skills“.",
       "integrations": "{available} von {needed} Integrationen verfügbar",
       "nameHeld": "Aus: {names} verwendet denselben Skill-Namen"
     },

@@ -17,10 +17,11 @@ Group or user restriction needs EE.
   Integrations (`/admin/integrations`) lists the MCP servers and apps from
   `GET /admin/integrations`, with Name (and the owner of a private one, or the
   "No access" reason for a manager with no access of its own), Type, Sign-in,
-  Install Setting and Status, a type filter, search and "Needs setup". "Add" opens `/admin/integrations/new`
-  (`/app/customize/integrations/new` from Customize): MCP Server, OpenAPI App
-  or App (only with Craft; Start From is a preset or Custom app), then posts
-  to `POST /admin/integrations`. Only a global
+  Install Setting and Status, a type filter, search and "Needs setup". "Add" opens the add
+  modal (also at `/admin/integrations/new` and `/app/customize/integrations/new`):
+  MCP Server or Custom API. "Browse the Catalog" opens it on the presets and
+  suggested MCP servers, with or without Craft. It posts to
+  `POST /admin/integrations`. Only a global
   action manager sees "For the organization"; everyone else adds "For me".
   The install setting select (`sections/integrations/IntegrationInstallSetting.tsx`,
   in the list and on the Overview tab) is the company setting; a global action
@@ -120,13 +121,28 @@ Its neighbours own:
 
 **Admin flow.** `web/src/sections/integrations/IntegrationsPage.tsx` lists
 integrations. `web/src/lib/integrations/hooks.ts`, `web/src/lib/integrations/svc.ts`
-and `web/src/lib/integrations/types.ts` follow the integration API. The add page
-(`sections/integrations/AddIntegrationPage.tsx`, at `/admin/integrations/new`
-and `/app/customize/integrations/new`) probes an MCP URL
-through `POST /admin/mcp/probe` to suggest the sign-in, and opens
-`AddOpenAPIActionModal` for the schema. Its App type is the `preset` and
-`custom` shapes: a preset fills the name and sign-in, and "Custom app" sends
-`custom`. The Actions tab
+and `web/src/lib/integrations/types.ts` follow the integration API. The add modal
+(`sections/integrations/AddIntegrationModal.tsx`, opened by
+`sections/integrations/AddIntegrationMenu.tsx`) asks for a name and a URL, then detects the rest. An
+MCP URL goes through `POST /admin/mcp/probe` for the transport and the
+sign-in. A custom API URL or uploaded spec goes through
+`sections/integrations/detectApi.ts`: `POST /admin/integrations/openapi-import`,
+then `POST /admin/integrations/graphql-introspect`, else a REST base URL that
+takes endpoint lines (`EndpointLinesField`). Only a 400 answer means "not
+this kind": a non-2xx answer to the spec GET is a 400, so detection tries
+GraphQL next. A 502 (the URL is blocked, times out or fails to connect, or the
+GraphQL POST gives a non-2xx answer) stops detection and opens REST setup with
+a warning that holds the server's detail (`detected.restUnreachable`). A 413
+from the import of a URL (an answer over 5 MB, read before Onyx knows if it is
+a spec) also opens REST setup, with `detected.restTooLarge`. Any other failure
+(no permission, an Onyx error, a 413 for an uploaded file or a GraphQL
+schema) stops detection with an error. An import
+`VALIDATION_ERROR` (a spec that Onyx cannot add) stops there and shows under
+the URL. Step 2 lists the endpoints that the import skipped, and asks for the
+base URL when the spec has no single http(s) server URL. With an upload, the entered
+URL is the base URL, prefilled for the admin to check. A catalog tile fills a preset or
+a suggested MCP server. Step 2 shows the sign-in mode; the method, OAuth
+client, header template, transport and owner are under Advanced. The Actions tab
 (`sections/integrations/IntegrationActionsTab.tsx`) is built from
 `PolicyEditor` and `PolicyToggle`, which take the API values
 `allow|ask|blocked`.
@@ -318,7 +334,7 @@ only the configuration of a chat that does not exist yet.
     ([[craft-external-apps]]) and to the chat approval gate
     ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
     `integrations/chat_tools.py:build_integration_chat_tools` gives each
-    integration tool, `CustomTool` too, the approval scope of an Ask action and
+    integration tool, REST and GraphQL too, the approval scope of an Ask action and
     leaves out a Blocked action. The Actions tab
     (`web/src/sections/integrations/IntegrationActionsTab.tsx`) shows the
     policies with or without Craft, and so does the "Users Can Save Always
@@ -354,7 +370,7 @@ only the configuration of a chat that does not exist yet.
 - `integration-kind-form` **An add form for a new integration kind.** Add the
   shape to `IntegrationShape` in `web/src/lib/integrations/types.ts`, its
   `config` to `IntegrationConfig`, and a branch in
-  `web/src/sections/integrations/AddIntegrationPage.tsx:config`. Add its label under
+  `web/src/sections/integrations/AddIntegrationModal.tsx:config`. Add its label under
   `admin.integrations.shape` in all nine locales, and its icon to
   `INTEGRATION_SHAPE_ICONS` in `web/src/sections/integrations/integrationLabels.ts`.
 - `mcp-auth-type-ui` **The UI for a new MCP auth type.** Add the admin sign-in
