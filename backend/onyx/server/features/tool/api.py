@@ -74,7 +74,6 @@ from onyx.server.features.tool.models import (
     Header,
     ToolSnapshot,
     ToolUserPreferences,
-    mask_custom_headers,
 )
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
@@ -83,6 +82,7 @@ from onyx.tools.tool_implementations.api_app.openapi_parsing import (
     openapi_to_method_specs,
     parse_openapi_document,
 )
+from onyx.utils.encryption import mask_string
 
 router = APIRouter(prefix="/tool")
 admin_router = APIRouter(prefix="/admin/tool")
@@ -251,12 +251,10 @@ def _alias_snapshot(
         ),
         display_name=integration.name,
         in_code_tool_id=None,
-        custom_headers=mask_custom_headers(
-            [
-                {"key": name, "value": value}
-                for name, value in _stored_headers(integration, organization).items()
-            ]
-        ),
+        custom_headers=[
+            {"key": name, "value": mask_string(value)}
+            for name, value in _stored_headers(integration, organization).items()
+        ],
         passthrough_auth=integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN,
         mcp_server_id=tool.mcp_server_id,
         user_id=(
@@ -472,6 +470,8 @@ def _openapi_snapshots(
         )
         if include_managed:
             snapshot.permissions = tool_permissions(can_manage=can_manage)
+        if not can_manage:
+            snapshot.custom_headers = None
         snapshots.append(snapshot)
     return snapshots
 

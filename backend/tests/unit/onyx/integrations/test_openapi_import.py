@@ -559,6 +559,12 @@ def test_create_refuses_a_spec_nested_too_deeply() -> None:
         validate_openapi_schema(_deeply_nested_spec())
 
 
+def test_a_stored_spec_nested_too_deeply_still_loads() -> None:
+    spec = _deeply_nested_spec()
+
+    assert parse_openapi_document(json.dumps(spec)) == spec
+
+
 def test_import_refuses_an_unpaired_surrogate() -> None:
     spec = _callable_spec()
     spec["info"] = {**spec.get("info", {}), "description": "\ud800"}

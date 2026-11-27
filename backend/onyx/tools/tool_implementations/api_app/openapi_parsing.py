@@ -61,9 +61,10 @@ _OpenApiYamlLoader.add_implicit_resolver(
 _MAX_NESTING_DEPTH = 200
 
 
-def _check_nesting_depth(value: Any) -> None:
+def check_nesting_depth(value: Any) -> None:
     """Raise ``ValueError`` for a document nested deeper than the recursive
-    walkers of this module can go."""
+    walkers of this module can go. Only input checks call it: a stored
+    document still loads."""
     stack: list[tuple[Any, int]] = [(value, 1)]
     while stack:
         node, depth = stack.pop()
@@ -83,7 +84,6 @@ def parse_openapi_document(document: str) -> dict[str, Any]:
         raise ValueError("The OpenAPI document is nested too deeply.") from e
     if not isinstance(parsed, dict):
         raise ValueError("The OpenAPI document is not an object.")
-    _check_nesting_depth(parsed)
     return parsed
 
 
@@ -487,7 +487,7 @@ def validate_openapi_schema(
     """Raise ``ValueError`` if ``schema`` is not an OpenAPI 3 schema that the
     REST tools can call. Without ``check_server_url``, the schema needs no
     server URL."""
-    _check_nesting_depth(schema)
+    check_nesting_depth(schema)
     try:
         # JSON can escape an unpaired surrogate; PostgreSQL JSONB cannot store it.
         json.dumps(schema, ensure_ascii=False).encode()

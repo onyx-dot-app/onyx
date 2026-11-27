@@ -1911,9 +1911,6 @@ def test_literal_header_values_are_masked_and_kept_on_save(
     assert view.header_template is None
 
 
-LONG_HEADER_SECRET = "abc{1}-secret-0123456789"
-
-
 def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     db_session: Session, admin: User, created: Created
 ) -> None:
@@ -1946,7 +1943,7 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
         ),
         {
             "integration_id": integration.id,
-            "headers": json.dumps([{"key": "X-Api-Key", "value": LONG_HEADER_SECRET}]),
+            "headers": json.dumps([{"key": "X-Api-Key", "value": "abc{1}-secret"}]),
         },
     )
     db_session.commit()
@@ -1955,8 +1952,7 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     assert fetched.custom_headers is not None
     assert [header["key"] for header in fetched.custom_headers] == ["X-Api-Key"]
     masked = fetched.custom_headers[0]["value"]
-    assert LONG_HEADER_SECRET[:4] not in masked
-    assert LONG_HEADER_SECRET[-4:] not in masked
+    assert masked != "abc{1}-secret"
 
     tool_api.update_custom_tool(
         snapshot.id,
@@ -1967,9 +1963,49 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     db_session.expire_all()
     connection = get_connection(db_session, integration.id, None)
     assert connection is not None
-    assert read_connection_secret(connection).fields == {
-        "X-Api-Key": LONG_HEADER_SECRET
-    }
+    assert read_connection_secret(connection).fields == {"X-Api-Key": "abc{1}-secret"}
+
+
+def test_only_a_manager_reads_custom_tool_header_values(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    """Members read tool and agent snapshots, so they get no part of a shared
+    header secret. A manager keeps the partial mask, which Terraform compares
+    with its known value."""
+    secret = "sk-proj-AAAABBBBCCCCDDDD"
+    snapshot = tool_api.create_custom_tool(
+        CustomToolCreate(
+            name=f"shared-key-{uuid4().hex[:8]}",
+            description="Shared key",
+            definition=OPENAPI_SPEC,
+            custom_headers=[Header(key="X-Api-Key", value=secret)],
+            passthrough_auth=False,
+        ),
+        db_session,
+        admin,
+    )
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+    give_access(db_session, [integration])
+
+    managed = tool_api.get_custom_tool(snapshot.id, db_session, admin)
+    assert managed.custom_headers == [
+        {"key": "X-Api-Key", "value": mask_string(secret)}
+    ]
+    assert (
+        tool_api.get_custom_tool(snapshot.id, db_session, member).custom_headers is None
+    )
+
+    persona_id = _persona(
+        db_session, admin, tool_ids=[snapshot.id], integration_links=None
+    )
+    for reader in (member, admin):
+        agent = persona_api.get_persona(persona_id, reader, db_session)
+        tool = next(tool for tool in agent.tools if tool.id == snapshot.id)
+        assert tool.custom_headers is None
 
 
 def test_custom_tool_alias_keeps_a_passthrough_header_with_braces(
