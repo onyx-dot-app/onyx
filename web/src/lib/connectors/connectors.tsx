@@ -1119,6 +1119,15 @@ export const connectorConfigs: Record<
           "connectors.jira.fields.comment_email_blacklist.description",
         optional: true,
       },
+      {
+        type: "checkbox",
+        label: "connectors.jira.fields.exclude_internal_comments.label",
+        name: "exclude_internal_comments",
+        description:
+          "connectors.jira.fields.exclude_internal_comments.description",
+        optional: true,
+        default: false,
+      },
     ],
     advanced_values: [],
   },
