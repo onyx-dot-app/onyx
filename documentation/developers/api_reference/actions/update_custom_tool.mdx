@@ -1,0 +1,13 @@
+---
+title: "Update Custom Tool"
+openapi: "PUT /admin/tool/custom/{tool_id}"
+---
+
+<Info>
+  **Required permission:** Manage Actions (`manage:actions`), or Admin (`admin`).
+  A **Group Manager** can also call this. Their scope comes from the agents shared with the groups they manage.
+</Info>
+
+The `definition` can be up to 5,242,880 bytes. Onyx measures it after it encodes it again as JSON,
+with a space after each comma and colon and with non-ASCII characters escaped.
+A compact request can be smaller than the limit and still get HTTP 413.

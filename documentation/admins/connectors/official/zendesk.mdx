@@ -1,0 +1,157 @@
+---
+title: "Zendesk"
+description: "Access tickets and conversations from Zendesk"
+---
+
+## How it works
+
+The Zendesk connector indexes content from your Zendesk instance. One connector indexes one content type:
+
+- **Articles**: Published articles from your Help Center
+- **Tickets**: Support tickets with their comments and metadata
+
+To index both articles and tickets, create two connectors with the same Zendesk account.
+
+The connector keeps author information, labels, tags, and other metadata. After the first run,
+it fetches only new and changed content. It also removes documents from Onyx when Zendesk deletes them.
+
+**Document Access** can be **Everyone in Your Organization**, **Specific Groups**, or **Sync with Zendesk**.
+**Specific Groups** and **Sync with Zendesk** are paid features: the Business and Enterprise tiers on Onyx Cloud,
+and the Enterprise Edition when self-hosted. With **Sync with Zendesk**,
+an Onyx user finds an article or ticket only if their Zendesk account can read it.
+See [Sync with Zendesk](#sync-with-zendesk).
+
+The connector is available in all editions.
+
+## Content Types
+
+### Articles
+
+- Includes article content, labels, and content tags
+- Tracks author information and update timestamps
+- Skips articles that carry a label listed in the `ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS` environment variable
+  (self-hosted only)
+
+### Tickets
+
+- Includes ticket metadata (status, priority, tags, type)
+- Tracks submitter and commenter information
+- Excludes deleted tickets
+- **Note**: Requires an active Zendesk Support product
+
+## Current Limitations
+
+- Articles: Cannot filter by category or section
+
+## Setting up
+
+### Authorization
+
+The Zendesk connector needs 3 values:
+- **Zendesk Subdomain**: Your Zendesk subdomain, for example `your-company` from `your-company.zendesk.com`
+- **Zendesk Account Email**: The email address of the API token owner. For **Sync with Zendesk**, this must be an admin.
+- **API Token**: A Zendesk API token
+
+See below for how to create the API token:
+
+<video className="rounded-image" src="/assets/admins/connectors/zendesk/ZendeskAPI.mp4" autoPlay muted loop playsInline aria-label="Zendesk settings page showing how to generate an API token" />
+
+<Note>
+  Onyx indexes only what the token owner can read in Zendesk.
+  Use an agent or admin account that can read the articles or tickets you want to index.
+</Note>
+
+### Indexing
+
+<Steps>
+  <Step title="Add the credential">
+    In the Admin Panel, go to **Connectors** and select **Zendesk**. Under **Authentication Account**,
+    select **New Zendesk Account** and enter the subdomain, account email, and API token from the section above.
+  </Step>
+
+  <Step title="Configure the content">
+    - **Zendesk Subdomain**: Enter the subdomain again.
+    - **Content Type**: Choose **articles** or **tickets**.
+    - **API Calls per Minute** (under **Advanced Options**): Limit the request rate if your Zendesk plan has a low
+    API rate limit. Leave empty for no limit.
+    - **Grant End Users Access** (under **Advanced Options**, tickets only): With **Sync with Zendesk**, also give
+    end users access to their tickets. See [End users](#end-users). Off by default.
+  </Step>
+
+  <Step title="Set access and create">
+    Under **Connector Settings**, choose **Document Access** and click **Create Connector**.
+  </Step>
+</Steps>
+
+## Sync with Zendesk
+
+With **Sync with Zendesk**,
+Onyx matches each Onyx user to a Zendesk user by email and copies who can read each article and ticket.
+Suspended Zendesk users get no access.
+
+**Articles**
+
+- An article visible to **Everyone** is public in Onyx only if your Help Center shows it without sign-in.
+  Otherwise every signed-in Zendesk user can read it, agents and end users.
+- An article limited to user segments is visible to the members of those segments,
+  plus admins and agents whose role can manage the Help Center. On plans without custom roles,
+  only admins count as Help Center managers.
+- Onyx evaluates the segment rules itself: all required tags, any one of the optional tags,
+  the listed organizations and groups, and the users added to the segment by name.
+
+**Tickets**
+
+- Admins, and agents whose role can see all tickets, can read every ticket, in private groups too.
+- Agents whose role can see their groups' tickets can read the tickets of their groups.
+  A role that also sees public groups adds every ticket in a public group.
+- Agents whose role can see their organization's tickets can read the tickets of their organizations.
+- The assignee, followers, and CCs who are agents can always read the ticket.
+- End users get no access unless you turn on **Grant End Users Access**.
+
+### End users
+
+Zendesk shows end users their own tickets without internal notes. The indexed ticket includes every comment,
+internal notes too, so Onyx never gives an end user a ticket with an internal note.
+
+With **Grant End Users Access**, the requester, CCs,
+and members of an organization that shares its tickets can read the tickets that have no internal note.
+To find internal notes, each permission sync reads the comments of each ticket that an end user could read.
+On an account with many tickets, this makes the sync much slower and uses much of your Zendesk API rate limit.
+Turn it on only if end users need to find their tickets in Onyx.
+
+### Accounts with several brands
+
+Zendesk can limit an agent to some brands, whatever their role allows.
+**Sync with Zendesk** does not support accounts with more than one brand yet: its checks fail,
+and no permission sync runs. For such an account, use **Everyone in Your Organization** or **Specific Groups**.
+
+### Token and schedule
+
+The API token must belong to a Zendesk **admin**. Only admins can read the ticket export, every restricted article,
+user emails, and group and organization memberships. Onyx checks this before each permission sync,
+so a token that loses admin access stops the sync instead of hiding documents.
+
+Onyx copies document access every 6 hours and group membership every 6 hours. When self-hosted,
+set `ZENDESK_PERMISSION_DOC_SYNC_FREQUENCY` and `ZENDESK_PERMISSION_GROUP_SYNC_FREQUENCY` (in seconds) to change this.
+The first indexing run copies each document's access.
+Documents that later indexing runs add stay hidden until the next permission sync.
+Group sync stops with an error if the account has more than 500,000 users, organizations, or memberships.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Your Zendesk token does not have sufficient permissions (HTTP 403)">
+    The token owner cannot read the content type you selected.
+    Check that the account has access to the Help Center (articles) or to Zendesk Support (tickets),
+    and that API token access is enabled in Zendesk Admin Center.
+  </Accordion>
+
+  <Accordion title="The token belongs to an admin check fails">
+    **Sync with Zendesk** needs the API token of a Zendesk admin. Create a token as an admin,
+    or give the token owner the admin role, then run the checks again.
+  </Accordion>
+
+  <Accordion title="Indexing is slow or hits rate limits">
+    Set **API Calls per Minute** under **Advanced Options** to a value below your Zendesk plan's rate limit.
+  </Accordion>
+</AccordionGroup>
