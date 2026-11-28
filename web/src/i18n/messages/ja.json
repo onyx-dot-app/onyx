@@ -324,10 +324,50 @@
       "details": "詳細",
       "serverDetails": "サーバーの詳細",
       "authentication": "認証",
-      "back": "戻る"
+      "back": "戻る",
+      "checking": "サーバーを確認中…",
+      "continue": "続ける"
     },
     "policyEditor": {
       "toolCount": "{count, plural, other {#個のアクション}}"
+    },
+    "addOpenApiModal": {
+      "cancelButton": {
+        "label": "キャンセル"
+      },
+      "copyButton": {
+        "tooltip": "定義をコピー"
+      },
+      "definition": {
+        "invalidJson": "JSON の形式が無効です",
+        "placeholder": "ここに OpenAPI スキーマを入力してください",
+        "required": "OpenAPI スキーマ定義は必須です",
+        "subDescription": "このプラグインで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI プラグイン]({docsUrl}) を参照してください。",
+        "title": "OpenAPI スキーマ定義"
+      },
+      "empty": {
+        "description": "OpenAPI スキーマを入力すると、ここにアクションのプレビューが表示されます。",
+        "title": "アクションが見つかりません"
+      },
+      "formatButton": {
+        "tooltip": "定義を整形"
+      },
+      "method": {
+        "noSummary": "概要はありません"
+      },
+      "toasts": {
+        "actionCreated": "OpenAPI プラグインを作成しました",
+        "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です"
+      },
+      "humanDescription": {
+        "title": "ユーザー向けの説明",
+        "hint": "プラグインのカードと詳細に表示されます。"
+      },
+      "agentDescription": {
+        "title": "エージェント向けの説明",
+        "hint": "OpenAPIスキーマのinfo.descriptionを編集します。",
+        "disabled": "このフィールドを編集するには、有効なスキーマを入力してください。"
+      }
     }
   },
   "admin": {
@@ -598,6 +638,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management サービスデスクのチケット"
         }
       }
     },
@@ -3984,6 +4027,45 @@
               "none": "このアプリ登録で 1 分あたりの RU を設定している他のコネクタはありません。",
               "hidden": "{count, plural, other {表示できないコネクタ # 件}}",
               "unavailable": "このアプリ登録を使用する他のコネクタの 1 分あたりの RU を読み込めませんでした。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクタの設定",
+          "subtext": "インデックスを作成する Jira Service Management のコンテンツを設定します。すべてのチケットを対象にするか、特定のプロジェクトや JQL クエリに限定できます。",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "jql": {
+                  "label": "JQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "アカウントが閲覧できるすべてのサービスデスクチケットをインデックス化",
+              "description": "選択したアカウントが閲覧できるサービスデスクチケットを Onyx がインデックス化します。他のプロジェクトタイプのチケットをインデックス化するには、別のタブを選択してください。"
+            },
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "インデックス化する特定プロジェクトのキー（例: 'IT'）。"
+            },
+            "jql_query": {
+              "label": "JQL クエリ",
+              "description": "Jira Service Management のチケットを絞り込むカスタム JQL クエリ。\n\n重要: コネクタのロジックと競合するため、JQL クエリに時間ベースのフィルターや ORDER BY 句を含めないでください。\n\n構文の詳細は [Atlassian の JQL ドキュメント](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) をご覧ください。"
+            },
+            "comment_email_blacklist": {
+              "label": "コメント除外メールアドレスリスト",
+              "description": "ボットのコメントなどを無視したい場合に便利です。コメントをインデックス化しないユーザーのメールアドレスを追加してください。"
             }
           }
         }
@@ -9147,7 +9229,9 @@
         }
       },
       "toasts": {
-        "unexpectedError": "予期しないエラーが発生しました。"
+        "unexpectedError": "予期しないエラーが発生しました。",
+        "connected": "{label} に接続しました",
+        "disconnected": "{label} を切断しました"
       },
       "providers": {
         "braintrust": {
@@ -10449,7 +10533,11 @@
         "createFailed": "連携を追加できませんでした。",
         "preset": {
           "loadFailed": "プリセットを読み込めませんでした。",
-          "credentialRequired": "この値を入力してください。"
+          "credentialRequired": "この値を入力してください。",
+          "title": "開始点",
+          "instructions": "セットアップ手順",
+          "description": "プリセットは、組み込みアプリの名前とサインインを入力します。任意のHTTPサービスを設定するには「カスタムアプリ」を選択します。",
+          "custom": "カスタムアプリ"
         },
         "name": {
           "title": "名前",
@@ -10467,13 +10555,15 @@
             "oauth": "このサーバーは OAuth ログインを使用します。",
             "authUnknown": "このサーバーにはログインが必要です。API キーのヘッダーまたは OAuth を追加してください。",
             "unreachable": "Onyx はこのサーバーに接続できません。URL を確認してください。",
-            "forbidden": "追加する前にこのサーバーを確認できるのは管理者だけです。このまま追加することもできます。"
+            "forbidden": "追加する前にこのサーバーを確認できるのは管理者だけです。このまま追加することもできます。",
+            "checking": "サーバーを確認しています…"
           },
           "transport": {
             "title": "トランスポート",
             "streamableHttp": "Streamable HTTP",
             "sse": "Server-Sent Events (SSE)"
-          }
+          },
+          "suggested": "おすすめのサーバー"
         },
         "owner": {
           "title": "所有者",
@@ -10592,6 +10682,53 @@
           "copyCallbackUrl": "コールバック URL をコピー",
           "scopes": "スコープ",
           "open": "{name} を開く"
+        },
+        "title": "連携を追加",
+        "description": "サービスを接続すると、チャットと Craft で使えるようになります。",
+        "openapi": {
+          "title": "OpenAPI アプリを追加",
+          "schema": {
+            "title": "スキーマ",
+            "description": "アクションを定義するOpenAPIスキーマを追加します。",
+            "added": "{count, plural, other {スキーマには # 個のパスがあります。}}",
+            "required": "スキーマを追加してください。",
+            "add": "スキーマを追加",
+            "edit": "スキーマを編集"
+          }
+        },
+        "descriptionField": {
+          "title": "説明",
+          "placeholder": "説明を入力"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL パターン",
+            "description": "1 行に 1 つの URL パターンを入力します（例: https://api.example.com/*）。",
+            "placeholder": "https://api.example.com/*",
+            "required": "URL パターンを 1 つ以上入力してください。"
+          }
+        },
+        "type": {
+          "title": "種類",
+          "description": "Onyxがサービスに接続する方法を選択します。",
+          "mcp_server": {
+            "title": "MCPサーバー",
+            "description": "URLでリモートのMCPサーバーに接続します。"
+          },
+          "openapi": {
+            "title": "OpenAPIアプリ",
+            "description": "OpenAPIスキーマからアクションを作成します。"
+          },
+          "app": {
+            "title": "アプリ",
+            "description": "GitHubなどのプリセット、またはカスタムアプリから始めます。"
+          }
+        },
+        "details": {
+          "title": "詳細"
+        },
+        "signIn": {
+          "title": "サインイン"
         }
       },
       "filters": {
@@ -10730,14 +10867,20 @@
           "urlPatternApp": {
             "title": "このアプリは URL パターンを使用しています",
             "description": "Onyx は URL パターンのアプリを追加しなくなりました。このアプリを置き換えるには、URL パターンが対象とするホストごとにカスタム REST アプリを追加してください。このアプリを削除する前に、ドキュメントのセットアップ手順を実施してください。"
-          }
+          },
+          "type": "種類"
         },
         "configuration": {
           "readOnly": "この連携は表示できますが、変更はできません。",
           "connection": {
             "title": "接続",
             "serverUrl": "サーバー URL",
-            "serverUrlError": "有効なサーバー URL を入力してください。"
+            "serverUrlError": "有効なサーバー URL を入力してください。",
+            "urlPatterns": "URL パターン",
+            "urlPatternsDescription": "1 行に 1 つの URL パターンを入力します。",
+            "schema": "OpenAPI スキーマ",
+            "schemaDescription": "変更したスキーマを保存すると、Onyx はアクションを再同期します。",
+            "schemaError": "スキーマを JSON オブジェクトとして入力してください。"
           },
           "signIn": {
             "title": "ログイン",
@@ -10841,7 +10984,8 @@
         "healthGreen": "緑: すべてのシャードコピーが割り当てられています。",
         "healthYellow": "黄: 一部のレプリカシャードが割り当てられていません。検索は機能しますが、データノードを失うとデータが失われる可能性があります。",
         "healthYellowSingleNode": "黄: レプリカのコピーには 2 つ目のデータノードが必要です。データノードが 1 つのクラスターでは正常な状態で、検索は動作します。",
-        "healthRed": "赤: 一部のプライマリシャードが割り当てられていないため、インデックスの一部を検索できません。"
+        "healthRed": "赤: 一部のプライマリシャードが割り当てられていないため、インデックスの一部を検索できません。",
+        "health": "状態 {health}"
       },
       "searches": {
         "loadTitle": "検索負荷",
@@ -11988,6 +12132,36 @@
       },
       "shareMenu": {
         "label": "共有またはエクスポート"
+      },
+      "delete": {
+        "label": "削除"
+      },
+      "deleteModal": {
+        "description": "このチャットを削除してもよろしいですか？この操作は元に戻せません。",
+        "submitButton": {
+          "label": "削除"
+        },
+        "title": "チャットを削除"
+      },
+      "exportAs": {
+        "label": "形式を指定してエクスポート…"
+      },
+      "exportFailed": {
+        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "プレーンテキスト"
+      },
+      "fullWidth": {
+        "ariaLabel": "チャットの全幅表示を切り替え",
+        "fitTooltip": "幅を合わせる",
+        "fullTooltip": "全幅"
+      },
+      "moveToProject": {
+        "label": "プロジェクトに移動"
       }
     },
     "banners": {
@@ -12172,7 +12346,11 @@
           "waitHint": "応答が終わるまでお待ちください。",
           "ctrlKey": "Ctrl"
         },
-        "questionAttachmentsHint": "エージェントの質問への回答にはファイルを含められません。回答するにはファイルを削除してください。"
+        "questionAttachmentsHint": "エージェントの質問への回答にはファイルを含められません。回答するにはファイルを削除してください。",
+        "subagentsWorking": "サブエージェントが作業中",
+        "stopSubagentsButton": {
+          "label": "サブエージェントを停止"
+        }
       },
       "baseInputBar": {
         "input": {
@@ -12318,7 +12496,8 @@
         "withdrawFailed": "保留中のメッセージを削除できませんでした。",
         "loadFailed": "保留中のメッセージを読み込めませんでした。",
         "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
-        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。"
+        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
+        "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
       },
       "pendingToolApproval": {
         "toast": "先に保留中のツール呼び出しを承認または拒否してください。"
@@ -12373,6 +12552,10 @@
         "wrapButton": {
           "unwrapLabel": "折り返さない",
           "wrapLabel": "折り返す"
+        },
+        "copyButton": {
+          "copiedLabel": "コピーしました！",
+          "label": "コピー"
         }
       },
       "customTool": {
@@ -12420,6 +12603,9 @@
         },
         "callFailedStatus": {
           "text": "{toolName} が失敗しました"
+        },
+        "waitingIndicator": {
+          "text": "レスポンスを待っています..."
         }
       },
       "customToolAuth": {
@@ -12708,6 +12894,9 @@
           },
           "browsing": {
             "label": "ウェブページを閲覧中..."
+          },
+          "thinkingEllipsis": {
+            "label": "思考中..."
           }
         },
         "internalSearch": {
@@ -12806,6 +12995,9 @@
             "message": "メッセージ {id}",
             "allRetrieved": "取得したすべて",
             "nextPage": "次のページ"
+          },
+          "listed": {
+            "label": "{count, plural, one {# 件のドキュメントを一覧表示} other {# 件のドキュメントを一覧表示}}"
           }
         },
         "python": {
@@ -12826,6 +13018,12 @@
           },
           "ran": {
             "status": "Python を実行しました"
+          },
+          "runningCode": {
+            "label": "コードを実行中..."
+          },
+          "writingCode": {
+            "status": "コードを作成中..."
           }
         },
         "reasoning": {
@@ -12992,6 +13190,9 @@
             "history": {
               "status": "{phase, select, running {{history, select, back {戻っています} forward {進んでいます} other {ページを再読み込みしています}}} failed {ページを変更できませんでした} canceled {キャンセルしました} other {{history, select, back {戻りました} forward {進みました} other {ページを再読み込みしました}}}}"
             }
+          },
+          "output": {
+            "title": "出力"
           }
         },
         "skill": {
@@ -13040,6 +13241,12 @@
           },
           "activity": "{tool} を使用中",
           "open": "{name} を開く"
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
+        },
+        "interruptedThinking": {
+          "label": "中断された思考"
         }
       },
       "toolApproval": {
@@ -13097,6 +13304,17 @@
         },
         "stopButton": {
           "tooltip": "再生を停止"
+        }
+      },
+      "agentResults": {
+        "received": "サブエージェントの結果を受信しました"
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "キャンセル"
+        },
+        "submitButton": {
+          "label": "送信"
         }
       }
     },
@@ -13386,6 +13604,33 @@
         },
         "error": {
           "description": "PDF ファイルを読み込めませんでした。"
+        }
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# 語} other {# 語}}"
+      },
+      "pptx": {
+        "controls": {
+          "label": "プレゼンテーションの操作"
+        },
+        "thumbnails": {
+          "toggle": "スライドのサムネイルを表示・非表示",
+          "resize": "スライドのサムネイルの幅を変更"
+        },
+        "slides": {
+          "label": "スライド"
+        },
+        "previous": {
+          "label": "前のスライド"
+        },
+        "next": {
+          "label": "次のスライド"
+        },
+        "slide": {
+          "counter": "スライド {current} / {total}"
+        },
+        "empty": {
+          "label": "このプレゼンテーションにはスライドがありません"
         }
       }
     },
@@ -13780,6 +14025,10 @@
       },
       "browserTab": {
         "label": "ブラウザー"
+      },
+      "downloadButton": {
+        "label": "ダウンロード",
+        "tooltip": "ファイルをダウンロード"
       }
     },
     "export": {
@@ -14624,6 +14873,11 @@
       },
       "submitError": "決定を送信できませんでした。もう一度お試しください。",
       "actionWithDescription": "{action}: {description}"
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "あア"
+      }
     }
   },
   "craft": {
@@ -16284,7 +16538,13 @@
           "mismatch": "パスワードが一致しません",
           "newRequired": "新しいパスワードは必須です"
         }
-      }
+      },
+      "email": {
+        "anonymousFallback": "匿名",
+        "description": "アカウントのメールアドレスです。",
+        "title": "メールアドレス"
+      },
+      "title": "アカウント"
     },
     "apiKeys": {
       "createModal": {
@@ -16424,7 +16684,8 @@
       "dynamicConversations": {
         "title": "動的な会話",
         "description": "長い会話をスクロールすると、メッセージを読み込んだり解放したりします。パフォーマンスは向上しますが、解放されたメッセージにはスクリーンリーダーからアクセスできません。すべてのメッセージを読み込んだままにするには、オフにしてください。"
-      }
+      },
+      "title": "外観"
     },
     "chats": {
       "autoScroll": {
@@ -16466,7 +16727,8 @@
         "description": "応答中のEnterキーと送信ボタンの動作を選択します。Ctrl/Cmd+Enterは常に次のメッセージをキューに追加します。",
         "afterStep": "現在のステップの後",
         "interrupt": "現在の処理を中断"
-      }
+      },
+      "title": "チャット"
     },
     "connectors": {
       "connectButton": "接続",
@@ -16480,12 +16742,14 @@
       },
       "status": {
         "connected": "接続済み",
-        "notConnected": "未接続"
+        "notConnected": "未接続",
+        "paused": "一時停止中"
       },
       "title": "コネクター",
       "toasts": {
         "disconnectFailed": "切断できませんでした"
-      }
+      },
+      "emptyMessage": "組織に設定されたコネクターはありません。"
     },
     "dangerZone": {
       "deleteAllChats": {
@@ -16546,7 +16810,8 @@
       },
       "toasts": {
         "updateFailed": "言語設定を更新できませんでした"
-      }
+      },
+      "title": "言語"
     },
     "layout": {
       "header": {
@@ -16570,6 +16835,18 @@
         },
         "thirdPartyAccess": {
           "label": "サードパーティアクセス"
+        },
+        "accountsAccess": {
+          "label": "アカウントとアクセス"
+        },
+        "connectors": {
+          "label": "コネクタ"
+        },
+        "general": {
+          "label": "一般"
+        },
+        "llmGateway": {
+          "label": "LLMゲートウェイ"
         }
       }
     },
@@ -16714,7 +16991,8 @@
       "toggle": {
         "description": "ショートカットを有効にすると、よく使うプロンプトをすばやく挿入できます。",
         "title": "プロンプトショートカットを使用"
-      }
+      },
+      "title": "プロンプトショートカット"
     },
     "usage": {
       "budget": {
@@ -16774,6 +17052,9 @@
       "usageThisPeriod": {
         "description": "{amount} 消費",
         "title": "この期間の使用状況"
+      },
+      "header": {
+        "title": "使用状況"
       }
     },
     "voice": {
@@ -17160,6 +17441,18 @@
         "toggleSidebar": {
           "label": "サイドバーの切り替え"
         }
+      },
+      "createNamedProject": {
+        "label": "新しいプロジェクト「<name>{projectName}</name>」を作成"
+      },
+      "newProject": {
+        "label": "新しいプロジェクト"
+      },
+      "noMoreResults": {
+        "text": "これ以上の結果はありません"
+      },
+      "projectsFilter": {
+        "label": "プロジェクト"
       }
     },
     "notifications": {
@@ -17512,6 +17805,10 @@
         "upload": {
           "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",
           "title": "スキルをアップロード"
+        },
+        "marketplace": {
+          "title": "マーケットプレイスを追加",
+          "description": "リポジトリから追加して、そのプラグインを同期します。"
         }
       },
       "empty": {
@@ -17757,7 +18054,11 @@
           "author": "作成者",
           "homepage": "ホームページ",
           "license": "ライセンス",
-          "notUsed": "Onyx では使用しない部分"
+          "notUsed": "Onyx では使用しない部分",
+          "noDescription": "説明はありません。",
+          "skills": "スキル",
+          "description": "説明",
+          "marketplace": "{name} マーケットプレイス、{scope, select, personal {個人} other {会社}}（{repository}）"
         },
         "skills": {
           "off": "オフ",
@@ -17771,7 +18072,11 @@
           "title": "このプラグインを使用",
           "label": "{name} を使用",
           "required": "管理者がこのプラグインを必須にしました。オフにできません。",
-          "unavailable": "このプラグインのオンとオフを切り替えることはできません。"
+          "unavailable": "このプラグインのオンとオフを切り替えることはできません。",
+          "failed": "プラグインを変更できませんでした。",
+          "on": "オン。デフォルトのエージェントはこのプラグインを使用できます。",
+          "off": "オフ。オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
+          "nameHeld": "{names} が同じスキル名を使用しているため、オフです。代わりにこのプラグインを使うにはオンにしてください。"
         },
         "actions": {
           "share": "共有",
@@ -17791,7 +18096,8 @@
           "title": "マーケットプレイス {name} が管理しています",
           "description": "Onyx はこのプラグインを {repository} から同期します。GitHub で変更してから、マーケットプレイスを同期してください。",
           "open": "マーケットプレイスを開く"
-        }
+        },
+        "syncedFrom": "{repository} から同期"
       },
       "connection": {
         "askAdmin": "管理者に問い合わせてください",
@@ -17837,7 +18143,9 @@
         "retry": {
           "label": "再試行"
         },
-        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。"
+        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。",
+        "title": "常に許可",
+        "readOnlyTitle": "アクション"
       },
       "oauthCallback": {
         "processing": "アカウントを接続中…",
@@ -17900,7 +18208,10 @@
         "not_supported": "非対応"
       },
       "note": {
-        "askAdmin": "管理者に依頼してください"
+        "askAdmin": "管理者に依頼してください",
+        "turnedOff": "管理者がオフにしています",
+        "moreThanOne": "複数の連携が一致します",
+        "notSupported": "Onyx では非対応"
       },
       "localServer": "ローカルサーバー",
       "noUrl": "サーバー URL なし",
@@ -18138,6 +18449,10 @@
       "errors": {
         "rateLimited": "GitHub の API レート制限に達しました。数分後にもう一度お試しください。制限を引き上げるには GitHub を接続してください。",
         "rateLimitedUntil": "GitHub の API レート制限に達しました。{time} にリセットされます。制限を引き上げるには GitHub を接続してください。"
+      },
+      "empty": {
+        "title": "マーケットプレイスはまだありません",
+        "description": "GitHub リポジトリを追加して、そのプラグインを取得します。"
       }
     },
     "bulk": {
@@ -18250,7 +18565,8 @@
         "upload": "スキルをアップロード",
         "create": "スキルを作成",
         "uploadPlugin": "プラグインをアップロード",
-        "marketplace": "マーケットプレイスを追加"
+        "marketplace": "マーケットプレイスを追加",
+        "manageMarketplaces": "マーケットプレイスを管理"
       },
       "groups": {
         "mine": "自分が作成",
@@ -18292,6 +18608,11 @@
         "title": "一致するスキルはありません",
         "description": "別の検索語またはフィルターを試してください。",
         "clear": "すべてのスキルを表示"
+      },
+      "sort": {
+        "label": "並べ替え",
+        "updated": "最近更新",
+        "name": "名前"
       }
     },
     "integrations": {
@@ -18315,6 +18636,11 @@
       "noMatches": {
         "title": "一致するインテグレーションはありません",
         "description": "別の検索語を試してください。"
+      },
+      "add": {
+        "label": "追加",
+        "integration": "インテグレーションを追加",
+        "manage": "インテグレーションを管理"
       }
     },
     "plugins": {
@@ -18332,7 +18658,9 @@
         "clear": "すべてのプラグインを表示"
       },
       "integrations": "{needed} 件中 {available} 件の連携が利用可能",
-      "nameHeld": "オフ: {names} が同じスキル名を使用しています"
+      "nameHeld": "オフ: {names} が同じスキル名を使用しています",
+      "contents": "{skills, plural, one {スキル 1 件} other {スキル {skills} 件}}",
+      "intro": "プラグインはスキルと、そのスキルに必要な連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。追加した各スキルは個別のプラグインになります。"
     },
     "skillPage": {
       "title": "スキル",
@@ -18398,7 +18726,8 @@
       "loadFailed": "このインテグレーションは利用できません。",
       "tabs": {
         "overview": "概要",
-        "actions": "アクション"
+        "actions": "アクション",
+        "configuration": "設定"
       },
       "overview": {
         "type": "種類",
@@ -18410,7 +18739,13 @@
           "title": "この統合を使用",
           "description": "オンにすると、チャットと Craft で使えます。",
           "required": "管理者がこの統合を必須にしました。オフにすることはできません。"
-        }
+        },
+        "description": "説明",
+        "noDescription": "説明はありません。",
+        "status": "ステータス"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {このインテグレーションへの接続です。使用するのはあなただけです。} shared {このインテグレーションのアカウントです。アクセス権を持つ全員が使用します。} other {このインテグレーションにサインインは不要です。}}"
       }
     },
     "pluginPage": {
@@ -18619,5 +18954,18 @@
         "label": "経営"
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearchのリソースが不足しています",
+    "disk": "OpenSearchのデータノードでディスク使用率が85%以上です。ディスクがいっぱいになるとインデックス作成が停止する可能性があります。",
+    "jvmMemory": "OpenSearchのJVMメモリ使用率が複数回のチェックで85%を超えています。検索やインデックス作成が失敗する可能性があります。",
+    "vectorMemory": "OpenSearchのベクトルメモリがほぼ満杯、または上限に達しています。検索やインデックス作成が失敗する可能性があります。",
+    "contact": "システム管理者、またはOnyxチーム（[support@onyx.app](mailto:support@onyx.app)）にお問い合わせください。",
+    "stale": "最新のチェックを利用できません。この警告は最後に成功したチェックに基づいており、復旧は確認されていません。",
+    "dismiss": "閉じる",
+    "diskTitle": "ディスク容量",
+    "jvmMemoryTitle": "JVMメモリ",
+    "vectorMemoryTitle": "ベクトルメモリ",
+    "viewDetails": "詳細を表示"
   }
 }

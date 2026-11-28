@@ -324,10 +324,50 @@
       "details": "Details",
       "serverDetails": "Server details",
       "authentication": "Authentication",
-      "back": "Back"
+      "back": "Back",
+      "checking": "Checking server…",
+      "continue": "Continue"
     },
     "policyEditor": {
       "toolCount": "{count, plural, one {# action} other {# actions}}"
+    },
+    "addOpenApiModal": {
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "copyButton": {
+        "tooltip": "Copy definition"
+      },
+      "definition": {
+        "invalidJson": "Invalid JSON format",
+        "placeholder": "Enter your OpenAPI schema here",
+        "required": "OpenAPI schema definition is required",
+        "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this plugin. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI plugins]({docsUrl}).",
+        "title": "OpenAPI Schema Definition"
+      },
+      "empty": {
+        "description": "Provide OpenAPI schema to preview actions here.",
+        "title": "No Actions Found"
+      },
+      "formatButton": {
+        "tooltip": "Format definition"
+      },
+      "method": {
+        "noSummary": "No summary provided"
+      },
+      "toasts": {
+        "actionCreated": "OpenAPI plugin created successfully",
+        "invalidJson": "Invalid JSON format in OpenAPI schema definition"
+      },
+      "humanDescription": {
+        "title": "Description for Humans",
+        "hint": "Displayed on the plugin card and in plugin details."
+      },
+      "agentDescription": {
+        "title": "Description for Agents",
+        "hint": "Edits info.description in the OpenAPI schema.",
+        "disabled": "Enter a valid schema to edit this field."
+      }
     }
   },
   "admin": {
@@ -598,6 +638,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management service desk tickets"
         }
       }
     },
@@ -3984,6 +4027,45 @@
               "none": "No other connector on this app registration sets RU per minute.",
               "hidden": "{count, plural, one {# connector you cannot see} other {# connectors you cannot see}}",
               "unavailable": "Could not load the RU per minute of the other connectors on this app registration."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Configure which Jira Service Management content to index. You can index every ticket or limit indexing to a specific project or JQL query.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "project": {
+                  "label": "Project"
+                },
+                "jql": {
+                  "label": "JQL Query"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexes every service desk ticket the account can read",
+              "description": "Onyx indexes the service desk tickets the selected account can read. To index tickets from other project types, choose another tab."
+            },
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific project to index (e.g., 'PROJ')."
+            },
+            "jql_query": {
+              "label": "JQL Query",
+              "description": "A custom JQL query to filter Jira Service Management tickets.\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses.\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax."
+            },
+            "comment_email_blacklist": {
+              "label": "Comment Email Blacklist",
+              "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
             }
           }
         }
@@ -9147,7 +9229,9 @@
         }
       },
       "toasts": {
-        "unexpectedError": "Unexpected error occurred."
+        "unexpectedError": "Unexpected error occurred.",
+        "connected": "{label} connected",
+        "disconnected": "{label} disconnected"
       },
       "providers": {
         "braintrust": {
@@ -10449,7 +10533,11 @@
         "createFailed": "Could not add the integration.",
         "preset": {
           "loadFailed": "Could not load the presets.",
-          "credentialRequired": "Add this value."
+          "credentialRequired": "Add this value.",
+          "title": "Start From",
+          "instructions": "Setup instructions",
+          "description": "A preset fills in the name and sign-in of a built-in app. Choose Custom app to set up any HTTP service.",
+          "custom": "Custom app"
         },
         "name": {
           "title": "Name",
@@ -10467,13 +10555,15 @@
             "oauth": "The server uses OAuth sign-in.",
             "authUnknown": "The server needs sign-in. Add an API key header or OAuth.",
             "unreachable": "Onyx cannot reach this server. Check the URL.",
-            "forbidden": "Only an admin can check this server before it is added. You can still add it."
+            "forbidden": "Only an admin can check this server before it is added. You can still add it.",
+            "checking": "Checking the server…"
           },
           "transport": {
             "title": "Transport",
             "streamableHttp": "Streamable HTTP",
             "sse": "Server-sent events (SSE)"
-          }
+          },
+          "suggested": "Suggested Servers"
         },
         "owner": {
           "title": "Owner",
@@ -10592,6 +10682,53 @@
           "copyCallbackUrl": "Copy the callback URL",
           "scopes": "Scopes",
           "open": "Open {name}"
+        },
+        "title": "Add an Integration",
+        "description": "Connect a service so people can use it in chat and Craft.",
+        "openapi": {
+          "title": "Add an OpenAPI App",
+          "schema": {
+            "title": "Schema",
+            "description": "Add the OpenAPI schema that defines the actions.",
+            "added": "{count, plural, one {The schema has # path.} other {The schema has # paths.}}",
+            "required": "Add a schema.",
+            "add": "Add schema",
+            "edit": "Edit schema"
+          }
+        },
+        "descriptionField": {
+          "title": "Description",
+          "placeholder": "Add a description"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL Patterns",
+            "description": "Put one URL pattern on each line, for example https://api.example.com/*.",
+            "placeholder": "https://api.example.com/*",
+            "required": "Add at least one URL pattern."
+          }
+        },
+        "type": {
+          "title": "Type",
+          "description": "Choose how Onyx connects to the service.",
+          "mcp_server": {
+            "title": "MCP Server",
+            "description": "Connect a remote MCP server by its URL."
+          },
+          "openapi": {
+            "title": "OpenAPI App",
+            "description": "Make actions from an OpenAPI schema."
+          },
+          "app": {
+            "title": "App",
+            "description": "Start from a preset, such as GitHub, or a custom app."
+          }
+        },
+        "details": {
+          "title": "Details"
+        },
+        "signIn": {
+          "title": "Sign-In"
         }
       },
       "filters": {
@@ -10730,14 +10867,20 @@
           "urlPatternApp": {
             "title": "This app uses URL patterns",
             "description": "Onyx no longer adds URL-pattern apps. To replace this app, add a custom REST app for each host that its URL patterns reach. Do the setup steps in the docs before you delete this app."
-          }
+          },
+          "type": "Type"
         },
         "configuration": {
           "readOnly": "You can see this integration. You cannot change it.",
           "connection": {
             "title": "Connection",
             "serverUrl": "Server URL",
-            "serverUrlError": "Enter a valid server URL."
+            "serverUrlError": "Enter a valid server URL.",
+            "urlPatterns": "URL Patterns",
+            "urlPatternsDescription": "Put one URL pattern on each line.",
+            "schema": "OpenAPI Schema",
+            "schemaDescription": "Onyx syncs the actions again when you save a changed schema.",
+            "schemaError": "Enter the schema as a JSON object."
           },
           "signIn": {
             "title": "Sign-in",
@@ -10841,7 +10984,8 @@
         "healthGreen": "Green: every shard copy is assigned.",
         "healthYellow": "Yellow: some replica shards are not assigned. Search works, but losing a data node can lose data.",
         "healthYellowSingleNode": "Yellow: replica copies need a second data node. This is normal for a cluster with one data node, and search works.",
-        "healthRed": "Red: some primary shards are not assigned, so part of the index cannot be searched."
+        "healthRed": "Red: some primary shards are not assigned, so part of the index cannot be searched.",
+        "health": "Status {health}"
       },
       "searches": {
         "loadTitle": "Search Load",
@@ -11988,6 +12132,36 @@
       },
       "shareMenu": {
         "label": "Share or export"
+      },
+      "delete": {
+        "label": "Delete"
+      },
+      "deleteModal": {
+        "description": "Are you sure you want to delete this chat? This action cannot be undone.",
+        "submitButton": {
+          "label": "Delete"
+        },
+        "title": "Delete Chat"
+      },
+      "exportAs": {
+        "label": "Export As…"
+      },
+      "exportFailed": {
+        "message": "Failed to export chat. Please try again."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "Plaintext"
+      },
+      "fullWidth": {
+        "ariaLabel": "Toggle full width chat",
+        "fitTooltip": "Fit width",
+        "fullTooltip": "Full width"
+      },
+      "moveToProject": {
+        "label": "Move to Project"
       }
     },
     "banners": {
@@ -12172,7 +12346,11 @@
           "waitHint": "Wait for the response to finish.",
           "ctrlKey": "Ctrl"
         },
-        "questionAttachmentsHint": "Answers to the agent's questions can't include files. Remove the files to answer."
+        "questionAttachmentsHint": "Answers to the agent's questions can't include files. Remove the files to answer.",
+        "subagentsWorking": "Subagents working",
+        "stopSubagentsButton": {
+          "label": "Stop subagents"
+        }
       },
       "baseInputBar": {
         "input": {
@@ -12318,7 +12496,8 @@
         "withdrawFailed": "Could not remove the pending message.",
         "loadFailed": "Could not load pending messages.",
         "alreadyAccepted": "This message was already accepted and is no longer pending.",
-        "interruptFailed": "Could not send this message now. It remains pending."
+        "interruptFailed": "Could not send this message now. It remains pending.",
+        "stopSubagentsFailed": "Could not stop the subagents."
       },
       "pendingToolApproval": {
         "toast": "Approve or reject the pending tool calls first."
@@ -12373,6 +12552,10 @@
         "wrapButton": {
           "unwrapLabel": "Unwrap",
           "wrapLabel": "Wrap"
+        },
+        "copyButton": {
+          "copiedLabel": "Copied!",
+          "label": "Copy"
         }
       },
       "customTool": {
@@ -12420,6 +12603,9 @@
         },
         "callFailedStatus": {
           "text": "{toolName} failed"
+        },
+        "waitingIndicator": {
+          "text": "Waiting for response..."
         }
       },
       "customToolAuth": {
@@ -12708,6 +12894,9 @@
           },
           "browsing": {
             "label": "Browsing web pages..."
+          },
+          "thinkingEllipsis": {
+            "label": "Thinking..."
           }
         },
         "internalSearch": {
@@ -12806,6 +12995,9 @@
             "message": "Message {id}",
             "allRetrieved": "All retrieved",
             "nextPage": "Next page"
+          },
+          "listed": {
+            "label": "{count, plural, one {# document listed} other {# documents listed}}"
           }
         },
         "python": {
@@ -12826,6 +13018,12 @@
           },
           "ran": {
             "status": "Ran Python"
+          },
+          "runningCode": {
+            "label": "Running code..."
+          },
+          "writingCode": {
+            "status": "Writing code..."
           }
         },
         "reasoning": {
@@ -12992,6 +13190,9 @@
             "history": {
               "status": "{phase, select, running {{history, select, back {Going back} forward {Going forward} other {Reloading the page}}} failed {Could not change the page} canceled {Canceled} other {{history, select, back {Went back} forward {Went forward} other {Reloaded the page}}}}"
             }
+          },
+          "output": {
+            "title": "Output"
           }
         },
         "skill": {
@@ -13040,6 +13241,12 @@
           },
           "activity": "Using {tool}",
           "open": "Open {name}"
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {Generated # image} other {Generated # images}}"
+        },
+        "interruptedThinking": {
+          "label": "Interrupted Thinking"
         }
       },
       "toolApproval": {
@@ -13097,6 +13304,17 @@
         },
         "stopButton": {
           "tooltip": "Stop playback"
+        }
+      },
+      "agentResults": {
+        "received": "Subagent results received"
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "submitButton": {
+          "label": "Submit"
         }
       }
     },
@@ -13386,6 +13604,33 @@
         },
         "error": {
           "description": "The PDF file could not be loaded."
+        }
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# word} other {# words}}"
+      },
+      "pptx": {
+        "controls": {
+          "label": "Presentation controls"
+        },
+        "thumbnails": {
+          "toggle": "Toggle slide thumbnails",
+          "resize": "Resize slide thumbnails"
+        },
+        "slides": {
+          "label": "Slides"
+        },
+        "previous": {
+          "label": "Previous slide"
+        },
+        "next": {
+          "label": "Next slide"
+        },
+        "slide": {
+          "counter": "Slide {current} of {total}"
+        },
+        "empty": {
+          "label": "No slides in this presentation"
         }
       }
     },
@@ -13780,6 +14025,10 @@
       },
       "browserTab": {
         "label": "Browser"
+      },
+      "downloadButton": {
+        "label": "Download",
+        "tooltip": "Download file"
       }
     },
     "export": {
@@ -14624,6 +14873,11 @@
       },
       "submitError": "Could not submit your decision. Try again.",
       "actionWithDescription": "{action}: {description}"
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "Aa"
+      }
     }
   },
   "craft": {
@@ -16284,7 +16538,13 @@
           "mismatch": "Passwords do not match",
           "newRequired": "New password is required"
         }
-      }
+      },
+      "email": {
+        "anonymousFallback": "anonymous",
+        "description": "Your account email address.",
+        "title": "Email"
+      },
+      "title": "Accounts"
     },
     "apiKeys": {
       "createModal": {
@@ -16424,7 +16684,8 @@
       "dynamicConversations": {
         "title": "Dynamic Conversations",
         "description": "Load and unload messages as you scroll long conversations. This improves performance, but screen readers can't reach unloaded messages. Turn this off to keep every message loaded."
-      }
+      },
+      "title": "Appearance"
     },
     "chats": {
       "autoScroll": {
@@ -16466,7 +16727,8 @@
         "description": "Choose what Enter and the send button do while an answer is in progress. Ctrl/Cmd+Enter always queues a follow-up.",
         "afterStep": "After the current step",
         "interrupt": "Interrupt current work"
-      }
+      },
+      "title": "Chats"
     },
     "connectors": {
       "connectButton": "Connect",
@@ -16480,12 +16742,14 @@
       },
       "status": {
         "connected": "Connected",
-        "notConnected": "Not connected"
+        "notConnected": "Not connected",
+        "paused": "Paused"
       },
       "title": "Connectors",
       "toasts": {
         "disconnectFailed": "Failed to disconnect"
-      }
+      },
+      "emptyMessage": "No connectors set up for your organization."
     },
     "dangerZone": {
       "deleteAllChats": {
@@ -16546,7 +16810,8 @@
       },
       "toasts": {
         "updateFailed": "Failed to update language preference"
-      }
+      },
+      "title": "Language"
     },
     "layout": {
       "header": {
@@ -16570,6 +16835,18 @@
         },
         "thirdPartyAccess": {
           "label": "3rd Party Access"
+        },
+        "accountsAccess": {
+          "label": "Accounts & Access"
+        },
+        "connectors": {
+          "label": "Connectors"
+        },
+        "general": {
+          "label": "General"
+        },
+        "llmGateway": {
+          "label": "LLM Gateway"
         }
       }
     },
@@ -16714,7 +16991,8 @@
       "toggle": {
         "description": "Enable shortcuts to quickly insert common prompts.",
         "title": "Use Prompt Shortcuts"
-      }
+      },
+      "title": "Prompt Shortcuts"
     },
     "usage": {
       "budget": {
@@ -16774,6 +17052,9 @@
       "usageThisPeriod": {
         "description": "{amount} spent",
         "title": "Usage This Period"
+      },
+      "header": {
+        "title": "Usage"
       }
     },
     "voice": {
@@ -17160,6 +17441,18 @@
         "toggleSidebar": {
           "label": "Toggle Sidebar"
         }
+      },
+      "createNamedProject": {
+        "label": "Create New Project \"<name>{projectName}</name>\""
+      },
+      "newProject": {
+        "label": "New Project"
+      },
+      "noMoreResults": {
+        "text": "No more results"
+      },
+      "projectsFilter": {
+        "label": "Projects"
       }
     },
     "notifications": {
@@ -17512,6 +17805,10 @@
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",
           "title": "Upload a skill"
+        },
+        "marketplace": {
+          "title": "Add marketplace",
+          "description": "Add from a repository and sync its plugins."
         }
       },
       "empty": {
@@ -17757,7 +18054,11 @@
           "author": "Author",
           "homepage": "Homepage",
           "license": "License",
-          "notUsed": "Not used in Onyx"
+          "notUsed": "Not used in Onyx",
+          "noDescription": "No description.",
+          "skills": "Skills",
+          "description": "Description",
+          "marketplace": "{name} marketplace, {scope, select, personal {personal} other {company}} ({repository})"
         },
         "skills": {
           "off": "Off",
@@ -17771,7 +18072,11 @@
           "title": "Use this plugin",
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
-          "unavailable": "You cannot turn this plugin on or off."
+          "unavailable": "You cannot turn this plugin on or off.",
+          "failed": "Could not change the plugin.",
+          "on": "On. The default agent can use this plugin.",
+          "off": "Off. Turn it on to let the default agent use this plugin.",
+          "nameHeld": "Off because {names} uses the same skill name. Turn this plugin on to use it instead."
         },
         "actions": {
           "share": "Share",
@@ -17791,7 +18096,8 @@
           "title": "Managed by the {name} marketplace",
           "description": "Onyx syncs this plugin from {repository}. Change it in GitHub, then sync the marketplace.",
           "open": "Open Marketplaces"
-        }
+        },
+        "syncedFrom": "Synced from {repository}"
       },
       "connection": {
         "askAdmin": "Ask your admin",
@@ -17837,7 +18143,9 @@
         "retry": {
           "label": "Try again"
         },
-        "readOnlyDescription": "Your admin sets how each action runs."
+        "readOnlyDescription": "Your admin sets how each action runs.",
+        "title": "Always Allow",
+        "readOnlyTitle": "Actions"
       },
       "oauthCallback": {
         "processing": "Connecting your account…",
@@ -17900,7 +18208,10 @@
         "not_supported": "Not supported"
       },
       "note": {
-        "askAdmin": "Ask an admin"
+        "askAdmin": "Ask an admin",
+        "turnedOff": "Turned off by your admin",
+        "moreThanOne": "More than one integration matches",
+        "notSupported": "Not supported in Onyx"
       },
       "localServer": "Local server",
       "noUrl": "No server URL",
@@ -18138,6 +18449,10 @@
       "errors": {
         "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
         "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
+      },
+      "empty": {
+        "title": "No marketplaces yet",
+        "description": "Add a GitHub repository to get its plugins."
       }
     },
     "bulk": {
@@ -18250,7 +18565,8 @@
         "upload": "Upload skill",
         "create": "Create a skill",
         "uploadPlugin": "Upload plugin",
-        "marketplace": "Add marketplace"
+        "marketplace": "Add marketplace",
+        "manageMarketplaces": "Manage marketplaces"
       },
       "groups": {
         "mine": "Created by you",
@@ -18292,6 +18608,11 @@
         "title": "No matching skills",
         "description": "Try another search or filter.",
         "clear": "Show all skills"
+      },
+      "sort": {
+        "label": "Sort",
+        "updated": "Recently updated",
+        "name": "Name"
       }
     },
     "integrations": {
@@ -18315,6 +18636,11 @@
       "noMatches": {
         "title": "No matching integrations",
         "description": "Try another search."
+      },
+      "add": {
+        "label": "Add",
+        "integration": "Add integration",
+        "manage": "Manage integrations"
       }
     },
     "plugins": {
@@ -18332,7 +18658,9 @@
         "clear": "Show all plugins"
       },
       "integrations": "{available} of {needed} integrations available",
-      "nameHeld": "Off: {names} uses the same skill name"
+      "nameHeld": "Off: {names} uses the same skill name",
+      "contents": "{skills, plural, one {1 skill} other {{skills} skills}}",
+      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. Each skill that you add comes in its own plugin."
     },
     "skillPage": {
       "title": "Skill",
@@ -18398,7 +18726,8 @@
       "loadFailed": "This integration is not available to you.",
       "tabs": {
         "overview": "Overview",
-        "actions": "Actions"
+        "actions": "Actions",
+        "configuration": "Configuration"
       },
       "overview": {
         "type": "Type",
@@ -18410,7 +18739,13 @@
           "title": "Use This Integration",
           "description": "When this is on, you can use it in chats and in Craft.",
           "required": "Your admin made this integration required. You cannot turn it off."
-        }
+        },
+        "description": "Description",
+        "noDescription": "No description.",
+        "status": "Status"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {Your connection to this integration. Only you use it.} shared {The account of this integration. Everyone with access uses it.} other {This integration needs no sign-in.}}"
       }
     },
     "pluginPage": {
@@ -18619,5 +18954,18 @@
         "label": "Leadership"
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch needs more resources",
+    "disk": "OpenSearch disk usage is at least 85% on a data node. Indexing may stop as the disk fills.",
+    "jvmMemory": "OpenSearch JVM memory usage stayed above 85% across repeated checks. Search and indexing may fail.",
+    "vectorMemory": "OpenSearch vector memory is nearly full or has reached its limit. Search and indexing may fail.",
+    "contact": "Contact your system administrator or the Onyx team at [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "The latest check is unavailable. This warning reflects the last successful check; recovery has not been confirmed.",
+    "dismiss": "Dismiss",
+    "diskTitle": "Disk space",
+    "jvmMemoryTitle": "JVM memory",
+    "vectorMemoryTitle": "Vector memory",
+    "viewDetails": "View details"
   }
 }

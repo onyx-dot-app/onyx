@@ -324,10 +324,50 @@
       "details": "التفاصيل",
       "serverDetails": "تفاصيل الخادم",
       "authentication": "المصادقة",
-      "back": "رجوع"
+      "back": "رجوع",
+      "checking": "جارٍ التحقق من الخادم…",
+      "continue": "متابعة"
     },
     "policyEditor": {
       "toolCount": "{count, plural, zero {لا توجد إجراءات} one {إجراء واحد} two {إجراءان} few {# إجراءات} many {# إجراءً} other {# إجراء}}"
+    },
+    "addOpenApiModal": {
+      "cancelButton": {
+        "label": "إلغاء"
+      },
+      "copyButton": {
+        "tooltip": "نسخ التعريف"
+      },
+      "definition": {
+        "invalidJson": "تنسيق JSON غير صالح",
+        "placeholder": "أدخل مخطط OpenAPI هنا",
+        "required": "تعريف مخطط OpenAPI مطلوب",
+        "subDescription": "حدد مخطط OpenAPI يعرّف واجهات API التي تريد إتاحتها ضمن هذه الإضافة. يمكنك استخدام العناصر النائبة `CHAT_SESSION_ID` و`MESSAGE_ID` و`USER_ID` و`USER_EMAIL` في أي مكان في المخطط (مثل عنوان الخادم أو المسارات أو القيم الافتراضية للمعاملات) وستُستبدل بقيم الطلب الحالي وقت الاستدعاء. اعرف المزيد عن [إضافات OpenAPI]({docsUrl}).",
+        "title": "تعريف مخطط OpenAPI"
+      },
+      "empty": {
+        "description": "قدّم مخطط OpenAPI لمعاينة الإجراءات هنا.",
+        "title": "لم يتم العثور على إجراءات"
+      },
+      "formatButton": {
+        "tooltip": "تنسيق التعريف"
+      },
+      "method": {
+        "noSummary": "لا يوجد ملخص"
+      },
+      "toasts": {
+        "actionCreated": "تم إنشاء إضافة OpenAPI بنجاح",
+        "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI"
+      },
+      "humanDescription": {
+        "title": "وصف للبشر",
+        "hint": "يظهر في بطاقة الإضافة وتفاصيلها."
+      },
+      "agentDescription": {
+        "title": "وصف للوكلاء",
+        "hint": "يحرر info.description في مخطط OpenAPI.",
+        "disabled": "أدخل مخططًا صالحًا لتحرير هذا الحقل."
+      }
     }
   },
   "admin": {
@@ -598,6 +638,9 @@
         },
         "federatedSlack": {
           "description": "البحث في Slack عند الاستعلام"
+        },
+        "jiraServiceManagement": {
+          "description": "تذاكر مكتب الخدمة في Jira Service Management"
         }
       }
     },
@@ -3984,6 +4027,45 @@
               "none": "لا يوجد موصل آخر على تسجيل التطبيق هذا يحدد RU في الدقيقة.",
               "hidden": "{count, plural, one {موصل واحد لا يمكنك رؤيته} two {موصلان لا يمكنك رؤيتهما} few {# موصلات لا يمكنك رؤيتها} many {# موصلًا لا يمكنك رؤيته} other {# موصل لا يمكنك رؤيته}}",
               "unavailable": "تعذر تحميل RU في الدقيقة للموصلات الأخرى على تسجيل التطبيق هذا."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تكوين موصل Jira Service Management",
+          "subtext": "حدّد محتوى Jira Service Management المراد فهرسته. يمكنك فهرسة كل تذكرة أو قصر الفهرسة على مشروع محدد أو استعلام JQL.",
+          "fields": {
+            "jira_base_url": {
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "project": {
+                  "label": "المشروع"
+                },
+                "jql": {
+                  "label": "استعلام JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "فهرسة كل تذكرة مكتب خدمة يمكن للحساب قراءتها",
+              "description": "يفهرس Onyx تذاكر مكتب الخدمة التي يمكن للحساب المحدد قراءتها. لفهرسة التذاكر من أنواع المشاريع الأخرى، اختر علامة تبويب أخرى."
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع محدد لفهرسته (على سبيل المثال، 'IT')."
+            },
+            "jql_query": {
+              "label": "استعلام JQL",
+              "description": "استعلام JQL مخصص لتصفية تذاكر Jira Service Management.\n\nمهم: لا تُدرج أي عوامل تصفية زمنية في استعلام JQL لأن ذلك سيتعارض مع منطق الموصل. كما يُرجى عدم تضمين جمل ORDER BY.\n\nراجع [وثائق JQL من Atlassian](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) لمزيد من التفاصيل حول الصياغة."
+            },
+            "comment_email_blacklist": {
+              "label": "القائمة السوداء لبريد التعليقات",
+              "description": "يفيد ذلك عمومًا لتجاهل حسابات الروبوتات. أضف عناوين البريد الإلكتروني للمستخدمين التي لا ينبغي فهرسة تعليقاتهم."
             }
           }
         }
@@ -9147,7 +9229,9 @@
         }
       },
       "toasts": {
-        "unexpectedError": "حدث خطأ غير متوقع."
+        "unexpectedError": "حدث خطأ غير متوقع.",
+        "connected": "تم الاتصال بـ {label}",
+        "disconnected": "تم قطع الاتصال بـ {label}"
       },
       "providers": {
         "braintrust": {
@@ -10449,7 +10533,11 @@
         "createFailed": "تعذّرت إضافة التكامل.",
         "preset": {
           "loadFailed": "تعذّر تحميل القوالب الجاهزة.",
-          "credentialRequired": "أدخل هذه القيمة."
+          "credentialRequired": "أدخل هذه القيمة.",
+          "title": "البدء من",
+          "instructions": "تعليمات الإعداد",
+          "description": "يملأ الإعداد المسبق اسم تطبيق مدمج وطريقة تسجيل الدخول إليه. اختر تطبيق مخصص لإعداد أي خدمة HTTP.",
+          "custom": "تطبيق مخصص"
         },
         "name": {
           "title": "الاسم",
@@ -10467,13 +10555,15 @@
             "oauth": "يستخدم الخادم تسجيل الدخول عبر OAuth.",
             "authUnknown": "يتطلب الخادم تسجيل الدخول. أضف ترويسة مفتاح API أو OAuth.",
             "unreachable": "لا يستطيع Onyx الوصول إلى هذا الخادم. تحقق من عنوان URL.",
-            "forbidden": "لا يمكن إلا للمسؤول فحص هذا الخادم قبل إضافته. لا يزال بإمكانك إضافته."
+            "forbidden": "لا يمكن إلا للمسؤول فحص هذا الخادم قبل إضافته. لا يزال بإمكانك إضافته.",
+            "checking": "جارٍ فحص الخادم…"
           },
           "transport": {
             "title": "النقل",
             "streamableHttp": "HTTP قابل للبث",
             "sse": "أحداث مُرسلة من الخادم (SSE)"
-          }
+          },
+          "suggested": "خوادم مقترحة"
         },
         "owner": {
           "title": "المالك",
@@ -10592,6 +10682,53 @@
           "copyCallbackUrl": "نسخ عنوان URL لرد الاتصال",
           "scopes": "النطاقات",
           "open": "فتح {name}"
+        },
+        "title": "إضافة تكامل",
+        "description": "اربط خدمة ليتمكن الأشخاص من استخدامها في المحادثة وCraft.",
+        "openapi": {
+          "title": "إضافة تطبيق OpenAPI",
+          "schema": {
+            "title": "المخطط",
+            "description": "أضف مخطط OpenAPI الذي يحدد الإجراءات.",
+            "added": "{count, plural, zero {لا يحتوي المخطط على مسارات.} one {يحتوي المخطط على مسار واحد.} two {يحتوي المخطط على مسارين.} few {يحتوي المخطط على # مسارات.} many {يحتوي المخطط على # مسارًا.} other {يحتوي المخطط على # مسار.}}",
+            "required": "أضف مخططًا.",
+            "add": "إضافة مخطط",
+            "edit": "تعديل المخطط"
+          }
+        },
+        "descriptionField": {
+          "title": "الوصف",
+          "placeholder": "أدخل وصفًا"
+        },
+        "custom": {
+          "patterns": {
+            "title": "أنماط URL",
+            "description": "ضع نمط URL واحدًا في كل سطر، مثل https://api.example.com/*.",
+            "placeholder": "https://api.example.com/*",
+            "required": "أضف نمط URL واحدًا على الأقل."
+          }
+        },
+        "type": {
+          "title": "النوع",
+          "description": "اختر طريقة اتصال Onyx بالخدمة.",
+          "mcp_server": {
+            "title": "خادم MCP",
+            "description": "اربط خادم MCP بعيدًا عبر عنوان URL الخاص به."
+          },
+          "openapi": {
+            "title": "تطبيق OpenAPI",
+            "description": "أنشئ إجراءات من مخطط OpenAPI."
+          },
+          "app": {
+            "title": "تطبيق",
+            "description": "ابدأ من إعداد مسبق، مثل GitHub، أو من تطبيق مخصص."
+          }
+        },
+        "details": {
+          "title": "التفاصيل"
+        },
+        "signIn": {
+          "title": "تسجيل الدخول"
         }
       },
       "filters": {
@@ -10730,14 +10867,20 @@
           "urlPatternApp": {
             "title": "يستخدم هذا التطبيق أنماط URL",
             "description": "لم يعد Onyx يضيف تطبيقات أنماط URL. لاستبدال هذا التطبيق، أضف تطبيق REST مخصصًا لكل مضيف تصل إليه أنماط URL الخاصة به. نفّذ خطوات الإعداد الواردة في الوثائق قبل حذف هذا التطبيق."
-          }
+          },
+          "type": "النوع"
         },
         "configuration": {
           "readOnly": "يمكنك رؤية هذا التكامل، لكن لا يمكنك تغييره.",
           "connection": {
             "title": "الاتصال",
             "serverUrl": "عنوان URL للخادم",
-            "serverUrlError": "أدخل عنوان URL صالحًا للخادم."
+            "serverUrlError": "أدخل عنوان URL صالحًا للخادم.",
+            "urlPatterns": "أنماط URL",
+            "urlPatternsDescription": "ضع نمط URL واحدًا في كل سطر.",
+            "schema": "مخطط OpenAPI",
+            "schemaDescription": "يزامن Onyx الإجراءات مرة أخرى عند حفظ مخطط معدّل.",
+            "schemaError": "أدخل المخطط ككائن JSON."
           },
           "signIn": {
             "title": "تسجيل الدخول",
@@ -10841,7 +10984,8 @@
         "healthGreen": "أخضر: جميع نُسخ الأجزاء مُعيّنة.",
         "healthYellow": "أصفر: بعض أجزاء النُسخ المتماثلة غير مُعيّنة. يعمل البحث، لكن فقدان عقدة بيانات قد يفقد البيانات.",
         "healthYellowSingleNode": "أصفر: تحتاج نسخ النسخ المتماثلة إلى عقدة بيانات ثانية. هذا طبيعي في مجموعة بها عقدة بيانات واحدة، والبحث يعمل.",
-        "healthRed": "أحمر: بعض الأجزاء الأساسية غير مُعيّنة، لذلك لا يمكن البحث في جزء من الفهرس."
+        "healthRed": "أحمر: بعض الأجزاء الأساسية غير مُعيّنة، لذلك لا يمكن البحث في جزء من الفهرس.",
+        "health": "الحالة {health}"
       },
       "searches": {
         "loadTitle": "حمل البحث",
@@ -11988,6 +12132,36 @@
       },
       "shareMenu": {
         "label": "مشاركة أو تصدير"
+      },
+      "delete": {
+        "label": "حذف"
+      },
+      "deleteModal": {
+        "description": "هل أنت متأكد من رغبتك في حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
+        "submitButton": {
+          "label": "حذف"
+        },
+        "title": "حذف المحادثة"
+      },
+      "exportAs": {
+        "label": "تصدير باسم…"
+      },
+      "exportFailed": {
+        "message": "فشل تصدير المحادثة. يرجى المحاولة مرة أخرى."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "نص عادي"
+      },
+      "fullWidth": {
+        "ariaLabel": "تبديل عرض المحادثة الكامل",
+        "fitTooltip": "ملاءمة العرض",
+        "fullTooltip": "عرض كامل"
+      },
+      "moveToProject": {
+        "label": "نقل إلى مشروع"
       }
     },
     "banners": {
@@ -12172,7 +12346,11 @@
           "waitHint": "انتظر حتى ينتهي الرد.",
           "ctrlKey": "Ctrl"
         },
-        "questionAttachmentsHint": "لا يمكن أن تتضمن الإجابات عن أسئلة الوكيل ملفات. أزل الملفات للإجابة."
+        "questionAttachmentsHint": "لا يمكن أن تتضمن الإجابات عن أسئلة الوكيل ملفات. أزل الملفات للإجابة.",
+        "subagentsWorking": "الوكلاء الفرعيون يعملون",
+        "stopSubagentsButton": {
+          "label": "إيقاف الوكلاء الفرعيين"
+        }
       },
       "baseInputBar": {
         "input": {
@@ -12318,7 +12496,8 @@
         "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
         "loadFailed": "تعذر تحميل الرسائل المعلقة.",
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
-        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار."
+        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
+        "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
       },
       "pendingToolApproval": {
         "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
@@ -12373,6 +12552,10 @@
         "wrapButton": {
           "unwrapLabel": "إلغاء الالتفاف",
           "wrapLabel": "التفاف"
+        },
+        "copyButton": {
+          "copiedLabel": "تم النسخ!",
+          "label": "نسخ"
         }
       },
       "customTool": {
@@ -12420,6 +12603,9 @@
         },
         "callFailedStatus": {
           "text": "فشل {toolName}"
+        },
+        "waitingIndicator": {
+          "text": "في انتظار الاستجابة..."
         }
       },
       "customToolAuth": {
@@ -12708,6 +12894,9 @@
           },
           "browsing": {
             "label": "جارٍ تصفح صفحات الويب..."
+          },
+          "thinkingEllipsis": {
+            "label": "جارٍ التفكير..."
           }
         },
         "internalSearch": {
@@ -12806,6 +12995,9 @@
             "message": "الرسالة {id}",
             "allRetrieved": "كل ما تم استرجاعه",
             "nextPage": "الصفحة التالية"
+          },
+          "listed": {
+            "label": "{count, plural, one {مستند واحد مُدرج} other {# مستندات مُدرجة}}"
           }
         },
         "python": {
@@ -12826,6 +13018,12 @@
           },
           "ran": {
             "status": "تم تشغيل Python"
+          },
+          "runningCode": {
+            "label": "جارٍ تشغيل الكود..."
+          },
+          "writingCode": {
+            "status": "جارٍ كتابة الكود..."
           }
         },
         "reasoning": {
@@ -12992,6 +13190,9 @@
             "history": {
               "status": "{phase, select, running {{history, select, back {جارٍ الرجوع} forward {جارٍ التقدم} other {جارٍ إعادة تحميل الصفحة}}} failed {تعذّر تغيير الصفحة} canceled {أُلغي} other {{history, select, back {تم الرجوع} forward {تم التقدم} other {أُعيد تحميل الصفحة}}}}"
             }
+          },
+          "output": {
+            "title": "المخرجات"
           }
         },
         "skill": {
@@ -13040,6 +13241,12 @@
           },
           "activity": "يستخدم {tool}",
           "open": "فتح {name}"
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {تم توليد صورة واحدة} other {تم توليد # صور}}"
+        },
+        "interruptedThinking": {
+          "label": "تفكير متقطع"
         }
       },
       "toolApproval": {
@@ -13097,6 +13304,17 @@
         },
         "stopButton": {
           "tooltip": "إيقاف التشغيل"
+        }
+      },
+      "agentResults": {
+        "received": "تم استلام نتائج الوكيل الفرعي"
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "إلغاء"
+        },
+        "submitButton": {
+          "label": "إرسال"
         }
       }
     },
@@ -13386,6 +13604,33 @@
         },
         "error": {
           "description": "تعذّر تحميل ملف PDF."
+        }
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# كلمة} other {# كلمات}}"
+      },
+      "pptx": {
+        "controls": {
+          "label": "عناصر التحكم في العرض التقديمي"
+        },
+        "thumbnails": {
+          "toggle": "إظهار الصور المصغّرة للشرائح أو إخفاؤها",
+          "resize": "تغيير حجم الصور المصغّرة للشرائح"
+        },
+        "slides": {
+          "label": "الشرائح"
+        },
+        "previous": {
+          "label": "الشريحة السابقة"
+        },
+        "next": {
+          "label": "الشريحة التالية"
+        },
+        "slide": {
+          "counter": "الشريحة {current} من {total}"
+        },
+        "empty": {
+          "label": "لا توجد شرائح في هذا العرض التقديمي"
         }
       }
     },
@@ -13780,6 +14025,10 @@
       },
       "browserTab": {
         "label": "المتصفح"
+      },
+      "downloadButton": {
+        "label": "تنزيل",
+        "tooltip": "تنزيل الملف"
       }
     },
     "export": {
@@ -14624,6 +14873,11 @@
       },
       "submitError": "تعذر إرسال قرارك. حاول مرة أخرى.",
       "actionWithDescription": "{action}: {description}"
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "اب"
+      }
     }
   },
   "craft": {
@@ -16284,7 +16538,13 @@
           "mismatch": "كلمتا المرور غير متطابقتين",
           "newRequired": "كلمة المرور الجديدة مطلوبة"
         }
-      }
+      },
+      "email": {
+        "anonymousFallback": "مجهول",
+        "description": "عنوان البريد الإلكتروني لحسابك.",
+        "title": "البريد الإلكتروني"
+      },
+      "title": "الحسابات"
     },
     "apiKeys": {
       "createModal": {
@@ -16424,7 +16684,8 @@
       "dynamicConversations": {
         "title": "المحادثات الديناميكية",
         "description": "تحميل الرسائل وإلغاء تحميلها أثناء التمرير في المحادثات الطويلة. يحسّن هذا الأداء، لكن قارئات الشاشة لا يمكنها الوصول إلى الرسائل التي أُلغي تحميلها. أوقف هذا الخيار لإبقاء جميع الرسائل محمّلة."
-      }
+      },
+      "title": "المظهر"
     },
     "chats": {
       "autoScroll": {
@@ -16466,7 +16727,8 @@
         "description": "اختر إجراء Enter وزر الإرسال أثناء الرد. يضيف Ctrl/Cmd+Enter دائمًا رسالة متابعة إلى قائمة الانتظار.",
         "afterStep": "بعد الخطوة الحالية",
         "interrupt": "مقاطعة العمل الحالي"
-      }
+      },
+      "title": "المحادثات"
     },
     "connectors": {
       "connectButton": "ربط",
@@ -16480,12 +16742,14 @@
       },
       "status": {
         "connected": "متصل",
-        "notConnected": "غير متصل"
+        "notConnected": "غير متصل",
+        "paused": "متوقف مؤقتًا"
       },
       "title": "الموصلات",
       "toasts": {
         "disconnectFailed": "فشل قطع الاتصال"
-      }
+      },
+      "emptyMessage": "لا توجد موصلات معدّة لمؤسستك."
     },
     "dangerZone": {
       "deleteAllChats": {
@@ -16546,7 +16810,8 @@
       },
       "toasts": {
         "updateFailed": "فشل تحديث تفضيل اللغة"
-      }
+      },
+      "title": "اللغة"
     },
     "layout": {
       "header": {
@@ -16570,6 +16835,18 @@
         },
         "thirdPartyAccess": {
           "label": "وصول الجهات الخارجية"
+        },
+        "accountsAccess": {
+          "label": "الحسابات والوصول"
+        },
+        "connectors": {
+          "label": "الموصلات"
+        },
+        "general": {
+          "label": "عام"
+        },
+        "llmGateway": {
+          "label": "بوابة LLM"
         }
       }
     },
@@ -16714,7 +16991,8 @@
       "toggle": {
         "description": "فعّل الاختصارات لإدراج المطالبات الشائعة بسرعة.",
         "title": "استخدام اختصارات المطالبات"
-      }
+      },
+      "title": "اختصارات المطالبات"
     },
     "usage": {
       "budget": {
@@ -16774,6 +17052,9 @@
       "usageThisPeriod": {
         "description": "أُنفق {amount}",
         "title": "الاستخدام في هذه الفترة"
+      },
+      "header": {
+        "title": "الاستخدام"
       }
     },
     "voice": {
@@ -17160,6 +17441,18 @@
         "toggleSidebar": {
           "label": "إظهار الشريط الجانبي أو إخفاؤه"
         }
+      },
+      "createNamedProject": {
+        "label": "إنشاء مشروع جديد \"<name>{projectName}</name>\""
+      },
+      "newProject": {
+        "label": "مشروع جديد"
+      },
+      "noMoreResults": {
+        "text": "لا توجد نتائج أخرى"
+      },
+      "projectsFilter": {
+        "label": "المشاريع"
       }
     },
     "notifications": {
@@ -17512,6 +17805,10 @@
         "upload": {
           "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",
           "title": "رفع مهارة"
+        },
+        "marketplace": {
+          "title": "إضافة سوق",
+          "description": "أضف من مستودع وزامن إضافاته."
         }
       },
       "empty": {
@@ -17757,7 +18054,11 @@
           "author": "المؤلف",
           "homepage": "الصفحة الرئيسية",
           "license": "الترخيص",
-          "notUsed": "غير مستخدم في Onyx"
+          "notUsed": "غير مستخدم في Onyx",
+          "noDescription": "لا يوجد وصف.",
+          "skills": "المهارات",
+          "description": "الوصف",
+          "marketplace": "سوق {name}، {scope, select, personal {شخصي} other {الشركة}} ({repository})"
         },
         "skills": {
           "off": "متوقفة",
@@ -17771,7 +18072,11 @@
           "title": "استخدام هذا المكوّن الإضافي",
           "label": "استخدام {name}",
           "required": "جعل المسؤول هذا المكوّن الإضافي مطلوبًا. لا يمكنك إيقافه.",
-          "unavailable": "لا يمكنك تشغيل هذا المكوّن الإضافي أو إيقافه."
+          "unavailable": "لا يمكنك تشغيل هذا المكوّن الإضافي أو إيقافه.",
+          "failed": "تعذّر تغيير المكوّن الإضافي.",
+          "on": "قيد التشغيل. يمكن للوكيل الافتراضي استخدام هذا المكوّن الإضافي.",
+          "off": "متوقف. شغّله ليتمكن الوكيل الافتراضي من استخدام هذا المكوّن الإضافي.",
+          "nameHeld": "متوقف لأن {names} يستخدم اسم المهارة نفسه. شغّل هذا المكوّن الإضافي لاستخدامه بدلًا منه."
         },
         "actions": {
           "share": "مشاركة",
@@ -17791,7 +18096,8 @@
           "title": "يديره سوق {name}",
           "description": "يزامن Onyx هذه الإضافة من {repository}. غيّرها في GitHub، ثم زامن السوق.",
           "open": "فتح الأسواق"
-        }
+        },
+        "syncedFrom": "تمت المزامنة من {repository}"
       },
       "connection": {
         "askAdmin": "اسأل المسؤول",
@@ -17837,7 +18143,9 @@
         "retry": {
           "label": "حاول مرة أخرى"
         },
-        "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء."
+        "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء.",
+        "title": "السماح دائمًا",
+        "readOnlyTitle": "الإجراءات"
       },
       "oauthCallback": {
         "processing": "جارٍ ربط حسابك…",
@@ -17900,7 +18208,10 @@
         "not_supported": "غير مدعوم"
       },
       "note": {
-        "askAdmin": "اسأل مسؤولًا"
+        "askAdmin": "اسأل مسؤولًا",
+        "turnedOff": "أوقفه المسؤول لديك",
+        "moreThanOne": "يتطابق أكثر من تكامل واحد",
+        "notSupported": "غير مدعوم في Onyx"
       },
       "localServer": "خادم محلي",
       "noUrl": "لا يوجد عنوان URL للخادم",
@@ -18138,6 +18449,10 @@
       "errors": {
         "rateLimited": "تم بلوغ حد واجهة GitHub البرمجية. حاول مرة أخرى بعد بضع دقائق. اربط GitHub لرفع الحد.",
         "rateLimitedUntil": "تم بلوغ حد واجهة GitHub البرمجية. تتم إعادة التعيين في {time}. اربط GitHub لرفع الحد."
+      },
+      "empty": {
+        "title": "لا توجد أسواق بعد",
+        "description": "أضف مستودع GitHub للحصول على إضافاته."
       }
     },
     "bulk": {
@@ -18250,7 +18565,8 @@
         "upload": "رفع مهارة",
         "create": "إنشاء مهارة",
         "uploadPlugin": "رفع إضافة",
-        "marketplace": "إضافة سوق"
+        "marketplace": "إضافة سوق",
+        "manageMarketplaces": "إدارة الأسواق"
       },
       "groups": {
         "mine": "أنشأتها أنت",
@@ -18292,6 +18608,11 @@
         "title": "لا توجد مهارات مطابقة",
         "description": "جرّب بحثًا أو عامل تصفية آخر.",
         "clear": "عرض كل المهارات"
+      },
+      "sort": {
+        "label": "ترتيب",
+        "updated": "المحدّثة مؤخرًا",
+        "name": "الاسم"
       }
     },
     "integrations": {
@@ -18315,6 +18636,11 @@
       "noMatches": {
         "title": "لا توجد عمليات تكامل مطابقة",
         "description": "جرّب بحثًا آخر."
+      },
+      "add": {
+        "label": "إضافة",
+        "integration": "إضافة تكامل",
+        "manage": "إدارة عمليات التكامل"
       }
     },
     "plugins": {
@@ -18332,7 +18658,9 @@
         "clear": "عرض كل الإضافات"
       },
       "integrations": "{available} من {needed} من التكاملات متاحة",
-      "nameHeld": "متوقف: يستخدم {names} اسم المهارة نفسه"
+      "nameHeld": "متوقف: يستخدم {names} اسم المهارة نفسه",
+      "contents": "{skills, plural, one {مهارة واحدة} other {{skills} مهارات}}",
+      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تأتي كل مهارة تضيفها في إضافة خاصة بها."
     },
     "skillPage": {
       "title": "مهارة",
@@ -18398,7 +18726,8 @@
       "loadFailed": "هذا التكامل غير متاح لك.",
       "tabs": {
         "overview": "نظرة عامة",
-        "actions": "الإجراءات"
+        "actions": "الإجراءات",
+        "configuration": "الإعداد"
       },
       "overview": {
         "type": "النوع",
@@ -18410,7 +18739,13 @@
           "title": "استخدام هذا التكامل",
           "description": "عند تفعيل هذا، يمكنك استخدامه في المحادثات وفي Craft.",
           "required": "جعل المسؤول هذا التكامل مطلوبًا. لا يمكنك إيقاف تشغيله."
-        }
+        },
+        "description": "الوصف",
+        "noDescription": "لا يوجد وصف.",
+        "status": "الحالة"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {اتصالك بهذا التكامل. أنت فقط من يستخدمه.} shared {حساب هذا التكامل. يستخدمه كل من لديه صلاحية الوصول.} other {لا يحتاج هذا التكامل إلى تسجيل الدخول.}}"
       }
     },
     "pluginPage": {
@@ -18619,5 +18954,18 @@
         "label": "القيادة"
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "يحتاج OpenSearch إلى موارد إضافية",
+    "disk": "يبلغ استخدام قرص OpenSearch ‏85% على الأقل على إحدى عقد البيانات. قد تتوقف الفهرسة عند امتلاء القرص.",
+    "jvmMemory": "ظل استخدام ذاكرة JVM في OpenSearch أعلى من 85% عبر فحوصات متكررة. قد يفشل البحث والفهرسة.",
+    "vectorMemory": "ذاكرة المتجهات في OpenSearch شبه ممتلئة أو وصلت إلى حدها. قد يفشل البحث والفهرسة.",
+    "contact": "تواصل مع مسؤول النظام أو فريق Onyx على [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "الفحص الأخير غير متاح. يعكس هذا التحذير آخر فحص ناجح؛ لم يتم تأكيد التعافي.",
+    "dismiss": "إغلاق",
+    "diskTitle": "مساحة القرص",
+    "jvmMemoryTitle": "ذاكرة JVM",
+    "vectorMemoryTitle": "ذاكرة المتجهات",
+    "viewDetails": "عرض التفاصيل"
   }
 }
