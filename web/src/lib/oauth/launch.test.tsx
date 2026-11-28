@@ -337,3 +337,13 @@ test("desktop state helpers", () => {
     "/mcp/oauth/callback?code=x&state=abc.desktop"
   );
 });
+
+test("the desktop return URL uses a path that older desktop builds accept", () => {
+  const callback = new URL(
+    "https://onyx.example/integrations/oauth/callback?code=x&state=abc.desktop"
+  );
+  const returnUrl = new URL(desktopOAuthReturnUrl(callback));
+  expect(returnUrl.searchParams.get("path")).toBe(
+    "/mcp/oauth/callback?code=x&state=abc.desktop"
+  );
+});
