@@ -5,9 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from onyx.db.enums import AccountType
+from onyx.db.enums import AccountType, UsageType, WindowAnchor
 from onyx.db.models import User
-from onyx.db.usage import UsageType
 from onyx.server.tenant_usage_limits import TenantUsageLimitKeys
 
 DataT = TypeVar("DataT")
@@ -105,19 +104,10 @@ class LimitScope(str, Enum):
 class LimitMeasure(str, Enum):
     """Where a limit's current usage is read from."""
 
-    # A tenant_usage column. Checked before the call, added after it, so one
+    # A tenant_usage_counter row. Checked before the call, added after it, so one
     # call can pass the line; callers that need an exact stop pass the amount
     # they are about to use as ``pending_amount``.
     COUNTER = "counter"
-
-
-class WindowAnchor(str, Enum):
-    """Where a limit's windows are counted from."""
-
-    # A grid shared by every tenant, from ``onyx.db.usage.get_current_window_start``:
-    # with the default USAGE_LIMIT_WINDOW_SECONDS, the calendar week from Monday
-    # 00:00 UTC. Not counted from the tenant's sign-up.
-    CALENDAR = "calendar"
 
 
 class LimitWindow(BaseModel):
@@ -153,7 +143,12 @@ class Allowance(BaseModel):
     limit: int
     scope: LimitScope = LimitScope.TENANT
     measure: LimitMeasure = LimitMeasure.COUNTER
-    # Required for a COUNTER; it names the tenant_usage row the count lives in.
+    # Required for a COUNTER; it picks the period the count is added up in.
+    # Changing a counter's window starts its count again from 0: the new
+    # period is a new row, and the usage counted under the old window is not
+    # carried over (its rows stay, unread). Changing only ``limit`` keeps the
+    # count. To carry usage over, add the old total into the new period's row
+    # when the change ships, or read the old window's usage alongside the new.
     window: LimitWindow | None = None
     # Field of cloud's override record that replaces ``limit`` for one tenant.
     override_field: TenantUsageLimitKeys | None = None

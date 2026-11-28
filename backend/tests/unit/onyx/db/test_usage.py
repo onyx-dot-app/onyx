@@ -1,335 +1,116 @@
-"""Unit tests for tenant usage tracking and limits."""
+"""Unit tests for the usage periods and the limit check in onyx.db.usage. The
+reads and adds against Postgres are in
+tests/external_dependency_unit/db/test_tenant_usage_counter.py."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
+from pydantic import ValidationError
 
+from onyx.db.enums import WindowAnchor
 from onyx.db.usage import (
-    TenantUsageStats,
     UsageLimitExceededError,
+    UsagePeriod,
     UsageType,
     check_usage_limit,
-    get_current_window_start,
-    get_or_create_tenant_usage,
-    get_tenant_usage_stats,
-    increment_usage,
+    current_calendar_period,
 )
 
-
-class TestGetCurrentWindowStart:
-    """Tests for get_current_window_start function."""
-
-    def test_weekly_window_aligns_to_monday(self) -> None:
-        """Test that weekly windows align to Monday 00:00 UTC."""
-        with patch("onyx.db.usage.USAGE_LIMIT_WINDOW_SECONDS", 604_800):
-            window_start = get_current_window_start()
-
-            # Window should be on a Monday
-            assert window_start.weekday() == 0  # Monday
-
-            # Window should be at midnight UTC
-            assert window_start.hour == 0
-            assert window_start.minute == 0
-            assert window_start.second == 0
-            assert window_start.microsecond == 0
-
-    def test_window_start_is_timezone_aware(self) -> None:
-        """Test that window start is timezone-aware."""
-        window_start = get_current_window_start()
-        assert window_start.tzinfo is not None
+_MONDAY = datetime(2026, 11, 23, tzinfo=timezone.utc)
 
 
-class TestGetOrCreateTenantUsage:
-    """Tests for get_or_create_tenant_usage function."""
+class TestCurrentCalendarPeriod:
+    @pytest.fixture(autouse=True)
+    def _weekly(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The default period, whatever the test environment sets."""
+        monkeypatch.setattr("onyx.db.usage.USAGE_LIMIT_WINDOW_SECONDS", 604800)
 
-    def test_creates_or_gets_usage_record(self) -> None:
-        """Test that get_or_create returns a usage record via atomic upsert."""
-        mock_usage = MagicMock()
-        mock_usage.llm_cost_cents = 0.0
-        mock_usage.chunks_indexed = 0
+    def test_is_the_week_from_monday(self) -> None:
+        wednesday = datetime(2026, 11, 25, 14, 7, tzinfo=timezone.utc)
+        assert current_calendar_period(wednesday) == UsagePeriod(
+            anchor=WindowAnchor.CALENDAR,
+            start=_MONDAY,
+            end=_MONDAY + timedelta(days=7),
+        )
 
-        mock_session = MagicMock()
-        # The new implementation uses INSERT ... ON CONFLICT with RETURNING
-        # which calls execute().scalar_one()
-        mock_session.execute.return_value.scalar_one.return_value = mock_usage
-
-        window_start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        usage = get_or_create_tenant_usage(mock_session, window_start)
-
-        # Verify execute was called (with the INSERT ... ON CONFLICT statement)
-        mock_session.execute.assert_called_once()
-        mock_session.flush.assert_called_once()
-        assert usage == mock_usage
-
-    def test_returns_usage_record_from_atomic_upsert(self) -> None:
-        """Test that the returned usage record comes from the atomic upsert."""
-        mock_usage = MagicMock()
-        mock_usage.llm_cost_cents = 100.0
-        mock_usage.chunks_indexed = 500
-
-        mock_session = MagicMock()
-        mock_session.execute.return_value.scalar_one.return_value = mock_usage
-
-        window_start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        usage = get_or_create_tenant_usage(mock_session, window_start)
-
-        assert usage == mock_usage
-        assert usage.llm_cost_cents == 100.0
-        assert usage.chunks_indexed == 500
+    def test_the_end_instant_starts_the_next_period(self) -> None:
+        next_monday = _MONDAY + timedelta(days=7)
+        assert current_calendar_period(next_monday).start == next_monday
 
 
-class TestGetTenantUsageStats:
-    """Tests for get_tenant_usage_stats function."""
+class TestUsagePeriod:
+    def test_a_period_may_never_end(self) -> None:
+        assert UsagePeriod(anchor=WindowAnchor.CALENDAR, start=_MONDAY).end is None
 
-    def test_returns_zero_stats_when_no_record_exists(self) -> None:
-        """Test that zero stats are returned when no usage record exists."""
-        mock_session = MagicMock()
-        mock_session.execute.return_value.scalar_one_or_none.return_value = None
+    @pytest.mark.parametrize("end", [_MONDAY, _MONDAY - timedelta(seconds=1)])
+    def test_must_end_after_it_starts(self, end: datetime) -> None:
+        with pytest.raises(ValidationError):
+            UsagePeriod(anchor=WindowAnchor.CALENDAR, start=_MONDAY, end=end)
 
-        window_start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        stats = get_tenant_usage_stats(mock_session, window_start)
+    def test_compares_real_instants_across_a_clock_change(self) -> None:
+        """On 1 Nov 2026 New York clocks go back: 01:45 before the change is
+        earlier than 01:15 after it."""
+        new_york = ZoneInfo("America/New_York")
+        before = datetime(2026, 11, 1, 1, 45, tzinfo=new_york)
+        after = datetime(2026, 11, 1, 1, 15, tzinfo=new_york, fold=1)
 
-        assert stats.llm_cost_cents == 0.0
-        assert stats.chunks_indexed == 0
-        assert stats.api_calls == 0
-        assert stats.non_streaming_api_calls == 0
+        period = UsagePeriod(anchor=WindowAnchor.CALENDAR, start=before, end=after)
+        assert period.start == datetime(2026, 11, 1, 5, 45, tzinfo=timezone.utc)
+        assert period.end == datetime(2026, 11, 1, 6, 15, tzinfo=timezone.utc)
+        with pytest.raises(ValidationError):
+            UsagePeriod(anchor=WindowAnchor.CALENDAR, start=after, end=before)
 
-    def test_returns_actual_stats_when_record_exists(self) -> None:
-        """Test that actual stats are returned when usage record exists."""
-        mock_usage = MagicMock()
-        mock_usage.window_start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        mock_usage.llm_cost_cents = 250.5
-        mock_usage.chunks_indexed = 1000
-        mock_usage.api_calls = 50
-        mock_usage.non_streaming_api_calls = 10
-
-        mock_session = MagicMock()
-        mock_session.execute.return_value.scalar_one_or_none.return_value = mock_usage
-
-        stats = get_tenant_usage_stats(mock_session)
-
-        assert stats.llm_cost_cents == 250.5
-        assert stats.chunks_indexed == 1000
-        assert stats.api_calls == 50
-        assert stats.non_streaming_api_calls == 10
-
-
-class TestIncrementUsage:
-    """Tests for increment_usage function."""
-
-    def test_increments_llm_cost(self) -> None:
-        """Test that LLM cost is incremented correctly."""
-        mock_usage = MagicMock()
-        mock_usage.llm_cost_cents = 100.0
-
-        mock_session = MagicMock()
-
-        with patch("onyx.db.usage.get_or_create_tenant_usage", return_value=mock_usage):
-            increment_usage(mock_session, UsageType.LLM_COST, 50.5)
-
-        assert mock_usage.llm_cost_cents == 150.5
-        mock_session.flush.assert_called_once()
-
-    def test_increments_chunks_indexed(self) -> None:
-        """Test that chunks indexed is incremented correctly."""
-        mock_usage = MagicMock()
-        mock_usage.chunks_indexed = 500
-
-        mock_session = MagicMock()
-
-        with patch("onyx.db.usage.get_or_create_tenant_usage", return_value=mock_usage):
-            increment_usage(mock_session, UsageType.CHUNKS_INDEXED, 100)
-
-        assert mock_usage.chunks_indexed == 600
-
-    def test_increments_api_calls(self) -> None:
-        """Test that API calls is incremented correctly."""
-        mock_usage = MagicMock()
-        mock_usage.api_calls = 10
-
-        mock_session = MagicMock()
-
-        with patch("onyx.db.usage.get_or_create_tenant_usage", return_value=mock_usage):
-            increment_usage(mock_session, UsageType.API_CALLS, 1)
-
-        assert mock_usage.api_calls == 11
-
-    def test_increments_non_streaming_calls(self) -> None:
-        """Test that non-streaming API calls is incremented correctly."""
-        mock_usage = MagicMock()
-        mock_usage.non_streaming_api_calls = 5
-
-        mock_session = MagicMock()
-
-        with patch("onyx.db.usage.get_or_create_tenant_usage", return_value=mock_usage):
-            increment_usage(mock_session, UsageType.NON_STREAMING_API_CALLS, 1)
-
-        assert mock_usage.non_streaming_api_calls == 6
+    def test_needs_timezone_aware_times(self) -> None:
+        with pytest.raises(ValidationError):
+            UsagePeriod(
+                anchor=WindowAnchor.CALENDAR,
+                start=datetime(2026, 11, 23),  # noqa: DTZ001 - the case under test
+            )
 
 
 class TestCheckUsageLimit:
-    """Tests for check_usage_limit function."""
-
-    def test_passes_when_under_limit(self) -> None:
-        """Test that check passes when usage is under the limit."""
-        mock_session = MagicMock()
-
-        mock_stats = TenantUsageStats(
-            window_start=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            llm_cost_cents=100.0,
-            chunks_indexed=500,
-            api_calls=10,
-            non_streaming_api_calls=5,
-        )
-
-        with patch("onyx.db.usage.get_tenant_usage_stats", return_value=mock_stats):
-            # Should not raise
-            check_usage_limit(
-                mock_session,
-                UsageType.LLM_COST,
-                limit=500,
-                pending_amount=0,
-            )
-
-    def test_passes_when_exactly_at_limit(self) -> None:
-        """Test that check passes when usage is exactly at the limit."""
-        mock_session = MagicMock()
-
-        mock_stats = TenantUsageStats(
-            window_start=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            llm_cost_cents=500.0,
-            chunks_indexed=500,
-            api_calls=10,
-            non_streaming_api_calls=5,
-        )
-
-        with patch("onyx.db.usage.get_tenant_usage_stats", return_value=mock_stats):
-            # Should not raise - at limit but not over
-            check_usage_limit(
-                mock_session,
-                UsageType.LLM_COST,
-                limit=500,
-                pending_amount=0,
-            )
-
-    def test_fails_when_over_limit(self) -> None:
-        """Test that check fails when usage exceeds the limit."""
-        mock_session = MagicMock()
-
-        mock_stats = TenantUsageStats(
-            window_start=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            llm_cost_cents=501.0,
-            chunks_indexed=500,
-            api_calls=10,
-            non_streaming_api_calls=5,
-        )
-
-        with patch("onyx.db.usage.get_tenant_usage_stats", return_value=mock_stats):
-            with pytest.raises(UsageLimitExceededError) as exc_info:
+    @pytest.mark.parametrize(
+        ("used", "pending", "over"),
+        [(50.0, 0, False), (100.0, 0, False), (100.5, 0, True), (99.0, 2, True)],
+    )
+    def test_raises_only_when_over(self, used: float, pending: int, over: bool) -> None:
+        with patch("onyx.db.usage.get_usage", return_value=used):
+            if over:
+                with pytest.raises(UsageLimitExceededError) as exc_info:
+                    check_usage_limit(
+                        MagicMock(), UsageType.LLM_COST, 100, pending_amount=pending
+                    )
+                assert exc_info.value.current == used + pending
+                assert exc_info.value.limit == 100.0
+            else:
                 check_usage_limit(
-                    mock_session,
-                    UsageType.LLM_COST,
-                    limit=500,
-                    pending_amount=0,
+                    MagicMock(), UsageType.LLM_COST, 100, pending_amount=pending
                 )
 
-            assert exc_info.value.usage_type == UsageType.LLM_COST
-            assert exc_info.value.current == 501.0
-            assert exc_info.value.limit == 500.0
+    def test_reads_the_given_period(self) -> None:
+        period = UsagePeriod(anchor=WindowAnchor.CALENDAR, start=_MONDAY)
+        with patch("onyx.db.usage.get_usage", return_value=0.0) as get_usage:
+            check_usage_limit(MagicMock(), UsageType.API_CALLS, 10, period=period)
+        assert get_usage.call_args.args[2] == period
 
-    def test_fails_when_pending_would_exceed_limit(self) -> None:
-        """Test that check fails when pending amount would exceed the limit."""
-        mock_session = MagicMock()
-
-        mock_stats = TenantUsageStats(
-            window_start=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            llm_cost_cents=400.0,
-            chunks_indexed=500,
-            api_calls=10,
-            non_streaming_api_calls=5,
+    def test_defaults_to_the_current_calendar_period(self) -> None:
+        current = UsagePeriod(
+            anchor=WindowAnchor.CALENDAR,
+            start=_MONDAY,
+            end=_MONDAY + timedelta(days=7),
         )
-
-        with patch("onyx.db.usage.get_tenant_usage_stats", return_value=mock_stats):
-            with pytest.raises(UsageLimitExceededError) as exc_info:
-                check_usage_limit(
-                    mock_session,
-                    UsageType.LLM_COST,
-                    limit=500,
-                    pending_amount=150,  # 400 + 150 = 550 > 500
-                )
-
-            assert exc_info.value.current == 550.0  # includes pending
-
-    def test_checks_chunks_indexed_limit(self) -> None:
-        """Test that chunk indexing limit is checked correctly."""
-        mock_session = MagicMock()
-
-        mock_stats = TenantUsageStats(
-            window_start=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            llm_cost_cents=100.0,
-            chunks_indexed=10001,
-            api_calls=10,
-            non_streaming_api_calls=5,
-        )
-
-        with patch("onyx.db.usage.get_tenant_usage_stats", return_value=mock_stats):
-            with pytest.raises(UsageLimitExceededError) as exc_info:
-                check_usage_limit(
-                    mock_session,
-                    UsageType.CHUNKS_INDEXED,
-                    limit=10000,
-                    pending_amount=0,
-                )
-
-            assert exc_info.value.usage_type == UsageType.CHUNKS_INDEXED
-
-
-class TestUsageLimitExceededError:
-    """Tests for UsageLimitExceededError exception."""
-
-    def test_error_message_format(self) -> None:
-        """Test that error message is formatted correctly."""
-        error = UsageLimitExceededError(
-            usage_type=UsageType.LLM_COST,
-            current=150.5,
-            limit=100.0,
-        )
-
-        assert "llm_cost_cents" in str(error)
-        assert "150.5" in str(error)
-        assert "100" in str(error)
-
-    def test_stores_values(self) -> None:
-        """Test that error stores all values correctly."""
-        error = UsageLimitExceededError(
-            usage_type=UsageType.API_CALLS,
-            current=1001,
-            limit=1000,
-        )
-
-        assert error.usage_type == UsageType.API_CALLS
-        assert error.current == 1001
-        assert error.limit == 1000
-
-
-class TestWindowRollover:
-    """Tests for window rollover behavior."""
-
-    def test_new_window_resets_usage(self) -> None:
-        """Test that a new window has zero usage even if previous window had usage."""
-        mock_session = MagicMock()
-        mock_session.execute.return_value.scalar_one_or_none.return_value = None
-
-        # Get stats for a new window (no existing record)
-        with patch(
-            "onyx.db.usage.get_current_window_start",
-            return_value=datetime(2024, 1, 8, tzinfo=timezone.utc),
+        with (
+            patch("onyx.db.usage.current_calendar_period", return_value=current),
+            patch("onyx.db.usage.get_usage", return_value=0.0) as get_usage,
         ):
-            stats = get_tenant_usage_stats(mock_session)
+            check_usage_limit(MagicMock(), UsageType.API_CALLS, 10)
+        assert get_usage.call_args.args[2] == current
 
-        # New window should have zero usage
-        assert stats.llm_cost_cents == 0.0
-        assert stats.chunks_indexed == 0
-        assert stats.api_calls == 0
-        assert stats.non_streaming_api_calls == 0
+
+def test_error_message_names_the_usage_type_and_values() -> None:
+    error = UsageLimitExceededError(UsageType.LLM_COST, current=150.5, limit=100.0)
+    assert "llm_cost_cents" in str(error)
+    assert "150.5" in str(error)
+    assert error.usage_type == UsageType.LLM_COST

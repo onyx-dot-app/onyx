@@ -63,13 +63,27 @@ link here from **Known issues** and do not restate the entry.
 
 - **What:** A counter allowance on any window other than `CALENDAR_WEEK` is
   refused at import and again before each check.
-- **Why:** An allowance declares its window, but the `tenant_usage` counter
-  does not read it yet: the check and the increment always use the current
-  calendar-week row. Another window would be counted in the wrong row with no
+- **Why:** An allowance declares its window, but the usage counter does not
+  read it yet: the check and the increment always use the current
+  calendar-week period. Another window would be counted in the wrong row with no
   error.
 - **Where:** `backend/onyx/server/usage_limits.py:_counter_window_supported`,
   called by `_require_supported_windows` and `_measure_and_check`.
 - **Ends when:** The next PR of the ENG-4479 stack passes the allowance's
-  `window_start` to `check_usage_limit` and `increment_usage`. Then the guard
+  period to `check_usage_limit` and `increment_usage`. Then the guard
   checks only that the counter supports the window's anchor.
 - **Owner:** Subash-Mohan. **Added:** 2026-11-25.
+
+## The old `tenant_usage` table is kept for one release
+
+- **What:** `tenant_usage` and its model `TenantUsage` stay, but the current
+  code does not read or write them. `tenant_usage_counter` replaced them.
+- **Why:** Migration `db8e1bfe4729` copies the usage into the new table. During
+  the rolling deploy, old pods still read and write `tenant_usage`. If it is
+  gone, they fail every request that checks a usage limit, such as chat on
+  Onyx's keys, API key calls and indexing batches. Rolling back is not
+  supported.
+- **Where:** `backend/onyx/db/models.py:TenantUsage`.
+- **Ends when:** The release after the one that adds `tenant_usage_counter`
+  drops the table and the model.
+- **Owner:** Subash-Mohan. **Added:** 2026-11-27.

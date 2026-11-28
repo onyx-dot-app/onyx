@@ -1,14 +1,20 @@
-"""Database interactions for tenant usage tracking (cloud usage limits)."""
+"""Database interactions for tenant usage tracking (cloud usage limits).
 
-from datetime import datetime, timezone
-from enum import Enum
+Usage is stored in ``tenant_usage_counter``: one row per usage type per
+period. A period has a start, an end (or none, for a period that never ends)
+and what it follows (``WindowAnchor``). The check and the add for one limit
+must use the same period, or they read and write different rows.
+"""
 
-from pydantic import BaseModel
-from sqlalchemy import select
+from datetime import datetime, timedelta, timezone
+
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from onyx.db.models import TenantUsage
+from onyx.db.enums import UsageType, WindowAnchor
+from onyx.db.models import TENANT_USAGE_COUNTER_PERIOD_END_KEY, TenantUsageCounter
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
@@ -16,23 +22,32 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 logger = setup_logger()
 
 
-class UsageType(str, Enum):
-    """Types of usage that can be tracked and limited."""
+class UsagePeriod(BaseModel):
+    """One period that usage is added up in."""
 
-    LLM_COST = "llm_cost_cents"
-    CHUNKS_INDEXED = "chunks_indexed"
-    API_CALLS = "api_calls"
-    NON_STREAMING_API_CALLS = "non_streaming_api_calls"
+    model_config = ConfigDict(frozen=True)
 
+    anchor: WindowAnchor
+    start: datetime
+    # None means the period never ends.
+    end: datetime | None = None
 
-class TenantUsageStats(BaseModel):
-    """Current usage statistics for a tenant."""
+    @field_validator("start", "end")
+    @classmethod
+    def _in_utc(cls, value: datetime | None) -> datetime | None:
+        """Times are kept in UTC, so comparing them compares real instants,
+        also across a daylight saving change."""
+        if value is None:
+            return None
+        if value.utcoffset() is None:
+            raise ValueError("A usage period needs timezone-aware times")
+        return value.astimezone(timezone.utc)
 
-    window_start: datetime
-    llm_cost_cents: float
-    chunks_indexed: int
-    api_calls: int
-    non_streaming_api_calls: int
+    @model_validator(mode="after")
+    def _ends_after_start(self) -> "UsagePeriod":
+        if self.end is not None and self.end <= self.start:
+            raise ValueError("A usage period must end after it starts")
+        return self
 
 
 class UsageLimitExceededError(Exception):
@@ -47,105 +62,82 @@ class UsageLimitExceededError(Exception):
         )
 
 
-def get_current_window_start() -> datetime:
-    """Start of the current usage window (USAGE_LIMIT_WINDOW_SECONDS grid)."""
-    return get_window_start(datetime.now(timezone.utc), USAGE_LIMIT_WINDOW_SECONDS)
-
-
-def get_or_create_tenant_usage(
-    db_session: Session,
-    window_start: datetime | None = None,
-) -> TenantUsage:
-    """
-    Get or create the usage record for the current window.
-
-    Uses INSERT ... ON CONFLICT DO UPDATE to atomically create or get the record,
-    avoiding TOCTOU race conditions where two concurrent requests could both
-    attempt to insert a new record.
-    """
-    if window_start is None:
-        window_start = get_current_window_start()
-
-    # Atomic upsert: insert if not exists, or update a field to itself if exists
-    # This ensures we always get back a valid row without race conditions
-    stmt = (
-        pg_insert(TenantUsage)
-        .values(
-            window_start=window_start,
-            llm_cost_cents=0.0,
-            chunks_indexed=0,
-            api_calls=0,
-            non_streaming_api_calls=0,
-        )
-        .on_conflict_do_update(
-            index_elements=["window_start"],
-            # No-op update: just set a field to its current value
-            # This ensures the row is returned even on conflict
-            set_={"llm_cost_cents": TenantUsage.llm_cost_cents},
-        )
-        .returning(TenantUsage)
+def current_calendar_period(now: datetime | None = None) -> UsagePeriod:
+    """The calendar period that contains ``now``. With the default
+    USAGE_LIMIT_WINDOW_SECONDS, the week from Monday 00:00 UTC."""
+    start = get_window_start(
+        now or datetime.now(timezone.utc), USAGE_LIMIT_WINDOW_SECONDS
+    )
+    return UsagePeriod(
+        anchor=WindowAnchor.CALENDAR,
+        start=start,
+        end=start + timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS),
     )
 
-    result = db_session.execute(stmt).scalar_one()
-    db_session.flush()
 
-    return result
-
-
-def get_tenant_usage_stats(
-    db_session: Session,
-    window_start: datetime | None = None,
-) -> TenantUsageStats:
-    """Get the current usage statistics for the tenant (read-only, no lock)."""
-    if window_start is None:
-        window_start = get_current_window_start()
-
-    usage = db_session.execute(
-        select(TenantUsage).where(TenantUsage.window_start == window_start)
-    ).scalar_one_or_none()
-
-    if usage is None:
-        # No usage recorded yet for this window
-        return TenantUsageStats(
-            window_start=window_start,
-            llm_cost_cents=0.0,
-            chunks_indexed=0,
-            api_calls=0,
-            non_streaming_api_calls=0,
-        )
-
-    return TenantUsageStats(
-        window_start=usage.window_start,
-        llm_cost_cents=usage.llm_cost_cents,
-        chunks_indexed=usage.chunks_indexed,
-        api_calls=usage.api_calls,
-        non_streaming_api_calls=usage.non_streaming_api_calls,
+def _in_period(period: UsagePeriod) -> list[ColumnElement[bool]]:
+    end_matches = (
+        TenantUsageCounter.window_end.is_(None)
+        if period.end is None
+        else TenantUsageCounter.window_end == period.end
     )
+    return [
+        TenantUsageCounter.window_anchor == period.anchor,
+        TenantUsageCounter.window_start == period.start,
+        end_matches,
+    ]
+
+
+def get_usage(db_session: Session, usage_type: UsageType, period: UsagePeriod) -> float:
+    """How much of ``usage_type`` the tenant used in ``period``. 0 if nothing
+    was added yet."""
+    amount = db_session.scalar(
+        select(TenantUsageCounter.amount).where(
+            TenantUsageCounter.usage_type == usage_type, *_in_period(period)
+        )
+    )
+    return amount or 0.0
 
 
 def increment_usage(
     db_session: Session,
     usage_type: UsageType,
     amount: float | int,
+    period: UsagePeriod | None = None,
 ) -> None:
     """
-    Atomically increment a usage counter.
+    Add ``amount`` to the tenant's usage of ``usage_type`` in ``period`` (the
+    current calendar period if not given).
 
-    Uses row-level locking to prevent race conditions.
-    The caller should handle the transaction commit.
+    One statement: it creates the row or adds to it, so concurrent adds are
+    never lost. The caller commits.
     """
-    usage = get_or_create_tenant_usage(db_session)
+    if period is None:
+        period = current_calendar_period()
 
-    if usage_type == UsageType.LLM_COST:
-        usage.llm_cost_cents += float(amount)
-    elif usage_type == UsageType.CHUNKS_INDEXED:
-        usage.chunks_indexed += int(amount)
-    elif usage_type == UsageType.API_CALLS:
-        usage.api_calls += int(amount)
-    elif usage_type == UsageType.NON_STREAMING_API_CALLS:
-        usage.non_streaming_api_calls += int(amount)
-
-    db_session.flush()
+    stmt = pg_insert(TenantUsageCounter).values(
+        usage_type=usage_type,
+        window_anchor=period.anchor,
+        window_start=period.start,
+        window_end=period.end,
+        amount=amount,
+    )
+    # If this usage type already has a row for this period, add to its amount
+    # instead of inserting a second row. The four elements must match the
+    # unique index on the table.
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[
+            TenantUsageCounter.usage_type,
+            TenantUsageCounter.window_anchor,
+            TenantUsageCounter.window_start,
+            TENANT_USAGE_COUNTER_PERIOD_END_KEY,
+        ],
+        set_={
+            "amount": TenantUsageCounter.amount + stmt.excluded.amount,
+            "updated_at": func.now(),
+        },
+    )
+    db_session.execute(stmt)
 
 
 def check_usage_limit(
@@ -153,33 +145,16 @@ def check_usage_limit(
     usage_type: UsageType,
     limit: float | int,
     pending_amount: float | int = 0,
+    period: UsagePeriod | None = None,
 ) -> None:
     """
-    Check if the current usage plus pending amount would exceed the limit.
-
-    Args:
-        db_session: Database session
-        usage_type: Type of usage to check
-        limit: The maximum allowed usage
-        pending_amount: Amount about to be used (to check before committing)
-
-    Raises:
-        UsageLimitExceededError: If usage would exceed the limit
+    Raise ``UsageLimitExceededError`` if the usage in ``period`` (the current
+    calendar period if not given) plus ``pending_amount`` is over ``limit``.
     """
-    stats = get_tenant_usage_stats(db_session)
+    if period is None:
+        period = current_calendar_period()
 
-    current_value: float
-    if usage_type == UsageType.LLM_COST:
-        current_value = stats.llm_cost_cents
-    elif usage_type == UsageType.CHUNKS_INDEXED:
-        current_value = float(stats.chunks_indexed)
-    elif usage_type == UsageType.API_CALLS:
-        current_value = float(stats.api_calls)
-    elif usage_type == UsageType.NON_STREAMING_API_CALLS:
-        current_value = float(stats.non_streaming_api_calls)
-    else:
-        current_value = 0.0
-
+    current_value = get_usage(db_session, usage_type, period)
     if current_value + pending_amount > limit:
         raise UsageLimitExceededError(
             usage_type=usage_type,

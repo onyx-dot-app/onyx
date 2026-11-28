@@ -1207,3 +1207,20 @@ class ConnectorEventStatus(str, PyEnum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class UsageType(str, PyEnum):
+    """What a tenant usage limit counts."""
+
+    LLM_COST = "llm_cost_cents"
+    CHUNKS_INDEXED = "chunks_indexed"
+    API_CALLS = "api_calls"
+    NON_STREAMING_API_CALLS = "non_streaming_api_calls"
+
+
+class WindowAnchor(str, PyEnum):
+    """What a limit's periods follow."""
+
+    # The same periods for every tenant. With the default
+    # USAGE_LIMIT_WINDOW_SECONDS, the calendar week from Monday 00:00 UTC.
+    CALENDAR = "calendar"

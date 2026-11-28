@@ -64,8 +64,9 @@ log export, query history and the EE workspace analytics.
 
 Neighbours own:
 - [[rate-and-usage-limits]]: budgets that read the `user_usage` ledger, and
-  the cloud `tenant_usage` counters. Both tables say "usage". They are
-  unrelated: this component writes `user_usage`, and limits own `tenant_usage`.
+  the cloud `tenant_usage_counter` counters. Both tables say "usage". They are
+  unrelated: this component writes `user_usage`, and limits own
+  `tenant_usage_counter`.
 - [[fleet-telemetry]]: events sent to the Onyx fleet service. Cloud PostHog
   product analytics (`mt_cloud_telemetry`) stay with this component. They
   run only under `MULTI_TENANT`.

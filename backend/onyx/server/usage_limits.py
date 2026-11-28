@@ -73,7 +73,7 @@ for key in [
         _ONYX_MANAGED_API_KEYS.add(key)
 
 
-# Cloud's window today: the tenant_usage grid.
+# Cloud's window today: the calendar week.
 CALENDAR_WEEK = LimitWindow(
     anchor=WindowAnchor.CALENDAR, length_seconds=USAGE_LIMIT_WINDOW_SECONDS
 )
@@ -136,11 +136,11 @@ CLOUD_PAID = LimitPolicy(
 # An allowance declares its window, but check_usage_limit and increment_usage in
 # onyx.db.usage do not read it yet: they always use the current CALENDAR_WEEK row.
 # A counter on any other window would be counted in the wrong row with no error,
-# so it is refused here until the counter takes its window_start from the
+# so it is refused here until the counter takes its period from the
 # allowance on both the check and the increment side.
 def _counter_window_supported(allowance: Allowance) -> bool:
-    """The tenant_usage counter reads and writes only its own grid, so a
-    counter allowance must use exactly that window."""
+    """The usage counter reads and writes only the current calendar period,
+    so a counter allowance must use exactly that window."""
     return (
         allowance.measure != LimitMeasure.COUNTER or allowance.window == CALENDAR_WEEK
     )
@@ -152,7 +152,7 @@ def _require_supported_windows(*policies: LimitPolicy) -> None:
             if not _counter_window_supported(allowance):
                 raise ValueError(
                     f"{policy.name.value}: {usage_type.value} uses a window the "
-                    "tenant_usage counter cannot read or write"
+                    "usage counter cannot read or write"
                 )
 
 
@@ -308,7 +308,7 @@ def _measure_and_check(
     # Temporary, see _counter_window_supported.
     if not _counter_window_supported(allowance):
         raise RuntimeError(
-            f"Bug: {usage_type.value} uses a window the tenant_usage counter cannot read"
+            f"Bug: {usage_type.value} uses a window the usage counter cannot read"
         )
     if allowance.measure == LimitMeasure.COUNTER:
         check_usage_limit(
