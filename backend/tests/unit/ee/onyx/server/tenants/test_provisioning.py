@@ -200,7 +200,7 @@ def test_vertex_is_skipped_only_on_the_playground(
     ("playground", "rule_default", "recommended", "expected"),
     [
         (True, "rule-pick", "recommended-pick", "rule-pick"),
-        (True, None, "recommended-pick", "recommended-pick"),
+        (True, None, "recommended-pick", None),  # never a default the rule refuses
         (False, "rule-pick", "recommended-pick", "recommended-pick"),
         (False, None, None, "fallback"),
     ],
@@ -209,7 +209,7 @@ def test_default_model_name(
     playground: bool,
     rule_default: str | None,
     recommended: str | None,
-    expected: str,
+    expected: str | None,
 ) -> None:
     from ee.onyx.server.tenants.provisioning import _default_model_name
 
@@ -273,3 +273,48 @@ def test_playground_shows_only_the_openrouter_models_its_price_rule_offers() -> 
         "cheap": True,
         "pricey": False,
     }
+
+
+def test_a_provider_without_a_playground_default_does_not_set_the_chat_default() -> (
+    None
+):
+    """Anthropic has no model within the default price limit, so OpenRouter,
+    created after it, sets the tenant's chat default."""
+    with (
+        patch(f"{_PROVISIONING_MODULE}.IS_PLAYGROUND", True),
+        patch(f"{_PROVISIONING_MODULE}.AUTO_PROVISION_DEFAULT_LLM_PROVIDERS", True),
+        patch(f"{_PROVISIONING_MODULE}.OPENAI_DEFAULT_API_KEY", None),
+        patch(f"{_PROVISIONING_MODULE}.ANTHROPIC_DEFAULT_API_KEY", "anthropic-key"),
+        patch(f"{_PROVISIONING_MODULE}.OPENROUTER_DEFAULT_API_KEY", "openrouter-key"),
+        patch(f"{_PROVISIONING_MODULE}.COHERE_DEFAULT_API_KEY", None),
+        patch(f"{_PROVISIONING_MODULE}.VERTEXAI_DEFAULT_CREDENTIALS", None),
+        patch(
+            f"{_PROVISIONING_MODULE}.get_recommendations",
+            return_value=_patch_recommendations(),
+        ),
+        patch(
+            f"{_PROVISIONING_MODULE}.playground_default_model",
+            side_effect=lambda provider, _rec: (
+                None if provider == "anthropic" else "glm-cheap"
+            ),
+        ),
+        patch(
+            f"{_PROVISIONING_MODULE}.fetch_existing_llm_provider_by_name_and_type",
+            return_value=None,
+        ),
+        patch(f"{_PROVISIONING_MODULE}.upsert_llm_provider") as upsert_mock,
+        patch(f"{_PROVISIONING_MODULE}.update_default_model") as default_mock,
+        patch(
+            f"{_PROVISIONING_MODULE}._build_model_configuration_upsert_requests",
+            return_value=[],
+        ),
+    ):
+        upsert_mock.side_effect = [MagicMock(id=1), MagicMock(id=2)]
+        from ee.onyx.server.tenants.provisioning import configure_default_api_keys
+
+        configure_default_api_keys(MagicMock())
+
+    assert upsert_mock.call_count == 2
+    default_mock.assert_called_once()
+    assert default_mock.call_args.kwargs["provider_id"] == 2
+    assert default_mock.call_args.kwargs["model"] == "glm-cheap"

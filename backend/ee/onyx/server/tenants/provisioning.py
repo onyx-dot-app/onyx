@@ -473,13 +473,19 @@ def _build_model_configuration_upsert_requests(
 
 def _default_model_name(
     provider_name: str, recommendations: LLMRecommendations, fallback: str
-) -> str:
+) -> str | None:
     """The model a new tenant's provider defaults to: the recommended default,
-    or on the playground the default its price rule picks."""
+    or on the playground the default its price rule picks. None on the
+    playground when the rule offers no default for this provider: the
+    uncapped recommendation would be refused by the playground's model check."""
     if IS_PLAYGROUND:
         playground_default = playground_default_model(provider_name, recommendations)
-        if playground_default is not None:
-            return playground_default
+        if playground_default is None:
+            logger.warning(
+                "No playground default model for %s within the price limit",
+                provider_name,
+            )
+        return playground_default
     default_model = recommendations.get_default_model(provider_name)
     if default_model is None:
         logger.error("No default model found for %s in recommendations", provider_name)
@@ -494,7 +500,9 @@ def configure_default_api_keys(db_session: Session) -> None:
 
     has_set_default_provider = False
 
-    def _upsert(request: LLMProviderUpsertRequest, default_model: str) -> None:
+    def _upsert(request: LLMProviderUpsertRequest, default_model: str | None) -> None:
+        """Create or update the provider. The first provider with a default
+        model sets the tenant's chat default."""
         nonlocal has_set_default_provider
         try:
             if request.name:
@@ -510,7 +518,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             if existing:
                 request.id = existing.id
             provider = upsert_llm_provider(request, db_session)
-            if not has_set_default_provider:
+            if not has_set_default_provider and default_model is not None:
                 update_default_model(
                     provider_id=provider.id,
                     model=default_model,
