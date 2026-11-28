@@ -332,18 +332,40 @@ def lock_plugin(plugin_id: UUID, db_session: Session) -> Plugin | None:
 
 def _manifest_matches(
     current: PluginVersion,
-    content: PluginVersionContent,
+    file_manifest: list[PluginFileEntry] | None,
+    bundle_sha256: str | None,
     previous_manifest: Callable[[], list[PluginFileEntry]] | None,
 ) -> bool:
-    if content.file_manifest is None:
-        return current.bundle_sha256 == content.bundle_sha256
-    new_manifest = [entry.model_dump() for entry in content.file_manifest]
+    if file_manifest is None:
+        return current.bundle_sha256 == bundle_sha256
+    new_manifest = [entry.model_dump() for entry in file_manifest]
     if current.file_manifest is not None:
         return current.file_manifest == new_manifest
     # A version from before file lists were written has none.
     if previous_manifest is not None:
         return [entry.model_dump() for entry in previous_manifest()] == new_manifest
-    return current.bundle_sha256 == content.bundle_sha256
+    return current.bundle_sha256 == bundle_sha256
+
+
+def unchanged_current_version(
+    plugin_id: UUID,
+    file_manifest: list[PluginFileEntry],
+    bundle_sha256: str,
+    db_session: Session,
+) -> PluginVersion | None:
+    """The current version of the plugin when it has these files, so that
+    ``add_plugin_version__no_commit`` with ``skip_if_unchanged`` adds no
+    version for them."""
+    current = db_session.scalars(
+        select(PluginVersion)
+        .join(Plugin, Plugin.current_version_id == PluginVersion.id)
+        .where(Plugin.id == plugin_id)
+    ).one_or_none()
+    if current is None or not _manifest_matches(
+        current, file_manifest, bundle_sha256, None
+    ):
+        return None
+    return current
 
 
 def check_base_version(plugin: Plugin, base_version_id: UUID | None) -> None:
@@ -407,7 +429,9 @@ def add_plugin_version__no_commit(
                 f"'{current_names[0]}'",
             )
 
-    if skip_if_unchanged and _manifest_matches(current, content, previous_manifest):
+    if skip_if_unchanged and _manifest_matches(
+        current, content.file_manifest, content.bundle_sha256, previous_manifest
+    ):
         return None
 
     version = _add_version_rows(

@@ -44,6 +44,9 @@ type UploadStep =
 
 interface UploadPluginModalProps {
   open: boolean;
+  /** Upload a new version of this plugin instead of the plugin that the
+   * manifest name picks. */
+  pluginId?: string;
   onClose: () => void;
   onContinueSkill: (draft: SkillCreationDraft) => void;
   onSaved: (result: PluginUploadResult, needsAttention: boolean) => void;
@@ -105,12 +108,12 @@ function PluginPreview({
         outerPadding={1}
         innerPadding={1}
         title={
-          target.kind === "new_version"
-            ? t("target.newVersion", {
+          target.kind === "new_plugin"
+            ? t("target.newPlugin", { name: name || target.plugin_name })
+            : t(preview.unchanged ? "target.unchanged" : "target.newVersion", {
                 name: target.plugin_name,
                 version: target.version_number,
               })
-            : t("target.newPlugin", { name: name || target.plugin_name })
         }
         bottomChildren={
           showSaveAsNew ? (
@@ -219,6 +222,7 @@ function UploadPluginModalContent({
   onClose,
   onContinueSkill,
   onSaved,
+  pluginId,
   onBusyChange,
 }: Omit<UploadPluginModalProps, "open"> & {
   onBusyChange: (busy: boolean) => void;
@@ -254,10 +258,19 @@ function UploadPluginModalContent({
     setError(null);
     try {
       if ((await pluginUploadKind(bundle)) === "skill") {
+        if (pluginId) {
+          setState({ step: "pick", bundle });
+          setError(t("skillOnly.notAVersion"));
+          return;
+        }
         setState({ step: "skill", bundle });
         return;
       }
-      const preview = await inspectPluginUpload(bundle.file, saveAsNew);
+      const preview = await inspectPluginUpload(
+        bundle.file,
+        saveAsNew,
+        pluginId
+      );
       const { target } = preview;
       setState({
         step: "plugin",
@@ -312,6 +325,7 @@ function UploadPluginModalContent({
       const result = await savePluginUpload(
         step.bundle.file,
         step.saveAsNew,
+        pluginId,
         step.takenNames.length > 0 ? step.name : undefined
       );
       onSaved(
@@ -441,6 +455,7 @@ function UploadPluginModalContent({
 
 export default function UploadPluginModal({
   open,
+  pluginId,
   onClose,
   onContinueSkill,
   onSaved,
@@ -451,6 +466,7 @@ export default function UploadPluginModal({
       <Modal.Content width="md" maxHeight="85dvh">
         {open && (
           <UploadPluginModalContent
+            pluginId={pluginId}
             onClose={onClose}
             onContinueSkill={onContinueSkill}
             onSaved={onSaved}

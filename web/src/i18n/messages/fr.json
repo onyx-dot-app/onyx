@@ -17932,12 +17932,14 @@
       "skillOnly": {
         "title": "Cet import est un skill",
         "description": "Il n'a pas de plugin.json. Continuez pour l'ajouter comme skill.",
-        "continue": "Continuer"
+        "continue": "Continuer",
+        "notAVersion": "Ce fichier est une compétence et n'a pas de plugin.json. Importez un .zip de plugin pour ajouter une nouvelle version."
       },
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "Met à jour {name} vers la version Onyx {version}",
-        "newPlugin": "Nouveau plugin : {name}"
+        "newPlugin": "Nouveau plugin : {name}",
+        "unchanged": "Aucun changement. {name} est déjà à la version Onyx {version}."
       },
       "willBeOff": "Le plugin est enregistré désactivé. {names} a déjà une compétence du même nom.",
       "willClash": "{names} a déjà une compétence du même nom. Une seule d'entre elles peut être activée.",

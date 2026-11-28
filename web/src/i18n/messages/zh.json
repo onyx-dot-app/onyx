@@ -17932,12 +17932,14 @@
       "skillOnly": {
         "title": "此上传是一个技能",
         "description": "它没有 plugin.json。继续以将其添加为技能。",
-        "continue": "继续"
+        "continue": "继续",
+        "notAVersion": "此文件是一个技能，没有 plugin.json。请上传插件 .zip 以添加新版本。"
       },
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "将 {name} 更新为 Onyx 版本 {version}",
-        "newPlugin": "新插件：{name}"
+        "newPlugin": "新插件：{name}",
+        "unchanged": "没有更改。{name} 已是 Onyx 版本 {version}。"
       },
       "willBeOff": "插件将以关闭状态保存。{names} 已有同名技能。",
       "willClash": "{names} 已有同名技能。只能开启其中一个。",

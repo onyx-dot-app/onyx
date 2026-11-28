@@ -70,11 +70,15 @@
 - **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
   ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
   MCP servers the plugin needs with their state for the user, the parts Onyx
-  does not use, and the save target. `POST /skills/plugins` saves it. On the
+  does not use, and the save target, or that the files equal the current
+  version (`db/plugin.py:unchanged_current_version`, the check of a save).
+  `POST /skills/plugins` saves it. On the
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
-  flow. A dropped folder is zipped in the browser when it has SKILL.md or a
+  flow. Upload New Version on a plugin page binds the upload to that plugin
+  (`plugin_id`) and takes plugin zips only: the modal refuses a skill zip, and
+  the server refuses a SKILL.md or a zip with no plugin.json. A dropped folder is zipped in the browser when it has SKILL.md or a
   plugin.json at its top level (`lib/skills/bundleUpload.ts:prepareSkillBundleUpload`
   with `allowPlugin`).
 - **Admins** set the installation policy of a custom skill: available (the user

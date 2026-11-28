@@ -17932,12 +17932,14 @@
       "skillOnly": {
         "title": "Esta subida es un skill",
         "description": "No tiene plugin.json. Continúa para añadirlo como skill.",
-        "continue": "Continuar"
+        "continue": "Continuar",
+        "notAVersion": "Este archivo es una habilidad y no tiene plugin.json. Sube un .zip de plugin para añadir una nueva versión."
       },
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "Actualiza {name} a la versión {version} de Onyx",
-        "newPlugin": "Nuevo plugin: {name}"
+        "newPlugin": "Nuevo plugin: {name}",
+        "unchanged": "Sin cambios. {name} ya está en la versión {version} de Onyx."
       },
       "willBeOff": "El plugin se guarda desactivado. {names} ya tiene una habilidad con el mismo nombre.",
       "willClash": "{names} ya tiene una habilidad con el mismo nombre. Solo una de ellas puede estar activada.",

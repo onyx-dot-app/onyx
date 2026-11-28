@@ -17932,12 +17932,14 @@
       "skillOnly": {
         "title": "Dieser Upload ist ein Skill",
         "description": "Er hat keine plugin.json. Fahren Sie fort, um ihn als Skill hinzuzufügen.",
-        "continue": "Weiter"
+        "continue": "Weiter",
+        "notAVersion": "Diese Datei ist ein Skill und hat keine plugin.json. Laden Sie eine Plugin-.zip hoch, um eine neue Version hinzuzufügen."
       },
       "version": "plugin.json {version}",
       "target": {
         "newVersion": "Aktualisiert {name} auf Onyx-Version {version}",
-        "newPlugin": "Neues Plugin: {name}"
+        "newPlugin": "Neues Plugin: {name}",
+        "unchanged": "Keine Änderungen. {name} ist bereits auf Onyx-Version {version}."
       },
       "willBeOff": "Das Plugin wird deaktiviert gespeichert. {names} hat bereits einen Skill mit demselben Namen.",
       "willClash": "{names} hat bereits einen Skill mit demselben Namen. Nur einer davon kann aktiv sein.",
