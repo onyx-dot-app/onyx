@@ -1,14 +1,18 @@
 """Unit tests for Jira Service Management connector."""
-import sys
+from datetime import datetime, timezone
 import unittest
-from pathlib import Path
 
-PATCH_BACKEND = Path(__file__).resolve().parents[5]
-if str(PATCH_BACKEND) not in sys.path:
-    sys.path.insert(0, str(PATCH_BACKEND))
-
-from onyx.connectors.jira_service_management.client import JSMClient, JSMClientError, normalize_base_url
-from onyx.connectors.jira_service_management.connector import JiraServiceManagementConnector
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import LoadConnector, PollConnector
+from onyx.connectors.jira_service_management.client import (
+    JSMClient,
+    JSMClientError,
+    normalize_base_url,
+)
+from onyx.connectors.jira_service_management.connector import (
+    JiraServiceManagementConnector,
+)
+from onyx.connectors.models import Document, TextSection
 
 
 class TestJSMConnector(unittest.TestCase):
@@ -17,6 +21,12 @@ class TestJSMConnector(unittest.TestCase):
             return 200, {
                 "isLastPage": True,
                 "values": [{"id": "42", "projectKey": "ITSD", "projectName": "IT Service Desk"}],
+            }
+        if "/rest/api/3/issue/ITSD-101" in url:
+            return 200, {
+                "id": "1001",
+                "key": "ITSD-101",
+                "fields": {"updated": "2026-11-20T10:35:00Z"},
             }
         if "/request?" in url:
             return 200, {
@@ -64,9 +74,20 @@ class TestJSMConnector(unittest.TestCase):
         return 404, {"errorMessage": "Not found"}
 
     def test_normalize_base_url_validation(self) -> None:
-        self.assertEqual(normalize_base_url("https://acme.atlassian.net/"), "https://acme.atlassian.net")
+        self.assertEqual(
+            normalize_base_url("https://acme.atlassian.net/"),
+            "https://acme.atlassian.net",
+        )
         with self.assertRaises(ValueError):
             normalize_base_url("ftp://invalid")
+
+    def test_connector_inherits_load_and_poll_interfaces(self) -> None:
+        conn = JiraServiceManagementConnector(
+            jira_base_url="https://acme.atlassian.net",
+            project_key="ITSD",
+        )
+        self.assertIsInstance(conn, LoadConnector)
+        self.assertIsInstance(conn, PollConnector)
 
     def test_resolve_project_and_load_public_comments_only(self) -> None:
         client = JSMClient(
@@ -86,11 +107,18 @@ class TestJSMConnector(unittest.TestCase):
         batches = list(conn.load_from_state())
         self.assertEqual(len(batches), 1)
         doc = batches[0][0]
-        self.assertEqual(doc["semantic_identifier"], "ITSD-101: VPN access broken")
-        self.assertEqual(len(doc["sections"]), 2)
-        self.assertIn("Please reset your MFA token.", doc["sections"][1]["text"])
+        self.assertIsInstance(doc, Document)
+        self.assertEqual(doc.source, DocumentSource.JIRA_SERVICE_MANAGEMENT)
+        self.assertEqual(doc.semantic_identifier, "ITSD-101: VPN access broken")
+        self.assertEqual(len(doc.sections), 2)
+        self.assertIsInstance(doc.sections[1], TextSection)
+        self.assertIn("Please reset your MFA token.", doc.sections[1].text)
+        self.assertEqual(
+            doc.doc_updated_at,
+            datetime(2026, 11, 20, 10, 35, 0, tzinfo=timezone.utc),
+        )
 
-    def test_include_internal_comments_and_time_window_filter(self) -> None:
+    def test_poll_captures_comment_or_edit_after_status_change(self) -> None:
         client = JSMClient(
             base_url="https://acme.atlassian.net",
             bearer_token="pat-123",
@@ -102,10 +130,20 @@ class TestJSMConnector(unittest.TestCase):
             include_internal_comments=True,
         )
         conn.set_client(client)
-        batches = list(conn.load_from_state())
-        self.assertEqual(len(batches[0][0]["sections"]), 3)
 
-        # Poll window after ticket updated_at should return no batches
+        # Status changed at 10:00, but issue was edited at 10:35 and internal comment added at 10:45.
+        # A 10:15 - 11:00 poll window must still include the ticket.
+        start_ts = datetime(2026, 11, 20, 10, 15, 0, tzinfo=timezone.utc).timestamp()
+        end_ts = datetime(2026, 11, 20, 11, 0, 0, tzinfo=timezone.utc).timestamp()
+        batches = list(conn.poll_source(start=start_ts, end=end_ts))
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(len(batches[0][0].sections), 3)
+        self.assertEqual(
+            batches[0][0].doc_updated_at,
+            datetime(2026, 11, 20, 10, 45, 0, tzinfo=timezone.utc),
+        )
+
+        # Window strictly after latest update returns no batches
         future_batches = list(conn.poll_source(start=1_900_000_000.0, end=2_000_000_000.0))
         self.assertEqual(future_batches, [])
 

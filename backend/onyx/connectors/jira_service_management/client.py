@@ -131,6 +131,17 @@ class JSMClient:
                 return str(desk["id"])
         raise JSMClientError(f"Service desk for project '{project_key}' not found.", status_code=404)
 
+    def get_issue_updated_timestamp(self, issue_key: str) -> str:
+        """Fetch the Jira issue's actual last-modified timestamp (fields.updated)."""
+        try:
+            data = self._get_json(
+                f"/rest/api/3/issue/{urllib.parse.quote(issue_key)}",
+                {"fields": "updated"},
+            )
+            return str((data.get("fields") or {}).get("updated") or "")
+        except JSMClientError:
+            return ""
+
     def list_request_comments(
         self,
         issue_key: str,
@@ -200,7 +211,7 @@ class JSMClient:
                 status_obj = raw.get("currentStatus") or {}
                 reporter = raw.get("reporter") or {}
                 created_iso = str((raw.get("createdDate") or {}).get("iso8601") or "")
-                updated_iso = str((status_obj.get("statusDate") or {}).get("iso8601") or created_iso)
+                status_iso = str((status_obj.get("statusDate") or {}).get("iso8601") or "")
                 links = raw.get("_links") or {}
                 web_link = str(links.get("web") or f"{self.base_url}/browse/{issue_key}")
 
@@ -209,6 +220,12 @@ class JSMClient:
                     if (include_comments and issue_key)
                     else []
                 )
+
+                # Resolve true Jira issue modification timestamp (description edits, field updates, comments)
+                issue_updated_iso = self.get_issue_updated_timestamp(issue_key) if issue_key else ""
+                candidates = [ts for ts in (issue_updated_iso, status_iso, created_iso) if ts]
+                candidates.extend(c.created_at for c in comments if c.created_at)
+                updated_iso = max(candidates) if candidates else created_iso
 
                 yield JSMRequest(
                     issue_id=str(raw.get("issueId") or issue_key),

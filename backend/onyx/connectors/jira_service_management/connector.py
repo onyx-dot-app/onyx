@@ -1,48 +1,61 @@
-"""Jira Service Management (JSM) Connector for Onyx (#2281)."""
+"""Jira Service Management (JSM) Connector for Onyx."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Iterator
+from typing import Any
+
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import BasicExpertInfo, Document, TextSection
 
 from .client import JSMClient, JSMClientError, JSMRequest
 
 
-def _parse_iso_ts(value: str) -> float | None:
+def _parse_iso_dt(value: str) -> datetime | None:
     if not value:
         return None
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return dt.timestamp()
+        return dt.astimezone(timezone.utc)
     except ValueError:
         return None
 
 
-def _request_to_document_dict(req: JSMRequest) -> dict[str, Any]:
-    """Build a normalized Onyx-compatible Document payload from a JSM ticket."""
-    sections: list[dict[str, Any]] = []
+def _request_to_document(req: JSMRequest) -> Document:
+    """Convert a JSM service desk request into an Onyx Document model."""
+    sections: list[TextSection] = []
     body_parts = [f"[{req.issue_key}] {req.summary}"]
     if req.status:
         body_parts.append(f"Status: {req.status}")
     if req.description:
         body_parts.append(req.description)
 
-    sections.append({
-        "link": req.web_link,
-        "text": "\n\n".join(body_parts),
-    })
+    sections.append(
+        TextSection(
+            link=req.web_link,
+            text="\n\n".join(body_parts),
+        )
+    )
 
     for comment in req.comments:
         if not comment.body:
             continue
         visibility = "Public" if comment.public else "Internal"
-        sections.append({
-            "link": f"{req.web_link}#comment-{comment.comment_id}",
-            "text": f"Comment ({visibility}) by {comment.author_name}: {comment.body}",
-        })
+        sections.append(
+            TextSection(
+                link=f"{req.web_link}#comment-{comment.comment_id}",
+                text=f"Comment ({visibility}) by {comment.author_name}: {comment.body}",
+            )
+        )
 
-    metadata: dict[str, Any] = {
+    metadata: dict[str, str | list[str]] = {
         "issue_key": req.issue_key,
         "service_desk_id": req.service_desk_id,
         "status": req.status,
@@ -50,17 +63,29 @@ def _request_to_document_dict(req: JSMRequest) -> dict[str, Any]:
     if req.reporter_name:
         metadata["reporter"] = req.reporter_name
 
-    return {
-        "id": req.web_link,
-        "semantic_identifier": f"{req.issue_key}: {req.summary}",
-        "source": "jira_service_management",
-        "sections": sections,
-        "metadata": metadata,
-        "doc_updated_at": req.updated_at or req.created_at,
-    }
+    primary_owners: list[BasicExpertInfo] | None = None
+    if req.reporter_name or req.reporter_email:
+        primary_owners = [
+            BasicExpertInfo(
+                display_name=req.reporter_name or None,
+                email=req.reporter_email or None,
+            )
+        ]
+
+    updated_dt = _parse_iso_dt(req.updated_at or req.created_at)
+
+    return Document(
+        id=req.web_link,
+        sections=sections,
+        source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+        semantic_identifier=f"{req.issue_key}: {req.summary}",
+        metadata=metadata,
+        doc_updated_at=updated_dt,
+        primary_owners=primary_owners,
+    )
 
 
-class JiraServiceManagementConnector:
+class JiraServiceManagementConnector(LoadConnector, PollConnector):
     """Pulls tickets and comments from a specified Jira Service Management project."""
 
     def __init__(
@@ -78,7 +103,7 @@ class JiraServiceManagementConnector:
         self.batch_size = max(1, int(batch_size))
         self._client: JSMClient | None = None
 
-    def load_credentials(self, credentials: dict[str, Any]) -> None:
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._client = JSMClient(
             base_url=self.jira_base_url,
             user_email=credentials.get("jira_user_email"),
@@ -86,6 +111,7 @@ class JiraServiceManagementConnector:
             bearer_token=credentials.get("jira_bearer_token"),
             page_size=self.batch_size,
         )
+        return None
 
     def set_client(self, client: JSMClient) -> None:
         self._client = client
@@ -111,23 +137,26 @@ class JiraServiceManagementConnector:
             if not desks:
                 raise JSMClientError("No accessible Jira Service Management desks found.")
 
-    def load_from_state(self) -> Iterator[list[dict[str, Any]]]:
+    def load_from_state(self) -> GenerateDocumentsOutput:
         return self.poll_source(start=0.0, end=float("inf"))
 
-    def poll_source(self, start: float, end: float) -> Iterator[list[dict[str, Any]]]:
+    def poll_source(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> GenerateDocumentsOutput:
         client = self._require_client()
         desk_id = self._target_desk_id()
-        batch: list[dict[str, Any]] = []
+        batch: list[Document] = []
 
         for req in client.iter_requests(
             service_desk_id=desk_id,
             include_comments=True,
             include_internal_comments=self.include_internal_comments,
         ):
-            updated_ts = _parse_iso_ts(req.updated_at or req.created_at)
+            updated_dt = _parse_iso_dt(req.updated_at or req.created_at)
+            updated_ts = updated_dt.timestamp() if updated_dt is not None else None
             if updated_ts is not None and (updated_ts < start or updated_ts > end):
                 continue
-            batch.append(_request_to_document_dict(req))
+            batch.append(_request_to_document(req))
             if len(batch) >= self.batch_size:
                 yield batch
                 batch = []
