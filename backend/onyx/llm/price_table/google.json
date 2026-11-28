@@ -24,9 +24,9 @@
           }
         ]
       },
-      "family": "gemini-pro",
+      "family": "gemini-deep-research-max",
       "limit": {
-        "context": 131072,
+        "context": 1048576,
         "output": 65536
       },
       "modalities": {
@@ -73,9 +73,9 @@
           }
         ]
       },
-      "family": "gemini-pro",
+      "family": "gemini-deep-research",
       "limit": {
-        "context": 131072,
+        "context": 1048576,
         "output": 65536
       },
       "modalities": {
@@ -138,6 +138,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-10-07",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -171,6 +172,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-17",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -178,14 +180,14 @@
     "gemini-2.5-flash-image": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.075,
+        "cache_read": 0.03,
         "image": 0.039,
         "input": 0.3,
-        "output": 30
+        "output": 2.5
       },
-      "family": "gemini-flash",
+      "family": "nano-banana",
       "limit": {
-        "context": 32768,
+        "context": 65536,
         "output": 32768
       },
       "modalities": {
@@ -202,7 +204,7 @@
       "name": "Nano Banana",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2025-08-26",
+      "release_date": "2025-10-02",
       "status": "deprecated",
       "temperature": true,
       "tool_call": false
@@ -236,7 +238,7 @@
       "name": "Gemini 2.5 Flash-Lite",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2025-06-17",
+      "release_date": "2025-07-22",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -283,7 +285,7 @@
         "input": 0.5,
         "output": 10
       },
-      "family": "gemini-flash",
+      "family": "gemini-tts-flash",
       "limit": {
         "context": 8192,
         "output": 16384
@@ -301,6 +303,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-05-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -349,6 +352,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2025-06-17",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -360,7 +364,7 @@
         "input": 1,
         "output": 20
       },
-      "family": "gemini-flash",
+      "family": "gemini-tts-pro",
       "limit": {
         "context": 8192,
         "output": 16384
@@ -378,6 +382,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-05-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -421,9 +426,9 @@
         "image": 0.134,
         "image_input": 0.0011,
         "input": 2,
-        "output": 120
+        "output": 12
       },
-      "family": "gemini-pro",
+      "family": "nano-banana-pro",
       "limit": {
         "context": 65536,
         "output": 32768
@@ -466,9 +471,9 @@
       "cost": {
         "image": 0.045,
         "input": 0.5,
-        "output": 60
+        "output": 3
       },
-      "family": "gemini-flash",
+      "family": "nano-banana",
       "limit": {
         "context": 131072,
         "output": 32768
@@ -490,6 +495,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -537,6 +543,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -547,9 +554,9 @@
         "image": 0.0336,
         "image_input": 0.00028,
         "input": 0.25,
-        "output": 30
+        "output": 1.5
       },
-      "family": "gemini-flash-lite",
+      "family": "nano-banana-lite",
       "limit": {
         "context": 65536,
         "output": 4096
@@ -557,7 +564,9 @@
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "video",
+          "pdf"
         ],
         "output": [
           "text",
@@ -617,7 +626,7 @@
         "output_audio": 12,
         "second_input": 8.33333333333e-05
       },
-      "family": "gemini-flash",
+      "family": "gemini-live",
       "limit": {
         "context": 131072,
         "output": 65536
@@ -649,7 +658,7 @@
         "input": 1,
         "output": 20
       },
-      "family": "gemini-flash",
+      "family": "gemini-tts-flash",
       "limit": {
         "context": 8192,
         "output": 16384
@@ -667,6 +676,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-15",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -798,6 +808,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-19",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -807,6 +818,7 @@
       "cost": {
         "cache_read": 0.03,
         "input": 0.3,
+        "input_audio": 0.3,
         "output": 2.5
       },
       "family": "gemini-flash-lite",
@@ -843,10 +855,10 @@
         "output": 21,
         "output_audio": 21
       },
-      "family": "gemini-pro",
+      "family": "gemini-live-translate",
       "limit": {
         "context": 16384,
-        "output": 32768
+        "output": 16384
       },
       "modalities": {
         "input": [
@@ -953,6 +965,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-13",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -993,7 +1006,6 @@
     },
     "gemini-3.8-flash-lite-tts": {
       "cost": {
-        "cache_read": 0.125,
         "input": 0.5,
         "output": 6.0
       },
@@ -1006,7 +1018,6 @@
     },
     "gemini-3.8-flash-tts": {
       "cost": {
-        "cache_read": 0.125,
         "input": 0.5,
         "output": 9.0
       },
@@ -1075,13 +1086,126 @@
       "temperature": true,
       "tool_call": true
     },
+    "gemini-4-carbon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 2,
+        "input_audio": 2,
+        "output": 10
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Carbon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "gemini-4-hydrogen": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.075,
+        "input": 1.5,
+        "input_audio": 1.5,
+        "output": 7.5
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Hydrogen",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "gemini-4-neon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "input": 3,
+        "input_audio": 3,
+        "output": 15
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Neon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-11-18",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "gemini-decision-1": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "decisions",
+      "name": "gemini-decision-1"
+    },
     "gemini-embedding-001": {
       "attachment": false,
       "cost": {
         "input": 0.15,
         "output": 0
       },
-      "family": "gemini",
+      "family": "gemini-embedding",
       "limit": {
         "context": 2048,
         "output": 1
@@ -1098,7 +1222,8 @@
       "name": "Gemini Embedding 001",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2025-05-20",
+      "release_date": "2025-07-14",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -1109,7 +1234,7 @@
         "input_audio": 6.5,
         "output": 0
       },
-      "family": "gemini",
+      "family": "gemini-embedding",
       "limit": {
         "context": 8192,
         "output": 1
@@ -1222,7 +1347,7 @@
       "name": "Gemini Flash Latest",
       "open_weights": false,
       "reasoning": true,
-      "release_date": "2026-08-13",
+      "release_date": "2026-09-02",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1232,6 +1357,7 @@
       "cost": {
         "cache_read": 0.03,
         "input": 0.3,
+        "input_audio": 0.3,
         "output": 2.5
       },
       "family": "gemini-flash-lite",
@@ -1399,6 +1525,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-30",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -1527,8 +1654,8 @@
     "gemma-4-26b-a4b-it": {
       "attachment": true,
       "cost": {
-        "input": 0.0,
-        "output": 0.0
+        "input": 0,
+        "output": 0
       },
       "family": "gemma",
       "limit": {
@@ -1556,8 +1683,8 @@
     "gemma-4-31b-it": {
       "attachment": true,
       "cost": {
-        "input": 0.0,
-        "output": 0.0
+        "input": 0,
+        "output": 0
       },
       "family": "gemma",
       "limit": {
@@ -1581,6 +1708,30 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "genie-4": {
+      "cost": {
+        "input": 1.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "genie-4",
+      "reasoning": false,
+      "structured_output": false,
+      "tool_call": false
     },
     "imagen-3.0-fast-generate-001": {
       "cost": {
@@ -1624,12 +1775,12 @@
       "attachment": true,
       "cost": {
         "image": 0.04,
-        "input": 0,
-        "output": 0
+        "input": 0.0,
+        "output": 0.0
       },
-      "family": "lyria",
+      "family": "lyria-clip",
       "limit": {
-        "context": 1048576,
+        "context": 131072,
         "output": 65536
       },
       "modalities": {
@@ -1655,12 +1806,12 @@
       "attachment": true,
       "cost": {
         "image": 0.08,
-        "input": 0,
-        "output": 0
+        "input": 0.0,
+        "output": 0.0
       },
-      "family": "lyria",
+      "family": "lyria-pro",
       "limit": {
-        "context": 1048576,
+        "context": 131072,
         "output": 65536
       },
       "modalities": {

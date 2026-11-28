@@ -36,6 +36,7 @@ import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
 import type { CaretText } from "@/lib/contentEditable";
 import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
+import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import {
   CRAFT_PICKER_TRIGGER,
   filterPickerSections,
@@ -152,14 +153,23 @@ const CraftInputBar = memo(
         useChatSkills({ builtIns: false });
       const { data: appsData } = useUserExternalApps();
       const { data: craftMcpData } = useCraftMcpServers();
+      const skillOmissions = useBuildSessionStore((state) =>
+        sessionId ? state.sessions.get(sessionId)?.skillOmissions : null
+      );
       const pickerSections = useMemo(
         () =>
           toPickerSections(
-            { builtins: skillsData?.builtins, customs: chatSkills.skills },
+            {
+              builtins: skillsData?.builtins,
+              customs: chatSkills.skills,
+              omittedPluginIds: new Set(
+                skillOmissions?.skills.map((skill) => skill.plugin_id)
+              ),
+            },
             appsData,
             craftMcpData
           ),
-        [skillsData, chatSkills, appsData, craftMcpData]
+        [skillsData, chatSkills, skillOmissions, appsData, craftMcpData]
       );
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(

@@ -214,7 +214,7 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
    A Playwright page calls `utils/playwright_fetch.py:install_ssrf_guard`
    before it navigates.
    Take the flags from the admin SSRF protection level:
-   `server/security/models.py:outbound_ssrf_params` for LLM-initiated and
+   `backend/onyx/server/security/models.py:outbound_ssrf_params` for LLM-initiated and
    admin-endpoint paths, `connector_ssrf_enforced` for connector URLs. Most
    callers read the level with the default env fallback; only
    `sandbox_proxy/destination_policy.py` reads it strictly
@@ -340,7 +340,7 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
   `request.state.token_scopes` and follow
   [[authorization#scoped-pat-fails-closed]].
 - `new-security-setting` **Add a security setting.** Copy `allow_renamed_account_claim` through
-  `server/security/models.py` and `server/security/store.py`; list the current
+  `backend/onyx/server/security/models.py` and `backend/onyx/server/security/store.py`; list the current
   settings in `SecuritySettings`. Read it with `allow_fallback=False` when it
   decides access ([[#security-settings-strict-read]]). The Security & Hardening
   page also edits workspace `Settings` fields (`invite_only_enabled`,

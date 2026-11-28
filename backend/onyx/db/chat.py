@@ -1671,17 +1671,39 @@ def rename_chat_artifact(db_session: Session, artifact_id: UUID, name: str) -> N
     publish does, which makes it PENDING for the search index. Its file
     records keep their names. An artifact that is gone, or whose chat is
     deleted, raises ArtifactNotFound. The caller checks the user's access
-    and the name, commits, and sends its indexing task."""
-    if (
-        db_session.execute(
-            update(ChatArtifact)
-            .where(ChatArtifact.id == artifact_id, _ARTIFACT_CHAT_NOT_DELETED)
-            .values(name=name, updated_at=_ARTIFACT_CHANGED_AT, **_INDEX_PENDING)
-            .returning(ChatArtifact.id)
-        ).one_or_none()
-        is None
-    ):
+    and the name, commits, and sends its indexing task.
+
+    A version title that is the artifact's old effective name only repeats
+    the file name, so the rename clears it and the label shows the new
+    name. It locks the artifact before its versions, as a delete does."""
+    old = db_session.execute(
+        select(ChatArtifact.name)
+        .where(ChatArtifact.id == artifact_id, _ARTIFACT_CHAT_NOT_DELETED)
+        .with_for_update()
+    ).one_or_none()
+    if old is None:
         raise ArtifactNotFound(artifact_id)
+    db_session.execute(
+        update(ChatArtifactVersion)
+        .where(
+            ChatArtifactVersion.artifact_id == artifact_id,
+            ChatArtifactVersion.title
+            == (
+                old.name
+                if old.name is not None
+                else select(FileRecord.display_name)
+                .where(FileRecord.file_id == ChatArtifactVersion.file_id)
+                .scalar_subquery()
+            ),
+        )
+        .values(title=None)
+        .execution_options(synchronize_session=False)
+    )
+    db_session.execute(
+        update(ChatArtifact)
+        .where(ChatArtifact.id == artifact_id)
+        .values(name=name, updated_at=_ARTIFACT_CHANGED_AT, **_INDEX_PENDING)
+    )
 
 
 def _newest_available_version(
@@ -2808,7 +2830,11 @@ def translate_db_message_to_chat_message_detail(
         chat_message.response_status == RunStatus.CANCELLED
         and chat_message.response_failure is not None
         and chat_message.response_failure.kind
-        in (RunFailureKind.DEADLINE, RunFailureKind.STOPPED_BY_USER)
+        in (
+            RunFailureKind.DEADLINE,
+            RunFailureKind.STOPPED_BY_USER,
+            RunFailureKind.APPROVAL_EXPIRED,
+        )
     )
     error_info = (
         None

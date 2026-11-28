@@ -111,7 +111,7 @@
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
-  stay selected. Admin Skills filters by exact group. Admin Plugins filters by
+  stay selected while they are still in the list. Admin Skills filters by exact group. Admin Plugins filters by
   status, and its search also matches group names. Search and filter changes
   clear selection. The bulk Share dialog loads users and groups only while it
   is open.
@@ -656,6 +656,9 @@ the app from the same rule
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
     Without it, an owner could push a skill into any group manager's scope.
+    The check includes every current group share, so the share dialog
+    (`web/src/sections/modals/skills/ShareSkillModal.tsx`) makes all group shares read-only for a scoped
+    manager while one is outside their scope.
     It compares against the stored plugin group shares (rows with a
     permission), and the privacy check uses the stored visibility and the
     request, so a public-to-private change in the same request cannot get past
@@ -904,9 +907,11 @@ the app from the same rule
     `mcpServers`. It refuses a plugin with no skill and no MCP server. A zip
     with only a SKILL.md stays a skill upload. A need stores the normalized
     URL (`utils/url.py:normalize_mcp_server_url`) and no integration id.
-    Each viewer sees that URL, so a URL with a credential (user info or a
-    query value such as `api_key`), a `${VAR}` or a bad scheme is dropped;
-    `url_problem` keeps the reason (`mcp_server_url_problem`) for the UI.
+    Each viewer sees that URL, so a URL with a credential (user info, or a
+    query or fragment value such as `api_key`), a `${VAR}` or a bad scheme is
+    dropped; `url_problem` keeps the reason (`mcp_server_url_problem`) for the
+    UI. `need_views` checks a saved URL again, so a version saved before a
+    rule existed does not show it.
     `integrations/plugin_needs.py:need_views` matches it at read time against
     the integrations of `integrations_for_needs`, so a private integration
     the user cannot see is `not_added`. `integrations_for_needs` adds the
@@ -926,7 +931,8 @@ the app from the same rule
     with a skill name that another plugin the user runs holds is saved off;
     the preview and the save name those plugins (`name_conflicts`). A plugin
     the user turned on that loses a skill name gets `name_held_by`, the
-    plugins that hold it (`db/skill.py:skill_user_states`); a 409
+    plugins ahead of it on a shared name, also one that loses another name
+    (`db/skill.py:skill_user_states`); a 409
     `SKILL_NAME_CONFLICT` on a turn-on has `conflict_names`.
     `GET /skills/{id}/plugin-skill?path=` returns one skill's SKILL.md
     instructions in the version the user runs. `GET /skills` marks each custom
@@ -944,8 +950,8 @@ the app from the same rule
     the user's Craft sessions when one changed.
     The on/off switch and the name order stay per plugin: a plugin that
     loses any skill name does not load.
-26. `write-skill-limit` **A user's own write never moves that user past 500
-    MB or 5,000 files of skills.** Limits are `skills/limits.py` constants. A
+26. `write-skill-limit` **A user's own write, other than a turn-off, never
+    moves that user past 500 MB or 5,000 files of skills.** Limits are `skills/limits.py` constants. A
     user's total is the recorded size (`plugin_version.unpacked_size_bytes`,
     `file_count`) of the version the user runs, for each plugin on for the user
     that can run (`db/plugin_access.py:skill_usage_by_user`), plus the built-ins
@@ -961,7 +967,10 @@ the app from the same rule
     (settings, shares, Default access, publish, approve, transfer), app connect
     and group membership are never checked: the run-time rule and the admin
     banner handle a user they put past the limit. A user already over is not
-    refused.
+    refused. A turn-off is never refused, even when it lets a larger
+    same-name plugin win the name and moves the user past the limit
+    (`db/skill.py:set_skill_enabled_for_user`). Usage counts only plugins
+    that win their skill names, so `check_skill_limit` compares whole totals.
 27. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
     and 10,000 files.** `skills/push.py:build_user_skills_payload` applies it,
     so session start (`build_managed_content_payload`) and the push both do.

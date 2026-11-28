@@ -489,6 +489,13 @@ class GateAddon:
                         raise
                     finally:
                         self._parked.remove(ctx.tenant_id, approval_id)
+                    if decision is ApprovalDecision.REJECTED and (
+                        await asyncio.to_thread(
+                            self._rejected_by_policy, approval_id, ctx.tenant_id
+                        )
+                    ):
+                        flow.response = http_403(SandboxProxyError.POLICY_DENIED)
+                        return
                     self._write_response_for_decision(flow, decision)
                     if decision is not ApprovalDecision.APPROVED:
                         return
@@ -1179,6 +1186,13 @@ class GateAddon:
                 )
                 return ApprovalDecision.EXPIRED
             return existing.decision
+
+    def _rejected_by_policy(self, approval_id: UUID, tenant_id: str) -> bool:
+        """A rejection that the policy wrote, not the user: the action became
+        blocked or its integration was removed while the row waited."""
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
+            row = action_approval.get_action_approval(db, approval_id)
+            return row is not None and row.decided_via is ApprovalDecidedVia.POLICY
 
     def _write_response_for_decision(
         self, flow: http.HTTPFlow, decision: ApprovalDecision

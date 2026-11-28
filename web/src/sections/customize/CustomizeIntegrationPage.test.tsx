@@ -426,7 +426,9 @@ test("an integration of everyone has no share menu", async () => {
 test("an organization-wide action manager publishes after the confirmation", async () => {
   mockGlobalHolder = true;
   const fetchMock = open(ownPrivate, {
-    "POST /api/integrations/1/publish": { installation_policy: "AVAILABLE" },
+    "PUT /api/admin/integrations/1/installation-policy": {
+      installation_policy: "AVAILABLE",
+    },
   });
   const success = jest.spyOn(toast, "success");
   const u = user();
@@ -440,12 +442,12 @@ test("an organization-wide action manager publishes after the confirmation", asy
   );
   await waitFor(() =>
     expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          String(input) === "/api/integrations/1/publish" &&
-          init?.method === "POST"
+      requestBody(
+        fetchMock,
+        "PUT",
+        "/api/admin/integrations/1/installation-policy"
       )
-    ).toBe(true)
+    ).toEqual({ installation_policy: "AVAILABLE" })
   );
   await waitFor(() =>
     expect(success).toHaveBeenCalledWith(

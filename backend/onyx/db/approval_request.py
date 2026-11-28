@@ -99,12 +99,19 @@ def record_approval_decision__no_commit(
         .values(decision=decision, decided_via=decided_via, decided_at=func.now())
         .returning(ApprovalRequest.id)
     )
+    if decided is not None and decided_via == ApprovalDecidedVia.SESSION_GRANT:
+        grant_session_to_pending_requests__no_commit(db_session, approval)
+
+
+def grant_session_to_pending_requests__no_commit(
+    db_session: Session, approval: ApprovalRequest
+) -> None:
+    """Approve, by the session grant of `approval`, the other pending
+    requests of its action in the chat. A built-in action matches the rows
+    with no integration and the same key; a deleted integration's request
+    matches none."""
     builtin = is_builtin_action(approval.integration_id, approval.action_id)
-    if (
-        decided is None
-        or decided_via != ApprovalDecidedVia.SESSION_GRANT
-        or (approval.integration_id is None and not builtin)
-    ):
+    if approval.integration_id is None and not builtin:
         return
     db_session.execute(
         update(ApprovalRequest)

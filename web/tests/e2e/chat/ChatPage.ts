@@ -1149,6 +1149,19 @@ export class ChatPage {
     await this.page.keyboard.press("Escape");
   }
 
+  /** The first message version switcher on the page. */
+  messageSwitcher(): Locator {
+    return this.page.getByTestId("MessageSwitcher/container").first();
+  }
+
+  async selectPreviousVersion(): Promise<void> {
+    await this.messageSwitcher().getByRole("button").first().click();
+  }
+
+  async selectNextVersion(): Promise<void> {
+    await this.messageSwitcher().getByRole("button").last().click();
+  }
+
   async selectPreviousHumanMessage(index = 0): Promise<void> {
     await this.humanMessage(index)
       .getByTestId("MessageSwitcher/container")

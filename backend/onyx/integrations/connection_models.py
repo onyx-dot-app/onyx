@@ -268,6 +268,10 @@ def secret_fingerprint(secret: ConnectionSecret) -> str:
     return hashlib.sha256(secret.model_dump_json().encode()).hexdigest()
 
 
+def access_token_fingerprint(access_token: str) -> str:
+    return hashlib.sha256(access_token.encode()).hexdigest()
+
+
 def connection_secret_fingerprint(connection: IntegrationConnection) -> str:
     return secret_fingerprint(read_connection_secret(connection))
 

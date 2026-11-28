@@ -1,4 +1,9 @@
-import { ensureHrefProtocol, transformLinkUri, getFileIcon } from "@/lib/utils";
+import {
+  ensureHrefProtocol,
+  isBareRelativeHref,
+  transformLinkUri,
+  getFileIcon,
+} from "@/lib/utils";
 import {
   SvgSpreadsheetFile,
   SvgAudioFile,
@@ -24,6 +29,23 @@ describe("ensureHrefProtocol", () => {
     expect(ensureHrefProtocol("support@anthropic.com")).toBe(
       "mailto:support@anthropic.com"
     );
+  });
+
+  it("adds https protocol to a host with a path", () => {
+    expect(ensureHrefProtocol("docs.onyx.app/guide")).toBe(
+      "https://docs.onyx.app/guide"
+    );
+  });
+});
+
+describe("isBareRelativeHref", () => {
+  it("is true only for a path with no scheme, host or leading slash", () => {
+    expect(isBareRelativeHref("copied_files/tiny.png")).toBe(true);
+    expect(isBareRelativeHref("/app/artifacts/abc/v1")).toBe(false);
+    expect(isBareRelativeHref("#section")).toBe(false);
+    expect(isBareRelativeHref("https://onyx.app")).toBe(false);
+    expect(isBareRelativeHref("onyx.app/docs")).toBe(false);
+    expect(isBareRelativeHref("support@onyx.app")).toBe(false);
   });
 });
 

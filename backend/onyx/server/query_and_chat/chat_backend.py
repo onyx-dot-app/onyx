@@ -42,7 +42,7 @@ from onyx.chat.chat_utils import (
 from onyx.chat.errors import unhandled_stream_error
 from onyx.chat.file_preview import (
     convert_chat_file_preview_pdf,
-    resolve_chat_file_preview,
+    read_stored_chat_file_preview,
 )
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
@@ -156,11 +156,13 @@ from onyx.db.enums import (
     record_mode_persists_content,
 )
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.incognito import (
     is_incognito_teardown_target,
     mark_incognito_user_files_deleting,
 )
 from onyx.db.models import (
+    ApprovalRequest,
     ChatMessage,
     ChatSessionSharedStatus,
     FileRecord,
@@ -212,7 +214,10 @@ from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
     parse_spreadsheet_for_preview,
 )
-from onyx.server.query_and_chat.command_approvals import decide_command_approval
+from onyx.server.query_and_chat.command_approvals import (
+    decide_command_approval,
+    saved_answer_or_conflict,
+)
 from onyx.server.query_and_chat.models import (
     ApprovalDecisionResponse,
     ChatApprovalDecisionRequest,
@@ -271,6 +276,12 @@ from onyx.server.usage_limits import (
 from onyx.server.utils import get_json_line
 from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -1356,7 +1367,10 @@ def _readable_chat_file_record(
         file_id = file_id_from_user_file
     if not user_can_access_chat_file(file_id, user, db_session):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
-    file_record = get_default_file_store().read_file_record(file_id)
+    try:
+        file_record = get_default_file_store().read_file_record(file_id)
+    except FileRecordNotFoundError:
+        file_record = None
     if not file_record:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
     return file_record
@@ -1423,17 +1437,34 @@ def fetch_chat_file(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    def audit_download() -> None:
+        # One event per user, file and form in the dedup window: the browser
+        # fetches the same image each time a chat renders. Written once the
+        # content is known to be served, so a refused preview claims no window.
+        emit_audit_event(
+            AuditAction.FILE_DOWNLOAD,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="file",
+            resource_id=file_id,
+            dedup_key=f"file_download:{user.id}:{file_id}{etag_variant}",
+            extra={
+                "file_name": file_name,
+                "file_type": file_record.file_type,
+                "form": preview or ("parsed" if parse_spreadsheet else "original"),
+            },
+        )
+
     if preview is not None:
-        preview_row, _, _ = resolve_chat_file_preview(db_session, file_record)
-        if preview_row.preview_file_id is None:
+        stored = read_stored_chat_file_preview(db_session, file_record)
+        if stored is None:
             raise OnyxError(
                 OnyxErrorCode.PREVIEW_NOT_READY, "The PDF preview is not made yet"
             )
+        audit_download()
         # The link is written once, so the ETag names one PDF.
         return StreamingResponse(
-            file_store.read_file(
-                preview_row.preview_file_id, mode="b", use_tempfile=True
-            ),
+            stored,
             media_type=media_type,
             headers=cache_headers,
         )
@@ -1445,9 +1476,11 @@ def fetch_chat_file(
             preview_sheets = parse_spreadsheet_for_preview(
                 xlsx_io, file_record.display_name or ""
             )
+        audit_download()
         return JSONResponse(content=preview_sheets.model_dump(), headers=cache_headers)
 
     file_io = file_store.read_file(file_id, mode="b")
+    audit_download()
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 
@@ -2175,6 +2208,22 @@ def stop_chat_subagents(
     return StopSubagentsResponse(stopped_count=len(stopped))
 
 
+def _chat_choice(
+    db_session: Session, approval: ApprovalRequest, choice: ApprovalChoice
+) -> ApprovalChoice:
+    """The choice that a tool call in the chat can take."""
+    if choice == ApprovalChoice.APPROVE_COMMAND:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "A tool call has no command to approve for"
+        )
+    # An action that asks each time takes a chat approval as a single one.
+    if choice == ApprovalChoice.APPROVE_SESSION and integration_action_always_asks(
+        db_session, approval.integration_id, approval.action_id
+    ):
+        return ApprovalChoice.APPROVE_ONCE
+    return choice
+
+
 @router.post("/approvals/{approval_id}/decision", tags=PUBLIC_API_TAGS)
 def decide_approval(
     approval_id: UUID,
@@ -2211,58 +2260,29 @@ def decide_approval(
         return decide_command_approval(
             db_session, command_approval, body.decision, user.id
         )
-    if body.decision == ApprovalChoice.APPROVE_COMMAND:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, "A tool call has no command to approve for"
-        )
-    rejected = body.decision == ApprovalChoice.REJECT
-    # An action that asks each time takes a chat approval as a single one.
-    standing = (
-        body.decision == ApprovalChoice.APPROVE_SESSION
-        and not integration_action_always_asks(
-            db_session, approval.integration_id, approval.action_id
-        )
-    )
-    upgrades_to_grant = (
-        standing
-        and approval.decision == ApprovalDecision.APPROVED
-        and approval.decided_via == ApprovalDecidedVia.USER
-    )
-    if approval.decision is None or upgrades_to_grant:
-        blocked = action_now_blocked(
-            db_session,
-            integration_id=approval.integration_id,
-            action_id=approval.action_id,
-            user_id=user.id,
-            chat_session_id=approval.chat_session_id,
-        )
+    choice = _chat_choice(db_session, approval, body.decision)
+    if approval.decision is None or choice.upgrades(
+        approval.decision, approval.decided_via
+    ):
         record_approval_decision__no_commit(
             db_session,
             approval,
-            ApprovalDecision.REJECTED
-            if rejected or blocked
-            else ApprovalDecision.APPROVED,
-            ApprovalDecidedVia.POLICY
-            if blocked and not rejected
-            else ApprovalDecidedVia.SESSION_GRANT
-            if standing
-            else ApprovalDecidedVia.USER,
+            *choice.outcome(
+                blocked=action_now_blocked(
+                    db_session,
+                    integration_id=approval.integration_id,
+                    action_id=approval.action_id,
+                    user_id=user.id,
+                    chat_session_id=approval.chat_session_id,
+                )
+            ),
         )
     db_session.refresh(approval)
-    decided_via = approval.decided_via
-    # The answer to this body: an approval that a policy blocked was saved as
-    # a rejection. A saved answer also comes from an earlier attempt, a session
-    # grant from another request, or a concurrent decision.
-    decision = (
-        ApprovalDecision.REJECTED
-        if rejected or decided_via == ApprovalDecidedVia.POLICY
-        else ApprovalDecision.APPROVED
+    # A saved answer also comes from an earlier attempt, a session grant from
+    # another request, or a concurrent decision.
+    decision, decided_via = saved_answer_or_conflict(
+        choice, approval.decision, approval.decided_via
     )
-    if decided_via is None or approval.decision != decision:
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "This request was already decided or is no longer waiting",
-        )
     return ApprovalDecisionResponse(
         approval_id=approval_id,
         decision=decision,

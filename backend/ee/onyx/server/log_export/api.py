@@ -44,6 +44,12 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.platform_utils import is_running_in_kubernetes
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -316,7 +322,7 @@ def get_log_export_status(
 @router.get("/admin/log-export/{export_id}/download")
 def download_log_export(
     export_id: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StreamingResponse:
     """Streams the bundle of whatever pieces have arrived so far.
 
@@ -329,6 +335,13 @@ def download_log_export(
 
     built = build_export_bundle(snapshot)
     zip_buffer = built.zip_buffer
+    emit_audit_event(
+        AuditAction.EXPORT_LOGS,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="log_export",
+        resource_id=export_id,
+    )
 
     def cleanup() -> None:
         # Wired to both the generator's ``finally`` and the response background

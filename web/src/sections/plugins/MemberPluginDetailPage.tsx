@@ -1,5 +1,6 @@
 "use client";
 
+import { canManageSkill } from "@/lib/skills/sharing";
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
@@ -29,6 +30,7 @@ import useUserSkills from "@/hooks/useUserSkills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import {
   memberPluginEntries,
+  panelShowsSkill,
   pluginSwitch,
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
@@ -335,7 +337,9 @@ export default function MemberPluginDetailPage({
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
   const skills = useUserSkills();
   const entry = memberPluginEntries(
-    skills.data?.customs ?? [],
+    (skills.data?.customs ?? []).filter((skill) =>
+      panelShowsSkill(skill, panel)
+    ),
     user?.email ?? null,
     locale
   ).find((candidate) => candidate.id === pluginId);
@@ -378,16 +382,11 @@ export default function MemberPluginDetailPage({
       );
   }, [panel, navigation, skillOnlyId]);
   const skill = entry?.skills.length === 1 ? entry.skills[0] : undefined;
-  const showVersions =
-    skill !== undefined &&
-    (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
+  const canEdit = skill !== undefined && canManageSkill(skill);
   const skillCount = plugin
     ? plugin.skills.length
     : (entry?.skills.length ?? 0);
   const needCount = plugin?.needs.length ?? 0;
-  const canEdit =
-    skill !== undefined &&
-    (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
   async function refresh(): Promise<void> {
     await Promise.all([skills.refresh(), isPlugin ? detail.refresh() : null]);
   }
@@ -425,7 +424,7 @@ export default function MemberPluginDetailPage({
               },
             ]
           : []),
-        ...(skill && showVersions
+        ...(skill && canEdit
           ? [
               {
                 value: "versions" as const,

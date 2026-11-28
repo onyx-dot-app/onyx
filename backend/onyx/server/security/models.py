@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from typing_extensions import Self
 
 from onyx.db.enums import IncognitoRecordMode
+from onyx.utils.audit import AuditEventCategory
 from onyx.utils.url import BLOCKED_HOSTNAMES
 
 
@@ -198,6 +199,15 @@ class SecuritySettingsOverrides(BaseModel):
     allow_connector_check_findings: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
+    # Which audit event categories Onyx writes. Enterprise only. Operator
+    # locked: on multi-tenant the stream goes to Onyx's logs, not the tenant's.
+    audit_event_categories: list[AuditEventCategory] | None = Field(
+        default=None, json_schema_extra=_operator_locked()
+    )
+    # Add user-written query text to activity events. Enterprise only.
+    audit_include_query_text: bool | None = Field(
+        default=None, json_schema_extra=_operator_locked()
+    )
     ssrf_protection_level: SSRFProtectionLevel | None = Field(
         default=None, json_schema_extra=_operator_locked()
     )
@@ -243,6 +253,13 @@ class SecuritySettingsOverrides(BaseModel):
     jwt_expected_issuer: str | None = Field(
         default=None, json_schema_extra=_env_pinned()
     )
+
+    @field_validator("audit_event_categories")
+    @classmethod
+    def _dedupe_categories(
+        cls, v: list[AuditEventCategory] | None
+    ) -> list[AuditEventCategory] | None:
+        return None if v is None else list(dict.fromkeys(v))
 
     @field_validator("valid_email_domains")
     @classmethod
@@ -306,6 +323,8 @@ class SecuritySettings(BaseModel):
     incognito_record_mode: IncognitoRecordMode
     allow_connector_group_restrictions: bool
     allow_connector_check_findings: bool
+    audit_event_categories: tuple[AuditEventCategory, ...]
+    audit_include_query_text: bool
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
     llm_custom_config_env_injection: bool

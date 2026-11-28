@@ -24,7 +24,6 @@ import {
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { formatDurationSeconds } from "@opal/time";
 import {
-  useCurrentChatState,
   useCurrentMessageTree,
   useRightPanelShown,
 } from "@/app/app/stores/useChatSessionStore";
@@ -223,8 +222,7 @@ export default function ChatActivity({
       ),
     [tree, localStatuses, localAnswers]
   );
-  const streaming = useCurrentChatState() !== "input";
-  const { agents, loaded, stopAgent } = useChatSubagents(sessionId, streaming);
+  const { agents, loaded, stopAgent } = useChatSubagents(sessionId);
   const publishedFiles = usePublishedFiles("current");
   const files = showFiles ? publishedFiles : NO_FILES;
   // Finished agents fold under one row, as their own list

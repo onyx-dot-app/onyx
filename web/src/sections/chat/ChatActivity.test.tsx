@@ -468,7 +468,7 @@ test("a cached agent list is not the baseline after a failed read", async () => 
     );
   let loaded: boolean | null = null;
   function Probe() {
-    loaded = useChatSubagents("s", false).loaded;
+    loaded = useChatSubagents("s").loaded;
     return null;
   }
   render(<Probe />, {
