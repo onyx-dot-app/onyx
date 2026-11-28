@@ -21,6 +21,7 @@ from onyx.db.llm import (
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.well_known_providers import auto_update_service
 from onyx.llm.well_known_providers.auto_update_service import (
     reset_seen_catalog,
     sync_auto_update_providers,
@@ -39,6 +40,30 @@ def _cleanup_provider(db_session: Session, name: str) -> None:
         remove_llm_provider(db_session, provider.id)
 
 
+# The providers the running test created. The sync below is limited to them.
+_created_provider_names: set[str] = set()
+
+
+@pytest.fixture(autouse=True)
+def _sync_only_this_tests_providers() -> Generator[None, None, None]:
+    """sync_auto_update_providers processes every auto-mode provider in the
+    database. Limit it to the providers this test creates, so a sync never
+    changes another test's providers."""
+    original = auto_update_service.fetch_auto_mode_providers
+    _created_provider_names.clear()
+    with patch.object(
+        auto_update_service,
+        "fetch_auto_mode_providers",
+        side_effect=lambda db_session: [
+            provider
+            for provider in original(db_session)
+            if provider.name in _created_provider_names
+        ],
+    ):
+        yield
+    _created_provider_names.clear()
+
+
 def _create_provider(
     db_session: Session,
     name: str,
@@ -46,6 +71,7 @@ def _create_provider(
     is_auto_mode: bool,
     models: dict[str, bool],
 ) -> LLMProviderModel:
+    _created_provider_names.add(name)
     put_llm_provider(
         llm_provider_upsert_request=LLMProviderUpsertRequest(
             name=name,
