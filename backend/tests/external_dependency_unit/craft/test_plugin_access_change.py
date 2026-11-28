@@ -1,6 +1,8 @@
 """Rules of the one access change function for group install settings and
 group shares."""
 
+from uuid import UUID
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -323,3 +325,44 @@ def test_owner_removing_a_group_share_keeps_its_setting(
     assert row is not None
     assert row.permission is None
     assert row.installation_policy == PluginInstallationPolicy.DEFAULT
+
+
+def test_scoped_manager_edit_scope_is_per_plugin(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """A group manager's edit scope reads the shares of each plugin only: a
+    group or user share of another plugin neither grants nor takes away their
+    edit."""
+    group = make_group(db_session)
+    manager = _manager_of(db_session, group)
+    in_scope = make_skill(db_session)
+    share_plugin_with_group(
+        db_session, in_scope.id, group.id, SkillSharePermission.VIEWER
+    )
+    shared_elsewhere = make_skill(db_session)
+    share_plugin_with_group(
+        db_session,
+        shared_elsewhere.id,
+        make_group(db_session).id,
+        SkillSharePermission.VIEWER,
+    )
+    share_plugin_with_user(
+        db_session,
+        shared_elsewhere.id,
+        make_user(db_session, standard_account=True).id,
+        SkillSharePermission.VIEWER,
+    )
+    unshared = make_skill(
+        db_session, author_user_id=make_user(db_session, standard_account=True).id
+    )
+
+    def editable(skill_id: UUID) -> bool:
+        return (
+            fetch_editable_skill(skill_id, user=manager, db_session=db_session)
+            is not None
+        )
+
+    assert editable(in_scope.id)
+    assert not editable(shared_elsewhere.id)
+    assert not editable(unshared.id)
