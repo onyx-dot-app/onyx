@@ -116,17 +116,17 @@ function PluginRow({
   const navigation = useNavigation();
   const panel = usePanel();
   const sourceOf = usePluginSource();
-  const [skill] = entry.skills;
+  const { skill } = entry;
   const { blocked } = pluginSwitch(entry);
-  const enabled = skill ? enablement.enabledOf(skill) : false;
-  const busy = skill ? enablement.isPending(skill.id) : false;
+  const enabled = enablement.enabledOf(skill);
+  const busy = enablement.isPending(skill.id);
   const canToggle = blocked === null;
   const source = sourceOf(entry, group);
-  const heldBy = skill?.name_held_by ?? [];
+  const heldBy = skill.name_held_by;
   const contents =
     !enabled && heldBy.length > 0
       ? t("plugins.nameHeld", { names: heldBy.join(", ") })
-      : skill && skill.needed_count > 0
+      : skill.needed_count > 0
         ? t("plugins.integrations", {
             available: skill.available_count,
             needed: skill.needed_count,
@@ -145,7 +145,7 @@ function PluginRow({
           },
         ]
       : []),
-    ...(skill && canShareSkill(skill)
+    ...(canShareSkill(skill)
       ? [
           {
             kind: "action" as const,
@@ -159,7 +159,7 @@ function PluginRow({
   ];
   return (
     <LineItemButton
-      icon={skill ? skillIcon(skill) : undefined}
+      icon={skillIcon(skill)}
       title={entry.name}
       titleMaxLines={1}
       description={
@@ -261,7 +261,7 @@ export default function CustomizePluginsPage() {
   );
   const adminRows = entries
     .filter((entry) => shownGroups.has(entry.id))
-    .flatMap((entry) => entry.skills);
+    .map((entry) => entry.skill);
   const bulk = usePluginBulkActions({
     items: adminRows,
     enablement,
@@ -424,8 +424,7 @@ export default function CustomizePluginsPage() {
                 group={group}
                 enablement={enablement}
                 onSwitch={(target, enabled) => {
-                  const [skill] = target.skills;
-                  if (skill) void enablement.setEnabled(skill, enabled);
+                  void enablement.setEnabled(target.skill, enabled);
                 }}
                 onShare={setSharing}
               />

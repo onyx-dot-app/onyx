@@ -12,7 +12,7 @@ function entry(over: Partial<MemberPluginEntry>): MemberPluginEntry {
     section: "shared",
     ownerEmail: null,
     marketplace: null,
-    skills: [customFixture({ enabled: true })],
+    skill: customFixture({ enabled: true }),
     ...over,
   };
 }
@@ -43,19 +43,38 @@ const ENTRIES = [
     name: "reports",
     section: "shared",
     ownerEmail: "other@example.com",
-    skills: [
-      customFixture({
-        enabled: false,
-        group_summaries: [
+    skill: customFixture({
+      enabled: false,
+      group_summaries: [
+        {
+          group_id: 1,
+          group_name: "Design",
+          permission: "VIEWER",
+          installation_policy: null,
+        },
+      ],
+    }),
+  }),
+  entry({
+    id: "kit",
+    name: "writing-kit",
+    section: "shared",
+    ownerEmail: "other@example.com",
+    skill: customFixture({
+      enabled: true,
+      kind: "plugin",
+      plugin: {
+        manifest: null,
+        skills: [
           {
-            group_id: 1,
-            group_name: "Design",
-            permission: "VIEWER",
-            installation_policy: null,
+            path: "skills/draft-memo",
+            name: "draft-memo",
+            description: "Drafts a memo.",
           },
         ],
-      }),
-    ],
+        needs: [],
+      },
+    }),
   }),
 ];
 
@@ -84,7 +103,7 @@ test("the user's own plugins stay in Created by you after a publish", () => {
   expect(ids()).toEqual({
     mine: ["mine-published"],
     organization: ["org"],
-    shared: ["shared", "off"],
+    shared: ["shared", "off", "kit"],
     marketplace: ["synced"],
     private: ["private"],
   });
@@ -108,4 +127,14 @@ test("the search also matches the owner and the shared groups", () => {
 
 test("the search matches a plugin's marketplace name", () => {
   expect(ids({ query: "team tools" }).marketplace).toEqual(["synced"]);
+});
+
+test("the search matches the names of the skills in a plugin", () => {
+  expect(ids({ query: "DRAFT-MEMO" })).toEqual({
+    mine: [],
+    organization: [],
+    shared: ["kit"],
+    marketplace: [],
+    private: [],
+  });
 });

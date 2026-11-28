@@ -93,8 +93,8 @@ Group or user restriction needs EE.
   a personal marketplace's plugin), and **Everyone** needs
   `canChangeOrganizationAccess` for every selected row (never a synced one).
   A row's Delete opens the same confirm for that plugin.
-  Search (on both Plugins pages) also matches the owner email and the shared group names, as Admin
-  Skills did. Search and the status filter clear the selection. A failed `GET /skills`
+  Search (on both Plugins pages, one matcher in `lib/customize/plugins.ts`) also matches the names
+  of the skills in a plugin, the owner email and the shared group names, as Admin Skills did. Search and the status filter clear the selection. A failed `GET /skills`
   shows an error in place of the list; the Marketplaces section stays.
   `/admin/plugins/[pluginId]` renders `MemberPluginDetailPage`. These pages read their panel from the path
   (`lib/customize/hooks.ts:usePanel`), so the links, back links, the
@@ -195,9 +195,9 @@ read only member endpoints: the user's skills
 `lib/plugins/directory.ts:memberPluginEntries` makes one plugin of each custom
 skill (a custom skill's id is its plugin id). `GET /skills` also lists
 uploaded plugins: each row has `kind` (`skill` or `plugin`) and
-`available_count` of `needed_count` integrations. `GET /skills/{id}` adds
-`plugin`: the skills, the plugin.json fields and the needs with their state
-for the user ([[skills#plugin-upload]]). A plugin row shows "N of M
+`available_count` of `needed_count` integrations. A `kind: plugin` row and
+`GET /skills/{id}` add `plugin`: the skills, the plugin.json fields and the
+needs with their state for the user ([[skills#plugin-upload]]). A plugin row shows "N of M
 integrations available"; a `kind: plugin` page reads `GET /skills/{id}`
 (`lib/plugins/hooks.ts:usePluginDetail`) for its Skills and Integrations tabs
 and does not redirect to the skill page. The admin skills table leaves out

@@ -15,7 +15,7 @@ from onyx.db.models import Plugin, Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
-from onyx.db.plugin import get_version_manifest, list_version_skills
+from onyx.db.plugin import get_versions_manifests, list_versions_skills
 from onyx.db.plugin_access import (
     PluginAccess,
     load_plugin_access,
@@ -150,13 +150,15 @@ def skill_response_for_user(
     shown_version_id: UUID | None = None,
     needs: dict[UUID, list[PluginNeedView]] | None = None,
     include_plugin_detail: bool = False,
+    plugin_details: dict[UUID, PluginDetail] | None = None,
 ) -> SkillResponse:
     """``shown_version_id`` is the version whose files the response shows, and
     so the edit base; by default the plugin's current version. When given, the
     counts and plugin detail also describe it, else the version the user
     runs. ``needs`` are the need views by version (``needs_of_versions``);
     read when not given. ``include_plugin_detail`` adds the skills, needs and
-    plugin.json fields."""
+    plugin.json fields; ``plugin_details`` holds them by version
+    (``plugin_version_details``), read when not given."""
     if state is None:
         state = skill_user_states(user, [skill.id], db_session)[skill.id]
     if isinstance(skill, Skill):
@@ -214,28 +216,47 @@ def skill_response_for_user(
         current_version_id=shown_version_id,
         counts=need_counts(version_needs),
         plugin_detail=(
-            plugin_version_detail(described, version_needs, db_session)
+            (
+                plugin_details.get(described)
+                if plugin_details is not None
+                else plugin_version_detail(described, version_needs, db_session)
+            )
             if include_plugin_detail
             else None
         ),
     )
 
 
+def plugin_version_details(
+    version_ids: Iterable[UUID],
+    needs: dict[UUID, list[PluginNeedView]],
+    db_session: Session,
+) -> dict[UUID, PluginDetail]:
+    ids = set(version_ids)
+    manifests = get_versions_manifests(ids, db_session)
+    return {
+        version_id: PluginDetail(
+            manifest=manifests.get(version_id),
+            skills=[
+                PluginSkillSummary(
+                    path=skill_row.path,
+                    name=skill_row.name,
+                    description=skill_row.description,
+                )
+                for skill_row in skill_rows
+            ],
+            needs=needs.get(version_id, []),
+        )
+        for version_id, skill_rows in list_versions_skills(ids, db_session).items()
+    }
+
+
 def plugin_version_detail(
     version_id: UUID, needs: list[PluginNeedView], db_session: Session
 ) -> PluginDetail:
-    return PluginDetail(
-        manifest=get_version_manifest(version_id, db_session),
-        skills=[
-            PluginSkillSummary(
-                path=skill_row.path,
-                name=skill_row.name,
-                description=skill_row.description,
-            )
-            for skill_row in list_version_skills(version_id, db_session)
-        ],
-        needs=needs,
-    )
+    return plugin_version_details([version_id], {version_id: needs}, db_session)[
+        version_id
+    ]
 
 
 def skills_list_response_for_user(
@@ -255,6 +276,15 @@ def skills_list_response_for_user(
     needs = needs_of_versions(
         user,
         (access.version_user_runs for access in plugin_access.values()),
+        db_session,
+    )
+    plugin_details = plugin_version_details(
+        (
+            access.version_user_runs
+            for access in plugin_access.values()
+            if not access.is_skill
+        ),
+        needs,
         db_session,
     )
     member_visible_ids = (
@@ -285,6 +315,11 @@ def skills_list_response_for_user(
             managed_scope_ids=managed_scope_ids,
             plugin_access=plugin_access,
             needs=needs,
+            include_plugin_detail=(
+                isinstance(skill, Plugin)
+                and not _access_of(skill, plugin_access).is_skill
+            ),
+            plugin_details=plugin_details,
         )
         if member_visible_ids is not None and isinstance(skill, Plugin):
             response.member_visible = skill.id in member_visible_ids

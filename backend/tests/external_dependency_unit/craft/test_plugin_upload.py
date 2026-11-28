@@ -492,12 +492,14 @@ def test_turning_a_plugin_on_turns_on_its_integrations(
         skill.id: skill
         for skill in api.list_skills_for_current_user(author, db_session).customs
     }
+    listed_detail = listed[plugin_id].plugin
+    assert listed_detail is not None
     assert (
         listed[plugin_id].kind,
         listed[plugin_id].available_count,
         listed[plugin_id].needed_count,
-        listed[plugin_id].plugin,
-    ) == ("plugin", 1, 1, None)
+        [(need.name, need.state) for need in listed_detail.needs],
+    ) == ("plugin", 1, 1, [("main", PluginNeedState.ON)])
     assert db_session.scalar(
         select(UserIntegrationPreference.enabled).where(
             UserIntegrationPreference.user_id == author.id,
@@ -1043,6 +1045,26 @@ def test_an_admin_list_marks_a_members_private_plugin_not_member_visible(
     }
 
     assert (listed[private.plugin.id], listed[own.plugin.id]) == (False, True)
+
+
+def test_the_list_gives_the_skills_of_each_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    kit = _save(author, _plugin_zip("listed-kit", ["draft", "review"]), db_session)
+
+    listed = next(
+        skill
+        for skill in api.list_skills_for_current_user(author, db_session).customs
+        if skill.id == kit.plugin.id
+    )
+
+    assert listed.plugin is not None
+    assert [skill.name for skill in listed.plugin.skills] == ["draft", "review"]
+    assert listed.plugin.manifest is not None
+    assert listed.plugin.manifest.name == "listed-kit"
 
 
 def test_a_viewer_reads_the_instructions_of_one_skill_in_a_plugin(
