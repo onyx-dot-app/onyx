@@ -90,6 +90,39 @@
       }
     }
   },
+  "anthropic": {
+    "models": {
+      "claude-fable-5-2": {
+        "name": "Claude Fable 5.2",
+        "mode": "chat",
+        "family": "claude-fable",
+        "cost": {"input": 8.0, "output": 40.0, "cache_read": 0.2, "cache_write": 10.0, "cache_write_above_1hr": 16.0},
+        "limit": {"context": 1000000, "output": 128000},
+        "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]},
+        "attachment": true,
+        "reasoning": true,
+        "structured_output": true,
+        "temperature": false,
+        "tool_call": true
+      }
+    }
+  },
+  "openrouter": {
+    "models": {
+      "qwen/qwen4-max": {
+        "name": "Qwen4 Max",
+        "family": "qwen",
+        "cost": {"input": 1.5, "output": 4.5, "cache_read": 0.075, "cache_write": 1.875},
+        "limit": {"context": 1000000, "output": 131072},
+        "modalities": {"input": ["text", "image", "video"], "output": ["text"]},
+        "attachment": true,
+        "reasoning": true,
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
+      }
+    }
+  },
   "bedrock": {
     "models": {
       "anthropic.claude-sonnet-4-20250514-v1:0": {

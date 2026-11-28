@@ -12,6 +12,14 @@ import pytest
 
 from onyx.llm import model_catalog
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.model_capabilities import (
+    catalog_model_supports_image_input,
+    find_model_obj,
+    get_llm_max_output_tokens,
+    get_model_map,
+    llm_max_input_tokens,
+    model_is_reasoning_model,
+)
 from onyx.llm.well_known_providers.llm_provider_options import (
     get_anthropic_model_names,
     get_openai_model_names,
@@ -205,3 +213,33 @@ def test_supplement_status_only_entry_is_not_added_as_model(
         assert "img-a" not in model_catalog._catalog()["openai"]["models"]
     finally:
         model_catalog._catalog.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "provider,model_name,max_input_tokens,max_output_tokens,supports_vision",
+    [
+        (LlmProviderNames.ANTHROPIC, "claude-fable-5-2", 1_000_000, 128_000, True),
+        (LlmProviderNames.OPENROUTER, "qwen/qwen4-max", 1_000_000, 131_072, True),
+    ],
+)
+def test_recommended_models_missing_upstream_resolve_from_supplement(
+    provider: str,
+    model_name: str,
+    max_input_tokens: int,
+    max_output_tokens: int,
+    supports_vision: bool,
+) -> None:
+    """Recommended models the feed has not picked up yet must not fall back
+    to the 32K default with vision and reasoning off."""
+    model_map = get_model_map()
+    entry = find_model_obj(model_map, provider, model_name, chat_only=True)
+    assert entry is not None
+    assert llm_max_input_tokens(model_map, model_name, provider) == max_input_tokens
+    assert (
+        get_llm_max_output_tokens(model_map, model_name, provider) == max_output_tokens
+    )
+    assert catalog_model_supports_image_input(model_name, provider) is supports_vision
+    assert model_is_reasoning_model(model_name, provider) is True
+    assert entry["supports_function_calling"] is True
+    assert entry["supports_response_schema"] is True
+    assert model_catalog.find_model_cost(provider, model_name) is not None
