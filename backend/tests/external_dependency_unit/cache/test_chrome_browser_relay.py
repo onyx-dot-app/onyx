@@ -586,6 +586,9 @@ def test_a_frame_needs_a_viewer_and_the_holder() -> None:
     relay.save_frame(_TENANT, user_id, presence.installation_id, _frame(chat_id))
     frame = relay.load_frame(_TENANT, chat_id)
     assert frame is not None and frame.data == "AAAA" and frame.seq > 0
+    # Stop clears the preview, so a new viewer sees no old page.
+    relay.end_grant(_TENANT, user_id, chat_id, notify=False)
+    assert relay.load_frame(_TENANT, chat_id) is None
 
 
 def test_a_pointer_needs_a_viewer_and_the_holder() -> None:

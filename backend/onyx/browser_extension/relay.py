@@ -454,6 +454,9 @@ def _end_grant(
         _installation_grant_key(user_id, grant.installation_id),
         str(chat_session_id).encode(),
     )
+    # The preview of an ended grant shows nothing more.
+    cache.delete(_frame_key(chat_session_id))
+    cache.delete(_pointer_key(chat_session_id))
     presence = _connection(cache, user_id, grant.installation_id)
     if notify and presence is not None:
         _send(
