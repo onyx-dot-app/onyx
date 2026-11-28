@@ -3,7 +3,7 @@ limit overrides."""
 
 from collections.abc import Generator
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from redis.exceptions import RedisError
@@ -25,6 +25,8 @@ def _fake_cache(
     cache = MagicMock()
     cache.get = MagicMock(side_effect=raise_on_get, return_value=get_return)
     cache.set = MagicMock(side_effect=raise_on_set, return_value=True)
+    cache.set_if_absent = MagicMock(side_effect=raise_on_set, return_value=True)
+    cache.replace_if_value = MagicMock(side_effect=raise_on_set, return_value=True)
     return cache
 
 
@@ -53,7 +55,7 @@ class TestCachedState:
             patch.object(ulc, "BILLING_CACHE_TTL_SECONDS", 3600),
         ):
             assert ulc.cached_tenant_usage_limit_state(_TENANT) == _STATE
-        cache.set.assert_called_once_with(
+        cache.set_if_absent.assert_called_once_with(
             "usage_limits:tenant_abc", _STATE.model_dump_json(), ex=3600
         )
 
@@ -69,7 +71,41 @@ class TestCachedState:
         ):
             state = ulc.cached_tenant_usage_limit_state(_TENANT)
         assert state == TenantUsageLimitState()
-        assert cache.set.call_args.kwargs["ex"] == ulc._FETCH_FAILED_TTL_SECONDS
+        assert (
+            cache.set_if_absent.call_args.kwargs["ex"] == ulc._FETCH_FAILED_TTL_SECONDS
+        )
+
+    def test_a_push_during_the_fetch_is_kept(self) -> None:
+        """A sales push stored while this request was fetching wins: the refill
+        does not overwrite it, and the pushed value is returned."""
+        pushed = TenantUsageLimitState(
+            trial_start=_START, limits={UsageType.LLM_COST: 30000}
+        )
+        cache = _fake_cache()
+        cache.get = MagicMock(side_effect=[None, pushed.model_dump_json().encode()])
+        cache.set_if_absent = MagicMock(return_value=False)
+        with (
+            patch.object(ulc, "get_shared_cache_backend", return_value=cache),
+            patch.object(ulc, "fetch_tenant_usage_limit_state", return_value=_STATE),
+        ):
+            assert ulc.cached_tenant_usage_limit_state(_TENANT) == pushed
+        cache.set.assert_not_called()
+
+    def test_a_push_replacing_an_unreadable_entry_is_kept(self) -> None:
+        pushed = TenantUsageLimitState(limits={UsageType.LLM_COST: 30000})
+        cache = _fake_cache()
+        cache.get = MagicMock(
+            side_effect=[b"not json", pushed.model_dump_json().encode()]
+        )
+        cache.replace_if_value = MagicMock(return_value=False)
+        with (
+            patch.object(ulc, "get_shared_cache_backend", return_value=cache),
+            patch.object(ulc, "fetch_tenant_usage_limit_state", return_value=_STATE),
+        ):
+            assert ulc.cached_tenant_usage_limit_state(_TENANT) == pushed
+        cache.replace_if_value.assert_called_once_with(
+            "usage_limits:tenant_abc", b"not json", _STATE.model_dump_json(), ex=ANY
+        )
 
     def test_cache_error_reads_the_control_plane_without_caching(self) -> None:
         cache = _fake_cache(raise_on_get=RedisError("down"))

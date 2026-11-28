@@ -17,7 +17,8 @@ During those 60 seconds:
   once a minute per tenant, not on every request.
 
 A sales raise is pushed by the control plane and written here at once, so it
-does not wait for the cache to expire.
+does not wait for the cache to expire. A refill after a miss never overwrites
+a value pushed while it was fetching.
 """
 
 import threading
@@ -29,7 +30,7 @@ from pydantic import ValidationError
 from ee.onyx.server.tenant_usage_limits import fetch_tenant_usage_limit_state
 from ee.onyx.server.tenants.models import TenantUsageLimitState
 from onyx.cache.factory import get_shared_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.app_configs import BILLING_CACHE_TTL_SECONDS
 from onyx.db.usage import UsageType
 from onyx.utils.logger import setup_logger
@@ -92,11 +93,39 @@ def cached_tenant_usage_limit_state(tenant_id: str) -> TenantUsageLimitState:
 
     state, fetched = _fetch(tenant_id)
     ttl = BILLING_CACHE_TTL_SECONDS if fetched else _FETCH_FAILED_TTL_SECONDS
+    return _refill(cache, key, raw, state, ttl, tenant_id)
+
+
+def _refill(
+    cache: CacheBackend,
+    key: str,
+    seen: bytes | None,
+    state: TenantUsageLimitState,
+    ttl: int,
+    tenant_id: str,
+) -> TenantUsageLimitState:
+    """Store a fetched value only if the entry is still what this request saw.
+    A sales push can land while the fetch runs, and it must not be overwritten
+    by the older fetched value. If another writer got there first, its value
+    is returned instead."""
+    value = state.model_dump_json()
     try:
-        cache.set(key, state.model_dump_json(), ex=ttl)
+        if seen is None:
+            stored = cache.set_if_absent(key, value, ex=ttl)
+        else:
+            stored = cache.replace_if_value(key, seen, value, ex=ttl)
+        if stored:
+            return state
+        winner = cache.get(key)
     except CACHE_TRANSIENT_ERRORS as e:
         logger.warning("Usage limit cache write failed for tenant %s: %s", tenant_id, e)
-    return state
+        return state
+    if not winner:
+        return state
+    try:
+        return TenantUsageLimitState.model_validate_json(winner)
+    except (ValueError, ValidationError):
+        return state
 
 
 def store_tenant_usage_limit_state(
