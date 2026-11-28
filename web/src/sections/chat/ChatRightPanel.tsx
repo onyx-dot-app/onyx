@@ -260,7 +260,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
             id: RIGHT_PANEL_CHROME_TAB,
             label: t("chromeTab.label"),
             icon: SvgMonitor,
-            closable: true,
             movable: false,
           },
         ]
