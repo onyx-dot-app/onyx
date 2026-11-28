@@ -43,9 +43,9 @@ import {
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
 import {
-  useSkillEnablement,
-  type SkillEnablement,
-  useRefreshSkillLists,
+  usePluginEnablement,
+  type PluginEnablement,
+  useRefreshPluginLists,
 } from "@/lib/skills/hooks";
 import { useMarketplaceAdded, useMarketplaces } from "@/lib/marketplaces/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
@@ -68,7 +68,7 @@ import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import PluginTurnOnModal from "@/sections/modals/plugins/PluginTurnOnModal";
 import UploadPluginFlow from "@/sections/modals/plugins/UploadPluginFlow";
 import AdminSkillsTable from "@/sections/skills/AdminSkillsTable";
-import { useSkillBulkActions } from "@/sections/skills/useSkillBulkActions";
+import { usePluginBulkActions } from "@/sections/skills/usePluginBulkActions";
 
 /** Where a plugin comes from, as its row or the admin Source column says. */
 function usePluginSource(): (
@@ -99,7 +99,7 @@ function usePluginSource(): (
 interface PluginRowProps {
   entry: MemberPluginEntry;
   group: PluginGroup;
-  enablement: SkillEnablement;
+  enablement: PluginEnablement;
   onSwitch: (entry: MemberPluginEntry, enabled: boolean) => void;
   onShare: (skill: CustomSkill) => void;
 }
@@ -218,7 +218,7 @@ export default function CustomizePluginsPage() {
     marketplaceList.error !== undefined;
   const locale = useLocale();
   const { user } = useUser();
-  const revalidate = useRefreshSkillLists();
+  const revalidate = useRefreshPluginLists();
   const skills = useUserSkills();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
@@ -235,7 +235,7 @@ export default function CustomizePluginsPage() {
     userEmail,
     locale
   );
-  const enablement = useSkillEnablement(
+  const enablement = usePluginEnablement(
     skills.data?.customs ?? [],
     skills.refresh,
     (skill) => {
@@ -259,7 +259,7 @@ export default function CustomizePluginsPage() {
   const adminRows = entries
     .filter((entry) => shownGroups.has(entry.id))
     .flatMap((entry) => entry.skills);
-  const bulk = useSkillBulkActions({
+  const bulk = usePluginBulkActions({
     items: adminRows,
     enablement,
     noun: "plugin",

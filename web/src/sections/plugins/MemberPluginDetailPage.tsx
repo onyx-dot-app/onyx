@@ -48,11 +48,11 @@ import { usePluginDetail } from "@/lib/plugins/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
 import type { PluginDetail, PluginSkillSummary } from "@/lib/plugins/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { deleteUserSkill } from "@/lib/skills/api";
 import {
-  useRefreshSkillLists,
-  useSkillEnablement,
-  type SkillEnablement,
+  useRefreshPluginLists,
+  usePluginDelete,
+  usePluginEnablement,
+  type PluginEnablement,
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -81,7 +81,7 @@ interface PluginTabProps {
 }
 
 interface PluginSwitchProps extends PluginTabProps {
-  enablement: SkillEnablement;
+  enablement: PluginEnablement;
 }
 
 function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
@@ -346,15 +346,15 @@ export default function MemberPluginDetailPage({
   const isPlugin = entry?.skills[0]?.kind === "plugin";
   const detail = usePluginDetail(isPlugin ? pluginId : null);
   const plugin = isPlugin ? (detail.data?.plugin ?? null) : null;
-  const refreshLists = useRefreshSkillLists();
+  const refreshLists = useRefreshPluginLists();
   const { mutate } = useSWRConfig();
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
   const [sharing, setSharing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [removing, setRemoving] = useState(false);
+  const deletion = usePluginDelete({ noun: "plugin" });
   const removeModal = useCreateModal();
   const removeCopy = useTranslations("plugins.member.detail.remove");
-  const enablement = useSkillEnablement(
+  const enablement = usePluginEnablement(
     skills.data?.customs ?? [],
     skills.refresh,
     (updated) => {
@@ -445,22 +445,8 @@ export default function MemberPluginDetailPage({
       ]
     : null;
   async function remove(): Promise<void> {
-    if (!skill || removing) return;
-    setRemoving(true);
-    try {
-      await deleteUserSkill(skill.id);
-      refreshLists();
-      toast.success(removeCopy("done", { name: skill.name }));
+    if (skill && (await deletion.remove(skill)))
       navigation.go(listHref, { replace: true });
-    } catch (failure) {
-      toast.error(
-        failure instanceof Error && failure.message
-          ? failure.message
-          : removeCopy("failed")
-      );
-    } finally {
-      setRemoving(false);
-    }
   }
 
   const menu: DropdownMenuItem[] = [
@@ -582,9 +568,11 @@ export default function MemberPluginDetailPage({
             entityType={removeCopy("entityType")}
             entityName={skill.name}
             additionalDetails={removeCopy("description")}
-            actionButtonText={removeCopy(removing ? "pending" : "submit")}
+            actionButtonText={removeCopy(
+              deletion.deleting ? "pending" : "submit"
+            )}
             onClose={() => {
-              if (!removing) removeModal.toggle(false);
+              if (!deletion.deleting) removeModal.toggle(false);
             }}
             onSubmit={() => void remove()}
           />
