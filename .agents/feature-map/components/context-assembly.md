@@ -127,6 +127,12 @@ once per turn. A turn that runs three tool cycles calls
 `construct_message_history` three times, each with a growing
 `[tool calls and responses]` section and a freshly recomputed reminder.
 
+`llm/multi_llm.py:LitellmLLM._prepare_request` joins the leading SYSTEM
+messages into one unless the cache adapter's
+`caches_leading_system_messages_separately` is true (only the Anthropic
+adapter). Some chat templates, such as Qwen's on vLLM, reject a second system
+message with a 400.
+
 ### 4.1 System prompt
 
 `prompt_utils.py:build_system_prompt` assembles the base prompt in this order:
