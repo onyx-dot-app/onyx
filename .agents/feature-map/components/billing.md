@@ -98,7 +98,8 @@ and `/api/admin/billing` on self-hosted
 `/tenants/*` billing routes or `/proxy/*`, and `backend/ee/onyx/main.py` does not
 mount `/admin/billing/*`, so they 404. The routes the control plane calls
 (`backend/ee/onyx/server/tenants/control_plane_api.py`: product gating, tier
-update) stay mounted. The admin sidebar hides Plans & Billing and Upgrade Plan
+update, and on the playground the usage-limit push from
+[[rate-and-usage-limits]]) stay mounted. The admin sidebar hides Plans & Billing and Upgrade Plan
 when `settings.is_playground` is set (`web/src/lib/admin-routes.ts`,
 `web/src/lib/admin-sidebar-utils.ts:buildItems`).
 

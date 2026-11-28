@@ -26,8 +26,9 @@ EE routers also carry the tag.
 - **A caller sees these failures:** 401 or 403 for a missing token or permission;
   402 for a route above the deployment's tier ([[editions-and-gating]]); 501 from
   the ingestion writes when the vector database is turned off; 429 from an LLM
-  route over a token budget, and on cloud from the chat and search routes when
-  the weekly API-call cap is used up ([[rate-and-usage-limits]]).
+  route over a token budget, on cloud from the chat and search routes when
+  the weekly API-call cap is used up, and on the playground from the ingestion
+  write when the chunk limit is used up ([[rate-and-usage-limits]]).
 - **An operator** can serve `/openapi.json`, `/docs` and `/redoc` from a
   deployment by setting `ENABLE_PUBLIC_DOCS=true`. They are off by default.
 
@@ -93,7 +94,9 @@ target pair = cc_pair_id or DEFAULT_CC_PAIR_ID (1, the public default pair)
 GATE 2 at EDIT on the target pair
 GATE 2 at EDIT on every pair that already serves this document_id
 reject an id that belongs to a user file
+on the playground: check the chunk limit (429 when used up)
 run_indexing_pipeline(ignore_time_skip=True) on the primary index, then the secondary if one is building
+on the playground: count the primary index's chunks toward the chunk limit
 -> IngestionResult(already_existed = new_docs == 0)
 ```
 

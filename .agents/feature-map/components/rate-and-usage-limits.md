@@ -166,11 +166,13 @@ is no longer read or written ([TECH-DEBT](../TECH-DEBT.md)).
   - `TENANT_START` with no length: one period for the whole trial. Used by the
     playground for chunks.
 
-  `TENANT_START` periods need the tenant's trial start, from
-  `tenant_trial_start`. It does not supply one yet, so today these periods use
-  the calendar week instead, the same as `CALENDAR`: playground cost and chunks
-  both reset every Monday until the trial start is read from the control plane
-  ([TECH-DEBT](../TECH-DEBT.md)).
+  `TENANT_START` periods need the tenant's trial start. On the playground it
+  comes from the control plane through the per-tenant cache below. When it is
+  missing, a limit with a length uses calendar periods of that length (the
+  calendar week for 7 days), and a whole-trial limit counts in one period that
+  never ends, so it cannot reset weekly. A warning is
+  logged at most once an hour per tenant. Until the control plane serves the
+  trial start, that is every tenant ([TECH-DEBT](../TECH-DEBT.md)).
 
   The check (before an action) and `record_usage` (after it) both call
   `period_for` to find the current period, so they always read and write the
@@ -178,6 +180,17 @@ is no longer read or written ([TECH-DEBT](../TECH-DEBT.md)).
 - **Adding usage.** Every place that adds usage calls `record_usage`. It uses the
   cloud trial policy's windows and does no billing lookup, so both cloud plans
   must use the same windows. This is checked when the module loads.
+- **Playground cache.** `backend/ee/onyx/server/tenants/usage_limit_cache.py`
+  keeps each playground tenant's trial start and overrides. The control plane
+  owns them; the data plane only caches them, like the billing cache: a miss
+  reads one tenant from the control plane, and a failed read caches an empty
+  value for 60 seconds so the control plane is not asked on every request. The
+  trial start never changes, so each process also keeps it in memory. A sales
+  raise is pushed to `POST /tenants/usage-limit-overrides` and applies at once.
+  A playground override replaces the plan's amount.
+- **Ingestion API.** On the playground, documents pushed to the ingestion API
+  are checked against and counted toward the chunk limit, like connector
+  indexing. On cloud they are not counted.
 - **Overrides.** On cloud, each check finds the plan from the trial status and
   reads the tenant's override from the control plane
   (`backend/ee/onyx/server/tenant_usage_limits.py`, refreshed every 24 h). If

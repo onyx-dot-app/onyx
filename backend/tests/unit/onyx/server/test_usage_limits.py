@@ -334,7 +334,7 @@ class TestPeriodFor:
         self, elapsed: timedelta, window_number: int
     ) -> None:
         block_start = _START + timedelta(days=7 * window_number)
-        with patch.object(usage_limits, "tenant_trial_start", return_value=_START):
+        with patch.object(usage_limits, "tenant_trial_start_fn", return_value=_START):
             assert period_for(TENANT_WEEK, "t", _START + elapsed) == UsagePeriod(
                 anchor=WindowAnchor.TENANT_START,
                 start=block_start,
@@ -342,7 +342,7 @@ class TestPeriodFor:
             )
 
     def test_whole_trial_is_one_period_that_never_ends(self) -> None:
-        with patch.object(usage_limits, "tenant_trial_start", return_value=_START):
+        with patch.object(usage_limits, "tenant_trial_start_fn", return_value=_START):
             assert period_for(
                 WHOLE_TRIAL, "t", _START + timedelta(days=20)
             ) == UsagePeriod(anchor=WindowAnchor.TENANT_START, start=_START)
@@ -357,7 +357,7 @@ class TestPeriodFor:
     ) -> None:
         monday = datetime(2026, 11, 23, tzinfo=timezone.utc)
         with (
-            patch.object(usage_limits, "tenant_trial_start", return_value=start),
+            patch.object(usage_limits, "tenant_trial_start_fn", return_value=start),
             patch("onyx.db.usage.USAGE_LIMIT_WINDOW_SECONDS", 604_800),
         ):
             assert period_for(TENANT_WEEK, "t", _START) == UsagePeriod(
@@ -365,6 +365,36 @@ class TestPeriodFor:
                 start=monday,
                 end=monday + timedelta(days=7),
             )
+
+
+class TestLengthWithoutATrialStart:
+    def test_falls_back_to_calendar_periods_of_its_own_length(self) -> None:
+        """A one-day limit counted from the trial start falls back to calendar
+        days, not calendar weeks."""
+        one_day = LimitWindow(anchor=WindowAnchor.TENANT_START, length_seconds=86_400)
+        midnight = datetime(2026, 11, 25, tzinfo=timezone.utc)
+        with patch.object(usage_limits, "tenant_trial_start_fn", return_value=None):
+            assert period_for(one_day, "t", _START) == UsagePeriod(
+                anchor=WindowAnchor.CALENDAR,
+                start=midnight,
+                end=midnight + timedelta(days=1),
+            )
+
+
+class TestWholeTrialWithoutATrialStart:
+    @pytest.mark.parametrize(
+        "start",
+        [None, _START.replace(tzinfo=None), _START + timedelta(days=30)],
+        ids=["missing", "naive", "in_the_future"],
+    )
+    def test_counts_in_one_period_that_never_ends(self, start: datetime | None) -> None:
+        """A whole-trial limit must not reset weekly when the trial start is
+        missing: every week lands in the same period."""
+        with patch.object(usage_limits, "tenant_trial_start_fn", return_value=start):
+            this_week = period_for(WHOLE_TRIAL, "t", _START)
+            weeks_later = period_for(WHOLE_TRIAL, "t", _START + timedelta(days=20))
+        assert this_week == weeks_later
+        assert this_week.end is None
 
 
 class TestPlayground:
@@ -407,7 +437,7 @@ class TestPlayground:
         with (
             patch.object(usage_limits, "USAGE_LIMITS_ENABLED", True),
             patch.object(usage_limits, "IS_PLAYGROUND", True),
-            patch.object(usage_limits, "tenant_trial_start", return_value=_START),
+            patch.object(usage_limits, "tenant_trial_start_fn", return_value=_START),
             patch.object(usage_limits, "check_usage_limit") as read,
         ):
             check_usage_and_raise(session, UsageType.LLM_COST, _TENANT)
@@ -443,7 +473,7 @@ class TestRecordUsage:
         now = _START + timedelta(days=9)
         with (
             patch.object(usage_limits, "_INCREMENT_POLICY", PLAYGROUND),
-            patch.object(usage_limits, "tenant_trial_start", return_value=_START),
+            patch.object(usage_limits, "tenant_trial_start_fn", return_value=_START),
             patch.object(usage_limits.tenant_usage_db, "increment_usage") as add,
             patch.object(usage_limits, "datetime") as clock,
         ):
@@ -462,3 +492,49 @@ class TestRecordUsage:
         ):
             record_usage(MagicMock(), UsageType.API_CALLS, 1, _TENANT)
         assert add.call_args.args[3] is None
+
+
+class TestPlaygroundOverrides:
+    def test_override_from_the_control_plane_replaces_the_amount(self) -> None:
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", True),
+            patch.object(usage_limits, "tenant_limit_override_fn", return_value=15000),
+            patch.object(usage_limits, "_get_tenant_override") as legacy,
+        ):
+            assert get_limit_for_usage_type(UsageType.LLM_COST, True, _TENANT) == 15000
+        legacy.assert_not_called()
+
+    def test_no_override_means_the_playground_amount(self) -> None:
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", True),
+            patch.object(usage_limits, "tenant_limit_override_fn", return_value=None),
+        ):
+            assert (
+                get_limit_for_usage_type(UsageType.CHUNKS_INDEXED, True, _TENANT)
+                == PLAYGROUND.allowances[UsageType.CHUNKS_INDEXED].limit
+            )
+
+    def test_cloud_never_reads_the_playground_source(self) -> None:
+        with (
+            patch.object(usage_limits, "IS_PLAYGROUND", False),
+            patch.object(usage_limits, "tenant_limit_override_fn") as playground,
+            patch.object(usage_limits, "_get_tenant_override", return_value=None),
+        ):
+            get_limit_for_usage_type(UsageType.LLM_COST, True, _TENANT)
+        playground.assert_not_called()
+
+
+class TestMissingTrialStartWarning:
+    def test_warns_once_an_hour_per_tenant(self) -> None:
+        usage_limits._trial_start_warned_at.clear()
+        with (
+            patch.object(usage_limits, "tenant_trial_start_fn", return_value=None),
+            patch.object(usage_limits, "logger") as log,
+            patch.object(usage_limits.time, "monotonic", side_effect=[0, 10, 10, 4000]),
+        ):
+            period_for(TENANT_WEEK, "t1", _START)
+            period_for(TENANT_WEEK, "t1", _START)
+            period_for(TENANT_WEEK, "t2", _START)
+            period_for(TENANT_WEEK, "t1", _START)
+        warned = [c.args[1] for c in log.warning.call_args_list]
+        assert warned == ["t1", "t2", "t1"]

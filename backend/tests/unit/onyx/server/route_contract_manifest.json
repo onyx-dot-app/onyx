@@ -736,6 +736,7 @@
   "POST /tenants/product-gating/full-sync": "control_plane_dep",
   "POST /tenants/seats/update": "admin",
   "POST /tenants/tier-update": "control_plane_dep",
+  "POST /tenants/usage-limit-overrides": "control_plane_dep",
   "POST /tenants/users/invite/accept": "basic",
   "POST /tenants/users/invite/approve": "admin",
   "POST /tenants/users/invite/deny": "basic",

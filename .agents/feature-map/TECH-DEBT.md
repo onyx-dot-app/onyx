@@ -59,17 +59,22 @@ link here from **Known issues** and do not restate the entry.
   handling in these files and `ApiShape.URL_PATTERN`.
 - **Owner:** rohoswagger. **Added:** 2026-11-24.
 
-## Playground trial-start periods use the calendar week
+## Playground trial-start periods fall back while the trial start is unknown
 
-- **What:** `tenant_trial_start` returns nothing, so playground limits that
-  count from the trial start (LLM cost per 7 days, chunks for the whole trial)
-  use the calendar week instead. Both reset every Monday.
-- **Why:** The trial start comes from the control plane through a per-tenant
-  cache, which the next PR of the ENG-4479 stack adds.
-- **Where:** `backend/onyx/server/usage_limits.py:tenant_trial_start`, used by
-  `period_for`.
-- **Ends when:** `tenant_trial_start` reads the cached `trial_start`. That PR
-  also adds a per-tenant warning when the trial start is missing.
+- **What:** Playground limits that count from the trial start (LLM cost per 7
+  days, chunks for the whole trial) need the tenant's trial start. The data
+  plane reads it from the control plane, but the control plane does not serve
+  `GET /tenants/{id}/usage-limit-overrides` yet. Each read fails, an empty value
+  is cached for 60 seconds, and those limits fall back. LLM cost uses the
+  calendar week, so it resets every Monday. Chunks count in one period that
+  never ends, so the whole-trial allowance never resets. A warning is logged at
+  most once an hour per tenant.
+- **Why:** The control plane work is separate (ENG-4468 for `trial_start`,
+  ENG-4755 for the overrides).
+- **Where:** `backend/ee/onyx/server/tenants/usage_limit_cache.py`, read through
+  `backend/onyx/server/usage_limits.py:tenant_trial_start_fn`.
+- **Ends when:** The control plane serves that endpoint with `trial_start`. No
+  data plane change is needed then.
 - **Owner:** Subash-Mohan. **Added:** 2026-11-27.
 
 ## The old `tenant_usage` table is kept for one release

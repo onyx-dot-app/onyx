@@ -2,10 +2,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ee.onyx.server.license.models import CustomerTier
+from onyx.db.usage import UsageType
 from onyx.server.settings.models import ApplicationStatus
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class CheckoutSessionCreationRequest(BaseModel):
@@ -24,6 +28,47 @@ class ProductGatingRequest(BaseModel):
 
 class ProductGatingFullSyncRequest(BaseModel):
     gated_tenant_ids: list[str]
+
+
+class TenantUsageLimitState(BaseModel):
+    """What the control plane says about one playground tenant's limits."""
+
+    # When the trial started. Periods that count from the trial start begin here.
+    trial_start: datetime | None = None
+    # Overrides by usage type, for example {"llm_cost_cents": 10000}. Each one
+    # replaces the plan's amount. It is not added to it.
+    limits: dict[UsageType, int] = {}
+
+    @field_validator("limits", mode="before")
+    @classmethod
+    def _drop_unknown_usage_types(cls, raw: object) -> object:
+        """The control plane may know usage types this version does not. Drop
+        those, so the known overrides still apply."""
+        if not isinstance(raw, dict):
+            return raw
+        known = {usage_type.value for usage_type in UsageType}
+        kept: dict[str, object] = {}
+        unknown: list[str] = []
+        for key, value in raw.items():
+            name = key.value if isinstance(key, UsageType) else str(key)
+            if name in known:
+                kept[name] = value
+            else:
+                unknown.append(name)
+        if unknown:
+            logger.warning(
+                "Ignoring unknown usage limit overrides: %s", sorted(unknown)
+            )
+        return kept
+
+
+class UsageLimitOverridesPushRequest(TenantUsageLimitState):
+    tenant_id: str
+
+
+class UsageLimitOverridesPushResponse(BaseModel):
+    updated: bool
+    error: str | None
 
 
 class TierUpdateRequest(BaseModel):
