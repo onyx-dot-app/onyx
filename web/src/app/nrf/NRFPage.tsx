@@ -19,6 +19,10 @@ import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
+import {
+  parseChromeContext,
+  setChromeContext,
+} from "@/lib/extension/chromeContext";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
@@ -302,6 +306,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       if (event.source !== window.parent) return;
       if (event.data?.type === CHROME_MESSAGE.TAB_URL_UPDATED) {
         setCurrentTabUrl(event.data.url as string);
+      } else {
+        const context = parseChromeContext(event);
+        if (context) setChromeContext(context);
       }
     }
 

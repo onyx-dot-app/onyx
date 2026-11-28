@@ -1484,7 +1484,11 @@
       },
       "browser": {
         "title": "Navigateur",
-        "description": "Autorisez l'agent à utiliser un navigateur web dans son bac à sable. Les utilisateurs peuvent le regarder et en prendre le contrôle dans le panneau du chat."
+        "description": "Autorisez l'agent à utiliser un navigateur web. Les utilisateurs peuvent le regarder dans le panneau du chat."
+      },
+      "chromeBrowser": {
+        "title": "Utiliser le Chrome de l'utilisateur",
+        "description": "Permet aux chats d'utiliser le propre Chrome de l'utilisateur avec l'extension Onyx. Onyx demande à l'utilisateur avant d'utiliser chaque site. Le texte des pages est envoyé à Onyx et au fournisseur du modèle."
       }
     },
     "codeInterpreter": {
@@ -12956,7 +12960,7 @@
                 "status": "{phase, select, running {Clic sur un élément} failed {Impossible de cliquer sur l’élément} canceled {Annulé} other {Clic effectué sur un élément}}"
               },
               "type": {
-                "status": "{phase, select, running {Saisie de « {text} »} failed {Impossible de saisir « {text} »} canceled {Annulé} other {« {text} » saisi}}"
+                "status": "{phase, select, running {Saisie de « {text} »} failed {Impossible de saisir le texte} canceled {Annulé} other {« {text} » saisi}}"
               },
               "hover": {
                 "status": "{phase, select, running {Survol d’un élément} failed {Impossible de survoler l’élément} canceled {Annulé} other {Élément survolé}}"
@@ -13780,6 +13784,9 @@
       },
       "browserTab": {
         "label": "Navigateur"
+      },
+      "chromeTab": {
+        "label": "Mon Chrome"
       }
     },
     "export": {
@@ -13960,6 +13967,27 @@
         "error": "Impossible de téléverser les fichiers. Réessayez."
       },
       "answerError": "Impossible de répondre à la page. Réessayez."
+    },
+    "chromeBrowser": {
+      "error": "Une erreur s'est produite. Réessayez.",
+      "retry": "Vérifier à nouveau",
+      "unavailable": {
+        "title": "Chrome n'est pas disponible",
+        "description": "Votre espace de travail ne permet pas aux chats d'utiliser votre Chrome, ou Onyx n'a pas pu charger son état."
+      },
+      "connect": {
+        "title": "Connecter votre Chrome",
+        "description": "Installez l'extension Onyx dans Chrome et connectez-vous à Onyx. Ce chat pourra ensuite utiliser votre Chrome."
+      },
+      "idle": {
+        "title": "Votre Chrome est prêt",
+        "description": "Quand l'agent utilise votre Chrome, vous le regardez ici. Onyx vous demande avant d'utiliser chaque site."
+      },
+      "using": {
+        "title": "Utilisation de votre Chrome",
+        "humanControl": "Vous utilisez cet onglet",
+        "stop": "Arrêter"
+      }
     }
   },
   "common": {
@@ -16441,6 +16469,12 @@
         "disabledTooltip": "L'interface de recherche est désactivée et ne peut être activée que par un administrateur.",
         "searchOption": "Recherche",
         "title": "Mode d'application par défaut"
+      },
+      "defaultBrowser": {
+        "chromeOption": "Votre Chrome",
+        "description": "Le navigateur que l'agent utilise dans les nouveaux chats. Votre Chrome a besoin de l'extension Onyx ; sans elle, les chats utilisent le navigateur du bac à sable.",
+        "sandboxOption": "Navigateur du bac à sable",
+        "title": "Navigateur par défaut"
       },
       "defaultModel": {
         "description": "Ce modèle sera utilisé par défaut par {appName} dans vos chats.",

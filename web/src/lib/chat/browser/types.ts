@@ -127,3 +127,29 @@ export type BrowserConnectionState =
   | "disabled"
   | "unreachable"
   | "error";
+
+/** The user's Chrome, as one chat sees it (the Onyx extension). */
+export interface ChromeBrowserState {
+  // The user's Chrome installations that are connected now
+  installations: { installation_id: string }[];
+  grant: {
+    tabs: {
+      id: string;
+      // Empty unless the tab is on an allowed site
+      title: string;
+      url: string;
+      // The tab's site, or an empty string when unknown
+      origin: string;
+      // "human" while the user's own input holds the tab
+      controller: "agent" | "human";
+    }[];
+    // The id of the tab that the agent uses now
+    current: string | null;
+    // The sites that the chat may use now
+    origins: string[];
+    // Seconds since the epoch
+    expires_at: number;
+    // The chat belongs to the extension side panel's window
+    side_panel: boolean;
+  } | null;
+}

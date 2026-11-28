@@ -33,13 +33,12 @@ deployments only.
   domain and the new-tab default by Chrome policy. SSO sign-in inside the panel
   opens the IdP in a new tab, and the panel picks up the session when the user
   returns.
-- **A chat can use the user's Chrome.** Onyx asks the user for each site in
-  the chat (tool approval card); the extension has no consent window. The
-  server binds a chat to the extension, and the chat's browser tools then act
-  in Chrome as the user, on the allowed sites only. The extension streams a
-  live preview of the current tab. The user stops it from the chat, the
-  extension popup, or Chrome's debugging bar. A side panel chat ends when the
-  panel closes.
+- **A chat can use the user's Chrome.** Onyx asks per site with the normal tool
+  approval card in the chat. The side panel chat always uses Chrome, in the
+  panel's window; the web chat uses the user's default browser. The chat's "My
+  Chrome" tab shows a live read-only preview of the agent's tab. The user stops
+  it from the chat, the extension popup, Chrome's debugging bar, or by closing
+  the side panel.
 
 On failure: the widget shows the error text in the chat when the send fails,
 for example on a stream line that is not valid JSON or a missing credential.

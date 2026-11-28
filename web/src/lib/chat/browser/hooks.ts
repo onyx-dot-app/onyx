@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import useSWR, { type SWRResponse } from "swr";
 import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
 import { SvgDownload } from "@opal/icons";
@@ -20,6 +21,8 @@ import {
   type ChatRightPanelState,
 } from "@/lib/chat/rightPanel";
 import { downloadFile } from "@/lib/download";
+import { errorHandlingFetcher, type FetchError } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   browserPageTitle,
   type BrowserSocketState,
@@ -30,6 +33,7 @@ import {
 } from "@/lib/chat/browser/stream";
 import type {
   BrowserConnectionState,
+  ChromeBrowserState,
   BrowserDownload,
   BrowserFileChooser,
   BrowserPointer,
@@ -483,4 +487,27 @@ export function useChatBrowserTabs({
     closeTab,
     openPage,
   };
+}
+
+// The chat's Chrome state changes in Chrome (a bind, a stop), so the
+// panel polls it while it shows, and the chat reads it once otherwise
+const CHROME_POLL_MS = 2_000;
+
+/**
+ * The chat's use of the user's own Chrome; no fetch for a null chat. It
+ * polls while `polling` and while the chat has Chrome access, so access that
+ * starts or ends anywhere shows soon. A failed fetch retries.
+ */
+export function useChromeBrowserState(
+  sessionId: string | null,
+  polling: boolean
+): SWRResponse<ChromeBrowserState, FetchError> {
+  return useSWR<ChromeBrowserState, FetchError>(
+    sessionId === null ? null : SWR_KEYS.chatChromeBrowser(sessionId),
+    errorHandlingFetcher,
+    {
+      refreshInterval: (data) => (polling || data?.grant ? CHROME_POLL_MS : 0),
+      errorRetryInterval: CHROME_POLL_MS,
+    }
+  );
 }

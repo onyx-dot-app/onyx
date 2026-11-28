@@ -1484,7 +1484,11 @@
       },
       "browser": {
         "title": "Navegador",
-        "description": "Permite que el agente use un navegador web en su sandbox. Los usuarios pueden verlo y tomar el control en el panel del chat."
+        "description": "Permite que el agente use un navegador web. Los usuarios pueden verlo en el panel del chat."
+      },
+      "chromeBrowser": {
+        "title": "Usar el Chrome del usuario",
+        "description": "Permite que los chats usen el propio Chrome del usuario con la extensión de Onyx. Onyx pregunta al usuario antes de usar cada sitio. El texto de la página va a Onyx y al proveedor del modelo."
       }
     },
     "codeInterpreter": {
@@ -12956,7 +12960,7 @@
                 "status": "{phase, select, running {Haciendo clic en un elemento} failed {No se pudo hacer clic en el elemento} canceled {Cancelado} other {Se hizo clic en un elemento}}"
               },
               "type": {
-                "status": "{phase, select, running {Escribiendo “{text}”} failed {No se pudo escribir “{text}”} canceled {Cancelado} other {Se escribió “{text}”}}"
+                "status": "{phase, select, running {Escribiendo “{text}”} failed {No se pudo escribir el texto} canceled {Cancelado} other {Se escribió “{text}”}}"
               },
               "hover": {
                 "status": "{phase, select, running {Pasando el cursor sobre un elemento} failed {No se pudo pasar el cursor sobre el elemento} canceled {Cancelado} other {Se pasó el cursor sobre un elemento}}"
@@ -13780,6 +13784,9 @@
       },
       "browserTab": {
         "label": "Navegador"
+      },
+      "chromeTab": {
+        "label": "Mi Chrome"
       }
     },
     "export": {
@@ -13960,6 +13967,27 @@
         "error": "No se pudieron subir los archivos. Inténtalo de nuevo."
       },
       "answerError": "No se pudo responder a la página. Inténtalo de nuevo."
+    },
+    "chromeBrowser": {
+      "error": "Algo salió mal. Inténtalo de nuevo.",
+      "retry": "Comprobar de nuevo",
+      "unavailable": {
+        "title": "Chrome no está disponible",
+        "description": "Tu espacio de trabajo no permite que los chats usen tu Chrome, u Onyx no pudo cargar su estado."
+      },
+      "connect": {
+        "title": "Conecta tu Chrome",
+        "description": "Instala la extensión de Onyx en Chrome e inicia sesión en Onyx allí. Luego este chat podrá usar tu Chrome."
+      },
+      "idle": {
+        "title": "Tu Chrome está listo",
+        "description": "Cuando el agente use tu Chrome, lo verás aquí. Onyx te pregunta antes de usar cada sitio."
+      },
+      "using": {
+        "title": "Usando tu Chrome",
+        "humanControl": "Estás usando esta pestaña",
+        "stop": "Detener"
+      }
     }
   },
   "common": {
@@ -16441,6 +16469,12 @@
         "disabledTooltip": "La interfaz de búsqueda está desactivada y solo un administrador puede activarla.",
         "searchOption": "Búsqueda",
         "title": "Modo de la app predeterminado"
+      },
+      "defaultBrowser": {
+        "chromeOption": "Tu Chrome",
+        "description": "El navegador que usa el agente en los chats nuevos. Tu Chrome necesita la extensión de Onyx; sin ella, los chats usan el navegador del sandbox.",
+        "sandboxOption": "Navegador del sandbox",
+        "title": "Navegador predeterminado"
       },
       "defaultModel": {
         "description": "{appName} usará este modelo de forma predeterminada en tus chats.",

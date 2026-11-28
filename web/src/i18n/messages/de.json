@@ -1484,7 +1484,11 @@
       },
       "browser": {
         "title": "Browser",
-        "description": "Erlauben Sie dem Agenten, in seiner Sandbox einen Webbrowser zu verwenden. Benutzer können ihn im Chatbereich beobachten und die Steuerung übernehmen."
+        "description": "Erlauben Sie dem Agenten, einen Webbrowser zu verwenden. Benutzer können ihn im Chatbereich beobachten."
+      },
+      "chromeBrowser": {
+        "title": "Chrome des Benutzers verwenden",
+        "description": "Chats dürfen das eigene Chrome des Benutzers über die Onyx-Erweiterung verwenden. Onyx fragt den Benutzer, bevor es eine Website verwendet. Seitentext geht an Onyx und den Modellanbieter."
       }
     },
     "codeInterpreter": {
@@ -12956,7 +12960,7 @@
                 "status": "{phase, select, running {Element wird angeklickt} failed {Element konnte nicht angeklickt werden} canceled {Abgebrochen} other {Element angeklickt}}"
               },
               "type": {
-                "status": "{phase, select, running {„{text}“ wird eingegeben} failed {„{text}“ konnte nicht eingegeben werden} canceled {Abgebrochen} other {„{text}“ eingegeben}}"
+                "status": "{phase, select, running {„{text}“ wird eingegeben} failed {Text konnte nicht eingegeben werden} canceled {Abgebrochen} other {„{text}“ eingegeben}}"
               },
               "hover": {
                 "status": "{phase, select, running {Zeiger über Element} failed {Zeiger konnte nicht über das Element bewegt werden} canceled {Abgebrochen} other {Zeiger über Element bewegt}}"
@@ -13780,6 +13784,9 @@
       },
       "browserTab": {
         "label": "Browser"
+      },
+      "chromeTab": {
+        "label": "Mein Chrome"
       }
     },
     "export": {
@@ -13960,6 +13967,27 @@
         "error": "Die Dateien konnten nicht hochgeladen werden. Versuchen Sie es erneut."
       },
       "answerError": "Die Antwort an die Seite ist fehlgeschlagen. Versuchen Sie es erneut."
+    },
+    "chromeBrowser": {
+      "error": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
+      "retry": "Erneut prüfen",
+      "unavailable": {
+        "title": "Chrome ist nicht verfügbar",
+        "description": "Ihr Arbeitsbereich erlaubt Chats nicht, Ihr Chrome zu verwenden, oder Onyx konnte den Status nicht laden."
+      },
+      "connect": {
+        "title": "Chrome verbinden",
+        "description": "Installieren Sie die Onyx-Erweiterung in Chrome und melden Sie sich dort bei Onyx an. Dann kann dieser Chat Ihr Chrome verwenden."
+      },
+      "idle": {
+        "title": "Ihr Chrome ist bereit",
+        "description": "Wenn der Agent Ihr Chrome verwendet, sehen Sie ihm hier zu. Onyx fragt Sie, bevor es eine Website verwendet."
+      },
+      "using": {
+        "title": "Ihr Chrome wird verwendet",
+        "humanControl": "Sie verwenden diesen Tab",
+        "stop": "Stoppen"
+      }
     }
   },
   "common": {
@@ -16441,6 +16469,12 @@
         "disabledTooltip": "Die Suchoberfläche ist deaktiviert und kann nur von einem Administrator aktiviert werden.",
         "searchOption": "Suche",
         "title": "Standard-App-Modus"
+      },
+      "defaultBrowser": {
+        "chromeOption": "Ihr Chrome",
+        "description": "Der Browser, den der Agent in neuen Chats verwendet. Ihr Chrome benötigt die Onyx-Erweiterung; ohne sie verwenden Chats den Sandbox-Browser.",
+        "sandboxOption": "Sandbox-Browser",
+        "title": "Standardbrowser"
       },
       "defaultModel": {
         "description": "Dieses Modell wird von {appName} standardmäßig in Ihren Chats verwendet.",

@@ -193,6 +193,9 @@ class UserSettings(Settings):
     # True when the user's chats can use the browser: a signed-in user,
     # harness sandboxes run in this deployment and browser_enabled is on.
     chat_browser_available: bool = False
+    # True when the user's chats can use the user's own Chrome: a signed-in
+    # user, and browser_enabled and chrome_browser_enabled are on.
+    chrome_browser_available: bool = False
     # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
     # True on the playground deployment (IS_PLAYGROUND env var). The web app

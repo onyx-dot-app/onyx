@@ -1484,7 +1484,11 @@
       },
       "browser": {
         "title": "ブラウザー",
-        "description": "エージェントがサンドボックス内でウェブブラウザーを使えるようにします。ユーザーはチャットパネルでその様子を見たり、操作を引き継いだりできます。"
+        "description": "エージェントがウェブブラウザーを使えるようにします。ユーザーはチャットパネルでその様子を見られます。"
+      },
+      "chromeBrowser": {
+        "title": "ユーザーの Chrome を使用",
+        "description": "Onyx 拡張機能を通じて、チャットでユーザー自身の Chrome を使えるようにします。Onyx はサイトを使う前にユーザーに確認します。ページのテキストは Onyx とモデルプロバイダーに送信されます。"
       }
     },
     "codeInterpreter": {
@@ -12956,7 +12960,7 @@
                 "status": "{phase, select, running {要素をクリックしています} failed {要素をクリックできませんでした} canceled {キャンセルしました} other {要素をクリックしました}}"
               },
               "type": {
-                "status": "{phase, select, running {「{text}」を入力しています} failed {「{text}」を入力できませんでした} canceled {キャンセルしました} other {「{text}」を入力しました}}"
+                "status": "{phase, select, running {「{text}」を入力しています} failed {テキストを入力できませんでした} canceled {キャンセルしました} other {「{text}」を入力しました}}"
               },
               "hover": {
                 "status": "{phase, select, running {要素にカーソルを合わせています} failed {要素にカーソルを合わせられませんでした} canceled {キャンセルしました} other {要素にカーソルを合わせました}}"
@@ -13780,6 +13784,9 @@
       },
       "browserTab": {
         "label": "ブラウザー"
+      },
+      "chromeTab": {
+        "label": "自分の Chrome"
       }
     },
     "export": {
@@ -13960,6 +13967,27 @@
         "error": "ファイルをアップロードできませんでした。もう一度お試しください。"
       },
       "answerError": "ページに応答できませんでした。もう一度お試しください。"
+    },
+    "chromeBrowser": {
+      "error": "問題が発生しました。もう一度お試しください。",
+      "retry": "再確認",
+      "unavailable": {
+        "title": "Chrome を使用できません",
+        "description": "ワークスペースでチャットによる Chrome の使用が許可されていないか、Onyx が状態を読み込めませんでした。"
+      },
+      "connect": {
+        "title": "Chrome を接続",
+        "description": "Chrome に Onyx 拡張機能をインストールし、そこで Onyx にサインインしてください。その後、このチャットはあなたの Chrome を使用できます。"
+      },
+      "idle": {
+        "title": "Chrome の準備ができました",
+        "description": "エージェントがあなたの Chrome を使うと、ここで様子を見られます。Onyx は各サイトを使う前に確認します。"
+      },
+      "using": {
+        "title": "Chrome を使用中",
+        "humanControl": "このタブを操作中です",
+        "stop": "停止"
+      }
     }
   },
   "common": {
@@ -16441,6 +16469,12 @@
         "disabledTooltip": "検索 UI は無効です。管理者のみが有効にできます。",
         "searchOption": "検索",
         "title": "デフォルトのアプリモード"
+      },
+      "defaultBrowser": {
+        "chromeOption": "あなたの Chrome",
+        "description": "新しいチャットでエージェントが使うブラウザーです。Chrome の利用には Onyx 拡張機能が必要です。拡張機能がない場合、チャットはサンドボックスブラウザーを使います。",
+        "sandboxOption": "サンドボックスブラウザー",
+        "title": "既定のブラウザー"
       },
       "defaultModel": {
         "description": "{appName} はチャットでこのモデルをデフォルトで使用します。",

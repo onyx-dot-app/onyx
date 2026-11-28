@@ -44,3 +44,12 @@ export async function clearBrowserData(sessionId: string): Promise<void> {
   if (!response.ok)
     throw new Error(`Clearing browser data failed: ${response.status}`);
 }
+
+/** Ends the chat's use of the user's Chrome. */
+export async function stopChromeShare(sessionId: string): Promise<void> {
+  const response = await fetch(browserRoute(sessionId, "chrome"), {
+    method: "DELETE",
+  });
+  if (!response.ok)
+    throw new Error(`Stopping the Chrome share failed: ${response.status}`);
+}

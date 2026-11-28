@@ -1,5 +1,6 @@
 import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
 import type { ChatToolOptions } from "@/lib/tools/types";
+import type { ChromeContext } from "@/lib/extension/chromeContext";
 import { mutate } from "swr";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -199,6 +200,9 @@ export interface SendMessageParams {
   // Additional context injected into the LLM call but not stored/shown in chat.
   // Used e.g. by Chrome extension "Read this tab" feature.
   additionalContext?: string;
+  // The side panel's Chrome window and tab; only the extension side panel
+  // sends it
+  chromeContext?: ChromeContext | null;
 }
 
 export class ChatSendRejectedError extends Error {}
@@ -222,6 +226,7 @@ export async function* sendMessage({
   llmOverrides,
   origin,
   additionalContext,
+  chromeContext,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   // Build payload for new send-chat-message API
   const payload = {
@@ -246,6 +251,7 @@ export async function* sendMessage({
     // Default to "unknown" for consistency with backend; callers should set explicitly
     origin: origin ?? "unknown",
     additional_context: additionalContext ?? null,
+    chrome_context: chromeContext ?? null,
     // The web chat shows responses that background agents start later.
     accepts_follow_ups: true,
     // The web chat updates the sidebar when the server names a new chat.

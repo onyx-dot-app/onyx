@@ -1484,7 +1484,11 @@
       },
       "browser": {
         "title": "브라우저",
-        "description": "에이전트가 샌드박스에서 웹 브라우저를 사용하도록 허용합니다. 사용자는 채팅 패널에서 이를 지켜보고 제어권을 가져올 수 있습니다."
+        "description": "에이전트가 웹 브라우저를 사용하도록 허용합니다. 사용자는 채팅 패널에서 이를 지켜볼 수 있습니다."
+      },
+      "chromeBrowser": {
+        "title": "사용자의 Chrome 사용",
+        "description": "Onyx 확장 프로그램을 통해 채팅이 사용자의 Chrome을 사용할 수 있게 합니다. Onyx는 각 사이트를 사용하기 전에 사용자에게 묻습니다. 페이지 텍스트는 Onyx와 모델 제공업체로 전송됩니다."
       }
     },
     "codeInterpreter": {
@@ -12956,7 +12960,7 @@
                 "status": "{phase, select, running {요소 클릭 중} failed {요소를 클릭할 수 없음} canceled {취소됨} other {요소를 클릭함}}"
               },
               "type": {
-                "status": "{phase, select, running {“{text}” 입력 중} failed {“{text}”을(를) 입력할 수 없음} canceled {취소됨} other {“{text}”을(를) 입력함}}"
+                "status": "{phase, select, running {“{text}” 입력 중} failed {텍스트를 입력할 수 없음} canceled {취소됨} other {“{text}”을(를) 입력함}}"
               },
               "hover": {
                 "status": "{phase, select, running {요소 위로 커서 이동 중} failed {요소 위로 커서를 이동할 수 없음} canceled {취소됨} other {요소 위로 커서를 이동함}}"
@@ -13780,6 +13784,9 @@
       },
       "browserTab": {
         "label": "브라우저"
+      },
+      "chromeTab": {
+        "label": "내 Chrome"
       }
     },
     "export": {
@@ -13960,6 +13967,27 @@
         "error": "파일을 업로드하지 못했습니다. 다시 시도하세요."
       },
       "answerError": "페이지에 응답하지 못했습니다. 다시 시도하세요."
+    },
+    "chromeBrowser": {
+      "error": "문제가 발생했습니다. 다시 시도하세요.",
+      "retry": "다시 확인",
+      "unavailable": {
+        "title": "Chrome을 사용할 수 없습니다",
+        "description": "워크스페이스에서 채팅의 Chrome 사용을 허용하지 않거나 Onyx가 상태를 불러오지 못했습니다."
+      },
+      "connect": {
+        "title": "Chrome 연결",
+        "description": "Chrome에 Onyx 확장 프로그램을 설치하고 그곳에서 Onyx에 로그인하세요. 그러면 이 채팅에서 내 Chrome을 사용할 수 있습니다."
+      },
+      "idle": {
+        "title": "Chrome이 준비되었습니다",
+        "description": "에이전트가 내 Chrome을 사용하면 여기에서 지켜볼 수 있습니다. Onyx는 각 사이트를 사용하기 전에 먼저 묻습니다."
+      },
+      "using": {
+        "title": "Chrome 사용 중",
+        "humanControl": "이 탭을 사용 중입니다",
+        "stop": "중지"
+      }
     }
   },
   "common": {
@@ -16441,6 +16469,12 @@
         "disabledTooltip": "검색 UI가 비활성화되어 있으며 관리자만 활성화할 수 있습니다.",
         "searchOption": "검색",
         "title": "기본 앱 모드"
+      },
+      "defaultBrowser": {
+        "chromeOption": "내 Chrome",
+        "description": "새 채팅에서 에이전트가 사용하는 브라우저입니다. 내 Chrome을 쓰려면 Onyx 확장 프로그램이 필요하며, 없으면 채팅은 샌드박스 브라우저를 사용합니다.",
+        "sandboxOption": "샌드박스 브라우저",
+        "title": "기본 브라우저"
       },
       "defaultModel": {
         "description": "{appName}가 채팅에서 기본으로 사용하는 모델입니다.",

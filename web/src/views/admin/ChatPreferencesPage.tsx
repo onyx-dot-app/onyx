@@ -21,6 +21,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   Content,
   ContentAction,
+  ContentIndent,
   InputHorizontal,
   InputVertical,
 } from "@opal/layouts";
@@ -417,6 +418,22 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
+              {(s.browser_enabled ?? true) && (
+                <ContentIndent font="main-ui-action">
+                  <InputHorizontal
+                    title={t("chromeBrowser.title")}
+                    description={t("chromeBrowser.description")}
+                    withLabel
+                  >
+                    <InputSwitch
+                      checked={s.chrome_browser_enabled ?? true}
+                      onCheckedChange={(checked) => {
+                        void saveSettings({ chrome_browser_enabled: checked });
+                      }}
+                    />
+                  </InputHorizontal>
+                </ContentIndent>
+              )}
               <InputHorizontal
                 title={t("autoScroll.title")}
                 description={t("autoScroll.description")}

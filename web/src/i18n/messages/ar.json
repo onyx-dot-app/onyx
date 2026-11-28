@@ -1484,7 +1484,11 @@
       },
       "browser": {
         "title": "المتصفح",
-        "description": "اسمح للوكيل باستخدام متصفح ويب في بيئة الحماية الخاصة به. يمكن للمستخدمين مشاهدته وتولي التحكم من لوحة المحادثة."
+        "description": "اسمح للوكيل باستخدام متصفح ويب. يمكن للمستخدمين مشاهدته في لوحة المحادثة."
+      },
+      "chromeBrowser": {
+        "title": "استخدام Chrome الخاص بالمستخدم",
+        "description": "السماح للمحادثات باستخدام Chrome الخاص بالمستخدم عبر إضافة Onyx. يسأل Onyx المستخدم قبل أن يستخدم كل موقع. يُرسل نص الصفحة إلى Onyx ومزوّد النموذج."
       }
     },
     "codeInterpreter": {
@@ -12956,7 +12960,7 @@
                 "status": "{phase, select, running {جارٍ النقر على عنصر} failed {تعذّر النقر على العنصر} canceled {أُلغي} other {تم النقر على عنصر}}"
               },
               "type": {
-                "status": "{phase, select, running {جارٍ كتابة “{text}”} failed {تعذّرت كتابة “{text}”} canceled {أُلغي} other {تمت كتابة “{text}”}}"
+                "status": "{phase, select, running {جارٍ كتابة “{text}”} failed {تعذّرت كتابة النص} canceled {أُلغي} other {تمت كتابة “{text}”}}"
               },
               "hover": {
                 "status": "{phase, select, running {جارٍ التمرير فوق عنصر} failed {تعذّر التمرير فوق العنصر} canceled {أُلغي} other {تم التمرير فوق عنصر}}"
@@ -13780,6 +13784,9 @@
       },
       "browserTab": {
         "label": "المتصفح"
+      },
+      "chromeTab": {
+        "label": "متصفح Chrome الخاص بي"
       }
     },
     "export": {
@@ -13960,6 +13967,27 @@
         "error": "تعذّر رفع الملفات. حاول مرة أخرى."
       },
       "answerError": "تعذّر الرد على الصفحة. حاول مرة أخرى."
+    },
+    "chromeBrowser": {
+      "error": "حدث خطأ. حاول مرة أخرى.",
+      "retry": "تحقّق مرة أخرى",
+      "unavailable": {
+        "title": "Chrome غير متاح",
+        "description": "لا تسمح مساحة العمل للمحادثات باستخدام Chrome الخاص بك، أو تعذّر على Onyx تحميل حالته."
+      },
+      "connect": {
+        "title": "اربط Chrome الخاص بك",
+        "description": "ثبّت إضافة Onyx في Chrome وسجّل الدخول إلى Onyx هناك. بعد ذلك يمكن لهذه المحادثة استخدام Chrome الخاص بك."
+      },
+      "idle": {
+        "title": "Chrome الخاص بك جاهز",
+        "description": "عندما يستخدم الوكيل Chrome الخاص بك، تشاهده هنا. يسألك Onyx قبل أن يستخدم كل موقع."
+      },
+      "using": {
+        "title": "يتم استخدام Chrome الخاص بك",
+        "humanControl": "أنت تستخدم علامة التبويب هذه",
+        "stop": "إيقاف"
+      }
     }
   },
   "common": {
@@ -16441,6 +16469,12 @@
         "disabledTooltip": "واجهة البحث معطّلة ولا يمكن تفعيلها إلا من قبل مسؤول.",
         "searchOption": "بحث",
         "title": "وضع التطبيق الافتراضي"
+      },
+      "defaultBrowser": {
+        "chromeOption": "Chrome الخاص بك",
+        "description": "المتصفح الذي يستخدمه الوكيل في المحادثات الجديدة. يحتاج Chrome الخاص بك إلى إضافة Onyx؛ وبدونها تستخدم المحادثات متصفح بيئة الحماية.",
+        "sandboxOption": "متصفح بيئة الحماية",
+        "title": "المتصفح الافتراضي"
       },
       "defaultModel": {
         "description": "سيستخدم {appName} هذا النموذج افتراضيًا في محادثاتك.",

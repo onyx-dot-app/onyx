@@ -310,6 +310,25 @@
   downloads it from `/api/chat/sessions/{id}/browser/downloads/{name}`. The
   admin switch is "Browser" on the chat preferences page
   (`browser_enabled`).
+- **"My Chrome" is a right-panel tab for the user's own Chrome**
+  (`RIGHT_PANEL_CHROME_TAB`, the "+" menu when
+  `settings.chrome_browser_available`). `ChatRightPanel` reads
+  `/api/chat/sessions/{id}/browser/chrome` (`useChromeBrowserState`, polled
+  while the Chrome tab is open or the chat has access) and passes it to
+  `ChromeBrowserPanel`: connect the extension, an idle note, or, with access,
+  a slim bar (Stop) over a full-panel read-only `BrowserPanel` that streams
+  the agent's tab from `/browser/chrome/ws` (`useBrowserStream` with
+  `chromeBrowserStreamUrl`). Onyx asks per site with the normal tool approval
+  card: the panel shows the chat's pending `browser_*` approvals over the
+  preview (or over the idle note), and the timeline shows the same cards. A turn picks its browser when it starts
+  (`backend/onyx/chat/process_message.py`), so while the chat has access, `ChatRightPanel`
+  turns a sandbox browser opening (for example on `browser_open`) into the
+  Chrome tab. A sandbox browser that was open before the access began stays until
+  the next send starts a turn (`turnCount`, from the chat leaving `input`).
+  The user picks the default browser in Chat Preferences
+  (`default_browser`, shown while `chrome_browser_available`). The extension
+  side panel sends `chrome_context` (its window and tab, from
+  `BROWSER_CONTEXT` messages) with each message.
 - **A chat has a right panel, with a toggle at the far end of its header**
   (the shared view's header for a shared chat), with or without published
   files. The toggle sits over the workspace's top end, so it stays at the

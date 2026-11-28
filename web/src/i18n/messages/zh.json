@@ -1484,7 +1484,11 @@
       },
       "browser": {
         "title": "浏览器",
-        "description": "允许智能体在其沙盒中使用网页浏览器。用户可以在聊天面板中观看并接管控制。"
+        "description": "允许智能体使用网页浏览器。用户可以在聊天面板中观看。"
+      },
+      "chromeBrowser": {
+        "title": "使用用户的 Chrome",
+        "description": "允许聊天通过 Onyx 扩展使用用户自己的 Chrome。Onyx 在使用每个网站前会询问用户。页面文本会发送给 Onyx 和模型提供商。"
       }
     },
     "codeInterpreter": {
@@ -12956,7 +12960,7 @@
                 "status": "{phase, select, running {正在点击元素} failed {无法点击元素} canceled {已取消} other {已点击元素}}"
               },
               "type": {
-                "status": "{phase, select, running {正在输入“{text}”} failed {无法输入“{text}”} canceled {已取消} other {已输入“{text}”}}"
+                "status": "{phase, select, running {正在输入“{text}”} failed {无法输入文本} canceled {已取消} other {已输入“{text}”}}"
               },
               "hover": {
                 "status": "{phase, select, running {正在悬停在元素上} failed {无法悬停在元素上} canceled {已取消} other {已悬停在元素上}}"
@@ -13780,6 +13784,9 @@
       },
       "browserTab": {
         "label": "浏览器"
+      },
+      "chromeTab": {
+        "label": "我的 Chrome"
       }
     },
     "export": {
@@ -13960,6 +13967,27 @@
         "error": "无法上传文件。请重试。"
       },
       "answerError": "无法响应该页面。请重试。"
+    },
+    "chromeBrowser": {
+      "error": "出现问题。请重试。",
+      "retry": "重新检查",
+      "unavailable": {
+        "title": "Chrome 不可用",
+        "description": "你的工作区不允许聊天使用你的 Chrome，或 Onyx 无法加载其状态。"
+      },
+      "connect": {
+        "title": "连接你的 Chrome",
+        "description": "在 Chrome 中安装 Onyx 扩展并在其中登录 Onyx。之后此聊天即可使用你的 Chrome。"
+      },
+      "idle": {
+        "title": "你的 Chrome 已就绪",
+        "description": "智能体使用你的 Chrome 时，你可以在这里观看。Onyx 在使用每个网站前会先询问你。"
+      },
+      "using": {
+        "title": "正在使用你的 Chrome",
+        "humanControl": "你正在使用此标签页",
+        "stop": "停止"
+      }
     }
   },
   "common": {
@@ -16441,6 +16469,12 @@
         "disabledTooltip": "搜索界面已禁用，只有管理员才能启用。",
         "searchOption": "搜索",
         "title": "默认应用模式"
+      },
+      "defaultBrowser": {
+        "chromeOption": "你的 Chrome",
+        "description": "智能体在新聊天中使用的浏览器。你的 Chrome 需要 Onyx 扩展；没有扩展时，聊天会使用沙盒浏览器。",
+        "sandboxOption": "沙盒浏览器",
+        "title": "默认浏览器"
       },
       "defaultModel": {
         "description": "{appName} 会在您的对话中默认使用此模型。",

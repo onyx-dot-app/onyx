@@ -56,6 +56,52 @@ the extension opens a welcome page. Enter your Onyx URL if your administrator ha
 
 You can change these shortcuts at `chrome://extensions/shortcuts`.
 
+## Let a Chat Use Your Chrome
+
+A chat can use your own Chrome, with your sign-ins. Use this for sites that only your browser can open,
+for example sites behind SSO or a company network.
+
+Which chats use your Chrome:
+
+- **Side panel chats** always use your Chrome. The agent works in the window of the side panel.
+  It starts on the tab that is active when you send a message.
+- **Chats in the Onyx web app** use your default browser. To use your Chrome, open **Settings → Chat Preferences**
+  and set **Default Browser** to **Your Chrome**. The setting shows when your admin allows it.
+  If Chrome is not connected, the chat uses the sandbox browser.
+
+Onyx asks you before the agent uses each site. When the agent first needs a site, the chat shows an approval card.
+Choose one of these:
+
+- **Approve once**: the agent can use the site for the rest of that response.
+- **Approve for this chat**: the agent can use the site for the rest of the chat.
+- **Reject**: the agent does not use the site.
+
+To watch the agent, open the **My Chrome** tab in the chat's right panel. It shows a live view of the agent's tab.
+The approval card also shows over the view. The view is read only.
+
+The agent does not type into standard password fields, run page scripts, upload files, or take screenshots.
+Onyx puts the tabs that the agent opens in a tab group named **Onyx**.
+Chrome shows a "started debugging this browser" bar while the chat has access,
+unless your admin installed the extension by policy.
+
+If you click or type in the agent's tab,
+the agent stops its clicks and typing in that tab until a few seconds after you stop. It can still read the page.
+To end access, do one of these:
+
+- Click **Stop** in the chat's **My Chrome** tab.
+- Click the Onyx icon in the Chrome toolbar, then **Stop**.
+- Click **Cancel** on the "debugging this browser" bar, if Chrome shows it.
+- Close the side panel, for a side panel chat.
+
+Access also ends after 8 hours. One Chrome serves one chat at a time.
+
+<Warning>
+  The text of the pages that the agent uses goes to Onyx and to your organization's AI model provider.
+  Approve only the sites that the task needs.
+</Warning>
+
+Your administrator can turn this off in **Admin Panel → Chat Preferences** or with a browser policy.
+
 ## Settings and Options
 
 Click the Onyx icon in the Chrome toolbar and select **Extension Settings** (or right-click the icon and select
