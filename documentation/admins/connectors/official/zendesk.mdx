@@ -94,7 +94,8 @@ Suspended Zendesk users get no access.
 - An article visible to **Everyone** is public in Onyx only if your Help Center shows it without sign-in.
   Otherwise every signed-in Zendesk user can read it, agents and end users.
 - An article limited to user segments is visible to the members of those segments,
-  plus admins and agents whose role can manage the Help Center.
+  plus admins and agents whose role can manage the Help Center. On plans without custom roles,
+  only admins count as Help Center managers.
 - Onyx evaluates the segment rules itself: all required tags, any one of the optional tags,
   the listed organizations and groups, and the users added to the segment by name.
 
@@ -126,7 +127,9 @@ so a token that loses admin access stops the sync instead of hiding documents.
 
 Onyx copies document access every 6 hours and group membership every 6 hours. When self-hosted,
 set `ZENDESK_PERMISSION_DOC_SYNC_FREQUENCY` and `ZENDESK_PERMISSION_GROUP_SYNC_FREQUENCY` (in seconds) to change this.
-New documents get their access when they are indexed.
+The first indexing run copies each document's access.
+Documents that later indexing runs add stay hidden until the next permission sync.
+Group sync stops with an error if the account has more than 500,000 users, organizations, or memberships.
 
 ## Troubleshooting
 

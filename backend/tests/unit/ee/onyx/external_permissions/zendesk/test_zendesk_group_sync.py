@@ -96,7 +96,13 @@ def test_ticket_access_of() -> None:
     # Unknown values and missing roles grant nothing.
     assert ticket_access_of(ODD_AGENT, ROLES) is None
     # A plan that lists no custom roles falls back to the user's restriction.
-    assert ticket_access_of(GROUP_AGENT, {}) == ZendeskTicketAccess.GROUPS
+    assert ticket_access_of(GROUP_AGENT, None) == ZendeskTicketAccess.GROUPS
+    # A listed plan without the agent's role grants nothing, whatever the
+    # restriction says.
+    assert (
+        ticket_access_of(LEAD.model_copy(update={"ticket_restriction": None}), {})
+        is None
+    )
     # Admins have their own group; end users have no agent access.
     assert ticket_access_of(ADMIN, ROLES) is None
     assert ticket_access_of(VIP, ROLES) is None
@@ -231,3 +237,11 @@ def test_ticket_groups_with_end_users() -> None:
     # Only organizations that share tickets, and no suspended users.
     assert groups["acme:org_end_users:30"] == ["vip@example.com"]
     assert "acme:org_end_users:31" not in groups
+
+
+def test_a_listing_past_the_limit_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ee.onyx.external_permissions.zendesk.group_sync as group_sync
+
+    monkeypatch.setattr(group_sync, "MAX_LISTED_ITEMS", 3)
+    with pytest.raises(RuntimeError, match="most it holds in memory"):
+        _groups(_connector("articles"))

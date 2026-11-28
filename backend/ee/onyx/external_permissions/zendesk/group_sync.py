@@ -52,6 +52,8 @@ _RESTRICTION_ACCESS: dict[str | None, ZendeskTicketAccess] = {
     "assigned": ZendeskTicketAccess.ASSIGNED,
 }
 _GUIDE_MANAGER_FORUM_ACCESS: str = "full"
+# Users, memberships and organizations are held in memory for one run.
+MAX_LISTED_ITEMS: int = 500_000
 
 
 class _Deadline:
@@ -86,9 +88,11 @@ def zendesk_groups(
     ops: ZendeskSourceOperations = connector.ops
     account: str = account_key(connector.subdomain)
     deadline = _Deadline()
-    custom_roles: dict[int, ZendeskCustomRole] = {
-        role.id: role for role in ops.list_custom_roles() or []
-    }
+    listed_roles = ops.list_custom_roles()
+    # None: the plan does not list custom roles.
+    custom_roles: dict[int, ZendeskCustomRole] | None = (
+        None if listed_roles is None else {role.id: role for role in listed_roles}
+    )
     group_members: dict[int, set[int]] = _memberships(
         ops.iterate_group_memberships(), deadline, "group memberships"
     )
@@ -126,7 +130,18 @@ def _users(
     for page in pages:
         deadline.check(step)
         users.extend(user for user in page if user.grantable_email is not None)
+        _check_size(len(users), step)
     return users
+
+
+def _check_size(count: int, step: str) -> None:
+    """The sync holds what it lists in memory, so a listing past the limit
+    fails clearly instead of exhausting the worker."""
+    if count > MAX_LISTED_ITEMS:
+        raise RuntimeError(
+            f"Zendesk group sync read more than {MAX_LISTED_ITEMS} {step}, the "
+            "most it holds in memory"
+        )
 
 
 def _organizations(
@@ -136,6 +151,7 @@ def _organizations(
     for page in ops.iterate_organizations():
         deadline.check("organizations")
         organizations.extend(page)
+        _check_size(len(organizations), "organizations")
     return organizations
 
 
@@ -148,6 +164,7 @@ def _memberships(
         deadline.check(step)
         for membership in page:
             containers[membership.user_id].add(membership.container_id)
+        _check_size(len(containers), step)
     return containers
 
 
@@ -156,14 +173,18 @@ def _emails(users: Iterable[ZendeskUser]) -> list[str]:
 
 
 def ticket_access_of(
-    user: ZendeskUser, custom_roles: dict[int, ZendeskCustomRole]
+    user: ZendeskUser, custom_roles: dict[int, ZendeskCustomRole] | None
 ) -> ZendeskTicketAccess | None:
     """An agent's ticket access. Admins read every ticket through their own
-    group, so they get None here, as do unknown values."""
+    group, so they get None here, as do unknown values and custom roles that
+    the listing does not hold. `custom_roles` is None on plans that do not
+    list them."""
     if user.role != ZendeskRole.AGENT:
         return None
-    role = custom_roles.get(user.custom_role_id) if user.custom_role_id else None
-    if role is not None:
+    if user.custom_role_id is not None and custom_roles is not None:
+        role = custom_roles.get(user.custom_role_id)
+        if role is None:
+            return None
         try:
             return ZendeskTicketAccess(role.ticket_access or "")
         except ValueError:
@@ -174,11 +195,17 @@ def ticket_access_of(
 
 
 def is_guide_manager(
-    user: ZendeskUser, custom_roles: dict[int, ZendeskCustomRole]
+    user: ZendeskUser, custom_roles: dict[int, ZendeskCustomRole] | None
 ) -> bool:
     if user.role == ZendeskRole.ADMIN:
         return True
-    if user.role != ZendeskRole.AGENT or user.custom_role_id is None:
+    if (
+        user.role != ZendeskRole.AGENT
+        or user.custom_role_id is None
+        or custom_roles is None
+    ):
+        # Without custom roles Zendesk shows no Guide manager status, so only
+        # admins count: agents then read only their segments' articles.
         return False
     role = custom_roles.get(user.custom_role_id)
     return role is not None and role.forum_access == _GUIDE_MANAGER_FORUM_ACCESS
@@ -217,7 +244,7 @@ def in_segment(
 def _article_groups(
     account: str,
     users: list[ZendeskUser],
-    custom_roles: dict[int, ZendeskCustomRole],
+    custom_roles: dict[int, ZendeskCustomRole] | None,
     organization_members: dict[int, set[int]],
     group_members: dict[int, set[int]],
     organizations: list[ZendeskOrganization],
@@ -262,7 +289,7 @@ def _ticket_groups(
     ops: ZendeskSourceOperations,
     account: str,
     staff: list[ZendeskUser],
-    custom_roles: dict[int, ZendeskCustomRole],
+    custom_roles: dict[int, ZendeskCustomRole] | None,
     group_members: dict[int, set[int]],
     deadline: _Deadline,
 ) -> Generator[ExternalUserGroup, None, None]:
