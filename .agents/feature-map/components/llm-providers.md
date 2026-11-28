@@ -174,9 +174,12 @@ model under it. Both limits are env settings in `shared_configs/configs.py`,
 read at startup. Tenant provisioning
 (`ee/onyx/server/tenants/provisioning.py:configure_default_api_keys`) shows only
 offered models, picks that default, and skips Vertex, whose cost is not counted
-toward the spend limit. Auto-update adds released models the rule does not
-offer as hidden (`db/llm.py:sync_auto_mode_models`), Craft's fallback uses the
-same default, and `llm/factory.py:llm_from_provider` refuses a model on Onyx's
+toward the spend limit. On every auto-update sync, the playground re-applies
+the rule to each provider's models
+(`backend/onyx/llm/well_known_providers/auto_update_service.py:_apply_playground_rule`):
+a model hidden on release appears once it qualifies, and a chat default that
+stops qualifying is replaced by the provider's playground default. Craft's fallback
+uses the same default, and `llm/factory.py:llm_from_provider` refuses a model on Onyx's
 keys the rule does not offer. Cloud is unchanged.
 
 **Router models.** A `ModelConfiguration` with `is_router` (for example

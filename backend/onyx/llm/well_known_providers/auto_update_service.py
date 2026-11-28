@@ -9,12 +9,22 @@ import httpx
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
-from onyx.db.llm import fetch_auto_mode_providers, sync_auto_mode_models
+from onyx.db.enums import LLMModelFlowType
+from onyx.db.llm import (
+    fetch_auto_mode_providers,
+    fetch_default_model,
+    set_model_visibility,
+    sync_auto_mode_models,
+    update_default_model,
+)
 from onyx.db.models import LLMProvider
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.constants import AUTO_UPDATE_PROVIDERS
-from onyx.llm.playground_models import is_offered_on_playground
+from onyx.llm.playground_models import (
+    is_offered_on_playground,
+    playground_default_model,
+)
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import IS_PLAYGROUND, ONYX_AIRGAPPED
@@ -92,50 +102,16 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
         return {}
 
     recommendations = get_recommendations()
-    kv_store = get_kv_store()
     results: dict[str, int] = {}
     for provider in providers:
-        catalog = fetch_latest_models_for_provider(provider.provider)
-        if catalog is None:
-            continue
-        try:
-            seen = _load_seen_catalog(provider)
-        except ValueError:
-            # Keep the stored value for inspection; never overwrite it.
-            logger.exception("Skipping auto-update for provider %s", provider.id)
-            continue
-        # The first sync records the catalog the admin set up against.
-        if seen is None:
-            kv_store.store(_seen_catalog_key(provider.id), catalog)
-            continue
-
-        display_names = {
-            model.name: model.display_name
-            for model in recommendations.get_visible_models(provider.provider)
-            if model.display_name
-        }
-        released_model_names = [name for name in catalog if name not in seen]
-        # The playground shows only the models its price rule offers.
-        hidden_model_names = (
-            frozenset(
-                name
-                for name in released_model_names
-                if not is_offered_on_playground(
-                    provider.provider, name, recommendations
-                )
-            )
-            if IS_PLAYGROUND
-            else frozenset()
+        changes = _sync_catalog(
+            db_session,
+            provider,
+            recommendations,
+            fetch_latest_models_for_provider(provider.provider),
         )
-        changes = sync_auto_mode_models(
-            db_session=db_session,
-            provider=provider,
-            released_model_names=released_model_names,
-            retired_model_names=seen - set(catalog),
-            display_names=display_names,
-            hidden_model_names=hidden_model_names,
-        )
-        kv_store.store(_seen_catalog_key(provider.id), catalog)
+        if IS_PLAYGROUND:
+            changes += _apply_playground_rule(db_session, provider, recommendations)
         if changes:
             results[str(provider.id)] = changes
             logger.info(
@@ -144,3 +120,86 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
                 provider.name or provider.provider,
             )
     return results
+
+
+def _sync_catalog(
+    db_session: Session,
+    provider: LLMProvider,
+    recommendations: LLMRecommendations,
+    catalog: list[str] | None,
+) -> int:
+    """Add the models the lab released since the last sync and remove the ones
+    it retired. Returns the number of changes."""
+    if catalog is None:
+        return 0
+    try:
+        seen = _load_seen_catalog(provider)
+    except ValueError:
+        # Keep the stored value for inspection; never overwrite it.
+        logger.exception("Skipping auto-update for provider %s", provider.id)
+        return 0
+    kv_store = get_kv_store()
+    # The first sync records the catalog the admin set up against.
+    if seen is None:
+        kv_store.store(_seen_catalog_key(provider.id), catalog)
+        return 0
+
+    display_names = {
+        model.name: model.display_name
+        for model in recommendations.get_visible_models(provider.provider)
+        if model.display_name
+    }
+    changes = sync_auto_mode_models(
+        db_session=db_session,
+        provider=provider,
+        released_model_names=[name for name in catalog if name not in seen],
+        retired_model_names=seen - set(catalog),
+        display_names=display_names,
+    )
+    kv_store.store(_seen_catalog_key(provider.id), catalog)
+    return changes
+
+
+def _apply_playground_rule(
+    db_session: Session,
+    provider: LLMProvider,
+    recommendations: LLMRecommendations,
+) -> int:
+    """On the playground, show exactly the models the price rule offers. The
+    rule owns visibility there, since playground admins cannot change models.
+    Rechecked on every sync, so a model hidden on release appears once the
+    recommended list includes it, and a model that stops qualifying is hidden.
+
+    If the tenant's chat default is on this provider and no longer offered, it
+    is first replaced by the provider's playground default, so chat keeps
+    working. The old model is then hidden like any other unoffered model.
+    Returns the number of changes."""
+    offered = {
+        model.name
+        for model in provider.model_configurations
+        if is_offered_on_playground(provider.provider, model.name, recommendations)
+    }
+    changes = 0
+    chat_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    if (
+        chat_default is not None
+        and chat_default.llm_provider_id == provider.id
+        and chat_default.name not in offered
+    ):
+        replacement = playground_default_model(provider.provider, recommendations)
+        if replacement is not None and replacement in offered:
+            update_default_model(
+                db_session=db_session,
+                provider_id=provider.id,
+                model=replacement,
+                flow_type=LLMModelFlowType.CHAT,
+            )
+            changes += 1
+        else:
+            logger.error(
+                "Chat default %s is not offered on the playground and provider "
+                "'%s' has no replacement",
+                chat_default.name,
+                provider.name or provider.provider,
+            )
+    return changes + set_model_visibility(db_session, provider, offered)

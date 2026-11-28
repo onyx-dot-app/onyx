@@ -1747,18 +1747,48 @@ def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
     return list(db_session.scalars(query).all())
 
 
+def set_model_visibility(
+    db_session: Session, provider: LLMProviderModel, visible_names: set[str]
+) -> int:
+    """Make exactly ``visible_names`` visible among the provider's models, and
+    hide the rest. Returns the number of models changed."""
+    shown = db_session.execute(
+        update(ModelConfiguration)
+        .where(
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.in_(visible_names),
+            ModelConfiguration.is_visible == False,  # noqa: E712
+        )
+        .values(is_visible=True)
+        .execution_options(synchronize_session="fetch")
+    )
+    hidden = db_session.execute(
+        update(ModelConfiguration)
+        .where(
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.not_in(visible_names),
+            ModelConfiguration.is_visible == True,  # noqa: E712
+        )
+        .values(is_visible=False)
+        .execution_options(synchronize_session="fetch")
+    )
+    changes = int(shown.rowcount) + int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
+    db_session.commit()
+    if changes:
+        db_session.refresh(provider)
+    return changes
+
+
 def sync_auto_mode_models(
     db_session: Session,
     provider: LLMProviderModel,
     released_model_names: list[str],
     retired_model_names: set[str],
     display_names: dict[str, str] | None = None,
-    hidden_model_names: frozenset[str] = frozenset(),
 ) -> int:
     """Apply a lab's model releases and retirements to an auto-update provider.
 
-    Released models the provider does not have yet are added and selected,
-    except those in ``hidden_model_names``, which are added hidden.
+    Released models the provider does not have yet are added and selected.
     Retired models are removed, unless they hold a default or back an image
     generation config. A retired model an agent or contextual RAG uses is
     hidden instead. The admin's selection of every other model and all
@@ -1785,7 +1815,7 @@ def sync_auto_mode_models(
             supported_flows=list(
                 _model_protocol_flows(provider.provider, model_name, None)
             ),
-            is_visible=model_name not in hidden_model_names,
+            is_visible=True,
             max_input_tokens=None,
             display_name=(display_names or {}).get(model_name),
         )

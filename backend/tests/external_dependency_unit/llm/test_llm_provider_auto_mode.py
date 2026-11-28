@@ -281,7 +281,88 @@ def test_aggregators_do_not_get_auto_update(
     assert _visibility(db_session, provider_name) == {"z-ai/glm-5.3": True}
 
 
-def test_playground_sync_hides_released_models_its_price_rule_does_not_offer(
+_SERVICE = "onyx.llm.well_known_providers.auto_update_service"
+
+
+def _sync_on_playground(
+    db_session: Session, catalog: list[str], offered: set[str], default: str | None
+) -> None:
+    with (
+        patch(f"{_SERVICE}.IS_PLAYGROUND", True),
+        patch(
+            f"{_SERVICE}.is_offered_on_playground",
+            side_effect=lambda _provider, name, _rec: name in offered,
+        ),
+        patch(f"{_SERVICE}.playground_default_model", return_value=default),
+    ):
+        _sync_with_catalog(db_session, catalog)
+
+
+def test_playground_sync_shows_exactly_the_models_its_price_rule_offers(
+    db_session: Session, provider_name: str
+) -> None:
+    """A model hidden on release appears once the rule offers it, and a model
+    that stops qualifying is hidden. The rule is rechecked on every sync."""
+    _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True, "gpt-b": True},
+    )
+    _sync_with_catalog(db_session, ["gpt-a", "gpt-b"])
+    catalog = ["gpt-a", "gpt-b", "gpt-new"]
+
+    # Released before the recommended list includes it: hidden.
+    _sync_on_playground(db_session, catalog, {"gpt-a", "gpt-b"}, None)
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-b": True,
+        "gpt-new": False,
+    }
+
+    # The list now includes it, and gpt-b stops qualifying.
+    _sync_on_playground(db_session, catalog, {"gpt-a", "gpt-new"}, None)
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-b": False,
+        "gpt-new": True,
+    }
+
+
+def test_playground_sync_replaces_a_chat_default_the_rule_no_longer_offers(
+    db_session: Session, provider_name: str
+) -> None:
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-pricey": True, "gpt-cheap": True},
+    )
+    update_default_model(
+        db_session=db_session,
+        provider_id=provider.id,
+        model="gpt-pricey",
+        flow_type=LLMModelFlowType.CHAT,
+    )
+    _sync_with_catalog(db_session, ["gpt-pricey", "gpt-cheap"])
+
+    _sync_on_playground(
+        db_session, ["gpt-pricey", "gpt-cheap"], {"gpt-cheap"}, "gpt-cheap"
+    )
+
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    assert default_model is not None
+    assert default_model.llm_provider_id == provider.id
+    assert default_model.name == "gpt-cheap"
+    assert _visibility(db_session, provider_name) == {
+        "gpt-pricey": False,
+        "gpt-cheap": True,
+    }
+
+
+def test_cloud_sync_does_not_apply_the_playground_rule(
     db_session: Session, provider_name: str
 ) -> None:
     _create_provider(
@@ -292,18 +373,8 @@ def test_playground_sync_hides_released_models_its_price_rule_does_not_offer(
         models={"gpt-a": True},
     )
     _sync_with_catalog(db_session, ["gpt-a"])
+    with patch(f"{_SERVICE}.is_offered_on_playground", return_value=False) as offered:
+        _sync_with_catalog(db_session, ["gpt-a", "gpt-new"])
 
-    with (
-        patch("onyx.llm.well_known_providers.auto_update_service.IS_PLAYGROUND", True),
-        patch(
-            "onyx.llm.well_known_providers.auto_update_service.is_offered_on_playground",
-            side_effect=lambda _provider, name, _rec: name == "gpt-new-cheap",
-        ),
-    ):
-        _sync_with_catalog(db_session, ["gpt-a", "gpt-new-cheap", "gpt-new-pricey"])
-
-    assert _visibility(db_session, provider_name) == {
-        "gpt-a": True,
-        "gpt-new-cheap": True,
-        "gpt-new-pricey": False,
-    }
+    offered.assert_not_called()
+    assert _visibility(db_session, provider_name) == {"gpt-a": True, "gpt-new": True}
