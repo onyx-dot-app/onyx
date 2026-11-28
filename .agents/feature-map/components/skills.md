@@ -542,12 +542,14 @@ the app from the same rule
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
 5. `name-uniqueness-in-db` **Only plugin.name is unique, per marketplace.**
-   `uq_plugin_marketplace_name`: a new plugin with a used name takes the next
-   free name (`db/plugin.py:free_plugin_name`); a concurrent create that takes
-   it first fails and the user tries again. Publish and transfer
-   refuse a clash with `CONFLICT`. The inner skill names of a multi-skill
-   plugin repeat across plugins; never compare one with `plugin.name`. A
-   single-skill plugin's skill name is `plugin.name`. Two skills with one name can both be
+   `uq_plugin_marketplace_name`: a user create, upload, publish or transfer
+   with a used name is refused with `CONFLICT` and `taken_name` in the body
+   (`db/plugin.py:plugin_name_taken_error`), also when a concurrent create
+   takes the name first. The UI asks for another name
+   (`web/src/sections/skills/TakenNameField.tsx`) and blocks a taken one. The
+   inner skill names of a multi-skill plugin repeat across plugins; never
+   compare one with `plugin.name`. A single-skill plugin's skill name is
+   `plugin.name`. Two skills with one name can both be
    Default or Required; the run-time name order picks one. A toggle conflicts only with skills the user can see. Every write that
    enables a preference first takes `db/skill_limit.py:lock_user_skill_preferences`,
    a `FOR NO KEY UPDATE` lock on the user row. The lock orders concurrent
@@ -772,14 +774,17 @@ the app from the same rule
     ([[mcp-and-custom-tools#access-grants-default-chat-only]]). A publish or
     a transfer to a marketplace that has the plugin name is refused, or
     takes a free name on request (`db/plugin.py:_move_plugin__no_commit`).
+    A transfer can set a new `name` (`TransferSkillOwnershipRequest.name`);
+    the API refuses a built-in skill name there and in an upload `name`
+    (`server/features/skill/api.py:_requested_name`).
     No foreign key checks the
     version pointers (`current_version_id`, `published_version_id`,
     `pending_version_id`); write them only through `db/plugin.py`, which sets
     them to a version of the same plugin.
     Public and author-less skills go to the Organization library, published.
-    Other skills go to the author's "My uploads". A duplicate name in one
-    marketplace gets the first free `-N` suffix on `plugin.name` only
-    (`db/plugin.py:free_plugin_name` in app code). The stored SKILL.md name lives
+    Other skills go to the author's "My uploads". Only the admin user-delete
+    transfer gives a duplicate name the first free `-N` suffix on
+    `plugin.name` (`db/plugin.py:free_plugin_name` in app code). The stored SKILL.md name lives
     in `plugin_skill.frontmatter` (NOT NULL, a check requires a string
     `name`); the backfill seeds it with the name and description of the
     old skill row. No column stores the kind (skill or plugin):
@@ -876,8 +881,8 @@ the app from the same rule
     approve. A save never moves `published_version_id`. Review state is two
     pointers on `plugin`: a request sets `pending_version_id` (a newer request
     replaces it), and a publish or a deny clears it. There is no denied state.
-    A new skill created published takes the next free name on a clash
-    (`on_name_clash="rename"`); other publishes return CONFLICT. Requests
+    A new skill created published and other publishes return CONFLICT on a
+    clash. Requests
     (`GET /skills/review-requests`, approve, deny) need global
     `MANAGE_PLUGINS`; the list shows the plugin author and the version's
     `created_at`, and the admin approves or denies from a view of the version
@@ -933,7 +938,9 @@ the app from the same rule
     plugin with the same name that the user edits and that is not a skill:
     the user's uploads first, then another user's uploads shared as EDITOR,
     then the Organization library (`db/plugin.py:find_upload_target`);
-    `save_as_new` makes a new plugin with the next free name. The save stores
+    `save_as_new` makes a new plugin. A new plugin takes the optional `name`
+    form field, else the manifest name; the preview sets
+    `target.name_taken` when "My uploads" already has it. The save stores
     the bundle, then takes the user row lock and finds the target under it, so
     two uploads of one new name make one plugin with two versions. A new version
     keeps shares, publishing and user choices. An upload with the files of

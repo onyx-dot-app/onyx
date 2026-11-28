@@ -597,10 +597,7 @@ def create_custom_skill__no_commit(
         affected: set[UUID] = set()
         # Inside the check: publishing can turn the skill on for its author.
         if change is not None:
-            # A new skill that is published takes the next free name.
-            affected = share_skill__no_commit(
-                plugin, change, user, db_session, on_name_clash="rename"
-            )
+            affected = share_skill__no_commit(plugin, change, user, db_session)
     return plugin, affected
 
 
@@ -609,13 +606,15 @@ def create_uploaded_plugin__no_commit(
     auto_enable: bool,
     user: User,
     db_session: Session,
+    name: str | None = None,
 ) -> tuple[Plugin, bool]:
+    """``name`` is the plugin name. The manifest name is the default."""
     if content.manifest is None:
         raise RuntimeError("Bug: an uploaded plugin has a manifest.")
     plugin_id = uuid4()
     with check_skill_limit(db_session, user.id):
         plugin = create_plugin__no_commit(
-            plugin_id, content.manifest.name, content, user, db_session
+            plugin_id, name or content.manifest.name, content, user, db_session
         )
     enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
         plugin, user.id, db_session
@@ -998,9 +997,11 @@ def transfer_skill_ownership(
     new_owner_user_id: UUID,
     db_session: Session,
     on_name_clash: NameClashAction = "raise",
+    name: str | None = None,
 ) -> None:
     """Make another user the owner. The previous owner keeps EDITOR. A private
-    skill moves to the new owner's "My uploads". On a name clash there,
+    skill moves to the new owner's "My uploads", under ``name`` when given.
+    On a name clash there,
     "raise" refuses with CONFLICT and "rename" takes the next free name. A
     published skill stays published."""
     refuse_if_synced(skill)
@@ -1010,7 +1011,7 @@ def transfer_skill_ownership(
 
     try:
         transfer_plugin__no_commit(
-            skill.id, new_owner_user_id, db_session, on_name_clash
+            skill.id, new_owner_user_id, db_session, on_name_clash, name
         )
     except IntegrityError as e:
         if is_fk_violation(e):

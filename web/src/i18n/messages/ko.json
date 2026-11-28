@@ -17724,6 +17724,12 @@
       "share": "공유",
       "delete": "삭제",
       "select": "{name} 선택"
+    },
+    "takenName": {
+      "title": "이름",
+      "description": "아직 사용되지 않은 이름을 입력하세요.",
+      "taken": "{name}은(는) 이미 사용 중입니다. 다른 이름을 선택하세요.",
+      "invalid": "소문자, 숫자, 단일 하이픈만 사용하고 최대 {max}자까지 입력하세요."
     }
   },
   "plugins": {

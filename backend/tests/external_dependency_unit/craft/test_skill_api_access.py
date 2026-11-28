@@ -546,7 +546,7 @@ def test_required_creation_preserves_same_name_personal_preference(
     )
     monkeypatch.setattr("onyx.skills.push.push_skills_for_users", MagicMock())
     response = create_custom_skill_from_editor(
-        name=personal.name,
+        name=f"{personal.name}-2",
         description="Admin required skill",
         instructions_markdown="Follow the organization instructions.",
         sharing='{"installation_policy":"REQUIRED"}',
@@ -563,11 +563,22 @@ def test_required_creation_preserves_same_name_personal_preference(
         user=owner,
         db_session=db_session,
     )
-    # The new skill takes the next free name, so the two names differ.
     assert response.name == f"{personal.name}-2"
     states = skill_user_states(owner, [personal.id, response.id], db_session)
     assert states[personal.id].enabled
     assert states[response.id].enabled
+    with pytest.raises(OnyxError) as taken:
+        create_custom_skill_from_editor(
+            name=personal.name,
+            description="Admin required skill",
+            instructions_markdown="Follow the organization instructions.",
+            sharing='{"installation_policy":"REQUIRED"}',
+            user=owner,
+            db_session=db_session,
+        )
+    # A required skill stays in "My uploads", which has the name.
+    assert taken.value.error_code is OnyxErrorCode.CONFLICT
+    assert taken.value.extra == {"taken_name": personal.name}
 
 
 @pytest.mark.parametrize("is_admin", [False, True])

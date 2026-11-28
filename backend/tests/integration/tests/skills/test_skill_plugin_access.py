@@ -70,11 +70,17 @@ def _bulk(user: DATestUser, body: dict[str, Any]) -> SkillBulkResponse:
 
 
 def _transfer(
-    user: DATestUser, skill_id: UUID | str, new_owner_id: str
+    user: DATestUser,
+    skill_id: UUID | str,
+    new_owner_id: str,
+    name: str | None = None,
 ) -> httpx.Response:
+    body: dict[str, str] = {"new_owner_user_id": new_owner_id}
+    if name is not None:
+        body["name"] = name
     return client.post(
         f"{API_SERVER_URL}/skills/custom/{skill_id}/transfer-ownership",
-        json={"new_owner_user_id": new_owner_id},
+        json=body,
         headers=user.headers,
     )
 
@@ -270,7 +276,7 @@ def test_publish_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     assert _plugin(second.id).marketplace_id == user_uploads_id(owner.id)
 
 
-def test_create_public_with_a_used_name_takes_a_free_name(owner: DATestUser) -> None:
+def test_create_public_with_a_used_name_is_refused(owner: DATestUser) -> None:
     other = _user("create_public_other")
     name = unique_name("created-public")
     first = SkillManager.create_custom(other, name=name, auto_enable=False)
@@ -288,15 +294,31 @@ def test_create_public_with_a_used_name_takes_a_free_name(owner: DATestUser) -> 
     )
     response.raise_for_status()
     result = response.json()
-    assert result["not_imported"] == []
-    [item] = result["imported"]
-    assert item["skill"]["name"] == f"{name}-2"
-    assert item["skill"]["public_permission"] == "VIEWER"
+    assert result["imported"] == []
+    [refused] = result["not_imported"]
+    assert f"'{name}'" in refused["reason"]
 
-    plugin = _plugin(item["skill"]["id"])
-    assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
-    assert plugin.name == f"{name}-2"
-    assert plugin.published_version_id == plugin.current_version_id
+    editor = client.post(
+        f"{API_SERVER_URL}/skills/custom/editor",
+        headers=headers,
+        files={
+            "name": (None, name, None),
+            "description": (None, "Editor description", None),
+            "instructions_markdown": (None, "Editor instructions.", None),
+            "auto_enable": (None, "false", None),
+            "sharing": (None, '{"public_permission":"VIEWER"}', None),
+        },
+    )
+    assert editor.status_code == 409
+    assert editor.json()["error_code"] == "CONFLICT"
+    assert editor.json()["taken_name"] == name
+    with get_session_with_current_tenant() as db_session:
+        held = db_session.scalars(
+            select(Plugin.name).where(
+                Plugin.marketplace_id == user_uploads_id(owner.id)
+            )
+        ).all()
+    assert name not in held
 
 
 def test_published_skill_cannot_be_made_private(owner: DATestUser) -> None:
@@ -486,11 +508,29 @@ def test_transfer_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     response = _transfer(owner, skill.id, new_owner.id)
     assert response.status_code == 409
     assert response.json()["error_code"] == "CONFLICT"
+    assert response.json()["taken_name"] == name
     assert name in response.json()["detail"]
     assert SkillManager.get_for_user(str(skill.id), owner).owner is not None
     plugin = _plugin(skill.id)
     assert plugin.author_user_id == UUID(owner.id)
     assert plugin.marketplace_id == user_uploads_id(owner.id)
+
+    again = _transfer(owner, skill.id, new_owner.id, name=name)
+    assert again.status_code == 409
+    assert again.json()["taken_name"] == name
+
+    reserved = _transfer(owner, skill.id, new_owner.id, name="pptx")
+    assert reserved.status_code == 400
+    assert reserved.json()["error_code"] == "INVALID_INPUT"
+    assert _plugin(skill.id).author_user_id == UUID(owner.id)
+
+    new_name = f"{name}-theirs"
+    _transfer(owner, skill.id, new_owner.id, name=new_name).raise_for_status()
+    plugin = _plugin(skill.id)
+    assert plugin.author_user_id == UUID(new_owner.id)
+    assert plugin.marketplace_id == user_uploads_id(new_owner.id)
+    assert plugin.name == new_name
+    assert SkillManager.get_for_user(str(skill.id), new_owner).name == new_name
 
 
 def test_transfer_keeps_a_published_plugin_published(owner: DATestUser) -> None:

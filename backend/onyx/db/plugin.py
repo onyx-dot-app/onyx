@@ -218,6 +218,30 @@ def refuse_if_synced(plugin: Plugin) -> None:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, SYNCED_PLUGIN_LOCKED)
 
 
+def plugin_name_taken(
+    marketplace_id: UUID,
+    name: str,
+    db_session: Session,
+    exclude_plugin_id: UUID | None = None,
+) -> bool:
+    stmt = select(Plugin.id).where(
+        Plugin.marketplace_id == marketplace_id, Plugin.name == name
+    )
+    if exclude_plugin_id is not None:
+        stmt = stmt.where(Plugin.id != exclude_plugin_id)
+    return db_session.scalar(stmt.limit(1)) is not None
+
+
+def plugin_name_taken_error(name: str, detail: str) -> OnyxError:
+    """CONFLICT for a plugin name that its marketplace already holds. The body
+    names it in ``taken_name`` so the client asks for another name."""
+    return OnyxError(
+        OnyxErrorCode.CONFLICT,
+        f"{detail} Pick a different name.",
+        extra={"taken_name": name},
+    )
+
+
 def free_plugin_name(
     marketplace_id: UUID,
     name: str,
@@ -624,12 +648,16 @@ def create_plugin__no_commit(
     db_session: Session,
 ) -> Plugin:
     marketplace_id = get_or_create_user_uploads__no_commit(author.id, db_session)
+    if plugin_name_taken(marketplace_id, name, db_session):
+        raise plugin_name_taken_error(
+            name, f"You already have a skill or plugin named '{name}'."
+        )
     version_id = uuid4()
     try:
         with db_session.begin_nested():
             plugin = Plugin(
                 id=plugin_id,
-                name=free_plugin_name(marketplace_id, name, db_session),
+                name=name,
                 description=version_description(content) or "",
                 marketplace_id=marketplace_id,
                 author_user_id=author.id,
@@ -648,9 +676,8 @@ def create_plugin__no_commit(
     except IntegrityError as exc:
         if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
             raise
-        raise OnyxError(
-            OnyxErrorCode.SKILL_NAME_CONFLICT,
-            f"Another skill named '{name}' was saved at the same time. Try again.",
+        raise plugin_name_taken_error(
+            name, f"Another skill or plugin named '{name}' was saved at the same time."
         ) from exc
     return plugin
 
@@ -722,25 +749,17 @@ def _move_plugin__no_commit(
     on_name_clash: NameClashAction,
     clash_detail: Callable[[str], str],
     db_session: Session,
+    name: str | None = None,
 ) -> None:
-    preferred = plugin.name
+    """Move the plugin, under ``name`` when given, else under its own name."""
+    preferred = name or plugin.name
     # A concurrent writer can take the chosen name before this move commits.
     # "rename" then picks the next free name again.
     for attempt in range(1, _RENAME_ATTEMPTS + 1):
         name = preferred
-        name_taken = (
-            db_session.scalar(
-                select(Plugin.id).where(
-                    Plugin.marketplace_id == marketplace_id,
-                    Plugin.name == name,
-                    Plugin.id != plugin.id,
-                )
-            )
-            is not None
-        )
-        if name_taken:
+        if plugin_name_taken(marketplace_id, name, db_session, plugin.id):
             if on_name_clash == "raise":
-                raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name))
+                raise plugin_name_taken_error(name, clash_detail(name))
             name = free_plugin_name(marketplace_id, name, db_session)
         try:
             with db_session.begin_nested():
@@ -752,7 +771,7 @@ def _move_plugin__no_commit(
             if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
                 raise
             if on_name_clash == "raise" or attempt == _RENAME_ATTEMPTS:
-                raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name)) from exc
+                raise plugin_name_taken_error(name, clash_detail(name)) from exc
 
 
 def private_plugins_blocking_user_delete(user_id: UUID) -> Select[tuple[Plugin]]:
@@ -842,11 +861,12 @@ def transfer_plugin__no_commit(
     new_author_user_id: UUID,
     db_session: Session,
     on_name_clash: NameClashAction = "raise",
+    name: str | None = None,
 ) -> None:
     """Set the plugin's author. A private plugin also moves to the new owner's
-    "My uploads". On a name clash there, "raise" refuses with CONFLICT and
-    "rename" takes the next free name. A published plugin stays in the
-    Organization library."""
+    "My uploads", under ``name`` when given. On a name clash there, "raise"
+    refuses with CONFLICT and "rename" takes the next free name. A published
+    plugin stays in the Organization library and keeps its name."""
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
@@ -865,6 +885,7 @@ def transfer_plugin__no_commit(
                 "Ask them to delete or rename it first."
             ),
             db_session=db_session,
+            name=name,
         )
     plugin.author_user_id = new_author_user_id
     db_session.flush()
