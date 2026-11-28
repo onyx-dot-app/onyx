@@ -284,6 +284,25 @@ def test_aggregators_do_not_get_auto_update(
 _SERVICE = "onyx.llm.well_known_providers.auto_update_service"
 
 
+@pytest.fixture
+def restore_chat_default(db_session: Session) -> Generator[None, None, None]:
+    """Put the tenant's chat default back after a test that changes it:
+    update_default_model clears every other provider's chat default."""
+    previous = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    previous_default = (
+        (previous.llm_provider_id, previous.name) if previous is not None else None
+    )
+    yield
+    db_session.rollback()
+    if previous_default is not None:
+        update_default_model(
+            db_session=db_session,
+            provider_id=previous_default[0],
+            model=previous_default[1],
+            flow_type=LLMModelFlowType.CHAT,
+        )
+
+
 def _sync_on_playground(
     db_session: Session, catalog: list[str], offered: set[str], default: str | None
 ) -> None:
@@ -378,3 +397,36 @@ def test_cloud_sync_does_not_apply_the_playground_rule(
 
     offered.assert_not_called()
     assert _visibility(db_session, provider_name) == {"gpt-a": True, "gpt-new": True}
+
+
+@pytest.mark.usefixtures("restore_chat_default")
+def test_playground_sync_keeps_a_retired_model_hidden(
+    db_session: Session, provider_name: str
+) -> None:
+    """A retired model the catalog sync keeps, here because it holds the chat
+    default, is not shown again by the playground rule, even though the
+    recommendations still offer it. The default is replaced first."""
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True, "gpt-retired": True},
+    )
+    update_default_model(
+        db_session=db_session,
+        provider_id=provider.id,
+        model="gpt-retired",
+        flow_type=LLMModelFlowType.CHAT,
+    )
+    _sync_with_catalog(db_session, ["gpt-a", "gpt-retired"])
+
+    _sync_on_playground(db_session, ["gpt-a"], {"gpt-a", "gpt-retired"}, "gpt-a")
+
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    assert default_model is not None
+    assert default_model.name == "gpt-a"
+    assert _visibility(db_session, provider_name) == {
+        "gpt-a": True,
+        "gpt-retired": False,
+    }

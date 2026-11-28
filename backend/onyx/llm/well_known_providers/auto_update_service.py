@@ -104,14 +104,12 @@ def sync_auto_update_providers(db_session: Session) -> dict[str, int]:
     recommendations = get_recommendations()
     results: dict[str, int] = {}
     for provider in providers:
-        changes = _sync_catalog(
-            db_session,
-            provider,
-            recommendations,
-            fetch_latest_models_for_provider(provider.provider),
-        )
+        catalog = fetch_latest_models_for_provider(provider.provider)
+        changes = _sync_catalog(db_session, provider, recommendations, catalog)
         if IS_PLAYGROUND:
-            changes += _apply_playground_rule(db_session, provider, recommendations)
+            changes += _apply_playground_rule(
+                db_session, provider, recommendations, catalog
+            )
         if changes:
             results[str(provider.id)] = changes
             logger.info(
@@ -164,6 +162,7 @@ def _apply_playground_rule(
     db_session: Session,
     provider: LLMProvider,
     recommendations: LLMRecommendations,
+    catalog: list[str] | None,
 ) -> int:
     """On the playground, show exactly the models the price rule offers. The
     rule owns visibility there, since playground admins cannot change models.
@@ -173,11 +172,17 @@ def _apply_playground_rule(
     If the tenant's chat default is on this provider and no longer offered, it
     is first replaced by the provider's playground default, so chat keeps
     working. The old model is then hidden like any other unoffered model.
-    Returns the number of changes."""
+    Only models in the lab's current catalog are shown: a retired model kept
+    hidden because an agent still uses it stays hidden. Without a catalog, this
+    run changes nothing. Returns the number of changes."""
+    if catalog is None:
+        return 0
+    available = set(catalog)
     offered = {
         model.name
         for model in provider.model_configurations
-        if is_offered_on_playground(provider.provider, model.name, recommendations)
+        if model.name in available
+        and is_offered_on_playground(provider.provider, model.name, recommendations)
     }
     changes = 0
     chat_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
