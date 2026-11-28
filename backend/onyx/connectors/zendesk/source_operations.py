@@ -25,7 +25,13 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     source_operation,
 )
-from onyx.connectors.zendesk.models import ZendeskPageResponse, ZendeskUser
+from onyx.connectors.zendesk.models import (
+    ZendeskGroup,
+    ZendeskOrganization,
+    ZendeskPageResponse,
+    ZendeskTicketPage,
+    ZendeskUser,
+)
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -114,6 +120,25 @@ def _make_request_function(
     return make_request
 
 
+def _no_auth(request: requests.PreparedRequest) -> requests.PreparedRequest:
+    return request
+
+
+@retry_builder(tries=5, retry_if=_is_transient)
+def _anonymous_get(url: str) -> requests.Response:
+    # A redirect leads to a sign-in page, which is no proof of public access.
+    # An explicit (empty) auth keeps netrc credentials out, while the session
+    # still honors the environment's proxy and CA settings.
+    with requests.Session() as session:
+        session.auth = _no_auth
+        response = session.get(
+            url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=False
+        )
+    if response.status_code == 429 or response.status_code >= 500:
+        response.raise_for_status()
+    return response
+
+
 class ZendeskSourceOperations(SourceOperations):
     source = DocumentSource.ZENDESK
     sdk_modules = ("requests",)
@@ -150,26 +175,34 @@ class ZendeskSourceOperations(SourceOperations):
         except requests.exceptions.RequestException as e:
             raise ZendeskRequestError(None, str(e)) from e
 
+    def _base_url(self) -> str:
+        subdomain: str | None = self.credentials_provider.get_credentials().get(
+            ZENDESK_SUBDOMAIN
+        )
+        if not subdomain:
+            raise ConnectorMissingCredentialError("Zendesk")
+        return f"https://{subdomain_from_credential(subdomain)}.zendesk.com/api/v2"
+
     def _build_request_function(
         self,
     ) -> Callable[[str, dict[str, Any]], dict[str, Any]]:
         credentials: dict[str, Any] = self.credentials_provider.get_credentials()
-        subdomain: str | None = credentials.get(ZENDESK_SUBDOMAIN)
         email: str | None = credentials.get(ZENDESK_EMAIL)
         token: str | None = credentials.get(ZENDESK_TOKEN)
-        if not subdomain or not email or not token:
+        if not email or not token:
             raise ConnectorMissingCredentialError("Zendesk")
         calls_per_minute: int | None = (self.connector_specific_config or {}).get(
             "calls_per_minute"
         )
         return _make_request_function(
-            f"https://{subdomain_from_credential(subdomain)}.zendesk.com/api/v2",
-            (f"{email}/token", token),
-            calls_per_minute,
+            self._base_url(), (f"{email}/token", token), calls_per_minute
         )
 
     @source_operation(
-        capabilities=(CredentialCapability.INDEXING,),
+        capabilities=(
+            CredentialCapability.INDEXING,
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ),
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_me(self) -> ZendeskUser:
@@ -205,7 +238,10 @@ class ZendeskSourceOperations(SourceOperations):
             params["page[after]"] = next_cursor(data["meta"], params.get("page[after]"))
 
     @source_operation(
-        capabilities=(CredentialCapability.INDEXING,),
+        capabilities=(
+            CredentialCapability.INDEXING,
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ),
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_article_page(
@@ -233,29 +269,45 @@ class ZendeskSourceOperations(SourceOperations):
         )
 
     @source_operation(
-        capabilities=(CredentialCapability.INDEXING,),
+        capabilities=(
+            CredentialCapability.INDEXING,
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ),
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_ticket_page(
-        self, *, start_time: int | None = None, per_page: int | None = None
-    ) -> ZendeskPageResponse:
+        self,
+        *,
+        start_time: int | None = None,
+        per_page: int | None = None,
+        include_access: bool = False,
+    ) -> ZendeskTicketPage:
         """One page of the incremental ticket export (up to 1,000 tickets unless
-        per_page is set)."""
+        per_page is set). With include_access, the page also carries the
+        users, groups and organizations its tickets name."""
         # NOTE: for some reason zendesk doesn't seem to be respecting the start_time
         # param in my local testing with very few tickets. We'll look into it if this
         # becomes an issue in larger deployments
         params: dict[str, Any] = {"start_time": start_time or 0}
         if per_page is not None:
             params["per_page"] = per_page
+        if include_access:
+            params["include"] = "users,groups,organizations"
         data = self._request("incremental/tickets.json", params)
         if data.get("error") == "SupportProductInactive":
             raise ZendeskSupportInactiveError(
                 "Zendesk Support Product is not active for this account, No tickets to index"
             )
-        return ZendeskPageResponse(
+        return ZendeskTicketPage(
             data=data["tickets"],
             meta={"end_time": data["end_time"]},
             has_more=not bool(data.get("end_of_stream", False)),
+            users=[ZendeskUser.model_validate(u) for u in data.get("users", [])],
+            groups=[ZendeskGroup.model_validate(g) for g in data.get("groups", [])],
+            organizations=[
+                ZendeskOrganization.model_validate(o)
+                for o in data.get("organizations", [])
+            ],
         )
 
     @source_operation(
@@ -272,7 +324,10 @@ class ZendeskSourceOperations(SourceOperations):
         return ZendeskUser.model_validate(user) if user else None
 
     @source_operation(
-        capabilities=(CredentialCapability.INDEXING,),
+        capabilities=(
+            CredentialCapability.INDEXING,
+            CredentialCapability.DOC_PERMISSION_SYNC,
+        ),
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_ticket_comments(self, *, ticket_id: str | int) -> list[dict[str, Any]]:
@@ -285,3 +340,31 @@ class ZendeskSourceOperations(SourceOperations):
             if not data.get("meta", {}).get("has_more", False):
                 return comments
             params["page[after]"] = next_cursor(data["meta"], params.get("page[after]"))
+
+    @source_operation(
+        capabilities=(CredentialCapability.DOC_PERMISSION_SYNC,),
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def is_article_public(self, *, article_id: int) -> bool:
+        """Whether anyone on the internet can read the article: Zendesk serves
+        it to a request without credentials. A Help Center that requires
+        sign-in answers 401, 403 or 404."""
+        try:
+            response = _anonymous_get(
+                f"{self._base_url()}/help_center/articles/{article_id}"
+            )
+        except requests.exceptions.RequestException as e:
+            raise ZendeskRequestError(None, str(e)) from e
+        if response.status_code == 200:
+            # A sign-in page or a host mapping answers with something else.
+            try:
+                payload = response.json()
+            except ValueError:
+                return False
+            article = payload.get("article") if isinstance(payload, dict) else None
+            return isinstance(article, dict) and article.get("id") == article_id
+        if response.status_code in (301, 302, 303, 307, 308, 401, 403, 404):
+            return False
+        raise ZendeskRequestError(
+            response.status_code, "the anonymous article read failed"
+        )

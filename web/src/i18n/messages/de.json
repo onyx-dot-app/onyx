@@ -3660,6 +3660,10 @@
             "calls_per_minute": {
               "label": "API-Aufrufe pro Minute",
               "description": "Begrenzt, wie viele Zendesk-API-Aufrufe dieser Konnektor pro Minute ausführen darf (gilt nur für diesen Konnektor). Standardwerte siehe: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            },
+            "grant_end_users": {
+              "label": "Endbenutzern Zugriff gewähren",
+              "description": "Gibt Endbenutzern (Anfragenden, CCs und Mitgliedern von Organisationen, die Tickets teilen) bei der Berechtigungssynchronisierung auch Zugriff auf ihre Tickets ohne interne Notizen. Dazu werden bei jeder Synchronisierung die Kommentare jedes dieser Tickets gelesen, was die Synchronisierung bei großen Konten deutlich verlangsamt. Wenn deaktiviert, erhalten nur Agenten und Administratoren Zugriff auf Tickets."
             }
           }
         },

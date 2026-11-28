@@ -1,21 +1,23 @@
 import copy
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any, cast
 
 from typing_extensions import override
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
-    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     ConnectorFailure,
     GenerateSlimDocumentOutput,
     SecondsSinceUnixEpoch,
+    SlimConnector,
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
@@ -26,6 +28,19 @@ from onyx.connectors.models import (
     HierarchyNode,
     SlimDocument,
     TextSection,
+)
+from onyx.connectors.zendesk.access import (
+    access_enabled,
+    get_article_access,
+    get_ticket_access,
+    grants_end_users,
+    has_internal_note,
+)
+from onyx.connectors.zendesk.models import (
+    ZendeskGroup,
+    ZendeskOrganization,
+    ZendeskTicketPage,
+    ZendeskUser,
 )
 from onyx.connectors.zendesk.source_operations import (
     ZENDESK_SUBDOMAIN,
@@ -60,13 +75,32 @@ def _iterate_articles(
         after_cursor = next_cursor(page.meta, after_cursor)
 
 
-def _iterate_tickets(
-    ops: ZendeskSourceOperations, start_time: int | None
-) -> Iterator[dict[str, Any]]:
+def _skips_article(article: dict[str, Any]) -> bool:
+    """Articles indexing leaves out. The slim listings leave them out too, so
+    pruning removes them."""
+    return (
+        article.get("body") is None
+        or bool(article.get("draft"))
+        or any(
+            label in ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
+            for label in article.get("label_names", [])
+        )
+    )
+
+
+def _skips_ticket(ticket: dict[str, Any]) -> bool:
+    return ticket.get("status") == "deleted"
+
+
+def _iterate_ticket_pages(
+    ops: ZendeskSourceOperations, start_time: int | None, include_access: bool
+) -> Iterator[ZendeskTicketPage]:
     next_start_time: int | None = start_time
     while True:
-        page = ops.get_ticket_page(start_time=next_start_time)
-        yield from page.data
+        page = ops.get_ticket_page(
+            start_time=next_start_time, include_access=include_access
+        )
+        yield page
         if not page.has_more:
             return
         next_start_time = page.meta["end_time"]
@@ -169,8 +203,11 @@ def _ticket_to_document(
     author_map: dict[str, BasicExpertInfo],
     ops: ZendeskSourceOperations,
     default_subdomain: str,
+    access_for: Callable[[list[dict[str, Any]]], ExternalAccess | None],
 ) -> tuple[dict[str, BasicExpertInfo] | None, Document]:
-    submitter_id = ticket.get("submitter")
+    """`access_for` gets the ticket's comments, which decide whether end users
+    may read it."""
+    submitter_id = ticket.get("submitter_id")
     if not submitter_id:
         submitter = None
     else:
@@ -203,9 +240,11 @@ def _ticket_to_document(
 
     comment_texts = []
     for comment in comments:
-        new_author_mapping, comment_text = _get_comment_text(comment, author_map, ops)
-        if new_author_mapping:
-            author_map.update(new_author_mapping)
+        comment_author_mapping, comment_text = _get_comment_text(
+            comment, author_map, ops
+        )
+        if comment_author_mapping:
+            author_map.update(comment_author_mapping)
         comment_texts.append(comment_text)
 
     comments_text = "\n\n".join(comment_texts)
@@ -233,6 +272,20 @@ def _ticket_to_document(
         doc_created_at=create_time,
         primary_owners=[submitter] if submitter else None,
         metadata=metadata,
+        external_access=access_for(comments),
+    )
+
+
+_TicketSideloads = tuple[
+    dict[int, ZendeskUser], dict[int, ZendeskGroup], dict[int, ZendeskOrganization]
+]
+
+
+def _sideload_maps(page: ZendeskTicketPage) -> _TicketSideloads:
+    return (
+        {user.id: user for user in page.users},
+        {group.id: group for group in page.groups},
+        {organization.id: organization for organization in page.organizations},
     )
 
 
@@ -248,7 +301,9 @@ class ZendeskConnectorCheckpoint(ConnectorCheckpoint):
 
 
 class ZendeskConnector(
-    SlimConnectorWithPermSync, CheckpointedConnector[ZendeskConnectorCheckpoint]
+    SlimConnector,
+    SlimConnectorWithPermSync,
+    CheckpointedConnectorWithPermSync[ZendeskConnectorCheckpoint],
 ):
     slim_listing_honors_indexing_start = True
 
@@ -256,13 +311,16 @@ class ZendeskConnector(
         self,
         content_type: str = "articles",
         calls_per_minute: int | None = None,
+        grant_end_users: bool = False,
     ) -> None:
         self.content_type = content_type
+        self.grant_end_users = grant_end_users
         self.subdomain = ""
         # Fetch all tags ahead of time
         self.content_tags: dict[str, str] = {}
         self.calls_per_minute = calls_per_minute
         self._ops: ZendeskSourceOperations | None = None
+        self._help_center_public: bool | None = None
 
     @property
     def ops(self) -> ZendeskSourceOperations:
@@ -280,12 +338,79 @@ class ZendeskConnector(
         )
         return None
 
+    def _is_help_center_public(self, article_id: int) -> bool:
+        """One anonymous read per run: whether the Help Center serves articles
+        visible to everyone without sign-in."""
+        if self._help_center_public is None:
+            self._help_center_public = self.ops.is_article_public(article_id=article_id)
+        return self._help_center_public
+
+    def _article_access(self, article: dict[str, Any]) -> ExternalAccess | None:
+        if not access_enabled():
+            return None
+        has_segments: bool = bool(
+            article.get("user_segment_ids") or article.get("user_segment_id")
+        )
+        help_center_public: bool = not has_segments and self._is_help_center_public(
+            article["id"]
+        )
+        return get_article_access(self.subdomain, article, help_center_public)
+
+    def _ticket_access(
+        self,
+        ticket: dict[str, Any],
+        sideloads: _TicketSideloads,
+        comments: list[dict[str, Any]] | None,
+    ) -> ExternalAccess | None:
+        """End users are granted only with grant_end_users, and only for
+        tickets without an internal note. Without comments, reads them only
+        when an end user would be granted. A ticket whose comments are gone
+        counts as having an internal note."""
+        if not access_enabled():
+            return None
+        users, groups, organizations = sideloads
+        internal_note: bool = True
+        if self.grant_end_users and grants_end_users(ticket, users, organizations):
+            if comments is None:
+                try:
+                    comments = self.ops.list_ticket_comments(ticket_id=ticket["id"])
+                except ZendeskRequestError as e:
+                    if e.status_code != 404:
+                        raise
+                    comments = None
+            internal_note = comments is None or has_internal_note(comments)
+        return get_ticket_access(
+            self.subdomain, ticket, users, groups, organizations, internal_note
+        )
+
     @override
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: ZendeskConnectorCheckpoint,
+    ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    @override
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ZendeskConnectorCheckpoint,
+    ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
+
+    def _load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ZendeskConnectorCheckpoint,
+        include_permissions: bool,
     ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
         if checkpoint.cached_content_tags is None:
             # Tickets have no content tags, and Support-only accounts have no
@@ -297,10 +422,14 @@ class ZendeskConnector(
         self.content_tags = checkpoint.cached_content_tags
 
         if self.content_type == "articles":
-            checkpoint = yield from self._retrieve_articles(start, end, checkpoint)
+            checkpoint = yield from self._retrieve_articles(
+                start, end, checkpoint, include_permissions
+            )
             return checkpoint
         elif self.content_type == "tickets":
-            checkpoint = yield from self._retrieve_tickets(start, end, checkpoint)
+            checkpoint = yield from self._retrieve_tickets(
+                start, end, checkpoint, include_permissions
+            )
             return checkpoint
         else:
             raise ValueError(f"Unsupported content_type: {self.content_type}")
@@ -310,6 +439,7 @@ class ZendeskConnector(
         start: SecondsSinceUnixEpoch | None,
         end: SecondsSinceUnixEpoch | None,
         checkpoint: ZendeskConnectorCheckpoint,
+        include_permissions: bool,
     ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
         checkpoint = copy.deepcopy(checkpoint)
         # This one is built on the fly as there may be more many more authors than tags
@@ -325,20 +455,15 @@ class ZendeskConnector(
         has_more = response.has_more
         after_cursor = response.meta.get("after_cursor")
         for article in articles:
-            if (
-                article.get("body") is None
-                or article.get("draft")
-                or any(
-                    label in ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
-                    for label in article.get("label_names", [])
-                )
-            ):
+            if _skips_article(article):
                 continue
 
             try:
                 new_author_map, document = _article_to_document(
                     article, self.content_tags, author_map, self.ops
                 )
+                if include_permissions:
+                    document.external_access = self._article_access(article)
             except Exception as e:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
@@ -381,6 +506,7 @@ class ZendeskConnector(
         start: SecondsSinceUnixEpoch | None,
         end: SecondsSinceUnixEpoch | None,
         checkpoint: ZendeskConnectorCheckpoint,
+        include_permissions: bool,
     ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
         checkpoint = copy.deepcopy(checkpoint)
 
@@ -388,12 +514,15 @@ class ZendeskConnector(
 
         doc_batch: list[Document] = []
         next_start_time = int(checkpoint.next_start_time_tickets or start or 0)
-        ticket_response = self.ops.get_ticket_page(start_time=next_start_time)
+        ticket_response = self.ops.get_ticket_page(
+            start_time=next_start_time, include_access=include_permissions
+        )
+        sideloads: _TicketSideloads = _sideload_maps(ticket_response)
         tickets = ticket_response.data
         has_more = ticket_response.has_more
         next_start_time = ticket_response.meta["end_time"]
         for ticket in tickets:
-            if ticket.get("status") == "deleted":
+            if _skips_ticket(ticket):
                 continue
 
             try:
@@ -402,6 +531,11 @@ class ZendeskConnector(
                     author_map=author_map,
                     ops=self.ops,
                     default_subdomain=self.subdomain,
+                    access_for=lambda comments, ticket=ticket: (
+                        self._ticket_access(ticket, sideloads, comments)
+                        if include_permissions
+                        else None
+                    ),
                 )
             except Exception as e:
                 yield ConnectorFailure(
@@ -437,18 +571,46 @@ class ZendeskConnector(
         )
         return checkpoint
 
+    @override
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Every document id, for pruning. Reads no access."""
+        yield from self._slim_docs(start, callback, include_permissions=False)
+
+    @override
     def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
+        """Every document with who may read it."""
+        yield from self._slim_docs(start, callback, include_permissions=True)
+
+    def _slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None,
+        callback: IndexingHeartbeatInterface | None,
+        include_permissions: bool,
+    ) -> GenerateSlimDocumentOutput:
+        """A partial listing reads as deletions to pruning and doc sync, so a
+        stop signal raises instead of returning."""
+        start_time: int | None = int(start) if start else None
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
+
+        def stop_if_requested() -> None:
+            if callback is not None and callback.should_stop():
+                raise RuntimeError("Zendesk slim listing: stop signal detected")
+
         if self.content_type == "articles":
-            articles = _iterate_articles(
-                self.ops, start_time=int(start) if start else None
-            )
-            for article in articles:
+            for article in _iterate_articles(self.ops, start_time=start_time):
+                stop_if_requested()
+                if _skips_article(article):
+                    continue
                 created_at = article.get("created_at")
                 slim_doc_batch.append(
                     SlimDocument(
@@ -456,30 +618,51 @@ class ZendeskConnector(
                         doc_created_at=(
                             time_str_to_utc(created_at) if created_at else None
                         ),
-                    )
-                )
-                if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
-                    yield slim_doc_batch
-                    slim_doc_batch = []
-        elif self.content_type == "tickets":
-            tickets = _iterate_tickets(
-                self.ops, start_time=int(start) if start else None
-            )
-            for ticket in tickets:
-                created_at = ticket.get("created_at")
-                slim_doc_batch.append(
-                    SlimDocument(
-                        id=f"zendesk_ticket_{ticket['id']}",
-                        doc_created_at=(
-                            time_str_to_utc(created_at) if created_at else None
+                        external_access=(
+                            self._article_access(article)
+                            if include_permissions
+                            else None
                         ),
                     )
                 )
                 if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
                     yield slim_doc_batch
                     slim_doc_batch = []
+        elif self.content_type == "tickets":
+            for page in _iterate_ticket_pages(
+                self.ops, start_time=start_time, include_access=include_permissions
+            ):
+                sideloads: _TicketSideloads = _sideload_maps(page)
+                for ticket in page.data:
+                    # Access may read each ticket's comments, so check often.
+                    stop_if_requested()
+                    if _skips_ticket(ticket):
+                        continue
+                    created_at = ticket.get("created_at")
+                    slim_doc_batch.append(
+                        SlimDocument(
+                            id=f"zendesk_ticket_{ticket['id']}",
+                            doc_created_at=(
+                                time_str_to_utc(created_at) if created_at else None
+                            ),
+                            external_access=(
+                                self._ticket_access(ticket, sideloads, comments=None)
+                                if include_permissions
+                                else None
+                            ),
+                        )
+                    )
+                    if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
+                        yield slim_doc_batch
+                        slim_doc_batch = []
+                    # Per ticket: with grant_end_users, each one may read its
+                    # comments, and a page can take long enough to look stalled.
+                    if callback is not None:
+                        callback.progress("zendesk_slim_tickets", 1)
         else:
             raise ValueError(f"Unsupported content_type: {self.content_type}")
+        # A stop during the last batch must not read as a complete listing.
+        stop_if_requested()
         if slim_doc_batch:
             yield slim_doc_batch
 

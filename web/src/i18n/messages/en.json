@@ -3660,6 +3660,10 @@
             "calls_per_minute": {
               "label": "API Calls per Minute",
               "description": "Restricts how many Zendesk API calls this connector can make per minute (applies only to this connector). See defaults: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            },
+            "grant_end_users": {
+              "label": "Grant End Users Access",
+              "description": "With permission sync, also give end users (requesters, CCs, and members of organizations that share tickets) access to their tickets that have no internal notes. This reads the comments of each of those tickets on every sync, which makes syncing much slower on large accounts. When off, only agents and admins get access to tickets."
             }
           }
         },

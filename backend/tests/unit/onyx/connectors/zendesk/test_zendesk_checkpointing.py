@@ -90,7 +90,7 @@ def create_mock_ticket() -> Callable[..., dict[str, Any]]:
             "subject": subject,
             "description": description,
             "updated_at": updated_at,
-            "submitter": submitter_id,
+            "submitter_id": submitter_id,
             "status": status,
             "priority": priority,
             "tags": tags or [],

@@ -20,7 +20,7 @@ from tests.unit.onyx.connectors.zendesk.utils import (
 )
 
 
-def _response(status_code: int, payload: dict[str, Any]) -> MagicMock:
+def _response(status_code: int, payload: Any) -> MagicMock:
     response = MagicMock()
     response.status_code = status_code
     response.headers = {}
@@ -145,3 +145,47 @@ def test_ticket_indexing_reads_no_content_tags(monkeypatch: pytest.MonkeyPatch) 
     assert all(
         c.args[0] == "incremental/tickets.json" for c in make_request.call_args_list
     )
+
+
+@pytest.mark.parametrize(
+    "status_code, payload, expected",
+    [
+        (200, {"article": {"id": 7}}, True),
+        # A sign-in or landing page served with 200.
+        (200, {"something": "else"}, False),
+        (200, {"article": None}, False),
+        (200, [1, 2], False),
+        (302, {}, False),
+        (403, {}, False),
+    ],
+)
+def test_is_article_public(status_code: int, payload: Any, expected: bool) -> None:
+    with patch(
+        "onyx.connectors.zendesk.source_operations.requests.Session.get",
+        return_value=_response(status_code, payload),
+    ) as get:
+        assert _gateway().is_article_public(article_id=7) is expected
+    assert get.call_args.kwargs["allow_redirects"] is False
+
+
+def test_is_article_public_sends_no_netrc_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The probe must stay anonymous, but keep the environment's proxy and CA
+    settings, so it disables only the netrc lookup."""
+    import requests
+
+    sent: list[requests.PreparedRequest] = []
+
+    def send(
+        _self: requests.Session, request: requests.PreparedRequest, **_kwargs: Any
+    ) -> MagicMock:
+        sent.append(request)
+        return _response(403, {})
+
+    monkeypatch.setattr(
+        requests.sessions, "get_netrc_auth", lambda *_a, **_k: ("user", "secret")
+    )
+    monkeypatch.setattr(requests.Session, "send", send)
+    assert _gateway().is_article_public(article_id=7) is False
+    assert "Authorization" not in sent[0].headers

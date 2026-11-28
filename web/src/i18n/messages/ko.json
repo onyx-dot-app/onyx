@@ -3660,6 +3660,10 @@
             "calls_per_minute": {
               "label": "분당 API 호출 수",
               "description": "이 커넥터가 분당 수행할 수 있는 Zendesk API 호출 수를 제한합니다 (이 커넥터에만 적용). 기본값은 https://developer.zendesk.com/api-reference/introduction/rate-limits/ 를 참조하세요"
+            },
+            "grant_end_users": {
+              "label": "최종 사용자에게 액세스 권한 부여",
+              "description": "권한 동기화 시 내부 메모가 없는 티켓에 대한 액세스 권한을 최종 사용자(요청자, 참조인, 티켓을 공유하는 조직의 구성원)에게도 부여합니다. 이를 위해 동기화할 때마다 해당 티켓의 댓글을 모두 읽으므로 대규모 계정에서는 동기화가 크게 느려집니다. 끄면 상담원과 관리자만 티켓에 액세스할 수 있습니다."
             }
           }
         },

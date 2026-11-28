@@ -75,7 +75,7 @@ def _mock_ticket(ticket_id: int) -> dict[str, Any]:
         "subject": "Test Ticket",
         "description": "Test Description",
         "updated_at": "2023-01-01T12:00:00Z",
-        "submitter": "123",
+        "submitter_id": "123",
         "status": "open",
         "priority": "normal",
         "tags": [],

@@ -18,3 +18,7 @@ class ZendeskConnectorConfig(ConnectorConfig):
         FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=False)),
     ] = ZendeskContentType.ARTICLES
     calls_per_minute: Annotated[int | None, FieldPolicy(FieldClass.COSMETIC)] = None
+    # With permission sync, also grant end users (requesters, CCs, members of
+    # an organization that shares tickets) the tickets without internal notes.
+    # Finding those reads every such ticket's comments on each sync.
+    grant_end_users: Annotated[bool, FieldPolicy(FieldClass.BEHAVIOR)] = False
