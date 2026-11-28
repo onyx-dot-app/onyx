@@ -1052,16 +1052,32 @@ func TestAsk_NoDecisionForARequestResolvedWhileAnotherWaited(t *testing.T) {
 
 func TestAsk_DecisionFailureStopsTheResponseBeforeExit(t *testing.T) {
 	for _, args := range [][]string{{"--approve=once"}, {"--approve=once", "--json"}} {
-		// A running stream's owner stops it; a waiting response cannot be
-		// stopped and keeps its request.
-		for _, waiting := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/waiting=%t", strings.Join(args, " "), waiting), func(t *testing.T) {
+		// A running stream's owner stops it. A waiting response keeps its
+		// request whether or not ask stops it: ask stops it when the failed
+		// decision cancels the stream before the reader reaches the stop line,
+		// and the server sends no line that could end that race. Such a stop
+		// changes nothing on the server, because the waiting response has
+		// already ended its stream and its continuation gets a new stream id.
+		// "waiting-late" sends the stop line only after that cancel.
+		for _, mode := range []string{"running", "waiting", "waiting-late"} {
+			waiting := mode != "running"
+			t.Run(fmt.Sprintf("%s/%s", strings.Join(args, " "), mode), func(t *testing.T) {
 				stopped := make(chan string, 1)
+				stopSeen := make(chan struct{})
+				var stopOnce sync.Once
 				mux := http.NewServeMux()
 				mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
 					fmt.Fprintf(w, "{\"chat_session_id\":%q}\n", testSessionID)
 					fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
 					fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a1")))
+					if mode == "waiting-late" {
+						w.(http.Flusher).Flush()
+						select {
+						case <-stopSeen:
+						case <-r.Context().Done():
+							return
+						}
+					}
 					if waiting {
 						fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_user"}))
 						return
@@ -1074,6 +1090,7 @@ func TestAsk_DecisionFailureStopsTheResponseBeforeExit(t *testing.T) {
 				})
 				mux.HandleFunc("/api/chat/stop-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
 					stopped <- r.URL.Query().Get("stream_id")
+					stopOnce.Do(func() { close(stopSeen) })
 				})
 				srv := httptest.NewServer(mux)
 				t.Cleanup(srv.Close)
@@ -1086,8 +1103,8 @@ func TestAsk_DecisionFailureStopsTheResponseBeforeExit(t *testing.T) {
 				}
 				select {
 				case id := <-stopped:
-					if waiting || id != "2" {
-						t.Fatalf("Stop stream_id = %q; want 2 only for a running stream", id)
+					if id != "2" {
+						t.Fatalf("Stop stream_id = %q; want 2", id)
 					}
 				default:
 					if !waiting {
