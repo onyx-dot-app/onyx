@@ -83,7 +83,7 @@ Group or user restriction needs EE.
   Source column carries the group (marketplace, owner, Organization library).
   Rows the admin owns or edits (`lib/skills/sharing.ts:canManageSkill`) can be
   selected; the others show a disabled checkbox. The selection gets the Admin
-  Skills bulk actions (`sections/skills/useSkillBulkActions.tsx`: Share,
+  Skills bulk actions (`sections/skills/usePluginBulkActions.tsx`: Share,
   Enable for me, Disable for me, Delete with a confirm that lists the
   plugins, all through `POST /skills/bulk`), with plugin copy
   (`plugins.bulk`). Share takes the row menu's rule (`canShareSkill`: never
@@ -205,7 +205,7 @@ matched integration from `GET /integrations`, so a row follows a switch or a
 sign-in at once, and `needAction` maps the state to one action (Turn on,
 Connect, Add for your team with `newIntegrationHref` filling the add modal, or
 the "Ask an admin" note; other states have only the badge). `lib/plugins/directory.ts:pluginSwitch` gives its switch
-(`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:useSkillEnablement`,
+(`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:usePluginEnablement`,
 so a skill name conflict asks to switch in `SkillSwitchModal`); when the response leaves a supported need not
 on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integration row carries `access`; its
 `installation_policy` is the user's own setting (group settings and shares

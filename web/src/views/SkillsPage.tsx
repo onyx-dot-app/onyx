@@ -28,7 +28,7 @@ import {
   SvgUploadCloud,
   SvgUsers,
 } from "@opal/icons";
-import { useSkillBulkActions } from "@/sections/skills/useSkillBulkActions";
+import { usePluginBulkActions } from "@/sections/skills/usePluginBulkActions";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import useOnMount from "@/hooks/useOnMount";
@@ -45,7 +45,7 @@ import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import { canManageSkill } from "@/lib/skills/sharing";
 import { useSettings } from "@/lib/settings/hooks";
-import { useSkillDelete, useSkillEnablement } from "@/lib/skills/hooks";
+import { usePluginDelete, usePluginEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import { adminSkillHref, newSkillHref } from "@/lib/customize/paths";
 
@@ -67,7 +67,7 @@ export default function AdminSkillsPage() {
   const [deleteTarget, setDeleteTarget] = useState<CustomSkill | null>(null);
   const deleteModal = useCreateModal();
   // Drop the skill now, so a failed refresh does not show it.
-  const deletion = useSkillDelete({
+  const deletion = usePluginDelete({
     noun: "skill",
     onDeleted: async (deleted) => {
       await refresh(
@@ -109,7 +109,7 @@ export default function AdminSkillsPage() {
         ),
     [data]
   );
-  const enablement = useSkillEnablement(items, refresh);
+  const enablement = usePluginEnablement(items, refresh);
 
   // The groups of the summaries the caller may see.
   const groupOptions = useMemo(() => {
@@ -149,7 +149,7 @@ export default function AdminSkillsPage() {
     );
   }, [activeGroupId, items, searchQuery, organizationLibrary]);
 
-  const bulk = useSkillBulkActions({
+  const bulk = usePluginBulkActions({
     items: visibleItems,
     enablement,
     noun: "skill",

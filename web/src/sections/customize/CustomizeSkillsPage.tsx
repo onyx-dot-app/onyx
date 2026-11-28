@@ -31,10 +31,10 @@ import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 import {
   useChatBuiltInSkillIds,
-  useSkillDelete,
-  useSkillEnablement,
-  type SkillEnablement,
-  useRefreshSkillLists,
+  usePluginDelete,
+  usePluginEnablement,
+  type PluginEnablement,
+  useRefreshPluginLists,
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import { needsAttention } from "@/lib/plugins/needs";
@@ -68,7 +68,7 @@ function canEdit(skill: Skill): boolean {
 interface SkillRowProps {
   skill: Skill;
   group: SkillGroup;
-  enablement: SkillEnablement;
+  enablement: PluginEnablement;
   onOpen: (skill: Skill) => void;
   onShare: (skill: Skill) => void;
   onRemove: (skill: Skill) => void;
@@ -216,7 +216,7 @@ export default function CustomizeSkillsPage() {
   const locale = useLocale();
   const navigation = useNavigation();
   const { user, isAdmin } = useUser();
-  const revalidate = useRefreshSkillLists();
+  const revalidate = useRefreshPluginLists();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
   );
@@ -225,14 +225,14 @@ export default function CustomizeSkillsPage() {
   const [status, setStatus] = useState<SkillStatusFilter>("all");
   const removeModal = useCreateModal();
   const [removeTarget, setRemoveTarget] = useState<Skill | null>(null);
-  const deletion = useSkillDelete({ noun: "skill" });
+  const deletion = usePluginDelete({ noun: "skill" });
   const [shareTarget, setShareTarget] = useState<Skill | null>(null);
   const [preview, setPreview] = useState<Skill | null>(null);
 
   const chatBuiltInIds = useChatBuiltInSkillIds();
   const all = data ? visibleSkills(data, chatBuiltInIds) : [];
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
-  const enablement = useSkillEnablement(all, refresh, (skill) => {
+  const enablement = usePluginEnablement(all, refresh, (skill) => {
     if (needsAttention(skill.plugin?.needs ?? [])) setTurnedOn(skill);
   });
   const groups = data

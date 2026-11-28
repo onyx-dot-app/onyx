@@ -27,7 +27,7 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { refreshSkillLists } from "@/lib/skills/cache";
-import { useSkillDelete, useSkillEnablement } from "@/lib/skills/hooks";
+import { usePluginDelete, usePluginEnablement } from "@/lib/skills/hooks";
 import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 import type { SkillEditableDetail, SkillPreview } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -76,8 +76,11 @@ export default function CustomizeSkillPage({
   const { mutate } = useSWRConfig();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
   const list = useUserSkills();
-  const enablement = useSkillEnablement(list.data?.customs ?? [], list.refresh);
-  const deletion = useSkillDelete({ noun: "skill" });
+  const enablement = usePluginEnablement(
+    list.data?.customs ?? [],
+    list.refresh
+  );
+  const deletion = usePluginDelete({ noun: "skill" });
   const listed = list.data?.customs.find((item) => item.id === skillId);
   const isPlugin = listed?.kind === "plugin";
   const canEdit =

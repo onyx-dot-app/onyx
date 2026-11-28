@@ -49,10 +49,10 @@ import { needsAttention } from "@/lib/plugins/needs";
 import type { PluginDetail, PluginSkillSummary } from "@/lib/plugins/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
-  useRefreshSkillLists,
-  useSkillDelete,
-  useSkillEnablement,
-  type SkillEnablement,
+  useRefreshPluginLists,
+  usePluginDelete,
+  usePluginEnablement,
+  type PluginEnablement,
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -81,7 +81,7 @@ interface PluginTabProps {
 }
 
 interface PluginSwitchProps extends PluginTabProps {
-  enablement: SkillEnablement;
+  enablement: PluginEnablement;
 }
 
 function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
@@ -346,15 +346,15 @@ export default function MemberPluginDetailPage({
   const isPlugin = entry?.skills[0]?.kind === "plugin";
   const detail = usePluginDetail(isPlugin ? pluginId : null);
   const plugin = isPlugin ? (detail.data?.plugin ?? null) : null;
-  const refreshLists = useRefreshSkillLists();
+  const refreshLists = useRefreshPluginLists();
   const { mutate } = useSWRConfig();
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
   const [sharing, setSharing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const deletion = useSkillDelete({ noun: "plugin" });
+  const deletion = usePluginDelete({ noun: "plugin" });
   const removeModal = useCreateModal();
   const removeCopy = useTranslations("plugins.member.detail.remove");
-  const enablement = useSkillEnablement(
+  const enablement = usePluginEnablement(
     skills.data?.customs ?? [],
     skills.refresh,
     (updated) => {

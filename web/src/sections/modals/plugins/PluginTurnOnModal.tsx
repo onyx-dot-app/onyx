@@ -5,7 +5,7 @@ import { Button, Modal, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgBlocks } from "@opal/icons";
 import { usePluginDetail } from "@/lib/plugins/hooks";
-import { useRefreshSkillLists } from "@/lib/skills/hooks";
+import { useRefreshPluginLists } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import PluginNeedList from "@/sections/plugins/PluginNeedList";
 
@@ -19,7 +19,7 @@ export default function PluginTurnOnModal({
   onClose,
 }: PluginTurnOnModalProps) {
   const t = useTranslations("plugins.turnOn");
-  const refreshLists = useRefreshSkillLists();
+  const refreshLists = useRefreshPluginLists();
   const detail = usePluginDetail(plugin.id, plugin);
   const needs = detail.data?.plugin?.needs ?? [];
 

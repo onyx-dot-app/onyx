@@ -1,7 +1,10 @@
 import useSWR, { SWRConfig } from "swr";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
-import { useSkillBulkSelection, useSkillEnablement } from "@/lib/skills/hooks";
+import {
+  usePluginBulkSelection,
+  usePluginEnablement,
+} from "@/lib/skills/hooks";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
@@ -27,7 +30,7 @@ const locked = customFixture({
 });
 
 function Harness({ items }: { items: CustomSkill[] }) {
-  const bulk = useSkillBulkSelection({
+  const bulk = usePluginBulkSelection({
     items,
     noun: "plugin",
     enablement: {
@@ -286,7 +289,7 @@ test("a bulk disable also sends a plugin that shows off but is saved on", async 
 });
 
 function EnablementHarness({ items }: { items: CustomSkill[] }) {
-  const enablement = useSkillEnablement(items, jest.fn());
+  const enablement = usePluginEnablement(items, jest.fn());
   return (
     <>
       <button onClick={() => void enablement.setEnabled(items[1]!, true)}>

@@ -107,7 +107,7 @@
   Installed by default or Not available; never Required) and **Sharing** (off:
   only organization-wide managers add user or group shares).
 - **Bulk management.** **Admin Panel → Skills** and **Admin Panel → Plugins**
-  ([[plugins]]) support selection of custom skills (`lib/skills/hooks.ts:useSkillBulkSelection`, UI in `sections/skills/useSkillBulkActions.tsx`), bulk access and installation changes,
+  ([[plugins]]) support selection of custom skills (`lib/skills/hooks.ts:usePluginBulkSelection`, UI in `sections/skills/usePluginBulkActions.tsx`), bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
