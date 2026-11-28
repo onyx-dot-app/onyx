@@ -10,6 +10,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { usePathname } from "@opal/navigation/next";
 import {
@@ -45,6 +46,17 @@ const SIDEBAR_LOGO_HEIGHT_PX = 28;
 const SidebarFoldableContext = createContext(false);
 const SidebarRailedContext = createContext(false);
 
+/**
+ * Under a rail: the height of the sidebar header's logo row. The header
+ * reports it, and the rail's top cell takes it, so the rail's rows stay level
+ * with the sidebar's when the name runs to two lines.
+ */
+interface SidebarBrandRow {
+  height: number | undefined;
+  setHeight: (height: number | undefined) => void;
+}
+const SidebarBrandRowContext = createContext<SidebarBrandRow | null>(null);
+
 interface SidebarRootProps {
   /**
    * Whether the sidebar supports folding on desktop.
@@ -66,6 +78,11 @@ function SidebarRoot({ foldable = false, rail, children }: SidebarRootProps) {
   const { folded, setFolded } = useSidebarState();
   const railed = rail !== undefined;
   const canFold = foldable || railed;
+  const [brandHeight, setBrandHeight] = useState<number>();
+  const brandRow = useMemo(
+    () => ({ height: brandHeight, setHeight: setBrandHeight }),
+    [brandHeight]
+  );
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
@@ -118,15 +135,17 @@ function SidebarRoot({ foldable = false, rail, children }: SidebarRootProps) {
   // tabs show icons with label tooltips.
   const inner = railed ? (
     <SidebarRailedContext.Provider value={true}>
-      <SidebarFoldedContext.Provider value={true}>
-        <div
-          className="opal-sidebar-root__inner opal-sidebar-root__rail"
-          data-folded="true"
-        >
-          {rail}
-        </div>
-      </SidebarFoldedContext.Provider>
-      {panel}
+      <SidebarBrandRowContext.Provider value={brandRow}>
+        <SidebarFoldedContext.Provider value={true}>
+          <div
+            className="opal-sidebar-root__inner opal-sidebar-root__rail"
+            data-folded="true"
+          >
+            {rail}
+          </div>
+        </SidebarFoldedContext.Provider>
+        {panel}
+      </SidebarBrandRowContext.Provider>
     </SidebarRailedContext.Provider>
   ) : (
     panel
@@ -245,6 +264,24 @@ function SidebarHeader(props: SidebarHeaderProps) {
   const railed = useContext(SidebarRailedContext);
   const foldLabel = folded ? strings.sidebarOpen : strings.sidebarClose;
 
+  // Under a rail, report the logo row's height to the rail (see
+  // `SidebarBrandRowContext`).
+  const brandRowRef = useRef<HTMLDivElement>(null);
+  const setBrandHeight = useContext(SidebarBrandRowContext)?.setHeight;
+  useLayoutEffect(() => {
+    const row = brandRowRef.current;
+    if (!row || !setBrandHeight || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => setBrandHeight(row.offsetHeight));
+    observer.observe(row);
+    setBrandHeight(row.offsetHeight);
+    return () => {
+      observer.disconnect();
+      setBrandHeight(undefined);
+    };
+  }, [setBrandHeight]);
+
   const closeButton = useMemo(
     () => (
       <Button
@@ -269,6 +306,7 @@ function SidebarHeader(props: SidebarHeaderProps) {
         {props.wordmark && (
           <div className="opal-sidebar-header__topbar">
             <div
+              ref={brandRowRef}
               className="opal-sidebar-header__railed-brand"
               style={{ minHeight: SIDEBAR_LOGO_HEIGHT_PX }}
             >
@@ -402,17 +440,22 @@ function SidebarRail({ logo, footer, children }: SidebarRailProps) {
   const { folded, setFolded } = useSidebarState();
   const strings = useOpalStrings();
   const foldLabel = folded ? strings.sidebarOpen : strings.sidebarClose;
+  const brandHeight = useContext(SidebarBrandRowContext)?.height;
   return (
     <div className="opal-sidebar-rail">
       {/* Folded, the fold button sits over the mark and shows on hover or
-          keyboard focus. Unfolded, it shows alone. */}
+          keyboard focus. Unfolded, it shows alone. The cell is as tall as
+          the sidebar's logo row, so the tabs below line up. */}
       <div
         className="opal-sidebar-rail__logo"
         data-folded={String(folded)}
-        style={{ height: SIDEBAR_LOGO_HEIGHT_PX }}
+        style={{ height: brandHeight ?? SIDEBAR_LOGO_HEIGHT_PX }}
       >
         {folded && <div className="opal-sidebar-rail__mark">{logo}</div>}
-        <div className="opal-sidebar-rail__fold-button">
+        <div
+          className="opal-sidebar-rail__fold-button"
+          style={{ height: SIDEBAR_LOGO_HEIGHT_PX }}
+        >
           <Button
             icon={SvgSidebar}
             prominence="tertiary"

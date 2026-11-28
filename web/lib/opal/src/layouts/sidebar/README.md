@@ -53,7 +53,9 @@ with no fold button: the rail holds it.
 
 A thin column of window tabs, passed to `Root` as `rail`. Its top corner is
 the fold button while the sidebar is open. Folded, the corner shows the `logo`
-mark, and hover or keyboard focus shows the open button in its place.
+mark, and hover or keyboard focus shows the open button in its place. The corner
+is as tall as the `Header`'s logo row, so the rail's tabs line up with the
+sidebar's rows when the name runs to two lines.
 
 | Prop       | Type        | Default | Description                                       |
 | ---------- | ----------- | ------- | ------------------------------------------------- |

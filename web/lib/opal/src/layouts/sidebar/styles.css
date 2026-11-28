@@ -81,7 +81,7 @@
 }
 
 .opal-sidebar-rail__logo {
-  @apply relative flex shrink-0 items-center justify-center;
+  @apply relative flex shrink-0 items-start justify-center;
 }
 
 .opal-sidebar-rail__mark {
@@ -90,7 +90,7 @@
 }
 
 .opal-sidebar-rail__fold-button {
-  @apply absolute inset-0 z-10 flex items-center justify-center opacity-0;
+  @apply absolute inset-x-0 top-0 z-10 flex items-center justify-center opacity-0;
   transition: opacity var(--duration-sidebar-fold) ease-in-out;
 }
 
