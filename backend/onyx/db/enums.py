@@ -791,10 +791,22 @@ class HierarchyNodeType(str, PyEnum):
 
 
 class LLMModelFlowType(str, PyEnum):
+    """A capability of a model. Which model does a job is a ModelRole."""
+
     CHAT = "chat"
     VISION = "vision"
-    CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
+    DECISION = "decision"
+    IMAGE_GENERATION = "image_generation"
+
+
+class ModelRole(str, PyEnum):
+    """A job the deployment gives one model, e.g. answering chats. The model's
+    capabilities (its LLMModelFlowType rows) must service the role; see
+    ROLE_REQUIREMENTS in onyx/db/llm.py."""
+
+    CHAT = "chat"
+    IMAGE_PROCESSING = "image_processing"
     CHAT_NAMING = "chat_naming"
     SEARCH_SELECTION = "search_selection"
     DECISION = "decision"

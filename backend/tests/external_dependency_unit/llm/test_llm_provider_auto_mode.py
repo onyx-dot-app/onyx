@@ -11,13 +11,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import ModelRole
 from onyx.db.llm import (
-    fetch_default_model,
     fetch_existing_llm_provider,
+    fetch_role_model,
     remove_llm_provider,
+    set_role_model,
     sync_auto_mode_models,
-    update_default_model,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.llm.constants import LlmProviderNames
@@ -134,11 +134,11 @@ def test_sync_does_not_change_the_global_default(
         is_auto_mode=True,
         models={"gpt-a": True, "gpt-old": True},
     )
-    update_default_model(
+    set_role_model(
         db_session=db_session,
+        role=ModelRole.CHAT,
         provider_id=provider.id,
-        model="gpt-old",
-        flow_type=LLMModelFlowType.CHAT,
+        model_name="gpt-old",
     )
 
     sync_auto_mode_models(
@@ -148,7 +148,7 @@ def test_sync_does_not_change_the_global_default(
         retired_model_names={"gpt-old"},
     )
 
-    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    default_model = fetch_role_model(db_session, ModelRole.CHAT)
     assert default_model is not None
     assert default_model.llm_provider_id == provider.id
     assert default_model.name == "gpt-old"

@@ -94,33 +94,34 @@ resolved provider to get the `LlmRequestPolicy`. `llm/factory.py:get_llm`
 merges the request and env headers, then the provider headers
 (`_build_provider_extra_headers`), then the policy headers and model kwargs.
 
-**Model flows.** `LLMModelFlow` rows join a `ModelConfiguration` to an
-`LLMModelFlowType`, with an `is_default` flag. A row without the flag is a
-capability (the model supports chat, vision or decisions). The default row is
-the designation for that task. The partial unique index
-`ix_one_default_per_llm_model_flow` allows at most one default per flow type
-across all providers.
+**Capabilities and roles.** `LLMModelFlow` rows join a `ModelConfiguration`
+to an `LLMModelFlowType`: a capability (chat, vision, reasoning, decisions,
+image generation). A role (`ModelRole`) is a job the deployment gives one
+model. `model_role` (`ModelRoleAssignment`) has one row per role; no row, or a
+null model, leaves the role empty. `db/llm.py:ROLE_REQUIREMENTS` lists the
+capabilities each role needs. Contextual RAG is not a role: its model is on
+the search settings ([[document-index]]).
 
-| Factory | When no default exists |
+| Factory | When the role is empty |
 |---|---|
 | `get_default_llm` (CHAT) | raises `ValueError` |
-| `get_default_llm_with_vision` | returns `None`; image summarization is off |
+| `get_default_llm_with_vision` (IMAGE_PROCESSING) | returns `None`; image summarization is off |
 | `get_default_utility_llm` (CHAT_NAMING, SEARCH_SELECTION) | returns `None`; caller uses its own model |
 | `get_search_selection_llm` | returns the caller's `fallback`, never the naming model |
-| `get_contextual_rag_llm_for_search_settings` (CONTEXTUAL_RAG) | returns `None` when the search settings name no model either |
-| `get_decision_client` | returns `None` |
+| `get_contextual_rag_llm_for_search_settings` | not a role; returns `None` when neither these nor the PRESENT search settings name a model |
+| `get_decision_client` (DECISION) | returns `None` |
 
 `get_default_utility_llm` and `get_decision_client` run the managed-key cost
 check themselves and skip the user access check. An admin designation applies
 to every user.
 
-**Setting a default.** `db/llm.py:update_default_model` clears the old default
-and sets the new one in one transaction. CHAT_NAMING, SEARCH_SELECTION and
-CRAFT are pointer flows: `db/llm.py:update_default_pointer_model` requires a
-CHAT-capable model and creates the flow row if it is missing. Setting a default
-makes the model visible, except for the flows in `_HIDDEN_DEFAULT_FLOW_TYPES`.
-So a hidden model can be the naming, selection or decision model and stay out
-of the chat picker.
+**Setting a role.** `db/llm.py:set_role_model` upserts the role's row after
+`model_can_hold_role` checks the model's capabilities; `clear_role` deletes it.
+Holding CHAT, IMAGE_PROCESSING or CRAFT makes the model visible. The other
+roles do not, so a hidden model can be the naming, selection or decision model
+and stay out of the chat picker. A provider edit cannot remove, hide (for the
+visible roles) or strip a capability from a model that holds a role
+(`_validate_provider_model_defaults`).
 
 **The wrapper.** `llm/multi_llm.py:LitellmLLM` has two layers. `invoke_raw` and
 `stream_raw` return provider chunks (`ModelResponseStream`). `invoke` and
@@ -338,9 +339,9 @@ build their own clients.
 ## Known issues
 
 - **Unverified column width for new flow types.** The `llm_model_flow_type`
-  column is `Enum(native_enum=False)` with no CHECK constraint. The migration
-  that created it imports the live enum, so the VARCHAR length depends on when
-  it ran. Check the column width before you add a flow type with a longer name.
+  column is `Enum(native_enum=False)` with no CHECK constraint, and its
+  VARCHAR length depends on when the creating migration ran. Check the column
+  width before you add a flow type with a longer name.
 - **Cancellation is cooperative.** The wrapper checks the signal between
   reads, so a stalled provider holds the turn until the stall timeout.
 
@@ -367,10 +368,12 @@ build their own clients.
   if it can list models. Copy `web/src/sections/modals/languageModels/OpenRouterModal.tsx` for the admin
   modal; list
   the modals with `ls web/src/sections/modals/languageModels/`.
-- `new-task-designation` **A task designation.** Add the `LLMModelFlowType` value (see Known issues).
-  Write the factory with an explicit no-default behaviour, and add the value to
-  `_HIDDEN_DEFAULT_FLOW_TYPES` if the model must stay out of the picker. Copy
-  CHAT_NAMING: `git grep -n CHAT_NAMING backend/onyx` lists its writer, factory
+- `new-task-designation` **A model role.** Add the `ModelRole` value and its
+  `ROLE_REQUIREMENTS` entry, and widen the `model_role.role` column in the
+  migration if the name is longer. Write the factory with an explicit
+  empty-role behaviour, and add the role to `_VISIBLE_ROLES` only if the model
+  must show in the chat picker. Copy CHAT_NAMING:
+  `git grep -n ModelRole.CHAT_NAMING backend/onyx` lists its writer, factory
   and admin route.
 - `new-call-site` **An LLM call site.** Copy a `get_default_utility_llm` caller; list them with
   `git grep -n get_default_utility_llm backend/onyx`. Set

@@ -10,8 +10,8 @@ from onyx.configs.app_configs import (
     MAX_EMBEDDED_IMAGES_PER_UPLOAD,
 )
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
-from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import fetch_default_model
+from onyx.db.enums import ModelRole
+from onyx.db.llm import fetch_role_model
 from onyx.file_processing.extract_file_text import (
     count_docx_embedded_images,
     extract_file_text,
@@ -233,7 +233,7 @@ def categorize_uploaded_files(
     """
 
     results = CategorizedFiles()
-    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    default_model = fetch_role_model(db_session, ModelRole.CHAT)
 
     model_name = default_model.name if default_model else None
     provider_type = default_model.llm_provider.provider if default_model else None

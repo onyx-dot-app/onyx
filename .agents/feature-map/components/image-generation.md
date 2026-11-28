@@ -195,10 +195,6 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
 
 ## Known issues
 
-- **No database rule keeps one default.** `ImageGenerationConfig.is_default`
-  has an index, not a unique constraint. The write paths clear other defaults
-  first, but two writes at the same time can leave two defaults.
-  `get_default_image_generation_config` then returns one of them.
 - **Reference images skip the file access check.**
   `ImageGenerationTool._load_reference_images` reads each file ID that the model
   passes with `file_store/utils.py:load_chat_file_by_id`, which does not check
@@ -235,7 +231,8 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
   `web/src/views/admin/ImageGenerationPage/forms/getImageGenForm.tsx`. Check
   both config readers ([[#two-default-config-readers]]).
 - `investigate-image-tool-missing` **Investigate "the image tool is not offered" or a standalone 404.** Check
-  that one config has `is_default` set and that its `LLMProvider` row exists.
+  that the IMAGE_GENERATION row of `model_role` names a config's model and
+  that its `LLMProvider` row exists.
   Then check that `validate_credentials` passes for that provider
   ([[#configured-means-complete]]). If the tool shows but every call fails, the
   key or the model is wrong; the user-visible error text comes from

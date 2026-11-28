@@ -52,12 +52,12 @@ from onyx.db.engine.sql_engine import (
     get_session_with_shared_schema,
     get_session_with_tenant,
 )
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import ModelRole
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
 from onyx.db.llm import (
     fetch_existing_llm_provider_by_name_and_type,
     fetch_existing_llm_provider_by_type_nameless,
-    update_default_model,
+    set_role_model,
     upsert_cloud_embedding_provider,
     upsert_llm_provider,
 )
@@ -484,11 +484,11 @@ def configure_default_api_keys(db_session: Session) -> None:
                 request.id = existing.id
             provider = upsert_llm_provider(request, db_session)
             if not has_set_default_provider:
-                update_default_model(
-                    provider_id=provider.id,
-                    model=default_model,
+                set_role_model(
                     db_session=db_session,
-                    flow_type=LLMModelFlowType.CHAT,
+                    role=ModelRole.CHAT,
+                    provider_id=provider.id,
+                    model_name=default_model,
                 )
                 has_set_default_provider = True
         except Exception as e:

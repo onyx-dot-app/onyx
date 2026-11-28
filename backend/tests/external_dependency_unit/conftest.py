@@ -18,12 +18,12 @@ from sqlalchemy.pool import NullPool
 
 from onyx.db.chat import delete_chat_artifact_files
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
-from onyx.db.enums import AccountType, LLMModelFlowType, UserFileStatus
+from onyx.db.enums import AccountType, ModelRole, UserFileStatus
 from onyx.db.llm import (
-    fetch_default_model,
     fetch_existing_llm_provider,
+    fetch_role_model,
     remove_llm_provider,
-    update_default_model,
+    set_role_model,
     upsert_llm_provider,
 )
 from onyx.db.models import (
@@ -367,15 +367,13 @@ def ensure_default_llm_provider(db_session: Session, provider_name: str) -> None
         ),
         db_session=db_session,
     )
-    update_default_model(
-        db_session, provider.id, CI_OPENAI_MODEL, LLMModelFlowType.CHAT
-    )
+    set_role_model(db_session, ModelRole.CHAT, provider.id, CI_OPENAI_MODEL)
 
 
 @contextmanager
 def temporary_default_llm_provider(db_session: Session) -> Generator[None, None, None]:
     """Use a private test provider and restore the previous chat default."""
-    previous = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    previous = fetch_role_model(db_session, ModelRole.CHAT)
     previous_default = (
         None if previous is None else (previous.llm_provider_id, previous.name)
     )
@@ -386,8 +384,8 @@ def temporary_default_llm_provider(db_session: Session) -> Generator[None, None,
     finally:
         db_session.rollback()
         if previous_default is not None:
-            update_default_model(db_session, *previous_default, LLMModelFlowType.CHAT)
-        # Removing the temporary provider also removes its default-flow rows.
+            set_role_model(db_session, ModelRole.CHAT, *previous_default)
+        # Removing the temporary provider also empties the roles its models held.
         provider = fetch_existing_llm_provider(provider_name, db_session)
         if provider is not None:
             remove_llm_provider(db_session, provider.id)

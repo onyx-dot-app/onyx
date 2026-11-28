@@ -125,6 +125,7 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    ModelRole,
     MotionPreference,
     NotificationSeverity,
     PatType,
@@ -4479,9 +4480,9 @@ class LLMProvider(Base):
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Deprecated: use LLMModelFlow.is_default with CHAT flow type instead
+    # Deprecated: use the CHAT model role instead
     is_default_provider: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    # Deprecated: use LLMModelFlow.is_default with VISION flow type instead
+    # Deprecated: use the IMAGE_PROCESSING model role instead
     is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
     # Deprecated: use LLMModelFlow with VISION flow type instead
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -4602,7 +4603,6 @@ class LLMModelFlow(Base):
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
         nullable=False,
     )
-    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration",
@@ -4615,12 +4615,25 @@ class LLMModelFlow(Base):
             "model_configuration_id",
             name="uq_model_config_per_llm_model_flow_type",
         ),
-        Index(
-            "ix_one_default_per_llm_model_flow",
-            "llm_model_flow_type",
-            unique=True,
-            postgresql_where=(is_default == True),  # noqa: E712
-        ),
+    )
+
+
+class ModelRoleAssignment(Base):
+    """The model that holds each deployment role, e.g. the default chat model.
+    One row per role; no row, or a null model, leaves the role empty and its
+    feature off."""
+
+    __tablename__ = "model_role"
+
+    role: Mapped[ModelRole] = mapped_column(
+        Enum(ModelRole, native_enum=False), primary_key=True
+    )
+    model_configuration_id: Mapped[int | None] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="SET NULL"), nullable=True
+    )
+
+    model_configuration: Mapped["ModelConfiguration | None"] = relationship(
+        "ModelConfiguration"
     )
 
 
@@ -4632,7 +4645,6 @@ class ImageGenerationConfig(Base):
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
         nullable=False,
     )
-    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # False when the config links a model on an admin-managed LLM provider; the
     # provider then outlives the config.
     llm_provider_owned: Mapped[bool] = mapped_column(
@@ -4644,7 +4656,6 @@ class ImageGenerationConfig(Base):
     )
 
     __table_args__ = (
-        Index("ix_image_generation_config_is_default", "is_default"),
         Index(
             "ix_image_generation_config_model_configuration_id",
             "model_configuration_id",

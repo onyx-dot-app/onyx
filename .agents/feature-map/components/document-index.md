@@ -277,16 +277,14 @@ it deletes the old one.
     `web/src/lib/searchSettings/constants.ts` must match the registry
     (`backend/tests/unit/shared_configs/test_web_embedding_model_registry_parity.py`).
 13. `contextual-rag-validator` **Contextual-RAG settings pass one validator, and
-    the default flow follows PRESENT.**
+    a missing model falls back to PRESENT.**
     `server/manage/search_settings.py:validate_contextual_rag_model` rejects a
     model without the CHAT flow type, and rejects enabling the feature with no
-    model and no tenant default. The reindex endpoint and
-    `update_saved_search_settings` both call it. The default CONTEXTUAL_RAG LLM
-    flow must match PRESENT:
-    `server/manage/search_settings.py:_sync_default_contextual_model` resets it
-    after an in-place change, and `db/swap_index.py:_perform_index_swap`
-    resets it after a swap. A new writer of PRESENT contextual-RAG fields must
-    do the same, or [[llm-providers]] shows a default that indexing does not use. The in-place
+    model when PRESENT has none either. The reindex endpoint and
+    `update_saved_search_settings` both call it.
+    `llm/factory.py:get_contextual_rag_llm_for_search_settings` uses the
+    PRESENT model when the given settings name none. Contextual RAG is not a
+    [[llm-providers]] role; the search settings are its only source. The in-place
     endpoint refuses to turn the feature off while the `ENABLE_CONTEXTUAL_RAG`
     env flag is set ([[indexing-pipeline]]).
 

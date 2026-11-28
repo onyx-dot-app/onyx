@@ -7,13 +7,13 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import LLMModelFlowType, Permission
+from onyx.db.enums import ModelRole, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
-    fetch_default_model,
     fetch_existing_llm_provider,
     fetch_first_llm_provider,
     fetch_model_configuration_by_id,
+    fetch_role_model,
     fetch_user_group_ids,
 )
 from onyx.db.model_configuration import (
@@ -21,6 +21,7 @@ from onyx.db.model_configuration import (
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
+from onyx.db.search_settings import get_current_search_settings
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
@@ -283,7 +284,7 @@ def get_default_llm_with_vision(
     model nobody chose.
     """
     with get_session_with_current_tenant() as db_session:
-        default_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
+        default_model = fetch_role_model(db_session, ModelRole.IMAGE_PROCESSING)
         if default_model is None:
             logger.warning(
                 "No default vision model is set — image summarization will be "
@@ -413,12 +414,13 @@ def get_contextual_rag_llm_for_search_settings(
     search_settings: SearchSettings,
 ) -> LLM | None:
     """Resolve the contextual-RAG LLM for the given search settings: the explicit
-    model configuration if set, else the tenant default; None when neither exists."""
+    model configuration if set, else the current index's; None when neither exists."""
     mc_id = search_settings.contextual_rag_model_configuration_id
     if mc_id is None:
         with get_session_with_current_tenant() as db_session:
-            mc = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
-        mc_id = mc.id if mc else None
+            current = get_current_search_settings(db_session)
+            if current.enable_contextual_rag:
+                mc_id = current.contextual_rag_model_configuration_id
     return get_llm_for_contextual_rag(mc_id) if mc_id is not None else None
 
 
@@ -429,7 +431,7 @@ def get_default_llm(
     user_defaults: UserChatDefaults | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+        model = fetch_role_model(db_session, ModelRole.CHAT)
 
         if not model:
             raise ValueError("No default LLM model found")
@@ -465,12 +467,12 @@ def _provider_view_within_cost_limit(
 
 
 def get_default_utility_llm(
-    flow_type: LLMModelFlowType,
+    role: ModelRole,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
 ) -> LLM | None:
     with get_session_with_current_tenant() as db_session:
-        model = fetch_default_model(db_session, flow_type)
+        model = fetch_role_model(db_session, role)
         if model is None:
             return None
         provider = _provider_view_within_cost_limit(
@@ -491,7 +493,7 @@ def get_decision_client(
     timeout: float = DEFAULT_DECISION_TIMEOUT_S,
 ) -> DecisionClient | None:
     with get_session_with_current_tenant() as db_session:
-        model = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+        model = fetch_role_model(db_session, ModelRole.DECISION)
         if model is None:
             return None
         provider = model.llm_provider
@@ -539,7 +541,7 @@ def get_search_selection_llm(
 ) -> LLM:
     return (
         get_default_utility_llm(
-            LLMModelFlowType.SEARCH_SELECTION, additional_headers, policy_fn
+            ModelRole.SEARCH_SELECTION, additional_headers, policy_fn
         )
         or fallback
     )

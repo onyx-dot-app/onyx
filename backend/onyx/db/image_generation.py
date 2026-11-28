@@ -1,7 +1,8 @@
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.db.model_configuration import (
     fetch_model_configuration_by_provider_id_and_name,
 )
@@ -10,6 +11,7 @@ from onyx.db.models import (
     LLMModelFlow,
     LLMProvider,
     ModelConfiguration,
+    ModelRoleAssignment,
 )
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.utils.logger import setup_logger
@@ -22,6 +24,42 @@ DEFAULT_IMAGE_MODEL_NAME = "gpt-image-2.5-flare"
 DEFAULT_IMAGE_PROVIDER = "openai"
 
 
+def _set_default_image_model__no_commit(
+    db_session: Session, model_configuration_id: int
+) -> None:
+    db_session.execute(
+        insert(ModelRoleAssignment)
+        .values(
+            role=ModelRole.IMAGE_GENERATION,
+            model_configuration_id=model_configuration_id,
+        )
+        .on_conflict_do_update(
+            index_elements=[ModelRoleAssignment.role],
+            set_={"model_configuration_id": model_configuration_id},
+        )
+    )
+
+
+def _clear_default_image_model__no_commit(
+    db_session: Session, model_configuration_id: int
+) -> None:
+    db_session.execute(
+        delete(ModelRoleAssignment).where(
+            ModelRoleAssignment.role == ModelRole.IMAGE_GENERATION,
+            ModelRoleAssignment.model_configuration_id == model_configuration_id,
+        )
+    )
+
+
+def fetch_default_image_model_configuration_id(db_session: Session) -> int | None:
+    """The model that holds the IMAGE_GENERATION role, if any."""
+    return db_session.scalar(
+        select(ModelRoleAssignment.model_configuration_id).where(
+            ModelRoleAssignment.role == ModelRole.IMAGE_GENERATION
+        )
+    )
+
+
 def create_image_generation_config__no_commit(
     db_session: Session,
     image_provider_id: str,
@@ -30,23 +68,15 @@ def create_image_generation_config__no_commit(
     llm_provider_owned: bool = True,
 ) -> ImageGenerationConfig:
     """Create a new image generation config."""
-    # If setting as default, clear ALL existing defaults in a single atomic update
-    # This is more atomic than select-then-update pattern
-    if is_default:
-        db_session.execute(
-            update(ImageGenerationConfig)
-            .where(ImageGenerationConfig.is_default.is_(True))
-            .values(is_default=False)
-        )
-
     new_config = ImageGenerationConfig(
         image_provider_id=image_provider_id,
         model_configuration_id=model_configuration_id,
-        is_default=is_default,
         llm_provider_owned=llm_provider_owned,
     )
     db_session.add(new_config)
     db_session.flush()
+    if is_default:
+        _set_default_image_model__no_commit(db_session, model_configuration_id)
     return new_config
 
 
@@ -97,7 +127,12 @@ def get_default_image_generation_config(
     """
     stmt = (
         select(ImageGenerationConfig)
-        .where(ImageGenerationConfig.is_default.is_(True))
+        .join(
+            ModelRoleAssignment,
+            ModelRoleAssignment.model_configuration_id
+            == ImageGenerationConfig.model_configuration_id,
+        )
+        .where(ModelRoleAssignment.role == ModelRole.IMAGE_GENERATION)
         .options(
             selectinload(ImageGenerationConfig.model_configuration).selectinload(
                 ModelConfiguration.llm_provider
@@ -127,19 +162,7 @@ def set_default_image_generation_config(
             f"ImageGenerationConfig with image_provider_id {image_provider_id} not found"
         )
 
-    # Clear ALL existing defaults in a single atomic update
-    # This is more atomic than select-then-update pattern
-    db_session.execute(
-        update(ImageGenerationConfig)
-        .where(
-            ImageGenerationConfig.is_default.is_(True),
-            ImageGenerationConfig.image_provider_id != image_provider_id,
-        )
-        .values(is_default=False)
-    )
-
-    # Set new default
-    new_default.is_default = True
+    _set_default_image_model__no_commit(db_session, new_default.model_configuration_id)
     db_session.commit()
 
 
@@ -153,7 +176,7 @@ def unset_default_image_generation_config(
         raise ValueError(
             f"ImageGenerationConfig with image_provider_id {image_provider_id} not found"
         )
-    config.is_default = False
+    _clear_default_image_model__no_commit(db_session, config.model_configuration_id)
     db_session.commit()
 
 
@@ -168,6 +191,7 @@ def delete_image_generation_config__no_commit(
             f"ImageGenerationConfig with image_provider_id {image_provider_id} not found"
         )
 
+    _clear_default_image_model__no_commit(db_session, config.model_configuration_id)
     db_session.delete(config)
     db_session.flush()
 
@@ -300,6 +324,7 @@ def unlink_image_generation_model__no_commit(
     """Delete a linked config. The model row is removed only when nothing
     else uses it; the LLM provider is never touched."""
     model_configuration = config.model_configuration
+    _clear_default_image_model__no_commit(db_session, model_configuration.id)
     db_session.delete(config)
     db_session.execute(
         delete(LLMModelFlow).where(

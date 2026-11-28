@@ -6,7 +6,6 @@ Create Date: 2026-01-30 12:21:24.955922
 
 """
 
-from onyx.db.enums import LLMModelFlowType
 from alembic import op
 import sqlalchemy as sa
 
@@ -16,6 +15,19 @@ down_revision = "9d1543a37106"
 branch_labels = None
 depends_on = None
 
+# The member names when this revision ran on main; later code trimmed the enum.
+LLM_MODEL_FLOW_TYPES = (
+    "CHAT",
+    "VISION",
+    "CONTEXTUAL_RAG",
+    "REASONING",
+    "CHAT_NAMING",
+    "SEARCH_SELECTION",
+    "DECISION",
+    "CRAFT",
+    "IMAGE_GENERATION",
+)
+
 
 def upgrade() -> None:
     op.create_table(
@@ -23,7 +35,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column(
             "llm_model_flow_type",
-            sa.Enum(LLMModelFlowType, name="llmmodelflowtype", native_enum=False),
+            sa.Enum(*LLM_MODEL_FLOW_TYPES, name="llmmodelflowtype", native_enum=False),
             nullable=False,
         ),
         sa.Column(

@@ -7,16 +7,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, ModelRole
 from onyx.db.llm import (
-    clear_decision_model,
-    fetch_default_model,
+    clear_role,
     fetch_existing_llm_provider_by_id,
     fetch_model_configurations_page,
+    fetch_role_model,
     remove_llm_provider,
+    set_role_model,
     sync_model_configurations,
-    update_default_contextual_model,
-    update_default_model,
     upsert_decision_provider,
     upsert_llm_provider,
 )
@@ -50,6 +49,7 @@ def db_session() -> Generator[Session, None, None]:
                     "llm_provider",
                     "model_configuration",
                     "llm_model_flow",
+                    "model_role",
                     "image_generation_config",
                     "llm_provider__persona",
                     "llm_provider__user_group",
@@ -93,14 +93,12 @@ def test_decision_model_requires_explicit_selection_and_can_be_cleared(
         "jev-latest",
         {LLMModelFlowType.DECISION},
     )
-    assert fetch_default_model(db_session, LLMModelFlowType.DECISION) is None
-    assert fetch_default_model(db_session, LLMModelFlowType.CHAT) is None
+    assert fetch_role_model(db_session, ModelRole.DECISION) is None
+    assert fetch_role_model(db_session, ModelRole.CHAT) is None
 
-    update_default_model(
-        db_session, decision_provider.id, "jev-latest", LLMModelFlowType.DECISION
-    )
+    set_role_model(db_session, ModelRole.DECISION, decision_provider.id, "jev-latest")
     db_session.expire_all()
-    selected = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+    selected = fetch_role_model(db_session, ModelRole.DECISION)
     assert selected is not None
     assert (selected.llm_provider_id, selected.name, selected.is_visible) == (
         decision_provider.id,
@@ -108,10 +106,10 @@ def test_decision_model_requires_explicit_selection_and_can_be_cleared(
         False,
     )
 
-    clear_decision_model(db_session)
-    clear_decision_model(db_session)
+    clear_role(db_session, ModelRole.DECISION)
+    clear_role(db_session, ModelRole.DECISION)
     db_session.expire_all()
-    assert fetch_default_model(db_session, LLMModelFlowType.DECISION) is None
+    assert fetch_role_model(db_session, ModelRole.DECISION) is None
     assert set(model.llm_model_flow_types) == {LLMModelFlowType.DECISION}
 
 
@@ -128,15 +126,13 @@ def test_chat_model_cannot_replace_selected_decision_model(
         ),
         db_session,
     )
-    update_default_model(
-        db_session, decision_provider.id, "jev-latest", LLMModelFlowType.DECISION
-    )
-    with pytest.raises(ValueError, match="is not a valid model"):
-        update_default_model(
-            db_session, chat_provider.id, CI_OPENAI_MODEL, LLMModelFlowType.DECISION
+    set_role_model(db_session, ModelRole.DECISION, decision_provider.id, "jev-latest")
+    with pytest.raises(ValueError, match="lacks the capabilities"):
+        set_role_model(
+            db_session, ModelRole.DECISION, chat_provider.id, CI_OPENAI_MODEL
         )
     db_session.rollback()
-    selected = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+    selected = fetch_role_model(db_session, ModelRole.DECISION)
     assert selected is not None
     assert (selected.llm_provider_id, selected.name) == (
         decision_provider.id,
@@ -155,9 +151,7 @@ def test_chat_model_cannot_replace_selected_decision_model(
 def test_provider_edit_preserves_hidden_decision_selection(
     db_session: Session, decision_provider: LLMProviderView
 ) -> None:
-    update_default_model(
-        db_session, decision_provider.id, "jev-latest", LLMModelFlowType.DECISION
-    )
+    set_role_model(db_session, ModelRole.DECISION, decision_provider.id, "jev-latest")
     upsert_llm_provider(
         LLMProviderUpsertRequest(
             id=decision_provider.id,
@@ -175,7 +169,7 @@ def test_provider_edit_preserves_hidden_decision_selection(
         db_session,
     )
     db_session.expire_all()
-    selected = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+    selected = fetch_role_model(db_session, ModelRole.DECISION)
     assert selected is not None
     assert (
         selected.llm_provider_id,
@@ -195,39 +189,35 @@ def test_provider_edit_preserves_hidden_decision_selection(
 def test_selected_model_can_only_be_removed_after_clearing(
     db_session: Session, decision_provider: LLMProviderView
 ) -> None:
-    update_default_model(
-        db_session, decision_provider.id, "jev-latest", LLMModelFlowType.DECISION
-    )
+    set_role_model(db_session, ModelRole.DECISION, decision_provider.id, "jev-latest")
     request = LLMProviderUpsertRequest(
         id=decision_provider.id, provider="typesafe", model_configurations=[]
     )
     with pytest.raises(ValueError, match="Cannot remove the default model"):
         upsert_llm_provider(request, db_session)
     db_session.rollback()
-    selected = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+    selected = fetch_role_model(db_session, ModelRole.DECISION)
     assert selected is not None and selected.name == "jev-latest"
 
-    clear_decision_model(db_session)
+    clear_role(db_session, ModelRole.DECISION)
     upsert_llm_provider(request, db_session)
     db_session.expire_all()
     stored = fetch_existing_llm_provider_by_id(decision_provider.id, db_session)
     assert stored is not None
     assert stored.model_configurations == []
-    assert fetch_default_model(db_session, LLMModelFlowType.DECISION) is None
+    assert fetch_role_model(db_session, ModelRole.DECISION) is None
 
 
 def test_deleting_provider_clears_selected_decision_model(
     db_session: Session, decision_provider: LLMProviderView
 ) -> None:
-    update_default_model(
-        db_session, decision_provider.id, "jev-latest", LLMModelFlowType.DECISION
-    )
-    selected = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+    set_role_model(db_session, ModelRole.DECISION, decision_provider.id, "jev-latest")
+    selected = fetch_role_model(db_session, ModelRole.DECISION)
     assert selected is not None and selected.name == "jev-latest"
 
     remove_llm_provider(db_session, decision_provider.id)
     db_session.expire_all()
-    assert fetch_default_model(db_session, LLMModelFlowType.DECISION) is None
+    assert fetch_role_model(db_session, ModelRole.DECISION) is None
     assert fetch_existing_llm_provider_by_id(decision_provider.id, db_session) is None
 
 
@@ -256,9 +246,7 @@ def test_discovered_typesafe_model_survives_save_and_refresh_without_reselection
         db_session,
         discovered_models={"jev-latest": False, "jev-future": False},
     )
-    update_default_model(
-        db_session, decision_provider.id, "jev-future", LLMModelFlowType.DECISION
-    )
+    set_role_model(db_session, ModelRole.DECISION, decision_provider.id, "jev-future")
     upsert_llm_provider(
         LLMProviderUpsertRequest(
             id=decision_provider.id,
@@ -270,27 +258,24 @@ def test_discovered_typesafe_model_survives_save_and_refresh_without_reselection
         ),
         db_session,
     )
-    selected = fetch_default_model(db_session, LLMModelFlowType.DECISION)
+    selected = fetch_role_model(db_session, ModelRole.DECISION)
     assert selected is not None
     assert selected.name == "jev-future"
     assert set(selected.llm_model_flow_types) == {LLMModelFlowType.DECISION}
-    clear_decision_model(db_session)
+    clear_role(db_session, ModelRole.DECISION)
     sync_model_configurations(db_session, decision_provider.id, [discovered])
-    assert fetch_default_model(db_session, LLMModelFlowType.DECISION) is None
+    assert fetch_role_model(db_session, ModelRole.DECISION) is None
 
 
-def test_decision_model_cannot_become_contextual_rag_default(
+def test_decision_model_cannot_become_contextual_rag_model(
     db_session: Session, decision_provider: LLMProviderView
 ) -> None:
     from onyx.error_handling.exceptions import OnyxError
     from onyx.server.manage.search_settings import validate_contextual_rag_model
 
     model_id = decision_provider.model_configurations[0].id
-    with pytest.raises(ValueError, match="requires a chat model"):
-        update_default_contextual_model(db_session, True, model_id)
     with pytest.raises(OnyxError, match="requires a chat model"):
         validate_contextual_rag_model(model_id, db_session, True)
-    assert fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG) is None
 
 
 def test_custom_chat_model_can_be_created_and_edited_as_default(
@@ -306,9 +291,7 @@ def test_custom_chat_model_can_be_created_and_edited_as_default(
         ),
         db_session,
     )
-    update_default_model(
-        db_session, provider.id, "instructor-chat", LLMModelFlowType.CHAT
-    )
+    set_role_model(db_session, ModelRole.CHAT, provider.id, "instructor-chat")
     upsert_llm_provider(
         LLMProviderUpsertRequest(
             id=provider.id,
@@ -324,7 +307,7 @@ def test_custom_chat_model_can_be_created_and_edited_as_default(
         db_session,
     )
     db_session.expire_all()
-    selected = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    selected = fetch_role_model(db_session, ModelRole.CHAT)
     assert selected is not None
     assert (selected.name, selected.custom_display_name) == (
         "instructor-chat",
@@ -372,7 +355,7 @@ def test_discovery_can_upgrade_decision_only_model_to_dual_capability(
     assert set(stored.model_configurations[0].llm_model_flow_types) == {
         LLMModelFlowType.CHAT,
     }
-    assert fetch_default_model(db_session, LLMModelFlowType.DECISION) is None
+    assert fetch_role_model(db_session, ModelRole.DECISION) is None
 
 
 def test_chat_pagination_filters_before_ranking_and_keeps_admin_catalog(

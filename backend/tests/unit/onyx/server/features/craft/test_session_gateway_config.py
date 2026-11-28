@@ -10,7 +10,7 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import ModelRole
 from onyx.db.models import BuildSession, Sandbox, User
 from onyx.llm.well_known_providers.auto_update_models import (
     LLMProviderRecommendation,
@@ -399,7 +399,7 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
         ) as fetch_providers,
         patch.object(
             manager_module,
-            "fetch_default_model",
+            "fetch_role_model",
             return_value=None,
         ),
     ):
@@ -440,11 +440,11 @@ def test_manager_prefers_configured_default_over_recommendation() -> None:
         ),
         patch.object(
             manager_module,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {
-                LLMModelFlowType.CHAT: configured_default,
-                LLMModelFlowType.CRAFT: None,
-            }.get(flow),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {
+                ModelRole.CHAT: configured_default,
+                ModelRole.CRAFT: None,
+            }.get(role),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -482,11 +482,11 @@ def test_manager_falls_back_to_recommendation_when_configured_default_not_visibl
         ),
         patch.object(
             manager_module,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {
-                LLMModelFlowType.CHAT: configured_default,
-                LLMModelFlowType.CRAFT: None,
-            }.get(flow),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {
+                ModelRole.CHAT: configured_default,
+                ModelRole.CRAFT: None,
+            }.get(role),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -514,11 +514,11 @@ def test_manager_prefers_craft_default_over_chat_default() -> None:
         ),
         patch.object(
             manager_module,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {
-                LLMModelFlowType.CHAT: chat_default,
-                LLMModelFlowType.CRAFT: craft_default,
-            }.get(flow),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {
+                ModelRole.CHAT: chat_default,
+                ModelRole.CRAFT: craft_default,
+            }.get(role),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -544,11 +544,11 @@ def test_manager_stored_selection_outranks_craft_default() -> None:
         ),
         patch.object(
             manager_module,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {
-                LLMModelFlowType.CHAT: None,
-                LLMModelFlowType.CRAFT: craft_default,
-            }.get(flow),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {
+                ModelRole.CHAT: None,
+                ModelRole.CRAFT: craft_default,
+            }.get(role),
         ),
     ):
         config = manager.build_llm_configs(
@@ -591,11 +591,11 @@ def test_manager_craft_default_not_visible_falls_through_to_chat_default() -> No
         ),
         patch.object(
             manager_module,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {
-                LLMModelFlowType.CHAT: chat_default,
-                LLMModelFlowType.CRAFT: craft_default,
-            }.get(flow),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {
+                ModelRole.CHAT: chat_default,
+                ModelRole.CRAFT: craft_default,
+            }.get(role),
         ),
     ):
         config = manager.build_llm_configs(user)

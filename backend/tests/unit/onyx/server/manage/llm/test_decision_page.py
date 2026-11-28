@@ -58,7 +58,7 @@ def test_decision_scope_rejects_client_claim_for_chat_only_model() -> None:
 def test_catalog_does_not_select_a_model() -> None:
     with (
         patch.object(api, "fetch_existing_models", return_value=[]),
-        patch.object(api, "fetch_default_model", return_value=None),
+        patch.object(api, "fetch_role_model", return_value=None),
     ):
         response = api.get_decision_model_configuration(MagicMock(), MagicMock())
     assert response.model is None
@@ -137,7 +137,7 @@ def test_selected_decision_model_blocks_provider_removal(force: bool) -> None:
     with (
         patch.object(
             api,
-            "fetch_default_model",
+            "fetch_role_model",
             return_value=ModelConfiguration(llm_provider_id=7),
         ),
         patch.object(api, "remove_llm_provider") as remove,

@@ -1,9 +1,4 @@
-"""Covers the Craft default model, whose flow rows no provider upsert creates.
-
-CHAT / VISION / REASONING rows are written during upsert from the model's
-capabilities. CRAFT is a pointer, not a capability, so setting the Craft
-default has to create its own flow row first.
-"""
+"""Covers the Craft default model, which the CRAFT model role holds."""
 
 from collections.abc import Generator
 from uuid import uuid4
@@ -11,13 +6,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import ModelRole
 from onyx.db.llm import (
-    fetch_default_model,
+    clear_role,
     fetch_existing_llm_provider,
+    fetch_role_model,
     remove_llm_provider,
-    update_default_pointer_model,
-    update_no_default_craft_provider,
+    set_role_model,
     upsert_llm_provider,
 )
 from onyx.llm.constants import LlmProviderNames
@@ -49,29 +44,28 @@ def provider_name(db_session: Session) -> Generator[str, None, None]:
     name = f"test-provider-{uuid4().hex[:8]}"
     yield name
     db_session.rollback()
-    update_no_default_craft_provider(db_session)
+    clear_role(db_session, ModelRole.CRAFT)
     provider = fetch_existing_llm_provider(name=name, db_session=db_session)
     if provider:
         remove_llm_provider(db_session, provider.id)
 
 
 class TestDefaultCraftModel:
-    def test_sets_default_on_a_model_with_no_craft_flow_row(
+    def test_sets_the_craft_default(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
-        """The regression: nothing seeds CRAFT rows, so this used to raise."""
         provider = _create_test_provider(db_session, provider_name)
 
-        update_default_pointer_model(
+        set_role_model(
+            db_session=db_session,
+            role=ModelRole.CRAFT,
             provider_id=provider.id,
             model_name="gpt-6-sol",
-            db_session=db_session,
-            flow_type=LLMModelFlowType.CRAFT,
         )
 
-        default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+        default = fetch_role_model(db_session, ModelRole.CRAFT)
         assert default is not None
         assert default.name == "gpt-6-sol"
         assert default.llm_provider_id == provider.id
@@ -83,20 +77,20 @@ class TestDefaultCraftModel:
     ) -> None:
         provider = _create_test_provider(db_session, provider_name)
 
-        update_default_pointer_model(
+        set_role_model(
+            db_session=db_session,
+            role=ModelRole.CRAFT,
             provider_id=provider.id,
             model_name="gpt-6-sol",
-            db_session=db_session,
-            flow_type=LLMModelFlowType.CRAFT,
         )
-        update_default_pointer_model(
+        set_role_model(
+            db_session=db_session,
+            role=ModelRole.CRAFT,
             provider_id=provider.id,
             model_name="gpt-6-luna",
-            db_session=db_session,
-            flow_type=LLMModelFlowType.CRAFT,
         )
 
-        default = fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+        default = fetch_role_model(db_session, ModelRole.CRAFT)
         assert default is not None
         assert default.name == "gpt-6-luna"
 
@@ -106,16 +100,16 @@ class TestDefaultCraftModel:
         provider_name: str,
     ) -> None:
         provider = _create_test_provider(db_session, provider_name)
-        update_default_pointer_model(
+        set_role_model(
+            db_session=db_session,
+            role=ModelRole.CRAFT,
             provider_id=provider.id,
             model_name="gpt-6-sol",
-            db_session=db_session,
-            flow_type=LLMModelFlowType.CRAFT,
         )
 
-        update_no_default_craft_provider(db_session)
+        clear_role(db_session, ModelRole.CRAFT)
 
-        assert fetch_default_model(db_session, LLMModelFlowType.CRAFT) is None
+        assert fetch_role_model(db_session, ModelRole.CRAFT) is None
 
     def test_rejects_a_model_the_provider_does_not_have(
         self,
@@ -125,9 +119,9 @@ class TestDefaultCraftModel:
         provider = _create_test_provider(db_session, provider_name)
 
         with pytest.raises(ValueError, match="is not a valid model"):
-            update_default_pointer_model(
+            set_role_model(
+                db_session=db_session,
+                role=ModelRole.CRAFT,
                 provider_id=provider.id,
                 model_name="not-a-real-model",
-                db_session=db_session,
-                flow_type=LLMModelFlowType.CRAFT,
             )

@@ -26,7 +26,7 @@ from onyx.db.chat import (
     save_generated_chat_session_name,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import LLMModelFlowType, record_mode_persists_content
+from onyx.db.enums import ModelRole, record_mode_persists_content
 from onyx.db.models import ChatMessage, User
 from onyx.db.user_preferences import fetch_user_preferences
 from onyx.llm.factory import (
@@ -109,7 +109,7 @@ def generate_chat_session_name_or_fallback(
         check_token_rate_limits(user)
         llm = get_default_utility_llm(
             additional_headers=additional_headers,
-            flow_type=LLMModelFlowType.CHAT_NAMING,
+            role=ModelRole.CHAT_NAMING,
         )
         if llm is None:
             llm = get_chat_llm()

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.db.enums import LLMModelFlowType, Permission, PermissionAuthority
+from onyx.db.enums import ModelRole, Permission, PermissionAuthority
 from onyx.db.llm import ModelConfigurationWindow
 from onyx.db.models import Persona, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
@@ -42,13 +42,8 @@ def test_manage_llms_can_set_and_clear_search_selection(client: TestClient) -> N
                 else PermissionAuthority.NONE
             ),
         ),
-        patch.object(api, "update_default_pointer_model") as set_default,
-        patch.object(
-            api, "update_no_default_search_selection_provider"
-        ) as clear_default,
-        patch.object(
-            api, "update_no_default_chat_naming_provider"
-        ) as clear_chat_naming,
+        patch.object(api, "set_role_model") as set_default,
+        patch.object(api, "clear_role") as clear_default,
         patch.object(api, "invalidate_provider_listing_cache") as invalidate,
     ):
         response = client.post(
@@ -56,18 +51,16 @@ def test_manage_llms_can_set_and_clear_search_selection(client: TestClient) -> N
             json={"provider_id": 7, "model_name": "gpt-6-sol"},
         )
         assert (response.status_code, response.json()) == (200, None)
-        assert set_default.call_args.kwargs["provider_id"] == 7
-        assert set_default.call_args.kwargs["model_name"] == "gpt-6-sol"
+        _, role, provider_id, model_name = set_default.call_args.args
+        assert provider_id == 7
+        assert model_name == "gpt-6-sol"
         response = client.delete("/admin/llm/default-search-selection")
         assert (response.status_code, response.json()) == (200, None)
         clear_default.assert_called_once()
+        assert clear_default.call_args.args[1] == ModelRole.SEARCH_SELECTION
         assert invalidate.call_count == 2
         set_default.assert_called_once()
-        assert (
-            set_default.call_args.kwargs["flow_type"]
-            == LLMModelFlowType.SEARCH_SELECTION
-        )
-        clear_chat_naming.assert_not_called()
+        assert role == ModelRole.SEARCH_SELECTION
 
 
 @pytest.mark.parametrize("method", ["post", "delete"])
@@ -77,10 +70,8 @@ def test_search_selection_requires_manage_llms(client: TestClient, method: str) 
             "onyx.auth.permissions.has_permission",
             return_value=PermissionAuthority.NONE,
         ),
-        patch.object(api, "update_default_pointer_model") as set_default,
-        patch.object(
-            api, "update_no_default_search_selection_provider"
-        ) as clear_default,
+        patch.object(api, "set_role_model") as set_default,
+        patch.object(api, "clear_role") as clear_default,
     ):
         response = client.request(
             method,
@@ -100,7 +91,7 @@ def test_invalid_search_selection_returns_validation_error(client: TestClient) -
         ),
         patch.object(
             api,
-            "update_default_pointer_model",
+            "set_role_model",
             side_effect=ValueError("Unknown model"),
         ),
         patch.object(api, "invalidate_provider_listing_cache") as invalidate,
@@ -120,16 +111,15 @@ def test_invalid_search_selection_returns_validation_error(client: TestClient) -
 @pytest.mark.usefixtures("listing_defaults")
 def test_admin_pins_hidden_search_selection_without_changing_chat_naming() -> None:
     provider, visible, hidden = _provider_with_chat_naming()
-    hidden.llm_model_flows[-1].llm_model_flow_type = LLMModelFlowType.SEARCH_SELECTION
     with (
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
         patch.object(
             api,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {
-                LLMModelFlowType.CHAT_NAMING: visible,
-                LLMModelFlowType.SEARCH_SELECTION: hidden,
-            }.get(flow),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {
+                ModelRole.CHAT_NAMING: visible,
+                ModelRole.SEARCH_SELECTION: hidden,
+            }.get(role),
         ),
         patch.object(
             api,
@@ -168,10 +158,10 @@ def test_user_listing_does_not_publish_search_selection(persona_id: int | None) 
         patch.object(api, "fetch_existing_llm_providers", return_value=[provider]),
         patch.object(
             api,
-            "fetch_default_model",
-            side_effect=lambda _db, flow: {
-                LLMModelFlowType.SEARCH_SELECTION: hidden
-            }.get(flow),
+            "fetch_role_model",
+            side_effect=lambda _db, role: {ModelRole.SEARCH_SELECTION: hidden}.get(
+                role
+            ),
         ) as fetch,
         patch.object(
             api,
@@ -194,6 +184,5 @@ def test_user_listing_does_not_publish_search_selection(persona_id: int | None) 
     assert response.default_search_selection is None
     assert "gpt-6-luna" not in response.model_dump_json()
     assert all(
-        call.args[1] != LLMModelFlowType.SEARCH_SELECTION
-        for call in fetch.call_args_list
+        call.args[1] != ModelRole.SEARCH_SELECTION for call in fetch.call_args_list
     )
