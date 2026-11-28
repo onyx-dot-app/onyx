@@ -95,5 +95,9 @@ PLANNING_RULES: dict[DocumentSource, PlanningRule] = {
 # Sources where a new credential usually sees different content (e.g. a
 # scoped token), so a credential swap usually needs a full re-index and prune.
 CREDENTIAL_SWAP_FULL_PATH_SOURCES: frozenset[DocumentSource] = frozenset(
-    {DocumentSource.CONFLUENCE, DocumentSource.JIRA}
+    {
+        DocumentSource.CONFLUENCE,
+        DocumentSource.JIRA,
+        DocumentSource.JIRA_SERVICE_MANAGEMENT,
+    }
 )

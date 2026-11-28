@@ -9,6 +9,7 @@ Usage:
     # Returns: "https://docs.google.com/document/d/123"
 """
 
+import re
 from urllib.parse import urlparse, urlunparse
 
 from onyx.configs.constants import DocumentSource
@@ -20,6 +21,9 @@ from onyx.connectors.jira_service_management.connector import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Self-hosted (Data Center) Jira has no fixed host, so match the issue path.
+_JIRA_ISSUE_PATH = re.compile(r"/browse/[a-z][a-z0-9_]*-\d+", re.IGNORECASE)
 
 
 def _default_url_normalizer(url: str) -> str | None:
@@ -142,6 +146,8 @@ def _detect_source_type(url: str) -> DocumentSource | None:
         if "/jira/" in path or "/browse/" in path or "jira" in netloc:
             return DocumentSource.JIRA
         return DocumentSource.CONFLUENCE
+    if _JIRA_ISSUE_PATH.search(path):
+        return DocumentSource.JIRA
     if "github.com" in netloc:
         return DocumentSource.GITHUB
     if "gitlab.com" in netloc:

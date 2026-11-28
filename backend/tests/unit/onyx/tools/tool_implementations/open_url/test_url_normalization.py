@@ -76,6 +76,17 @@ def test_jira_candidates_include_service_management_id(suffix: str) -> None:
 
 @pytest.mark.parametrize(
     "url",
+    [
+        "https://jira.corp.example/browse/HELP-1",
+        "https://corp.example/jira/browse/HELP-1",
+    ],
+)
+def test_self_hosted_jira_candidates_include_service_management_id(url: str) -> None:
+    assert normalize_url_candidates(url) == [url, JSM_DOCUMENT_ID_PREFIX + url]
+
+
+@pytest.mark.parametrize(
+    "url",
     ["https://x.atlassian.net/wiki/spaces/A/pages/1", "https://example.com/browse/A"],
 )
 def test_non_jira_candidates_have_no_service_management_id(url: str) -> None:
