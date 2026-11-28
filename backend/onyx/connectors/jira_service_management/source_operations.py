@@ -191,9 +191,14 @@ class JiraServiceManagementSourceOperations(SourceOperations):
                 headers = {"Accept": "application/json"}
             else:
                 auth = None
+                # Data Center experimental service desk methods require this
+                # header. The documented value is "true" (JSM 5.12 and later,
+                # including current Data Center). Cloud uses "opt-in"; this
+                # session is Data Center only.
                 headers = {
                     "Accept": "application/json",
                     "Authorization": f"Bearer {token}",
+                    "X-ExperimentalApi": "true",
                 }
             root = binding.jira_base_url.rstrip("/")
             session = requests.Session()

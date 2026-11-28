@@ -103,6 +103,8 @@ def test_cloud_session_uses_basic_auth_and_server_uses_bearer(
     server_session, _root, is_cloud = server._client()
     assert is_cloud is False
     assert server_session.headers["Authorization"] == "Bearer pat"
+    assert server_session.headers["X-ExperimentalApi"] == "true"
+    assert "X-ExperimentalApi" not in cloud_session.headers
 
 
 def test_cloud_search_sends_the_token_and_server_search_sends_the_offset(
