@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management service desk tickets"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -3284,6 +3287,15 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "service_desk_id": {
+              "label": "Service Desk ID",
+              "description": "Numeric ID of one Jira Service Management service desk (e.g. 7). Leave empty to index every desk the account can read."
+            }
+          }
+        },
         "salesforce": {
           "description": "Salesforce コネクターを設定",
           "fields": {
@@ -4380,6 +4392,7 @@
         "githubBaseUrl": "任意。https://github.example.com のようにサーバーのホストを指定します。github.com を使う場合は空欄のままにします。",
         "gongBaseUrl": "任意。米国外のデータを使う場合は、https://[region].api.gong.io のようにリージョンのホストを指定します。",
         "jiraUserEmail": "Jira Cloud では必須です。",
+        "jiraServiceManagementBaseUrl": "For example https://your-domain.atlassian.net",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
         "azureDatalakeAccountKey": "Azure portal でストレージアカウントを開き、[セキュリティとネットワーク]、[アクセスキー] の順に開きます。",

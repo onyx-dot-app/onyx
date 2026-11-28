@@ -434,6 +434,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management service desk tickets"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -3284,6 +3287,15 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "service_desk_id": {
+              "label": "Service Desk ID",
+              "description": "Numeric ID of one Jira Service Management service desk (e.g. 7). Leave empty to index every desk the account can read."
+            }
+          }
+        },
         "salesforce": {
           "description": "تهيئة موصل Salesforce",
           "fields": {
@@ -4380,6 +4392,7 @@
         "githubBaseUrl": "اختياري. حدد مضيف الخادم لديك، مثل https://github.example.com. اتركه فارغًا لاستخدام github.com.",
         "gongBaseUrl": "اختياري. للبيانات خارج الولايات المتحدة، حدد مضيف منطقتك، مثل https://[region].api.gong.io.",
         "jiraUserEmail": "مطلوب لـ Jira Cloud.",
+        "jiraServiceManagementBaseUrl": "For example https://your-domain.atlassian.net",
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "youtrackToken": "رمز دائم لمستخدم YouTrack يمكنه قراءة كل المشاريع المراد فهرستها. أنشئه في ملفك الشخصي في YouTrack ضمن أمان الحساب.",
         "azureDatalakeAccountKey": "في مدخل Azure، افتح حساب التخزين، ثم الأمان + الشبكات، ثم مفاتيح الوصول.",

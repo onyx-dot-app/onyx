@@ -904,6 +904,21 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jira_service_management.description",
+    values: [
+      {
+        type: "text",
+        label:
+          "connectors.jira_service_management.fields.service_desk_id.label",
+        name: "service_desk_id",
+        optional: true,
+        description:
+          "connectors.jira_service_management.fields.service_desk_id.description",
+      },
+    ],
+    advanced_values: [],
+  },
   confluence: {
     description: "connectors.confluence.description",
     initialConnectorName: "cloud_name",

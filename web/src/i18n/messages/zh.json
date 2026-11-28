@@ -434,6 +434,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management service desk tickets"
+        },
         "productboard": {
           "description": "产品管理"
         },
@@ -3284,6 +3287,15 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "service_desk_id": {
+              "label": "Service Desk ID",
+              "description": "Numeric ID of one Jira Service Management service desk (e.g. 7). Leave empty to index every desk the account can read."
+            }
+          }
+        },
         "salesforce": {
           "description": "配置 Salesforce 连接器",
           "fields": {
@@ -4380,6 +4392,7 @@
         "githubBaseUrl": "可选。设置你的服务器主机，例如 https://github.example.com。使用 github.com 时请留空。",
         "gongBaseUrl": "可选。美国以外的数据请设置你所在区域的主机，例如 https://[region].api.gong.io。",
         "jiraUserEmail": "Jira Cloud 必填。",
+        "jiraServiceManagementBaseUrl": "For example https://your-domain.atlassian.net",
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "youtrackToken": "可读取所有待索引项目的 YouTrack 用户的永久令牌。请在 YouTrack 个人资料的“账户安全”中创建。",
         "azureDatalakeAccountKey": "在 Azure 门户中打开存储帐户,然后打开“安全性 + 网络”,再打开“访问密钥”。",
