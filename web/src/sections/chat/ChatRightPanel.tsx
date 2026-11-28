@@ -187,12 +187,37 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     count: number;
   } | null>(null);
   if (!state.browserOpen && sandboxTurn !== null) setSandboxTurn(null);
-  if (
-    state.browserOpen &&
-    !chromeShared &&
-    (sandboxTurn?.sessionId !== sessionId || sandboxTurn.count !== turnCount)
-  )
-    setSandboxTurn({ sessionId, count: turnCount });
+  const sandboxTurnKnown =
+    sandboxTurn?.sessionId === sessionId && sandboxTurn.count === turnCount;
+  const refreshChrome = chrome.mutate;
+  useEffect(() => {
+    if (!state.browserOpen || chromeShared || sandboxTurnKnown) return;
+    if (!chromeAvailable || sessionId === null) {
+      setSandboxTurn({ sessionId, count: turnCount });
+      return;
+    }
+    // The turn binds Chrome as it starts, and the state above can lag it:
+    // a fresh read decides before the open browser counts as the sandbox's.
+    let live = true;
+    void refreshChrome().then(
+      (data) => {
+        if (live && !data?.grant)
+          setSandboxTurn({ sessionId, count: turnCount });
+      },
+      () => {}
+    );
+    return () => {
+      live = false;
+    };
+  }, [
+    state.browserOpen,
+    chromeShared,
+    sandboxTurnKnown,
+    chromeAvailable,
+    sessionId,
+    turnCount,
+    refreshChrome,
+  ]);
   const redirectBrowser =
     chromeShared &&
     (sandboxTurn === null ||

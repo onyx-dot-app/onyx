@@ -1852,6 +1852,17 @@ describe("the user's Chrome", () => {
     expect(panel().browserOpen).toBe(true);
   });
 
+  test("a turn that binds Chrome before the panel's next fetch opens My Chrome", async () => {
+    renderChat([[REPORT]]);
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    // The turn binds the chat to Chrome as it starts; the panel's last
+    // fetch still says there is no grant
+    grant = { expires_at: Date.now() / 1000 + 600 };
+    act(() => openBrowserInChat("session"));
+    await waitFor(() => expect(panel().browserOpen).toBe(false));
+    expect(panel().activeId).toBe("chrome");
+  });
+
   test("a sandbox browser that was open before the share stays open", async () => {
     renderChat([[REPORT]]);
     act(() => openBrowserInChat("session"));
