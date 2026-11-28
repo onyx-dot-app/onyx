@@ -19,10 +19,10 @@ The access type can only be **Everyone in Your Organization**, **Specific Groups
 
 The Jira connector and this connector index the same issue as two separate documents.
 
-| Content  | Notes                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------ |
-| Requests | Summary and description, with the request's comments. Requests with a label to skip are skipped. |
-| Scope    | One Jira Service Management project, chosen by its project key.                                  |
+| Content  | Notes                                                                                                                |
+| -------- | -------------------------------------------------------------------------------------------------------------------- |
+| Requests | Summary and description, with the request's comments. Requests with a label to skip are skipped.                     |
+| Scope    | One Jira Service Management project, chosen by its project key. All issues of the project, not only portal requests. |
 
 The connector supports Jira Cloud and Jira Data Center. It rejects a project that is not a service project.
 To index a software or business project, use the [Jira connector](/admins/connectors/official/jira).
@@ -35,9 +35,11 @@ The connector uses the same credential as the Jira connector.
 Give the account **Browse Projects** in the service project to index.
 
 <Warning>
-  Onyx indexes every request the account can browse. It does not keep the restrictions of the service project,
-  such as a request that only its reporter or an agent can see. Anyone who can see the connector's documents
-  in Onyx can see every indexed request.
+  Onyx indexes every issue in the project that the account can browse.
+  This includes issues that were not created through the portal.
+  It does not keep the restrictions of the service project,
+  such as a request that only its reporter or an agent can
+  see. Anyone who can see the connector's documents in Onyx can see every indexed request.
 </Warning>
 
 <Steps>

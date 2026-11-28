@@ -92,23 +92,40 @@ def _without_internal_comments(issue: JiraIssue) -> JiraIssue:
     return filtered
 
 
+def _node_id(site: str, raw_id: str) -> str:
+    """A hierarchy node ID that is unique per Jira site."""
+    return f"{site}:{raw_id}"
+
+
 @overload
-def _namespaced(item: Document) -> Document: ...
+def _namespaced(item: Document, site: str) -> Document: ...
 @overload
-def _namespaced(item: ConnectorFailure) -> ConnectorFailure: ...
-@overload
-def _namespaced(item: SlimDocument | HierarchyNode) -> SlimDocument | HierarchyNode: ...
+def _namespaced(item: ConnectorFailure, site: str) -> ConnectorFailure: ...
 @overload
 def _namespaced(
-    item: Document | ConnectorFailure | HierarchyNode,
+    item: SlimDocument | HierarchyNode, site: str
+) -> SlimDocument | HierarchyNode: ...
+@overload
+def _namespaced(
+    item: Document | ConnectorFailure | HierarchyNode, site: str
 ) -> Document | ConnectorFailure | HierarchyNode: ...
 def _namespaced(
-    item: Document | ConnectorFailure | SlimDocument | HierarchyNode,
+    item: Document | ConnectorFailure | SlimDocument | HierarchyNode, site: str
 ) -> Document | ConnectorFailure | SlimDocument | HierarchyNode:
     """Prefix the document ID, so a request does not collide with the same issue
-    indexed by the Jira connector. The Jira code keeps the plain IDs."""
+    indexed by the Jira connector. Prefix hierarchy node IDs and parent references
+    with the site, so projects with the same key on two sites stay apart. The Jira
+    code keeps the plain IDs."""
     if isinstance(item, Document | SlimDocument):
         item.id = DOCUMENT_ID_PREFIX + item.id
+        if item.parent_hierarchy_raw_node_id is not None:
+            item.parent_hierarchy_raw_node_id = _node_id(
+                site, item.parent_hierarchy_raw_node_id
+            )
+    elif isinstance(item, HierarchyNode):
+        item.raw_node_id = _node_id(site, item.raw_node_id)
+        if item.raw_parent_id is not None:
+            item.raw_parent_id = _node_id(site, item.raw_parent_id)
     elif isinstance(item, ConnectorFailure):
         document = item.failed_document
         if document is not None:
@@ -181,7 +198,7 @@ class JiraServiceManagementConnector(JiraConnector):
                 item = next(output)
             except StopIteration as stop:
                 return stop.value
-            yield _namespaced(item)
+            yield _namespaced(item, self.jira_base)
 
     @override
     def reindex(
@@ -191,7 +208,7 @@ class JiraServiceManagementConnector(JiraConnector):
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         stripped = [_stripped(failure) for failure in errors]
         for item in super().reindex(stripped, include_permissions):
-            yield _namespaced(item)
+            yield _namespaced(item, self.jira_base)
 
     @override
     def _retrieve_all_slim_docs(
@@ -208,7 +225,7 @@ class JiraServiceManagementConnector(JiraConnector):
             callback=callback,
             include_permissions=include_permissions,
         ):
-            yield [_namespaced(item) for item in batch]
+            yield [_namespaced(item, self.jira_base) for item in batch]
 
     def validate_connector_settings(self) -> None:
         if self._source_operations is None or self.jira_project is None:

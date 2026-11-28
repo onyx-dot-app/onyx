@@ -28,6 +28,7 @@ from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     DocumentFailure,
+    HierarchyNode,
     SlimDocument,
 )
 
@@ -198,6 +199,47 @@ def test_document_ids_differ_from_the_jira_connector() -> None:
     assert jira_ids == {_PLAIN_ID}
     assert [d.id for d in documents] == [_NAMESPACED_ID]
     assert documents[0].sections[0].link == _PLAIN_ID
+
+
+def _hierarchy_items(
+    connector: JiraServiceManagementConnector,
+) -> tuple[list[HierarchyNode], list[Document]]:
+    with patch(
+        "onyx.connectors.jira.connector._perform_jql_search",
+        return_value=iter([_request_issue()]),
+    ):
+        items = list(
+            connector._load_from_checkpoint("jql", _checkpoint(connector), False)
+        )
+    return (
+        [i for i in items if isinstance(i, HierarchyNode)],
+        [i for i in items if isinstance(i, Document)],
+    )
+
+
+def test_hierarchy_ids_carry_the_site() -> None:
+    nodes, documents = _hierarchy_items(_connector())
+    project_nodes = [n for n in nodes if n.raw_node_id.endswith(":HELP")]
+    assert [n.raw_node_id for n in project_nodes] == [f"{_BASE_URL}:HELP"]
+    assert project_nodes[0].raw_parent_id is None
+    assert documents[0].parent_hierarchy_raw_node_id == f"{_BASE_URL}:HELP"
+    for node in nodes:
+        assert node.raw_node_id.startswith(f"{_BASE_URL}:")
+        if node.raw_parent_id is not None:
+            assert node.raw_parent_id.startswith(f"{_BASE_URL}:")
+
+
+def test_hierarchy_ids_differ_between_sites() -> None:
+    other = JiraServiceManagementConnector(
+        jira_base_url="https://other.atlassian.net", project_key="HELP"
+    )
+    other._source_operations = create_autospec(JiraSourceOperations, instance=True)
+    first_nodes, _ = _hierarchy_items(_connector())
+    other_nodes, _ = _hierarchy_items(other)
+    first_ids = {n.raw_node_id for n in first_nodes}
+    other_ids = {n.raw_node_id for n in other_nodes}
+    assert first_ids
+    assert first_ids.isdisjoint(other_ids)
 
 
 def test_failures_carry_the_namespaced_id() -> None:
