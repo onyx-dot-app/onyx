@@ -1712,6 +1712,12 @@ function jsonResponse(body: object): Response {
   });
 }
 
+const isAck = (message: unknown) =>
+  typeof message === "object" &&
+  message !== null &&
+  "type" in message &&
+  message.type === "ack";
+
 /** Shows a reply that waits for approval of each of `tools`. */
 function showApprovals(tools: string[]) {
   const user: Message = {
@@ -1813,6 +1819,12 @@ describe("the user's Chrome", () => {
     });
   });
 
+  const sandboxSockets = () =>
+    FakeSocket.instances.filter((socket) => socket.url.endsWith("/browser/ws"));
+  const chromeSockets = () =>
+    FakeSocket.instances.filter((socket) =>
+      socket.url.endsWith("/api/chat/sessions/session/browser/chrome/ws")
+    );
   const openChrome = async () => {
     update({ type: "showTab", tabId: "files" });
     fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
@@ -1828,7 +1840,7 @@ describe("the user's Chrome", () => {
     act(() => openBrowserInChat("session"));
     await waitFor(() => expect(panel().browserOpen).toBe(false));
     expect(panel().activeId).toBe("chrome");
-    expect(FakeSocket.instances).toHaveLength(0);
+    expect(sandboxSockets()).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Open a tab" }));
     expect(
       (await screen.findAllByRole("menuitem")).map((item) => item.textContent)
@@ -1888,6 +1900,53 @@ describe("the user's Chrome", () => {
     update({ type: "openChrome" });
     await screen.findByText("Your Chrome is ready");
     expect(panel().seenInitialized).toBe(false);
+  });
+
+  test("with access, the panel streams the agent's tab as a view only", async () => {
+    grant = { expires_at: Date.now() / 1000 + 600 };
+    renderChat([[REPORT]]);
+    await openChrome();
+    await waitFor(() => expect(chromeSockets()).toHaveLength(1));
+    const [socket] = chromeSockets();
+    if (!socket) throw new Error("The panel opened no Chrome websocket");
+    act(() => socket.open());
+    act(() => socket.receive({ type: "control", controller: "agent" }));
+    act(() =>
+      socket.receive({
+        type: "tabs",
+        tabs: [{ ...PAGE, url: "https://wiki.example/" }],
+        selected: "t1",
+      })
+    );
+
+    expect(await screen.findByText("https://wiki.example/")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Take control" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Address" })).toBeNull();
+    expect(screen.getByText("Using your Chrome")).toBeVisible();
+    // The view sends nothing: it only listens
+    expect(socket.sent.filter((m) => !isAck(m))).toEqual([]);
+  });
+
+  test("a pending site approval shows over the preview", async () => {
+    grant = { expires_at: Date.now() / 1000 + 600 };
+    renderChat([[REPORT]]);
+    act(() => showApprovals(["browser_click", "web_search"]));
+    await openChrome();
+    await waitFor(() => expect(chromeSockets()).toHaveLength(1));
+
+    const overlay = await screen.findByTestId("chrome-site-approvals");
+    expect(
+      within(overlay).getByRole("button", {
+        name: "Approval requested: browser_click",
+      })
+    ).toBeVisible();
+    expect(
+      within(overlay).queryByRole("button", {
+        name: "Approval requested: web_search",
+      })
+    ).toBeNull();
   });
 
   test("Stop ends the chat's use of Chrome", async () => {

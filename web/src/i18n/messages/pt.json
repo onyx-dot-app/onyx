@@ -13844,6 +13844,10 @@
           "title": "Nenhuma página aberta",
           "description": "As páginas que o agente abre aparecem aqui. Você também pode abrir uma nova aba."
         },
+        "waiting": {
+          "title": "Aguardando o agente",
+          "description": "A página que o agente usa no seu Chrome aparece aqui."
+        },
         "disconnected": {
           "title": "O navegador foi desconectado",
           "description": "Tentando conectar novamente."

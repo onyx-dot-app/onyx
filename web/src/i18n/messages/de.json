@@ -13844,6 +13844,10 @@
           "title": "Keine Seite geöffnet",
           "description": "Seiten, die der Agent öffnet, erscheinen hier. Sie können auch einen neuen Tab öffnen."
         },
+        "waiting": {
+          "title": "Warten auf den Agenten",
+          "description": "Die Seite, die der Agent in Ihrem Chrome verwendet, erscheint hier."
+        },
         "disconnected": {
           "title": "Die Verbindung zum Browser wurde getrennt",
           "description": "Es wird erneut versucht, eine Verbindung herzustellen."

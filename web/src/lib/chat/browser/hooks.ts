@@ -183,6 +183,8 @@ interface UseBrowserStreamOptions {
   // Connects while true and the canvas is mounted; the api_server keeps the
   // VM awake for a viewer
   active: boolean;
+  // The websocket to open; the chat's sandbox browser by default
+  url?: string;
   // `sessionId` is the chat whose browser downloaded the file
   onDownload: (download: BrowserDownload, sessionId: string) => void;
   onError: (message: string) => void;
@@ -212,6 +214,7 @@ export interface BrowserStream {
 export function useBrowserStream({
   sessionId,
   active,
+  url,
   onDownload,
   onError,
 }: UseBrowserStreamOptions): BrowserStream {
@@ -244,7 +247,7 @@ export function useBrowserStream({
     // Undefined until this connection's first tab list
     let selected: string | null | undefined;
     const client = createBrowserStreamClient({
-      url: browserStreamUrl(sessionId, window.location),
+      url: url ?? browserStreamUrl(sessionId, window.location),
       events: {
         onState: (socketState) => {
           painter.clear();
@@ -278,7 +281,7 @@ export function useBrowserStream({
       setHasFrame(false);
       dispatch({ type: "reset" });
     };
-  }, [active, sessionId, generation]);
+  }, [active, sessionId, url, generation]);
 
   // Another chat's connection, before its effect stops it, takes nothing
   const send = useCallback(
