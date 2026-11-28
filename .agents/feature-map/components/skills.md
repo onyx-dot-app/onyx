@@ -303,7 +303,8 @@ skill mutation (server/features/skill/api.py)   compute affected users BEFORE th
          _assemble_skills                one fit loop: whole plugins within 900 MB and
                                          10,000 files; built-ins from disk, custom from
                                          the FileStore bundle of that version, in a
-                                         folder named by its frontmatter (each
+                                         folder named by plugin.name, also written
+                                         to its SKILL.md frontmatter name (each
                                          skills/<name>/ of a plugin version in its own
                                          folder); resolves ${CLAUDE_SKILL_DIR}
          build_connectable_apps_list     guidance for unconnected apps
@@ -544,8 +545,9 @@ the app from the same rule
    `uq_plugin_marketplace_name`: a new plugin with a used name takes the next
    free name (`db/plugin.py:free_plugin_name`); a concurrent create that takes
    it first fails and the user tries again. Publish and transfer
-   refuse a clash with `CONFLICT`. Skill names repeat across plugins; never
-   compare one with `plugin.name`. Two skills with one name can both be
+   refuse a clash with `CONFLICT`. The inner skill names of a multi-skill
+   plugin repeat across plugins; never compare one with `plugin.name`. A
+   single-skill plugin's skill name is `plugin.name`. Two skills with one name can both be
    Default or Required; the run-time name order picks one. A toggle conflicts only with skills the user can see. Every write that
    enables a preference first takes `db/skill_limit.py:lock_user_skill_preferences`,
    a `FOR NO KEY UPDATE` lock on the user row. The lock orders concurrent
@@ -555,18 +557,22 @@ the app from the same rule
    writer, such as an auto-enable, must take the same lock.
    The run-time name order (Architecture, Name order) keeps one skill for each name,
    because the name is the sandbox directory, so a duplicate never fails a
-   push. For a custom skill that name is
-   `frontmatter->>'name'` of the version the user runs.
+   push. For a custom skill that name is `plugin.name`; for each skill of a
+   plugin version it is `frontmatter->>'name'` of the version the user runs.
 6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
    `Skill.name` and the bundle's wrapper directory, when there is one, must
    match (`skills/metadata.py:parse_skill_document`). Storage removes the
-   wrapper. A rename is a delete and a new skill. Custom names cannot match a
-   built-in.
+   wrapper. A user cannot rename a skill. Onyx owns a custom skill's name:
+   `plugin.name`. The SKILL.md name only pre-fills it, so a `-N` rename on
+   publish or transfer changes the name in every response, the name order,
+   chat and the sandbox (`db/plugin_access.py:load_user_plugin_states`,
+   `load_plugin_access`), and the stored frontmatter keeps the old name.
+   Custom names cannot match a built-in.
 7. `validate-before-sandbox` **Validate before content reaches a sandbox.**
    `_assemble_fileset` unzips the bundle of the version a user runs only when
    that version's `is_valid` is true, or after
    `skills/validation.py:validate_stored_custom_skill` passes for an
-   unclassified version (it checks the name in the version's frontmatter).
+   unclassified version (it checks the skill's name and the SKILL.md).
    `db/skill.py:persist_skill_validity` writes the result to the plugin
    versions that hold that bundle and are still unclassified.
    Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
@@ -773,7 +779,7 @@ the app from the same rule
     Public and author-less skills go to the Organization library, published.
     Other skills go to the author's "My uploads". A duplicate name in one
     marketplace gets the first free `-N` suffix on `plugin.name` only
-    (`db/plugin.py:free_plugin_name` in app code). The skill name lives only
+    (`db/plugin.py:free_plugin_name` in app code). The stored SKILL.md name lives
     in `plugin_skill.frontmatter` (NOT NULL, a check requires a string
     `name`); the backfill seeds it with the name and description of the
     old skill row. No column stores the kind (skill or plugin):
@@ -782,7 +788,7 @@ the app from the same rule
     ([[#bundle-change-adds-version]]); the skill responses read
     `db/plugin_access.py:load_plugin_access`. The list and
     runtime names and descriptions come from the frontmatter of the version
-    the user runs. Migration `2d7510746863` adds `plugin_version.manifest`
+    the user runs; a skill version takes `plugin.name` as its name. Migration `2d7510746863` adds `plugin_version.manifest`
     and `plugin_version.needs` (nullable JSONB, NULL for a skill version).
     An old custom skill row with no plugin is ignored. Migration
     `65f8d8cd1bf3` drops `ck_private_skill_has_owner`: old rows go stale, and

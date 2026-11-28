@@ -186,7 +186,7 @@ class SkillResponse(BaseModel):
         return cls(
             source="custom",
             id=plugin.id,
-            name=access.name or plugin.name,
+            name=access.name,
             description=access.description,
             kind="skill" if access.is_skill else "plugin",
             available_count=counts.available_count if counts is not None else 0,
@@ -274,7 +274,7 @@ class SkillPreviewResponse(BaseModel):
         return cls(
             source="custom",
             id=plugin.id,
-            name=access.name or plugin.name,
+            name=access.name,
             description=access.description,
             author_email=access.author_email,
             instructions_markdown=instructions_markdown,

@@ -238,7 +238,7 @@ def free_plugin_name(
         is not None
     ):
         suffix += 1
-        base = name[: 64 - 1 - len(str(suffix))]
+        base = name[: 64 - 1 - len(str(suffix))].rstrip("-")
         candidate = f"{base}-{suffix}"
     return candidate
 
@@ -723,18 +723,7 @@ def _move_plugin__no_commit(
     clash_detail: Callable[[str], str],
     db_session: Session,
 ) -> None:
-    # A plugin whose current version is a skill asks for its skill name, which
-    # a "-2" suffix in the old marketplace does not change.
-    rows = db_session.execute(
-        select(PluginSkill.path, PluginSkill.frontmatter["name"].astext).where(
-            PluginSkill.plugin_version_id == plugin.current_version_id
-        )
-    ).all()
-    preferred = (
-        rows[0][1]
-        if is_skill_version(path for path, _ in rows) and rows[0][1]
-        else plugin.name
-    )
+    preferred = plugin.name
     # A concurrent writer can take the chosen name before this move commits.
     # "rename" then picks the next free name again.
     for attempt in range(1, _RENAME_ATTEMPTS + 1):

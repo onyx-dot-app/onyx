@@ -563,9 +563,11 @@ def test_required_creation_preserves_same_name_personal_preference(
         user=owner,
         db_session=db_session,
     )
+    # The new skill takes the next free name, so the two names differ.
+    assert response.name == f"{personal.name}-2"
     states = skill_user_states(owner, [personal.id, response.id], db_session)
     assert states[personal.id].enabled
-    assert not states[response.id].enabled
+    assert states[response.id].enabled
 
 
 @pytest.mark.parametrize("is_admin", [False, True])

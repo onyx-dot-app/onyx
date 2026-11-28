@@ -290,7 +290,7 @@ def test_create_public_with_a_used_name_takes_a_free_name(owner: DATestUser) -> 
     result = response.json()
     assert result["not_imported"] == []
     [item] = result["imported"]
-    assert item["skill"]["name"] == name
+    assert item["skill"]["name"] == f"{name}-2"
     assert item["skill"]["public_permission"] == "VIEWER"
 
     plugin = _plugin(item["skill"]["id"])
@@ -432,7 +432,17 @@ def test_replacing_a_same_named_skill_turns_the_other_plugin_off(
 ) -> None:
     name = unique_name("same-choice")
     first = SkillManager.create_custom(owner, name=name)
-    second = SkillManager.create_custom(owner, name=name, auto_enable=False)
+    other = _user("same_choice_other")
+    second = SkillManager.create_custom(other, name=name, auto_enable=False)
+    SkillManager.share(
+        second,
+        other,
+        user_shares=[
+            SkillUserShareRequest(
+                user_id=UUID(owner.id), permission=SkillSharePermission.VIEWER
+            )
+        ],
+    )
 
     SkillManager.set_enabled(second, owner, enabled=True, replace_conflict=True)
     first_choice = _choice(first.id, owner.id)

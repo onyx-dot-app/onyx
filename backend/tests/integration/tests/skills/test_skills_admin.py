@@ -215,12 +215,11 @@ def test_create_skill_allows_disabled_duplicate_name(admin_user: DATestUser) -> 
     assert first.id != second.id
     assert first.enabled is True
     assert second.enabled is False
-    matching = [
-        skill
-        for skill in SkillManager.list_all(admin_user).customs
-        if skill.name == name
-    ]
-    assert {skill.id for skill in matching} == {first.id, second.id}
+    # The duplicate takes the next free plugin name, and that is its name.
+    listed = {
+        skill.id: skill.name for skill in SkillManager.list_all(admin_user).customs
+    }
+    assert (listed[first.id], listed[second.id]) == (name, f"{name}-2")
 
 
 def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
