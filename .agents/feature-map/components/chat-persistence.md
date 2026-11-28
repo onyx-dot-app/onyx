@@ -423,7 +423,9 @@ background thread. The purge is best effort: a failure is logged and the
 delete stands. A chat deleted during its first sandbox call can leave its
 directory until the VM stops.
 Hard delete
-(`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
+(`HARD_DELETE_CHATS` or the `hard_delete` parameter; the playground ignores the
+parameter, since its per-user image limit counts the images of the user's chats,
+see [[rate-and-usage-limits]]) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
 its child sessions: first the files, thumbnails and preview PDFs of the root
 session's `chat_artifact` versions, through `delete_chat_artifact_files` (this covers a

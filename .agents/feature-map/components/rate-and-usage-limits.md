@@ -188,7 +188,10 @@ is no longer read or written ([TECH-DEBT](../TECH-DEBT.md)).
   chat sessions (`backend/onyx/db/usage.py:count_generated_images`). The tool
   saves them during the call, only once the images are made, so a later check
   sees them. The limit is soft on purpose: parallel image calls and two turns
-  at once reserve nothing, so a user can end a few images over it. A usage
+  at once reserve nothing, so a user can end a few images over it. A deleted
+  chat keeps counting: the playground ignores the delete route's `hard_delete`
+  parameter (`chat_backend._hard_delete_for_request`), so a chat is only marked
+  deleted and its images stay. A usage
   type no plan in force limits returns before any lookup
   (`is_usage_type_limited`), so cloud does no work for it.
 - **Playground cache.** `backend/ee/onyx/server/tenants/usage_limit_cache.py`

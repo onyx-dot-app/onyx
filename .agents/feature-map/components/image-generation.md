@@ -128,7 +128,8 @@ It counts the image files the tool saved in the user's chat sessions. The
 limit is soft on purpose: calls in one model step still run in parallel and
 reserve nothing, so calls that start together all pass and a user can end a
 few images over the limit. That is accepted so trial users see the tool make
-several images at once. A refusal becomes the tool's answer, so the model tells the
+several images at once. Deleting a chat does not give its images back: the
+playground ignores the delete route's `hard_delete` parameter. A refusal becomes the tool's answer, so the model tells the
 user. The standalone endpoint, which Craft uses through `onyx-cli image`, is
 not limited: Craft has its own limits.
 

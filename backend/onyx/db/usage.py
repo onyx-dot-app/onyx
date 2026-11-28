@@ -182,7 +182,8 @@ def count_generated_images(db_session: Session, user_id: UUID) -> int:
     running at the same time do not see each other, which the image limit
     accepts (`ImageGenerationTool._check_image_limit`). A deleted
     chat still counts while chats are only marked deleted, the default
-    (HARD_DELETE_CHATS off)."""
+    (HARD_DELETE_CHATS off); the playground ignores a request for a hard
+    delete for this reason (`chat_backend._hard_delete_for_request`)."""
     users_sessions = select(cast(ChatSession.id, String)).where(
         ChatSession.user_id == user_id
     )

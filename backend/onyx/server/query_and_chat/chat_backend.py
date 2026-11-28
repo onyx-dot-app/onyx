@@ -287,6 +287,7 @@ from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.telemetry import mt_cloud_telemetry
+from shared_configs.configs import IS_PLAYGROUND
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -840,6 +841,17 @@ def _end_parked_responses(response_ids: list[int]) -> None:
             logger.exception("Could not end parked response %s", response_id)
 
 
+def _hard_delete_for_request(hard_delete: bool | None) -> bool:
+    """Whether a delete removes the chat's rows or only marks the chat deleted.
+    The request may choose, except on the playground, where the server
+    setting decides: the per-user image limit counts the images of the user's
+    chats (`onyx/db/usage.py:count_generated_images`), and a hard delete
+    would give those images back."""
+    if hard_delete is None or IS_PLAYGROUND:
+        return HARD_DELETE_CHATS
+    return hard_delete
+
+
 @router.delete("/delete-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
 def delete_chat_session_by_id(
     session_id: UUID,
@@ -860,10 +872,7 @@ def delete_chat_session_by_id(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
                 "Some generated files could not be deleted yet. Try again shortly.",
             )
-        # Use the provided hard_delete parameter if specified, otherwise use the default config
-        actual_hard_delete = (
-            hard_delete if hard_delete is not None else HARD_DELETE_CHATS
-        )
+        actual_hard_delete = _hard_delete_for_request(hard_delete)
         artifact_ids = delete_chat_session(
             user_id, session_id, db_session, hard_delete=actual_hard_delete
         )
