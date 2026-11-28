@@ -27,11 +27,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.enums import (
     MarketplaceKind,
     Permission,
+    PermissionAuthority,
     PluginInstallationPolicy,
     PluginPublishingPolicy,
     SkillSharePermission,
@@ -44,6 +45,7 @@ from onyx.db.models import (
     PluginSkill,
     PluginVersion,
     User,
+    User__UserGroup,
     UserPluginPreference,
 )
 from onyx.db.plugin_access import (
@@ -52,6 +54,10 @@ from onyx.db.plugin_access import (
     plugin_editable_by_user,
     seen_by_organization,
     visible_plugin_ids,
+)
+from onyx.db.scoped_permissions import (
+    managed_group_member_ids_subquery,
+    scoped_group_ids_subquery,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
@@ -1348,6 +1354,66 @@ def _write_group_rows__no_commit(
         raise
 
 
+def _check_user_shares_in_managed_scope(
+    locked: _LockedPlugin, actor: User, db_session: Session
+) -> None:
+    """A scoped manager who edits a plugin only through their groups shares it
+    only with members of those groups. Another user share moves the plugin out
+    of their scope. Removing a share stays allowed. Editor rights the manager
+    can grant to themselves (a user share or a managed group's share) do not
+    lift this rule."""
+    added_user_ids = {
+        user_id
+        for user_id, permission in (locked.new_user_grants or {}).items()
+        if locked.user_grants.get(user_id) != permission
+    }
+    if not added_user_ids:
+        return
+    editor = SkillSharePermission.EDITOR
+    granted_editor_by_others = (
+        locked.plugin.author_user_id == actor.id
+        or locked.user_grants.get(actor.id) == editor
+        or db_session.scalar(
+            select(Plugin__UserGroup.plugin_id)
+            .join(
+                User__UserGroup,
+                User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
+            )
+            .where(
+                Plugin__UserGroup.plugin_id == locked.plugin.id,
+                Plugin__UserGroup.permission == editor,
+                User__UserGroup.user_id == actor.id,
+                Plugin__UserGroup.user_group_id.not_in(
+                    scoped_group_ids_subquery(actor)
+                ),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+    if granted_editor_by_others:
+        return
+    if (locked.new_user_grants or {}).get(actor.id) == editor:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers cannot make themselves an editor of a skill they "
+            "manage through their groups.",
+        )
+    members = set(
+        db_session.scalars(
+            managed_group_member_ids_subquery(actor).where(
+                User__UserGroup.user_id.in_(added_user_ids)
+            )
+        )
+    )
+    if added_user_ids - members:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers can only share a skill with members of the groups "
+            "they manage.",
+        )
+
+
 def _apply_to_plugin__no_commit(
     locked: _LockedPlugin,
     change: PluginAccessChange,
@@ -1355,6 +1421,12 @@ def _apply_to_plugin__no_commit(
     db_session: Session,
 ) -> None:
     plugin = locked.plugin
+    if (
+        actor is not None
+        and has_permission(actor, Permission.MANAGE_PLUGINS)
+        is PermissionAuthority.SCOPED
+    ):
+        _check_user_shares_in_managed_scope(locked, actor, db_session)
     if change.publish:
         if (
             actor is not None
