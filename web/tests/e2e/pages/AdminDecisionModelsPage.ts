@@ -4,20 +4,11 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 export class AdminDecisionModelsPage {
   constructor(readonly page: Page) {}
 
-  async openFromChatPreferences(): Promise<void> {
-    await this.page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
-    await expect(this.page.getByLabel("admin-page-title")).toBeVisible();
+  /** Decision models live on the AI Models page. */
+  async open(): Promise<void> {
+    await this.page.goto(ADMIN_ROUTES.LLM_MODELS.path);
     await expect(
-      this.page.getByRole("group", { name: "Decision model", exact: true })
-    ).toHaveCount(0);
-    await this.page
-      .getByRole("link", { name: "Decision Models", exact: true })
-      .click();
-    await this.page.waitForURL(`**${ADMIN_ROUTES.DECISION_MODELS.path}`);
-    await expect(
-      this.page
-        .getByLabel("admin-page-title")
-        .getByText("Decision Models", { exact: true })
+      this.page.getByLabel("admin-page-title").getByText("AI Models")
     ).toBeVisible();
   }
 
@@ -27,14 +18,15 @@ export class AdminDecisionModelsPage {
       this.page.getByRole("button", { name: "Clear", exact: true })
     ).toHaveCount(0);
     await expect(
-      this.page.getByText("Providers", { exact: true })
+      this.page.getByText("Decisions", { exact: true })
     ).toBeVisible();
   }
 
   async openZoomSetup(): Promise<void> {
+    // The Decisions card to connect Zoom, or its provider card once connected.
     await this.page
-      .getByTestId(/^decision-provider-zoom_ai-/)
-      .getByRole("button", { name: /^(Connect|Edit )/ })
+      .getByLabel(/^(Add Zoom Zoom AI Decisions|Zoom AI Decisions)$/)
+      .first()
       .click();
     const dialog = this.page.getByRole("dialog");
     await expect(

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { usePendingAction } from "@opal/hooks";
 import { useTranslations } from "next-intl";
+import { useLifecycleBadge } from "@/lib/badges/components";
 import { Button, MessageCard, OnyxLoader } from "@opal/components";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { useDecisionModel } from "@/lib/languageModels/hooks";
@@ -9,26 +10,27 @@ import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { saveDecisionModel } from "@/lib/languageModels/svc";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import type { DefaultModel } from "@/lib/languageModels/types";
+import type { DefaultModel, ModelCapability } from "@/lib/languageModels/types";
 
 // The row's label targets the select by id: the Clear button comes first,
 // so an implicit label would forward a title click to it.
 const SELECT_ID = "decision-model-select";
+const DECISION_CAPABILITIES: readonly ModelCapability[] = ["decision"];
 
 export default function DecisionModelSetting() {
   const t = useTranslations("admin.decisionModels");
+  const betaTag = useLifecycleBadge("beta");
   const { model, providers, error, refetch } = useDecisionModel();
   const settings = useSettings();
-  const [pending, setPending] = useState(false);
   const selectedId =
     providers
       ?.find((provider) => provider.id === model?.provider_id)
       ?.model_configurations.find((config) => config.name === model?.model_name)
       ?.id ?? null;
 
-  async function save(selection: DefaultModel | null) {
-    if (pending) return;
-    setPending(true);
+  // One pending save for the Clear button and the select: either disables
+  // both until it settles.
+  const saving = usePendingAction(async (selection: DefaultModel | null) => {
     try {
       await saveDecisionModel(selection);
       await refetch();
@@ -38,17 +40,17 @@ export default function DecisionModelSetting() {
           ? error.message
           : t("decisionModel.saveFailed")
       );
-    } finally {
-      setPending(false);
     }
-  }
+  });
 
   return (
     <InputHorizontal
       title={t("decisionModel.title")}
       description={t("decisionModel.description")}
+      tag={betaTag}
       suffix="optional"
       withLabel={SELECT_ID}
+      fillInput
     >
       {error ? (
         <MessageCard
@@ -67,7 +69,8 @@ export default function DecisionModelSetting() {
           role="group"
           aria-label={t("decisionModel.title")}
           flexDirection="row"
-          width="fit"
+          justifyContent="start"
+          alignItems="start"
           height="auto"
           gap={2}
         >
@@ -75,19 +78,18 @@ export default function DecisionModelSetting() {
             <Button
               prominence="tertiary"
               size="sm"
-              disabled={pending}
-              onClick={() => void save(null)}
+              disabled={saving.isPending}
+              onClick={() => void saving.run(null)}
             >
               {t("decisionModel.clear")}
             </Button>
           )}
           <SimpleModelSelector
             id={SELECT_ID}
-            includeDecisionOnly
+            capabilities={DECISION_CAPABILITIES}
             providers={providers}
             value={selectedId}
-            placeholder={t("decisionModel.notConfigured")}
-            disabled={pending}
+            disabled={saving.isPending}
             grouped={!settings.hide_provider_grouping}
             onChange={(id) => {
               const provider = findProviderOwningModelConfig(providers, id);
@@ -98,7 +100,7 @@ export default function DecisionModelSetting() {
                 toast.error(t("decisionModel.saveFailed"));
                 return;
               }
-              void save({
+              return saving.run({
                 provider_id: provider.id,
                 model_name: selected.name,
               });

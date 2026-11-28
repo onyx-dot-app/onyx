@@ -148,9 +148,7 @@ async function createPublicProviderWithModels(
 async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
   await page.goto(LLM_SETUP_URL);
   await page.waitForURL(`**${ADMIN_ROUTES.LLM_MODELS.path}**`);
-  await expect(page.getByLabel("admin-page-title")).toHaveText(
-    /^Language Models/
-  );
+  await expect(page.getByLabel("admin-page-title")).toHaveText(/^AI Models/);
 }
 
 async function exitAdminToChat(page: Page): Promise<void> {
@@ -275,9 +273,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await loginAs(page, "admin");
     await page.goto(LLM_SETUP_URL);
     await page.waitForLoadState("networkidle");
-    await expect(page.getByLabel("admin-page-title")).toHaveText(
-      /^Language Models/
-    );
+    await expect(page.getByLabel("admin-page-title")).toHaveText(/^AI Models/);
   });
 
   test.afterEach(async ({ page }) => {

@@ -11,13 +11,10 @@ any chat model in Onyx can invoke the action.
 
 ## Supported Models
 
-Image models come from the LLM providers you have already connected. Onyx does not ask for an API key again.
-The Image Generation page lists each connected provider that has image models, and the models it serves.
-
-**Available Models** has two tabs. The **Recommended** tab opens by default.
-It shows the image models in the Onyx model catalog that the vendor has not retired, for example GPT Image,
-Gemini image (Nano Banana), Imagen, and the Bedrock image models. Open the **All** tab to see every model on a provider,
-for example a new model or a model name that a gateway such as LiteLLM Proxy or OpenRouter defines.
+Image models come from the LLM providers that you connected on the [AI Models](/admins/ai_models/overview)
+page (**Admin Panel → AI Models**). Onyx does not ask for an API key again.
+The settings of each provider list its recommended image models, for example GPT Image, Gemini image (Nano Banana),
+Imagen, and the Bedrock image models.
 
 <Note>
   The default image model follows the access of its LLM provider.
@@ -29,31 +26,29 @@ for example a new model or a model name that a gateway such as LiteLLM Proxy or 
 
 <Steps>
   <Step title="Connect an LLM Provider">
-    Connect the provider on the [AI Models](/admins/ai_models/overview) page if it is not connected yet.
+    Connect the provider on the **AI Models** page if it is not connected yet.
     Image generation uses the credentials of that provider. When you rotate the provider key,
     image generation uses the new key.
   </Step>
 
-  <Step title="Connect a Model">
-    Open **Admin Panel → Image Generation**. Under **Available Models**, click **Connect** on a model.
-    The model moves to **Connected Models**. If no default model is set, the model becomes the default.
-
-    <img className="rounded-image" src="/assets/admins/actions/image_generation_overview.webp" alt="Image Generation page in the Onyx Admin Panel"/>
-
-    Image models that you connected with their own credentials in an earlier Onyx version stay on the page until you
-    disconnect them. To edit their credentials, click the settings icon on the model.
+  <Step title="Select an Image Model">
+    On the **AI Models** page, open the settings of the provider. Under **Models**, select an image model,
+    then click **Update**. Image models have the **Image Generation** tag.
+    You can also select image models when you connect a new provider. If no default image model is set,
+    the model becomes the default. Clear the model and click **Update** to disconnect it.
+    This does not disconnect the LLM provider.
   </Step>
 
   <Step title="Set the Default Model">
-    Select the model in **Image Generation Model** at the top of the page. Only one model can be the default.
+    Select the model in **Image Model** on the **AI Models** page. Only one model can be the default.
+    The provider card of the default model shows the **Default Image** tag.
 
-    - To clear the default, select **No Default**. Image generation is turned off until you set
-    another default.
-    - If you disconnect the current default model, the dialog asks you to choose a replacement default or
-    **No Default**, which turns image generation off.
-    - Disconnecting a model does not disconnect its LLM provider.
+    To turn image generation off, select **No Default**. Image generation stays off until you set another default.
   </Step>
 </Steps>
+
+Image models that you connected with their own credentials in an earlier Onyx version keep working,
+and you can select them as the default.
 
 ## Enable Image Generation for Agents
 

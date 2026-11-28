@@ -154,6 +154,9 @@ export const SWR_KEYS = {
   adminLlmProviders: "/api/admin/llm/provider",
   decisionModel: "/api/admin/llm/decision-model",
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
+  // Every provider with every model, image models included.
+  adminLlmProvidersWithImageModels:
+    "/api/admin/llm/provider?include_image_gen=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
   llmRouterModels: "/api/admin/llm/router-models",
@@ -171,6 +174,8 @@ export const SWR_KEYS = {
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",
   imageGenLlmProviders: "/api/admin/image-generation/llm-providers",
+  imageGenCatalog: (provider: string) =>
+    `/api/admin/image-generation/catalog/${encodeURIComponent(provider)}`,
 
   // ── Documents ─────────────────────────────────────────────────────────────
   documentSets: "/api/manage/document-set",

@@ -1,18 +1,18 @@
 import { test } from "@playwright/test";
 import { AdminDecisionModelsPage } from "@tests/e2e/pages/AdminDecisionModelsPage";
 
-test("Decision Models has its own admin page and keeps selection opt-in", async ({
+test("Decision models are on AI Models and keep selection opt-in", async ({
   page,
 }) => {
   const decisionModels = new AdminDecisionModelsPage(page);
-  await decisionModels.openFromChatPreferences();
+  await decisionModels.open();
   await decisionModels.expectUnsetModel();
 });
 
-test("Zoom setup provides shared credentials directly on Decision Models", async ({
+test("Zoom setup provides shared credentials directly on AI Models", async ({
   page,
 }) => {
   const decisionModels = new AdminDecisionModelsPage(page);
-  await decisionModels.openFromChatPreferences();
+  await decisionModels.open();
   await decisionModels.openZoomSetup();
 });

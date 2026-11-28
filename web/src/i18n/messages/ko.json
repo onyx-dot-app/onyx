@@ -332,21 +332,16 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "언어 모델에서 채팅 설정 관리",
+      "sharedModelSettings": "AI 모델에서 채팅 설정 관리",
       "decisionModel": {
         "title": "판단 모델",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
         "description": "내부 검색은 이 모델로 결과의 순위를 매기고 추가할 컨텍스트의 양을 정합니다. 채팅 환경설정에서도 설정할 수 있습니다.",
         "clear": "해제",
-        "notConfigured": "설정되지 않음",
         "saveFailed": "판단 모델을 업데이트하지 못했습니다"
       },
-      "header": {
-        "title": "판단 모델",
-        "description": "판단 모델 제공업체를 관리하고 선택적으로 모델을 선택합니다."
-      },
       "providers": {
-        "title": "제공업체",
+        "title": "결정 제공자",
         "description": "제공업체를 연결하거나 판단 모델을 관리합니다.",
         "clearBeforeRemoval": "이 제공업체를 삭제하기 전에 선택한 판단 모델을 해제하세요.",
         "connect": "연결"
@@ -1321,9 +1316,6 @@
         "loadFailed": "작업 모델을 불러오지 못했습니다",
         "retry": {
           "label": "다시 시도"
-        },
-        "addProvider": {
-          "label": "제공자 추가"
         },
         "chatDefault": {
           "label": "채팅 기본값"
@@ -5724,222 +5716,6 @@
         "endpointUrl": "https://api-endeupointeu.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "연결된 LLM 공급자의 이미지 모델입니다. 채팅에서 사용하려면 연결하세요.",
-        "title": "사용 가능한 모델"
-      },
-      "configureSuccess": {
-        "message": "제공업체를 설정했습니다"
-      },
-      "connectButton": {
-        "label": "연결"
-      },
-      "connectedModels": {
-        "title": "연결된 모델"
-      },
-      "deselectError": {
-        "message": "선택 해제에 실패했습니다"
-      },
-      "disconnectButton": {
-        "ariaLabel": "{title} 연결 해제"
-      },
-      "disconnectError": {
-        "message": "연결 해제에 실패했습니다"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "이미지 생성을 계속 사용하려면 다른 제공업체를 연결하세요."
-        },
-        "defaultNoReplacement": {
-          "description": "현재 **{title}**이(가) 기본 이미지 생성 모델입니다."
-        },
-        "defaultWithReplacement": {
-          "description": "현재 **{title}**이(가) 기본 이미지 생성 모델입니다. 세션 기록은 유지됩니다."
-        },
-        "header": {
-          "description": "이 제공업체에 저장된 자격 증명을 삭제합니다.",
-          "title": "*{title}* 연결 해제"
-        },
-        "linkedHeader": {
-          "description": "LLM 공급자와 해당 자격 증명은 연결된 상태로 유지됩니다."
-        },
-        "noDefaultOption": {
-          "description": "(이미지 생성 비활성화)",
-          "label": "기본값 없음"
-        },
-        "nonDefault": {
-          "description": "이제 **{title}** 모델은 이미지 생성에 사용되지 않습니다."
-        },
-        "replacement": {
-          "label": "새 기본값 설정",
-          "placeholder": "대체할 모델을 선택하세요"
-        },
-        "sessionHistory": {
-          "description": "세션 기록은 유지됩니다."
-        },
-        "submitButton": {
-          "label": "연결 해제"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "{title} 연결을 해제했습니다"
-      },
-      "editButton": {
-        "ariaLabel": "{title} 편집"
-      },
-      "emptyState": {
-        "title": "채팅에서 사용할 이미지 생성 모델을 연결하세요."
-      },
-      "form": {
-        "apiKey": {
-          "idle": "API 키를 입력하세요.",
-          "label": "API 키",
-          "placeholder": "API 키를 입력하세요",
-          "required": "API 키는 필수입니다"
-        },
-        "apiKeyTest": {
-          "error": "잘못된 API 키입니다",
-          "loading": "{title}에서 API 키를 테스트하는 중...",
-          "success": "API 키가 유효합니다. 구성을 저장했습니다."
-        },
-        "apiKeyValidationFailed": {
-          "message": "API 키 검증에 실패했습니다"
-        },
-        "authMethod": {
-          "idle": "{appName}가 Google Vertex AI에 인증하는 방식을 선택하세요.",
-          "label": "인증 방식",
-          "required": "인증 방식은 필수입니다",
-          "serviceAccount": {
-            "description": "GCP 서비스 계정 키 JSON 파일을 업로드하세요",
-            "label": "서비스 계정 JSON"
-          },
-          "workloadIdentity": {
-            "description": "Pod의 기본 GCP 자격 증명을 사용합니다 (GKE Workload Identity)",
-            "label": "Workload Identity (GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "모델에 접근하려면 Azure OpenAI의 <link>API 키</link>를 붙여넣으세요."
-        },
-        "connectHeader": {
-          "title": "{title} 연결"
-        },
-        "credentials": {
-          "idle": "Google Cloud의 <link>서비스 계정 자격 증명</link>을 업로드하거나 붙여넣으세요.",
-          "label": "자격 증명 파일",
-          "placeholder": "자격 증명을 업로드하거나 붙여넣으세요",
-          "required": "자격 증명 파일은 필수입니다"
-        },
-        "credentialsTest": {
-          "error": "잘못된 자격 증명입니다",
-          "loading": "{title}에서 자격 증명을 테스트하는 중...",
-          "success": "자격 증명이 유효합니다. 구성을 저장했습니다."
-        },
-        "editHeader": {
-          "title": "{title} 편집"
-        },
-        "loading": {
-          "placeholder": "불러오는 중..."
-        },
-        "location": {
-          "idle": "Vertex AI 모델을 사용할 Google Cloud 리전입니다. 사용 가능한 리전은 <link>Google 문서</link>를 참고하세요.",
-          "label": "위치",
-          "required": "위치는 필수입니다"
-        },
-        "projectId": {
-          "idle": "Vertex AI가 활성화된 GCP 프로젝트입니다. {appName}는 Pod에 연결된 서비스 계정으로 인증합니다 (GKE Workload Identity).",
-          "label": "GCP 프로젝트 ID",
-          "required": "프로젝트 ID는 필수입니다"
-        },
-        "targetUri": {
-          "idle": "<link>Azure OpenAI</link>의 엔드포인트 대상 URI를 붙여넣으세요. API 엔드포인트 기본 주소, 배포 이름, API 버전이 포함되어야 합니다.",
-          "invalid": "대상 URI는 api-version과 배포 이름을 포함한 유효한 URL이어야 합니다",
-          "label": "대상 URI",
-          "required": "대상 URI는 필수입니다"
-        },
-        "unknownError": {
-          "message": "알 수 없는 오류가 발생했습니다"
-        }
-      },
-      "header": {
-        "description": "채팅 내 이미지 생성 설정입니다.",
-        "title": "이미지 생성"
-      },
-      "linkError": {
-        "message": "모델을 연결하지 못했습니다"
-      },
-      "linkSuccess": {
-        "message": "{title} 연결됨"
-      },
-      "linkedModel": {
-        "description": "{provider}에서 제공"
-      },
-      "loadError": {
-        "message": "구성을 불러오지 못했습니다. 페이지를 새로고침하세요."
-      },
-      "model": {
-        "description": "채팅에서 이미지를 생성할 모델을 선택하세요.",
-        "placeholder": "기본 모델 선택",
-        "title": "이미지 생성 모델"
-      },
-      "modelFilter": {
-        "all": "전체",
-        "recommended": "추천"
-      },
-      "noImageModels": {
-        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요. 연결된 공급자의 모든 모델을 보려면 전체 탭을 여세요.",
-        "title": "사용 가능한 이미지 모델이 없습니다"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "Microsoft Azure에서 호스팅되는 GPT Image 1 이미지 생성 모델입니다."
-        },
-        "azureGptImage15": {
-          "description": "Microsoft Azure에서 호스팅되는 GPT Image 1.5 이미지 생성 모델입니다."
-        },
-        "azureGptImage2": {
-          "description": "Microsoft Azure에서 호스팅되는 GPT Image 2 이미지 생성 모델입니다."
-        },
-        "azureGptImage25Flare": {
-          "description": "Microsoft Azure에서 호스팅되는 GPT Image 2.5 Flare 이미지 생성 모델입니다."
-        },
-        "azureGptImage25Sunburst": {
-          "description": "Microsoft Azure에서 호스팅되는 GPT Image 2.5 Sunburst 이미지 생성 모델입니다."
-        },
-        "gemini25FlashImage": {
-          "description": "Gemini 2.5 Flash Image (Nano Banana) 모델은 속도와 효율성에 중점을 둡니다."
-        },
-        "gemini3ProImage": {
-          "description": "Gemini 3 Pro Image (Nano Banana Pro)는 전문적인 에셋 제작에 중점을 둡니다."
-        },
-        "gemini3ProImagePreview": {
-          "description": "Google Cloud에서 2026년 7월 17일에 지원을 종료합니다. Gemini 3 Pro Image로 전환하세요."
-        },
-        "openaiGptImage1": {
-          "description": "프롬프트 준수도가 높은 OpenAI의 강력한 이미지 생성 모델입니다."
-        },
-        "openaiGptImage15": {
-          "description": "OpenAI의 이전 대표 이미지 생성 모델입니다."
-        },
-        "openaiGptImage2": {
-          "description": "프롬프트 재현도가 높은 OpenAI의 이전 세대 이미지 생성 모델입니다."
-        },
-        "openaiGptImage25Flare": {
-          "description": "높은 품질과 빠른 생성 속도를 갖춘 OpenAI의 최신 이미지 생성 모델입니다."
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "가장 정밀한 편집을 위한 OpenAI의 프리미엄 이미지 생성 모델입니다."
-        }
-      },
-      "retiredModelWarning": {
-        "description": "다른 모델을 연결하고 기본값으로 설정한 다음 {title} 연결을 해제하세요.",
-        "title": "{title}은(는) 더 이상 사용할 수 없습니다"
-      },
-      "setDefaultError": {
-        "message": "기본값 설정에 실패했습니다"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "고급 옵션",
@@ -6625,7 +6401,7 @@
       },
       "defaultModel": {
         "description": "새 세션에 기본으로 사용됩니다.",
-        "title": "기본 모델"
+        "title": "채팅 모델"
       },
       "deleteModal": {
         "defaultProviderWarning": "기본 제공자는 삭제할 수 없습니다. 이 제공자를 삭제하기 전에 다른 제공자를 기본으로 선택하세요.",
@@ -6646,6 +6422,9 @@
         },
         "selfHosted": {
           "title": "자체 호스팅 및 사용자 지정"
+        },
+        "decisions": {
+          "title": "결정"
         }
       },
       "hideProviderGrouping": {
@@ -6891,7 +6670,7 @@
             "placeholder": "모델 이름 입력"
           },
           "autoUpdate": {
-            "description": "새 모델이 출시되면 사용 가능한 모델을 업데이트합니다.",
+            "description": "새로 출시된 채팅 모델을 자동으로 추가하고 지원 종료된 모델을 제거합니다.",
             "title": "자동 업데이트"
           },
           "deselectAllButton": {
@@ -6901,30 +6680,24 @@
             "title": "사용 가능한 모델이 없습니다."
           },
           "field": {
-            "description": "이 제공자에서 사용할 모델을 선택하세요.",
+            "description": "앱 전체에서 사용할 수 있는 모델을 선택하세요.",
             "title": "모델"
           },
-          "foldButton": {
-            "label": "모델 접기"
-          },
-          "moreButton": {
-            "label": "모델 더 보기"
+          "search": {
+            "empty": "검색과 일치하는 모델이 없습니다.",
+            "placeholder": "모델 검색"
           },
           "refetch": {
             "label": "모델 새로고침",
             "errorToast": "모델을 가져오지 못했습니다"
           },
           "row": {
-            "defaultLabel": "기본 모델",
             "decisionTag": {
               "decisionOnly": "판단 모델입니다. 채팅 모델 선택기에는 표시되지 않습니다.",
               "chatAndDecision": "채팅과 판단 작업을 모두 지원합니다."
             },
             "renameButton": {
               "tooltip": "이름 변경"
-            },
-            "setDefaultButton": {
-              "label": "기본으로 설정"
             }
           },
           "selectAllButton": {
@@ -7042,11 +6815,12 @@
           },
           "submitButton": {
             "invalidTooltip": "필수 항목을 모두 입력하세요.",
-            "pristineTooltip": "저장할 변경 사항이 없습니다."
+            "pristineTooltip": "저장할 변경 사항이 없습니다.",
+            "noModelsTooltip": "채팅 또는 이미지 모델을 하나 이상 선택하세요"
           },
           "title": {
             "configure": "*{provider}* 구성",
-            "create": "{product} 설정"
+            "create": "{product} 구성"
           },
           "updateButton": {
             "label": "업데이트"
@@ -7061,7 +6835,8 @@
           "setNewDefaultFailed": "새 제공자를 기본으로 설정하지 못했습니다",
           "testApiKeyFailed": "API 키를 테스트하는 중 오류가 발생했습니다.",
           "testCustomProviderFailed": "사용자 지정 제공자를 테스트하는 중 오류가 발생했습니다.",
-          "testProviderFailed": "제공자를 테스트하는 중 오류가 발생했습니다."
+          "testProviderFailed": "제공자를 테스트하는 중 오류가 발생했습니다.",
+          "imageModelsUpdateFailed": "제공자는 저장되었지만 이미지 모델을 업데이트할 수 없습니다"
         },
         "validation": {
           "apiBaseRequired": "API 기본 URL은 필수입니다",
@@ -7166,6 +6941,46 @@
       "temperature": {
         "description": "사용자가 세션마다 모델의 기본 온도를 재정의할 수 있도록 합니다.",
         "title": "Temperature 제어"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "이미지 모델",
+          "description": "세션에서 이미지를 생성하는 데 사용됩니다.",
+          "error": "기본 이미지 모델을 변경할 수 없습니다",
+          "noDefault": {
+            "label": "기본값 없음",
+            "description": "(이미지 생성 사용 안 함)"
+          }
+        }
+      },
+      "defaultChanges": {
+        "back": "뒤로",
+        "title": "새 기본값 선택",
+        "description": "이 변경으로 기본값인 모델이 빠집니다. 각각을 대신할 모델을 선택하세요.",
+        "deleteDescription": "이 제공자에 기본값인 모델이 있습니다. 각각을 대신할 모델을 선택하세요.",
+        "confirm": "계속",
+        "cleared": "대신할 모델이 없습니다. 기본값이 해제됩니다.",
+        "flows": {
+          "chat": {
+            "lost": "선택된 다른 채팅 모델이 없습니다. 채팅이 꺼집니다."
+          },
+          "decision": {
+            "lost": "선택된 다른 결정 모델이 없습니다. 결정 기능이 꺼집니다."
+          }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "채팅"
+        },
+        "imageGeneration": {
+          "empty": "이미지를 생성하려면 제공자 설정에서 이미지 모델을 켜세요.",
+          "title": "이미지 생성"
+        },
+        "decisions": {
+          "empty": "결정을 사용하려면 LLM 공급자 또는 결정 공급자를 설정하세요.",
+          "title": "결정"
+        }
       }
     },
     "mcpActions": {
@@ -14564,10 +14379,23 @@
         "legacy": "레거시"
       },
       "labels": {
-        "default": "기본"
+        "default": "기본",
+        "defaultChat": "기본 채팅",
+        "defaultImage": "기본 이미지"
+      },
+      "defaultRoles": {
+        "chat": "기본 채팅",
+        "imageGeneration": "기본 이미지",
+        "imageProcessing": "기본 이미지 처리",
+        "chatNaming": "기본 채팅 이름 지정",
+        "searchSelection": "기본 검색 결정",
+        "decision": "기본 결정",
+        "craft": "기본 Craft"
       },
       "modelTypes": {
+        "chat": "채팅",
         "decision": "판단",
+        "image": "이미지",
         "vision": "비전"
       }
     },
@@ -16879,17 +16707,11 @@
         "hookExtensions": {
           "label": "훅 확장"
         },
-        "imageGeneration": {
-          "label": "이미지 생성"
-        },
         "indexSettings": {
           "label": "인덱스 설정"
         },
         "languageModels": {
-          "label": "언어 모델"
-        },
-        "decisionModels": {
-          "label": "판단 모델"
+          "label": "AI 모델"
         },
         "llmGateway": {
           "label": "LLM 게이트웨이"

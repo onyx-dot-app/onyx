@@ -48,10 +48,6 @@ import { Modal } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { Tier } from "@/lib/tiers/types";
-import {
-  ChatNamingModelSetting,
-  SearchDecisionModelSetting,
-} from "@/views/admin/ChatTaskModelSettings";
 
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 
@@ -380,7 +376,6 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
-              <ChatNamingModelSetting />
               <InputHorizontal
                 title={t("multiModel.title")}
                 description={t("multiModel.description")}
@@ -462,13 +457,6 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
-            </Section>
-          </Card>
-
-          {/* Search */}
-          <Card border="solid" rounding={4}>
-            <Section alignItems="stretch">
-              <SearchDecisionModelSetting />
             </Section>
           </Card>
 

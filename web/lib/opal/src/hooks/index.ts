@@ -15,6 +15,10 @@ export { default as useContainerCenter } from "@opal/hooks/useContainerCenter";
 export { default as useDebouncedValue } from "@opal/hooks/useDebouncedValue";
 export { default as useFocusOnMount } from "@opal/hooks/useFocusOnMount";
 export {
+  default as usePendingAction,
+  type PendingAction,
+} from "@opal/hooks/usePendingAction";
+export {
   default as useGridNavigation,
   type GridDirection,
   type UseGridNavigationOptions,

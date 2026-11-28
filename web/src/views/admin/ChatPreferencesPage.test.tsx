@@ -120,11 +120,9 @@ describe("ChatPreferencesPage", () => {
     expect(screen.getByDisplayValue("Example team")).toBeInTheDocument();
     const ordered = [
       "Default Language",
-      "Chat Naming Model",
       "Multi-Model Generation",
       "Search Mode",
       "Auto-Detect Search Filters",
-      "Search Decision Model",
       "Team Name",
     ].map((text) => screen.getByText(text));
     ordered.slice(1).forEach((node, i) => {

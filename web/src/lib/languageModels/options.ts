@@ -11,6 +11,7 @@ import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import type {
   DefaultModel,
   FilterModelConfigurationsOptions,
+  ModelCapability,
   LLMOption,
   LLMOptionGroup,
   LLMProviderDescriptor,
@@ -68,6 +69,26 @@ export function llmOptionKey(option: {
  * selectable model options. Hidden models require an existing selection or
  * an explicit admin opt-in.
  */
+/** Whether a model has any of `capabilities`. */
+export function hasModelCapability(
+  mc: ModelOptionProvider["model_configurations"][number],
+  capabilities: readonly ModelCapability[]
+): boolean {
+  const canChat = mc.supports_chat !== false;
+  return capabilities.some((capability) => {
+    switch (capability) {
+      case "chat":
+        return canChat;
+      case "vision":
+        return canChat && mc.supports_image_input === true;
+      case "decision":
+        return mc.supports_decisions === true;
+      case "image":
+        return mc.supports_image_generation === true;
+    }
+  });
+}
+
 /** `useProviderNames()`: a provider entry's names as the UI shows them. */
 export type ProviderNamesResolver = (entry: ProviderEntry) => ProviderNames;
 
@@ -81,7 +102,7 @@ export function buildLlmOptions(
   currentModelName?: string,
   includeHiddenModels = false,
   providerNames?: ProviderNamesResolver,
-  includeDecisionOnly = false
+  capabilities: readonly ModelCapability[] = ["chat"]
 ): LLMOption[] {
   if (!llmProviders) return [];
 
@@ -100,7 +121,7 @@ export function buildLlmOptions(
     llmProvider.model_configurations
       .filter(
         (mc) =>
-          (includeDecisionOnly || mc.supports_chat !== false) &&
+          hasModelCapability(mc, capabilities) &&
           (includeHiddenModels || mc.is_visible || mc.name === currentModelName)
       )
       .forEach((mc) => {
@@ -248,9 +269,12 @@ export function findLlmOptionById(
 ): LLMOption | null {
   if (modelConfigurationId === null) return null;
   return (
-    buildLlmOptions(llmProviders, undefined, true, undefined, true).find(
-      (option) => option.modelConfigurationId === modelConfigurationId
-    ) ?? null
+    buildLlmOptions(llmProviders, undefined, true, undefined, [
+      "chat",
+      "decision",
+      "image",
+    ]).find((option) => option.modelConfigurationId === modelConfigurationId) ??
+    null
   );
 }
 
@@ -284,19 +308,23 @@ export function findDefaultModelDisplayName(
 export function filterModelConfigurations<T extends ModelOptionProvider>(
   providers: T[],
   {
-    imageInput = false,
     keep = null,
-    includeDecisionOnly = false,
+    capabilities = ["chat"],
   }: FilterModelConfigurationsOptions = {}
 ): T[] {
+  // The current value stays listed even when hidden or when it no longer
+  // reads images; it must still be the right kind of model.
+  const keptCapabilities = capabilities.map(
+    (capability): ModelCapability =>
+      capability === "vision" ? "chat" : capability
+  );
   return providers
     .map((provider) => ({
       ...provider,
-      model_configurations: provider.model_configurations.filter(
-        (mc) =>
-          (includeDecisionOnly || mc.supports_chat !== false) &&
-          ((keep !== null && mc.id === keep) ||
-            (mc.is_visible && (!imageInput || mc.supports_image_input)))
+      model_configurations: provider.model_configurations.filter((mc) =>
+        keep !== null && mc.id === keep
+          ? hasModelCapability(mc, keptCapabilities)
+          : mc.is_visible && hasModelCapability(mc, capabilities)
       ),
     }))
     .filter((provider) => provider.model_configurations.length > 0);
@@ -319,7 +347,8 @@ export function fromSelectValue(value: string): number | null {
 }
 
 export interface BuildModelSelectOptionsOptions {
-  includeDecisionOnly?: boolean;
+  /** Offer models with any of these capabilities. Defaults to chat models. */
+  capabilities?: readonly ModelCapability[];
   /**
    * Group models under a foldable divider per provider (aggregators split
    * per vendor, as the chat picker does). Off, or with a single group,
@@ -347,18 +376,12 @@ export function buildModelSelectOptions(
   {
     grouped = true,
     providerNames,
-    includeDecisionOnly = false,
     labelSingleGroup = false,
+    capabilities = ["chat"],
   }: BuildModelSelectOptionsOptions = {}
 ): SelectOptions {
   const dividers: SelectDivider[] = groupLlmOptions(
-    buildLlmOptions(
-      providers,
-      undefined,
-      true,
-      providerNames,
-      includeDecisionOnly
-    )
+    buildLlmOptions(providers, undefined, true, providerNames, capabilities)
   )
     .map((group) => ({
       title: group.displayName,

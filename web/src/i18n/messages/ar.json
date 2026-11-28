@@ -332,21 +332,16 @@
   },
   "admin": {
     "decisionModels": {
-      "sharedModelSettings": "إدارة إعدادات الدردشة في نماذج اللغة",
+      "sharedModelSettings": "إدارة إعدادات الدردشة في نماذج الذكاء الاصطناعي",
       "decisionModel": {
         "title": "نموذج القرار",
         "openAiDecisionsModelName": "قرارات OpenAI (GPT-6 Luna)",
         "description": "يستخدم البحث الداخلي هذا النموذج لترتيب النتائج وتحديد مقدار السياق المضاف. يمكنك أيضًا تعيينه في تفضيلات الدردشة.",
         "clear": "مسح",
-        "notConfigured": "غير مُعدّ",
         "saveFailed": "تعذّر تحديث نموذج القرار"
       },
-      "header": {
-        "title": "نماذج القرار",
-        "description": "أدر موفري نماذج القرار واختر نموذجًا اختياريًا."
-      },
       "providers": {
-        "title": "الموفرون",
+        "title": "مزوّدو القرارات",
         "description": "اربط موفرًا أو أدر نماذج القرار الخاصة به.",
         "clearBeforeRemoval": "امسح نموذج القرار المحدد قبل إزالة هذا الموفر.",
         "connect": "ربط"
@@ -1321,9 +1316,6 @@
         "loadFailed": "تعذر تحميل نماذج المهام",
         "retry": {
           "label": "إعادة المحاولة"
-        },
-        "addProvider": {
-          "label": "إضافة موفر"
         },
         "chatDefault": {
           "label": "الافتراضي للمحادثة"
@@ -5724,222 +5716,6 @@
         "endpointUrl": "https://nuqtat-nihayat-api.com"
       }
     },
-    "imageGeneration": {
-      "availableModels": {
-        "description": "نماذج الصور لدى موفري LLM المتصلين. اربط نموذجًا لاستخدامه في الدردشة.",
-        "title": "النماذج المتاحة"
-      },
-      "configureSuccess": {
-        "message": "تم تهيئة الموفر بنجاح"
-      },
-      "connectButton": {
-        "label": "اتصال"
-      },
-      "connectedModels": {
-        "title": "النماذج المتصلة"
-      },
-      "deselectError": {
-        "message": "فشل إلغاء التحديد"
-      },
-      "disconnectButton": {
-        "ariaLabel": "قطع اتصال {title}"
-      },
-      "disconnectError": {
-        "message": "فشل قطع الاتصال"
-      },
-      "disconnectModal": {
-        "connectAnother": {
-          "description": "اربط موفرًا آخر لمواصلة استخدام توليد الصور."
-        },
-        "defaultNoReplacement": {
-          "description": "**{title}** هو حاليًا نموذج توليد الصور الافتراضي."
-        },
-        "defaultWithReplacement": {
-          "description": "**{title}** هو حاليًا نموذج توليد الصور الافتراضي. سيُحتفظ بسجل الجلسات."
-        },
-        "header": {
-          "description": "سيزيل هذا بيانات الاعتماد المخزنة لهذا الموفر.",
-          "title": "قطع الاتصال بـ *{title}*"
-        },
-        "linkedHeader": {
-          "description": "يبقى مزوّد LLM وبيانات اعتماده متصلين."
-        },
-        "noDefaultOption": {
-          "description": "(تعطيل توليد الصور)",
-          "label": "بدون افتراضي"
-        },
-        "nonDefault": {
-          "description": "لن تُستخدم نماذج **{title}** لتوليد الصور بعد الآن."
-        },
-        "replacement": {
-          "label": "تعيين افتراضي جديد",
-          "placeholder": "اختر نموذجًا بديلًا"
-        },
-        "sessionHistory": {
-          "description": "سيُحتفظ بسجل الجلسات."
-        },
-        "submitButton": {
-          "label": "قطع الاتصال"
-        }
-      },
-      "disconnectSuccess": {
-        "message": "تم قطع الاتصال بـ {title}"
-      },
-      "editButton": {
-        "ariaLabel": "تعديل {title}"
-      },
-      "emptyState": {
-        "title": "اربط نموذج توليد صور لاستخدامه في المحادثة."
-      },
-      "form": {
-        "apiKey": {
-          "idle": "أدخل مفتاح API الخاص بك.",
-          "label": "مفتاح API",
-          "placeholder": "أدخل مفتاح API الخاص بك",
-          "required": "مفتاح API مطلوب"
-        },
-        "apiKeyTest": {
-          "error": "مفتاح API غير صالح",
-          "loading": "جارٍ اختبار مفتاح API مع {title}...",
-          "success": "مفتاح API صالح. تم حفظ التهيئة."
-        },
-        "apiKeyValidationFailed": {
-          "message": "فشل التحقق من مفتاح API"
-        },
-        "authMethod": {
-          "idle": "اختر كيف يجب أن يصادق {appName} مع Google Vertex AI.",
-          "label": "طريقة المصادقة",
-          "required": "طريقة المصادقة مطلوبة",
-          "serviceAccount": {
-            "description": "ارفع ملف JSON لمفتاح حساب خدمة GCP",
-            "label": "JSON حساب الخدمة"
-          },
-          "workloadIdentity": {
-            "description": "استخدم بيانات اعتماد GCP المحيطة بالحاوية (GKE Workload Identity)",
-            "label": "Workload Identity ‏(GKE)"
-          }
-        },
-        "azureApiKey": {
-          "idle": "الصق <link>مفتاح API</link> من Azure OpenAI للوصول إلى نماذجك."
-        },
-        "connectHeader": {
-          "title": "ربط {title}"
-        },
-        "credentials": {
-          "idle": "ارفع أو الصق <link>بيانات اعتماد حساب الخدمة</link> من Google Cloud.",
-          "label": "ملف بيانات الاعتماد",
-          "placeholder": "ارفع أو الصق بيانات الاعتماد",
-          "required": "ملف بيانات الاعتماد مطلوب"
-        },
-        "credentialsTest": {
-          "error": "بيانات اعتماد غير صالحة",
-          "loading": "جارٍ اختبار بيانات الاعتماد مع {title}...",
-          "success": "بيانات الاعتماد صالحة. تم حفظ التهيئة."
-        },
-        "editHeader": {
-          "title": "تعديل {title}"
-        },
-        "loading": {
-          "placeholder": "جارٍ التحميل..."
-        },
-        "location": {
-          "idle": "منطقة Google Cloud لنماذج Vertex AI الخاصة بك. راجع <link>وثائق Google</link> للمناطق المتاحة.",
-          "label": "الموقع",
-          "required": "الموقع مطلوب"
-        },
-        "projectId": {
-          "idle": "مشروع GCP الذي فُعّل فيه Vertex AI. يصادق {appName} بحساب الخدمة المرتبط بالحاوية (GKE Workload Identity).",
-          "label": "معرّف مشروع GCP",
-          "required": "معرّف المشروع مطلوب"
-        },
-        "targetUri": {
-          "idle": "الصق عنوان URI الهدف لنقطة النهاية من <link>Azure OpenAI</link> (بما في ذلك عنوان API الأساسي واسم النشر وإصدار API).",
-          "invalid": "يجب أن يكون عنوان URI الهدف عنوان URL صالحًا يتضمن api-version واسم النشر",
-          "label": "عنوان URI الهدف",
-          "required": "عنوان URI الهدف مطلوب"
-        },
-        "unknownError": {
-          "message": "حدث خطأ غير معروف"
-        }
-      },
-      "header": {
-        "description": "إعدادات توليد الصور داخل المحادثة.",
-        "title": "توليد الصور"
-      },
-      "linkError": {
-        "message": "تعذّر ربط النموذج"
-      },
-      "linkSuccess": {
-        "message": "تم ربط {title}"
-      },
-      "linkedModel": {
-        "description": "من {provider}"
-      },
-      "loadError": {
-        "message": "فشل تحميل التهيئة. يرجى تحديث الصفحة."
-      },
-      "model": {
-        "description": "اختر نموذجًا لتوليد الصور في المحادثة.",
-        "placeholder": "اختر نموذجًا افتراضيًا",
-        "title": "نموذج توليد الصور"
-      },
-      "modelFilter": {
-        "all": "الكل",
-        "recommended": "موصى بها"
-      },
-      "noImageModels": {
-        "description": "اربط موفر LLM يقدم نماذج صور في صفحة نماذج اللغة. لعرض كل النماذج لدى الموفرين المتصلين، افتح علامة التبويب الكل.",
-        "title": "لا توجد نماذج صور متاحة"
-      },
-      "providers": {
-        "azureGptImage1": {
-          "description": "نموذج توليد الصور GPT Image 1 مستضاف على Microsoft Azure."
-        },
-        "azureGptImage15": {
-          "description": "نموذج توليد الصور GPT Image 1.5 مستضاف على Microsoft Azure."
-        },
-        "azureGptImage2": {
-          "description": "نموذج توليد الصور GPT Image 2 مستضاف على Microsoft Azure."
-        },
-        "azureGptImage25Flare": {
-          "description": "نموذج توليد الصور GPT Image 2.5 Flare مستضاف على Microsoft Azure."
-        },
-        "azureGptImage25Sunburst": {
-          "description": "نموذج توليد الصور GPT Image 2.5 Sunburst مستضاف على Microsoft Azure."
-        },
-        "gemini25FlashImage": {
-          "description": "نموذج Gemini 2.5 Flash Image ‏(Nano Banana) مصمم للسرعة والكفاءة."
-        },
-        "gemini3ProImage": {
-          "description": "نموذج Gemini 3 Pro Image ‏(Nano Banana Pro) مصمم لإنتاج الأصول الاحترافية."
-        },
-        "gemini3ProImagePreview": {
-          "description": "أوقفته Google Cloud في 17 يوليو 2026. انتقل إلى Gemini 3 Pro Image."
-        },
-        "openaiGptImage1": {
-          "description": "نموذج توليد صور قدير من OpenAI بالتزام قوي بالمطالبات."
-        },
-        "openaiGptImage15": {
-          "description": "نموذج توليد الصور الرائد السابق من OpenAI."
-        },
-        "openaiGptImage2": {
-          "description": "نموذج توليد الصور من الجيل السابق من OpenAI بدقة عالية في الالتزام بالمطالبات."
-        },
-        "openaiGptImage25Flare": {
-          "description": "أحدث نموذج توليد صور من OpenAI بجودة عالية وسرعة توليد كبيرة."
-        },
-        "openaiGptImage25Sunburst": {
-          "description": "نموذج توليد الصور المتميز من OpenAI لأدق عمليات التعديل."
-        }
-      },
-      "retiredModelWarning": {
-        "description": "اربط نموذجًا آخر واجعله الافتراضي، ثم افصل {title}.",
-        "title": "لم يعد {title} متاحًا"
-      },
-      "setDefaultError": {
-        "message": "فشل تعيين الافتراضي"
-      }
-    },
     "indexSettings": {
       "advanced": {
         "title": "خيارات متقدمة",
@@ -6625,7 +6401,7 @@
       },
       "defaultModel": {
         "description": "يُستخدم للجلسات الجديدة افتراضيًا.",
-        "title": "النموذج الافتراضي"
+        "title": "نموذج الدردشة"
       },
       "deleteModal": {
         "defaultProviderWarning": "لا يمكن حذف الموفر الافتراضي. اختر موفرًا آخر كافتراضي قبل حذف هذا.",
@@ -6646,6 +6422,9 @@
         },
         "selfHosted": {
           "title": "مستضاف ذاتيًا ومخصص"
+        },
+        "decisions": {
+          "title": "القرارات"
         }
       },
       "hideProviderGrouping": {
@@ -6891,7 +6670,7 @@
             "placeholder": "أدخل اسم النموذج"
           },
           "autoUpdate": {
-            "description": "تحديث النماذج المتاحة عند صدور نماذج جديدة.",
+            "description": "إضافة نماذج الدردشة الجديدة عند صدورها وإزالة النماذج المتقاعدة تلقائيًا.",
             "title": "تحديث تلقائي"
           },
           "deselectAllButton": {
@@ -6901,30 +6680,24 @@
             "title": "لا توجد نماذج متاحة."
           },
           "field": {
-            "description": "اختر النماذج المراد إتاحتها لهذا الموفر.",
+            "description": "اختر النماذج المسموح باستخدامها في جميع أنحاء التطبيق.",
             "title": "النماذج"
           },
-          "foldButton": {
-            "label": "طي النماذج"
-          },
-          "moreButton": {
-            "label": "المزيد من النماذج"
+          "search": {
+            "empty": "لا توجد نماذج تطابق بحثك.",
+            "placeholder": "ابحث في النماذج"
           },
           "refetch": {
             "label": "تحديث النماذج",
             "errorToast": "فشل جلب النماذج"
           },
           "row": {
-            "defaultLabel": "النموذج الافتراضي",
             "decisionTag": {
               "decisionOnly": "نموذج لاتخاذ القرارات. غير متاح في قائمة نماذج الدردشة.",
               "chatAndDecision": "يدعم مهام الدردشة واتخاذ القرارات."
             },
             "renameButton": {
               "tooltip": "إعادة تسمية"
-            },
-            "setDefaultButton": {
-              "label": "تعيين كافتراضي"
             }
           },
           "selectAllButton": {
@@ -7042,11 +6815,12 @@
           },
           "submitButton": {
             "invalidTooltip": "يرجى ملء جميع الحقول المطلوبة.",
-            "pristineTooltip": "لا توجد تغييرات للحفظ."
+            "pristineTooltip": "لا توجد تغييرات للحفظ.",
+            "noModelsTooltip": "اختر نموذج دردشة أو نموذج صور واحدًا على الأقل"
           },
           "title": {
             "configure": "تهيئة *{provider}*",
-            "create": "إعداد {product}"
+            "create": "تهيئة {product}"
           },
           "updateButton": {
             "label": "تحديث"
@@ -7061,7 +6835,8 @@
           "setNewDefaultFailed": "فشل تعيين الموفر الجديد كافتراضي",
           "testApiKeyFailed": "حدث خطأ أثناء اختبار مفتاح API.",
           "testCustomProviderFailed": "حدث خطأ أثناء اختبار الموفر المخصص.",
-          "testProviderFailed": "حدث خطأ أثناء اختبار الموفر."
+          "testProviderFailed": "حدث خطأ أثناء اختبار الموفر.",
+          "imageModelsUpdateFailed": "تم حفظ المزوّد، لكن تعذّر تحديث نماذج الصور الخاصة به"
         },
         "validation": {
           "apiBaseRequired": "عنوان URL الأساسي لـ API مطلوب",
@@ -7166,6 +6941,46 @@
       "temperature": {
         "description": "السماح للمستخدمين بتجاوز درجة حرارة النموذج الافتراضية في كل جلسة.",
         "title": "التحكم في درجة الحرارة"
+      },
+      "imageGeneration": {
+        "defaultModel": {
+          "title": "نموذج الصور",
+          "description": "يُستخدم لإنشاء الصور في الجلسات.",
+          "error": "تعذّر تغيير نموذج الصور الافتراضي",
+          "noDefault": {
+            "label": "بلا افتراضي",
+            "description": "(تعطيل إنشاء الصور)"
+          }
+        }
+      },
+      "defaultChanges": {
+        "back": "رجوع",
+        "title": "اختر قيمًا افتراضية جديدة",
+        "description": "يزيل هذا التغيير نماذج مستخدمة كافتراضية. اختر نموذجًا بديلًا لكل منها.",
+        "deleteDescription": "يحتوي هذا المزوّد على نماذج افتراضية. اختر نموذجًا بديلًا لكل منها.",
+        "confirm": "متابعة",
+        "cleared": "لا يوجد نموذج آخر يمكنه أن يحل محله. تتم إزالة القيمة الافتراضية.",
+        "flows": {
+          "chat": {
+            "lost": "لا يوجد نموذج دردشة آخر محدد. تتوقف الدردشة."
+          },
+          "decision": {
+            "lost": "لا يوجد نموذج قرارات آخر محدد. تتوقف القرارات."
+          }
+        }
+      },
+      "sections": {
+        "chat": {
+          "title": "الدردشة"
+        },
+        "imageGeneration": {
+          "empty": "فعّل نموذج صور في إعدادات أحد المزوّدين لإنشاء الصور.",
+          "title": "إنشاء الصور"
+        },
+        "decisions": {
+          "empty": "قم بإعداد موفر نماذج لغوية أو موفر قرارات لاستخدام القرارات.",
+          "title": "القرارات"
+        }
       }
     },
     "mcpActions": {
@@ -14564,10 +14379,23 @@
         "legacy": "قديم"
       },
       "labels": {
-        "default": "افتراضي"
+        "default": "افتراضي",
+        "defaultChat": "الدردشة الافتراضية",
+        "defaultImage": "الصورة الافتراضية"
+      },
+      "defaultRoles": {
+        "chat": "الدردشة الافتراضية",
+        "imageGeneration": "الصورة الافتراضية",
+        "imageProcessing": "معالجة الصور الافتراضية",
+        "chatNaming": "تسمية الدردشة الافتراضية",
+        "searchSelection": "قرار البحث الافتراضي",
+        "decision": "القرار الافتراضي",
+        "craft": "Craft الافتراضي"
       },
       "modelTypes": {
+        "chat": "الدردشة",
         "decision": "قرار",
+        "image": "صورة",
         "vision": "رؤية"
       }
     },
@@ -16879,17 +16707,11 @@
         "hookExtensions": {
           "label": "امتدادات Hook"
         },
-        "imageGeneration": {
-          "label": "توليد الصور"
-        },
         "indexSettings": {
           "label": "إعدادات الفهرس"
         },
         "languageModels": {
-          "label": "نماذج اللغة"
-        },
-        "decisionModels": {
-          "label": "نماذج القرار"
+          "label": "نماذج الذكاء الاصطناعي"
         },
         "llmGateway": {
           "label": "بوابة LLM"

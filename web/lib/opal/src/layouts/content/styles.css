@@ -305,8 +305,10 @@
   @apply opacity-0 no-hover:opacity-100;
 }
 
-/* Hover, or keyboard focus on the pencil, reveals it. */
+/* Hover, or keyboard focus on the pencil, reveals it. Inside a
+   `Hoverable.Root`, hovering anywhere in the root does too. */
 .opal-content:hover .opal-content-edit-button[data-show="hover"],
+[data-hover-group]:hover .opal-content-edit-button[data-show="hover"],
 .opal-content-edit-button[data-show="hover"]:focus-within {
   @apply opacity-100;
 }

@@ -1476,7 +1476,7 @@ export default function AgentEditorPage({
                                   }
                                   grouped={!hideProviderGrouping}
                                   onChange={(modelConfigurationId) =>
-                                    setFieldValue(
+                                    void setFieldValue(
                                       "default_model_configuration_id",
                                       modelConfigurationId
                                     )
