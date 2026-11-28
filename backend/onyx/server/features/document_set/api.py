@@ -41,9 +41,38 @@ from onyx.server.features.document_set.models import (
     DocumentSetSummary,
     DocumentSetUpdateRequest,
 )
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/manage")
+
+
+def _emit_document_set_event(
+    action: AuditAction,
+    user: User,
+    document_set_id: int,
+    request: DocumentSetCreationRequest | DocumentSetUpdateRequest | None = None,
+) -> None:
+    emit_audit_event(
+        action,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="document_set",
+        resource_id=document_set_id,
+        extra=(
+            request.model_dump(
+                mode="json",
+                include={"name", "is_public", "cc_pair_ids", "users", "groups"},
+            )
+            if request is not None
+            else None
+        ),
+    )
 
 
 @router.post("/admin/document-set")
@@ -72,6 +101,12 @@ def create_document_set(
         )
     except Exception as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+    _emit_document_set_event(
+        AuditAction.DOCUMENT_SET_CREATE,
+        user,
+        document_set_db_model.id,
+        document_set_creation_request,
+    )
 
     if not DISABLE_VECTOR_DB:
         client_app.send_task(
@@ -172,6 +207,12 @@ def patch_document_set(
         )
     except Exception as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+    _emit_document_set_event(
+        AuditAction.DOCUMENT_SET_UPDATE,
+        user,
+        document_set_update_request.id,
+        document_set_update_request,
+    )
 
     if not DISABLE_VECTOR_DB:
         client_app.send_task(
@@ -219,6 +260,7 @@ def delete_document_set(
         )
     except Exception as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+    _emit_document_set_event(AuditAction.DOCUMENT_SET_DELETE, user, document_set_id)
 
     if DISABLE_VECTOR_DB:
         db_session.refresh(document_set)

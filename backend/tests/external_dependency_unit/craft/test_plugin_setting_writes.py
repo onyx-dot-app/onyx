@@ -149,6 +149,19 @@ def test_one_name_in_two_marketplaces(
     )
 
 
+def test_a_free_name_never_ends_its_base_with_a_hyphen(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """A cut base that ends with "-" loses it, so the free name has no "--"."""
+    user = make_user(db_session, standard_account=True)
+    uploads_id = get_or_create_user_uploads__no_commit(user.id, db_session)
+    name = f"{uuid4().hex[:8]}{'a' * 53}-bc"
+    _create(db_session, uploads_id, name, user.id)
+
+    assert free_plugin_name(uploads_id, name, db_session) == f"{name[:61]}-2"
+
+
 def test_a_version_with_a_new_skill_name(
     db_session: Session,
     test_user: User,  # noqa: ARG001

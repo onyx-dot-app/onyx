@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.db.enums import (
     IntegrationAuthMethod,
@@ -273,6 +273,16 @@ class IntegrationGroupSettingsUpdate(BaseModel):
     """The groups to change. A group left out keeps its setting."""
 
     group_settings: list[IntegrationGroupSettingChange]
+
+    @field_validator("group_settings")
+    @classmethod
+    def _one_change_for_each_group(
+        cls, value: list[IntegrationGroupSettingChange]
+    ) -> list[IntegrationGroupSettingChange]:
+        group_ids = [change.group_id for change in value]
+        if len(group_ids) != len(set(group_ids)):
+            raise ValueError("Each group can appear only one time.")
+        return value
 
 
 class AdminIntegrationDetail(AdminIntegration):

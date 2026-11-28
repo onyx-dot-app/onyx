@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from onyx.integrations.call_credentials import (
     credentials_near_expiry,
-    mark_api_key_rejected,
+    mark_credential_rejected,
     resolve_fresh_call_credentials,
 )
 from onyx.integrations.connections import ConnectionProblem
@@ -221,10 +221,10 @@ def fresh_call_credentials(
 def note_rejected_credential(
     response: ToolResponse, credentials: CallCredentials
 ) -> None:
-    """A 401 on an API key marks its connection Needs reconnect."""
+    """A 401 marks the connection of the credential Needs reconnect."""
     if response.status_code != 401:
         return
     try:
-        mark_api_key_rejected(credentials)
+        mark_credential_rejected(credentials)
     except Exception:
         logger.exception("Could not record the rejected credential")

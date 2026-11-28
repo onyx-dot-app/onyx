@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import io
 import zipfile
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
 from onyx.db.enums import SkillSharePermission
-from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.server.features.skill.models import SkillPatchRequest, SkillUserShareRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import (
@@ -229,29 +229,27 @@ def test_duplicate_name_across_users(
 
 def test_same_name_enable_requires_explicit_replacement(
     basic_user: DATestUser,
+    other_basic_user: DATestUser,
 ) -> None:
     name = f"personal-switch-{uuid4().hex[:6]}"
     first = SkillManager.create_personal(basic_user, name=name)
-    with pytest.raises(httpx.HTTPStatusError) as create_exc_info:
-        SkillManager.create_personal(basic_user, name=name)
-    assert create_exc_info.value.response.status_code == 409
-    assert create_exc_info.value.response.json()["error_code"] == "SKILL_NAME_CONFLICT"
-    after_rejection = [
-        skill
-        for skill in SkillManager.list_for_user(basic_user).customs
-        if skill.name == name
-    ]
-    assert [(skill.id, skill.enabled) for skill in after_rejection] == [
-        (first.id, True)
-    ]
-
-    second = SkillManager.create_personal(
-        basic_user,
-        name=name,
-        auto_enable=False,
+    # A skill of another user with the same name, shared with this user.
+    second = SkillManager.create_personal(other_basic_user, name=name)
+    SkillManager.share(
+        second,
+        other_basic_user,
+        user_shares=[
+            SkillUserShareRequest(
+                user_id=UUID(basic_user.id), permission=SkillSharePermission.VIEWER
+            )
+        ],
     )
     assert first.enabled is True
-    assert second.enabled is False
+    assert [
+        skill.enabled
+        for skill in SkillManager.list_for_user(basic_user).customs
+        if skill.id == second.id
+    ] == [False]
 
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
         SkillManager.set_enabled(second, basic_user, True)

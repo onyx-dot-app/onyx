@@ -31,6 +31,12 @@ from onyx.db.tasks import fail_task_with_id, get_all_tasks_with_prefix
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -107,13 +113,20 @@ def generate_report(
 @router.get("/admin/usage-report/{report_name}")
 def read_usage_report(
     report_name: str,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),  # noqa: ARG001
 ) -> Response:
     try:
         file = get_usage_report_data(report_name)
     except (ValueError, RuntimeError) as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    emit_audit_event(
+        AuditAction.EXPORT_USAGE_REPORT,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="usage_report",
+        resource_id=report_name,
+    )
 
     def iterfile() -> Generator[bytes, None, None]:
         while True:

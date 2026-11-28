@@ -1,5 +1,5 @@
 import { act, render, screen } from "@tests/setup/test-utils";
-import { FilePreviewLoading } from "@/app/craft/components/output-panel/FilePreviewLoading";
+import { FilePreviewLoading } from "@/sections/file-preview/FilePreviewLoading";
 
 afterEach(() => jest.useRealTimers());
 

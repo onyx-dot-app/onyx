@@ -7876,6 +7876,89 @@
         "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
         "audience": "onyx",
         "issuer": "https://idp.example.com"
+      },
+      "auditLogs": {
+        "section": {
+          "title": "سجلات التدقيق وSIEM",
+          "description": "يكتب Onyx أحداث التدقيق كسطور JSON في سجلاته. يرسلها ناقل السجلات لديك إلى نظام SIEM. [إعداد إعادة التوجيه إلى SIEM]({url})."
+        },
+        "status": {
+          "title": "حالة تدفق التدقيق",
+          "description": "الأحداث التي كتبها Onyx. لا يستطيع Onyx رؤية ناقل السجلات أو نظام SIEM لديك، لذا تأكد من وصول الأحداث إليهما.",
+          "loadFailed": {
+            "title": "تعذر تحميل حالة تدفق التدقيق",
+            "description": "أعد تحميل الصفحة للمحاولة مرة أخرى."
+          },
+          "notEnabled": {
+            "title": "لا يكتب Onyx أحداث التدقيق",
+            "description": "يتطلب تدفق التدقيق ترخيص Enterprise."
+          },
+          "logFormat": {
+            "title": "استخدم سجلات JSON",
+            "description": "تنسيق السجل هو {logFormat}. اضبط LOG_FORMAT=json حتى يتمكن ناقل السجلات من تحليل كل سجل."
+          },
+          "noEvents": "لا توجد أحداث بعد",
+          "eventSummary": "{count, plural, one {حدث واحد} other {# أحداث}} خلال آخر 24 ساعة. آخر حدث {lastEvent}.",
+          "eventCount": "{count, plural, one {حدث واحد} other {# أحداث}} خلال آخر 24 ساعة.",
+          "classes": {
+            "authentication": "المصادقة",
+            "account_change": "تغييرات الحساب",
+            "user_access_management": "إدارة وصول المستخدمين",
+            "group_management": "إدارة المجموعات",
+            "api_activity": "نشاط واجهة API",
+            "credential_access": "الوصول إلى بيانات الاعتماد"
+          }
+        },
+        "auditEvents": {
+          "title": "أحداث التدقيق",
+          "description": "تغييرات الأمان والإدارة. هذه مفعّلة افتراضيًا."
+        },
+        "userActivity": {
+          "title": "نشاط المستخدمين",
+          "description": "ما فعله كل مستخدم، للتحقيق في الحوادث. هذه معطّلة افتراضيًا وقد تضيف أحداثًا كثيرة."
+        },
+        "categories": {
+          "authentication": {
+            "title": "المصادقة",
+            "description": "تسجيلات الدخول، ومحاولات الدخول الفاشلة، وتسجيلات الخروج، وإعادة تعيين كلمات المرور."
+          },
+          "user_and_group_management": {
+            "title": "إدارة المستخدمين والمجموعات",
+            "description": "تغييرات المستخدمين والأدوار والمجموعات، وموافقات عملاء MCP."
+          },
+          "configuration": {
+            "title": "تغييرات التكوين",
+            "description": "تغييرات الإعدادات والموصلات وبيانات الاعتماد والوكلاء ومجموعات المستندات ومفاتيح API ورموز الوصول."
+          },
+          "credential_access": {
+            "title": "الوصول إلى بيانات الاعتماد",
+            "description": "عمليات فك تشفير بيانات الاعتماد المخزنة. قد يتجاهل Onyx التكرار لنفس بيانات الاعتماد ونفس المستخدم خلال 10 دقائق."
+          },
+          "data_export": {
+            "title": "تصدير البيانات",
+            "description": "تنزيلات سجل الاستعلامات وتقارير الاستخدام وتصدير السجلات."
+          },
+          "chat": {
+            "title": "رسائل الدردشة",
+            "description": "كل إجابة في الدردشة، مع الوكيل والنموذج والأدوات والمستندات التي رآها المستخدم."
+          },
+          "search": {
+            "title": "عمليات البحث",
+            "description": "كل بحث من صفحة البحث أو واجهة API أو عميل MCP، مع المستندات التي عثر عليها."
+          },
+          "llm_gateway": {
+            "title": "طلبات بوابة LLM",
+            "description": "كل استدعاء عبر بوابة LLM، مع النموذج وعدد الرموز."
+          },
+          "file_download": {
+            "title": "تنزيلات الملفات",
+            "description": "كل ملف دردشة يقوم المستخدم بتنزيله."
+          }
+        },
+        "queryText": {
+          "title": "تضمين نص الاستعلام",
+          "description": "يضيف ما كتبه المستخدم إلى أحداث الدردشة والبحث. يضيفه Onyx فقط عندما يكون سجل الاستعلامات عاديًا."
+        }
       }
     },
     "serviceAccounts": {
@@ -12264,6 +12347,9 @@
         },
         "timedOut": {
           "text": "توقف الرد لأنه بلغ الحد الزمني."
+        },
+        "approvalExpired": {
+          "text": "توقف التشغيل المجدول لأن أحدًا لم يرد على طلب الموافقة في الوقت المحدد."
         }
       },
       "callout": {
@@ -12601,6 +12687,12 @@
           },
           "waitingForAnswer": {
             "label": "في انتظار إجابتك..."
+          },
+          "waitingForOwnerApproval": {
+            "label": "في انتظار موافقة المالك..."
+          },
+          "waitingForOwnerAnswer": {
+            "label": "في انتظار إجابة المالك..."
           },
           "runningCommand": {
             "label": "جارٍ تشغيل الأمر..."
@@ -13645,6 +13737,10 @@
       },
       "viewAllButton": {
         "label": "عرض كل الملفات ({count})"
+      },
+      "unavailable": {
+        "title": "هذا الملف غير متاح",
+        "description": "تم حذفه، أو ليس لديك صلاحية الوصول إليه."
       }
     },
     "rightPanel": {
@@ -14707,9 +14803,6 @@
       },
       "unsupported": {
         "description": "نزّل الملف لعرض محتوياته."
-      },
-      "retry": {
-        "label": "حاول مجددًا"
       },
       "download": {
         "label": "تنزيل الملف"
@@ -17631,6 +17724,12 @@
       "share": "مشاركة",
       "delete": "حذف",
       "select": "تحديد {name}"
+    },
+    "takenName": {
+      "title": "الاسم",
+      "description": "أدخل اسمًا غير مستخدم بعد.",
+      "taken": "{name} مستخدم بالفعل. اختر اسمًا مختلفًا.",
+      "invalid": "استخدم أحرفًا صغيرة وأرقامًا وشرطات مفردة، بحد أقصى {max} حرفًا."
     }
   },
   "plugins": {

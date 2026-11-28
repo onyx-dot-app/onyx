@@ -68,6 +68,8 @@ export interface PluginUploadSkill extends PluginSkillSummary {
 interface PluginUploadTargetBase {
   plugin_name: string;
   version_number: number;
+  /** A new plugin whose name the user's "My uploads" already holds. */
+  name_taken: boolean;
 }
 
 export type PluginUploadTarget =

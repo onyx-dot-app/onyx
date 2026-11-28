@@ -321,14 +321,18 @@ async def resolve_oauth_provider_access_token(
 
 def revoke_oauth_provider_token__no_commit(
     session: Session, raw_token: str, *, client_id: str, resource: str
-) -> None:
+) -> OAuthProviderGrant | None:
+    """Revoke the token's grant. Returns the grant when this call revoked it."""
     locked = _lock_token_grant(
         session, raw_token, client_id=client_id, resource=resource
     )
-    if locked is not None:
-        grant, _ = locked
-        if grant.revoked_at is None:
-            grant.revoked_at = datetime.now(timezone.utc)
+    if locked is None:
+        return None
+    grant, _ = locked
+    if grant.revoked_at is not None:
+        return None
+    grant.revoked_at = datetime.now(timezone.utc)
+    return grant
 
 
 def list_oauth_provider_grants(

@@ -66,6 +66,7 @@ from onyx.oauth_provider.models import (
     PendingOAuthProviderAuthorization,
     StoredOAuthProviderCode,
 )
+from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from shared_configs.contextvars import get_current_tenant_id
 
 _PKCE_CHALLENGE = re.compile(OAUTH_PROVIDER_SECRET_PATTERN)
@@ -172,7 +173,20 @@ def _create_grant(
             issue_refresh=issue_refresh,
         )
         session.commit()
-        return pair
+    if pair is not None:
+        emit_audit_event(
+            AuditAction.OAUTH_GRANT_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(record.user_id), email=owner.email),
+            resource_type="oauth_grant",
+            resource_id=str(pair.grant_id),
+            extra={
+                "client_id": record.authorization.client_id,
+                "client_name": record.authorization.client_name,
+                "scopes": list(pair.scopes),
+            },
+        )
+    return pair
 
 
 def _with_authorized_refresh[T](
@@ -197,10 +211,23 @@ def _with_authorized_refresh[T](
 
 def _revoke_token(token: str, *, client_id: str, resource: str) -> None:
     with get_session_with_current_tenant() as session:
-        revoke_oauth_provider_token__no_commit(
+        grant = revoke_oauth_provider_token__no_commit(
             session, token, client_id=client_id, resource=resource
         )
         session.commit()
+        if grant is None:
+            return
+        user_id = str(grant.user_id)
+        grant_id = str(grant.id)
+    # The client revoked its own token, or its owner left the workspace.
+    emit_audit_event(
+        AuditAction.OAUTH_GRANT_REVOKE,
+        AuditOutcome.SUCCESS,
+        actor=AuditActor(user_id=user_id, oauth_client_id=client_id),
+        resource_type="oauth_grant",
+        resource_id=grant_id,
+        extra={"client_id": client_id, "source": "token_revocation"},
+    )
 
 
 def _token_response(pair: OAuthProviderTokenPair) -> OAuthToken:

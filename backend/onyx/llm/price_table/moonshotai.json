@@ -8,7 +8,7 @@
         "input": 0.95,
         "output": 4
       },
-      "family": "kimi-k2",
+      "family": "kimi",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -28,6 +28,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-20",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -39,7 +40,7 @@
         "input": 0.95,
         "output": 4
       },
-      "family": "kimi-k2",
+      "family": "kimi-code",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -59,6 +60,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -70,7 +72,7 @@
         "input": 1.9,
         "output": 8
       },
-      "family": "kimi-k2",
+      "family": "kimi-code",
       "limit": {
         "context": 262144,
         "output": 262144
@@ -89,6 +91,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -102,7 +105,7 @@
         "input": 3,
         "output": 15
       },
-      "family": "kimi-k3",
+      "family": "kimi",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -135,7 +138,7 @@
         "input": 2,
         "output": 10
       },
-      "family": "kimi-k3",
+      "family": "kimi-pro",
       "limit": {
         "context": 1048576,
         "output": 1048576
@@ -168,7 +171,7 @@
         "input": 4,
         "output": 20
       },
-      "family": "kimi-k3",
+      "family": "kimi-pro",
       "limit": {
         "context": 1048576,
         "output": 1048576

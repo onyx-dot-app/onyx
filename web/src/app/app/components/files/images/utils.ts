@@ -2,7 +2,7 @@ const CHAT_FILE_URL_REGEX = /\/api\/chat\/file\/([^/?#]+)/;
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|ico|tiff?)$/i;
 
 export function buildImgUrl(fileId: string) {
-  return `/api/chat/file/${fileId}`;
+  return `/api/chat/file/${encodeURIComponent(fileId)}`;
 }
 
 /**

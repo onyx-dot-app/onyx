@@ -145,7 +145,11 @@ test.describe("Plugin upload", () => {
     );
     await plugins.expectSaveLine(`Updates ${name} to Onyx version 2`);
     await plugins.setSaveAsNew(true);
-    await plugins.expectSaveLine(`New plugin: ${name}-2`);
+    await plugins.expectSaveLine(`New plugin: ${name}`);
+    await plugins.expectPreviewText(
+      `${name} is already in use. Pick a different name.`
+    );
+    await plugins.expectSaveDisabled();
     await plugins.setSaveAsNew(false);
     await plugins.expectSaveLine(`Updates ${name} to Onyx version 2`);
     expect(await plugins.saveUpload()).toBe(firstId);

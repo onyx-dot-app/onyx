@@ -27,6 +27,14 @@ from onyx.secondary_llm_flows.document_filter import select_sections_for_expansi
 from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
+from onyx.utils.audit import (
+    AuditAction,
+    AuditActor,
+    AuditOutcome,
+    actor_from_user,
+    document_id_fields,
+    emit_audit_event,
+)
 from onyx.utils.fleet_query_telemetry import QueryMode, telemetry_query
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -75,6 +83,7 @@ def stream_search_query(
     db_session: Session,
     primary_llm: LLM | None = None,
     selection_llm_factory: Callable[[], LLM] | None = None,
+    audit_actor: AuditActor | None = None,
 ) -> Generator[
     SearchQueriesPacket | SearchDocsPacket | LLMSelectedDocsPacket | SearchErrorPacket,
     None,
@@ -252,6 +261,25 @@ def stream_search_query(
         sections,
         include_content=request.include_content,
         is_internet=False,
+    )
+
+    emit_audit_event(
+        AuditAction.SEARCH_QUERY,
+        AuditOutcome.SUCCESS,
+        actor=audit_actor or actor_from_user(user),
+        extra={
+            "api": "search_page",
+            "query_expansion_count": len(keyword_expansions),
+            **document_id_fields(
+                "retrieved_document_ids", (doc.document_id for doc in search_docs)
+            ),
+            **(
+                document_id_fields("selected_document_ids", llm_selected_doc_ids)
+                if llm_selected_doc_ids
+                else {}
+            ),
+        },
+        query_text=original_query,
     )
 
     # Yield queries packet

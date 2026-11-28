@@ -7,7 +7,7 @@
         "input": 2,
         "output": 8
       },
-      "family": "jamba",
+      "family": "jamba-large",
       "limit": {
         "context": 256000,
         "output": 4096
@@ -34,7 +34,7 @@
         "input": 0.2,
         "output": 0.4
       },
-      "family": "jamba",
+      "family": "jamba-mini",
       "limit": {
         "context": 256000,
         "output": 4096

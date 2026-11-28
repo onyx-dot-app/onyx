@@ -5,6 +5,7 @@ from onyx.configs.app_configs import USER_USAGE_TRACKING_ENABLED
 from onyx.tracing.dynamic_processor import DynamicTracingProcessor
 from onyx.tracing.framework import add_trace_processor, set_trace_processors
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
@@ -26,6 +27,14 @@ def setup_tracing() -> list[str]:
     config = _dynamic_processor.reconcile(force=True)
 
     initialized_providers = config.active_provider_names() if config else []
+
+    # EE: audit events for LLM gateway calls. Registered after
+    # set_trace_processors so it isn't wiped by the replace.
+    audit_processor = fetch_ee_implementation_or_noop(
+        "onyx.tracing.audit_processor", "build_audit_tracing_processor"
+    )()
+    if audit_processor is not None:
+        add_trace_processor(audit_processor)
 
     # Per-user usage recorder — independent of external tracing backends.
     # Registered after set_trace_processors so it isn't wiped by the replace.

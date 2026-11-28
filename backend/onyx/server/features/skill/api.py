@@ -17,7 +17,6 @@ from onyx.db.plugin import (
     ORGANIZATION_LIBRARY_ID,
     check_sharing_allowed,
     find_upload_target,
-    free_plugin_name,
     get_organization_library_default,
     get_plugin_current_version_id,
     get_plugin_version,
@@ -28,6 +27,7 @@ from onyx.db.plugin import (
     list_plugin_versions,
     lock_plugin,
     next_version_number,
+    plugin_name_taken,
     refuse_if_synced,
     set_marketplace_default__no_commit,
     unchanged_current_version,
@@ -116,6 +116,7 @@ from onyx.server.features.skill.response_helpers import (
     skill_response_for_user,
     skills_list_response_for_user,
 )
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
     build_single_file_bundle,
@@ -149,6 +150,8 @@ from onyx.skills.limits import SKILL_WRITE_MAX_BYTES, SKILL_WRITE_MAX_FILES
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
+    SKILL_NAME_MAX_LENGTH,
+    SKILL_NAME_PATTERN,
     ChatSkill,
     PluginBundle,
     PluginManifest,
@@ -274,7 +277,8 @@ def _enable_new_skill__no_commit(
 
 
 def _skill_name(skill: Plugin, db_session: Session) -> str:
-    """A skill name never changes, so the current version holds it."""
+    """The name in the current version's SKILL.md. A rename changes only
+    ``Plugin.name``, so a renamed skill keeps its former name here."""
     name = get_stored_version_content(skill.current_version_id, db_session).name
     if name is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -672,22 +676,37 @@ def _bound_upload_target(
     return plugin
 
 
+def _requested_name(name: str | None) -> str | None:
+    if name is None:
+        return None
+    if len(name) > SKILL_NAME_MAX_LENGTH or not SKILL_NAME_PATTERN.fullmatch(name):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"The name '{name}' must use only lowercase letters, numbers and "
+            f"single hyphens, and at most {SKILL_NAME_MAX_LENGTH} characters.",
+        )
+    if name in BUILT_IN_SKILLS:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"The name '{name}' is reserved.")
+    return name
+
+
 def _upload_target(
     bundle: PluginBundle,
     save_as_new: bool,
     plugin_id: UUID | None,
+    new_name: str | None,
     user: User,
     db_session: Session,
 ) -> PluginUploadTarget:
     """``plugin_id`` binds the upload to that plugin: a new version of it.
-    Without it, the manifest name picks the plugin (``find_upload_target``)."""
-    name = bundle.manifest.name
+    Without it, the manifest name picks the plugin (``find_upload_target``).
+    ``new_name`` names a new plugin. A new version keeps the plugin name."""
     if save_as_new:
         target = None
     elif plugin_id is not None:
-        target = _bound_upload_target(plugin_id, name, user, db_session)
+        target = _bound_upload_target(plugin_id, bundle.manifest.name, user, db_session)
     else:
-        target = find_upload_target(name, user.id, db_session)
+        target = find_upload_target(bundle.manifest.name, user.id, db_session)
     if target is not None:
         return PluginUploadTarget(
             kind="new_version",
@@ -695,16 +714,15 @@ def _upload_target(
             plugin_name=target.name,
             version_number=next_version_number(target.id, db_session),
         )
+    name = new_name or bundle.manifest.name
     uploads_id = get_user_uploads_id(user.id, db_session)
     return PluginUploadTarget(
         kind="new_plugin",
         plugin_id=None,
-        plugin_name=(
-            free_plugin_name(uploads_id, name, db_session)
-            if uploads_id is not None
-            else name
-        ),
+        plugin_name=name,
         version_number=1,
+        name_taken=uploads_id is not None
+        and plugin_name_taken(uploads_id, name, db_session),
     )
 
 
@@ -713,11 +731,15 @@ def inspect_plugin_upload(
     bundle: UploadFile = File(...),
     save_as_new: Annotated[bool, Form()] = False,
     plugin_id: Annotated[UUID | None, Form()] = None,
+    name: Annotated[str | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginUploadPreview:
+    new_name = _requested_name(name)
     plugin_bundle = _read_plugin_upload(bundle)
-    target = _upload_target(plugin_bundle, save_as_new, plugin_id, user, db_session)
+    target = _upload_target(
+        plugin_bundle, save_as_new, plugin_id, new_name, user, db_session
+    )
     current_version = (
         unchanged_current_version(
             target.plugin_id,
@@ -768,9 +790,11 @@ def save_plugin_upload(
     save_as_new: Annotated[bool, Form()] = False,
     auto_enable: Annotated[bool, Form()] = True,
     plugin_id: Annotated[UUID | None, Form()] = None,
+    name: Annotated[str | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginUploadResponse:
+    new_name = _requested_name(name)
     plugin_bundle = _read_plugin_upload(bundle)
     file_store = get_default_file_store()
     added = True
@@ -779,7 +803,9 @@ def save_plugin_upload(
         # Two uploads of one new name at the same time make one plugin with
         # two versions: the second one finds the first under the lock.
         lock_user_skill_preferences(user.id, db_session)
-        target = _upload_target(plugin_bundle, save_as_new, plugin_id, user, db_session)
+        target = _upload_target(
+            plugin_bundle, save_as_new, plugin_id, new_name, user, db_session
+        )
         if target.plugin_id is not None:
             plugin, version, added = add_uploaded_plugin_version__no_commit(
                 target.plugin_id, content, user, db_session
@@ -796,9 +822,8 @@ def save_plugin_upload(
             )
         else:
             plugin, enabled = create_uploaded_plugin__no_commit(
-                content, auto_enable, user, db_session
+                content, auto_enable, user, db_session, target.plugin_name
             )
-            target = target.model_copy(update={"plugin_name": plugin.name})
             if auto_enable and not enabled:
                 name_conflicts = skill_name_conflicts(
                     [skill.content.name for skill in plugin_bundle.skills],
@@ -1161,6 +1186,7 @@ def replace_current_user_skill_bundle(
         bundle.filename,
         file_store,
         expected_name=_skill_name(skill, db_session),
+        public_name=skill.name,
     ) as ingested:
         # An upload always adds a version, also for the same zip.
         replace_skill_bundle(
@@ -1426,6 +1452,7 @@ def transfer_current_user_skill_ownership(
         skill=skill,
         new_owner_user_id=target.id,
         db_session=db_session,
+        name=_requested_name(transfer_req.name),
     )
 
     after_affected = affected_user_ids_for_plugins([skill.id], db_session)

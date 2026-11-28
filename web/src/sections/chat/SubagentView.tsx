@@ -94,7 +94,7 @@ export function SubagentView({
   setPresentingDocument,
 }: SubagentViewProps) {
   const t = useTranslations("chat.subagents.view");
-  const { agents } = useChatSubagents(sessionId, false);
+  const { agents } = useChatSubagents(sessionId);
   const agent = agents.find((candidate) => candidate.id === agentId);
   const { messages, loading, failed } = useSubagentTranscript(
     sessionId,
@@ -279,7 +279,7 @@ interface SubagentBarProps {
 export function SubagentBar({ sessionId, agentId }: SubagentBarProps) {
   const t = useTranslations("chat.subagents.bar");
   const tAgents = useTranslations("chat.activity.agents");
-  const { agents, stopAgent } = useChatSubagents(sessionId, false);
+  const { agents, stopAgent } = useChatSubagents(sessionId);
   const { openParent } = useSubagentNavigation();
   const agent = agents.find((candidate) => candidate.id === agentId);
   const live = agent !== undefined && isLiveSubagent(agent);
