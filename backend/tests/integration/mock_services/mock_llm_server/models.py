@@ -53,6 +53,10 @@ class Reply(BaseModel):
     # Hold the stream after its first text chunk until the test releases this gate.
     pause_after_first_chunk: str | None = None
     heartbeat_while_paused: bool = False
+    # Wait this long before the first chunk, as a model that thinks.
+    first_chunk_delay_s: float | None = None
+    # Stream the text in this number of chunks. The default is 3.
+    text_fragments: int | None = None
     # End the stream with this provider error after the text, as a failed call.
     error_after_text: str | None = None
 
@@ -90,6 +94,10 @@ class RecordedRequest(BaseModel):
     reply_index: int | None = None
     used_default_reply: bool = False
     error: str | None = None
+    # time.monotonic() of this server: the request arrived, and the first text
+    # chunk left. For callers in the same process, such as a benchmark.
+    received_at: float = 0.0
+    first_text_at: float | None = None
 
     @property
     def prompt_text(self) -> str:

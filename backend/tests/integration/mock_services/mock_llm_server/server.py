@@ -144,8 +144,8 @@ def _pending_required(entry: _Entry) -> list[str]:
     ]
 
 
-def _fragments(text: str) -> list[str]:
-    size = max(1, -(-len(text) // _FRAGMENTS))
+def _fragments(text: str, count: int = _FRAGMENTS) -> list[str]:
+    size = max(1, -(-len(text) // count))
     return [text[i : i + size] for i in range(0, len(text), size)]
 
 
@@ -182,13 +182,21 @@ def _delta(model: str, delta: dict[str, Any], finish: str | None = None) -> str:
 
 
 def _sse(
-    reply: Reply, body: dict[str, Any], gate: threading.Event | None = None
+    reply: Reply,
+    body: dict[str, Any],
+    gate: threading.Event | None = None,
+    recorded: RecordedRequest | None = None,
 ) -> Iterator[str]:
     model = str(body.get("model", ""))
+    if reply.first_chunk_delay_s:
+        time.sleep(reply.first_chunk_delay_s)  # test-flakes: allow mock latency
     yield _delta(model, {"role": "assistant", "content": ""})
     for piece in _fragments(reply.reasoning or ""):
         yield _delta(model, {"reasoning_content": piece})
-    for index, piece in enumerate(_fragments(reply.text or "")):
+    text_fragments = reply.text_fragments or _FRAGMENTS
+    for index, piece in enumerate(_fragments(reply.text or "", text_fragments)):
+        if index == 0 and recorded is not None:
+            recorded.first_text_at = time.monotonic()
         yield _delta(model, {"content": piece})
         if index == 0 and gate is not None:
             deadline = time.monotonic() + _GATE_TIMEOUT_S
@@ -308,11 +316,13 @@ def create_app() -> FastAPI:
 
     @app.post("/scripts/{script_id}/v1/chat/completions")
     async def chat_completions(script_id: str, request: Request) -> Response:
+        received_at = time.monotonic()
         body: dict[str, Any] = await request.json()
         entry: _Entry | None = scripts.get(script_id)
         if entry is None:
             return _error(f"mock_llm_server: unknown script {script_id}")
         recorded = _parse_request(body)
+        recorded.received_at = received_at
         entry.requests.append(recorded)
         reply = _serve(entry, recorded)
         # Onyx retries a 400 whose message names a request parameter, so the
@@ -328,7 +338,7 @@ def create_app() -> FastAPI:
                 else None
             )
             return StreamingResponse(
-                _sse(reply, body, gate), media_type="text/event-stream"
+                _sse(reply, body, gate, recorded), media_type="text/event-stream"
             )
         return JSONResponse(_completion(reply, body))
 

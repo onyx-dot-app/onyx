@@ -25,7 +25,6 @@ import argparse
 import fcntl
 import json
 import os
-import socket
 import subprocess
 import sys
 import tempfile
@@ -38,6 +37,12 @@ import httpx
 import psutil
 from pydantic import BaseModel
 
+from scripts.benchmark_shared import (
+    LOCK_PATH,
+    PASSED_ENV_PREFIXES,
+    free_port,
+    read_env_file,
+)
 from scripts.docprocessing_bench.corpus import CorpusProfile, CorpusSpec
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -49,12 +54,10 @@ _ENV_FILE = _BACKEND_DIR.parent / ".vscode" / ".env"
 _PROFILE_DIR = Path(__file__).resolve().parent / "docprocessing_bench" / "profiles"
 # Every run uses the same database, index and bucket, and a second run on the
 # machine changes the timings of the first. One run at a time.
-_LOCK_PATH = Path(tempfile.gettempdir()) / "docproc-bench.lock"
 _BENCH_PREFIX = "docproc_bench"
 
 # Only connection settings pass from the env file to the worker. API keys and
 # tracing settings stay out, so a run sends nothing to an outside service.
-_PASSED_ENV_PREFIXES = ("POSTGRES_", "REDIS_", "S3_", "OPENSEARCH_", "FILE_STORE_")
 
 # Embed latency in the mock model server. `zero` shows the limit of Onyx's own
 # code. `local` and `api` are estimates until they are calibrated against a real
@@ -97,29 +100,8 @@ class PhaseKilled(Exception):
     pass
 
 
-def _free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
-
-
-def _read_env_file(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not path.exists():
-        return values
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.removeprefix("export ").strip()
-        if key.startswith(_PASSED_ENV_PREFIXES):
-            values[key] = value.strip().strip("'\"")
-    return values
-
-
 def _worker_env(mock_port: int, log_level: str) -> dict[str, str]:
-    env = _read_env_file(_ENV_FILE)
+    env = read_env_file(_ENV_FILE)
     env.update(os.environ)
     env.update(_bench_env(mock_port, log_level))
     return env
@@ -194,7 +176,7 @@ def _container_command(
     container_env = {
         key: value
         for key, value in env.items()
-        if key.startswith(_PASSED_ENV_PREFIXES) or key in _BENCH_ENV_KEYS
+        if key.startswith(PASSED_ENV_PREFIXES) or key in _BENCH_ENV_KEYS
     }
     container_env.update(limits.env)
     # A file keeps the passwords out of the process list.
@@ -530,7 +512,7 @@ def main() -> None:
         if name not in _PASS_REVISION:
             parser.error(f"unknown pass '{name}'")
 
-    lock_file = open(_LOCK_PATH, "w")  # noqa: SIM115 - held until the process exits
+    lock_file = open(LOCK_PATH, "w")  # noqa: SIM115 - held until the process exits
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -555,7 +537,7 @@ def main() -> None:
     corpus_json = spec.model_dump_json()
     index_name = f"{_BENCH_PREFIX}_index"
     log_dir = Path(tempfile.mkdtemp(prefix="docproc-bench-"))
-    mock_port = _free_port()
+    mock_port = free_port()
     mock_url = f"http://127.0.0.1:{mock_port}"
     env = _worker_env(mock_port, args.log_level)
 
