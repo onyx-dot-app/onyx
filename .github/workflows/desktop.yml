@@ -1,6 +1,6 @@
 name: Desktop
 concurrency:
-  group: Desktop-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: Desktop-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_id) || github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 # Checks and unsigned review builds of the desktop app (desktop/). The release
@@ -16,6 +16,14 @@ permissions:
   contents: read
 
 jobs:
+  cancel-superseded:
+    # Keeps only the newest run for a same-repo PR (see the called workflow).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/reusable-cancel-superseded-runs.yml
+
   check-and-build:
     name: Check and build (macOS universal)
     runs-on: macos-latest

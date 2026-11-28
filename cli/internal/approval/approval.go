@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
@@ -23,12 +24,44 @@ const (
 
 // Title names the tool that waits for approval.
 func Title(req models.ToolApprovalRequestEvent) string {
+	title := "Tool call"
 	for _, name := range []string{req.DisplayName, req.ToolName} {
-		if title := truncate(sanitize.Line(name), maxKeyRunes); title != "" {
-			return title
+		if name := truncate(sanitize.Line(name), maxKeyRunes); name != "" {
+			title = name
+			break
 		}
 	}
-	return "Tool call"
+	if app := truncate(sanitize.Line(req.AppName), maxKeyRunes); app != "" {
+		title += " in " + app
+	}
+	return title
+}
+
+// WiderApproval is the approval beyond this request that the server allows:
+// for the rest of a VM command, or for the rest of the chat. ok is false when
+// the action asks each time.
+func WiderApproval(req models.ToolApprovalRequestEvent) (decision models.ApprovalDecision, label string, ok bool) {
+	switch {
+	case req.CanApproveForCommand:
+		return models.ApproveCommand, "Approve for this command", true
+	case req.CanApproveForChat != nil && !*req.CanApproveForChat:
+		return "", "", false
+	default:
+		return models.ApproveSession, "Approve for this chat", true
+	}
+}
+
+// Deadline is the local time by which the request needs a decision, or empty.
+func Deadline(req models.ToolApprovalRequestEvent) string {
+	if req.ExpiresAt == "" {
+		return ""
+	}
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999999999"} {
+		if at, err := time.Parse(layout, req.ExpiresAt); err == nil {
+			return "Approve by " + at.Local().Format("15:04")
+		}
+	}
+	return ""
 }
 
 // AgentRequest names the background agent that asks to run the tool, as the
@@ -98,7 +131,7 @@ func OutcomeLabel(outcome string) string {
 	case models.ApprovalOutcomeApproved:
 		return "Approved"
 	case models.ApprovalOutcomeApprovedForChat:
-		return "Approved for this session"
+		return "Approved for this chat"
 	case models.ApprovalOutcomeApprovedForCommand:
 		return "Approved for this command"
 	case models.ApprovalOutcomeRejected:
@@ -120,6 +153,8 @@ func DecisionOutcome(result models.ApprovalDecisionResult) string {
 		return models.ApprovalOutcomeRejected
 	case result.DecidedVia == "SESSION_GRANT":
 		return models.ApprovalOutcomeApprovedForChat
+	case result.DecidedVia == "COMMAND_GRANT":
+		return models.ApprovalOutcomeApprovedForCommand
 	default:
 		return models.ApprovalOutcomeApproved
 	}

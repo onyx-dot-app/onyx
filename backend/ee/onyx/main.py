@@ -33,6 +33,7 @@ from ee.onyx.server.query_and_chat.search_backend import router as search_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.scim.api import register_scim_exception_handlers, scim_router
+from ee.onyx.server.security.api import router as security_router
 from ee.onyx.server.seeding import seed_db
 from ee.onyx.server.service_status.api import router as service_status_router
 from ee.onyx.server.spending_limits.api import router as spending_limits_router
@@ -151,6 +152,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, usage_export_router)
     # Admin log export
     include_router_with_global_prefix_prepended(application, log_export_router)
+    include_router_with_global_prefix_prepended(application, security_router)
     # License management
     include_router_with_global_prefix_prepended(application, license_router)
 

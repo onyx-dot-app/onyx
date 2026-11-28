@@ -16,6 +16,8 @@ from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.db.enums import AccountType, Permission
 from tests.utils.audit import audit_events
 
+pytestmark = pytest.mark.usefixtures("enterprise_audit")
+
 
 def _make_db_session(
     existing_user_ids: list[Any], existing_cc_pair_ids: list[int]

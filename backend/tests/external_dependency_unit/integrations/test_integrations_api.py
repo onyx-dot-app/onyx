@@ -5,7 +5,7 @@ actions, the member choices, the agent integrations and the public tool aliases.
 import json
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -87,6 +87,7 @@ from onyx.server.features.integrations.models import (
     OpenApiConfigInput,
     PresetConfigInput,
 )
+from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 from onyx.server.features.persona import api as persona_api
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import (
@@ -1188,6 +1189,12 @@ def _unauthorized(status: int) -> HTTPStatusError:
             400,
             "{name} refused the credential. Reconnect it and try again.",
         ),
+        (
+            True,
+            MCPReauthenticationRequired(),
+            400,
+            "{name} refused the credential. Reconnect it and try again.",
+        ),
         (True, ConnectError("refused"), 502, "Could not reach {name}."),
     ],
 )
@@ -1966,6 +1973,48 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     assert read_connection_secret(connection).fields == {"X-Api-Key": "abc{1}-secret"}
 
 
+def test_only_a_manager_reads_custom_tool_header_values(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    """Members read tool and agent snapshots, so they get no part of a shared
+    header secret. A manager keeps the partial mask, which Terraform compares
+    with its known value."""
+    secret = "sk-proj-AAAABBBBCCCCDDDD"
+    snapshot = tool_api.create_custom_tool(
+        CustomToolCreate(
+            name=f"shared-key-{uuid4().hex[:8]}",
+            description="Shared key",
+            definition=OPENAPI_SPEC,
+            custom_headers=[Header(key="X-Api-Key", value=secret)],
+            passthrough_auth=False,
+        ),
+        db_session,
+        admin,
+    )
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+    give_access(db_session, [integration])
+
+    managed = tool_api.get_custom_tool(snapshot.id, db_session, admin)
+    assert managed.custom_headers == [
+        {"key": "X-Api-Key", "value": mask_string(secret)}
+    ]
+    assert (
+        tool_api.get_custom_tool(snapshot.id, db_session, member).custom_headers is None
+    )
+
+    persona_id = _persona(
+        db_session, admin, tool_ids=[snapshot.id], integration_links=None
+    )
+    for reader in (member, admin):
+        agent = persona_api.get_persona(persona_id, reader, db_session)
+        tool = next(tool for tool in agent.tools if tool.id == snapshot.id)
+        assert tool.custom_headers is None
+
+
 def test_custom_tool_alias_keeps_a_passthrough_header_with_braces(
     db_session: Session, admin: User, created: Created
 ) -> None:
@@ -2152,3 +2201,454 @@ def test_the_custom_tool_alias_refuses_a_spec_over_5_mb(
             snapshot.id, CustomToolUpdate(definition=large), db_session, admin
         )
     assert error.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
+
+
+# Edits that must not leave stale state
+
+
+def _mcp_spec(key: str) -> IntegrationActionSpec:
+    return IntegrationActionSpec(
+        key=key,
+        source=IntegrationActionSource.MCP,
+        display_name=key,
+        description=None,
+        read_only=None,
+        default_policy=IntegrationActionPolicyValue.ASK,
+    )
+
+
+def test_a_server_url_change_replaces_the_actions_of_the_old_server(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://old.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("old_tool",),
+    )
+    created.add(integration.id)
+
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        return_value=[_mcp_spec("new_tool")],
+    ):
+        admin_api.update_integration(
+            integration.id,
+            IntegrationUpdate(
+                config=McpServerConfigInput(server_url="https://new.example.com/mcp")
+            ),
+            admin,
+            db_session,
+        )
+    assert [a.key for a in list_integration_actions(integration.id, db_session)] == [
+        "new_tool"
+    ]
+
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        side_effect=ConnectError("down"),
+    ):
+        admin_api.update_integration(
+            integration.id,
+            IntegrationUpdate(
+                config=McpServerConfigInput(server_url="https://down.example.com/mcp")
+            ),
+            admin,
+            db_session,
+        )
+    assert list_integration_actions(integration.id, db_session) == []
+
+
+def test_the_policy_of_a_removed_action_does_not_come_back(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    from onyx.db.models import IntegrationActionPolicy
+    from onyx.integrations.models import EffectivePolicy
+
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("tool",),
+    )
+    created.add(integration.id)
+    admin_api.set_integration_actions(
+        integration.id,
+        IntegrationActionsUpdate(actions={"tool": EffectivePolicy.BLOCKED}),
+        admin,
+        db_session,
+    )
+
+    for actions in ([], [_mcp_spec("tool")]):
+        with patch("onyx.integrations.service.fetch_mcp_actions", return_value=actions):
+            admin_api.refresh_integration_actions(integration.id, admin, db_session)
+
+    assert (
+        db_session.scalars(
+            select(IntegrationActionPolicy).where(
+                IntegrationActionPolicy.integration_id == integration.id,
+                IntegrationActionPolicy.action == "tool",
+            )
+        ).all()
+        == []
+    )
+
+
+def test_a_server_that_does_not_answer_after_an_edit_keeps_the_policies(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    from onyx.db.enums import MCPTransport
+    from onyx.integrations.models import EffectivePolicy
+
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("tool",),
+    )
+    created.add(integration.id)
+    admin_api.set_integration_actions(
+        integration.id,
+        IntegrationActionsUpdate(actions={"tool": EffectivePolicy.BLOCKED}),
+        admin,
+        db_session,
+    )
+
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        side_effect=ConnectError("down"),
+    ):
+        admin_api.update_integration(
+            integration.id,
+            IntegrationUpdate(
+                config=McpServerConfigInput(
+                    server_url="https://mcp.example.com/mcp",
+                    transport=MCPTransport.SSE,
+                )
+            ),
+            admin,
+            db_session,
+        )
+    assert list_integration_actions(integration.id, db_session) == []
+
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        return_value=[_mcp_spec("tool")],
+    ):
+        actions = admin_api.refresh_integration_actions(
+            integration.id, admin, db_session
+        )
+
+    assert [(a.key, a.admin_policy) for a in actions.actions] == [
+        ("tool", EffectivePolicy.BLOCKED)
+    ]
+
+
+def test_a_spec_sync_keeps_the_policy_of_the_other_request_action(
+    db_session: Session, created: Created
+) -> None:
+    from onyx.db.enums import IntegrationActionPolicyValue, IntegrationActionSource
+    from onyx.db.integration import replace_integration_actions__no_commit
+    from onyx.db.models import IntegrationActionPolicy
+    from onyx.external_apps.models import OTHER_REQUEST_ACTION_KEY
+
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=(),
+    )
+    created.add(integration.id)
+    db_session.add(
+        IntegrationActionPolicy(
+            integration_id=integration.id,
+            action=OTHER_REQUEST_ACTION_KEY,
+            policy=IntegrationActionPolicyValue.BLOCKED,
+        )
+    )
+    db_session.flush()
+
+    replace_integration_actions__no_commit(
+        integration.id, IntegrationActionSource.OPENAPI, [], db_session
+    )
+
+    assert db_session.scalars(
+        select(IntegrationActionPolicy.action).where(
+            IntegrationActionPolicy.integration_id == integration.id
+        )
+    ).all() == [OTHER_REQUEST_ACTION_KEY]
+
+
+def test_a_refresh_without_an_action_drops_the_policy_that_a_failed_edit_kept(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    from onyx.db.enums import MCPTransport
+    from onyx.db.models import IntegrationActionPolicy
+    from onyx.integrations.models import EffectivePolicy
+
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("tool",),
+    )
+    created.add(integration.id)
+    admin_api.set_integration_actions(
+        integration.id,
+        IntegrationActionsUpdate(actions={"tool": EffectivePolicy.BLOCKED}),
+        admin,
+        db_session,
+    )
+    with patch(
+        "onyx.integrations.service.fetch_mcp_actions",
+        side_effect=ConnectError("down"),
+    ):
+        admin_api.update_integration(
+            integration.id,
+            IntegrationUpdate(
+                config=McpServerConfigInput(
+                    server_url="https://mcp.example.com/mcp",
+                    transport=MCPTransport.SSE,
+                )
+            ),
+            admin,
+            db_session,
+        )
+
+    for actions in ([_mcp_spec("other")], [_mcp_spec("other"), _mcp_spec("tool")]):
+        with patch("onyx.integrations.service.fetch_mcp_actions", return_value=actions):
+            admin_api.refresh_integration_actions(integration.id, admin, db_session)
+
+    assert (
+        db_session.scalars(
+            select(IntegrationActionPolicy).where(
+                IntegrationActionPolicy.integration_id == integration.id,
+                IntegrationActionPolicy.action == "tool",
+            )
+        ).all()
+        == []
+    )
+
+
+def test_a_switch_from_oauth_to_no_sign_in_drops_the_token_template(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(
+        _oauth_create().model_copy(
+            update={"header_template": {"Authorization": "Bearer {access_token}"}}
+        ),
+        admin,
+        db_session,
+    )
+    created.add(detail.id)
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(auth_mode=IntegrationAuthMode.NONE, auth_method=None),
+        admin,
+        db_session,
+    )
+
+    assert updated.header_template is None
+
+
+def test_a_preset_that_needs_a_sign_in_cannot_be_added_with_none(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    with pytest.raises(OnyxError) as error:
+        detail = admin_api.create_integration(
+            IntegrationCreate(
+                for_organization=True,
+                name=f"github-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.NONE,
+                config=PresetConfigInput(preset_id="GITHUB"),
+            ),
+            admin,
+            db_session,
+        )
+        created.add(detail.id)
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+    assert error.value.detail == "This integration needs a sign-in."
+    db_session.rollback()
+
+
+def test_a_scheme_relative_server_url_with_a_blocked_host_is_refused_on_fetch() -> None:
+    from onyx.integrations.service import import_openapi_document
+    from onyx.server.features.integrations.models import OpenApiEndpointsRequest
+
+    blocked = json.dumps(
+        {**OPENAPI_SPEC, "servers": [{"url": "//169.254.169.254/api"}]}
+    )
+    # The admin's base URL replaces a URL with no scheme in an uploaded spec.
+    with_query = json.dumps(
+        {**OPENAPI_SPEC, "servers": [{"url": "//pets.example.com/api?v=1"}]}
+    )
+    for document in (blocked, with_query):
+        import_openapi_document(OpenApiEndpointsRequest(openapi_document=document))
+
+    response = MagicMock(status_code=200, headers={})
+    response.raw.read1.side_effect = [blocked.encode(), b""]
+    get = MagicMock()
+    get.return_value.__enter__.return_value = response
+    with (
+        patch("onyx.integrations.service.ssrf_safe_get", get),
+        pytest.raises(OnyxError) as error,
+    ):
+        import_openapi_document(
+            OpenApiEndpointsRequest(spec_url="https://specs.example.com/openapi.json")
+        )
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+
+
+def test_a_spec_with_a_blocked_server_url_is_refused_on_import() -> None:
+    from onyx.integrations.service import import_openapi_document
+    from onyx.server.features.integrations.models import OpenApiEndpointsRequest
+
+    spec = {**OPENAPI_SPEC, "servers": [{"url": "http://169.254.169.254"}]}
+    with pytest.raises(OnyxError) as error:
+        import_openapi_document(
+            OpenApiEndpointsRequest(openapi_document=json.dumps(spec))
+        )
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+
+    relative = {**OPENAPI_SPEC, "servers": [{"url": "/api/v3"}]}
+    view = import_openapi_document(
+        OpenApiEndpointsRequest(openapi_document=json.dumps(relative))
+    )
+    assert view.base_url == "/api/v3"
+
+    broken = {**OPENAPI_SPEC, "servers": [{"url": "https://[broken"}]}
+    with pytest.raises(OnyxError) as error:
+        import_openapi_document(
+            OpenApiEndpointsRequest(openapi_document=json.dumps(broken))
+        )
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+
+    # The admin's base URL replaces the relative URL of an uploaded spec.
+    with_query = {**OPENAPI_SPEC, "servers": [{"url": "/api?version=1"}]}
+    view = import_openapi_document(
+        OpenApiEndpointsRequest(openapi_document=json.dumps(with_query))
+    )
+    assert view.base_url == "/api?version=1"
+
+    # The client resolves the relative URL of a fetched spec, query included.
+    response = MagicMock(status_code=200, headers={})
+    response.raw.read1.side_effect = [json.dumps(with_query).encode(), b""]
+    get = MagicMock()
+    get.return_value.__enter__.return_value = response
+    with (
+        patch("onyx.integrations.service.ssrf_safe_get", get),
+        pytest.raises(OnyxError) as error,
+    ):
+        import_openapi_document(
+            OpenApiEndpointsRequest(spec_url="https://pets.example.com/spec.json")
+        )
+    assert error.value.error_code is OnyxErrorCode.VALIDATION_ERROR
+
+
+def test_a_key_is_trimmed_and_a_key_that_a_header_cannot_carry_is_refused(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]
+    ):
+        integration = admin_api.create_integration(
+            IntegrationCreate(
+                for_organization=True,
+                name=f"mcp-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.INDIVIDUAL,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"Authorization": "Bearer {api_key}"},
+                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+            ),
+            admin,
+            db_session,
+        )
+    created.add(integration.id)
+
+    for unsendable in ("key\u2713", "caf\u00e9"):
+        with pytest.raises(OnyxError) as error:
+            api.save_member_connection(
+                integration.id,
+                ConnectionFieldsRequest(fields={"api_key": unsendable}),
+                member,
+                db_session,
+            )
+        assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+        db_session.rollback()
+
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]
+    ) as discover:
+        api.save_member_connection(
+            integration.id,
+            ConnectionFieldsRequest(fields={"api_key": "  right-key \n"}),
+            member,
+            db_session,
+        )
+    assert discover.call_args.args[1] == {"Authorization": "Bearer right-key"}
+
+
+def test_a_member_can_clear_always_allow_after_the_admin_turns_it_off(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    api.save_action_grants(
+        detail.id,
+        ActionGrantsUpdate(actions={"set_alert": "allow"}),
+        member,
+        db_session,
+    )
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(users_can_save_always_allow=False),
+        admin,
+        db_session,
+    )
+
+    with pytest.raises(OnyxError):
+        api.save_action_grants(
+            detail.id,
+            ActionGrantsUpdate(actions={"set_alert": "allow"}),
+            member,
+            db_session,
+        )
+    db_session.rollback()
+    api.save_action_grants(
+        detail.id, ActionGrantsUpdate(actions={"set_alert": None}), member, db_session
+    )
+    assert all(
+        action.user_policy is None
+        for action in api.get_action_grants(detail.id, member, db_session).actions
+    )
+
+
+def test_a_request_cannot_repeat_a_group_or_an_agent_integration() -> None:
+    from onyx.server.features.integrations.models import (
+        IntegrationGroupSettingChange,
+        IntegrationGroupSettingsUpdate,
+    )
+    from onyx.server.features.persona.models import PersonaUpsertRequest
+
+    change = IntegrationGroupSettingChange(group_id=1, installation_policy=None)
+    with pytest.raises(ValidationError):
+        IntegrationGroupSettingsUpdate(group_settings=[change, change])
+
+    def agent(links: list[PersonaIntegrationLink] | None) -> PersonaUpsertRequest:
+        return PersonaUpsertRequest(
+            name="agent",
+            description="",
+            system_prompt="",
+            task_prompt="",
+            datetime_aware=False,
+            document_set_ids=[],
+            tool_ids=[],
+            integrations=links,
+        )
+
+    first = PersonaIntegrationLink(integration_id=1)
+    with pytest.raises(ValidationError):
+        agent([first, PersonaIntegrationLink(integration_id=1)])
+    assert agent([first, PersonaIntegrationLink(integration_id=2)]).integrations
+    assert agent(None).integrations is None

@@ -260,13 +260,51 @@ describe("AgentTimeline's collapsed run card", () => {
 
 describe("AgentTimeline while a tool call waits for the user", () => {
   it.each([
-    ["parallel tool calls", parallelTurn, false, "approval"],
-    ["a preamble", sequentialTurn, true, "approval"],
-    ["a preamble and a question", sequentialTurn, true, "answer"],
-    ["a preamble and only a question", noTurns, true, "answer"],
+    [
+      "parallel tool calls",
+      parallelTurn,
+      false,
+      "approval",
+      "Waiting for your approval...",
+    ],
+    [
+      "a preamble",
+      sequentialTurn,
+      true,
+      "approval",
+      "Waiting for your approval...",
+    ],
+    [
+      "a preamble and a question",
+      sequentialTurn,
+      true,
+      "answer",
+      "Waiting for your answer...",
+    ],
+    [
+      "a preamble and only a question",
+      noTurns,
+      true,
+      "answer",
+      "Waiting for your answer...",
+    ],
+    [
+      "tool calls in a chat that the viewer only reads",
+      parallelTurn,
+      false,
+      "ownerApproval",
+      "Waiting for the owner's approval...",
+    ],
+    [
+      "a question in a chat that the viewer only reads",
+      noTurns,
+      true,
+      "ownerAnswer",
+      "Waiting for the owner's answer...",
+    ],
   ] as const)(
     "names the wait after %s",
-    (_, turnGroups, hasDisplayContent, awaitingUser) => {
+    (_, turnGroups, hasDisplayContent, awaitingUser, label) => {
       render(
         <AgentTimeline
           turnGroups={turnGroups}
@@ -276,13 +314,7 @@ describe("AgentTimeline while a tool call waits for the user", () => {
         />
       );
 
-      expect(
-        screen.getByText(
-          awaitingUser === "approval"
-            ? "Waiting for your approval..."
-            : "Waiting for your answer..."
-        )
-      ).toBeVisible();
+      expect(screen.getByText(label)).toBeVisible();
     }
   );
 });

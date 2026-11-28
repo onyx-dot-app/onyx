@@ -63,6 +63,10 @@ PUBLIC_ENDPOINT_SPECS = [
     # no user dependency by design (the code IS the credential), so it must be
     # declared public to satisfy the startup public-route assertion.
     ("/auth/mobile/sso/exchange", {"POST"}),
+    # /request only mails a link and
+    # /redeem is authenticated by the one-time token in its body.
+    ("/auth/magic-link/request", {"POST"}),
+    ("/auth/magic-link/redeem", {"POST"}),
     ("/users/me", {"GET"}),
     ("/users/me", {"PATCH"}),
     ("/users/{id}", {"GET"}),

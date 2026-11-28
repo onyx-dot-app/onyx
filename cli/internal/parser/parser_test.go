@@ -392,6 +392,27 @@ func TestToolApprovalRequest(t *testing.T) {
 	}
 }
 
+func TestToolApprovalRequestReadsTheApprovalScope(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":                    "tool_approval_request",
+		"approval_id":             "a1",
+		"can_approve_for_chat":    false,
+		"can_approve_for_command": true,
+		"app_name":                "Deploy",
+		"expires_at":              "2026-01-01T10:30:00Z",
+	}, 1, 0)
+	e, ok := ParseStreamLine(line).(models.ToolApprovalRequestEvent)
+	if !ok {
+		t.Fatal("expected ToolApprovalRequestEvent")
+	}
+	if e.CanApproveForChat == nil || *e.CanApproveForChat || !e.CanApproveForCommand {
+		t.Errorf("approval scope = %v, %v", e.CanApproveForChat, e.CanApproveForCommand)
+	}
+	if e.AppName != "Deploy" || e.ExpiresAt != "2026-01-01T10:30:00Z" {
+		t.Errorf("app name or deadline = %q, %q", e.AppName, e.ExpiresAt)
+	}
+}
+
 func TestToolApprovalRequestToleratesBadFields(t *testing.T) {
 	line := makePacket(map[string]interface{}{
 		"type":        "tool_approval_request",

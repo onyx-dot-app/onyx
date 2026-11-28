@@ -40,6 +40,7 @@ export function TransferTrailingButton({
   return (
     <Button
       icon={SvgArrowExchange}
+      aria-label={t("transferOwnership.trailingButton.tooltip")}
       onClick={onTransfer}
       prominence="tertiary"
       size="sm"

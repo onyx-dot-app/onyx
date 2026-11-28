@@ -5,6 +5,8 @@ from typing import Any
 import pytest
 from scripts.sync_price_table import (
     _build_provider_section,
+    _check_litellm_schema,
+    _preserve_retired_models,
     _preserve_unbounded_flags,
     merge_litellm,
     merge_openrouter,
@@ -271,3 +273,55 @@ def test_build_provider_section_drops_nested_negative_rates() -> None:
     assert cost["tiers"] == [
         {"tier": {"type": "context", "size": 272000}, "output": 15.0}
     ]
+
+
+def _image_entry() -> dict[str, Any]:
+    return {
+        "litellm_provider": "fal_ai",
+        "mode": "image_generation",
+        "output_cost_per_image": 0.04,
+    }
+
+
+def test_litellm_schema_check_ignores_entries_priced_per_image() -> None:
+    # Per-image and per-second entries outnumber chat entries upstream.
+    litellm_map = {f"chat-{i}": _chat_entry("openai") for i in range(600)}
+    litellm_map |= {f"image-{i}": _image_entry() for i in range(900)}
+
+    _check_litellm_schema(litellm_map)
+
+
+def test_litellm_schema_check_fails_when_chat_entries_lose_token_costs() -> None:
+    renamed = _chat_entry("openai")
+    renamed["input_cost_per_million_tokens"] = renamed.pop("input_cost_per_token")
+    litellm_map = {f"chat-{i}": dict(renamed) for i in range(1500)}
+
+    with pytest.raises(AssertionError, match="input_cost_per_token"):
+        _check_litellm_schema(litellm_map)
+
+
+def test_models_that_leave_upstream_stay_vendored(tmp_path: Path) -> None:
+    vendored = {
+        "models": {
+            "gpt-4": {"id": "gpt-4", "status": "deprecated"},
+            "o4-mini": {"id": "o4-mini"},
+            "gpt-6": {"id": "gpt-6", "cost": {"input": 1.0}},
+        },
+        "aliases": {"gpt-4-0613": "gpt-4", "gpt-6-latest": "gpt-6"},
+    }
+    (tmp_path / "openai.json").write_text(json.dumps(vendored))
+    providers = _providers()
+    providers["openai"]["models"]["gpt-6"] = {"id": "gpt-6", "cost": {"input": 2.0}}
+
+    _preserve_retired_models(providers, tmp_path)
+
+    models = providers["openai"]["models"]
+    assert models["gpt-4"] == {"id": "gpt-4", "status": "deprecated"}
+    # Upstream also drops ids it only renamed, so the status stays as it was.
+    assert models["o4-mini"] == {"id": "o4-mini"}
+    # Upstream still has gpt-6, so its fresh entry wins.
+    assert models["gpt-6"] == {"id": "gpt-6", "cost": {"input": 2.0}}
+    assert providers["openai"]["aliases"] == {
+        "gpt-4-0613": "gpt-4",
+        "gpt-6-latest": "gpt-6",
+    }

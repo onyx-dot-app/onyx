@@ -37,14 +37,19 @@ type approvalCard struct {
 	expanded bool
 }
 
-var approvalActions = []struct {
+type approvalAction struct {
 	decision models.ApprovalDecision
 	label    string
 	key      string
-}{
-	{models.ApproveOnce, "Approve once", "y"},
-	{models.ApproveSession, "Approve for this session", "a"},
-	{models.RejectApproval, "Reject", "n"},
+}
+
+// approvalActions are the decisions that the request offers.
+func approvalActions(request models.ToolApprovalRequestEvent) []approvalAction {
+	actions := []approvalAction{{models.ApproveOnce, "Approve once", "y"}}
+	if decision, label, ok := approval.WiderApproval(request); ok {
+		actions = append(actions, approvalAction{decision, label, "a"})
+	}
+	return append(actions, approvalAction{models.RejectApproval, "Reject", "n"})
 }
 
 // approvalDecidedMsg carries the server's answer to a decision.
@@ -73,6 +78,10 @@ func renderApprovalCard(card approvalCard, active, stoppable bool, width int) st
 	if agent := approval.AgentRequest(card.request); agent != "" {
 		lines = append(lines, dimInfoStyle.Render("    "+agent))
 	}
+	if deadline := approval.Deadline(card.request); deadline != "" {
+		lines = append(lines, dimInfoStyle.Render("    "+deadline))
+	}
+	actions := approvalActions(card.request)
 	if card.expanded {
 		// Wrap instead of truncating, so no part of a value is hidden.
 		wrapAt := max(width-5, 16)
@@ -90,14 +99,16 @@ func renderApprovalCard(card approvalCard, active, stoppable bool, width int) st
 	case !active:
 		lines = append(lines, dimInfoStyle.Render("    Waits for the request above."))
 	case card.sending != "":
-		for _, action := range approvalActions {
+		for _, action := range actions {
 			if action.decision == card.sending {
 				lines = append(lines, dimInfoStyle.Render("    Sending: "+action.label+"…"))
 			}
 		}
 	default:
 		selected := lipgloss.NewStyle().Foreground(accentColor).Bold(true)
-		for i, action := range approvalActions {
+		keys := make([]string, len(actions))
+		for i, action := range actions {
+			keys[i] = action.key
 			row := action.label + " (" + action.key + ")"
 			if i == card.selected {
 				lines = append(lines, "  "+selected.Render("> "+row))
@@ -109,7 +120,7 @@ func renderApprovalCard(card approvalCard, active, stoppable bool, width int) st
 		if card.expanded {
 			details = "d show less"
 		}
-		hint := "    ↑↓ select • enter confirm • y/a/n • " + details
+		hint := "    ↑↓ select • enter confirm • " + strings.Join(keys, "/") + " • " + details
 		if stoppable {
 			hint += " • esc stop the response"
 		}
@@ -540,13 +551,14 @@ func (m Model) handleApprovalKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	if card.sending != "" {
 		return m, nil, false
 	}
+	actions := approvalActions(card.request)
 	key := msg.String()
 	switch key {
 	case "up", "down":
 		if key == "up" && card.selected > 0 {
 			card.selected--
 		}
-		if key == "down" && card.selected < len(approvalActions)-1 {
+		if key == "down" && card.selected < len(actions)-1 {
 			card.selected++
 		}
 		m.renderCards()
@@ -557,14 +569,14 @@ func (m Model) handleApprovalKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	}
 	switch key {
 	case "enter":
-		m, cmd := m.decideApproval(index, approvalActions[card.selected].decision)
+		m, cmd := m.decideApproval(index, actions[card.selected].decision)
 		return m, cmd, true
 	case "d":
 		card.expanded = !card.expanded
 		m.renderCards()
 		return m, nil, true
 	}
-	for _, action := range approvalActions {
+	for _, action := range actions {
 		if key == action.key {
 			m, cmd := m.decideApproval(index, action.decision)
 			return m, cmd, true

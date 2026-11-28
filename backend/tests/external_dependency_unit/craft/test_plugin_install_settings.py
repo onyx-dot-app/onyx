@@ -43,6 +43,7 @@ from onyx.skills import push
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
+    make_org_marketplace,
     make_skill,
     make_user,
     set_current_version_validity,
@@ -349,12 +350,10 @@ def test_version_each_kind_of_user_runs(
     newest = {owner.id, editor.id, viewer.id, group_member.id}
     for user in users:
         state = states[(user.id, skill.id)]
-        if user.id in newest:
-            assert state.version_id == draft_id, user.email
-            assert state.skill_names == (f"{skill.name}-draft",)
-        else:
-            assert state.version_id == published_id, user.email
-            assert state.skill_names == (skill.name,)
+        expected = draft_id if user.id in newest else published_id
+        assert state.version_id == expected, user.email
+        # A skill's name is its plugin name, not the frontmatter name.
+        assert state.skill_names == (skill.name,)
     assert states[(setting_member.id, skill.id)].installation_policy == DEFAULT
     assert states[(setting_member.id, skill.id)].enabled
 
@@ -376,11 +375,17 @@ def test_name_order(
     user = make_user(db_session, standard_account=True)
     owner = make_user(db_session, standard_account=True)
     name = f"name-order-{uuid4().hex[:8]}"
+    other_owner = make_user(db_session, standard_account=True)
     required = make_skill(db_session, name=name, is_public=True)
-    published = make_skill(db_session, name=name, is_public=True)
+    published = make_skill(
+        db_session,
+        name=name,
+        is_public=True,
+        marketplace_id=make_org_marketplace(db_session),
+    )
     own = make_skill(db_session, name=name, author_user_id=user.id)
     shared_old = make_skill(db_session, name=name, author_user_id=owner.id)
-    shared_new = make_skill(db_session, name=name, author_user_id=owner.id)
+    shared_new = make_skill(db_session, name=name, author_user_id=other_owner.id)
     _set_company_setting(db_session, required, REQUIRED)
     _set_company_setting(db_session, published, DEFAULT)
     for age, skill in enumerate((shared_new, shared_old, own, published, required)):

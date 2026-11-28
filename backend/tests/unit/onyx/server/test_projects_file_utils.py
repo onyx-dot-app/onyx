@@ -620,3 +620,19 @@ def test_code_file_over_token_threshold_rejected(
     assert result.acceptable == []
     assert result.acceptable_skip_indexing == []
     assert result.rejected[0].reason == "Exceeds 1K token limit"
+
+
+def test_an_empty_text_file_is_rejected_as_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_common_dependencies(monkeypatch)
+    monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: "")
+
+    result = utils.categorize_uploaded_files(
+        [_make_upload("empty.txt", size=0, content=b"")], MagicMock()
+    )
+
+    assert result.acceptable == []
+    assert [(r.filename, r.reason) for r in result.rejected] == [
+        ("empty.txt", "File is empty")
+    ]

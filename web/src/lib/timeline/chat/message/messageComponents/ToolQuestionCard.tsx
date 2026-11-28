@@ -24,11 +24,11 @@ import {
   useFollowUserInput,
   useNudgedCard,
 } from "@/lib/chat/hooks";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import {
   type ToolQuestionCall,
   type ToolQuestionStatus,
-  useToolRequestUi,
-} from "@/lib/chat/toolApprovals";
+} from "@/lib/chat/toolQuestions";
 
 interface ToolQuestionCardProps {
   question: ToolQuestionCall;
@@ -447,18 +447,15 @@ interface QuestionRecordProps {
 }
 
 /**
- * How the questions ended, as a timeline step: its title is each answer, or
- * else the outcome, and its body each question with its answer.
+ * How the questions ended, as a timeline step: its title counts the answered
+ * questions, or else names the outcome, and its body pairs each question with
+ * its answer.
  */
 function QuestionRecord({ questions, status }: QuestionRecordProps) {
   const t = useTranslations("chat.messages.toolQuestion");
   const format = useFormatter();
   const answers =
     status.kind === "answered" && status.answers ? status.answers : null;
-  const outcome =
-    status.kind === "answered"
-      ? t(answers ? "record.answered" : "record.answeredInChat")
-      : t(`record.${status.kind}`);
   const lines = questions.map((item) => {
     const answer = answers?.find((entry) => entry.question_id === item.id);
     const option = answer?.option_labels.length
@@ -467,7 +464,6 @@ function QuestionRecord({ questions, status }: QuestionRecordProps) {
     const note = answer?.user_note ?? null;
     return {
       id: item.id,
-      header: item.header,
       question: item.question,
       answer:
         option && note
@@ -476,17 +472,17 @@ function QuestionRecord({ questions, status }: QuestionRecordProps) {
     };
   });
   const title = answers
-    ? lines
-        .map((line) =>
-          t("record.answer", { header: line.header, answer: line.answer ?? "" })
-        )
-        .join(" · ")
-    : outcome;
+    ? t("record.answeredCount", {
+        count: lines.filter((line) => line.answer).length,
+      })
+    : status.kind === "answered"
+      ? t("record.answeredInChat")
+      : t(`record.${status.kind}`);
   return (
     <>
       <div role="status" className="sr-only">
         <Text as="p" font="main-ui-muted" color="text-04">
-          {outcome}
+          {title}
         </Text>
       </div>
       <RunStep
@@ -494,11 +490,11 @@ function QuestionRecord({ questions, status }: QuestionRecordProps) {
         icon={STEP_ICONS.request}
         title={title}
         body={
-          <Section gap={1} alignItems="stretch" height="auto">
+          <Section gap={3} alignItems="stretch" height="auto">
             {lines.map((line) => (
               <Section
                 key={line.id}
-                gap={0.25}
+                gap={0.5}
                 alignItems="stretch"
                 height="auto"
               >
@@ -511,16 +507,14 @@ function QuestionRecord({ questions, status }: QuestionRecordProps) {
                   {line.question}
                 </Text>
                 {line.answer && (
-                  <div className="ps-3">
-                    <Text
-                      as="p"
-                      font="secondary-body"
-                      color="text-04"
-                      wordWrap="wrap-anywhere"
-                    >
-                      {line.answer}
-                    </Text>
-                  </div>
+                  <Text
+                    as="p"
+                    font="main-ui-body"
+                    color="text-05"
+                    wordWrap="wrap-anywhere"
+                  >
+                    {line.answer}
+                  </Text>
                 )}
               </Section>
             ))}

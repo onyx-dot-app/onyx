@@ -217,13 +217,21 @@ def plugin_in_managed_scope(
     shared with a group they manage, and is shared with no other group and no
     user outside their groups. Fails closed for a user who manages no group."""
     managed = scoped_group_ids_subquery(manager)
-    group_share = select(Plugin__UserGroup.plugin_id).where(
-        Plugin__UserGroup.plugin_id == plugin.id,
-        Plugin__UserGroup.permission.is_not(None),
+    group_share = (
+        select(Plugin__UserGroup.plugin_id)
+        .where(
+            Plugin__UserGroup.plugin_id == plugin.id,
+            Plugin__UserGroup.permission.is_not(None),
+        )
+        .correlate(plugin)
     )
-    user_share_outside = select(Plugin__User.plugin_id).where(
-        Plugin__User.plugin_id == plugin.id,
-        Plugin__User.user_id.not_in(managed_group_member_ids_subquery(manager)),
+    user_share_outside = (
+        select(Plugin__User.plugin_id)
+        .where(
+            Plugin__User.plugin_id == plugin.id,
+            Plugin__User.user_id.not_in(managed_group_member_ids_subquery(manager)),
+        )
+        .correlate(plugin)
     )
     return and_(
         ~seen_by_organization(marketplace),
@@ -294,6 +302,21 @@ def get_version_user_runs(
     return db_session.scalar(
         select(version_user_runs(Plugin, user_id)).where(Plugin.id == plugin_id)
     )
+
+
+def get_versions_user_runs(
+    plugin_ids: Iterable[UUID], user_id: UUID, db_session: Session
+) -> list[UUID]:
+    ids = sorted(set(plugin_ids))
+    if not ids:
+        return []
+    return [
+        version_id
+        for version_id in db_session.scalars(
+            select(version_user_runs(Plugin, user_id)).where(Plugin.id.in_(ids))
+        )
+        if version_id is not None
+    ]
 
 
 def frontmatter_in_version(
@@ -705,7 +728,12 @@ def load_user_plugin_states(
                 can_run=can_run,
                 created_at=row.created_at,
                 plugin_name=row.plugin_name,
-                skill_names=tuple(row.skill_names or ()),
+                # Onyx owns a skill's name: its plugin name, not the frontmatter.
+                skill_names=(
+                    (row.plugin_name,)
+                    if row.skill_paths == [""]
+                    else tuple(row.skill_names or ())
+                ),
                 skill_paths=tuple(row.skill_paths or ()),
                 usage=(
                     None
@@ -723,15 +751,25 @@ def load_user_plugin_states(
 
 
 def skill_usage_by_user(states: Iterable[UserPluginState]) -> dict[UUID, SkillUsage]:
-    """Usage of the plugins each user can run, before the name order. A
-    version with no recorded size counts as 0. Built-in skills are not
-    plugins and are not counted."""
-    usage: dict[UUID, SkillUsage] = {}
+    """Usage of the plugins each user can run, after the name order between
+    those plugins (``order_skill_names``): a plugin that loses a name does not
+    load, so it does not count. A version with no recorded size counts as 0.
+    Built-in skills are not plugins and are not counted."""
+    by_user: dict[UUID, list[UserPluginState]] = {}
     for state in states:
         if state.can_run:
-            usage[state.user_id] = usage.get(state.user_id, SkillUsage()) + (
+            by_user.setdefault(state.user_id, []).append(state)
+    usage: dict[UUID, SkillUsage] = {}
+    for user_id, user_states in by_user.items():
+        hidden = order_skill_names(user_states)
+        usage[user_id] = sum(
+            (
                 state.usage or SkillUsage()
-            )
+                for state in user_states
+                if state.plugin_id not in hidden
+            ),
+            SkillUsage(),
+        )
     return usage
 
 
@@ -739,8 +777,8 @@ def users_with_usage_past(
     user_filter: ColumnElement[bool], usage: SkillUsage
 ) -> Select[tuple[UUID]]:
     """Users whose enabled, not invalid plugins add up past ``usage`` in bytes
-    or files. It narrows the users that need the full read of
-    ``skill_usage_by_user``."""
+    or files, before the name order. It narrows the users that need the full
+    read of ``skill_usage_by_user``, which can only count less."""
     pairs = _user_plugin_pairs(user_filter, None)
     return (
         select(pairs.c.user_id)
@@ -800,6 +838,11 @@ def affected_user_ids_for_plugins(
     return set(db_session.scalars(select(pairs.c.user_id).distinct()))
 
 
+def name_order_key(state: UserPluginState) -> tuple[SkillNameRank, datetime, UUID]:
+    """The order in which plugins win a skill name: lowest first."""
+    return (state.name_rank, state.created_at, state.plugin_id)
+
+
 def order_skill_names(
     states: Iterable[UserPluginState],
     reserved_names: Collection[str] = (),
@@ -817,10 +860,7 @@ def order_skill_names(
 
     hidden: set[UUID] = set()
     for name, named in contenders.items():
-        ordered = sorted(
-            named,
-            key=lambda state: (state.name_rank, state.created_at, state.plugin_id),
-        )
+        ordered = sorted(named, key=name_order_key)
         if name not in reserved_names:
             ordered = ordered[1:]
         hidden.update(state.plugin_id for state in ordered)
@@ -878,7 +918,7 @@ class PluginAccess(BaseModel):
     # The version waiting for review, if any.
     pending_version_number: int | None
     version_user_runs: UUID
-    name: str | None
+    name: str
     description: str
     # Lazy validity of the version the user runs.
     is_valid: bool | None
@@ -942,7 +982,7 @@ def load_plugin_access(
             published.version_number,
             pending.version_number,
             runs,
-            case((holds_one_root_skill(runs), frontmatter_in_version("name", runs))),
+            Plugin.name,
             func.coalesce(
                 case(
                     (

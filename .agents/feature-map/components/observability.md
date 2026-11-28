@@ -5,8 +5,8 @@
 > stream, the support log export and query history.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
-**Edition:** CE for metrics, tracing, usage accounting and audit logging. EE
-for the usage report, log export, query history and workspace analytics.
+**Edition:** CE for metrics, tracing and usage accounting. EE for audit
+logging, the usage report, log export, query history and workspace analytics.
 
 ---
 
@@ -155,10 +155,33 @@ counters of the use of that capacity carry `tenant_id`.
 `tools/tool_implementations/code_mode/sandbox.py` and
 `tools/tool_implementations/code_mode/cells.py` update them where they own the state ([[code-execution]]).
 
-**Audit.** `utils/audit.py:emit_audit_event` writes one JSON line to the child
-logger `onyx.audit.<ocsf_class>`. The module owns its stdout handler, set at
-import, because root-logger propagation drops the events under uvicorn.
+**Audit.** Call sites use `backend/onyx/utils/audit.py:emit_audit_event`, which
+does nothing unless EE is loaded. The EE `backend/ee/onyx/utils/audit.py:emit_audit_event`
+writes one JSON line to the child logger `onyx.audit.<ocsf_class>`, but only for a tenant on
+the Enterprise tier (`backend/ee/onyx/utils/audit.py:audit_enabled_for_tenant`, cached per
+process for 60 s, fails open). The credential-access line uses the same gate. The EE module
+owns its stdout handler, set at import, because root-logger propagation drops
+the events under uvicorn.
 High-volume actions pass a `dedup_key`, which a Redis `SET NX` checks.
+`backend/onyx/utils/audit.py:actor_from_user` adds the request's credential
+(`credential_type`, `credential_id`, `oauth_client_id`) when the user is the requester. Build
+the actor in the request: a streamed response body can run after the request contextvars end.
+Each action maps to an `AuditEventCategory` (`backend/ee/onyx/utils/audit.py:_CATEGORY_BY_ACTION`,
+guarded at import). An admin picks categories in security settings (`audit_event_categories`,
+Enterprise only); user activity (`chat`, `search`, `llm_gateway`, `file_download`) is off by
+default, and `settings.security_settings_change` is always written. Activity events: chat in
+`backend/onyx/chat/execution.py:ChatTurnExecution._emit_message_audit` (one per finished
+response, none for a parked run), search in `backend/onyx/server/features/search/api.py:_run_search`
+(which MCP calls over HTTP) and `backend/ee/onyx/search/process_search_query.py:stream_search_query`,
+the gateway in the tracing processor `backend/ee/onyx/tracing/audit_processor.py`, and chat file
+downloads. Query text reaches an event only through `query_text=`, and only when
+`audit_include_query_text` is on and query history is `normal`.
+Each written event also counts in `backend/ee/onyx/utils/audit_stats.py`: a bounded queue and one
+writer thread per process keep the cache write off the caller (hourly buckets, last event time at
+most once a minute per process; a full queue drops counts), which
+`GET /admin/security/audit-status` (`backend/ee/onyx/server/security/api.py`) reports.
+`web/src/views/admin/AuditLogsSection.tsx` on the Security & Hardening page shows that status,
+the category switches and the docs link (Enterprise, self-hosted only).
 
 **Log export.** `ee/onyx/server/log_export/api.py:start_log_export` sends a
 collect task to the queue of each worker type, collects its own logs inline,
@@ -216,12 +239,12 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
    A scrape-time collector must bound its read
    (`server/metrics/indexing_pipeline.py:_CachedCollector`). The metrics README
    gives the detail.
-7. `audit-actions-append-only` **The audit `utils/audit.py:AuditAction`
+7. `audit-actions-append-only` **The audit `backend/onyx/utils/audit.py:AuditAction`
    values are append-only.** SIEM rules match the exact string. Moving an action to
    another OCSF class changes its logger name, which also breaks a shipper
    filter. Update `audit_logs.mdx` with any schema change.
 8. `audit-never-raises` **Audit emission never raises and never logs a
-   secret.** `utils/audit.py:emit_audit_event` catches every exception, and dedup emits when
+   secret.** `backend/ee/onyx/utils/audit.py:emit_audit_event` catches every exception, and dedup emits when
    Redis is down. Do not put a secret in `extra`.
    `auth/scoped_permissions.py:_emit_denial` passes no dedup key, so each
    denied attempt emits its own event.
@@ -307,9 +330,9 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
   and a case in `env_tracing_configured` to `tracing/provider_config.py` (the
   admin page reads it to choose reconnect and delete), and the checks in
   [[#external-processor-mask-and-drop-incognito]].
-- `add-audit-action` **Add an audit action.** Append to `utils/audit.py:AuditAction`, map it to an
-  OCSF class in `utils/audit.py:_OCSF_CLASS_BY_ACTION`, and document it in
-  `audit_logs.mdx`. The module raises at import when an action has no class. Copy the
+- `add-audit-action` **Add an audit action.** Append to `backend/onyx/utils/audit.py:AuditAction`, map it to an
+  OCSF class in `backend/ee/onyx/utils/audit.py:_OCSF_CLASS_BY_ACTION`, and document it in
+  `audit_logs.mdx`. The EE module raises at import when an action has no class. Copy the
   `PERMISSION_DENIED` emit in `auth/scoped_permissions.py:_emit_denial`. List
   the emit sites with `git grep -l emit_audit_event backend`.
 - `investigate-missing-usage` **Investigate a call that is missing from usage

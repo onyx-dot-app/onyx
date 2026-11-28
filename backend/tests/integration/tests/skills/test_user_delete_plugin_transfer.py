@@ -75,6 +75,9 @@ def test_transfer_all_private_plugins_then_delete(admin_user: DATestUser) -> Non
 
     _delete_user(owner, admin_user).raise_for_status()
 
+    renamed = SkillManager.get_for_user(skills[0].id, new_owner)
+    assert renamed.name == f"{clash_name}-2"
+    assert renamed.name_held_by == []
     for skill in skills:
         moved = SkillManager.get_for_user(skill.id, new_owner)
         assert moved.author_user_id == UUID(new_owner.id)

@@ -1899,8 +1899,10 @@ configMap:
   # SMTP_PASS: ""
   # 'your-email@company.com' SMTP_USER missing used instead
   EMAIL_FROM: ""
-  # Optional comma-separated BCC archive recipients for all emails
+  # Optional comma-separated BCC archive recipients for all emails except sign-in links
   EMAIL_ARCHIVE_BCC_ADDRESSES: ""
+  # "true" turns on sign-in with a link sent by email. Needs the SMTP settings above.
+  MAGIC_LINK_ENABLED: ""
   # External S3 configuration
   S3_ENDPOINT_URL: ""  # ignored while objectStore or minio is enabled
   S3_FILE_STORE_BUCKET_NAME: ""

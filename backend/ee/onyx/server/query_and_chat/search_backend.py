@@ -46,6 +46,7 @@ from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
 from onyx.server.utils_vector_db import require_vector_db
+from onyx.utils.audit import actor_from_user
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -188,7 +189,10 @@ def handle_send_search_message(
                 error=str(e),
             )
 
-    # Streaming path
+    # Streaming path. The body can run after the request context ends, so
+    # build the audit actor now.
+    audit_actor = actor_from_user(user)
+
     def stream_generator() -> Generator[str, None, None]:
         try:
             with get_session_with_current_tenant() as streaming_db_session:
@@ -198,6 +202,7 @@ def handle_send_search_message(
                     streaming_db_session,
                     primary_llm=primary_llm,
                     selection_llm_factory=selection_llm_factory,
+                    audit_actor=audit_actor,
                 ):
                     yield get_json_line(packet.model_dump())
         except NotImplementedError as e:

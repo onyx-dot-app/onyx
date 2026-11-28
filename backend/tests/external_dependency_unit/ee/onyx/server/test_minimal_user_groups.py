@@ -60,3 +60,33 @@ def test_an_organization_wide_manager_picks_from_every_group(
 
     expected = {mine.id} if permission is None else {mine.id, other.id}
     assert _offered(user, db_session, groups) == expected
+
+
+@pytest.mark.parametrize(
+    ("permission", "expected_count"),
+    [(None, 0), (Permission.MANAGE_PLUGINS, 2)],
+)
+def test_manageable_for_offers_only_groups_whose_shares_the_user_can_change(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+    groups: list[UserGroup],
+    permission: Permission | None,
+    expected_count: int,
+) -> None:
+    mine, _ = groups
+    user = make_test_user(f"manageable-groups-{permission}")
+    add_user_to_group(db_session, user, mine)
+    if permission is not None:
+        user.effective_permissions = [permission.value]
+    db_session.commit()
+
+    wanted = {group.id for group in groups}
+    offered = {
+        group.id
+        for group in list_minimal_user_groups(
+            False, user, db_session, manageable_for=Permission.MANAGE_PLUGINS
+        )
+        if group.id in wanted
+    }
+
+    assert len(offered) == expected_count
