@@ -137,12 +137,12 @@ def test_older_models_keep_reasoning_with_tools() -> None:
     assert "reasoning_effort" not in kwargs
 
 
-def test_azure_deployment_alias_sends_explicit_none() -> None:
-    """An alias the registry doesn't know takes Azure chat completions, where
-    the model rejects the tools even with no reasoning kwarg at all."""
+def test_azure_deployment_alias_keeps_reasoning_on_responses_bridge() -> None:
+    """LiteLLM treats an unmapped Azure deployment alias as a reasoning model,
+    so its tool turn takes the responses bridge with the chosen effort."""
     kwargs = _sent_kwargs(_azure_llm("gpt-5.6-sol-01-ptu"), _TOOLS)
     assert kwargs["model"] == "azure/gpt-5.6-sol-01-ptu"
-    assert kwargs["reasoning_effort"] == "none"
+    assert kwargs["reasoning_effort"] == "medium"
     assert "reasoning" not in kwargs
 
 

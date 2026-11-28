@@ -1181,6 +1181,34 @@ def test_azure_chat_completions_keeps_dated_api_version() -> None:
     assert kwargs["api_version"] == "2025-03-01-preview"
 
 
+@pytest.mark.parametrize(
+    "reasoning_effort,expected_api_version",
+    [
+        (ReasoningEffort.HIGH, None),
+        (ReasoningEffort.OFF, "2025-03-01-preview"),
+    ],
+)
+def test_azure_alias_tool_turn_bridge_drops_dated_api_version(
+    reasoning_effort: ReasoningEffort, expected_api_version: str | None
+) -> None:
+    """LiteLLM bridges a tool turn for an unmapped deployment alias to the
+    responses API unless its effort is "none", so the dated api-version goes
+    only on the bridged turn."""
+    llm = _azure_llm("gpt-5.6-sol-01-ptu", api_version="2025-03-01-preview")
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        list(
+            llm.stream_raw(
+                [UserMessage(content="Hi")],
+                tools=[{"type": "function", "function": {"name": "search"}}],
+                reasoning_effort=reasoning_effort,
+            )
+        )
+        kwargs = mock_completion.call_args.kwargs
+    assert kwargs["model"] == "azure/gpt-5.6-sol-01-ptu"
+    assert kwargs["api_version"] == expected_api_version
+
+
 def test_non_azure_responses_bridge_keeps_api_version() -> None:
     """The upgrade is Azure-only: a LiteLLM proxy fronting Azure manages its
     own upstream routing, so its configured api-version passes through."""
