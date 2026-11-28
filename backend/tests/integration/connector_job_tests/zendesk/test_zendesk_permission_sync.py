@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import update
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -24,6 +25,7 @@ from onyx.connectors.models import InputType
 from onyx.connectors.zendesk.source_operations import ZendeskSourceOperations
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
+from onyx.db.models import Document
 from tests.integration.common_utils.document_acl import (
     get_all_connector_documents,
     get_user_document_access_via_acl,
@@ -167,6 +169,8 @@ def zendesk_sync_env(
 ) -> Generator[ZendeskSyncEnv, None, None]:
     credential_json = _credential_json(test_secrets)
     doc_ids = _fixture_doc_ids(credential_json)
+    admin_user: DATestUser | None = None
+    pairs: list[DATestCCPair] = []
     try:
         # The first user created is the Onyx admin.
         admin_user = UserManager.create(email=f"{FIXTURE_PREFIX}onyx_admin@example.com")
@@ -179,25 +183,70 @@ def zendesk_sync_env(
             credential_json=credential_json,
             user_performing_action=admin_user,
         )
+        articles_pair = _pair(
+            admin_user,
+            credential.id,
+            "Zendesk Articles Permission Sync Test",
+            {"content_type": "articles"},
+        )
+        pairs.append(articles_pair)
+        tickets_pair = _pair(
+            admin_user,
+            credential.id,
+            "Zendesk Tickets Permission Sync Test",
+            {"content_type": "tickets", "grant_end_users": True},
+        )
+        pairs.append(tickets_pair)
         yield ZendeskSyncEnv(
             admin_user=admin_user,
             users=users,
-            articles_pair=_pair(
-                admin_user,
-                credential.id,
-                "Zendesk Articles Permission Sync Test",
-                {"content_type": "articles"},
-            ),
-            tickets_pair=_pair(
-                admin_user,
-                credential.id,
-                "Zendesk Tickets Permission Sync Test",
-                {"content_type": "tickets", "grant_end_users": True},
-            ),
+            articles_pair=articles_pair,
+            tickets_pair=tickets_pair,
             doc_ids=doc_ids,
         )
     finally:
-        reset_all()
+        try:
+            # reset_all leaves OpenSearch alone, so deleting the pairs removes
+            # their documents from the index.
+            if admin_user is not None:
+                _delete_pairs(admin_user, pairs)
+        finally:
+            reset_all()
+
+
+def _delete_pairs(admin_user: DATestUser, pairs: list[DATestCCPair]) -> None:
+    for cc_pair in pairs:
+        CCPairManager.pause_cc_pair(cc_pair=cc_pair, user_performing_action=admin_user)
+        CCPairManager.delete(cc_pair, user_performing_action=admin_user)
+    for cc_pair in pairs:
+        CCPairManager.wait_for_deletion_completion(
+            user_performing_action=admin_user, cc_pair_id=cc_pair.id
+        )
+
+
+def _clear_stored_access(doc_ids: list[str]) -> None:
+    """Indexing already stores each document's access, so the doc sync is
+    tested only once that access is gone."""
+    with get_session_with_current_tenant() as db_session:
+        db_session.execute(
+            update(Document)
+            .where(Document.id.in_(doc_ids))
+            .values(
+                external_user_emails=[], external_user_group_ids=[], is_public=False
+            )
+        )
+        db_session.commit()
+
+
+def _sync(env: ZendeskSyncEnv, cc_pair: DATestCCPair) -> None:
+    synced_after = datetime.now(timezone.utc)
+    CCPairManager.sync(cc_pair=cc_pair, user_performing_action=env.admin_user)
+    CCPairManager.wait_for_sync(
+        cc_pair=cc_pair,
+        after=synced_after,
+        user_performing_action=env.admin_user,
+        should_wait_for_index_sync=False,
+    )
 
 
 def _index_and_sync(env: ZendeskSyncEnv, cc_pair: DATestCCPair) -> None:
@@ -215,14 +264,7 @@ def _index_and_sync(env: ZendeskSyncEnv, cc_pair: DATestCCPair) -> None:
         cc_pair=cc_pair, after=before, user_performing_action=admin
     )
     # Zendesk is not changed, so any sync that starts after indexing will do.
-    synced_after = datetime.now(timezone.utc)
-    CCPairManager.sync(cc_pair=cc_pair, user_performing_action=admin)
-    CCPairManager.wait_for_sync(
-        cc_pair=cc_pair,
-        after=synced_after,
-        user_performing_action=admin,
-        should_wait_for_index_sync=False,
-    )
+    _sync(env, cc_pair)
 
 
 def _readers(env: ZendeskSyncEnv, doc_id: str) -> set[str]:
@@ -250,8 +292,16 @@ def _assert_readers(
 def test_zendesk_permission_sync(zendesk_sync_env: ZendeskSyncEnv) -> None:
     env = zendesk_sync_env
 
-    _index_and_sync(env, env.articles_pair)
-    _assert_readers(env, env.articles_pair, EXPECTED_ARTICLE_READERS)
+    for cc_pair, expected in (
+        (env.articles_pair, EXPECTED_ARTICLE_READERS),
+        (env.tickets_pair, EXPECTED_TICKET_READERS),
+    ):
+        _index_and_sync(env, cc_pair)
+        _assert_readers(env, cc_pair, expected)
 
-    _index_and_sync(env, env.tickets_pair)
-    _assert_readers(env, env.tickets_pair, EXPECTED_TICKET_READERS)
+        # The doc sync alone must restore the access.
+        doc_ids = [env.doc_ids[title] for title in expected]
+        _clear_stored_access(doc_ids)
+        assert all(not _readers(env, doc_id) for doc_id in doc_ids)
+        _sync(env, cc_pair)
+        _assert_readers(env, cc_pair, expected)
