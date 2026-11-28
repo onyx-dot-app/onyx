@@ -44,6 +44,9 @@ type UploadStep =
 
 interface UploadPluginModalProps {
   open: boolean;
+  /** Upload a new version of this plugin instead of the plugin that the
+   * manifest name picks. */
+  pluginId?: string;
   onClose: () => void;
   onContinueSkill: (draft: SkillCreationDraft) => void;
   onSaved: (result: PluginUploadResult, needsAttention: boolean) => void;
@@ -219,6 +222,7 @@ function UploadPluginModalContent({
   onClose,
   onContinueSkill,
   onSaved,
+  pluginId,
   onBusyChange,
 }: Omit<UploadPluginModalProps, "open"> & {
   onBusyChange: (busy: boolean) => void;
@@ -253,11 +257,13 @@ function UploadPluginModalContent({
     setBusy("read");
     setError(null);
     try {
-      if ((await pluginUploadKind(bundle)) === "skill") {
+      if (!pluginId && (await pluginUploadKind(bundle)) === "skill") {
         setState({ step: "skill", bundle });
         return;
       }
-      const preview = await inspectPluginUpload(bundle.file, saveAsNew);
+      const preview = await inspectPluginUpload(bundle.file, saveAsNew, {
+        pluginId,
+      });
       const { target } = preview;
       setState({
         step: "plugin",
@@ -309,11 +315,10 @@ function UploadPluginModalContent({
     setBusy("save");
     setError(null);
     try {
-      const result = await savePluginUpload(
-        step.bundle.file,
-        step.saveAsNew,
-        step.takenNames.length > 0 ? step.name : undefined
-      );
+      const result = await savePluginUpload(step.bundle.file, step.saveAsNew, {
+        pluginId,
+        name: step.takenNames.length > 0 ? step.name : undefined,
+      });
       onSaved(
         result,
         result.enabled && needsAttention(result.plugin.plugin?.needs ?? [])
@@ -441,6 +446,7 @@ function UploadPluginModalContent({
 
 export default function UploadPluginModal({
   open,
+  pluginId,
   onClose,
   onContinueSkill,
   onSaved,
@@ -451,6 +457,7 @@ export default function UploadPluginModal({
       <Modal.Content width="md" maxHeight="85dvh">
         {open && (
           <UploadPluginModalContent
+            pluginId={pluginId}
             onClose={onClose}
             onContinueSkill={onContinueSkill}
             onSaved={onSaved}

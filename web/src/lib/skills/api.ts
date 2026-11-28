@@ -104,27 +104,34 @@ export async function bulkUpdateSkills(
   return result;
 }
 
+interface PluginUploadOptions {
+  /** Binds the upload to that plugin: it adds a version to it. */
+  pluginId?: string;
+  /** Names a new plugin. The manifest name is the default. */
+  name?: string;
+}
+
 function pluginUploadForm(
   bundle: File,
   saveAsNew: boolean,
-  name?: string
+  { pluginId, name }: PluginUploadOptions
 ): FormData {
   const form = new FormData();
   form.append("bundle", bundle);
   form.append("save_as_new", String(saveAsNew));
+  if (pluginId) form.append("plugin_id", pluginId);
   if (name) form.append("name", name);
   return form;
 }
 
-/** `name` names a new plugin. The manifest name is the default. */
 export async function inspectPluginUpload(
   bundle: File,
   saveAsNew: boolean,
-  name?: string
+  options: PluginUploadOptions = {}
 ): Promise<PluginUploadPreview> {
   return skillsFetch<PluginUploadPreview>("/api/skills/plugins/inspect", {
     method: "POST",
-    body: pluginUploadForm(bundle, saveAsNew, name),
+    body: pluginUploadForm(bundle, saveAsNew, options),
   });
 }
 
@@ -139,11 +146,11 @@ export interface PluginUploadResult {
 export async function savePluginUpload(
   bundle: File,
   saveAsNew: boolean,
-  name?: string
+  options: PluginUploadOptions = {}
 ): Promise<PluginUploadResult> {
   return skillsFetch<PluginUploadResult>("/api/skills/plugins", {
     method: "POST",
-    body: pluginUploadForm(bundle, saveAsNew, name),
+    body: pluginUploadForm(bundle, saveAsNew, options),
   });
 }
 

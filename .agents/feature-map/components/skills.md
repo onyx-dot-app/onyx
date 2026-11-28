@@ -74,7 +74,10 @@
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
-  flow. A dropped folder is zipped in the browser when it has SKILL.md or a
+  flow. Upload New Version on a plugin page
+  (`sections/plugins/MemberPluginDetailPage.tsx`) opens the same modal with
+  `pluginId`: it takes only a plugin zip, so a SKILL.md or a zip with no
+  plugin.json gets the plugin upload error, not the skill flow. A dropped folder is zipped in the browser when it has SKILL.md or a
   plugin.json at its top level (`lib/skills/bundleUpload.ts:prepareSkillBundleUpload`
   with `allowPlugin`).
 - **Admins** set the installation policy of a custom skill: available (the user
@@ -940,7 +943,13 @@ the app from the same rule
     then the Organization library (`db/plugin.py:find_upload_target`);
     `save_as_new` makes a new plugin. A new plugin takes the optional `name`
     form field, else the manifest name; the preview sets
-    `target.name_taken` when "My uploads" already has it. The save stores
+    `target.name_taken` when "My uploads" already has it. A `plugin_id`
+    form field (Upload New Version) binds the upload to that plugin
+    (`_bound_upload_target`): the user must edit it
+    (`fetch_editable_skill(..., any_plugin=True)`), a synced plugin is refused
+    (`refuse_if_synced`), and the manifest name must be the plugin name or the
+    plugin.json name of its current version (Save as New and ownership
+    transfer rename only the plugin); another name is `INVALID_INPUT`. The save stores
     the bundle, then takes the user row lock and finds the target under it, so
     two uploads of one new name make one plugin with two versions. A new version
     keeps shares, publishing and user choices. An upload with the files of
