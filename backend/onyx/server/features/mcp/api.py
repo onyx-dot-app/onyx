@@ -4,7 +4,9 @@ through ``/admin/integrations``.
 
 The admin server routes are the public API of the release before
 integrations, which the Terraform provider calls. They read and write the
-integration of the server and return the id of its ``mcp_server`` row."""
+integration of the server and return the id of its ``mcp_server`` row. They
+are deprecated: the provider's ``onyx_integration`` resource uses
+``/admin/integrations``. A later release removes them."""
 
 from uuid import UUID
 
@@ -368,7 +370,7 @@ def _admin_view(integration: Integration, db_session: Session) -> MCPServerAdmin
     )
 
 
-@admin_router.post("/servers/create")
+@admin_router.post("/servers/create", deprecated=True)
 def upsert_mcp_server_alias(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
@@ -457,7 +459,7 @@ def upsert_mcp_server_alias(
     )
 
 
-@admin_router.get("/servers/{server_id}")
+@admin_router.get("/servers/{server_id}", deprecated=True)
 def get_mcp_server_alias(
     server_id: int,
     db_session: Session = Depends(get_session),
@@ -469,7 +471,7 @@ def get_mcp_server_alias(
     return _admin_view(integration, db_session)
 
 
-@admin_router.patch("/server/{server_id}")
+@admin_router.patch("/server/{server_id}", deprecated=True)
 def update_mcp_server_alias(
     server_id: int,
     request: MCPServerSimpleUpdateRequest,
@@ -511,7 +513,7 @@ def update_mcp_server_alias(
     return _admin_view(integration, db_session)
 
 
-@admin_router.delete("/server/{server_id}")
+@admin_router.delete("/server/{server_id}", deprecated=True)
 def delete_mcp_server_alias(
     server_id: int,
     db_session: Session = Depends(get_session),
