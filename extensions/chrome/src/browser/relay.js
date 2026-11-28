@@ -187,6 +187,16 @@ async function handleMessage(message) {
       await serial(() => bind(message));
       await reportGrant();
       break;
+    case "screencast": {
+      const grant = await getGrant();
+      if (grant && grant.chat_session_id === message.chat_session_id) {
+        screencastUntil = Date.now() + SCREENCAST_MS;
+        clearTimeout(screencastTimer);
+        screencastTimer = setTimeout(refreshStream, SCREENCAST_MS + 50);
+        await refreshStream();
+      }
+      break;
+    }
     case "end_grant": {
       const grant = await getGrant();
       if (grant && grant.chat_session_id === message.chat_session_id) await endGrant(false);
@@ -196,6 +206,72 @@ async function handleMessage(message) {
       break;
   }
 }
+
+// ---- live preview ----
+
+// A viewer keeps the stream alive: frames flow for this long after its last
+// screencast message, at most one per FRAME_GAP_MS.
+const SCREENCAST_MS = 15_000;
+const FRAME_GAP_MS = 250;
+let screencastUntil = 0;
+let screencastTimer = null;
+let streamingTab = null;
+let lastFrameAt = 0;
+let streamChanges = Promise.resolve();
+
+/** Stream the grant's current tab while a viewer watches; stop otherwise or
+ * when the current tab changes. */
+function refreshStream() {
+  const run = streamChanges.then(async () => {
+    const grant = await getGrant();
+    const wanted = grant && Date.now() < screencastUntil ? (grant.current ?? null) : null;
+    if (wanted === streamingTab) return;
+    if (streamingTab !== null) await driver.stopScreencast(streamingTab);
+    streamingTab = null;
+    if (wanted === null) return;
+    try {
+      await driver.startScreencast(wanted);
+      streamingTab = wanted;
+    } catch (error) {
+      console.warn("[Onyx browser] Could not start the preview", error);
+    }
+  });
+  streamChanges = run.catch(() => {});
+  return run;
+}
+
+driver.onFrame(async (tabId, { data, metadata }) => {
+  if (Date.now() >= screencastUntil) {
+    void refreshStream();
+    return;
+  }
+  const grant = await getGrant();
+  if (!grant || grant.current !== tabId || Date.now() - lastFrameAt < FRAME_GAP_MS) return;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || !driver.isShared(grant, tab.url ?? "")) return;
+  lastFrameAt = Date.now();
+  sendMessage({
+    type: "frame",
+    chat_session_id: grant.chat_session_id,
+    tab_id: String(tabId),
+    width: metadata.deviceWidth,
+    height: metadata.deviceHeight,
+    data,
+  });
+});
+
+driver.onPointer(async (tabId, phase, x, y) => {
+  const grant = await getGrant();
+  if (grant?.current !== tabId) return;
+  sendMessage({
+    type: "pointer",
+    chat_session_id: grant.chat_session_id,
+    tab_id: String(tabId),
+    phase,
+    x,
+    y,
+  });
+});
 
 // ---- commands ----
 
@@ -368,6 +444,7 @@ async function bind(message) {
     grant.group_id = await groupTabs([tabId], grant.group_id);
   }
   await setGrant(grant);
+  void refreshStream();
 }
 
 /** Where the agent's new tabs open: the bound window, else the user's
@@ -396,6 +473,7 @@ async function endGrantNow(notify) {
     if (tab && grant.group_id != null && tab.groupId === grant.group_id)
       await chrome.tabs.ungroup(tabId).catch(() => {});
   }
+  void refreshStream();
   if (notify) await notifyEnd(grant.chat_session_id);
 }
 
@@ -434,6 +512,7 @@ async function addTab(tabId, grantId) {
     await setGrant({ ...grant, tabs, current: tabId });
     const groupId = await groupTabs([tabId], grant.group_id);
     await setGrant({ ...grant, tabs, current: tabId, group_id: groupId });
+    void refreshStream();
     return true;
   });
   if (!added)
@@ -444,8 +523,10 @@ async function addTab(tabId, grantId) {
 function setCurrent(tabId, grantId) {
   return serial(async () => {
     const grant = await getGrant();
-    if (grant && grant.id === grantId && grant.current !== tabId)
+    if (grant && grant.id === grantId && grant.current !== tabId) {
       await setGrant({ ...grant, current: tabId });
+      void refreshStream();
+    }
   });
 }
 
@@ -460,6 +541,7 @@ export async function onTabRemoved(tabId) {
       return false;
     }
     await setGrant({ ...grant, tabs, current: grant.current === tabId ? tabs[0] : grant.current });
+    void refreshStream();
     return true;
   });
   if (changed) await reportGrant();
