@@ -2441,6 +2441,17 @@ sandboxPod:
 # Celery beat or heavy worker to stop idle pods). Does not need ENABLE_CRAFT. With auto, a sandbox starts on
 # Firecracker while a KVM node serves the template, else on a pod. A running
 # sandbox stays on its backend until it stops.
+# The chart sets SANDBOX_CONTAINER_HARNESS, SANDBOX_HARNESS_IMAGE and
+# SANDBOX_HARNESS_DAEMON_PORT from these values. Set these optional backend
+# settings under configMap:
+#   SANDBOX_POD_CPU_REQUEST / SANDBOX_POD_CPU_LIMIT (1000m / 2000m),
+#   SANDBOX_POD_MEMORY_REQUEST / SANDBOX_POD_MEMORY_LIMIT (2Gi / 10Gi),
+#   SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST / _LIMIT (5Gi / 20Gi): pod size.
+#   SANDBOX_HARNESS_START_TIMEOUT_SECONDS (120): time limit of a pod start.
+#   SANDBOX_HARNESS_IDLE_TIMEOUT_SECONDS (900): idle time before a pod is
+#   saved and deleted.
+#   SANDBOX_HARNESS_POD_TEMPLATE (harness-sandbox-pod): the PodTemplate name.
+# The kubelet podPidsLimit is the only process limit of a pod.
 harnessSandbox:
   enabled: true
   image:
