@@ -338,8 +338,11 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         the browser tools (rank BROWSER, after the family's
                                         sandbox tools) come from build_browser_tools with a
                                         BrowserBackend for ChatTurnSetup.browser_target:
-                                        CHROME while the user shares Chrome tabs with the
-                                        chat (relay.load_grant; needs no sandbox),
+                                        CHROME for the extension's side panel (bind_chat
+                                        with its window), a chat that holds a grant
+                                        (relay.load_grant), or a user whose default
+                                        browser is CHROME with a connected Chrome (needs
+                                        no sandbox); the side panel never gets SANDBOX;
                                         else SANDBOX with the sandbox tools
                                         (browser_enabled and chrome_browser_enabled, read
                                         once in prepare_chat_turn, off when the settings
@@ -352,7 +355,13 @@ exec_command (bash for Claude models; SHELL_SHAPES) / write_stdin / apply_patch 
                                         browser_extension/relay.py:ChromeBrowser pushes the
                                         call onto the installation's cache list and waits on
                                         its result list (bounded polls; a lost extension or a
-                                        deadline is an "outcome unknown" error). Chrome offers
+                                        deadline is an "outcome unknown" error). Each call
+                                        on a site without approval waits first: the Chrome
+                                        tools carry CHROME_SITE_APPROVAL and
+                                        ChromeBrowser.site_approval gives the per-site
+                                        action `onyx:chrome.site:<origin>` (once: the
+                                        grant's once_origins for the response; chat: a
+                                        session grant). Chrome offers
                                         no browser_evaluate and refuses upload and
                                         screenshot_path. A refusal (for example human_control:
                                         a human uses the tab) is a tool error with the
